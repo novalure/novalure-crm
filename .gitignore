@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local npm cache used by Codex installs
 .npm-cache/
+
+.vercel
+.env*.local
