@@ -1,0 +1,752 @@
+{
+  "funnel_wohnpark_buyer": {
+    "blueprint": {
+      "schemaVersion": 1,
+      "id": "funnel_wohnpark_buyer",
+      "workspaceId": "ws_novalure",
+      "projectId": "project_wohnpark_graz",
+      "name": "Wohnpark Graz Käufer-Funnel",
+      "goal": "Qualifizierte Besichtigung für Neubau-Einheiten buchen",
+      "audience": "Käufer",
+      "entryChannel": "Website",
+      "status": "aktiv",
+      "theme": {
+        "id": "funnel_wohnpark_buyer_theme",
+        "name": "Projekt-Branding",
+        "fontFamily": "system",
+        "colors": {
+          "background": "#ffffff",
+          "text": "#020617",
+          "accent": "#047857",
+          "muted": "#f5f5f4"
+        },
+        "radii": {
+          "button": 8,
+          "block": 8
+        },
+        "spacing": {
+          "desktop": 16,
+          "tablet": 16,
+          "mobile": 12
+        },
+        "logoText": "Wohnpark"
+      },
+      "pages": [
+        {
+          "id": "funnel_wohnpark_buyer_page_landing",
+          "name": "Landingpage",
+          "slug": "landing",
+          "kind": "landing",
+          "sections": [
+            {
+              "id": "funnel_wohnpark_buyer_section_hero",
+              "name": "Hero",
+              "rows": [
+                {
+                  "id": "funnel_wohnpark_buyer_row_hero",
+                  "columns": [
+                    {
+                      "id": "funnel_wohnpark_buyer_col_hero",
+                      "width": {
+                        "desktop": 12,
+                        "tablet": 12,
+                        "mobile": 12
+                      },
+                      "elements": [
+                        {
+                          "id": "funnel_wohnpark_buyer_headline",
+                          "type": "headline",
+                          "name": "Headline",
+                          "content": "Qualifizierte Besichtigung für Neubau-Einheiten buchen",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "funnel_wohnpark_buyer_subline",
+                          "type": "text",
+                          "name": "Beschreibung",
+                          "content": "Käufer erhalten passende Informationen und den nächsten Schritt.",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "funnel_wohnpark_buyer_cta",
+                          "type": "button",
+                          "name": "CTA",
+                          "ctaLabel": "Lead starten",
+                          "analyticsEvent": "funnel_start",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "funnel_wohnpark_buyer_section_blocks",
+              "name": "Landingpage-Blöcke",
+              "rows": [
+                {
+                  "id": "funnel_wohnpark_buyer_row_blocks",
+                  "columns": [
+                    {
+                      "id": "funnel_wohnpark_buyer_col_blocks",
+                      "width": {
+                        "desktop": 12,
+                        "tablet": 12,
+                        "mobile": 12
+                      },
+                      "elements": [
+                        {
+                          "id": "funnel_wohnpark_buyer_block_0_text",
+                          "type": "text",
+                          "name": "Hero",
+                          "content": "Hero klar und conversion-orientiert erklären.",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "funnel_wohnpark_buyer_block_1_text",
+                          "type": "text",
+                          "name": "Vorteile",
+                          "content": "Vorteile klar und conversion-orientiert erklären.",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "funnel_wohnpark_buyer_block_2_form",
+                          "type": "form",
+                          "name": "Kontaktformular",
+                          "content": "Kontaktdaten erfassen",
+                          "fields": [
+                            {
+                              "id": "funnel_wohnpark_buyer_field_name",
+                              "type": "text",
+                              "crmField": "name",
+                              "label": "Name",
+                              "placeholder": "Vor- und Nachname",
+                              "required": true,
+                              "errorMessage": "Bitte Namen eintragen.",
+                              "helpText": "Wird für die CRM-Zuordnung verwendet."
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_field_email",
+                              "type": "email",
+                              "crmField": "email",
+                              "label": "E-Mail",
+                              "placeholder": "name@example.com",
+                              "required": true,
+                              "validationPattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                              "errorMessage": "Bitte gültige E-Mail eintragen."
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_field_phone",
+                              "type": "phone",
+                              "crmField": "phone",
+                              "label": "Telefon",
+                              "placeholder": "+43 ...",
+                              "required": true,
+                              "errorMessage": "Bitte Telefonnummer eintragen.",
+                              "helpText": "Später mit echter Nummernvalidierung verbinden."
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_field_consent",
+                              "type": "consent",
+                              "crmField": "privacy_consent",
+                              "label": "Ich stimme der Verarbeitung meiner Angaben zu.",
+                              "required": true,
+                              "errorMessage": "Die Zustimmung ist erforderlich."
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_field_utm_source",
+                              "type": "hidden",
+                              "crmField": "utm_source",
+                              "label": "UTM Source",
+                              "required": false,
+                              "hiddenValueSource": "utm"
+                            }
+                          ],
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "funnel_wohnpark_buyer_block_3_calendar",
+                          "type": "calendar",
+                          "name": "Kalender",
+                          "content": "Termin direkt buchen",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        },
+                        {
+                          "id": "step_wohnpark_landing_element",
+                          "type": "choice",
+                          "name": "Projekt-Landingpage",
+                          "content": "Projekt-Landingpage",
+                          "options": [
+                            "Ja, passt",
+                            "Noch unsicher",
+                            "Nicht relevant"
+                          ],
+                          "score": 20,
+                          "required": true,
+                          "crmField": "projekt_landingpage",
+                          "analyticsEvent": "funnel_start",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "step_wohnpark_landing_page",
+          "name": "Projekt-Landingpage",
+          "slug": "step-1",
+          "kind": "step",
+          "sections": [
+            {
+              "id": "step_wohnpark_landing_section",
+              "name": "Projekt-Landingpage",
+              "rows": [
+                {
+                  "id": "step_wohnpark_landing_row",
+                  "columns": [
+                    {
+                      "id": "step_wohnpark_landing_col",
+                      "width": {
+                        "desktop": 12,
+                        "tablet": 12,
+                        "mobile": 12
+                      },
+                      "elements": [
+                        {
+                          "id": "step_wohnpark_landing_element",
+                          "type": "choice",
+                          "name": "Projekt-Landingpage",
+                          "content": "Projekt-Landingpage",
+                          "options": [
+                            "Ja, passt",
+                            "Noch unsicher",
+                            "Nicht relevant"
+                          ],
+                          "score": 20,
+                          "required": true,
+                          "crmField": "projekt_landingpage",
+                          "analyticsEvent": "funnel_start",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "step_wohnpark_form_page",
+          "name": "Finanzierungs- und Besichtigungsformular",
+          "slug": "step-2",
+          "kind": "step",
+          "sections": [
+            {
+              "id": "step_wohnpark_form_section",
+              "name": "Finanzierungs- und Besichtigungsformular",
+              "rows": [
+                {
+                  "id": "step_wohnpark_form_row",
+                  "columns": [
+                    {
+                      "id": "step_wohnpark_form_col",
+                      "width": {
+                        "desktop": 12,
+                        "tablet": 12,
+                        "mobile": 12
+                      },
+                      "elements": [
+                        {
+                          "id": "step_wohnpark_form_element",
+                          "type": "choice",
+                          "name": "Finanzierungs- und Besichtigungsformular",
+                          "content": "Finanzierungs- und Besichtigungsformular",
+                          "options": [
+                            "Ja, passt",
+                            "Noch unsicher",
+                            "Nicht relevant"
+                          ],
+                          "score": 74,
+                          "required": true,
+                          "crmField": "finanzierungs_und_besichtigungsformular",
+                          "analyticsEvent": "step_view",
+                          "visibility": {
+                            "desktop": true,
+                            "tablet": true,
+                            "mobile": true
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "funnel_wohnpark_buyer_variant_base",
+          "name": "Basis",
+          "trafficPercent": 50,
+          "visits": 1840,
+          "conversions": 31
+        },
+        {
+          "id": "funnel_wohnpark_buyer_variant_mobile_short",
+          "name": "Mobile Kurzform",
+          "trafficPercent": 50,
+          "visits": 644,
+          "conversions": 13
+        }
+      ],
+      "tracking": {
+        "consentMode": "internal"
+      },
+      "crmHandover": {
+        "destination": "leadInbox",
+        "pipelineStage": "Lead Inbox",
+        "statusTemplate": "Immobilien Vertrieb",
+        "qualityRule": "Telefon + E-Mail erforderlich, Score ab 60",
+        "notificationRecipients": "Sales Graz",
+        "followUp": "Lead prüfen und nächsten Schritt planen.",
+        "createLeadInboxEntry": true,
+        "createTask": true,
+        "createAppointment": false
+      },
+      "mediaLibrary": [
+        {
+          "id": "funnel_wohnpark_buyer_media_project_image",
+          "name": "Wohnpark Graz Bild",
+          "type": "image",
+          "url": "",
+          "folder": "Projekt",
+          "alt": "Wohnpark Graz",
+          "createdAt": "2026-05-11T19:55:50.416Z"
+        }
+      ],
+      "createdFrom": "crm-data"
+    },
+    "versions": [
+      {
+        "id": "funnel_wohnpark_buyer_version_1778529371676",
+        "label": "Designer-Version",
+        "createdAt": "2026-05-11T19:56:11.676Z",
+        "blueprint": {
+          "schemaVersion": 1,
+          "id": "funnel_wohnpark_buyer",
+          "workspaceId": "ws_novalure",
+          "projectId": "project_wohnpark_graz",
+          "name": "Wohnpark Graz Käufer-Funnel",
+          "goal": "Qualifizierte Besichtigung für Neubau-Einheiten buchen",
+          "audience": "Käufer",
+          "entryChannel": "Website",
+          "status": "aktiv",
+          "theme": {
+            "id": "funnel_wohnpark_buyer_theme",
+            "name": "Projekt-Branding",
+            "fontFamily": "system",
+            "colors": {
+              "background": "#ffffff",
+              "text": "#020617",
+              "accent": "#047857",
+              "muted": "#f5f5f4"
+            },
+            "radii": {
+              "button": 8,
+              "block": 8
+            },
+            "spacing": {
+              "desktop": 16,
+              "tablet": 16,
+              "mobile": 12
+            },
+            "logoText": "Wohnpark"
+          },
+          "pages": [
+            {
+              "id": "funnel_wohnpark_buyer_page_landing",
+              "name": "Landingpage",
+              "slug": "landing",
+              "kind": "landing",
+              "sections": [
+                {
+                  "id": "funnel_wohnpark_buyer_section_hero",
+                  "name": "Hero",
+                  "rows": [
+                    {
+                      "id": "funnel_wohnpark_buyer_row_hero",
+                      "columns": [
+                        {
+                          "id": "funnel_wohnpark_buyer_col_hero",
+                          "width": {
+                            "desktop": 12,
+                            "tablet": 12,
+                            "mobile": 12
+                          },
+                          "elements": [
+                            {
+                              "id": "funnel_wohnpark_buyer_headline",
+                              "type": "headline",
+                              "name": "Headline",
+                              "content": "Qualifizierte Besichtigung für Neubau-Einheiten buchen",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_subline",
+                              "type": "text",
+                              "name": "Beschreibung",
+                              "content": "Käufer erhalten passende Informationen und den nächsten Schritt.",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_cta",
+                              "type": "button",
+                              "name": "CTA",
+                              "ctaLabel": "Lead starten",
+                              "analyticsEvent": "funnel_start",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "funnel_wohnpark_buyer_section_blocks",
+                  "name": "Landingpage-Blöcke",
+                  "rows": [
+                    {
+                      "id": "funnel_wohnpark_buyer_row_blocks",
+                      "columns": [
+                        {
+                          "id": "funnel_wohnpark_buyer_col_blocks",
+                          "width": {
+                            "desktop": 12,
+                            "tablet": 12,
+                            "mobile": 12
+                          },
+                          "elements": [
+                            {
+                              "id": "funnel_wohnpark_buyer_block_0_text",
+                              "type": "text",
+                              "name": "Hero",
+                              "content": "Hero klar und conversion-orientiert erklären.",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_block_1_text",
+                              "type": "text",
+                              "name": "Vorteile",
+                              "content": "Vorteile klar und conversion-orientiert erklären.",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_block_2_form",
+                              "type": "form",
+                              "name": "Kontaktformular",
+                              "content": "Kontaktdaten erfassen",
+                              "fields": [
+                                {
+                                  "id": "funnel_wohnpark_buyer_field_name",
+                                  "type": "text",
+                                  "crmField": "name",
+                                  "label": "Name",
+                                  "placeholder": "Vor- und Nachname",
+                                  "required": true,
+                                  "errorMessage": "Bitte Namen eintragen.",
+                                  "helpText": "Wird für die CRM-Zuordnung verwendet."
+                                },
+                                {
+                                  "id": "funnel_wohnpark_buyer_field_email",
+                                  "type": "email",
+                                  "crmField": "email",
+                                  "label": "E-Mail",
+                                  "placeholder": "name@example.com",
+                                  "required": true,
+                                  "validationPattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                                  "errorMessage": "Bitte gültige E-Mail eintragen."
+                                },
+                                {
+                                  "id": "funnel_wohnpark_buyer_field_phone",
+                                  "type": "phone",
+                                  "crmField": "phone",
+                                  "label": "Telefon",
+                                  "placeholder": "+43 ...",
+                                  "required": true,
+                                  "errorMessage": "Bitte Telefonnummer eintragen.",
+                                  "helpText": "Später mit echter Nummernvalidierung verbinden."
+                                },
+                                {
+                                  "id": "funnel_wohnpark_buyer_field_consent",
+                                  "type": "consent",
+                                  "crmField": "privacy_consent",
+                                  "label": "Ich stimme der Verarbeitung meiner Angaben zu.",
+                                  "required": true,
+                                  "errorMessage": "Die Zustimmung ist erforderlich."
+                                },
+                                {
+                                  "id": "funnel_wohnpark_buyer_field_utm_source",
+                                  "type": "hidden",
+                                  "crmField": "utm_source",
+                                  "label": "UTM Source",
+                                  "required": false,
+                                  "hiddenValueSource": "utm"
+                                }
+                              ],
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "funnel_wohnpark_buyer_block_3_calendar",
+                              "type": "calendar",
+                              "name": "Kalender",
+                              "content": "Termin direkt buchen",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            },
+                            {
+                              "id": "step_wohnpark_landing_element",
+                              "type": "choice",
+                              "name": "Projekt-Landingpage",
+                              "content": "Projekt-Landingpage",
+                              "options": [
+                                "Ja, passt",
+                                "Noch unsicher",
+                                "Nicht relevant"
+                              ],
+                              "score": 20,
+                              "required": true,
+                              "crmField": "projekt_landingpage",
+                              "analyticsEvent": "funnel_start",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "step_wohnpark_landing_page",
+              "name": "Projekt-Landingpage",
+              "slug": "step-1",
+              "kind": "step",
+              "sections": [
+                {
+                  "id": "step_wohnpark_landing_section",
+                  "name": "Projekt-Landingpage",
+                  "rows": [
+                    {
+                      "id": "step_wohnpark_landing_row",
+                      "columns": [
+                        {
+                          "id": "step_wohnpark_landing_col",
+                          "width": {
+                            "desktop": 12,
+                            "tablet": 12,
+                            "mobile": 12
+                          },
+                          "elements": [
+                            {
+                              "id": "step_wohnpark_landing_element",
+                              "type": "choice",
+                              "name": "Projekt-Landingpage",
+                              "content": "Projekt-Landingpage",
+                              "options": [
+                                "Ja, passt",
+                                "Noch unsicher",
+                                "Nicht relevant"
+                              ],
+                              "score": 20,
+                              "required": true,
+                              "crmField": "projekt_landingpage",
+                              "analyticsEvent": "funnel_start",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "step_wohnpark_form_page",
+              "name": "Finanzierungs- und Besichtigungsformular",
+              "slug": "step-2",
+              "kind": "step",
+              "sections": [
+                {
+                  "id": "step_wohnpark_form_section",
+                  "name": "Finanzierungs- und Besichtigungsformular",
+                  "rows": [
+                    {
+                      "id": "step_wohnpark_form_row",
+                      "columns": [
+                        {
+                          "id": "step_wohnpark_form_col",
+                          "width": {
+                            "desktop": 12,
+                            "tablet": 12,
+                            "mobile": 12
+                          },
+                          "elements": [
+                            {
+                              "id": "step_wohnpark_form_element",
+                              "type": "choice",
+                              "name": "Finanzierungs- und Besichtigungsformular",
+                              "content": "Finanzierungs- und Besichtigungsformular",
+                              "options": [
+                                "Ja, passt",
+                                "Noch unsicher",
+                                "Nicht relevant"
+                              ],
+                              "score": 74,
+                              "required": true,
+                              "crmField": "finanzierungs_und_besichtigungsformular",
+                              "analyticsEvent": "step_view",
+                              "visibility": {
+                                "desktop": true,
+                                "tablet": true,
+                                "mobile": true
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "variants": [
+            {
+              "id": "funnel_wohnpark_buyer_variant_base",
+              "name": "Basis",
+              "trafficPercent": 50,
+              "visits": 1840,
+              "conversions": 31
+            },
+            {
+              "id": "funnel_wohnpark_buyer_variant_mobile_short",
+              "name": "Mobile Kurzform",
+              "trafficPercent": 50,
+              "visits": 644,
+              "conversions": 13
+            }
+          ],
+          "tracking": {
+            "consentMode": "internal"
+          },
+          "crmHandover": {
+            "destination": "leadInbox",
+            "pipelineStage": "Lead Inbox",
+            "statusTemplate": "Immobilien Vertrieb",
+            "qualityRule": "Telefon + E-Mail erforderlich, Score ab 60",
+            "notificationRecipients": "Sales Graz",
+            "followUp": "Lead prüfen und nächsten Schritt planen.",
+            "createLeadInboxEntry": true,
+            "createTask": true,
+            "createAppointment": false
+          },
+          "mediaLibrary": [
+            {
+              "id": "funnel_wohnpark_buyer_media_project_image",
+              "name": "Wohnpark Graz Bild",
+              "type": "image",
+              "url": "",
+              "folder": "Projekt",
+              "alt": "Wohnpark Graz",
+              "createdAt": "2026-05-11T19:55:50.416Z"
+            }
+          ],
+          "createdFrom": "crm-data"
+        }
+      }
+    ],
+    "updatedAt": "2026-05-11T19:56:11.676Z"
+  }
+}

@@ -1,0 +1,330 @@
+export type LanguageCode = "de" | "en";
+
+export type BotLanguageMode = "auto" | "fixed";
+
+export type LanguageOption = {
+  code: LanguageCode;
+  nativeName: string;
+  label: string;
+  locale: string;
+};
+
+export const defaultLanguage: LanguageCode = "de";
+
+export const supportedLanguages: LanguageOption[] = [
+  {
+    code: "de",
+    nativeName: "Deutsch",
+    label: "German",
+    locale: "de-AT",
+  },
+  {
+    code: "en",
+    nativeName: "English",
+    label: "English",
+    locale: "en-US",
+  },
+];
+
+export const languageOptionsByCode = Object.fromEntries(
+  supportedLanguages.map((language) => [language.code, language]),
+) as Record<LanguageCode, LanguageOption>;
+
+export const dashboardCopy = {
+  de: {
+    navigation: {
+      overview: "Übersicht",
+      leadInbox: "Lead Inbox",
+      pipelines: "Pipelines",
+      contacts: "Kontakte",
+      tasks: "Aufgaben",
+      funnels: "Funnels",
+      bots: "Bots",
+      knowledge: "Wissen",
+      newsletter: "Newsletter",
+      calendar: "Kalender",
+    },
+    language: {
+      systemLabel: "Systemsprache",
+      botLabel: "Chatbot-Sprache",
+      modeLabel: "Bot-Modus",
+      autoMode: "Automatisch erkennen",
+      fixedMode: "Fix verwenden",
+      helper:
+        "Deutsch ist Standard. Bots können die Kundensprache automatisch erkennen oder fest je Projekt gesetzt werden.",
+      customerContext: "Startseiten-Auswahl",
+    },
+    header: {
+      allProjects: "Alle Projekte",
+      allProjectsSubtitle: "Gesamter Workspace",
+      defaultHeadline: "Projektbasierte Leads, Termine und Kommunikation in einem Workspace.",
+      projectHeadline: (projectType: string) =>
+        `${projectType}: Leads, Termine und Pipeline fokussiert steuern.`,
+      importButton: "Import prüfen",
+      newProjectButton: "Neues Projekt",
+    },
+    metrics: {
+      activeLeads: "Aktive Leads",
+      projectLeads: "Projekt-Leads",
+      openTasks: "Offene Aufgaben",
+      botConversations: "Bot Gespräche",
+      consentRecords: "Consent Einträge",
+      workspace: "Workspace",
+      botChannels: "WhatsApp, Instagram, Website",
+      crmNewsletter: "CRM und Newsletter",
+      speedToLead: "Speed-to-Lead",
+      leadConversion: "Lead zu Termin",
+      pipelineValue: "Pipeline-Wert",
+      dueToday: "Heute fällig",
+      targetUnderFive: "Ziel unter 5 Min.",
+    },
+    leadInbox: {
+      title: "Neue Leads zuerst bearbeiten",
+      description:
+        "Eingang für Website, WhatsApp, Instagram und Newsletter, bevor ein Lead in die Dealpipeline übernommen wird.",
+      open: "offen",
+      hot: "hot",
+      accepted: "übernommen",
+      all: "Alle",
+      nextAction: "Nächste Aktion",
+      pipelineHandover: "Pipeline-Übergabe prüfen",
+      acceptButton: "In Pipeline übernehmen",
+      acceptedButton: "Übernommen",
+      openContact: "Kontakt öffnen",
+      owner: "Besitzer",
+      unassigned: "Noch nicht zugewiesen",
+      unknownContact: "Unbekannter Kontakt",
+      noProject: "Kein Projekt",
+      contactDetail: "Kontaktdetail",
+      aiSummary: "KI-Zusammenfassung",
+      aiNextStep: "Nächster sinnvoller Schritt",
+      budget: "Budget",
+      contact: "Kontakt",
+      noContactData: "Keine Kontaktdaten",
+      noConsent: "Kein Consent erfasst",
+      timeline: "Timeline",
+      empty: "Keine Leads für diesen Filter.",
+    },
+    sidebar: {
+      workspace: "Workspace",
+      projects: "Projekte",
+      users: "Nutzer",
+      leads: "Leads",
+      pipeline: "Pipeline",
+    },
+    pipeline: {
+      title: "Projekt-Pipelines",
+      description: "Leads bleiben pro Projekt getrennt, inklusive nächstem Schritt und Score.",
+      filter: "Filter",
+      configure: "Phase konfigurieren",
+      volume: "Volumen",
+      emptyStage: "Keine Deals in dieser Phase.",
+    },
+    panels: {
+      dashboard: "Dashboard",
+      dashboardDescription:
+        "Leistung, neue Leads, fällige Aufgaben und Engpässe auf einen Blick.",
+      newLeads: "Neue Leads",
+      priorityQueue: "Prioritäten heute",
+      topSources: "Lead-Quellen",
+      responseHealth: "Antwortgeschwindigkeit",
+      pipelineHealth: "Pipeline-Gesundheit",
+      nextWork: "Nächste Arbeit",
+      bottlenecks: "Engpässe",
+      slaRisk: "SLA-Risiko",
+      recommendedAction: "Empfohlene Aktion",
+      tasks: "Aufgaben",
+      taskButton: "Aufgabe",
+      noTasks: "Keine offenen Aufgaben für diesen Projektfilter.",
+      contactsConsent: "Kontakte und Consent",
+      noContacts: "Keine Kontakte für diesen Projektfilter.",
+      automations: "Automationen",
+      knowledge: "Wissensbasis",
+      knowledgeDescription: "Inhalte, die später als freigegebene Quellen für Bots dienen.",
+      noKnowledge: "Keine Wissensquellen für diesen Projektfilter.",
+      technicalNext: "Nächster technischer Ausbau",
+      checkedEntries: "geprüfte Einträge",
+    },
+    bots: {
+      title: "Mehrsprachige Bot-Steuerung",
+      description:
+        "Die gleiche Sprachlogik gilt später für WhatsApp, Instagram, Website-Bot und Newsletter.",
+      systemPrompt: "Bot antwortet in der Kundensprache, wenn sie erkannt wird.",
+      fallback: "Fallback",
+      projectRule: "Projektregel",
+      channelRule: "Kanalregel",
+      autoRule: "Sprache aus Chat, Formular oder Browser ableiten.",
+      fixedRule: "Feste Sprache für dieses Projekt verwenden.",
+      activeRules: "Aktive Sprachregeln",
+      confidence: "Erkennung",
+      signals: "Signale",
+      fixedLanguage: "Fixe Sprache",
+      noRules: "Keine Bot-Sprachregeln für diesen Projektfilter.",
+      testerTitle: "Bot-Sprachtest",
+      testerDescription: "Teste, wie die Sprachregel auf eine Kundennachricht reagieren würde.",
+      ruleLabel: "Regel",
+      customerLanguage: "Kundensprache",
+      customerMessage: "Kundennachricht",
+      detectedLanguage: "Erkannte Sprache",
+      responseLanguage: "Antwortsprache",
+      answerPreview: "Antwortvorschau",
+      emptyMessage: "Hallo, ich interessiere mich für diese Immobilie.",
+      germanReply:
+        "Danke für Ihre Nachricht. Ich antworte auf Deutsch und nutze nur freigegebenes Projektwissen, bevor ich einen Termin oder nächsten Schritt vorschlage.",
+      englishReply:
+        "Thank you for your message. I will reply in English and only use approved project knowledge before suggesting an appointment or next step.",
+    },
+  },
+  en: {
+    navigation: {
+      overview: "Overview",
+      leadInbox: "Lead Inbox",
+      pipelines: "Pipelines",
+      contacts: "Contacts",
+      tasks: "Tasks",
+      funnels: "Funnels",
+      bots: "Bots",
+      knowledge: "Knowledge",
+      newsletter: "Newsletter",
+      calendar: "Calendar",
+    },
+    language: {
+      systemLabel: "System language",
+      botLabel: "Chatbot language",
+      modeLabel: "Bot mode",
+      autoMode: "Detect automatically",
+      fixedMode: "Use fixed language",
+      helper:
+        "German is the default. Bots can detect the customer language or use a fixed project language.",
+      customerContext: "Homepage selection",
+    },
+    header: {
+      allProjects: "All projects",
+      allProjectsSubtitle: "Full workspace",
+      defaultHeadline: "Project-based leads, appointments and communication in one workspace.",
+      projectHeadline: (projectType: string) =>
+        `${projectType}: focus leads, appointments and pipeline work.`,
+      importButton: "Review import",
+      newProjectButton: "New project",
+    },
+    metrics: {
+      activeLeads: "Active leads",
+      projectLeads: "Project leads",
+      openTasks: "Open tasks",
+      botConversations: "Bot conversations",
+      consentRecords: "Consent records",
+      workspace: "Workspace",
+      botChannels: "WhatsApp, Instagram, Website",
+      crmNewsletter: "CRM and newsletter",
+      speedToLead: "Speed to lead",
+      leadConversion: "Lead to appointment",
+      pipelineValue: "Pipeline value",
+      dueToday: "Due today",
+      targetUnderFive: "Target under 5 min.",
+    },
+    leadInbox: {
+      title: "Handle new leads first",
+      description:
+        "Inbox for website, WhatsApp, Instagram and newsletter before a lead moves into the deal pipeline.",
+      open: "open",
+      hot: "hot",
+      accepted: "accepted",
+      all: "All",
+      nextAction: "Next action",
+      pipelineHandover: "Review pipeline handover",
+      acceptButton: "Move to pipeline",
+      acceptedButton: "Accepted",
+      openContact: "Open contact",
+      owner: "Owner",
+      unassigned: "Unassigned",
+      unknownContact: "Unknown contact",
+      noProject: "No project",
+      contactDetail: "Contact detail",
+      aiSummary: "AI summary",
+      aiNextStep: "Next best step",
+      budget: "Budget",
+      contact: "Contact",
+      noContactData: "No contact data",
+      noConsent: "No consent captured",
+      timeline: "Timeline",
+      empty: "No leads for this filter.",
+    },
+    sidebar: {
+      workspace: "Workspace",
+      projects: "Projects",
+      users: "Users",
+      leads: "Leads",
+      pipeline: "Pipeline",
+    },
+    pipeline: {
+      title: "Project pipelines",
+      description: "Leads stay separated by project, including next step and score.",
+      filter: "Filter",
+      configure: "Configure stage",
+      volume: "Volume",
+      emptyStage: "No deals in this stage.",
+    },
+    panels: {
+      dashboard: "Dashboard",
+      dashboardDescription:
+        "Performance, new leads, due tasks and bottlenecks at a glance.",
+      newLeads: "New leads",
+      priorityQueue: "Today’s priorities",
+      topSources: "Lead sources",
+      responseHealth: "Response speed",
+      pipelineHealth: "Pipeline health",
+      nextWork: "Next work",
+      bottlenecks: "Bottlenecks",
+      slaRisk: "SLA risk",
+      recommendedAction: "Recommended action",
+      tasks: "Tasks",
+      taskButton: "Task",
+      noTasks: "No open tasks for this project filter.",
+      contactsConsent: "Contacts and consent",
+      noContacts: "No contacts for this project filter.",
+      automations: "Automations",
+      knowledge: "Knowledge base",
+      knowledgeDescription: "Content that will later act as approved bot sources.",
+      noKnowledge: "No knowledge sources for this project filter.",
+      technicalNext: "Next technical build-out",
+      checkedEntries: "checked entries",
+    },
+    bots: {
+      title: "Multilingual bot control",
+      description:
+        "The same language logic will later apply to WhatsApp, Instagram, website bot and newsletter.",
+      systemPrompt: "Bot replies in the customer language once detected.",
+      fallback: "Fallback",
+      projectRule: "Project rule",
+      channelRule: "Channel rule",
+      autoRule: "Infer language from chat, form or browser.",
+      fixedRule: "Use a fixed language for this project.",
+      activeRules: "Active language rules",
+      confidence: "Detection",
+      signals: "Signals",
+      fixedLanguage: "Fixed language",
+      noRules: "No bot language rules for this project filter.",
+      testerTitle: "Bot language test",
+      testerDescription: "Test how the language rule would react to a customer message.",
+      ruleLabel: "Rule",
+      customerLanguage: "Customer language",
+      customerMessage: "Customer message",
+      detectedLanguage: "Detected language",
+      responseLanguage: "Response language",
+      answerPreview: "Answer preview",
+      emptyMessage: "Hello, I am interested in this property.",
+      germanReply:
+        "Danke für Ihre Nachricht. Ich antworte auf Deutsch und nutze nur freigegebenes Projektwissen, bevor ich einen Termin oder nächsten Schritt vorschlage.",
+      englishReply:
+        "Thank you for your message. I will reply in English and only use approved project knowledge before suggesting an appointment or next step.",
+    },
+  },
+} as const;
+
+export function getDashboardCopy(language: LanguageCode) {
+  return dashboardCopy[language] ?? dashboardCopy[defaultLanguage];
+}
+
+export function getLanguageLabel(language: LanguageCode) {
+  return languageOptionsByCode[language]?.nativeName ?? languageOptionsByCode[defaultLanguage].nativeName;
+}
