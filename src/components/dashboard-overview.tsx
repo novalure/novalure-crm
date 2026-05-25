@@ -57,6 +57,7 @@ const sourceOptions = [
 
 const PDF_EXPORT_BACKGROUND = "#f4f2ec";
 const PDF_EXPORT_MARGIN_MM = 8;
+const DISPLAY_TIME_ZONE = "Europe/Vienna";
 
 function prepareDashboardPdfClone(clonedDocument: Document) {
   const root = clonedDocument.querySelector('[data-dashboard-pdf-root="true"]');
@@ -533,12 +534,12 @@ export function DashboardOverview({
     const day = new Date(NOW);
     day.setDate(NOW.getDate() - (6 - index));
     const key = day.toISOString().slice(0, 10);
-    return { key, label: new Intl.DateTimeFormat(locale, { weekday: "short" }).format(day), count: filteredLeads.filter((lead) => lead.receivedAt.slice(0, 10) === key).length };
+    return { key, label: new Intl.DateTimeFormat(locale, { timeZone: DISPLAY_TIME_ZONE, weekday: "short" }).format(day), count: filteredLeads.filter((lead) => lead.receivedAt.slice(0, 10) === key).length };
   });
   const trendMax = Math.max(1, ...requestTrend.map((item) => item.count));
   const todayItems = [
     ...tasks.filter((task) => task.status === "open" && task.due.includes("Heute")).map((task) => ({ id: task.id, title: task.title, meta: task.due, priority: task.priority })),
-    ...calendarEvents.filter((event) => event.startsAt.slice(0, 10) === "2026-05-11").map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(event.startsAt)), priority: event.location })),
+    ...calendarEvents.filter((event) => event.startsAt.slice(0, 10) === "2026-05-11").map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(event.startsAt)), priority: event.location })),
   ];
   const mandateRows = sellerListings.filter((listing) => listing.mandateEndsAt).map((listing) => ({ listing, daysLeft: daysBetween(NOW.toISOString(), listing.mandateEndsAt) })).filter((item) => item.daysLeft <= 60).sort((a, b) => a.daysLeft - b.daysLeft);
   const matchRows = sellerListings.flatMap((listing) => filteredLeads.filter((lead) => lead.type === "Käufer" || lead.type === "Investor").map((lead) => {
@@ -705,7 +706,7 @@ export function DashboardOverview({
       case "hotLeadsList":
         return <ListRows rows={hotLeads.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: copy.lists.score + " " + lead.score + " | " + lead.intent, className: getAging(lead).className }))} empty={copy.lists.noHotLeads} />;
       case "newLeadsWeek":
-        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: lead.source + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit" }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
+        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: lead.source + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
       case "expiringMandates":
         return <ListRows rows={mandateRows.map(({ listing, daysLeft }) => ({ id: listing.id, title: listing.title, meta: copy.lists.expiresInDays(daysLeft) + " | " + formatEuro(listing.targetPrice, locale), className: daysLeft <= 30 ? "border-orange-200 bg-orange-50 text-orange-950" : "border-yellow-200 bg-yellow-50 text-yellow-950" }))} empty={copy.lists.noExpiringMandates} />;
       case "matchSuggestions":

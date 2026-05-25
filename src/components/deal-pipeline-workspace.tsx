@@ -28,6 +28,7 @@ import {
   getCrmTaskDueLabel,
   getDealPipelineCommandCopy,
   getLocale,
+  displayTimeZone,
   type LanguageCode,
 } from "@/lib/i18n";
 
@@ -305,7 +306,7 @@ function formatDate(value: string | undefined, locale: string) {
     return value;
   }
 
-  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: displayTimeZone, year: "numeric" }).format(date);
 }
 
 function formatDateTime(value: string | undefined, locale: string) {
@@ -323,6 +324,7 @@ function formatDateTime(value: string | undefined, locale: string) {
     hour: "2-digit",
     minute: "2-digit",
     month: "2-digit",
+    timeZone: displayTimeZone,
   }).format(date);
 }
 

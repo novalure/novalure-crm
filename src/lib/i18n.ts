@@ -12,6 +12,7 @@ export type LanguageOption = {
 export const defaultLanguage: LanguageCode = "en";
 
 export const fallbackLanguage: LanguageCode = defaultLanguage;
+export const displayTimeZone = "Europe/Vienna";
 
 export const supportedLanguages: LanguageOption[] = [
   {
@@ -9713,6 +9714,7 @@ export function formatDate(value: Date | string | number, language: LanguageCode
   return new Intl.DateTimeFormat(getLocale(language), {
     day: "2-digit",
     month: "2-digit",
+    timeZone: displayTimeZone,
     year: "numeric",
   }).format(date);
 }
@@ -9731,6 +9733,7 @@ export function formatDateTime(value: Date | string | number, language: Language
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: displayTimeZone,
   }).format(date);
 }
 
