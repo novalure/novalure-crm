@@ -19,7 +19,7 @@ type PublicCopy = ReturnType<typeof getPublicPageCopy>;
 type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
 
 const landingAssetPaths = {
-  auditToSystem: "/landing-assets/audit-to-system.html",
+  auditToSystem: "/landing-assets/lead-ops-process-visual-2400x1200.mp4",
   companySystemSplit: "/landing-assets/company-system-split.png",
   heroOperatingLayer: "/landing-assets/hero-operating-layer.mp4",
   leadLeakage: "/landing-assets/lead-leakage.mp4",
@@ -221,15 +221,8 @@ function LockedCrmPreviewVisual({ visual }: { visual: VisualCopy }) {
 function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
   return (
     <VisualShell className="aspect-[2/1] min-h-[220px] crm-noncritical-motion" visual={visual}>
-      <iframe
-        aria-hidden="true"
-        className="h-full w-full border-0"
-        loading="lazy"
-        sandbox=""
-        scrolling="no"
-        src={landingAssetPaths.auditToSystem}
-        title={visual.alt}
-      />
+      <VideoAsset src={landingAssetPaths.auditToSystem} />
+      <ReducedMotionFallback visual={visual} />
     </VisualShell>
   );
 }
