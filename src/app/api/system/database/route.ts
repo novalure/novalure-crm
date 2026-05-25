@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { getRequestSession } from "@/lib/auth/session";
 import { queryRows } from "@/lib/db/client";
 import { crmTables, getDatabaseStatus } from "@/lib/db/schema";
+import { hasProductCapability } from "@/lib/product-model";
 
 const migrations = [
   "migrations/001_initial_novalure_crm.sql",
@@ -31,6 +33,7 @@ const migrations = [
   "migrations/025_analysis_recommendation_completion.sql",
   "migrations/026_workspace_operating_model.sql",
   "migrations/027_broker_pipeline_preflights.sql",
+  "migrations/028_contact_archiving.sql",
 ];
 
 type TableStatusRow = {
@@ -38,8 +41,27 @@ type TableStatusRow = {
   tableName: string;
 };
 
-export async function GET() {
+function isProductionDiagnosticsRestricted() {
+  return process.env.VERCEL_ENV === "production" || process.env.NOVALURE_RESTRICT_SYSTEM_DIAGNOSTICS === "1";
+}
+
+function canViewSystemDiagnostics(session: Awaited<ReturnType<typeof getRequestSession>>) {
+  if (!session) return false;
+  return session.productRole === "platform_admin" || hasProductCapability(session.productRole, "novalure:internal");
+}
+
+export async function GET(request: Request) {
   const status = getDatabaseStatus();
+
+  if (isProductionDiagnosticsRestricted()) {
+    const session = await getRequestSession(request);
+    if (!canViewSystemDiagnostics(session)) {
+      return NextResponse.json({
+        ok: status.configured,
+      });
+    }
+  }
+
   let tableStatus: TableStatusRow[] = [];
   let tableCheckError: string | null = null;
 
