@@ -19,7 +19,7 @@ export function createTrackingSnippet(blueprint: FunnelBlueprint): FunnelTrackin
   ];
 
   if (blueprint.tracking.consentMode !== "active") {
-    warnings.push("Tracking ist im Funnel noch nicht aktiv. Events duerfen erst nach Consent gesendet werden.");
+    warnings.push("Tracking ist im Funnel noch nicht aktiv. Events dürfen erst nach Consent gesendet werden.");
   }
 
   if (blueprint.tracking.gtmId) {

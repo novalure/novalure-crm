@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
+import { getKnowledgeCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
 
 type KnowledgeImportType = "text" | "faq" | "file" | "url" | "call" | "social";
 
@@ -10,56 +11,36 @@ type PreparedKnowledgeSource = {
   type: KnowledgeImportType;
   title: string;
   location: string;
-  approval: "Zu pruefen" | "Freigegeben" | "Nur intern";
+  approval: "Zu prüfen" | "Freigegeben" | "Nur intern";
   status: "Import bereit" | "Review offen" | "Vector bereit";
   chunks: number;
   embeddedChunks: number;
   gaps: number;
 };
 
-const importTypes: Array<{
+type PersistedKnowledgeSource = {
+  id: string;
+  sourceType: KnowledgeImportType;
+  title: string;
+  location: string | null;
+  status: string;
+  chunkCount: number;
+  embeddedChunkCount: number;
+};
+
+type KnowledgeCommandCenterText = ReturnType<typeof getKnowledgeCommandCenterCopy>;
+
+function buildImportTypes(text: KnowledgeCommandCenterText): Array<{
   id: KnowledgeImportType;
   label: string;
   description: string;
   badge: string;
-}> = [
-  {
-    id: "text",
-    label: "Text",
-    description: "Plain Text, Verkaufsargumente, interne Notizen oder Skripte.",
-    badge: "TXT",
-  },
-  {
-    id: "faq",
-    label: "FAQ",
-    description: "Fragen und Antworten fuer wiederkehrende Bot-Antworten.",
-    badge: "FAQ",
-  },
-  {
-    id: "file",
-    label: "Datei",
-    description: "PDFs, Whitepaper, Exposes, Preislisten oder Vertragsmuster.",
-    badge: "PDF",
-  },
-  {
-    id: "url",
-    label: "URL",
-    description: "Help-Center, Landingpages, Projektseiten oder Blogartikel.",
-    badge: "URL",
-  },
-  {
-    id: "call",
-    label: "Call",
-    description: "Call-Aufzeichnungen, Transkripte und Beratungsnotizen.",
-    badge: "REC",
-  },
-  {
-    id: "social",
-    label: "Social",
-    description: "Instagram, Facebook, LinkedIn, YouTube oder Ad-Kommentare.",
-    badge: "SOC",
-  },
-];
+}> {
+  return (["text", "faq", "file", "url", "call", "social"] as const).map((id) => ({
+    id,
+    ...text.importTypes[id],
+  }));
+}
 
 function parseCoverage(value: string) {
   return Number(value.replace("%", "")) || 0;
@@ -75,27 +56,51 @@ function statusForApproval(approval: PreparedKnowledgeSource["approval"]) {
   return "Review offen";
 }
 
+function sourceFromPersisted(source: PersistedKnowledgeSource): PreparedKnowledgeSource {
+  const embeddedChunks = Number(source.embeddedChunkCount) || 0;
+  const chunks = Math.max(1, Number(source.chunkCount) || embeddedChunks || 1);
+  const approved = embeddedChunks > 0 || source.status === "Vector bereit" || source.status === "vector_ready";
+
+  return {
+    id: source.id,
+    type: source.sourceType || "text",
+    title: source.title,
+    location: source.location ?? "",
+    approval: approved ? "Freigegeben" : "Zu prüfen",
+    status: approved ? "Vector bereit" : "Review offen",
+    chunks,
+    embeddedChunks,
+    gaps: approved ? 0 : 1,
+  };
+}
+
 export function KnowledgeCommandCenter({
   items,
+  language,
   projectLabel,
   projects,
 }: {
   items: KnowledgeItem[];
+  language: LanguageCode;
   projectLabel: string;
   projects: Project[];
 }) {
+  const text = getKnowledgeCommandCenterCopy(language);
+  const importTypes = useMemo(() => buildImportTypes(text), [text]);
   const [selectedType, setSelectedType] = useState<KnowledgeImportType>("text");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [approval, setApproval] = useState<PreparedKnowledgeSource["approval"]>("Zu pruefen");
+  const [approval, setApproval] = useState<PreparedKnowledgeSource["approval"]>("Zu prüfen");
   const [context, setContext] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [persistedSources, setPersistedSources] = useState<PreparedKnowledgeSource[]>([]);
   const [preparedSources, setPreparedSources] = useState<PreparedKnowledgeSource[]>([
     {
       id: "prepared_call",
       type: "call",
-      title: "Beratungscall Wohnpark Graz",
-      location: "Transkript / Call Recording",
-      approval: "Zu pruefen",
+      title: text.preparedCallTitle,
+      location: text.preparedCallLocation,
+      approval: "Zu prüfen",
       status: "Review offen",
       chunks: 24,
       embeddedChunks: 0,
@@ -104,7 +109,7 @@ export function KnowledgeCommandCenter({
     {
       id: "prepared_url",
       type: "url",
-      title: "Projektseite Novalure.eu",
+      title: text.preparedUrlTitle,
       location: "https://novalure.eu/projekte",
       approval: "Freigegeben",
       status: "Vector bereit",
@@ -125,7 +130,7 @@ export function KnowledgeCommandCenter({
           type: item.name.toLowerCase().includes("expose") ? "file" : "faq",
           title: item.name,
           location: projects.find((project) => project.id === item.projectId)?.name ?? projectLabel,
-          approval: approved ? "Freigegeben" : "Zu pruefen",
+          approval: approved ? "Freigegeben" : "Zu prüfen",
           status: approved ? "Vector bereit" : "Review offen",
           chunks,
           embeddedChunks: approved ? Math.round((chunks * parseCoverage(item.coverage)) / 100) : 0,
@@ -135,9 +140,33 @@ export function KnowledgeCommandCenter({
     [items, projectLabel, projects],
   );
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadPersistedSources() {
+      try {
+        const response = await fetch("/api/bots/knowledge?limit=25");
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { sources?: PersistedKnowledgeSource[] };
+        if (!active || !Array.isArray(data.sources)) return;
+
+        setPersistedSources(data.sources.map(sourceFromPersisted));
+      } catch {
+        // Keep the local planner usable if the live API is unavailable.
+      }
+    }
+
+    loadPersistedSources();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const sources = useMemo(
-    () => [...preparedSources, ...existingSources],
-    [existingSources, preparedSources],
+    () => [...persistedSources, ...preparedSources, ...existingSources],
+    [existingSources, persistedSources, preparedSources],
   );
   const totals = useMemo(() => {
     const chunks = sources.reduce((sum, source) => sum + source.chunks, 0);
@@ -154,29 +183,68 @@ export function KnowledgeCommandCenter({
     };
   }, [sources]);
 
-  function prepareSource() {
-    const sourceTitle = title.trim() || `${importTypes.find((item) => item.id === selectedType)?.label} Quelle`;
-    const sourceContent = content.trim() || context.trim() || "Quelle vorbereitet";
+  async function prepareSource() {
+    const sourceTitle = title.trim() || `${importTypes.find((item) => item.id === selectedType)?.label} ${text.fallbackSourceTitle}`;
+    const sourceContent = content.trim() || context.trim() || text.fallbackSourceContent;
     const chunks = estimateChunks(sourceContent);
     const status = statusForApproval(approval);
+    const fallbackSource: PreparedKnowledgeSource = {
+      id: `prepared_${new Date().getTime()}`,
+      type: selectedType,
+      title: sourceTitle,
+      location: context.trim() || sourceContent.slice(0, 90),
+      approval,
+      status,
+      chunks,
+      embeddedChunks: status === "Vector bereit" ? chunks : 0,
+      gaps: status === "Vector bereit" ? 0 : 1,
+    };
 
-    setPreparedSources((current) => [
-      {
-        id: `prepared_${Date.now()}`,
-        type: selectedType,
-        title: sourceTitle,
-        location: context.trim() || sourceContent.slice(0, 90),
-        approval,
-        status,
-        chunks,
-        embeddedChunks: status === "Vector bereit" ? chunks : 0,
-        gaps: status === "Vector bereit" ? 0 : 1,
-      },
-      ...current,
-    ]);
-    setTitle("");
-    setContent("");
-    setContext("");
+    setIsSyncing(true);
+
+    try {
+      const response = await fetch("/api/bots/knowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: sourceTitle,
+          contentOrLocation: sourceContent,
+          sourceType: selectedType,
+          approval,
+        }),
+      });
+      const result = (await response.json()) as {
+        sourceId?: string;
+        status?: string;
+        chunkCount?: number;
+        embeddedChunkCount?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error("Knowledge source import failed");
+      }
+
+      const savedSource: PreparedKnowledgeSource = {
+        ...fallbackSource,
+        id: result.sourceId ?? fallbackSource.id,
+        status: result.status === "synced" ? "Vector bereit" : fallbackSource.status,
+        chunks: result.chunkCount ?? fallbackSource.chunks,
+        embeddedChunks: result.embeddedChunkCount ?? fallbackSource.embeddedChunks,
+        gaps: result.status === "synced" ? 0 : fallbackSource.gaps,
+      };
+
+      setPersistedSources((current) => [
+        savedSource,
+        ...current.filter((source) => source.id !== savedSource.id),
+      ]);
+    } catch {
+      setPreparedSources((current) => [fallbackSource, ...current]);
+    } finally {
+      setIsSyncing(false);
+      setTitle("");
+      setContent("");
+      setContext("");
+    }
   }
 
   function simulateIndexing() {
@@ -200,21 +268,19 @@ export function KnowledgeCommandCenter({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              Agent fuettern
+              {text.eyebrow}
             </p>
-            <h3 className="mt-1 text-2xl font-semibold">Wissensdatenbank aufbauen</h3>
+            <h3 className="mt-1 text-2xl font-semibold">{text.title}</h3>
             <p className="mt-2 max-w-4xl break-words text-sm leading-6 text-stone-600">
-              Importiere externes Wissen wie Call-Aufzeichnungen, PDFs, Whitepaper,
-              Webseiten, Social-Media-Links, FAQs oder Freitext. Jede Quelle wird fuer
-              Review, Chunking, Embeddings, Zitate und spaetere Bot-Freigabe vorbereitet.
+              {text.description}
             </p>
           </div>
           <div className="grid min-w-[320px] gap-2 sm:grid-cols-4 xl:max-w-xl">
             {[
-              ["Quellen", sources.length],
-              ["Chunks", totals.chunks],
-              ["Vector", `${totals.coverage}%`],
-              ["Review", totals.reviews],
+              [text.metrics.sources, sources.length],
+              [text.metrics.chunks, totals.chunks],
+              [text.metrics.vector, `${totals.coverage}%`],
+              [text.metrics.review, totals.reviews],
             ].map(([label, value]) => (
               <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
@@ -231,9 +297,9 @@ export function KnowledgeCommandCenter({
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold">Upload und Import</h3>
+              <h3 className="text-lg font-semibold">{text.importTitle}</h3>
               <p className="mt-1 text-sm text-stone-600">
-                Waehle einen Quellentyp und bereite ihn fuer die Freigabe vor.
+                {text.importDescription}
               </p>
             </div>
             <span className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
@@ -274,26 +340,26 @@ export function KnowledgeCommandCenter({
 
           <div className="mt-5 grid gap-3">
             <label className="grid gap-1 text-sm font-semibold text-slate-900">
-              Titel
+              {text.titleLabel}
               <input
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="z.B. Rueckerstattungs-FAQ, Call Mitschnitt Q2, Preis-PDF"
+                placeholder={text.titlePlaceholder}
                 value={title}
               />
             </label>
             <label className="grid gap-1 text-sm font-semibold text-slate-900">
-              Quelle oder Inhalt
+              {text.sourceLabel}
               <textarea
                 className="min-h-28 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
                 onChange={(event) => setContent(event.target.value)}
-                placeholder="Text einfuegen, URL eintragen oder Datei/Blob-Pfad vorbereiten"
+                placeholder={text.sourcePlaceholder}
                 value={content}
               />
             </label>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-1 text-sm font-semibold text-slate-900">
-                Freigabe
+                {text.approvalLabel}
                 <select
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
                   onChange={(event) =>
@@ -301,35 +367,37 @@ export function KnowledgeCommandCenter({
                   }
                   value={approval}
                 >
-                  <option>Zu pruefen</option>
-                  <option>Freigegeben</option>
-                  <option>Nur intern</option>
+                  <option value="Zu prüfen">{text.approvals["Zu prüfen"]}</option>
+                  <option value="Freigegeben">{text.approvals.Freigegeben}</option>
+                  <option value="Nur intern">{text.approvals["Nur intern"]}</option>
                 </select>
               </label>
               <label className="grid gap-1 text-sm font-semibold text-slate-900">
-                Domain / Kontext
+                {text.contextLabel}
                 <input
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
                   onChange={(event) => setContext(event.target.value)}
-                  placeholder="z.B. novalure.eu oder Support DACH"
+                  placeholder={text.contextPlaceholder}
                   value={context}
                 />
               </label>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
-                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
+                aria-busy={isSyncing}
+                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSyncing}
                 onClick={prepareSource}
                 type="button"
               >
-                Quelle vorbereiten
+                {text.prepare}
               </button>
               <button
                 className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
                 onClick={simulateIndexing}
                 type="button"
               >
-                Indexierung simulieren
+                {text.simulateIndexing}
               </button>
             </div>
           </div>
@@ -338,18 +406,17 @@ export function KnowledgeCommandCenter({
         <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Ingestion Pipeline</h3>
+              <h3 className="text-lg font-semibold">{text.pipelineTitle}</h3>
               <p className="mt-1 max-w-2xl text-sm text-slate-300">
-                Diese Schritte bereiten Quellen fuer Vercel Blob, Postgres/pgvector,
-                Zitate und Bot-Antworten mit striktem Wissensmodus vor.
+                {text.pipelineDescription}
               </p>
             </div>
             <span className="rounded-md bg-white/10 px-3 py-2 text-xs font-semibold">
-              {totals.gaps} Wissensluecken
+              {totals.gaps} {text.knowledgeGaps}
             </span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-5">
-            {["Import", "Bereinigung", "Chunking", "Embedding", "Freigabe"].map((step, index) => (
+            {text.pipelineSteps.map((step, index) => (
               <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={step}>
                 <span className="grid h-8 w-8 place-items-center rounded-md bg-emerald-300 text-sm font-black text-slate-950">
                   {index + 1}
@@ -360,12 +427,7 @@ export function KnowledgeCommandCenter({
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {[
-              "Call-Aufzeichnungen werden zuerst transkribiert und dann geprueft.",
-              "PDFs und Whitepaper landen spaeter in Vercel Blob.",
-              "URLs und Social Links werden nur aus erlaubten Domains verarbeitet.",
-              "Freigegebene Chunks koennen mit pgvector fuer Bot-Antworten gesucht werden.",
-            ].map((item) => (
+            {text.pipelineNotes.map((item) => (
               <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={item}>
                 <p className="break-words text-sm text-slate-100">{item}</p>
               </div>
@@ -377,13 +439,13 @@ export function KnowledgeCommandCenter({
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Quellen und Freigabe</h3>
+            <h3 className="text-lg font-semibold">{text.sourcesTitle}</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Sichtbar fuer den Bot erst nach Freigabe. Quellen mit Review offen bleiben intern.
+              {text.sourcesDescription}
             </p>
           </div>
           <span className="rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-            {totals.embedded} eingebettete Chunks
+            {totals.embedded} {text.embeddedChunks}
           </span>
         </div>
         <div className="mt-4 grid gap-3">
@@ -405,13 +467,13 @@ export function KnowledgeCommandCenter({
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Status
+                  {text.status}
                 </p>
-                <p className="mt-1 text-sm font-semibold">{source.status}</p>
+                <p className="mt-1 text-sm font-semibold">{text.statuses[source.status]}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Chunks
+                  {text.metrics.chunks}
                 </p>
                 <p className="mt-1 text-sm font-semibold">
                   {source.embeddedChunks}/{source.chunks}
@@ -419,9 +481,9 @@ export function KnowledgeCommandCenter({
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Review
+                  {text.review}
                 </p>
-                <p className="mt-1 text-sm font-semibold">{source.approval}</p>
+                <p className="mt-1 text-sm font-semibold">{text.approvals[source.approval]}</p>
               </div>
             </div>
           ))}

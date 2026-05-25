@@ -1,11 +1,25 @@
-﻿"use client";
+"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FunnelBlueprintDesigner } from "@/components/funnel-blueprint-designer";
 import { FunnelRenderer } from "@/components/funnel-renderer";
 import { buildFunnelBlueprint } from "@/lib/funnel-builder-adapter";
 import type { Funnel, FunnelStep, Lead, Project, WorkspaceUser } from "@/lib/crm-types";
-import { type LanguageCode } from "@/lib/i18n";
+import type { FunnelBlueprint } from "@/lib/funnel-schema";
+import {
+  formatNumber,
+  getCrmLeadTypeLabel,
+  getCrmSourceLabel,
+  getCrmStatusLabel,
+  getFunnelBookingProviderLabel,
+  getFunnelCommandCenterCopy,
+  getFunnelDestinationLabel,
+  getFunnelStepTypeLabel,
+  getFunnelTemplateUseCaseLabel,
+  getFunnelWorkspaceAccessLabel,
+  getLocale,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type FunnelCommandCenterProps = {
   funnels: Funnel[];
@@ -120,6 +134,7 @@ type TrackingEvent = {
   ga: string;
   enabled: boolean;
 };
+type FunnelCommandCenterText = ReturnType<typeof getFunnelCommandCenterCopy>;
 
 const statusStyles = {
   aktiv: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -153,35 +168,15 @@ const stepTypes: EditableStepType[] = [
   "Ergebnisseite",
 ];
 
-const defaultTrackingEvents: TrackingEvent[] = [
-  { id: "page_view", label: "Funnel geladen", meta: "PageView", ga: "page_view", enabled: true },
-  { id: "funnel_start", label: "Funnel gestartet", meta: "ViewContent", ga: "funnel_start", enabled: true },
-  { id: "step_view", label: "Schritt angesehen", meta: "ViewContent", ga: "funnel_step_view", enabled: true },
-  { id: "answer", label: "Antwort gewählt", meta: "CustomizeProduct", ga: "funnel_answer", enabled: true },
-  { id: "lead", label: "Lead gesendet", meta: "Lead", ga: "generate_lead", enabled: true },
-  { id: "appointment", label: "Termin gebucht", meta: "Schedule", ga: "book_appointment", enabled: true },
-];
+const trackingEventConfigs = [
+  { id: "page_view", labelKey: "pageView", meta: "PageView", ga: "page_view", enabled: true },
+  { id: "funnel_start", labelKey: "start", meta: "ViewContent", ga: "funnel_start", enabled: true },
+  { id: "step_view", labelKey: "stepView", meta: "ViewContent", ga: "funnel_step_view", enabled: true },
+  { id: "answer", labelKey: "answer", meta: "CustomizeProduct", ga: "funnel_answer", enabled: true },
+  { id: "lead", labelKey: "lead", meta: "Lead", ga: "generate_lead", enabled: true },
+  { id: "appointment", labelKey: "appointment", meta: "Schedule", ga: "book_appointment", enabled: true },
+] as const;
 
-const adaptationPrompt = [
-  "Baue den CRM-Funnel-Builder als eine einheitliche Softwareanwendung aus.",
-  "Verbinde Funnel-Editor, Landingpage, mobile Vorschau, CRM-Pipeline, Follow-up, Tracking, Datenschutz und Analyse in einem Workspace.",
-  "Der Nutzer muss neue Funnels erstellen, einem Projekt zuordnen, Lead-Ziele bestimmen, Schritte bearbeiten, Logik definieren, Termine buchen, E-Mail/WhatsApp-Sequenzen starten und Leads direkt im CRM sehen können.",
-  "Nutze Best Practices von Heyflow und Perspective: Mobile-first, direkte Bearbeitung, bedingte Pfade, Variablen, Lead Scoring, Meta Pixel plus CAPI, GA4/GTM/Matomo, UTM-Tracking, Consent, Sensitive Fields, A/B-Testing, Workspaces, Rollen, White Label und Status-Trigger.",
-].join(" ");
-
-const leadQualityRules = [
-  "Telefon + E-Mail erforderlich, Score ab 60",
-  "Budget + Zeitraum + Projektinteresse erforderlich",
-  "Double Opt-in vor Automation",
-  "Terminbuchung vor Pipeline-Übergabe",
-];
-const statusTemplateOptions = [
-  "Immobilien Vertrieb",
-  "B2B Qualifizierung",
-  "Newsletter Double Opt-in",
-  "Terminbuchung",
-  "Agentur Kundenreport",
-];
 const fieldLabelClass = "grid min-w-0 gap-1 text-sm font-semibold text-slate-900";
 const inputClass = "w-full min-w-0 max-w-full rounded-md border border-stone-300 px-3 py-2 text-sm";
 const selectClass = "w-full min-w-0 max-w-full rounded-md border border-stone-300 px-3 py-2 text-sm";
@@ -189,73 +184,84 @@ const textareaClass = "w-full min-h-24 min-w-0 max-w-full resize-y rounded-md bo
 const cardClass = "min-w-0 rounded-lg border border-stone-200 bg-white p-4";
 const mutedCardClass = "min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4";
 
-const labels = {
-  de: {
-    title: "Funnel und Leadgewinnung",
-    description:
-      "Eine CRM-Anwendung: Funnel auswählen, bearbeiten, testen, messen und direkt an Leads, Pipeline, Aufgaben und Kalender übergeben.",
-    all: "Alle",
-    active: "Aktiv",
-    optimize: "Optimieren",
-    blocked: "Blockiert",
-    bots: "Bot-Schritte",
-    search: "Suche",
-    searchPlaceholder: "Funnel, Kanal, Zielgruppe oder Engpass suchen",
-    visits: "Besuche",
-    leads: "Leads",
-    conversion: "Conversion",
-    avgConversion: "Ø Conversion",
-    liveLeads: "Leads im Projektfilter",
-    selectedFunnel: "Ausgewählter Funnel",
-    noFunnels: "Keine Funnel für diese Ansicht.",
-    save: "Änderungen speichern",
-    addStep: "Schritt hinzufügen",
-    duplicate: "Duplizieren",
-    remove: "Löschen",
-  },
-  en: {
-    title: "Funnels and lead generation",
-    description:
-      "One CRM application: select, edit, test, measure and hand funnels over to leads, pipeline, tasks and calendar.",
-    all: "All",
-    active: "Active",
-    optimize: "Optimize",
-    blocked: "Blocked",
-    bots: "Bot steps",
-    search: "Search",
-    searchPlaceholder: "Search funnel, channel, audience or bottleneck",
-    visits: "Visits",
-    leads: "Leads",
-    conversion: "Conversion",
-    avgConversion: "Avg conversion",
-    liveLeads: "Leads in project filter",
-    selectedFunnel: "Selected funnel",
-    noFunnels: "No funnels for this view.",
-    save: "Save changes",
-    addStep: "Add step",
-    duplicate: "Duplicate",
-    remove: "Delete",
-  },
-} as const;
-
-function formatNumber(value: number, language: LanguageCode) {
-  return new Intl.NumberFormat(language === "de" ? "de-AT" : "en-US").format(value);
-}
-
 function formatPercent(value: number, language: LanguageCode) {
-  return new Intl.NumberFormat(language === "de" ? "de-AT" : "en-US", {
+  return new Intl.NumberFormat(getLocale(language), {
     maximumFractionDigits: 1,
     minimumFractionDigits: 1,
   }).format(value);
 }
 
-function normalizeFunnel(funnel: Funnel): EditableFunnel {
+function isUuid(value: string | undefined | null) {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+}
+
+function getFunnelLiveReadiness(blueprint: FunnelBlueprint, funnel: EditableFunnel) {
+  const formFields = collectFunnelFormFields(blueprint);
+  const blockers: string[] = [];
+
+  if (!blueprint.name.trim()) blockers.push("name_missing");
+  if (!blueprint.projectId.trim()) blockers.push("project_missing");
+  if (formFields.length === 0) blockers.push("contact_form_missing");
+  if (!hasPrivacyConsentField(formFields)) blockers.push("privacy_consent_missing");
+  if (!blueprint.crmHandover.destination.trim()) blockers.push("crm_handover_missing");
+
+  for (const field of formFields) {
+    if (field.required && !String(field.label ?? "").trim()) {
+      blockers.push("required_field_label_missing");
+    }
+  }
+
+  const status = blockers.length
+    ? "blocked"
+    : funnel.status === "aktiv"
+      ? "live"
+      : funnel.status === "optimieren"
+        ? "optimize"
+        : "test";
+
+  return {
+    blockers: Array.from(new Set(blockers)),
+    publicTokenAvailable: isUuid(funnel.id),
+    status,
+  };
+}
+
+function collectFunnelFormFields(blueprint: FunnelBlueprint) {
+  return blueprint.pages.flatMap((page) =>
+    page.sections.flatMap((section) =>
+      section.rows.flatMap((row) =>
+        row.columns.flatMap((column) =>
+          column.elements.flatMap((element) => element.type === "form" ? element.fields ?? [] : []),
+        ),
+      ),
+    ),
+  );
+}
+
+function hasPrivacyConsentField(fields: ReturnType<typeof collectFunnelFormFields>) {
+  return fields.some((field) => {
+    const searchable = [
+      field.type,
+      field.crmField,
+      field.label,
+      field.helpText,
+    ].map((value) => String(value ?? "").toLowerCase()).join(" ");
+
+    return searchable.includes("privacy")
+      || searchable.includes("datenschutz")
+      || searchable.includes("consent")
+      || searchable.includes("dsgvo")
+      || searchable.includes("gdpr");
+  });
+}
+
+function normalizeFunnel(funnel: Funnel, text: FunnelCommandCenterText): EditableFunnel {
   const isNewsletter = funnel.entryChannel === "Newsletter";
   const isAppointment = funnel.goal.toLowerCase().includes("termin") || funnel.goal.toLowerCase().includes("besichtigung");
 
   return {
     ...funnel,
-    adaptationBrief: adaptationPrompt,
+    adaptationBrief: text.defaults.adaptationPrompt,
     templateUseCase:
       funnel.audience === "Verkäufer"
         ? "Immobilien Verkäufer"
@@ -266,39 +272,39 @@ function normalizeFunnel(funnel: Funnel): EditableFunnel {
             : funnel.audience === "Käufer"
               ? "Immobilien Käufer"
               : "Custom",
-    brandPreset: "Projekt-Branding übernehmen",
+    brandPreset: text.defaults.brandPreset,
     highlightColor: "#047857",
     customDomain: "",
     mobileFirstMode: true,
     headerMode: "Logo",
     landingPageBlocks: ["Hero", "Projektvideo", "Testimonials", "Kalender"],
     designerHeroTitle: funnel.goal,
-    designerHeroSubtitle: `${funnel.audience} erhalten in wenigen Schritten die passenden Informationen und einen direkten Kontakt zum Team.`,
-    designerCtaLabel: isAppointment ? "Termin sichern" : "Lead starten",
+    designerHeroSubtitle: text.defaults.designerSubtitle(funnel.audience),
+    designerCtaLabel: isAppointment ? text.defaults.designerCtaAppointment : text.defaults.designerCtaLead,
     designerLogoText: funnel.name.split(" ")[0] ?? "Novalure",
     designerBackgroundColor: "#ffffff",
     designerTextColor: "#020617",
-    designerBlockText: "Kundenvorteile, Vertrauen und nächster Schritt klar darstellen.",
+    designerBlockText: text.defaults.designerBlockText,
     designerFontPreset: "System",
     designerButtonRadius: "8",
     designerBlockRadius: "8",
     designerSectionSpacing: "16",
     bookingProvider: "CRM Kalender",
-    leadMagnet: isNewsletter ? "Projekt-Update und Investment-Checkliste" : "",
+    leadMagnet: isNewsletter ? text.defaults.leadMagnet : "",
     newsletterSegment: isNewsletter ? `${funnel.audience} Segment` : "",
     doubleOptIn: isNewsletter,
     whatsappInbox: funnel.entryChannel === "WhatsApp",
     emailSequence: isAppointment
-      ? "Sofort bestätigen, nach 2 Stunden Termin erinnern, nach 1 Tag Sales-Aufgabe"
-      : "Sofort bestätigen, nach 1 Tag Mehrwert senden, nach 3 Tagen Beratung anbieten",
-    messageCondition: "Wenn kein Termin gebucht wurde oder Score über 60 liegt",
-    messageDelay: "Sofort, 2 Stunden, 1 Tag",
+      ? text.defaults.emailSequenceAppointment
+      : text.defaults.emailSequenceLead,
+    messageCondition: text.defaults.messageCondition,
+    messageDelay: text.defaults.messageDelay,
     replySender: "Novalure Sales",
     crmStage: funnel.status === "aktiv" ? "Qualifiziert" : "Lead Inbox",
     followUp:
       funnel.entryChannel === "WhatsApp"
-        ? "WhatsApp Rückfrage und Bewertungsaufgabe"
-        : "E-Mail Sequenz, Aufgabe und Kalenderlink",
+        ? text.defaults.followUpWhatsapp
+        : text.defaults.followUpDefault,
     leadDestination: "Lead Inbox",
     metaPixelId: "",
     metaCapiToken: "",
@@ -307,23 +313,23 @@ function normalizeFunnel(funnel: Funnel): EditableFunnel {
     matomoSiteId: "",
     consentMode: "intern",
     cookieConsent: "Website Consent",
-    dataRetention: "Antworten 6 Monate speichern, sensible Felder sofort minimieren",
-    sensitiveMode: "Telefon, E-Mail, Budget, Adresse und Uploads markieren",
+    dataRetention: text.defaults.dataRetention,
+    sensitiveMode: text.defaults.sensitiveMode,
     webhookUrl: "",
-    abVariant: "Basis vs. kuerzere mobile Variante",
+    abVariant: text.defaults.newFunnelAbVariant,
     trafficSplit: "50/50",
-    winningRule: "Gewinner nach Conversion Rate und qualifizierten Leads wählen",
+    winningRule: text.defaults.winningRule,
     workspaceAccess: "Intern",
-    statusTemplate: "Immobilien Vertrieb",
+    statusTemplate: text.statusTemplateOptions[0],
     notificationRecipients: "Franz, Sales Graz",
-    leadQualityRule: leadQualityRules[1],
+    leadQualityRule: text.leadQualityRules[1],
     triggerLeadInbox: true,
     triggerTask: true,
     triggerAppointment: isAppointment,
   };
 }
 
-function normalizeStep(step: FunnelStep, index: number): EditableStep {
+function normalizeStep(step: FunnelStep, index: number, text: FunnelCommandCenterText): EditableStep {
   const inferredType: EditableStepType =
     step.botRuleId ? "Bot" : step.channel === "Landingpage" ? "Landingpage" : index === 0 ? "Auswahlfrage" : "Kontaktformular";
 
@@ -338,29 +344,31 @@ function normalizeStep(step: FunnelStep, index: number): EditableStep {
     score: Math.max(10, Math.round(step.conversionRate * 3)),
     required: true,
     crmField: step.name.toLowerCase().replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, ""),
-    condition: "Wenn Antwort qualifiziert ist",
-    target: "Nächster Schritt",
+    condition: text.defaults.conditionQualified,
+    target: text.defaults.nextStep,
     analyticsEvent: index === 0 ? "funnel_start" : "step_view",
   };
 }
 
 function createFunnel({
+  text,
   project,
   user,
   workspaceId,
 }: {
+  text: FunnelCommandCenterText;
   project: Project;
   user?: WorkspaceUser;
   workspaceId: string;
 }): EditableFunnel {
-  const id = `funnel_new_${Date.now()}`;
+  const id = `funnel_new_${new Date().getTime()}`;
 
   return {
     id,
     workspaceId,
     projectId: project.id,
-    name: `${project.name} Neuer Funnel`,
-    goal: "Qualifizierte Leads erfassen und an Vertrieb übergeben",
+    name: text.defaults.newFunnelName(project.name),
+    goal: text.defaults.newFunnelGoal,
     audience: "Käufer",
     entryChannel: "Website",
     status: "entwurf",
@@ -368,21 +376,21 @@ function createFunnel({
     leads: 0,
     conversionRate: 0,
     ownerUserId: user?.id,
-    adaptationBrief: adaptationPrompt,
+    adaptationBrief: text.defaults.adaptationPrompt,
     templateUseCase: "Immobilien Käufer",
-    brandPreset: "Projekt-Branding übernehmen",
+    brandPreset: text.defaults.brandPreset,
     highlightColor: "#047857",
     customDomain: "",
     mobileFirstMode: true,
     headerMode: "Logo",
     landingPageBlocks: ["Hero", "Projektvideo", "Testimonials", "Kalender"],
-    designerHeroTitle: "Qualifizierte Leads erfassen und an Vertrieb übergeben",
-    designerHeroSubtitle: "Der Kunde beantwortet wenige Fragen, wird qualifiziert und landet direkt im richtigen CRM-Ziel.",
-    designerCtaLabel: "Lead starten",
+    designerHeroTitle: text.defaults.newFunnelGoal,
+    designerHeroSubtitle: text.defaults.newFunnelSubtitle,
+    designerCtaLabel: text.defaults.designerCtaLead,
     designerLogoText: project.name,
     designerBackgroundColor: "#ffffff",
     designerTextColor: "#020617",
-    designerBlockText: "Kundenvorteile, Vertrauen und nächster Schritt klar darstellen.",
+    designerBlockText: text.defaults.designerBlockText,
     designerFontPreset: "System",
     designerButtonRadius: "8",
     designerBlockRadius: "8",
@@ -392,12 +400,12 @@ function createFunnel({
     newsletterSegment: "",
     doubleOptIn: false,
     whatsappInbox: false,
-    emailSequence: "Sofort bestätigen, nach 2 Stunden Termin erinnern, nach 1 Tag Sales-Aufgabe",
-    messageCondition: "Wenn kein Termin gebucht wurde oder Score über 60 liegt",
-    messageDelay: "Sofort, 2 Stunden, 1 Tag",
+    emailSequence: text.defaults.emailSequenceAppointment,
+    messageCondition: text.defaults.messageCondition,
+    messageDelay: text.defaults.messageDelay,
     replySender: "Novalure Sales",
     crmStage: "Lead Inbox",
-    followUp: "Lead prüfen, Aufgabe erstellen und bei Hot Lead Termin anbieten",
+    followUp: text.defaults.newFunnelFollowUp,
     leadDestination: "Lead Inbox",
     metaPixelId: "",
     metaCapiToken: "",
@@ -406,51 +414,51 @@ function createFunnel({
     matomoSiteId: "",
     consentMode: "intern",
     cookieConsent: "Website Consent",
-    dataRetention: "Antworten 6 Monate speichern, sensible Felder sofort minimieren",
-    sensitiveMode: "Telefon, E-Mail, Budget, Adresse und Uploads markieren",
+    dataRetention: text.defaults.dataRetention,
+    sensitiveMode: text.defaults.sensitiveMode,
     webhookUrl: "",
-    abVariant: "Basis vs. kuerzere mobile Variante",
+    abVariant: text.defaults.newFunnelAbVariant,
     trafficSplit: "50/50",
-    winningRule: "Gewinner nach Conversion Rate und qualifizierten Leads wählen",
+    winningRule: text.defaults.winningRule,
     workspaceAccess: "Intern",
-    statusTemplate: "Immobilien Vertrieb",
+    statusTemplate: text.statusTemplateOptions[0],
     notificationRecipients: "Franz, Sales Graz",
-    leadQualityRule: leadQualityRules[1],
+    leadQualityRule: text.leadQualityRules[1],
     triggerLeadInbox: true,
     triggerTask: true,
     triggerAppointment: false,
   };
 }
 
-function createDefaultSteps(funnel: EditableFunnel): EditableStep[] {
+function createDefaultSteps(funnel: EditableFunnel, text: FunnelCommandCenterText): EditableStep[] {
   return [
     {
-      ...createStep(funnel, 0),
-      name: "Einstiegsfrage",
+      ...createStep(funnel, 0, text),
+      name: text.defaults.entryStepName,
       type: "Auswahlfrage",
-      question: "Wofür interessieren Sie sich?",
-      options: ["Besichtigung", "Beratung", "Informationen erhalten"],
+      question: text.defaults.entryStepQuestion,
+      options: [...text.defaults.entryStepOptions],
       score: 12,
       crmField: "interest",
       analyticsEvent: "funnel_start",
     },
     {
-      ...createStep(funnel, 1),
-      name: "Qualifizierung",
+      ...createStep(funnel, 1, text),
+      name: text.defaults.qualifyStepName,
       type: "Auswahlfrage",
-      question: "Wann ist der nächste Schritt relevant?",
-      options: ["Sofort", "In 30 Tagen", "Nur Recherche"],
+      question: text.defaults.qualifyStepQuestion,
+      options: [...text.defaults.qualifyStepOptions],
       score: 18,
       crmField: "timeline",
       analyticsEvent: "step_view",
     },
     {
-      ...createStep(funnel, 2),
-      name: "Kontaktformular",
+      ...createStep(funnel, 2, text),
+      name: text.defaults.contactStepName,
       type: "Kontaktformular",
       channel: "Website",
-      question: "Wie erreichen wir Sie am besten?",
-      options: ["Name", "E-Mail", "Telefon"],
+      question: text.defaults.contactStepQuestion,
+      options: [...text.defaults.contactStepOptions],
       score: 25,
       crmField: "contact",
       analyticsEvent: "lead",
@@ -458,28 +466,28 @@ function createDefaultSteps(funnel: EditableFunnel): EditableStep[] {
   ];
 }
 
-function createStep(funnel: EditableFunnel, index: number): EditableStep {
+function createStep(funnel: EditableFunnel, index: number, text: FunnelCommandCenterText): EditableStep {
   return {
-    id: `step_new_${Date.now()}`,
+    id: `step_new_${new Date().getTime()}`,
     workspaceId: funnel.workspaceId,
     projectId: funnel.projectId,
     funnelId: funnel.id,
-    name: `Neuer Schritt ${index + 1}`,
+    name: text.defaults.newStepName(index),
     channel: funnel.entryChannel === "Website" ? "Website" : funnel.entryChannel,
     status: "entwurf",
     visits: 0,
     leads: 0,
     conversionRate: 0,
-    dropOffReason: "Noch keine Daten vorhanden.",
-    nextOptimization: "Frage, Score und CRM-Feld definieren.",
+    dropOffReason: text.defaults.noData,
+    nextOptimization: text.defaults.nextOptimization,
     type: "Auswahlfrage",
-    question: `Neue Qualifizierungsfrage ${index + 1}`,
+    question: text.defaults.newStepQuestion(index),
     options: ["Option A", "Option B", "Option C"],
     score: 10,
     required: true,
     crmField: `funnel_step_${index + 1}`,
-    condition: "Wenn Antwort Option A ist",
-    target: "Nächster Schritt",
+    condition: text.defaults.conditionOptionA,
+    target: text.defaults.nextStep,
     analyticsEvent: "step_view",
   };
 }
@@ -493,14 +501,14 @@ export function FunnelCommandCenter({
   steps,
   users,
 }: FunnelCommandCenterProps) {
-  const text = labels[language];
+  const text = getFunnelCommandCenterCopy(language);
   const [activeView, setActiveView] = useState<FunnelView>("all");
   const [activeTab, setActiveTab] = useState<BuilderTab>("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [localFunnelIds, setLocalFunnelIds] = useState<string[]>([]);
   const [selectedFunnelId, setSelectedFunnelId] = useState(funnels[0]?.id ?? "");
   const [editedFunnels, setEditedFunnels] = useState<Record<string, EditableFunnel>>(() =>
-    Object.fromEntries(funnels.map((funnel) => [funnel.id, normalizeFunnel(funnel)])),
+    Object.fromEntries(funnels.map((funnel) => [funnel.id, normalizeFunnel(funnel, text)])),
   );
   const [editedSteps, setEditedSteps] = useState<Record<string, EditableStep[]>>(() =>
     Object.fromEntries(
@@ -508,16 +516,21 @@ export function FunnelCommandCenter({
         funnel.id,
         steps
           .filter((step) => step.funnelId === funnel.id)
-          .map((step, index) => normalizeStep(step, index)),
+          .map((step, index) => normalizeStep(step, index, text)),
       ]),
     ),
   );
   const [selectedStepId, setSelectedStepId] = useState("");
-  const [trackingEvents, setTrackingEvents] = useState(defaultTrackingEvents);
+  const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>(() =>
+    trackingEventConfigs.map(({ labelKey, ...event }) => ({
+      ...event,
+      label: text.tracking.events[labelKey],
+    })),
+  );
   const [monitor, setMonitor] = useState<Array<{ label: string; detail: string; status: string }>>([
-    { label: "Funnel geladen", detail: "Interner CRM-Monitor bereit", status: "intern" },
+    { label: text.monitorLoaded, detail: text.monitorReady, status: text.internal },
   ]);
-  const [notice, setNotice] = useState("Änderungen werden in diesem CRM-Workspace sofort als Entwurf geführt.");
+  const [notice, setNotice] = useState<string>(text.draftNotice);
   const sourceFunnels = useMemo(
     () => [
       ...funnels,
@@ -531,7 +544,7 @@ export function FunnelCommandCenter({
   const decoratedFunnels = useMemo(
     () =>
       sourceFunnels.map((funnel) => {
-        const editable = editedFunnels[funnel.id] ?? normalizeFunnel(funnel);
+        const editable = editedFunnels[funnel.id] ?? normalizeFunnel(funnel, text);
         const project = projects.find((item) => item.id === editable.projectId);
         const owner = editable.ownerUserId ? users.find((item) => item.id === editable.ownerUserId) : undefined;
         const funnelSteps = editedSteps[editable.id] ?? [];
@@ -541,7 +554,7 @@ export function FunnelCommandCenter({
 
         return { funnel: editable, project, owner, steps: funnelSteps, bottleneck };
       }),
-    [editedFunnels, editedSteps, projects, sourceFunnels, users],
+    [editedFunnels, editedSteps, projects, sourceFunnels, text, users],
   );
 
   const filteredFunnels = decoratedFunnels.filter((item) => {
@@ -571,7 +584,7 @@ export function FunnelCommandCenter({
     return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
   });
 
-  const selected = 
+  const selected =
     decoratedFunnels.find((item) => item.funnel.id === selectedFunnelId) ??
     filteredFunnels[0] ??
     decoratedFunnels[0];
@@ -586,8 +599,9 @@ export function FunnelCommandCenter({
       })
     : null;
   const selectedPreviewUrl = selectedBlueprint
-    ? `/preview/${selectedBlueprint.id}?device=mobile&mode=test&token=local`
+    ? `/preview/${selectedBlueprint.id}?device=mobile&mode=test&lang=${language}&token=local`
     : "";
+  const selectedReadiness = selectedBlueprint && selected ? getFunnelLiveReadiness(selectedBlueprint, selected.funnel) : null;
   const totalVisits = decoratedFunnels.reduce((sum, item) => sum + item.funnel.visits, 0);
   const totalLeads = decoratedFunnels.reduce((sum, item) => sum + item.funnel.leads, 0);
   const avgConversion = totalVisits > 0 ? (totalLeads / totalVisits) * 100 : 0;
@@ -595,20 +609,26 @@ export function FunnelCommandCenter({
   const botSteps = decoratedFunnels.flatMap((item) => item.steps).filter((step) => step.botRuleId || step.type === "Bot");
   const relatedLeads = selected ? leads.filter((lead) => lead.projectId === selected.funnel.projectId) : leads;
   const tabs: Array<{ id: BuilderTab; label: string }> = [
-    { id: "overview", label: "Übersicht" },
-    { id: "editor", label: "Funnel bearbeiten" },
-    { id: "design", label: "Design" },
-    { id: "steps", label: "Schritte" },
-    { id: "logic", label: "Logik" },
-    { id: "messages", label: "Messages" },
-    { id: "tracking", label: "Tracking" },
-    { id: "analytics", label: "Analyse" },
-    { id: "privacy", label: "Datenschutz" },
-    { id: "experiments", label: "A/B-Tests" },
-    { id: "handover", label: "CRM-Übergabe" },
-    { id: "workspace", label: "Workspace" },
-    { id: "preview", label: "Vorschau" },
+    { id: "overview", label: text.tabs.overview },
+    { id: "editor", label: text.tabs.editor },
+    { id: "design", label: text.tabs.design },
+    { id: "steps", label: text.tabs.steps },
+    { id: "logic", label: text.tabs.logic },
+    { id: "messages", label: text.tabs.messages },
+    { id: "tracking", label: text.tabs.tracking },
+    { id: "analytics", label: text.tabs.analytics },
+    { id: "privacy", label: text.tabs.privacy },
+    { id: "experiments", label: text.tabs.experiments },
+    { id: "handover", label: text.tabs.handover },
+    { id: "workspace", label: text.tabs.workspace },
+    { id: "preview", label: text.tabs.preview },
   ];
+  const customerTabIds: BuilderTab[] = ["overview", "editor", "design", "steps", "logic", "handover", "preview"];
+  const primaryTabs = tabs.filter((tab) => customerTabIds.includes(tab.id));
+  const advancedTabs = tabs.filter((tab) => !customerTabIds.includes(tab.id));
+  const isDesignerMode = activeTab === "design";
+  const backToFunnelsLabel = language === "de" ? "Zurück zur Funnel-Liste" : "Back to funnel list";
+  const editorModeLabel = language === "de" ? "Editor-Modus" : "Editor mode";
   const views: Array<{ id: FunnelView; label: string; count: number }> = [
     { id: "all", label: text.all, count: decoratedFunnels.length },
     { id: "active", label: text.active, count: decoratedFunnels.filter((item) => item.funnel.status === "aktiv").length },
@@ -650,7 +670,7 @@ export function FunnelCommandCenter({
     if (!selected) return;
     setEditedSteps((current) => {
       const currentSteps = current[selected.funnel.id] ?? [];
-      const nextStep = createStep(selected.funnel, currentSteps.length);
+      const nextStep = createStep(selected.funnel, currentSteps.length, text);
       setSelectedStepId(nextStep.id);
       return {
         ...current,
@@ -658,7 +678,7 @@ export function FunnelCommandCenter({
       };
     });
     setActiveTab("steps");
-    setNotice("Neuer Funnel-Schritt wurde im CRM-Builder angelegt.");
+    setNotice(text.newStepNotice);
   }
 
   function createNewFunnel() {
@@ -668,8 +688,8 @@ export function FunnelCommandCenter({
 
     if (!project) return;
 
-    const funnel = createFunnel({ project, user: owner, workspaceId });
-    const funnelSteps = createDefaultSteps(funnel);
+    const funnel = createFunnel({ text, project, user: owner, workspaceId });
+    const funnelSteps = createDefaultSteps(funnel, text);
     setEditedFunnels((current) => ({ ...current, [funnel.id]: funnel }));
     setEditedSteps((current) => ({ ...current, [funnel.id]: funnelSteps }));
     setLocalFunnelIds((current) => [...current, funnel.id]);
@@ -677,24 +697,24 @@ export function FunnelCommandCenter({
     setSelectedStepId(funnelSteps[0]?.id ?? "");
     setActiveView("all");
     setActiveTab("editor");
-    pushMonitor("Neuer Funnel", `${funnel.name} wurde für ${project.name} angelegt`, "CRM");
-    setNotice("Neuer Funnel erstellt: Projekt, Lead-Ziel, Pipeline und Verantwortlicher können jetzt bearbeitet werden.");
+    pushMonitor(text.newFunnel, text.newFunnelDetail(funnel.name, project.name), "CRM");
+    setNotice(text.newFunnelNotice);
   }
 
   function duplicateStep() {
     if (!selected || !selectedStep) return;
     const copy: EditableStep = {
       ...selectedStep,
-      id: `step_copy_${Date.now()}`,
-      name: `${selectedStep.name} Kopie`,
-      question: `${selectedStep.question} Kopie`,
+      id: `step_copy_${new Date().getTime()}`,
+      name: `${selectedStep.name} ${text.stepCopySuffix}`,
+      question: `${selectedStep.question} ${text.stepCopySuffix}`,
     };
     setEditedSteps((current) => ({
       ...current,
       [selected.funnel.id]: [...(current[selected.funnel.id] ?? []), copy],
     }));
     setSelectedStepId(copy.id);
-    setNotice("Schritt wurde dupliziert und bleibt Teil desselben CRM-Funnels.");
+    setNotice(text.duplicateNotice);
   }
 
   function removeStep() {
@@ -704,17 +724,55 @@ export function FunnelCommandCenter({
       [selected.funnel.id]: (current[selected.funnel.id] ?? []).filter((step) => step.id !== selectedStep.id),
     }));
     setSelectedStepId(selectedSteps[0]?.id ?? "");
-    setNotice("Schritt wurde aus dem Funnel-Entwurf entfernt.");
+    setNotice(text.removeNotice);
   }
 
   function pushMonitor(label: string, detail: string, status = "intern") {
     setMonitor((current) => [{ label, detail, status }, ...current].slice(0, 8));
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     if (!selected) return;
-    pushMonitor("Funnel gespeichert", `${selected.funnel.name} als CRM-Entwurf aktualisiert`, "CRM");
-    setNotice("Gespeichert: Funnel, Schritte, Logik, Tracking und CRM-Übergabe sind zusammengeführt.");
+    const originalId = selected.funnel.id;
+    const response = await fetch("/api/crm/funnels", {
+      body: JSON.stringify({ funnel: selected.funnel, steps: selectedSteps }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }).catch(() => null);
+
+    if (response?.ok) {
+      const payload = await response.json() as { funnel?: EditableFunnel; stepIds?: string[] };
+      if (payload.funnel?.id) {
+        const persistedFunnel = { ...selected.funnel, ...payload.funnel };
+        const persistedSteps = selectedSteps.map((step, index) => ({
+          ...step,
+          funnelId: persistedFunnel.id,
+          id: payload.stepIds?.[index] ?? step.id,
+          projectId: persistedFunnel.projectId,
+          workspaceId: persistedFunnel.workspaceId,
+        }));
+
+        setEditedFunnels((current) => {
+          const next = { ...current };
+          delete next[originalId];
+          return { ...next, [persistedFunnel.id]: persistedFunnel };
+        });
+        setEditedSteps((current) => {
+          const next = { ...current };
+          delete next[originalId];
+          return { ...next, [persistedFunnel.id]: persistedSteps };
+        });
+        setLocalFunnelIds((current) => [
+          persistedFunnel.id,
+          ...current.filter((id) => id !== originalId && id !== persistedFunnel.id),
+        ]);
+        setSelectedFunnelId(persistedFunnel.id);
+        setSelectedStepId(persistedSteps[0]?.id ?? "");
+      }
+    }
+
+    pushMonitor(text.saved, text.savedDetail(selected.funnel.name), "CRM");
+    setNotice(text.savedNotice);
   }
 
   function simulateTracking(event: TrackingEvent) {
@@ -728,10 +786,77 @@ export function FunnelCommandCenter({
     setSelectedStepId((editedSteps[id] ?? [])[0]?.id ?? "");
   }
 
+  useEffect(() => {
+    if (!isDesignerMode) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isDesignerMode]);
+
   if (!selected) {
     return (
       <section className="rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
         {text.noFunnels}
+      </section>
+    );
+  }
+
+  if (isDesignerMode && selectedBlueprint) {
+    return (
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#eef7ff] text-slate-950">
+        <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
+          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <button
+                className="shrink-0 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                onClick={() => setActiveTab("overview")}
+                type="button"
+              >
+                {backToFunnelsLabel}
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                  {editorModeLabel}
+                </p>
+                <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">
+                  {selected.funnel.name}
+                </h3>
+                <p className="mt-1 break-words text-xs text-stone-600">
+                  {selected.project?.name ?? projectLabel} · {getCrmLeadTypeLabel(selected.funnel.audience, language)} · {getCrmSourceLabel(selected.funnel.entryChannel, language)}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                onClick={() => setActiveTab("steps")}
+                type="button"
+              >
+                {text.tabs.steps}
+              </button>
+              <button
+                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => void saveDraft()}
+                type="button"
+              >
+                {text.save}
+              </button>
+            </div>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
+          <FunnelBlueprintDesigner
+            initialBlueprint={selectedBlueprint}
+            key={selectedBlueprint.id}
+            language={language}
+            onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
+            variant="immersive"
+          />
+        </div>
       </section>
     );
   }
@@ -774,7 +899,7 @@ export function FunnelCommandCenter({
               onClick={createNewFunnel}
               type="button"
             >
-              Neuen Funnel erstellen
+              {text.createFunnel}
             </button>
             <div className="grid min-w-0 grid-cols-2 gap-2 text-sm 2xl:grid-cols-4">
               {[
@@ -847,18 +972,18 @@ export function FunnelCommandCenter({
                       </span>
                     </span>
                     <span className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${isSelected ? "border-white/10 bg-white/10 text-white" : statusStyles[item.funnel.status]}`}>
-                      {item.funnel.status}
+                      {getCrmStatusLabel(item.funnel.status, language)}
                     </span>
                   </span>
                   <span className="mt-3 grid min-w-0 gap-2 text-xs">
                     <span className={`min-w-0 rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : channelStyles[item.funnel.entryChannel]}`}>
-                      {item.funnel.entryChannel}
+                      {getCrmSourceLabel(item.funnel.entryChannel, language)}
                     </span>
                     <span className={`min-w-0 rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"}`}>
-                      {formatNumber(item.funnel.visits, language)} Besuche · {item.funnel.leads} Leads
+                      {formatNumber(item.funnel.visits, language)} {text.visits} · {formatNumber(item.funnel.leads, language)} {text.leads}
                     </span>
                     <span className={`min-w-0 rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-emerald-300/20 text-emerald-100" : "bg-emerald-50 text-emerald-800"}`}>
-                      {formatPercent(item.funnel.conversionRate, language)}% Conversion
+                      {formatPercent(item.funnel.conversionRate, language)}% {text.conversion}
                     </span>
                   </span>
                 </button>
@@ -877,21 +1002,21 @@ export function FunnelCommandCenter({
                 {selected.funnel.name}
               </h4>
               <p className="mt-2 break-words text-sm text-stone-600">
-                {selected.project?.name ?? projectLabel} · {selected.funnel.audience} · {selected.funnel.entryChannel}
+                {selected.project?.name ?? projectLabel} · {getCrmLeadTypeLabel(selected.funnel.audience, language)} · {getCrmSourceLabel(selected.funnel.entryChannel, language)}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800" onClick={addStep} type="button">
                 {text.addStep}
               </button>
-              <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={saveDraft} type="button">
+              <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={() => void saveDraft()} type="button">
                 {text.save}
               </button>
             </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {tabs.map((tab) => (
+            {primaryTabs.map((tab) => (
               <button
                 className={`rounded-md border px-3 py-2 text-sm font-semibold ${
                   activeTab === tab.id
@@ -905,32 +1030,88 @@ export function FunnelCommandCenter({
                 {tab.label}
               </button>
             ))}
+            <details className="relative">
+              <summary className={`list-none rounded-md border px-3 py-2 text-sm font-semibold ${
+                advancedTabs.some((tab) => activeTab === tab.id)
+                  ? "border-slate-950 bg-slate-950 text-white"
+                  : "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50"
+              }`}>
+                {text.tabs.advanced}
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 grid min-w-56 gap-1 rounded-lg border border-stone-200 bg-white p-2 shadow-lg">
+                {advancedTabs.map((tab) => (
+                  <button
+                    className={`rounded-md px-3 py-2 text-left text-sm font-semibold ${activeTab === tab.id ? "bg-slate-950 text-white" : "text-stone-700 hover:bg-stone-50"}`}
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </details>
           </div>
 
           {activeTab === "overview" ? (
             <div className="mt-5 grid gap-4 xl:grid-cols-3">
               {[
-                ["Ziel", selected.funnel.goal],
-                ["Lead-Ziel", selected.funnel.leadDestination],
-                ["CRM-Phase", selected.funnel.crmStage],
-                ["Follow-up", selected.funnel.followUp],
-                ["Besuche", formatNumber(selected.funnel.visits, language)],
-                ["Leads", selected.funnel.leads],
-                ["Conversion", `${formatPercent(selected.funnel.conversionRate, language)}%`],
+                [text.overview.goal, selected.funnel.goal],
+                [text.overview.leadTarget, getFunnelDestinationLabel(selected.funnel.leadDestination, language)],
+                [text.overview.crmStage, selected.funnel.crmStage],
+                [text.overview.followUp, selected.funnel.followUp],
+                [text.visits, formatNumber(selected.funnel.visits, language)],
+                [text.leads, formatNumber(selected.funnel.leads, language)],
+                [text.conversion, `${formatPercent(selected.funnel.conversionRate, language)}%`],
               ].map(([label, value]) => (
                 <div className="rounded-lg bg-stone-50 p-4" key={label}>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
                   <p className="mt-2 break-words text-sm font-semibold text-slate-950">{value}</p>
                 </div>
               ))}
+              {selectedReadiness ? (
+                <div className={`rounded-lg border p-4 xl:col-span-3 ${selectedReadiness.status === "blocked" ? "border-amber-200 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+                  <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{text.overview.liveReadinessTitle}</p>
+                      <p className="mt-2 break-words text-sm">
+                        {text.overview.liveStatus}: {
+                          selectedReadiness.status === "blocked"
+                            ? text.overview.liveStatusBlocked
+                            : selectedReadiness.status === "live"
+                              ? text.overview.liveStatusLive
+                              : selectedReadiness.status === "optimize"
+                                ? text.overview.liveStatusOptimize
+                                : text.overview.liveStatusTest
+                        }
+                      </p>
+                      <p className="mt-1 break-words text-sm">
+                        {text.overview.publicToken}: {selectedReadiness.publicTokenAvailable ? text.overview.publicTokenAvailable : text.overview.publicTokenMissing}
+                      </p>
+                    </div>
+                    <span className="rounded-md bg-white px-3 py-2 text-xs font-semibold">
+                      {selectedReadiness.blockers.length ? text.overview.preflightBlockers : text.overview.preflightReady}
+                    </span>
+                  </div>
+                  {selectedReadiness.blockers.length ? (
+                    <ul className="mt-3 grid gap-2 text-sm">
+                      {selectedReadiness.blockers.map((blocker) => {
+                        const key = blocker.split(":")[0] as keyof typeof text.overview.preflightBlockerNames;
+                        return <li className="break-words" key={blocker}>- {text.overview.preflightBlockerNames[key] ?? blocker}</li>;
+                      })}
+                    </ul>
+                  ) : null}
+                  <p className="mt-3 break-words text-sm">{text.overview.liveLinkHint}</p>
+                </div>
+              ) : null}
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950 xl:col-span-3">
-                <p className="text-sm font-semibold">Ein CRM, ein Funnel-Workspace</p>
+                <p className="text-sm font-semibold">{text.overview.workspaceTitle}</p>
                 <p className="mt-2 break-words text-sm">
-                  Diese Ansicht bearbeitet denselben Funnel, der links gelistet ist. Schritte, Logik, Tracking, Analyse und Übergabe sind Tabs derselben CRM-Anwendung.
+                  {text.overview.workspaceDescription}
                 </p>
               </div>
               <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-950 xl:col-span-3">
-                <p className="text-sm font-semibold">Adaptierungs-Prompt für diesen Builder</p>
+                <p className="text-sm font-semibold">{text.overview.builderPromptTitle}</p>
                 <p className="mt-2 break-words text-sm">{selected.funnel.adaptationBrief}</p>
               </div>
             </div>
@@ -939,22 +1120,19 @@ export function FunnelCommandCenter({
           {activeTab === "editor" ? (
             <div className="mt-5 grid min-w-0 gap-4 xl:grid-cols-2">
               <label className={fieldLabelClass}>
-                Funnel-Vorlage
+                {text.editor.template}
                 <select className={selectClass} value={selected.funnel.templateUseCase} onChange={(event) => updateSelectedFunnel({ templateUseCase: event.target.value as EditableFunnel["templateUseCase"] })}>
-                  <option>Immobilien Käufer</option>
-                  <option>Immobilien Verkäufer</option>
-                  <option>Termin</option>
-                  <option>B2B Lead</option>
-                  <option>Newsletter</option>
-                  <option>Custom</option>
+                  {(["Immobilien Käufer", "Immobilien Verkäufer", "Termin", "B2B Lead", "Newsletter", "Custom"] as const).map((option) => (
+                    <option key={option} value={option}>{getFunnelTemplateUseCaseLabel(option, language)}</option>
+                  ))}
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Funnel-Name
+                {text.editor.name}
                 <input className={inputClass} value={selected.funnel.name} onChange={(event) => updateSelectedFunnel({ name: event.target.value })} />
               </label>
               <label className={fieldLabelClass}>
-                Projekt
+                {text.editor.project}
                 <select
                   className={selectClass}
                   value={selected.funnel.projectId}
@@ -968,38 +1146,35 @@ export function FunnelCommandCenter({
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Ziel
+                {text.editor.goal}
                 <input className={inputClass} value={selected.funnel.goal} onChange={(event) => updateSelectedFunnel({ goal: event.target.value })} />
               </label>
               <label className={fieldLabelClass}>
-                Zielgruppe
+                {text.editor.audience}
                 <select className={selectClass} value={selected.funnel.audience} onChange={(event) => updateSelectedFunnel({ audience: event.target.value as EditableFunnel["audience"] })}>
-                  <option>Käufer</option>
-                  <option>Verkäufer</option>
-                  <option>Investor</option>
-                  <option>Bauträger</option>
+                  {(["Käufer", "Verkäufer", "Investor", "Bauträger"] as const).map((option) => (
+                    <option key={option} value={option}>{getCrmLeadTypeLabel(option, language)}</option>
+                  ))}
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Einstiegskanal
+                {text.editor.channel}
                 <select className={selectClass} value={selected.funnel.entryChannel} onChange={(event) => updateSelectedFunnel({ entryChannel: event.target.value as EditableFunnel["entryChannel"] })}>
-                  <option>Website</option>
-                  <option>Landingpage</option>
-                  <option>WhatsApp</option>
-                  <option>Instagram</option>
-                  <option>Newsletter</option>
+                  {(["Website", "Landingpage", "WhatsApp", "Instagram", "Newsletter"] as const).map((option) => (
+                    <option key={option} value={option}>{getCrmSourceLabel(option, language)}</option>
+                  ))}
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Status
+                {text.editor.status}
                 <select className={selectClass} value={selected.funnel.status} onChange={(event) => updateSelectedFunnel({ status: event.target.value as EditableFunnel["status"] })}>
-                  <option value="aktiv">aktiv</option>
-                  <option value="optimieren">optimieren</option>
-                  <option value="entwurf">entwurf</option>
+                  <option value="aktiv">{text.statusOptions.aktiv}</option>
+                  <option value="optimieren">{text.statusOptions.optimieren}</option>
+                  <option value="entwurf">{text.statusOptions.entwurf}</option>
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Verantwortlich
+                {text.editor.owner}
                 <select className={selectClass} value={selected.funnel.ownerUserId ?? ""} onChange={(event) => updateSelectedFunnel({ ownerUserId: event.target.value })}>
                   {users.map((user) => (
                     <option key={user.id} value={user.id}>{user.name}</option>
@@ -1007,7 +1182,7 @@ export function FunnelCommandCenter({
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Leads laufen nach
+                {text.editor.leadDestination}
                 <select
                   className={selectClass}
                   value={selected.funnel.leadDestination}
@@ -1019,14 +1194,13 @@ export function FunnelCommandCenter({
                     })
                   }
                 >
-                  <option>Lead Inbox</option>
-                  <option>Pipeline</option>
-                  <option>Kalender</option>
-                  <option>Newsletter Segment</option>
+                  {(["Lead Inbox", "Pipeline", "Kalender", "Newsletter Segment"] as const).map((option) => (
+                    <option key={option} value={option}>{getFunnelDestinationLabel(option, language)}</option>
+                  ))}
                 </select>
               </label>
               <label className={fieldLabelClass}>
-                Pipeline-Phase
+                {text.editor.pipelineStage}
                 <input
                   className={inputClass}
                   value={selected.funnel.crmStage}
@@ -1034,13 +1208,11 @@ export function FunnelCommandCenter({
                 />
               </label>
               <label className={fieldLabelClass}>
-                Terminbuchung
+                {text.editor.booking}
                 <select className={selectClass} value={selected.funnel.bookingProvider} onChange={(event) => updateSelectedFunnel({ bookingProvider: event.target.value as EditableFunnel["bookingProvider"], triggerAppointment: true })}>
-                  <option>CRM Kalender</option>
-                  <option>Calendly</option>
-                  <option>Meeting-Kalender</option>
-                  <option>Cal.com</option>
-                  <option>Externer Kalender</option>
+                  {(["CRM Kalender", "Calendly", "Meeting-Kalender", "Cal.com", "Externer Kalender"] as const).map((option) => (
+                    <option key={option} value={option}>{getFunnelBookingProviderLabel(option, language)}</option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -1051,6 +1223,7 @@ export function FunnelCommandCenter({
                 <FunnelBlueprintDesigner
                   initialBlueprint={selectedBlueprint}
                   key={selectedBlueprint.id}
+                  language={language}
                   onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
                 />
               ) : null}
@@ -1067,23 +1240,23 @@ export function FunnelCommandCenter({
                     onClick={() => setSelectedStepId(step.id)}
                     type="button"
                   >
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">Schritt {index + 1}</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">{text.stepsPanel.step} {index + 1}</span>
                     <span className="mt-1 block break-words text-sm font-semibold">{step.name}</span>
-                    <span className="mt-2 block break-words text-xs opacity-70">{step.type} · Score {step.score} · {step.conversionRate}%</span>
+                    <span className="mt-2 block break-words text-xs opacity-70">{getFunnelStepTypeLabel(step.type, language)} · {text.stepsPanel.score} {step.score} · {step.conversionRate}%</span>
                   </button>
                 ))}
               </div>
               {selectedStep ? (
                 <div className={mutedCardClass}>
                   <div className="grid min-w-0 gap-4">
-                    <label className={fieldLabelClass}>Name<input className={inputClass} value={selectedStep.name} onChange={(event) => updateStep(selectedStep.id, { name: event.target.value })} /></label>
-                    <label className={fieldLabelClass}>Frage oder Inhalt<textarea className={textareaClass} value={selectedStep.question} onChange={(event) => updateStep(selectedStep.id, { question: event.target.value })} /></label>
-                    <label className={fieldLabelClass}>Typ<select className={selectClass} value={selectedStep.type} onChange={(event) => updateStep(selectedStep.id, { type: event.target.value as EditableStepType })}>{stepTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-                    <label className={fieldLabelClass}>Antwortoptionen<textarea className={textareaClass} value={selectedStep.options.join("\n")} onChange={(event) => updateStep(selectedStep.id, { options: event.target.value.split("\n").filter(Boolean) })} /></label>
+                    <label className={fieldLabelClass}>{text.stepsPanel.name}<input className={inputClass} value={selectedStep.name} onChange={(event) => updateStep(selectedStep.id, { name: event.target.value })} /></label>
+                    <label className={fieldLabelClass}>{text.stepsPanel.question}<textarea className={textareaClass} value={selectedStep.question} onChange={(event) => updateStep(selectedStep.id, { question: event.target.value })} /></label>
+                    <label className={fieldLabelClass}>{text.stepsPanel.type}<select className={selectClass} value={selectedStep.type} onChange={(event) => updateStep(selectedStep.id, { type: event.target.value as EditableStepType })}>{stepTypes.map((type) => <option key={type} value={type}>{getFunnelStepTypeLabel(type, language)}</option>)}</select></label>
+                    <label className={fieldLabelClass}>{text.stepsPanel.options}<textarea className={textareaClass} value={selectedStep.options.join("\n")} onChange={(event) => updateStep(selectedStep.id, { options: event.target.value.split("\n").filter(Boolean) })} /></label>
                     <div className="grid min-w-0 gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
-                      <label className={fieldLabelClass}>Score<input className={inputClass} type="number" value={selectedStep.score} onChange={(event) => updateStep(selectedStep.id, { score: Number(event.target.value) })} /></label>
-                      <label className={fieldLabelClass}>CRM-Feld<input className={inputClass} value={selectedStep.crmField} onChange={(event) => updateStep(selectedStep.id, { crmField: event.target.value })} /></label>
-                      <label className={`${fieldLabelClass} sm:col-span-2`}>Pflicht<select className={selectClass} value={String(selectedStep.required)} onChange={(event) => updateStep(selectedStep.id, { required: event.target.value === "true" })}><option value="true">Ja</option><option value="false">Nein</option></select></label>
+                      <label className={fieldLabelClass}>{text.stepsPanel.score}<input className={inputClass} type="number" value={selectedStep.score} onChange={(event) => updateStep(selectedStep.id, { score: Number(event.target.value) })} /></label>
+                      <label className={fieldLabelClass}>{text.stepsPanel.crmField}<input className={inputClass} value={selectedStep.crmField} onChange={(event) => updateStep(selectedStep.id, { crmField: event.target.value })} /></label>
+                      <label className={`${fieldLabelClass} sm:col-span-2`}>{text.stepsPanel.required}<select className={selectClass} value={String(selectedStep.required)} onChange={(event) => updateStep(selectedStep.id, { required: event.target.value === "true" })}><option value="true">{text.stepsPanel.yes}</option><option value="false">{text.stepsPanel.no}</option></select></label>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold" onClick={duplicateStep} type="button">{text.duplicate}</button>
@@ -1099,9 +1272,9 @@ export function FunnelCommandCenter({
             <div className="mt-5 grid min-w-0 gap-3">
               {selectedSteps.map((step, index) => (
                 <div className={`${mutedCardClass} grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(180px,0.7fr)]`} key={step.id}>
-                  <label className={fieldLabelClass}>Wenn<input className={inputClass} value={step.condition} onChange={(event) => updateStep(step.id, { condition: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Dann zu<input className={inputClass} value={step.target} onChange={(event) => updateStep(step.id, { target: event.target.value })} /></label>
-                  <div className="min-w-0 rounded-md bg-white p-3 text-sm"><p className="font-semibold">Map</p><p className="mt-1 break-words text-stone-600">Schritt {index + 1}: {step.name}</p></div>
+                  <label className={fieldLabelClass}>{text.logic.when}<input className={inputClass} value={step.condition} onChange={(event) => updateStep(step.id, { condition: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.logic.then}<input className={inputClass} value={step.target} onChange={(event) => updateStep(step.id, { target: event.target.value })} /></label>
+                  <div className="min-w-0 rounded-md bg-white p-3 text-sm"><p className="font-semibold">{text.logic.map}</p><p className="mt-1 break-words text-stone-600">{text.stepsPanel.step} {index + 1}: {step.name}</p></div>
                 </div>
               ))}
             </div>
@@ -1110,30 +1283,30 @@ export function FunnelCommandCenter({
           {activeTab === "messages" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
               <div className={mutedCardClass}>
-                <p className="text-sm font-semibold">Follow-up Automation</p>
+                <p className="text-sm font-semibold">{text.messages.automation}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className={fieldLabelClass}>Sequenz<textarea className={textareaClass} value={selected.funnel.emailSequence} onChange={(event) => updateSelectedFunnel({ emailSequence: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Bedingung<input className={inputClass} value={selected.funnel.messageCondition} onChange={(event) => updateSelectedFunnel({ messageCondition: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Delays<input className={inputClass} value={selected.funnel.messageDelay} onChange={(event) => updateSelectedFunnel({ messageDelay: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Absender<input className={inputClass} value={selected.funnel.replySender} onChange={(event) => updateSelectedFunnel({ replySender: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.messages.sequence}<textarea className={textareaClass} value={selected.funnel.emailSequence} onChange={(event) => updateSelectedFunnel({ emailSequence: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.messages.condition}<input className={inputClass} value={selected.funnel.messageCondition} onChange={(event) => updateSelectedFunnel({ messageCondition: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.messages.delays}<input className={inputClass} value={selected.funnel.messageDelay} onChange={(event) => updateSelectedFunnel({ messageDelay: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.messages.sender}<input className={inputClass} value={selected.funnel.replySender} onChange={(event) => updateSelectedFunnel({ replySender: event.target.value })} /></label>
                 </div>
               </div>
               <div className="min-w-0 rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
-                <p className="text-sm font-semibold">WhatsApp, DOI und Lead Magnet</p>
+                <p className="text-sm font-semibold">{text.messages.channelTitle}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className="flex min-w-0 items-start gap-2 text-sm font-semibold"><input className="mt-0.5 shrink-0" checked={selected.funnel.whatsappInbox} onChange={(event) => updateSelectedFunnel({ whatsappInbox: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">WhatsApp Inbox am Lead aktivieren</span></label>
-                  <label className="flex min-w-0 items-start gap-2 text-sm font-semibold"><input className="mt-0.5 shrink-0" checked={selected.funnel.doubleOptIn} onChange={(event) => updateSelectedFunnel({ doubleOptIn: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">Double Opt-in / OTP vor Automation</span></label>
-                  <label className={fieldLabelClass}>Lead Magnet<input className="w-full min-w-0 max-w-full rounded-md border border-blue-200 px-3 py-2 text-sm" placeholder="PDF, Checkliste, Bewertung, Projekt-Update" value={selected.funnel.leadMagnet} onChange={(event) => updateSelectedFunnel({ leadMagnet: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Newsletter Segment<input className="w-full min-w-0 max-w-full rounded-md border border-blue-200 px-3 py-2 text-sm" value={selected.funnel.newsletterSegment} onChange={(event) => updateSelectedFunnel({ newsletterSegment: event.target.value })} /></label>
+                  <label className="flex min-w-0 items-start gap-2 text-sm font-semibold"><input className="mt-0.5 shrink-0" checked={selected.funnel.whatsappInbox} onChange={(event) => updateSelectedFunnel({ whatsappInbox: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">{text.messages.whatsapp}</span></label>
+                  <label className="flex min-w-0 items-start gap-2 text-sm font-semibold"><input className="mt-0.5 shrink-0" checked={selected.funnel.doubleOptIn} onChange={(event) => updateSelectedFunnel({ doubleOptIn: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">{text.messages.doubleOptIn}</span></label>
+                  <label className={fieldLabelClass}>{text.messages.leadMagnet}<input className="w-full min-w-0 max-w-full rounded-md border border-blue-200 px-3 py-2 text-sm" placeholder={text.messages.leadMagnetPlaceholder} value={selected.funnel.leadMagnet} onChange={(event) => updateSelectedFunnel({ leadMagnet: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.messages.newsletterSegment}<input className="w-full min-w-0 max-w-full rounded-md border border-blue-200 px-3 py-2 text-sm" value={selected.funnel.newsletterSegment} onChange={(event) => updateSelectedFunnel({ newsletterSegment: event.target.value })} /></label>
                 </div>
               </div>
               <div className={`${cardClass} 2xl:col-span-2`}>
-                <p className="text-sm font-semibold">CRM-Status-Trigger</p>
+                <p className="text-sm font-semibold">{text.messages.statusTriggers}</p>
                 <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   {["Neu", "Qualifiziert", "Termin offen", "Besichtigung gebucht"].map((stage, index) => (
                     <div className="rounded-md bg-stone-50 p-3 text-sm" key={stage}>
                       <p className="font-semibold">{stage}</p>
-                      <p className="mt-1 text-stone-600">{index === 0 ? "Sofort bestätigen" : index === 1 ? "Sales informieren" : index === 2 ? "Reminder senden" : "Vorbereitung senden"}</p>
+                      <p className="mt-1 text-stone-600">{text.messages.triggerDescriptions[index] ?? text.messages.triggerDescriptions[0]}</p>
                     </div>
                   ))}
                 </div>
@@ -1144,35 +1317,35 @@ export function FunnelCommandCenter({
           {activeTab === "tracking" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
               <div className={`${mutedCardClass} grid gap-3`}>
-                <p className="text-sm font-semibold">Pixel, Analytics und Consent</p>
+                <p className="text-sm font-semibold">{text.tracking.setupTitle}</p>
                 <label className={fieldLabelClass}>Meta Pixel ID<input className={inputClass} value={selected.funnel.metaPixelId} onChange={(event) => updateSelectedFunnel({ metaPixelId: event.target.value })} placeholder="123456789012345" /></label>
-                <label className={fieldLabelClass}>Meta Conversion API Token<input className={inputClass} value={selected.funnel.metaCapiToken} onChange={(event) => updateSelectedFunnel({ metaCapiToken: event.target.value })} placeholder="Server Token für deduplizierte Events" /></label>
+                <label className={fieldLabelClass}>{text.tracking.metaCapi}<input className={inputClass} value={selected.funnel.metaCapiToken} onChange={(event) => updateSelectedFunnel({ metaCapiToken: event.target.value })} placeholder={text.tracking.metaCapiPlaceholder} /></label>
                 <label className={fieldLabelClass}>Google Analytics GA4 ID<input className={inputClass} value={selected.funnel.gaMeasurementId} onChange={(event) => updateSelectedFunnel({ gaMeasurementId: event.target.value })} placeholder="G-XXXXXXXXXX" /></label>
                 <label className={fieldLabelClass}>Google Tag Manager<input className={inputClass} value={selected.funnel.gtmId} onChange={(event) => updateSelectedFunnel({ gtmId: event.target.value })} placeholder="GTM-XXXXXXX" /></label>
-                <label className={fieldLabelClass}>Matomo Site ID<input className={inputClass} value={selected.funnel.matomoSiteId} onChange={(event) => updateSelectedFunnel({ matomoSiteId: event.target.value })} placeholder="Optional für eigenes Tracking" /></label>
-                <label className={fieldLabelClass}>Consent und Sendestatus<select className={selectClass} value={selected.funnel.consentMode} onChange={(event) => updateSelectedFunnel({ consentMode: event.target.value as EditableFunnel["consentMode"] })}><option value="intern">Nur intern überwachen</option><option value="bereit">Bereit, wartet auf Consent</option><option value="aktiv">Aktiv senden</option></select></label>
+                <label className={fieldLabelClass}>{text.tracking.matomo}<input className={inputClass} value={selected.funnel.matomoSiteId} onChange={(event) => updateSelectedFunnel({ matomoSiteId: event.target.value })} placeholder={text.tracking.matomoPlaceholder} /></label>
+                <label className={fieldLabelClass}>{text.tracking.consent}<select className={selectClass} value={selected.funnel.consentMode} onChange={(event) => updateSelectedFunnel({ consentMode: event.target.value as EditableFunnel["consentMode"] })}><option value="intern">{text.consentModeOptions.intern}</option><option value="bereit">{text.consentModeOptions.bereit}</option><option value="aktiv">{text.consentModeOptions.aktiv}</option></select></label>
               </div>
               <div className="grid min-w-0 gap-2">
                 {trackingEvents.map((event) => (
                   <label className="flex min-w-0 items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm" key={event.id}>
                     <input checked={event.enabled} className="mt-1 h-4 w-4 shrink-0" onChange={() => setTrackingEvents((current) => current.map((item) => item.id === event.id ? { ...item, enabled: !item.enabled } : item))} type="checkbox" />
                     <span className="min-w-0"><span className="block font-semibold">{event.label}</span><span className="block break-words text-xs text-stone-500">Meta: {event.meta} · GA4: {event.ga}</span></span>
-                    <button className="ml-auto shrink-0 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold" onClick={(buttonEvent) => { buttonEvent.preventDefault(); simulateTracking(event); }} type="button">Test</button>
+                    <button className="ml-auto shrink-0 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold" onClick={(buttonEvent) => { buttonEvent.preventDefault(); simulateTracking(event); }} type="button">{text.tracking.test}</button>
                   </label>
                 ))}
               </div>
               <div className={`${cardClass} 2xl:col-span-2`}>
-                <p className="text-sm font-semibold">Server-Side Events und CRM-Datenfluss</p>
+                <p className="text-sm font-semibold">{text.tracking.serverTitle}</p>
                 <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-2">
-                  <label className={fieldLabelClass}>Webhook oder Automations-Endpunkt<input className={inputClass} value={selected.funnel.webhookUrl} onChange={(event) => updateSelectedFunnel({ webhookUrl: event.target.value })} placeholder="https://hooks.crm.local/funnel-lead" /></label>
+                  <label className={fieldLabelClass}>{text.tracking.webhook}<input className={inputClass} value={selected.funnel.webhookUrl} onChange={(event) => updateSelectedFunnel({ webhookUrl: event.target.value })} placeholder="https://hooks.crm.local/funnel-lead" /></label>
                   <div className="min-w-0 rounded-md bg-stone-50 p-3 text-sm text-stone-700">
-                    <p className="font-semibold text-stone-950">Event-Deduplizierung</p>
-                    <p className="mt-1 break-words">Browser Pixel und Conversion API verwenden dieselbe Event-ID. UTM, gclid, fbclid, Projekt, Funnel, Schritt und Lead-Score werden am Lead gespeichert.</p>
+                    <p className="font-semibold text-stone-950">{text.tracking.dedupeTitle}</p>
+                    <p className="mt-1 break-words">{text.tracking.dedupeText}</p>
                   </div>
                 </div>
               </div>
               <div className="min-w-0 rounded-lg border border-stone-200 bg-slate-950 p-4 text-white 2xl:col-span-2">
-                <p className="text-sm font-semibold">Live Event Monitor</p>
+                <p className="text-sm font-semibold">{text.tracking.monitor}</p>
                 <div className="mt-3 grid gap-2">
                   {monitor.map((item, index) => (
                     <div className="rounded-md bg-white/10 p-3 text-sm" key={`${item.label}_${index}`}><p className="font-semibold">{item.label} · {item.status}</p><p className="mt-1 break-words text-slate-300">{item.detail}</p></div>
@@ -1186,28 +1359,28 @@ export function FunnelCommandCenter({
           {activeTab === "analytics" ? (
             <div className="mt-5 grid gap-4">
               <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">Besuche</p><p className="mt-2 text-2xl font-semibold">{selected.funnel.visits.toLocaleString("de-DE")}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">Leads</p><p className="mt-2 text-2xl font-semibold">{selected.funnel.leads}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">Conversion</p><p className="mt-2 text-2xl font-semibold">{selected.funnel.conversionRate.toFixed(1)}%</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">Hot Leads</p><p className="mt-2 text-2xl font-semibold">{relatedLeads.filter((lead) => lead.score >= 80).length}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.visits}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.visits, language)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.leads}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.leads, language)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.conversion}</p><p className="mt-2 text-2xl font-semibold">{formatPercent(selected.funnel.conversionRate, language)}%</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.analytics.hotLeads}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(relatedLeads.filter((lead) => lead.score >= 80).length, language)}</p></div>
               </div>
               <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
                 <div className="grid gap-3">
                   {selectedSteps.map((step) => (
                     <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={step.id}>
-                      <div className="flex items-center justify-between gap-3 text-sm"><p className="font-semibold">{step.name}</p><span>{step.visits - step.leads} Absprünge</span></div>
+                      <div className="flex items-center justify-between gap-3 text-sm"><p className="font-semibold">{step.name}</p><span>{formatNumber(step.visits - step.leads, language)} {text.analytics.dropOffs}</span></div>
                       <div className="mt-3 h-3 overflow-hidden rounded-full bg-stone-200"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${Math.max(4, Math.min(100, step.conversionRate))}%` }} /></div>
                       <p className="mt-2 break-words text-xs text-stone-600">{step.dropOffReason}</p>
                     </div>
                   ))}
                 </div>
                 <div className="grid gap-3">
-                  {["utm_source: meta", "utm_campaign: immobilien_graz_q2", "device: mobile", "gclid/fbclid gespeichert"].map((item) => (
+                  {text.analytics.sourceSignals.map((item) => (
                     <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm font-semibold" key={item}>{item}</div>
                   ))}
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-                    <p className="font-semibold">Nächste Optimierung</p>
-                    <p className="mt-1">Größter Hebel: Step mit höchstem Drop-off zuerst testen, dann Quelle, Gerät und Variante vergleichen.</p>
+                    <p className="font-semibold">{text.analytics.nextOptimization}</p>
+                    <p className="mt-1">{text.analytics.nextOptimizationText}</p>
                   </div>
                 </div>
               </div>
@@ -1217,17 +1390,17 @@ export function FunnelCommandCenter({
           {activeTab === "privacy" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
               <div className={mutedCardClass}>
-                <p className="text-sm font-semibold">Consent, Datenschutz und Datenhaltung</p>
+                <p className="text-sm font-semibold">{text.privacy.title}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className={fieldLabelClass}>Cookie Consent<select className={selectClass} value={selected.funnel.cookieConsent} onChange={(event) => updateSelectedFunnel({ cookieConsent: event.target.value as EditableFunnel["cookieConsent"] })}><option>Standalone Banner</option><option>Website Consent</option><option>Openli</option><option>Custom Code</option></select></label>
-                  <label className={fieldLabelClass}>Datenaufbewahrung<input className={inputClass} value={selected.funnel.dataRetention} onChange={(event) => updateSelectedFunnel({ dataRetention: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Sensitive Fields<input className={inputClass} value={selected.funnel.sensitiveMode} onChange={(event) => updateSelectedFunnel({ sensitiveMode: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.privacy.cookieConsent}<select className={selectClass} value={selected.funnel.cookieConsent} onChange={(event) => updateSelectedFunnel({ cookieConsent: event.target.value as EditableFunnel["cookieConsent"] })}><option>Standalone Banner</option><option>Website Consent</option><option>Openli</option><option>Custom Code</option></select></label>
+                  <label className={fieldLabelClass}>{text.privacy.retention}<input className={inputClass} value={selected.funnel.dataRetention} onChange={(event) => updateSelectedFunnel({ dataRetention: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.privacy.sensitiveFields}<input className={inputClass} value={selected.funnel.sensitiveMode} onChange={(event) => updateSelectedFunnel({ sensitiveMode: event.target.value })} /></label>
                 </div>
               </div>
               <div className="min-w-0 rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
-                <p className="text-sm font-semibold">Compliance-Checkliste</p>
+                <p className="text-sm font-semibold">{text.privacy.checklist}</p>
                 <div className="mt-3 grid min-w-0 gap-2 text-sm">
-                  {["Consent vor Pixel-Feuerung", "Double Opt-in für Newsletter-Leads", "Export und Löschung am Lead", "Rollenrechte für Kunden-Workspace", "Tracking nur mit Event-ID und Zweck"].map((item) => (
+                  {text.privacy.checklistItems.map((item) => (
                     <label className="flex min-w-0 items-start gap-2" key={item}><input className="mt-0.5 shrink-0" defaultChecked type="checkbox" /> <span className="min-w-0 break-words">{item}</span></label>
                   ))}
                 </div>
@@ -1238,17 +1411,17 @@ export function FunnelCommandCenter({
           {activeTab === "experiments" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
               <div className={mutedCardClass}>
-                <p className="text-sm font-semibold">A/B-Test Steuerung</p>
+                <p className="text-sm font-semibold">{text.experiments.title}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className={fieldLabelClass}>Variante<input className={inputClass} value={selected.funnel.abVariant} onChange={(event) => updateSelectedFunnel({ abVariant: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Traffic Split<input className={inputClass} value={selected.funnel.trafficSplit} onChange={(event) => updateSelectedFunnel({ trafficSplit: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Gewinner-Regel<input className={inputClass} value={selected.funnel.winningRule} onChange={(event) => updateSelectedFunnel({ winningRule: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.experiments.variant}<input className={inputClass} value={selected.funnel.abVariant} onChange={(event) => updateSelectedFunnel({ abVariant: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.experiments.trafficSplit}<input className={inputClass} value={selected.funnel.trafficSplit} onChange={(event) => updateSelectedFunnel({ trafficSplit: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.experiments.winningRule}<input className={inputClass} value={selected.funnel.winningRule} onChange={(event) => updateSelectedFunnel({ winningRule: event.target.value })} /></label>
                 </div>
               </div>
               <div className={cardClass}>
-                <p className="text-sm font-semibold">Testideen aus Analyse</p>
+                <p className="text-sm font-semibold">{text.experiments.ideasTitle}</p>
                 <div className="mt-3 grid min-w-0 gap-2 text-sm">
-                  {["Hero-Versprechen gegen konkreten Termin-Nutzen testen", "Mehrstufiges Formular gegen Kontaktformular am Ende testen", "WhatsApp-Follow-up gegen E-Mail-Sequenz testen", "Kalender vor Kontaktformular bei Hot Leads testen"].map((item) => (
+                  {text.experiments.ideas.map((item) => (
                     <div className="min-w-0 rounded-md bg-stone-50 p-3 break-words" key={item}>{item}</div>
                   ))}
                 </div>
@@ -1259,17 +1432,17 @@ export function FunnelCommandCenter({
           {activeTab === "handover" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
               <div className="min-w-0 self-start rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
-                <p className="text-sm font-semibold">CRM-Übergabe</p>
+                <p className="text-sm font-semibold">{text.handover.title}</p>
                 <div className="mt-3 grid min-w-0 gap-2 text-sm">
-                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerLeadInbox} onChange={(event) => updateSelectedFunnel({ triggerLeadInbox: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">Lead Inbox Eintrag erzeugen</span></label>
-                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerTask} onChange={(event) => updateSelectedFunnel({ triggerTask: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">Aufgabe für Verantwortlichen erzeugen</span></label>
-                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerAppointment} onChange={(event) => updateSelectedFunnel({ triggerAppointment: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">Hot Leads zum Kalender führen</span></label>
+                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerLeadInbox} onChange={(event) => updateSelectedFunnel({ triggerLeadInbox: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">{text.handover.leadInbox}</span></label>
+                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerTask} onChange={(event) => updateSelectedFunnel({ triggerTask: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">{text.handover.task}</span></label>
+                  <label className="flex min-w-0 items-start gap-2"><input className="mt-0.5 shrink-0" checked={selected.funnel.triggerAppointment} onChange={(event) => updateSelectedFunnel({ triggerAppointment: event.target.checked })} type="checkbox" /> <span className="min-w-0 break-words">{text.handover.appointment}</span></label>
                 </div>
               </div>
               <div className={mutedCardClass}>
                 <div className="grid min-w-0 gap-4">
                 <label className={fieldLabelClass}>
-                  Leads laufen nach
+                  {text.editor.leadDestination}
                   <select
                     className={selectClass}
                     value={selected.funnel.leadDestination}
@@ -1279,21 +1452,20 @@ export function FunnelCommandCenter({
                       })
                     }
                   >
-                    <option>Lead Inbox</option>
-                    <option>Pipeline</option>
-                    <option>Kalender</option>
-                    <option>Newsletter Segment</option>
+                    {(["Lead Inbox", "Pipeline", "Kalender", "Newsletter Segment"] as const).map((option) => (
+                      <option key={option} value={option}>{getFunnelDestinationLabel(option, language)}</option>
+                    ))}
                   </select>
                 </label>
-                <label className={fieldLabelClass}>Pipeline-Phase<input className={inputClass} value={selected.funnel.crmStage} onChange={(event) => updateSelectedFunnel({ crmStage: event.target.value })} /></label>
-                <label className={fieldLabelClass}>Status-Vorlage<select className={selectClass} value={selected.funnel.statusTemplate} onChange={(event) => updateSelectedFunnel({ statusTemplate: event.target.value })}>{statusTemplateOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
-                <label className={fieldLabelClass}>Lead-Qualitätsregel<select className={selectClass} value={selected.funnel.leadQualityRule} onChange={(event) => updateSelectedFunnel({ leadQualityRule: event.target.value })}>{leadQualityRules.map((option) => <option key={option}>{option}</option>)}</select></label>
-                <label className={fieldLabelClass}>Benachrichtigungen<input className={inputClass} value={selected.funnel.notificationRecipients} onChange={(event) => updateSelectedFunnel({ notificationRecipients: event.target.value })} placeholder="Sales, Projektleitung, Kunde" /></label>
-                <label className={fieldLabelClass}>Follow-up<textarea className={textareaClass} value={selected.funnel.followUp} onChange={(event) => updateSelectedFunnel({ followUp: event.target.value })} /></label>
+                <label className={fieldLabelClass}>{text.editor.pipelineStage}<input className={inputClass} value={selected.funnel.crmStage} onChange={(event) => updateSelectedFunnel({ crmStage: event.target.value })} /></label>
+                <label className={fieldLabelClass}>{text.handover.statusTemplate}<select className={selectClass} value={selected.funnel.statusTemplate} onChange={(event) => updateSelectedFunnel({ statusTemplate: event.target.value })}>{text.statusTemplateOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+                <label className={fieldLabelClass}>{text.handover.qualityRule}<select className={selectClass} value={selected.funnel.leadQualityRule} onChange={(event) => updateSelectedFunnel({ leadQualityRule: event.target.value })}>{text.leadQualityRules.map((option) => <option key={option}>{option}</option>)}</select></label>
+                <label className={fieldLabelClass}>{text.handover.notifications}<input className={inputClass} value={selected.funnel.notificationRecipients} onChange={(event) => updateSelectedFunnel({ notificationRecipients: event.target.value })} placeholder={text.handover.notificationsPlaceholder} /></label>
+                <label className={fieldLabelClass}>{text.overview.followUp}<textarea className={textareaClass} value={selected.funnel.followUp} onChange={(event) => updateSelectedFunnel({ followUp: event.target.value })} /></label>
                 </div>
               </div>
               <div className={`${cardClass} 2xl:col-span-2`}>
-                <p className="text-sm font-semibold">Verknüpfte Leads im aktuellen Projekt</p>
+                <p className="text-sm font-semibold">{text.handover.linkedLeads}</p>
                 <div className="mt-3 grid min-w-0 gap-2">
                   {relatedLeads.map((lead) => (
                     <div className="grid min-w-0 gap-2 rounded-md bg-stone-50 p-3 text-sm xl:grid-cols-[minmax(0,1fr)_96px_minmax(160px,auto)]" key={lead.id}>
@@ -1308,19 +1480,19 @@ export function FunnelCommandCenter({
           {activeTab === "workspace" ? (
             <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
               <div className={mutedCardClass}>
-                <p className="text-sm font-semibold">Workspace, Kundenrechte und Agentur-Modus</p>
+                <p className="text-sm font-semibold">{text.workspace.title}</p>
                 <div className="mt-3 grid min-w-0 gap-3">
-                  <label className={fieldLabelClass}>Zugriff<select className={selectClass} value={selected.funnel.workspaceAccess} onChange={(event) => updateSelectedFunnel({ workspaceAccess: event.target.value as EditableFunnel["workspaceAccess"] })}><option>Intern</option><option>Kunde Betrachter</option><option>Kunde Bearbeiter</option><option>Agentur White Label</option></select></label>
-                  <label className={fieldLabelClass}>Brand Preset<input className={inputClass} value={selected.funnel.brandPreset} onChange={(event) => updateSelectedFunnel({ brandPreset: event.target.value })} /></label>
-                  <label className={fieldLabelClass}>Eigene Domain<input className={inputClass} value={selected.funnel.customDomain} onChange={(event) => updateSelectedFunnel({ customDomain: event.target.value })} placeholder="funnels.novalure.local/wohnpark-graz" /></label>
+                  <label className={fieldLabelClass}>{text.workspace.access}<select className={selectClass} value={selected.funnel.workspaceAccess} onChange={(event) => updateSelectedFunnel({ workspaceAccess: event.target.value as EditableFunnel["workspaceAccess"] })}>{(["Intern", "Kunde Betrachter", "Kunde Bearbeiter", "Agentur White Label"] as const).map((option) => <option key={option} value={option}>{getFunnelWorkspaceAccessLabel(option, language)}</option>)}</select></label>
+                  <label className={fieldLabelClass}>{text.workspace.brandPreset}<input className={inputClass} value={selected.funnel.brandPreset} onChange={(event) => updateSelectedFunnel({ brandPreset: event.target.value })} /></label>
+                  <label className={fieldLabelClass}>{text.workspace.customDomain}<input className={inputClass} value={selected.funnel.customDomain} onChange={(event) => updateSelectedFunnel({ customDomain: event.target.value })} placeholder="funnels.novalure.local/wohnpark-graz" /></label>
                 </div>
               </div>
               <div className={cardClass}>
-                <p className="text-sm font-semibold">Projekt-Kontext</p>
+                <p className="text-sm font-semibold">{text.workspace.projectContext}</p>
                 <div className="mt-3 grid min-w-0 gap-2 text-sm">
-                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">Projekt</span><span className="block min-w-0 break-words font-semibold">{selected.project?.name ?? projectLabel}</span></div>
-                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">Lead-Ziel</span><span className="block min-w-0 break-words font-semibold">{selected.funnel.leadDestination}</span></div>
-                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">Owner</span><span className="block min-w-0 break-words font-semibold">{users.find((user) => user.id === selected.funnel.ownerUserId)?.name ?? "Nicht zugewiesen"}</span></div>
+                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">{text.workspace.project}</span><span className="block min-w-0 break-words font-semibold">{selected.project?.name ?? projectLabel}</span></div>
+                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">{text.workspace.leadGoal}</span><span className="block min-w-0 break-words font-semibold">{getFunnelDestinationLabel(selected.funnel.leadDestination, language)}</span></div>
+                  <div className="min-w-0 rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase tracking-[0.16em] text-stone-500">{text.workspace.owner}</span><span className="block min-w-0 break-words font-semibold">{users.find((user) => user.id === selected.funnel.ownerUserId)?.name ?? text.workspace.unassigned}</span></div>
                 </div>
               </div>
             </div>
@@ -1333,28 +1505,29 @@ export function FunnelCommandCenter({
                   <FunnelRenderer
                     blueprint={selectedBlueprint}
                     device={selected.funnel.mobileFirstMode ? "mobile" : "desktop"}
+                    language={language}
                     mode="test"
                     onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
                   />
                 ) : null}
               </div>
               <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
-                <p className="text-sm font-semibold">Preview und Testmodus</p>
+                <p className="text-sm font-semibold">{text.preview.title}</p>
                 <div className="mt-3 grid min-w-0 gap-2 text-sm">
                   <div className="min-w-0 rounded-md bg-stone-50 p-3">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Schema</span>
+                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.preview.schema}</span>
                     <span className="block break-words font-semibold">Funnel Blueprint v{selectedBlueprint?.schemaVersion}</span>
                   </div>
                   <div className="min-w-0 rounded-md bg-stone-50 p-3">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Felder</span>
-                    <span className="block break-words font-semibold">17 Feldtypen vorbereitet</span>
+                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.preview.fields}</span>
+                    <span className="block break-words font-semibold">{text.preview.preparedFields}</span>
                   </div>
                   <div className="min-w-0 rounded-md bg-stone-50 p-3">
-                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">CRM-Ziel</span>
-                    <span className="block break-words font-semibold">{selected.funnel.leadDestination} / {selected.funnel.crmStage}</span>
+                    <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.preview.crmTarget}</span>
+                    <span className="block break-words font-semibold">{getFunnelDestinationLabel(selected.funnel.leadDestination, language)} / {selected.funnel.crmStage}</span>
                   </div>
                   <a className="block min-w-0 rounded-md bg-slate-950 px-3 py-2 text-center text-sm font-semibold text-white" href={selectedPreviewUrl} rel="noreferrer" target="_blank">
-                    Preview-URL öffnen
+                    {text.preview.openUrl}
                   </a>
                 </div>
               </div>

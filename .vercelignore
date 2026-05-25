@@ -1,0 +1,14 @@
+.npm-cache/
+.vercel-cache/
+.git/
+.codex-deploy.index
+.codex-git-objects/
+.localappdata/
+.xdg-data/
+.next/
+.vercel/
+.vercel-cli/
+.vercel-data/
+node_modules/
+*.tsbuildinfo
+*.log

@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import type { Contact, Lead, Project, Task } from "@/lib/crm-types";
-import { type LanguageCode } from "@/lib/i18n";
+import {
+  getCrmSourceLabel,
+  getCrmTaskDueLabel,
+  getCrmTaskPriorityLabel,
+  getCrmTaskStatusLabel,
+  getTaskCommandCenterCopy,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type TaskCommandCenterProps = {
   contacts: Contact[];
@@ -26,84 +33,12 @@ const viewStyles = {
   idle: "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50",
 };
 
-const labels = {
-  de: {
-    title: "Aufgaben-Cockpit",
-    description:
-      "Tagesfokus für Follow-ups, Speed-to-Lead, Projektarbeit und Datenpflege. Jede Aufgabe bleibt mit Kontakt, Lead oder Projekt verbunden.",
-    focus: "Fokus",
-    today: "Heute",
-    high: "Hohe Priorität",
-    followUp: "Lead-Follow-up",
-    all: "Alle",
-    search: "Suche",
-    searchPlaceholder: "Aufgabe, Kontakt, Projekt oder Quelle suchen",
-    dueToday: "Heute fällig",
-    overdue: "Überfällig",
-    highPriority: "Hoch priorisiert",
-    completedHere: "Hier erledigt",
-    nextTask: "Ausgewählte Aufgabe",
-    linkedContact: "Verknüpfter Kontakt",
-    linkedLead: "Lead-Kontext",
-    source: "Quelle",
-    score: "Score",
-    project: "Projekt",
-    due: "Fälligkeit",
-    priority: "Priorität",
-    status: "Status",
-    nextAction: "Nächste Aktion",
-    markDone: "Als erledigt markieren",
-    reopen: "Wieder öffnen",
-    recommendedQueue: "Empfohlene Reihenfolge",
-    queueReason: "Sortiert nach Fälligkeit, Priorität und Lead-Score.",
-    noTasks: "Keine Aufgaben für diese Ansicht.",
-    noContact: "Kein Kontakt verknüpft",
-    noLead: "Kein Lead verknüpft",
-    open: "offen",
-    done: "erledigt",
-    microsoftReady: "Microsoft 365 bereit",
-    fieldMappingReady: "Aufgabenfeld-Mapping",
-  },
-  en: {
-    title: "Task cockpit",
-    description:
-      "Daily focus for follow-ups, speed to lead, project work and data hygiene. Every task stays linked to a contact, lead or project.",
-    focus: "Focus",
-    today: "Today",
-    high: "High priority",
-    followUp: "Lead follow-up",
-    all: "All",
-    search: "Search",
-    searchPlaceholder: "Search task, contact, project or source",
-    dueToday: "Due today",
-    overdue: "Overdue",
-    highPriority: "High priority",
-    completedHere: "Done here",
-    nextTask: "Selected task",
-    linkedContact: "Linked contact",
-    linkedLead: "Lead context",
-    source: "Source",
-    score: "Score",
-    project: "Project",
-    due: "Due",
-    priority: "Priority",
-    status: "Status",
-    nextAction: "Next action",
-    markDone: "Mark done",
-    reopen: "Reopen",
-    recommendedQueue: "Recommended order",
-    queueReason: "Sorted by due date, priority and lead score.",
-    noTasks: "No tasks for this view.",
-    noContact: "No contact linked",
-    noLead: "No lead linked",
-    open: "open",
-    done: "done",
-    microsoftReady: "Microsoft 365 ready",
-    fieldMappingReady: "Task field mapping",
-  },
-} as const;
-
 function getDueRank(due: string) {
+  const parsed = new Date(due).getTime();
+  if (Number.isFinite(parsed)) {
+    return Math.round(parsed / 60000);
+  }
+
   if (due.includes("Heute")) {
     const match = due.match(/(\d{1,2}):(\d{2})/);
     return match ? Number(match[1]) * 60 + Number(match[2]) : 600;
@@ -118,6 +53,20 @@ function getDueRank(due: string) {
   }
 
   return 30 * 24 * 60;
+}
+
+function isDueToday(due: string) {
+  if (due.includes("Heute") || due.includes("Today")) return true;
+
+  const parsed = new Date(due);
+  if (Number.isNaN(parsed.getTime())) return false;
+
+  const today = new Date();
+  return (
+    parsed.getFullYear() === today.getFullYear() &&
+    parsed.getMonth() === today.getMonth() &&
+    parsed.getDate() === today.getDate()
+  );
 }
 
 function getPriorityRank(priority: Task["priority"]) {
@@ -140,11 +89,13 @@ export function TaskCommandCenter({
   projects,
   tasks,
 }: TaskCommandCenterProps) {
-  const text = labels[language];
+  const text = getTaskCommandCenterCopy(language);
   const [activeView, setActiveView] = useState<TaskView>("focus");
   const [searchTerm, setSearchTerm] = useState("");
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
+  const [followUpSaving, setFollowUpSaving] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const decoratedTasks = useMemo(
     () =>
@@ -172,7 +123,7 @@ export function TaskCommandCenter({
   );
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
-  const dueTodayTasks = openTasks.filter((item) => item.task.due.includes("Heute"));
+  const dueTodayTasks = openTasks.filter((item) => isDueToday(item.task.due));
   const overdueTasks = dueTodayTasks.filter((item) => getDueRank(item.task.due) < 15 * 60 + 30);
   const highPriorityTasks = openTasks.filter((item) => item.task.priority === "Hoch");
   const followUpTasks = openTasks.filter((item) => Boolean(item.lead || item.contact));
@@ -182,7 +133,7 @@ export function TaskCommandCenter({
       const matchesView =
         activeView === "all" ||
         (activeView === "focus" && !item.isCompleted) ||
-        (activeView === "today" && item.task.due.includes("Heute")) ||
+        (activeView === "today" && isDueToday(item.task.due)) ||
         (activeView === "high" && item.task.priority === "Hoch") ||
         (activeView === "followUp" && Boolean(item.lead || item.contact));
       const searchable = [
@@ -214,11 +165,59 @@ export function TaskCommandCenter({
   ];
 
   const toggleTask = (taskId: string) => {
+    const currentTask = decoratedTasks.find((item) => item.task.id === taskId);
+    const nextStatus = currentTask?.isCompleted ? "open" : "done";
+
     setCompletedTaskIds((current) =>
       current.includes(taskId)
         ? current.filter((id) => id !== taskId)
         : [...current, taskId],
     );
+
+    if (currentTask) {
+      void fetch("/api/crm/tasks", {
+        body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus } }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }).catch(() => undefined);
+    }
+  };
+
+  const prepareTaskFollowUp = async () => {
+    if (!selectedTask) return;
+
+    setFollowUpSaving(true);
+    try {
+      const response = await fetch("/api/crm/recommendation-runtime", {
+        body: JSON.stringify({
+          actionType: selectedTask.task.priority === "Hoch" ? "task_priority_follow_up" : "task_follow_up",
+          channel: selectedTask.contact?.email ? "E-Mail" : selectedTask.contact?.phone ? "WhatsApp" : "Telefon",
+          contactId: selectedTask.contact?.id ?? selectedTask.task.contactId ?? null,
+          email: selectedTask.contact?.email ?? null,
+          leadId: selectedTask.lead?.id ?? selectedTask.task.leadId ?? null,
+          operation: "follow_up_action",
+          outcome: "planned",
+          phone: selectedTask.contact?.phone ?? null,
+          projectId: selectedTask.task.projectId,
+          purpose: "salesFollowUp",
+          taskTitle: selectedTask.task.title,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean; delivery?: { status?: string } } };
+      if (!response.ok) throw new Error(text.followUpFailed);
+
+      setNotice(
+        payload.data?.allowed === false
+          ? text.followUpBlocked
+          : text.followUpQueued(payload.data?.delivery?.status ?? "queued"),
+      );
+    } catch {
+      setNotice(text.followUpFailed);
+    } finally {
+      setFollowUpSaving(false);
+    }
   };
 
   return (
@@ -315,7 +314,7 @@ export function TaskCommandCenter({
                             isSelected ? "text-slate-300" : "text-stone-500"
                           }`}
                         >
-                          {item.contact?.name ?? text.noContact} · {item.task.project}
+                          {item.contact?.name ?? text.noContact} · {item.project?.name ?? item.task.project}
                         </span>
                       </span>
                       <span
@@ -323,7 +322,7 @@ export function TaskCommandCenter({
                           isSelected ? "border-white/10 bg-white/10 text-white" : priorityStyles[item.task.priority]
                         }`}
                       >
-                        {item.task.priority}
+                        {getCrmTaskPriorityLabel(item.task.priority, language)}
                       </span>
                     </span>
                     <span className="flex flex-wrap gap-2 text-xs">
@@ -332,7 +331,7 @@ export function TaskCommandCenter({
                           isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"
                         }`}
                       >
-                        {item.task.due}
+                        {getCrmTaskDueLabel(item.task.due, language)}
                       </span>
                       {item.lead ? (
                         <span
@@ -375,10 +374,10 @@ export function TaskCommandCenter({
               [text.project, selectedTask?.project?.name ?? selectedTask?.task.project],
               [text.linkedContact, selectedTask?.contact?.name ?? text.noContact],
               [text.linkedLead, selectedTask?.lead?.intent ?? text.noLead],
-              [text.source, selectedTask?.contact?.source],
-              [text.due, selectedTask?.task.due],
-              [text.priority, selectedTask?.task.priority],
-              [text.status, selectedTask?.isCompleted ? text.done : text.open],
+              [text.source, selectedTask?.contact?.source ? getCrmSourceLabel(selectedTask.contact.source, language) : undefined],
+              [text.due, selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : undefined],
+              [text.priority, selectedTask?.task.priority ? getCrmTaskPriorityLabel(selectedTask.task.priority, language) : undefined],
+              [text.status, selectedTask ? getCrmTaskStatusLabel(selectedTask.isCompleted ? "done" : "open", language) : undefined],
             ].map(([label, value]) => (
               <div className="rounded-md bg-stone-50 p-3" key={label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
@@ -402,12 +401,29 @@ export function TaskCommandCenter({
             {selectedTask?.isCompleted ? text.reopen : text.markDone}
           </button>
 
+          <button
+            className="mt-2 w-full rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!selectedTask || followUpSaving}
+            onClick={() => {
+              void prepareTaskFollowUp();
+            }}
+            type="button"
+          >
+            {followUpSaving ? text.savingFollowUp : text.prepareFollowUp}
+          </button>
+
+          {notice ? (
+            <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+              {notice}
+            </p>
+          ) : null}
+
           <div className="mt-4 rounded-lg bg-slate-950 p-4 text-white">
             <p className="text-sm font-semibold">{text.fieldMappingReady}</p>
             <div className="mt-3 grid gap-2 text-xs text-slate-200">
               <span>task_subject · {selectedTask?.task.title ? text.open : "-"}</span>
-              <span>task_priority · {selectedTask?.task.priority ?? "-"}</span>
-              <span>task_due_at · {selectedTask?.task.due ?? "-"}</span>
+              <span>task_priority · {selectedTask?.task.priority ? getCrmTaskPriorityLabel(selectedTask.task.priority, language) : "-"}</span>
+              <span>task_due_at · {selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : "-"}</span>
               <span>linked_record · {selectedTask?.contact?.name ?? selectedTask?.project?.name ?? "-"}</span>
             </div>
           </div>
@@ -415,7 +431,7 @@ export function TaskCommandCenter({
           <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4 text-blue-950">
             <p className="text-sm font-semibold">{text.microsoftReady}</p>
             <p className="mt-2 break-words text-sm text-blue-900">
-              {selectedTask?.task.due ?? "-"} · {selectedTask?.project?.name ?? projectLabel}
+              {selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : "-"} · {selectedTask?.project?.name ?? projectLabel}
             </p>
           </div>
         </aside>

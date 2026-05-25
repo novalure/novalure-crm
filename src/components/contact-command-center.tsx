@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import type {
@@ -12,13 +12,25 @@ import type {
   Task,
   WorkspaceUser,
 } from "@/lib/crm-types";
-import { type LanguageCode } from "@/lib/i18n";
+import {
+  getContactCommandCenterCopy,
+  getCrmLeadTypeLabel,
+  getCrmLifecycleLabel,
+  getCrmOrganizationTypeLabel,
+  getCrmRelationshipInfluenceLabel,
+  getCrmRelationshipRoleLabel,
+  getCrmSourceLabel,
+  getCrmTaskDueLabel,
+  getCrmTaskPriorityLabel,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type ContactCommandCenterProps = {
   consents: ConsentRecord[];
   contacts: Contact[];
   language: LanguageCode;
   leads: Lead[];
+  onContactsChanged?: () => Promise<void> | void;
   organizations: Organization[];
   projects: Project[];
   relationships: ContactRelationship[];
@@ -30,7 +42,50 @@ type ContactCommandCenterProps = {
 type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates";
 type ContactEditableField = "name" | "role" | "project" | "source" | "intent" | "consent" | "email" | "phone";
 
-const CONTACT_STORAGE_KEY = "novalure-contact-records-v1";
+const LEGACY_CONTACT_STORAGE_KEY = "novalure-contact-records-v1";
+
+const defaultRoleOptions: Contact["role"][] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
+const defaultSourceOptions: Contact["source"][] = [
+  "Manual",
+  "Website Funnel",
+  "Website",
+  "WhatsApp",
+  "Instagram",
+  "Newsletter",
+  "Microsoft 365",
+  "Google Meet",
+  "willhaben",
+  "ImmobilienScout",
+  "Empfehlung",
+];
+
+type ContactFeedback = {
+  message: string;
+  tone: "error" | "success";
+};
+
+function createContactDraft(input: {
+  contacts: Contact[];
+  organizations: Organization[];
+  projects: Project[];
+}): Contact {
+  const project = input.projects[0];
+
+  return {
+    consent: "Nur CRM",
+    email: "",
+    id: "",
+    intent: "",
+    name: "",
+    organizationId: undefined,
+    phone: "",
+    project: project?.name ?? "",
+    projectId: project?.id ?? "",
+    role: input.contacts[0]?.role ?? "Käufer",
+    source: "Manual",
+    workspaceId: input.contacts[0]?.workspaceId ?? project?.workspaceId ?? "",
+  };
+}
 
 const lifecycleStyles = {
   Lead: "bg-blue-50 text-blue-800",
@@ -57,6 +112,7 @@ export function ContactCommandCenter({
   contacts,
   language,
   leads,
+  onContactsChanged,
   organizations,
   projects,
   relationships,
@@ -64,49 +120,48 @@ export function ContactCommandCenter({
   timeline,
   users,
 }: ContactCommandCenterProps) {
-  const [contactRecords, setContactRecords] = useState<Contact[]>(() => {
-    if (typeof window === "undefined") {
-      return contacts;
-    }
+  const copy = getContactCommandCenterCopy(language);
+  const [serverContactOverlays, setServerContactOverlays] = useState<Contact[]>([]);
+  const [contactPatches, setContactPatches] = useState<Record<string, Partial<Contact>>>({});
+  const [archivedContactIds, setArchivedContactIds] = useState<Set<string>>(() => new Set());
+  const contactRecords = useMemo(() => {
+    const activeContacts = contacts.filter((contact) => !archivedContactIds.has(contact.id));
+    const activeOverlays = serverContactOverlays.filter((contact) => !archivedContactIds.has(contact.id));
+    const overlayById = new Map(activeOverlays.map((contact) => [contact.id, contact]));
+    const contactIds = new Set(activeContacts.map((contact) => contact.id));
+    const mergedContacts = [
+      ...activeOverlays.filter((contact) => !contactIds.has(contact.id)),
+      ...activeContacts.map((contact) => overlayById.get(contact.id) ?? contact),
+    ];
 
-    try {
-      const stored = window.localStorage.getItem(CONTACT_STORAGE_KEY);
-      if (!stored) {
-        return contacts;
-      }
-
-      const parsed = JSON.parse(stored) as Contact[];
-      return Array.isArray(parsed) && parsed.length ? parsed : contacts;
-    } catch {
-      return contacts;
-    }
-  });
-  const [selectedContactId, setSelectedContactId] = useState(contactRecords[0]?.id ?? "");
+    return mergedContacts.map((contact) => ({
+      ...contact,
+      ...(contactPatches[contact.id] ?? {}),
+    }));
+  }, [archivedContactIds, contactPatches, contacts, serverContactOverlays]);
+  const [selectedContactId, setSelectedContactId] = useState(contacts[0]?.id ?? "");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<ContactView>("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [savedMessage, setSavedMessage] = useState("");
-  const [newContact, setNewContact] = useState<Contact>(() => ({
-    id: "",
-    workspaceId: contacts[0]?.workspaceId ?? "workspace_novalure",
-    projectId: projects[0]?.id ?? "",
-    organizationId: organizations[0]?.id,
-    name: "",
-    role: contacts[0]?.role ?? ("Verkäufer" as Contact["role"]),
-    project: projects[0]?.name ?? "",
-    source: "Manual",
-    intent: "",
-    consent: "Nur CRM",
-    email: "",
-    phone: "",
-  }));
+  const [archiveConfirmContactId, setArchiveConfirmContactId] = useState("");
+  const [feedback, setFeedback] = useState<ContactFeedback | null>(null);
+  const [newContact, setNewContact] = useState<Contact>(() =>
+    createContactDraft({ contacts, organizations, projects }),
+  );
 
   useEffect(() => {
-    window.localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(contactRecords));
-  }, [contactRecords]);
+    try {
+      window.localStorage.removeItem(LEGACY_CONTACT_STORAGE_KEY);
+    } catch {
+      // Ignore browser storage restrictions; contacts are loaded from server props.
+    }
+  }, []);
 
+  const effectiveSelectedContactId = contactRecords.some((contact) => contact.id === selectedContactId)
+    ? selectedContactId
+    : contactRecords[0]?.id ?? "";
   const selectedContact =
-    contactRecords.find((contact) => contact.id === selectedContactId) ?? contactRecords[0];
+    contactRecords.find((contact) => contact.id === effectiveSelectedContactId) ?? contactRecords[0];
   const selectedOrganization = selectedContact?.organizationId
     ? organizations.find((organization) => organization.id === selectedContact.organizationId)
     : undefined;
@@ -193,43 +248,45 @@ export function ContactCommandCenter({
   }, [activeView, consentContactIds, contactRecords, duplicateSignals, leads, organizations, searchTerm]);
   const dataModelMapping = [
     {
-      label: "Name",
+      label: copy.mapping.name,
       novalure: selectedContact.name,
       targetField: "first_name, last_name",
       ready: Boolean(selectedContact.name),
     },
     {
-      label: "E-Mail",
+      label: copy.mapping.email,
       novalure: selectedContact.email,
       targetField: "email",
       ready: Boolean(selectedContact.email),
     },
     {
-      label: "Telefon",
+      label: copy.mapping.phone,
       novalure: selectedContact.phone,
       targetField: "phone / mobile_phone",
       ready: Boolean(selectedContact.phone),
     },
     {
-      label: "Organisation",
+      label: copy.mapping.organization,
       novalure: selectedOrganization?.name,
       targetField: "linked_organization",
       ready: Boolean(selectedOrganization),
     },
     {
-      label: "Lifecycle",
-      novalure: selectedOrganization?.lifecycleStage,
+      label: copy.mapping.lifecycle,
+      novalure: selectedOrganization?.lifecycleStage
+        ? getCrmLifecycleLabel(selectedOrganization.lifecycleStage, language)
+        : undefined,
       targetField: "contact_status",
       ready: Boolean(selectedOrganization?.lifecycleStage),
     },
     {
-      label: "Quelle",
-      novalure: selectedContact.source,
+      label: copy.mapping.source,
+      novalure: getCrmSourceLabel(selectedContact.source, language),
       targetField: "analytics_source / record_source",
       ready: Boolean(selectedContact.source),
     },
     {
-      label: "Besitzer",
+      label: copy.mapping.owner,
       novalure: contactOwner?.name,
       targetField: "owner_id",
       ready: Boolean(contactOwner),
@@ -237,32 +294,34 @@ export function ContactCommandCenter({
   ];
   const qualityChecks = [
     {
-      label: language === "de" ? "Kontaktweg vorhanden" : "Contact channel present",
+      label: copy.qualityContactChannel,
       detail: selectedContact.email ?? selectedContact.phone ?? "",
       status: selectedContact.email || selectedContact.phone ? "ok" : "missing",
     },
     {
-      label: language === "de" ? "Organisation verknüpft" : "Organization linked",
+      label: copy.qualityOrganization,
       detail: selectedOrganization?.name ?? "",
       status: selectedOrganization ? "ok" : "warning",
     },
     {
-      label: language === "de" ? "Rolle im Deal erklärt" : "Deal role explained",
-      detail: selectedRelationships.map((relationship) => relationship.role).join(", "),
+      label: copy.qualityDealRole,
+      detail: selectedRelationships
+        .map((relationship) => getCrmRelationshipRoleLabel(relationship.role, language))
+        .join(", "),
       status: selectedRelationships.length > 0 ? "ok" : "warning",
     },
     {
-      label: language === "de" ? "Consent dokumentiert" : "Consent documented",
+      label: copy.qualityConsent,
       detail: selectedConsents.map((consent) => `${consent.channel}: ${consent.status}`).join(", "),
       status: selectedConsents.length > 0 ? "ok" : "warning",
     },
     {
-      label: language === "de" ? "Nächste Aktion vorhanden" : "Next action present",
+      label: copy.qualityNextAction,
       detail: selectedLead?.nextAction ?? "",
       status: selectedLead?.nextAction ? "ok" : "warning",
     },
     {
-      label: language === "de" ? "Keine Dublette erkannt" : "No duplicate detected",
+      label: copy.qualityNoDuplicate,
       detail: selectedDuplicateSignals.map((contact) => contact.name).join(", "),
       status: selectedDuplicateSignals.length === 0 ? "ok" : "warning",
     },
@@ -272,84 +331,6 @@ export function ContactCommandCenter({
   );
   const readyMappingCount = dataModelMapping.filter((item) => item.ready).length;
 
-  const copy =
-    language === "de"
-      ? {
-          title: "Kontakte, Organisationen und Beziehungen",
-          description:
-            "Aufbau wie in führenden CRM-Systemen: Person, Organisation, Deal-Kontext, Consent und Timeline bleiben getrennt, aber sichtbar verbunden.",
-          people: "Personen",
-          organizations: "Organisationen",
-          primaryRoles: "Primäre Rollen",
-          duplicateSignals: "Dublettensignale",
-          savedViews: "Gespeicherte Ansichten",
-          allContacts: "Alle Kontakte",
-          hotLeads: "Heiße Leads",
-          incompleteData: "Fehlende Daten",
-          missingConsentView: "Consent fehlt",
-          duplicatesView: "Dubletten",
-          search: "Suche",
-          searchPlaceholder: "Kontakt, Firma, Ort oder Quelle suchen",
-          noFilteredContacts: "Keine Kontakte für diese Ansicht.",
-          dataQuality: "Datenqualität",
-          dataModelMapping: "Datenfeld-Mapping",
-          importReadiness: "Importbereitschaft",
-          personRecord: "Personendatensatz",
-          organizationRecord: "Organisation",
-          relationshipMap: "Beziehungen",
-          timeline: "Timeline",
-          openTasks: "Offene Aufgaben",
-          consent: "Consent",
-          project: "Projekt",
-          owner: "Besitzer",
-          leadScore: "Lead-Score",
-          nextAction: "Nächste Aktion",
-          noContact: "Kein Kontakt im aktuellen Projektfilter.",
-          noOrganization: "Keine Organisation verknüpft",
-          noTimeline: "Noch keine Timeline-Einträge",
-          lastActivity: "Letzte Aktivität",
-          ready: "bereit",
-          missing: "fehlt",
-          warning: "prüfen",
-        }
-      : {
-          title: "Contacts, organizations and relationships",
-          description:
-            "Built around proven contact data models: person, organization, deal context, consent and timeline stay separate but visibly connected.",
-          people: "People",
-          organizations: "Organizations",
-          primaryRoles: "Primary roles",
-          duplicateSignals: "Duplicate signals",
-          savedViews: "Saved views",
-          allContacts: "All contacts",
-          hotLeads: "Hot leads",
-          incompleteData: "Missing data",
-          missingConsentView: "Missing consent",
-          duplicatesView: "Duplicates",
-          search: "Search",
-          searchPlaceholder: "Search contact, company, city or source",
-          noFilteredContacts: "No contacts for this view.",
-          dataQuality: "Data quality",
-          dataModelMapping: "Data field mapping",
-          importReadiness: "Import readiness",
-          personRecord: "Person record",
-          organizationRecord: "Organization",
-          relationshipMap: "Relationships",
-          timeline: "Timeline",
-          openTasks: "Open tasks",
-          consent: "Consent",
-          project: "Project",
-          owner: "Owner",
-          leadScore: "Lead score",
-          nextAction: "Next action",
-          noContact: "No contact for the current project filter.",
-          noOrganization: "No organization linked",
-          noTimeline: "No timeline entries yet",
-          lastActivity: "Last activity",
-          ready: "ready",
-          missing: "missing",
-          warning: "review",
-        };
   const contactViews: Array<{ id: ContactView; label: string; count: number }> = [
     { id: "all", label: copy.allContacts, count: contactRecords.length },
     {
@@ -371,21 +352,39 @@ export function ContactCommandCenter({
     },
     { id: "duplicates", label: copy.duplicatesView, count: duplicateSignals.length },
   ];
-  const roleOptions = Array.from(new Set(contactRecords.map((contact) => contact.role)));
-  const sourceOptions = Array.from(new Set([...contactRecords.map((contact) => contact.source), "Manual" as const]));
+  const roleOptions = Array.from(new Set([...defaultRoleOptions, ...contactRecords.map((contact) => contact.role)]));
+  const sourceOptions = Array.from(
+    new Set([...defaultSourceOptions, ...contactRecords.map((contact) => contact.source)]),
+  );
+  const showFeedback = (tone: ContactFeedback["tone"], message: string) => {
+    setFeedback({ message, tone });
+  };
+  const clearFeedback = () => setFeedback(null);
+  const refreshAfterContactChange = async (overlayContactIdToClear?: string) => {
+    await onContactsChanged?.();
+    if (overlayContactIdToClear) {
+      setServerContactOverlays((current) =>
+        current.filter((contact) => contact.id !== overlayContactIdToClear),
+      );
+    }
+  };
+  const removeContactPatch = (contactId: string) => {
+    setContactPatches((current) => {
+      const next = { ...current };
+      delete next[contactId];
+      return next;
+    });
+  };
   const updateSelectedContact = (field: ContactEditableField, value: string) => {
     if (!selectedContact) return;
-    setSavedMessage("");
-    setContactRecords((current) =>
-      current.map((contact) =>
-        contact.id === selectedContact.id
-          ? {
-              ...contact,
-              [field]: value || undefined,
-            }
-          : contact,
-      ),
-    );
+    clearFeedback();
+    setContactPatches((current) => ({
+      ...current,
+      [selectedContact.id]: {
+        ...(current[selectedContact.id] ?? {}),
+        [field]: value,
+      },
+    }));
   };
   const updateNewContact = (field: ContactEditableField, value: string) => {
     setNewContact((current) => ({
@@ -393,26 +392,38 @@ export function ContactCommandCenter({
       [field]: value || undefined,
     }));
   };
-  const createContact = () => {
+  const persistContact = async (contact: Contact) => {
+    try {
+      const response = await fetch("/api/crm/contacts", {
+        body: JSON.stringify({ contact }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null) as { contact?: Contact; error?: string } | null;
+
+      if (!response.ok) return { error: payload?.error ?? copy.saveFailed };
+
+      return payload?.contact ? { contact: payload.contact } : { error: copy.saveFailed };
+    } catch {
+      return { error: copy.networkError };
+    }
+  };
+  const createContact = async () => {
     if (!newContact.name.trim() && !newContact.email?.trim() && !newContact.phone?.trim()) {
-      setSavedMessage(
-        language === "de"
-          ? "Bitte mindestens Name, E-Mail oder Telefon eintragen."
-          : "Enter at least a name, email, or phone number.",
-      );
+      showFeedback("error", copy.validationRequired);
       return;
     }
 
     const project = projects.find((item) => item.id === newContact.projectId) ?? projects[0];
     const createdContact: Contact = {
       ...newContact,
-      id: `contact_manual_${Date.now()}`,
-      workspaceId: newContact.workspaceId || contacts[0]?.workspaceId || "workspace_novalure",
+      id: "",
+      workspaceId: newContact.workspaceId || contacts[0]?.workspaceId || project?.workspaceId || "",
       projectId: project?.id ?? contacts[0]?.projectId ?? "",
-      organizationId: newContact.organizationId || organizations[0]?.id,
-      name: newContact.name.trim() || newContact.email || newContact.phone || "Neuer Kontakt",
+      organizationId: newContact.organizationId,
+      name: newContact.name.trim() || newContact.email || newContact.phone || copy.newContactFallback,
       project: project?.name ?? newContact.project,
-      intent: newContact.intent || "Manuell erfasst",
+      intent: newContact.intent || copy.manualIntent,
       consent: newContact.consent || "Nur CRM",
       source: newContact.source || ("Manual" as Contact["source"]),
       role: newContact.role || contactRecords[0]?.role,
@@ -420,23 +431,68 @@ export function ContactCommandCenter({
       phone: newContact.phone?.trim() || undefined,
     };
 
-    setContactRecords((current) => [createdContact, ...current]);
-    setSelectedContactId(createdContact.id);
-    setNewContact({
-      ...createdContact,
-      id: "",
-      name: "",
-      email: "",
-      phone: "",
-      intent: "",
-      consent: "Nur CRM",
-    });
+    const result = await persistContact(createdContact);
+    if (!result.contact) {
+      showFeedback("error", result.error);
+      return;
+    }
+    const persistedContact = result.contact;
+
+    setServerContactOverlays((current) => [persistedContact, ...current.filter((contact) => contact.id !== persistedContact.id)]);
+    setSelectedContactId(persistedContact.id);
+    setNewContact(createContactDraft({ contacts: [persistedContact, ...contacts], organizations, projects }));
     setIsCreateOpen(false);
     setActiveView("all");
-    setSavedMessage(language === "de" ? "Kontakt wurde hinzugefügt." : "Contact added.");
+    showFeedback("success", copy.contactAdded);
+    void onContactsChanged?.();
   };
-  const saveSelectedContact = () => {
-    setSavedMessage(language === "de" ? "Änderungen gespeichert." : "Changes saved.");
+  const saveSelectedContact = async () => {
+    if (!selectedContact) return;
+    if (!selectedContact.name.trim() && !selectedContact.email?.trim() && !selectedContact.phone?.trim()) {
+      showFeedback("error", copy.validationRequired);
+      return;
+    }
+
+    const result = await persistContact(selectedContact);
+    if (!result.contact) {
+      showFeedback("error", result.error);
+      return;
+    }
+    const persistedContact = result.contact;
+
+    setServerContactOverlays((current) => [
+      persistedContact,
+      ...current.filter((contact) => contact.id !== persistedContact.id),
+    ]);
+    removeContactPatch(selectedContact.id);
+    setSelectedContactId(persistedContact.id);
+    showFeedback("success", copy.changesSaved);
+    void refreshAfterContactChange(persistedContact.id);
+  };
+  const archiveSelectedContact = async () => {
+    if (!selectedContact) return;
+
+    try {
+      const response = await fetch(`/api/crm/contacts?id=${encodeURIComponent(selectedContact.id)}`, {
+        method: "DELETE",
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        showFeedback("error", payload?.error ?? copy.archiveFailed);
+        return;
+      }
+
+      setServerContactOverlays((current) => current.filter((contact) => contact.id !== selectedContact.id));
+      removeContactPatch(selectedContact.id);
+      setArchivedContactIds((current) => new Set([...current, selectedContact.id]));
+      setSelectedContactId(contactRecords.find((contact) => contact.id !== selectedContact.id)?.id ?? "");
+      setArchiveConfirmContactId("");
+      showFeedback("success", copy.contactArchived);
+      void onContactsChanged?.();
+    } catch {
+      showFeedback("error", copy.networkError);
+    }
   };
 
   if (!selectedContact) {
@@ -448,12 +504,12 @@ export function ContactCommandCenter({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="min-w-0 space-y-4">
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              Kontakt-Datenmodell
+              {copy.moduleLabel}
             </p>
             <h3 className="mt-1 text-xl font-semibold">{copy.title}</h3>
             <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">
@@ -463,11 +519,12 @@ export function ContactCommandCenter({
               className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               onClick={() => {
                 setIsCreateOpen(true);
-                setSavedMessage("");
+                setArchiveConfirmContactId("");
+                clearFeedback();
               }}
               type="button"
             >
-              {language === "de" ? "Kontakt hinzufügen" : "Add contact"}
+              {copy.addContact}
             </button>
           </div>
           <div className="flex flex-col gap-3">
@@ -491,28 +548,34 @@ export function ContactCommandCenter({
             </div>
           </div>
         </div>
-        {savedMessage ? (
-          <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
-            {savedMessage}
+        {feedback ? (
+          <div
+            className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${
+              feedback.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-red-200 bg-red-50 text-red-900"
+            }`}
+          >
+            {feedback.message}
           </div>
         ) : null}
         {isCreateOpen ? (
           <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h4 className="text-lg font-semibold">
-                {language === "de" ? "Neuen Kontakt manuell erstellen" : "Create contact manually"}
+                {copy.createContactTitle}
               </h4>
               <button
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
                 onClick={() => setIsCreateOpen(false)}
                 type="button"
               >
-                {language === "de" ? "Schliessen" : "Close"}
+                {copy.close}
               </button>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Name
+                {copy.name}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("name", event.target.value)}
@@ -520,7 +583,7 @@ export function ContactCommandCenter({
                 />
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                E-Mail
+                {copy.email}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("email", event.target.value)}
@@ -529,7 +592,7 @@ export function ContactCommandCenter({
                 />
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Telefon
+                {copy.phone}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("phone", event.target.value)}
@@ -537,7 +600,7 @@ export function ContactCommandCenter({
                 />
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Rolle
+                {copy.role}
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("role", event.target.value)}
@@ -545,13 +608,13 @@ export function ContactCommandCenter({
                 >
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {getCrmLeadTypeLabel(role, language)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Quelle
+                {copy.source}
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("source", event.target.value)}
@@ -559,13 +622,13 @@ export function ContactCommandCenter({
                 >
                   {sourceOptions.map((source) => (
                     <option key={source} value={source}>
-                      {source}
+                      {getCrmSourceLabel(source, language)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Projekt
+                {copy.project}
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => {
@@ -586,7 +649,7 @@ export function ContactCommandCenter({
                 </select>
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Bedarf
+                {copy.need}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("intent", event.target.value)}
@@ -594,7 +657,7 @@ export function ContactCommandCenter({
                 />
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                Consent
+                {copy.consent}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateNewContact("consent", event.target.value)}
@@ -604,17 +667,17 @@ export function ContactCommandCenter({
             </div>
             <button
               className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={createContact}
+              onClick={() => void createContact()}
               type="button"
             >
-              {language === "de" ? "Kontakt speichern" : "Save contact"}
+              {copy.saveContact}
             </button>
           </div>
         ) : null}
       </article>
 
-      <section className="grid gap-4 xl:grid-cols-[340px_1fr]">
-        <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <section className="grid min-w-0 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)]">
+        <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-sm font-semibold">{copy.people}</h4>
             <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">
@@ -673,7 +736,10 @@ export function ContactCommandCenter({
                       : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
                   }`}
                   key={contact.id}
-                  onClick={() => setSelectedContactId(contact.id)}
+                  onClick={() => {
+                    setSelectedContactId(contact.id);
+                    setArchiveConfirmContactId("");
+                  }}
                   type="button"
                 >
                   <span className="block break-words font-semibold">{contact.name}</span>
@@ -682,7 +748,7 @@ export function ContactCommandCenter({
                       isSelected ? "text-slate-300" : "text-stone-500"
                     }`}
                   >
-                    {contact.role} · {organization?.name ?? copy.noOrganization}
+                      {getCrmLeadTypeLabel(contact.role, language)} · {organization?.name ?? copy.noOrganization}
                   </span>
                   <span
                     className={`mt-2 block break-words text-xs ${
@@ -697,7 +763,7 @@ export function ContactCommandCenter({
                         isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"
                       }`}
                     >
-                      {contact.source}
+                      {getCrmSourceLabel(contact.source, language)}
                     </span>
                     {lead ? (
                       <span
@@ -705,7 +771,7 @@ export function ContactCommandCenter({
                           isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"
                         }`}
                       >
-                        Score {lead.score}
+                        {copy.score} {lead.score}
                       </span>
                     ) : null}
                     <span
@@ -727,9 +793,9 @@ export function ContactCommandCenter({
           </div>
         </article>
 
-        <section className="grid gap-4">
-          <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+        <section className="grid min-w-0 gap-4">
+          <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
@@ -739,7 +805,7 @@ export function ContactCommandCenter({
                     {selectedContact.name}
                   </h4>
                   <p className="mt-1 break-words text-sm text-stone-600">
-                    {selectedContact.role} · {selectedContact.source}
+                    {getCrmLeadTypeLabel(selectedContact.role, language)} · {getCrmSourceLabel(selectedContact.source, language)}
                   </p>
                 </div>
                 {selectedLead ? (
@@ -752,19 +818,52 @@ export function ContactCommandCenter({
               <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <h5 className="text-sm font-semibold">
-                    {language === "de" ? "Kontakt bearbeiten" : "Edit contact"}
+                    {copy.editContact}
                   </h5>
-                  <button
-                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                    onClick={saveSelectedContact}
-                    type="button"
-                  >
-                    {language === "de" ? "Änderungen speichern" : "Save changes"}
-                  </button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {archiveConfirmContactId === selectedContact.id ? (
+                      <>
+                        <button
+                          className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100"
+                          onClick={() => setArchiveConfirmContactId("")}
+                          type="button"
+                        >
+                          {copy.cancelArchive}
+                        </button>
+                        <button
+                          className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
+                          onClick={() => void archiveSelectedContact()}
+                          type="button"
+                        >
+                          {copy.confirmArchive}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-50"
+                        onClick={() => setArchiveConfirmContactId(selectedContact.id)}
+                        type="button"
+                      >
+                        {copy.archiveContact}
+                      </button>
+                    )}
+                    <button
+                      className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                      onClick={() => void saveSelectedContact()}
+                      type="button"
+                    >
+                      {copy.saveChanges}
+                    </button>
+                  </div>
                 </div>
+                {archiveConfirmContactId === selectedContact.id ? (
+                  <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                    {copy.archiveConfirm(selectedContact.name)}
+                  </p>
+                ) : null}
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    Name
+                    {copy.name}
                     <input
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("name", event.target.value)}
@@ -772,7 +871,7 @@ export function ContactCommandCenter({
                     />
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    Rolle
+                    {copy.role}
                     <select
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("role", event.target.value)}
@@ -780,13 +879,13 @@ export function ContactCommandCenter({
                     >
                       {roleOptions.map((role) => (
                         <option key={role} value={role}>
-                          {role}
+                          {getCrmLeadTypeLabel(role, language)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    E-Mail
+                    {copy.email}
                     <input
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("email", event.target.value)}
@@ -795,7 +894,7 @@ export function ContactCommandCenter({
                     />
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    Telefon
+                    {copy.phone}
                     <input
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("phone", event.target.value)}
@@ -803,7 +902,7 @@ export function ContactCommandCenter({
                     />
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    Quelle
+                    {copy.source}
                     <select
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("source", event.target.value)}
@@ -811,13 +910,13 @@ export function ContactCommandCenter({
                     >
                       {sourceOptions.map((source) => (
                         <option key={source} value={source}>
-                          {source}
+                          {getCrmSourceLabel(source, language)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                    Bedarf
+                    {copy.need}
                     <input
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("intent", event.target.value)}
@@ -825,7 +924,7 @@ export function ContactCommandCenter({
                     />
                   </label>
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
-                    Consent / Notiz
+                    {copy.consentNote}
                     <input
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("consent", event.target.value)}
@@ -849,21 +948,21 @@ export function ContactCommandCenter({
                   </p>
                 </div>
                 <div className="rounded-md bg-stone-50 p-3 text-sm">
-                  <p className="font-semibold text-slate-900">E-Mail</p>
+                  <p className="font-semibold text-slate-900">{copy.email}</p>
                   <p className="mt-1 break-words text-stone-600">
-                    {selectedContact.email ?? "Noch nicht erfasst"}
+                    {selectedContact.email ?? copy.noValue}
                   </p>
                 </div>
                 <div className="rounded-md bg-stone-50 p-3 text-sm">
-                  <p className="font-semibold text-slate-900">Telefon</p>
+                  <p className="font-semibold text-slate-900">{copy.phone}</p>
                   <p className="mt-1 break-words text-stone-600">
-                    {selectedContact.phone ?? "Noch nicht erfasst"}
+                    {selectedContact.phone ?? copy.noValue}
                   </p>
                 </div>
               </div>
             </article>
 
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
                 {copy.organizationRecord}
               </p>
@@ -878,10 +977,10 @@ export function ContactCommandCenter({
                         lifecycleStyles[selectedOrganization.lifecycleStage]
                       }`}
                     >
-                      {selectedOrganization.lifecycleStage}
+                      {getCrmLifecycleLabel(selectedOrganization.lifecycleStage, language)}
                     </span>
                     <span className="rounded-md bg-stone-100 px-2 py-1 font-semibold text-stone-700">
-                      {selectedOrganization.type}
+                      {getCrmOrganizationTypeLabel(selectedOrganization.type, language)}
                     </span>
                     <span className="rounded-md bg-stone-100 px-2 py-1 font-semibold text-stone-700">
                       {selectedOrganization.city}
@@ -890,7 +989,7 @@ export function ContactCommandCenter({
                   <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                     <div className="rounded-md bg-stone-50 p-3">
                       <p className="font-semibold">{selectedOrganization.openDeals}</p>
-                      <p className="text-xs text-stone-500">Open Deals</p>
+                      <p className="text-xs text-stone-500">{copy.openDeals}</p>
                     </div>
                     <div className="rounded-md bg-stone-50 p-3">
                       <p className="font-semibold">{selectedOrganization.activeContacts}</p>
@@ -898,15 +997,15 @@ export function ContactCommandCenter({
                     </div>
                   </div>
                   <p className="mt-4 break-words text-sm text-stone-600">
-                    {copy.owner}: {contactOwner?.name ?? "Nicht zugewiesen"}
+                    {copy.owner}: {contactOwner?.name ?? copy.unassigned}
                   </p>
                 </>
               ) : null}
             </article>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-3">
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+          <section className="grid min-w-0 gap-4 lg:grid-cols-3">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="text-lg font-semibold">{copy.dataQuality}</h4>
@@ -940,26 +1039,26 @@ export function ContactCommandCenter({
               </div>
             </article>
 
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <h4 className="text-lg font-semibold">{copy.relationshipMap}</h4>
               <div className="mt-4 space-y-3">
                 {selectedRelationships.map((relationship) => (
                   <div className="rounded-md bg-stone-50 p-3" key={relationship.id}>
                     <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="font-semibold">{relationship.role}</span>
+                      <span className="font-semibold">{getCrmRelationshipRoleLabel(relationship.role, language)}</span>
                       <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">
-                        {relationship.influence}
+                        {getCrmRelationshipInfluenceLabel(relationship.influence, language)}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-stone-500">
-                      {relationship.isPrimary ? "Primäre Beziehung" : "Weitere Beziehung"}
+                      {relationship.isPrimary ? copy.primaryRelationship : copy.secondaryRelationship}
                     </p>
                   </div>
                 ))}
               </div>
             </article>
 
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <h4 className="text-lg font-semibold">{copy.consent}</h4>
               <div className="mt-4 flex flex-wrap gap-2">
                 {selectedConsents.map((consent) => (
@@ -971,7 +1070,7 @@ export function ContactCommandCenter({
                   </span>
                 ))}
                 {selectedConsents.length === 0 ? (
-                  <span className="text-sm text-stone-500">Noch kein Consent erfasst</span>
+                  <span className="text-sm text-stone-500">{copy.noConsent}</span>
                 ) : null}
               </div>
               <h4 className="mt-5 text-lg font-semibold">{copy.openTasks}</h4>
@@ -980,7 +1079,7 @@ export function ContactCommandCenter({
                   <div className="rounded-md bg-stone-50 p-3 text-sm" key={task.id}>
                     <p className="font-semibold">{task.title}</p>
                     <p className="mt-1 text-xs text-stone-500">
-                      {task.due} · {task.priority}
+                      {getCrmTaskDueLabel(task.due, language)} · {getCrmTaskPriorityLabel(task.priority, language)}
                     </p>
                   </div>
                 ))}
@@ -988,8 +1087,8 @@ export function ContactCommandCenter({
             </article>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-            <article className="rounded-lg border border-stone-200 bg-white p-5">
+          <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+            <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h4 className="text-lg font-semibold">{copy.dataModelMapping}</h4>
@@ -998,17 +1097,17 @@ export function ContactCommandCenter({
                   </p>
                 </div>
                 <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                  Contact + Company
+                  {copy.recordBundle}
                 </span>
               </div>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[620px] border-collapse text-left text-sm">
                   <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
                     <tr>
-                      <th className="py-2 pr-3 font-semibold">Novalure</th>
-                      <th className="py-2 pr-3 font-semibold">Wert</th>
-                      <th className="py-2 pr-3 font-semibold">Zielfeld</th>
-                      <th className="py-2 font-semibold">Status</th>
+                      <th className="py-2 pr-3 font-semibold">{copy.tableNovalure}</th>
+                      <th className="py-2 pr-3 font-semibold">{copy.tableValue}</th>
+                      <th className="py-2 pr-3 font-semibold">{copy.tableTargetField}</th>
+                      <th className="py-2 font-semibold">{copy.tableStatus}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -1016,7 +1115,7 @@ export function ContactCommandCenter({
                       <tr key={item.label}>
                         <td className="py-3 pr-3 font-semibold text-slate-900">{item.label}</td>
                         <td className="py-3 pr-3 text-stone-600">
-                          {item.novalure ?? "Noch nicht erfasst"}
+                          {item.novalure ?? copy.noValue}
                         </td>
                         <td className="py-3 pr-3 text-stone-600">{item.targetField}</td>
                         <td className="py-3">
@@ -1038,12 +1137,11 @@ export function ContactCommandCenter({
             </article>
 
             <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
-              <h4 className="text-lg font-semibold">Datenmodell-Prinzip</h4>
+              <h4 className="text-lg font-semibold">{copy.dataPrincipleTitle}</h4>
               <div className="mt-4 space-y-3 text-sm text-slate-200">
-                <p className="break-words">Personen enthalten Kommunikationsdaten.</p>
-                <p className="break-words">Organisationen bündeln Haushalt, Firma oder Bauträger.</p>
-                <p className="break-words">Beziehungen erklären Rolle und Einfluss im Deal.</p>
-                <p className="break-words">Aktivitäten bilden die Timeline und nächste Aktion.</p>
+                {copy.dataPrinciples.map((principle) => (
+                  <p className="break-words" key={principle}>{principle}</p>
+                ))}
               </div>
             </article>
           </section>

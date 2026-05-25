@@ -29,12 +29,20 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+*.out.log
+*.err.log
 
 # env files (can opt-in for committing if needed)
 .env*
 
 # vercel
 .vercel
+.vercel-cache/
+.vercel-cli/
+.vercel-data/
+.vercel-device-auth.json
+.vercel-login*.log
 
 # typescript
 *.tsbuildinfo
@@ -42,6 +50,17 @@ next-env.d.ts
 
 # local npm cache used by Codex installs
 .npm-cache/
+.localappdata/
+.xdg-data/
+.codex-deploy.index
+.codex-git-objects/
+
+# local database helper scripts
+.novalure-*.cjs
 
 .vercel
 .env*.local
+
+.env*.local
+.vercel
+.env*

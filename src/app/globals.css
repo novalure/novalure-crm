@@ -3,8 +3,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #d9ecff;
+  --foreground: #08233f;
+  --nova-panel: #eef7ff;
+  --nova-panel-soft: #d8ecff;
+  --nova-panel-raised: #c1e0ff;
+  --nova-muted: #45627f;
+  --nova-line: rgba(74, 144, 226, 0.28);
+  --nova-accent: #4a90e2;
+  --nova-accent-2: #1f6fbe;
+  --nova-accent-soft: rgba(74, 144, 226, 0.16);
+  --nova-shadow: 0 24px 70px rgba(51, 111, 170, 0.18);
 }
 
 @theme inline {
@@ -14,19 +23,186 @@
   --font-mono: "Cascadia Mono", "Segoe UI Mono", ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 82% 4%, rgba(255, 255, 255, 0.7), transparent 30%),
+    linear-gradient(180deg, #eef7ff 0%, #d9ecff 48%, #c6e2ff 100%);
   color: var(--foreground);
   font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
+html {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+main,
+section,
+article,
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+span,
+a,
+label,
+th,
+td,
+dd {
+  overflow-wrap: anywhere;
+}
+
+a,
+a *,
+button,
+button *,
+select,
+option {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+main.min-h-screen {
+  background:
+    radial-gradient(circle at 82% 4%, rgba(255, 255, 255, 0.7), transparent 30%),
+    linear-gradient(180deg, #eef7ff 0%, #d9ecff 48%, #c6e2ff 100%) !important;
+  color: var(--foreground) !important;
+}
+
+.bg-white,
+.bg-stone-50,
+.bg-stone-100 {
+  background: var(--nova-panel) !important;
+}
+
+.bg-stone-200,
+.bg-slate-100,
+.bg-blue-50,
+.bg-emerald-50,
+.bg-amber-50,
+.bg-red-50,
+.bg-violet-50 {
+  background: var(--nova-panel-soft) !important;
+}
+
+.bg-slate-950 {
+  background: #4a90e2 !important;
+}
+
+button.bg-slate-950,
+button.bg-emerald-700,
+.bg-emerald-700 {
+  background: linear-gradient(135deg, var(--nova-accent), #5bb6ff) !important;
+  box-shadow: 0 12px 30px rgba(74, 144, 226, 0.28);
+  color: #ffffff !important;
+}
+
+.border-stone-200,
+.border-stone-300,
+.border-slate-950,
+.border-blue-100,
+.border-blue-200,
+.border-emerald-100,
+.border-emerald-200,
+.border-amber-200,
+.border-red-200,
+.border-violet-200 {
+  border-color: var(--nova-line) !important;
+}
+
+.text-slate-950,
+.text-slate-900,
+.text-slate-800,
+.text-blue-950,
+.text-emerald-950,
+.text-red-900,
+.text-amber-900,
+.text-violet-900 {
+  color: #08233f !important;
+}
+
+.text-slate-700,
+.text-slate-600,
+.text-stone-700,
+.text-stone-600,
+.text-stone-500,
+.text-blue-900,
+.text-blue-800,
+.text-emerald-900,
+.text-emerald-800,
+.text-amber-800,
+.text-violet-800 {
+  color: var(--nova-muted) !important;
+}
+
+.text-emerald-700,
+.text-emerald-300 {
+  color: var(--nova-accent) !important;
+}
+
+.shadow-sm,
+.shadow,
+.shadow-md,
+.shadow-lg {
+  box-shadow: var(--nova-shadow) !important;
+}
+
+.rounded-lg,
+.rounded-md {
+  border-radius: 8px;
+}
+
+input,
+select,
+textarea {
+  background: rgba(255, 255, 255, 0.64) !important;
+  border-color: var(--nova-line) !important;
+  color: #08233f !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(69, 98, 127, 0.76);
+}
+
+.password-visibility-input::-ms-clear,
+.password-visibility-input::-ms-reveal {
+  display: none;
+}
+
+option {
+  background: #eef7ff;
+  color: #08233f;
+}
+
+button:hover {
+  border-color: rgba(89, 215, 255, 0.45) !important;
+}
+
+button.bg-stone-50:hover,
+button.hover\:bg-stone-100:hover,
+button.hover\:bg-emerald-50:hover {
+  background: var(--nova-accent-soft) !important;
+  color: #ffffff !important;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: var(--nova-accent) !important;
+  opacity: 0.18;
+}
 
 .dashboard-grid {
   min-height: 320px;
@@ -34,8 +210,8 @@ body {
 
 .react-grid-item.react-grid-placeholder {
   border-radius: 8px;
-  background: #059669;
-  opacity: 0.16;
+  background: var(--nova-accent) !important;
+  opacity: 0.18;
 }
 
 @media (max-width: 767px) {

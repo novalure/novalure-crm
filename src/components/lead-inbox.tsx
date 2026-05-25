@@ -2,19 +2,33 @@
 
 import { useMemo, useState } from "react";
 import type {
+  BrokerMandate,
+  BuyerSearchProfile,
   ConsentRecord,
   Contact,
   Conversation,
+  FinancingStatus,
   Lead,
   LeadSource,
   LeadStatus,
   LeadType,
+  PropertyType,
   Project,
   WorkspaceUser,
 } from "@/lib/crm-types";
-import { getDashboardCopy, languageOptionsByCode, type LanguageCode } from "@/lib/i18n";
+import {
+  getCrmLeadTypeLabel,
+  getCrmSourceLabel,
+  getCrmStatusLabel,
+  getDashboardCopy,
+  getLeadInboxCommandCopy,
+  getLocale,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type LeadInboxProps = {
+  brokerMandates?: BrokerMandate[];
+  buyerSearchProfiles?: BuyerSearchProfile[];
   consents: ConsentRecord[];
   contacts: Contact[];
   conversations: Conversation[];
@@ -50,6 +64,7 @@ const sourceStyles: Record<LeadSource, string> = {
   "Website Funnel": "bg-blue-50 text-blue-800",
   Newsletter: "bg-amber-50 text-amber-800",
   "Microsoft 365": "bg-sky-50 text-sky-800",
+  "Google Meet": "bg-cyan-50 text-cyan-800",
   willhaben: "bg-red-50 text-red-800",
   ImmobilienScout: "bg-cyan-50 text-cyan-800",
   Empfehlung: "bg-emerald-50 text-emerald-800",
@@ -67,6 +82,7 @@ const sourceOptions: LeadSource[] = [
   "Instagram",
   "Newsletter",
   "Microsoft 365",
+  "Google Meet",
   "willhaben",
   "ImmobilienScout",
   "Empfehlung",
@@ -75,6 +91,8 @@ const sourceOptions: LeadSource[] = [
 ];
 
 const typeOptions: LeadType[] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
+const propertyTypeOptions: PropertyType[] = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"];
+const financingStatusOptions: FinancingStatus[] = ["offen", "vorqualifiziert", "Eigenmittel", "Finanzierungszusage"];
 const statusOptions: LeadStatus[] = [
   "Neu",
   "Qualifizieren",
@@ -88,137 +106,6 @@ const viewStyles = {
   idle: "border-stone-300 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50",
 };
 
-const labels = {
-  de: {
-    queue: "Queue",
-    hot: "Hot",
-    due: "SLA fällig",
-    unassignedView: "Ohne Owner",
-    handover: "Übergabe",
-    archived: "Archiv",
-    all: "Alle",
-    search: "Suche",
-    searchPlaceholder: "Name, Projekt, Quelle, Absicht oder nächste Aktion suchen",
-    sort: "Sortierung",
-    sortPriority: "Priorität",
-    sortScore: "Score",
-    sortSla: "SLA",
-    sortNewest: "Neueste",
-    createLead: "Lead erfassen",
-    closeForm: "Formular schließen",
-    contact: "Kontakt",
-    project: "Projekt",
-    source: "Quelle",
-    type: "Typ",
-    score: "Score",
-    budget: "Budget",
-    intent: "Absicht",
-    nextAction: "Nächste Aktion",
-    saveLead: "Lead speichern",
-    required: "Kontakt, Projekt, Absicht und nächste Aktion sind Pflicht.",
-    selectedLead: "Ausgewählter Lead",
-    workspaceFields: "Arbeitsfelder",
-    owner: "Owner",
-    status: "Status",
-    saveChanges: "Änderungen speichern",
-    addNote: "Notiz hinzufügen",
-    notePlaceholder: "Kurze Gesprächsnotiz, Einwand, Zusage oder nächster Schritt",
-    createTask: "Aufgabe anlegen",
-    accept: "In Pipeline übernehmen",
-    archive: "Archivieren",
-    restore: "Wieder öffnen",
-    noResults: "Keine Leads für diese Ansicht.",
-    noLead: "Kein Lead ausgewählt.",
-    noContactData: "Keine Kontaktdaten",
-    consentReady: "Consent geprüft",
-    consentMissing: "Consent prüfen",
-    activity: "Aktivität",
-    originalConversation: "Original-Konversation",
-    localActivity: "Lokale Aktionen",
-    taskCreated: "Aufgabe wurde in dieser Sitzung angelegt",
-    changed: "Lead wurde aktualisiert",
-    accepted: "Pipeline-Übergabe vorbereitet",
-    archivedNow: "Lead wurde archiviert",
-    restored: "Lead wurde wieder geöffnet",
-    noteSaved: "Notiz gespeichert",
-    newLeadSaved: "Neuer Lead in der Inbox erfasst",
-    unassigned: "Noch nicht zugewiesen",
-    handoverChecklist: "Übergabecheck",
-    qualification: "Qualifikation",
-    contactData: "Kontaktdaten",
-    consent: "Consent",
-    action: "Aktion",
-    fulfilled: "erfüllt",
-    open: "offen",
-    sla: "SLA",
-    received: "Eingang",
-  },
-  en: {
-    queue: "Queue",
-    hot: "Hot",
-    due: "SLA due",
-    unassignedView: "Unassigned",
-    handover: "Handover",
-    archived: "Archive",
-    all: "All",
-    search: "Search",
-    searchPlaceholder: "Search name, project, source, intent or next action",
-    sort: "Sort",
-    sortPriority: "Priority",
-    sortScore: "Score",
-    sortSla: "SLA",
-    sortNewest: "Newest",
-    createLead: "Capture lead",
-    closeForm: "Close form",
-    contact: "Contact",
-    project: "Project",
-    source: "Source",
-    type: "Type",
-    score: "Score",
-    budget: "Budget",
-    intent: "Intent",
-    nextAction: "Next action",
-    saveLead: "Save lead",
-    required: "Contact, project, intent and next action are required.",
-    selectedLead: "Selected lead",
-    workspaceFields: "Work fields",
-    owner: "Owner",
-    status: "Status",
-    saveChanges: "Save changes",
-    addNote: "Add note",
-    notePlaceholder: "Short call note, objection, promise or next step",
-    createTask: "Create task",
-    accept: "Move to pipeline",
-    archive: "Archive",
-    restore: "Reopen",
-    noResults: "No leads for this view.",
-    noLead: "No lead selected.",
-    noContactData: "No contact data",
-    consentReady: "Consent checked",
-    consentMissing: "Check consent",
-    activity: "Activity",
-    originalConversation: "Original conversation",
-    localActivity: "Local actions",
-    taskCreated: "Task created in this session",
-    changed: "Lead updated",
-    accepted: "Pipeline handover prepared",
-    archivedNow: "Lead archived",
-    restored: "Lead reopened",
-    noteSaved: "Note saved",
-    newLeadSaved: "New lead captured in inbox",
-    unassigned: "Unassigned",
-    handoverChecklist: "Handover check",
-    qualification: "Qualification",
-    contactData: "Contact data",
-    consent: "Consent",
-    action: "Action",
-    fulfilled: "done",
-    open: "open",
-    sla: "SLA",
-    received: "Received",
-  },
-} as const;
-
 function formatDateTime(value: string, locale: string) {
   return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
@@ -228,8 +115,18 @@ function formatDateTime(value: string, locale: string) {
   }).format(new Date(value));
 }
 
+function formatMoney(value: number | undefined, locale: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+
+  return new Intl.NumberFormat(locale, {
+    currency: "EUR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(value);
+}
+
 function minutesUntil(value: string) {
-  return Math.round((new Date(value).getTime() - Date.now()) / 60000);
+  return Math.round((new Date(value).getTime() - new Date().getTime()) / 60000);
 }
 
 function getPriorityRank(lead: LocalLead) {
@@ -245,6 +142,18 @@ function getPriorityRank(lead: LocalLead) {
   return statusRank[lead.status] + Math.max(0, 100 - lead.score) + Math.max(-80, slaMinutes / 10);
 }
 
+function toOptionalNumber(value: string) {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function splitCriteria(value: string) {
+  return value
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function getInitialDraft(leads: Lead[], contacts: Contact[], projects: Project[]) {
   return {
     contactId: contacts[0]?.id ?? "",
@@ -253,12 +162,30 @@ function getInitialDraft(leads: Lead[], contacts: Contact[], projects: Project[]
     type: contacts[0]?.role ?? ("Käufer" as LeadType),
     score: 70,
     budget: "",
+    address: "",
+    areaSqm: "",
+    askingPrice: "",
+    budgetFrom: "",
+    budgetTo: "",
+    condition: "",
+    financingStatus: "offen" as FinancingStatus,
+    marketValue: "",
+    mustCriteria: "",
+    niceCriteria: "",
+    objectType: "Wohnung" as PropertyType,
+    purchaseTimeline: "",
+    rooms: "",
+    sellingReason: "",
+    sellingTimeline: "",
+    yearBuilt: "",
     intent: "",
     nextAction: "",
   };
 }
 
 export function LeadInbox({
+  brokerMandates = [],
+  buyerSearchProfiles = [],
   consents = [],
   contacts = [],
   conversations = [],
@@ -268,8 +195,8 @@ export function LeadInbox({
   users = [],
 }: LeadInboxProps) {
   const copy = getDashboardCopy(language).leadInbox;
-  const text = labels[language];
-  const locale = languageOptionsByCode[language]?.locale ?? languageOptionsByCode.de.locale;
+  const text = getLeadInboxCommandCopy(language);
+  const locale = getLocale(language);
   const [sessionLeads, setSessionLeads] = useState<LocalLead[]>([]);
   const [leadOverrides, setLeadOverrides] = useState<Record<string, Partial<LocalLead>>>({});
   const [selectedLeadId, setSelectedLeadId] = useState<string>(leads[0]?.id ?? "");
@@ -289,6 +216,7 @@ export function LeadInbox({
   const [noteDraft, setNoteDraft] = useState("");
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [createdTaskLeadIds, setCreatedTaskLeadIds] = useState<string[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const effectiveLeads = useMemo(
     () => [
@@ -319,6 +247,8 @@ export function LeadInbox({
           (conversation) => conversation.leadId === lead.id || conversation.contactId === lead.contactId,
         );
         const leadActivities = activities.filter((activity) => activity.leadId === lead.id);
+        const brokerMandate = brokerMandates.find((mandate) => mandate.sellerLeadId === lead.id);
+        const buyerSearchProfile = buyerSearchProfiles.find((profile) => profile.buyerLeadId === lead.id);
         const hasContactData = Boolean(contact?.email || contact?.phone);
         const hasConsent = leadConsents.some((consent) => consent.status === "Opt-in" || consent.status === "Nur CRM");
         const hasAction = lead.nextAction.trim().length > 0;
@@ -332,6 +262,8 @@ export function LeadInbox({
           consents: leadConsents,
           conversations: leadConversations,
           activities: leadActivities,
+          brokerMandate,
+          buyerSearchProfile,
           hasContactData,
           hasConsent,
           hasAction,
@@ -339,7 +271,7 @@ export function LeadInbox({
           slaMinutes: minutesUntil(lead.slaDueAt),
         };
       }),
-    [activities, consents, contacts, conversations, effectiveLeads, projects, users],
+    [activities, brokerMandates, buyerSearchProfiles, consents, contacts, conversations, effectiveLeads, projects, users],
   );
 
   const filteredLeads = useMemo(() => {
@@ -404,10 +336,11 @@ export function LeadInbox({
   ];
 
   const addActivity = (leadId: string, title: string, detail: string, tone: LeadActivity["tone"]) => {
+    const now = new Date();
     const activity: LeadActivity = {
-      id: `activity_${leadId}_${Date.now()}`,
+      id: `activity_${leadId}_${now.getTime()}`,
       leadId,
-      at: new Date().toISOString(),
+      at: now.toISOString(),
       title,
       detail,
       tone,
@@ -434,40 +367,101 @@ export function LeadInbox({
     }));
   };
 
-  const saveFieldDraft = () => {
+  const persistLead = async (lead: Partial<LocalLead>) => {
+    const response = await fetch("/api/crm/leads", {
+      body: JSON.stringify({ lead }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(text.saveError);
+    }
+
+    const payload = await response.json() as { lead?: Lead };
+    return payload.lead;
+  };
+
+  const saveFieldDraft = async () => {
     if (!selectedLead) {
       return;
     }
 
-    updateLead(selectedLead.id, {
+    const patch = {
       status: activeFieldDraft.status,
       assignedToUserId: activeFieldDraft.assignedToUserId || undefined,
       nextAction: activeFieldDraft.nextAction,
-    });
+    } satisfies Partial<LocalLead>;
+
+    updateLead(selectedLead.id, patch);
     addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
-    setNotice(text.changed);
+    try {
+      await persistLead({ ...selectedLead, ...patch });
+      setNotice(text.changed);
+    } catch {
+      setNotice(text.saveError);
+    }
   };
 
-  const acceptLead = (leadId: string) => {
+  const acceptLead = async (leadId: string) => {
     const fallbackOwnerId = users[0]?.id;
-    updateLead(leadId, {
+    const lead = effectiveLeads.find((item) => item.id === leadId);
+    const patch = {
       status: "Übergabe",
-      assignedToUserId: effectiveLeads.find((lead) => lead.id === leadId)?.assignedToUserId ?? fallbackOwnerId,
-    });
-    addActivity(leadId, text.accepted, "Status, Owner und nächste Aktion sind für die Pipeline vorbereitet.", "success");
-    setNotice(text.accepted);
+      assignedToUserId: lead?.assignedToUserId ?? fallbackOwnerId,
+    } satisfies Partial<LocalLead>;
+
+    updateLead(leadId, patch);
+    addActivity(leadId, text.accepted, text.acceptedDetail, "success");
+    try {
+      await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      setNotice(text.accepted);
+    } catch {
+      setNotice(text.saveError);
+    }
   };
 
-  const archiveLead = (leadId: string) => {
+  const archiveLead = async (leadId: string) => {
     const lead = effectiveLeads.find((item) => item.id === leadId);
     const nextStatus = lead?.status === "Archiviert" ? "Qualifizieren" : "Archiviert";
-    updateLead(leadId, { status: nextStatus });
+    const patch = { status: nextStatus } satisfies Partial<LocalLead>;
+
+    updateLead(leadId, patch);
     addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
-    setNotice(nextStatus === "Archiviert" ? text.archivedNow : text.restored);
+    try {
+      await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      setNotice(nextStatus === "Archiviert" ? text.archivedNow : text.restored);
+    } catch {
+      setNotice(text.saveError);
+    }
   };
 
-  const createTask = () => {
+  const createTask = async () => {
     if (!selectedLead) {
+      return;
+    }
+
+    const contact = contacts.find((item) => item.id === selectedLead.contactId);
+    const response = await fetch("/api/crm/recommendation-runtime", {
+      body: JSON.stringify({
+        actionType: selectedLead.hotStatus || selectedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
+        channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
+        contactId: selectedLead.contactId,
+        email: contact?.email ?? null,
+        leadId: selectedLead.id,
+        operation: "follow_up_action",
+        outcome: "planned",
+        phone: contact?.phone ?? null,
+        projectId: selectedLead.projectId,
+        purpose: "salesFollowUp",
+        taskTitle: selectedLead.nextAction || selectedLead.intent,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      setNotice(text.saveError);
       return;
     }
 
@@ -475,7 +469,65 @@ export function LeadInbox({
       current.includes(selectedLead.id) ? current : [...current, selectedLead.id],
     );
     addActivity(selectedLead.id, text.taskCreated, selectedLead.nextAction, "success");
-    setNotice(text.taskCreated);
+    const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean } };
+    setNotice(payload.data?.allowed === false ? text.consentBlocked : text.taskCreated);
+  };
+
+  const prepareBulkFollowUp = async () => {
+    const candidates = filteredLeads
+      .filter((item) => item.lead.status !== "Archiviert")
+      .slice(0, 25);
+
+    if (!candidates.length) {
+      setNotice(text.bulkFollowUpEmpty);
+      return;
+    }
+
+    setBulkSaving(true);
+    try {
+      const response = await fetch("/api/crm/recommendation-runtime", {
+        body: JSON.stringify({
+          actionType: "lead_inbox_bulk_follow_up",
+          leads: candidates.map((item) => ({
+            channel: item.contact?.email ? "E-Mail" : item.contact?.phone ? "WhatsApp" : "Telefon",
+            contactId: item.lead.contactId,
+            email: item.contact?.email ?? null,
+            leadId: item.lead.id,
+            ownerUserId: item.lead.assignedToUserId ?? null,
+            phone: item.contact?.phone ?? null,
+            projectId: item.lead.projectId,
+            taskTitle: item.lead.nextAction || item.lead.intent,
+          })),
+          operation: "bulk_follow_up_actions",
+          outcome: "planned",
+          purpose: "salesFollowUp",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        data?: { blockedCount?: number; failedCount?: number; succeededCount?: number };
+      };
+      if (!response.ok) throw new Error(text.saveError);
+
+      const leadIds = candidates.map((item) => item.lead.id);
+      setCreatedTaskLeadIds((current) => Array.from(new Set([...current, ...leadIds])));
+      candidates.slice(0, 5).forEach((item) => {
+        addActivity(item.lead.id, text.bulkFollowUp, item.lead.nextAction, "success");
+      });
+      setNotice(
+        text.bulkFollowUpDone(
+          payload.data?.succeededCount ?? candidates.length,
+          payload.data?.blockedCount ?? 0,
+          payload.data?.failedCount ?? 0,
+        ),
+      );
+    } catch {
+      setNotice(text.saveError);
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   const addNote = () => {
@@ -488,7 +540,7 @@ export function LeadInbox({
     setNotice(text.noteSaved);
   };
 
-  const createLead = () => {
+  const createLead = async () => {
     setFormError("");
 
     if (!leadDraft.contactId || !leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
@@ -497,8 +549,9 @@ export function LeadInbox({
     }
 
     const contact = contacts.find((item) => item.id === leadDraft.contactId);
+    const now = new Date();
     const nextLead: LocalLead = {
-      id: `lead_local_${Date.now()}`,
+      id: `lead_local_${now.getTime()}`,
       workspaceId: contact?.workspaceId ?? users[0]?.workspaceId ?? "ws_novalure",
       projectId: leadDraft.projectId,
       contactId: leadDraft.contactId,
@@ -509,25 +562,64 @@ export function LeadInbox({
       budget: leadDraft.budget.trim() || undefined,
       intent: leadDraft.intent.trim(),
       nextAction: leadDraft.nextAction.trim(),
-      receivedAt: new Date().toISOString(),
-      slaDueAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      receivedAt: now.toISOString(),
+      slaDueAt: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+      objectType: leadDraft.objectType,
+      rooms: toOptionalNumber(leadDraft.rooms),
+      areaSqm: toOptionalNumber(leadDraft.areaSqm),
+      buyerProfile:
+        leadDraft.type === "Käufer"
+          ? {
+              budgetFrom: toOptionalNumber(leadDraft.budgetFrom) ?? 0,
+              budgetTo: toOptionalNumber(leadDraft.budgetTo) ?? 0,
+              desiredLocation: leadDraft.address.trim() || undefined,
+              financingStatus: leadDraft.financingStatus,
+              mustHaveCriteria: splitCriteria(leadDraft.mustCriteria),
+              niceToHaveCriteria: splitCriteria(leadDraft.niceCriteria),
+              propertyType: leadDraft.objectType,
+              purchaseTimeline: leadDraft.purchaseTimeline.trim() || undefined,
+              useCase: "Eigennutzung",
+            }
+          : undefined,
+      sellerProfile:
+        leadDraft.type === "Verkäufer"
+          ? {
+              address: leadDraft.address.trim(),
+              askingPrice: toOptionalNumber(leadDraft.askingPrice) ?? 0,
+              brokerContractStatus: "offen",
+              commissionRate: 0,
+              competingBroker: false,
+              marketValue: toOptionalNumber(leadDraft.marketValue) ?? 0,
+              objectCondition: leadDraft.condition.trim() || undefined,
+              sellingReason: leadDraft.sellingReason.trim(),
+              sellingTimeline: leadDraft.sellingTimeline.trim() || undefined,
+              yearBuilt: toOptionalNumber(leadDraft.yearBuilt) ?? 0,
+            }
+          : undefined,
       assignedToUserId: users[0]?.id,
       isLocal: true,
     };
 
-    setSessionLeads((current) => [nextLead, ...current]);
-    setSelectedLeadId(nextLead.id);
-    setFieldDraft({
-      leadId: nextLead.id,
-      status: nextLead.status,
-      assignedToUserId: nextLead.assignedToUserId ?? "",
-      nextAction: nextLead.nextAction,
-    });
-    setActiveView("queue");
-    setShowCreateForm(false);
-    setLeadDraft(getInitialDraft(leads, contacts, projects));
-    addActivity(nextLead.id, text.newLeadSaved, nextLead.nextAction, "success");
-    setNotice(text.newLeadSaved);
+    try {
+      const persistedLead = await persistLead(nextLead);
+      const savedLead: LocalLead = { ...(persistedLead ?? nextLead), isLocal: false };
+
+      setSessionLeads((current) => [savedLead, ...current]);
+      setSelectedLeadId(savedLead.id);
+      setFieldDraft({
+        leadId: savedLead.id,
+        status: savedLead.status,
+        assignedToUserId: savedLead.assignedToUserId ?? "",
+        nextAction: savedLead.nextAction,
+      });
+      setActiveView("queue");
+      setShowCreateForm(false);
+      setLeadDraft(getInitialDraft(leads, contacts, projects));
+      addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
+      setNotice(text.newLeadSaved);
+    } catch {
+      setFormError(text.saveError);
+    }
   };
 
   return (
@@ -536,7 +628,7 @@ export function LeadInbox({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              Lead Inbox
+              {text.moduleLabel}
             </p>
             <h3 className="mt-1 text-xl font-semibold">{copy.title}</h3>
             <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">
@@ -582,13 +674,25 @@ export function LeadInbox({
                 </button>
               ))}
             </div>
-            <button
-              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={() => setShowCreateForm((current) => !current)}
-              type="button"
-            >
-              {showCreateForm ? text.closeForm : text.createLead}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={bulkSaving || filteredLeads.length === 0}
+                onClick={() => {
+                  void prepareBulkFollowUp();
+                }}
+                type="button"
+              >
+                {bulkSaving ? text.saving : text.bulkFollowUp}
+              </button>
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => setShowCreateForm((current) => !current)}
+                type="button"
+              >
+                {showCreateForm ? text.closeForm : text.createLead}
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
@@ -665,7 +769,7 @@ export function LeadInbox({
                   >
                     {sourceOptions.map((source) => (
                       <option key={source} value={source}>
-                        {source}
+                        {getCrmSourceLabel(source, language)}
                       </option>
                     ))}
                   </select>
@@ -679,7 +783,7 @@ export function LeadInbox({
                   >
                     {typeOptions.map((type) => (
                       <option key={type} value={type}>
-                        {type}
+                        {getCrmLeadTypeLabel(type, language)}
                       </option>
                     ))}
                   </select>
@@ -700,11 +804,172 @@ export function LeadInbox({
                   <input
                     className="rounded-md border border-emerald-200 bg-white px-3 py-2"
                     onChange={(event) => setLeadDraft((current) => ({ ...current, budget: event.target.value }))}
-                    placeholder="bis 520.000 Euro"
+                    placeholder={text.budgetPlaceholder}
                     value={leadDraft.budget}
                   />
                 </label>
               </div>
+              {leadDraft.type === "Verkäufer" || leadDraft.type === "Käufer" ? (
+                <div className="mt-3 rounded-md border border-emerald-200 bg-white p-3">
+                  <p className="text-sm font-semibold text-slate-950">{text.brokerProfileTitle}</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.address}
+                      <input
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, address: event.target.value }))}
+                        value={leadDraft.address}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.type}
+                      <select
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, objectType: event.target.value as PropertyType }))}
+                        value={leadDraft.objectType}
+                      >
+                        {propertyTypeOptions.map((propertyType) => (
+                          <option key={propertyType} value={propertyType}>
+                            {propertyType}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.rooms}
+                      <input
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, rooms: event.target.value }))}
+                        type="number"
+                        value={leadDraft.rooms}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.livingArea}
+                      <input
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, areaSqm: event.target.value }))}
+                        type="number"
+                        value={leadDraft.areaSqm}
+                      />
+                    </label>
+                    {leadDraft.type === "Verkäufer" ? (
+                      <>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.yearBuilt}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, yearBuilt: event.target.value }))}
+                            type="number"
+                            value={leadDraft.yearBuilt}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.askingPrice}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, askingPrice: event.target.value }))}
+                            type="number"
+                            value={leadDraft.askingPrice}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.marketValue}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, marketValue: event.target.value }))}
+                            type="number"
+                            value={leadDraft.marketValue}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.condition}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, condition: event.target.value }))}
+                            value={leadDraft.condition}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.sellingTimeline}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, sellingTimeline: event.target.value }))}
+                            value={leadDraft.sellingTimeline}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold xl:col-span-2">
+                          {text.sellingReason}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, sellingReason: event.target.value }))}
+                            value={leadDraft.sellingReason}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.budgetFrom}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, budgetFrom: event.target.value }))}
+                            type="number"
+                            value={leadDraft.budgetFrom}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.budgetTo}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, budgetTo: event.target.value }))}
+                            type="number"
+                            value={leadDraft.budgetTo}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.financingStatus}
+                          <select
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, financingStatus: event.target.value as FinancingStatus }))}
+                            value={leadDraft.financingStatus}
+                          >
+                            {financingStatusOptions.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold">
+                          {text.purchaseTimeline}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, purchaseTimeline: event.target.value }))}
+                            value={leadDraft.purchaseTimeline}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold md:col-span-2">
+                          {text.mustCriteria}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, mustCriteria: event.target.value }))}
+                            value={leadDraft.mustCriteria}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold md:col-span-2">
+                          {text.niceCriteria}
+                          <input
+                            className="rounded-md border border-emerald-200 px-3 py-2"
+                            onChange={(event) => setLeadDraft((current) => ({ ...current, niceCriteria: event.target.value }))}
+                            value={leadDraft.niceCriteria}
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.intent}
@@ -726,7 +991,9 @@ export function LeadInbox({
               {formError ? <p className="mt-3 text-sm font-semibold text-red-700">{formError}</p> : null}
               <button
                 className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-                onClick={createLead}
+                onClick={() => {
+                  void createLead();
+                }}
                 type="button"
               >
                 {text.saveLead}
@@ -762,7 +1029,7 @@ export function LeadInbox({
                           {item.contact?.name ?? copy.unknownContact}
                         </span>
                         <span className={`mt-1 block break-words text-xs ${isSelected ? "text-slate-300" : "text-stone-500"}`}>
-                          {item.project?.name ?? copy.noProject} · {item.lead.type}
+                          {item.project?.name ?? copy.noProject} · {getCrmLeadTypeLabel(item.lead.type, language)}
                         </span>
                       </span>
                       <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${isSelected ? "bg-white text-slate-950" : "bg-slate-950 text-white"}`}>
@@ -772,10 +1039,10 @@ export function LeadInbox({
 
                     <span className="flex flex-wrap gap-2 text-xs">
                       <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : statusStyles[item.lead.status]}`}>
-                        {item.lead.status}
+                        {getCrmStatusLabel(item.lead.status, language)}
                       </span>
                       <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : sourceStyles[item.lead.source]}`}>
-                        {item.lead.source}
+                        {getCrmSourceLabel(item.lead.source, language)}
                       </span>
                       <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : isUrgent ? "bg-amber-100 text-amber-900" : "bg-white text-stone-700"}`}>
                         {text.sla} {formatDateTime(item.lead.slaDueAt, locale)}
@@ -812,7 +1079,7 @@ export function LeadInbox({
                     {selected.contact?.name ?? copy.unknownContact}
                   </h4>
                   <p className="mt-1 break-words text-sm text-stone-600">
-                    {selected.project?.name ?? copy.noProject} · {selected.lead.type}
+                    {selected.project?.name ?? copy.noProject} · {getCrmLeadTypeLabel(selected.lead.type, language)}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white">
@@ -847,6 +1114,58 @@ export function LeadInbox({
                 </div>
               </div>
 
+              {selected.brokerMandate || selected.buyerSearchProfile ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-sm font-semibold text-slate-950">
+                    {selected.brokerMandate ? text.mandateEntityTitle : text.searchProfileEntityTitle}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                    {text.profilePersisted}
+                  </p>
+                  {selected.brokerMandate ? (
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.address}</span>
+                        <span className="break-words font-semibold">{selected.brokerMandate.address || "-"}</span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.mandateStatus}</span>
+                        <span className="break-words font-semibold">{selected.brokerMandate.mandateStatus}</span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.marketValue}</span>
+                        <span className="break-words font-semibold">{formatMoney(selected.brokerMandate.marketValue, locale)}</span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.documentsStatus}</span>
+                        <span className="break-words font-semibold">{selected.brokerMandate.documentsStatus ?? "-"}</span>
+                      </p>
+                    </div>
+                  ) : selected.buyerSearchProfile ? (
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.budgetRange}</span>
+                        <span className="break-words font-semibold">
+                          {formatMoney(selected.buyerSearchProfile.budgetFrom, locale)} - {formatMoney(selected.buyerSearchProfile.budgetTo, locale)}
+                        </span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.financingStatus}</span>
+                        <span className="break-words font-semibold">{selected.buyerSearchProfile.financingStatus ?? "-"}</span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.address}</span>
+                        <span className="break-words font-semibold">{selected.buyerSearchProfile.desiredLocation ?? "-"}</span>
+                      </p>
+                      <p className="rounded-md bg-white p-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.matchingStatus}</span>
+                        <span className="break-words font-semibold">{selected.buyerSearchProfile.matchingStatus}</span>
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="rounded-lg border border-stone-200 p-3">
                 <p className="text-sm font-semibold">{text.workspaceFields}</p>
                 <div className="mt-3 grid gap-3">
@@ -859,7 +1178,7 @@ export function LeadInbox({
                     >
                       {statusOptions.map((status) => (
                         <option key={status} value={status}>
-                          {status}
+                          {getCrmStatusLabel(status, language)}
                         </option>
                       ))}
                     </select>
@@ -889,7 +1208,9 @@ export function LeadInbox({
                   </label>
                   <button
                     className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-                    onClick={saveFieldDraft}
+                    onClick={() => {
+                      void saveFieldDraft();
+                    }}
                     type="button"
                   >
                     {text.saveChanges}
@@ -901,21 +1222,27 @@ export function LeadInbox({
                 <button
                   className="rounded-md bg-violet-700 px-3 py-2 text-sm font-semibold text-white disabled:bg-violet-300"
                   disabled={selected.lead.status === "Übergabe"}
-                  onClick={() => acceptLead(selected.lead.id)}
+                  onClick={() => {
+                    void acceptLead(selected.lead.id);
+                  }}
                   type="button"
                 >
                   {selected.lead.status === "Übergabe" ? copy.acceptedButton : text.accept}
                 </button>
                 <button
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                  onClick={createTask}
+                  onClick={() => {
+                    void createTask();
+                  }}
                   type="button"
                 >
                   {createdTaskLeadIds.includes(selected.lead.id) ? text.taskCreated : text.createTask}
                 </button>
                 <button
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                  onClick={() => archiveLead(selected.lead.id)}
+                  onClick={() => {
+                    void archiveLead(selected.lead.id);
+                  }}
                   type="button"
                 >
                   {selected.lead.status === "Archiviert" ? text.restore : text.archive}

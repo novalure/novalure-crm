@@ -40,7 +40,7 @@ export function BotLanguageTester({ language, projects, rules }: BotLanguageTest
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-            Bots
+            {copy.navigation.bots}
           </p>
           <h3 className="mt-1 text-lg font-semibold">{copy.bots.testerTitle}</h3>
           <p className="mt-2 max-w-3xl break-words text-sm text-stone-600">

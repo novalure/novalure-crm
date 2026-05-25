@@ -1,0 +1,48 @@
+import { NextResponse } from "next/server";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { upsertDealRecord } from "@/lib/db/crm-write-repositories";
+
+async function readJson(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+function getDealWriteStatus(reason: string) {
+  if (reason.includes("permission")) return 403;
+  if (reason.includes("not found")) return 404;
+  if (reason.includes("required") || reason.includes("Invalid") || reason.includes("not configured")) return 400;
+  return 503;
+}
+
+export async function POST(request: Request) {
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
+  if (!auth.ok) return auth.response;
+
+  const body = await readJson(request);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const input = body as Record<string, unknown>;
+  const deal = typeof input.deal === "object" && input.deal ? input.deal as Record<string, unknown> : input;
+  const result = await upsertDealRecord({
+    deal,
+    reason: typeof input.reason === "string" ? input.reason : undefined,
+    reasonCategory: input.reasonCategory,
+    reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
+    session: auth.session,
+  });
+
+  if (!result.persisted) {
+    return NextResponse.json({ error: result.reason }, { status: getDealWriteStatus(result.reason) });
+  }
+
+  return NextResponse.json({ deal: result.data, persisted: true });
+}
+
+export async function PATCH(request: Request) {
+  return POST(request);
+}

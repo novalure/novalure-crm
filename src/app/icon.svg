@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Novalure CRM favicon">
+  <rect width="64" height="64" rx="14" fill="#08233f"/>
+  <rect x="13" y="13" width="38" height="38" rx="8" fill="#eef7ff" stroke="#4a90e2" stroke-width="4"/>
+  <path d="M23 42V22h6.3l9.4 12.8V22H44v20h-6.1L28.4 29v13H23z" fill="#1f6fbe"/>
+</svg>

@@ -1,0 +1,118 @@
+name: Livegang E2E
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Lint and build
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  livegang-e2e:
+    name: Livegang API E2E
+    runs-on: ubuntu-latest
+    needs: checks
+    if: ${{ vars.NOVALURE_RUN_LIVEGANG_E2E == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    env:
+      DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL || secrets.DATABASE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
+      NOVALURE_QA_BASE_URL: http://127.0.0.1:3000
+      NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
+      NOVALURE_QA_SEED_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
+      NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_SESSION_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check QA configuration
+        id: qa_config
+        run: |
+          if [ -n "$DATABASE_URL" ] && [ -n "$NOVALURE_SESSION_SECRET" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Livegang E2E because NOVALURE_QA_DATABASE_URL or DATABASE_URL and NOVALURE_SESSION_SECRET are not configured."
+          fi
+
+      - name: Reset QA data
+        if: steps.qa_config.outputs.enabled == 'true'
+        run: npm run qa:livegang:reset -- --cleanup-only
+
+      - name: Seed QA data
+        if: steps.qa_config.outputs.enabled == 'true'
+        run: npm run qa:livegang:seed
+
+      - name: Start Next.js
+        if: steps.qa_config.outputs.enabled == 'true'
+        run: |
+          npm run dev -- --hostname 127.0.0.1 > /tmp/novalure-livegang.log 2>&1 &
+          echo $! > /tmp/novalure-livegang.pid
+
+      - name: Wait for app
+        if: steps.qa_config.outputs.enabled == 'true'
+        run: |
+          for attempt in {1..60}; do
+            if curl -fsS "$NOVALURE_QA_BASE_URL/api/system/database" >/tmp/novalure-db.json; then
+              cat /tmp/novalure-db.json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/novalure-livegang.log
+          exit 1
+
+      - name: Run Workspace, Stage-History and Lost-Reasons E2E
+        if: steps.qa_config.outputs.enabled == 'true'
+        run: npm run qa:livegang:api
+
+      - name: Cleanup QA data
+        if: always() && steps.qa_config.outputs.enabled == 'true'
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            npm run qa:livegang:reset -- --cleanup-only
+          fi
+
+      - name: Stop Next.js
+        if: always() && steps.qa_config.outputs.enabled == 'true'
+        run: |
+          if [ -f /tmp/novalure-livegang.pid ]; then
+            kill "$(cat /tmp/novalure-livegang.pid)" || true
+          fi
+
+      - name: Print app log on failure
+        if: failure()
+        run: cat /tmp/novalure-livegang.log || true
