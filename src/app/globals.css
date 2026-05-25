@@ -214,6 +214,91 @@ button.hover\:bg-emerald-50:hover {
   opacity: 0.18;
 }
 
+.crm-asset-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.crm-flow-dot {
+  position: absolute;
+  top: 50%;
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #9fd8be;
+  box-shadow: 0 0 0 8px rgba(159, 216, 190, 0.08);
+  transform: translateY(-50%);
+  animation: crm-flow-dot 7s ease-in-out infinite;
+}
+
+.crm-pulse-ring {
+  animation: crm-pulse-ring 6s ease-in-out infinite;
+}
+
+.crm-soft-lift {
+  animation: crm-soft-lift 7s ease-in-out infinite;
+}
+
+.crm-progress-line {
+  animation: crm-progress-line 7s ease-in-out infinite;
+}
+
+@keyframes crm-flow-dot {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translateY(-50%) scale(0.9);
+  }
+  45%,
+  55% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.08);
+  }
+}
+
+@keyframes crm-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(159, 216, 190, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(159, 216, 190, 0);
+  }
+}
+
+@keyframes crm-soft-lift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes crm-progress-line {
+  0%,
+  100% {
+    width: 34%;
+  }
+  50% {
+    width: 86%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-flow-dot,
+  .crm-pulse-ring,
+  .crm-soft-lift,
+  .crm-progress-line {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 @media (max-width: 767px) {
   .dashboard-grid {
     margin-inline: -8px;
@@ -221,5 +306,13 @@ button.hover\:bg-emerald-50:hover {
 
   .dashboard-grid .react-grid-item {
     touch-action: manipulation;
+  }
+
+  .crm-noncritical-motion .crm-flow-dot,
+  .crm-noncritical-motion .crm-pulse-ring,
+  .crm-noncritical-motion .crm-soft-lift,
+  .crm-noncritical-motion .crm-progress-line {
+    animation: none !important;
+    transform: none !important;
   }
 }
