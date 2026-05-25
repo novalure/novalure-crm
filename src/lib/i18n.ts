@@ -498,6 +498,343 @@ export const crmLandingPageCopy = {
   },
 } as const;
 
+export const crmPublicLandingPageCopy = {
+  en: {
+    nav: {
+      companySystem: "Company and system",
+      problem: "Lead leakage",
+      preview: "CRM preview",
+      audit: "Pipeline Audit",
+      login: "Team login",
+      auditCta: "Request audit",
+    },
+    hero: {
+      eyebrow: "Protected Novalure CRM layer",
+      title: "Real estate leads become a guided sales process.",
+      description:
+        "This is the protected CRM workspace behind the Novalure lead system. Here, real estate leads become qualified sales cases with ownership, next action and pipeline visibility.",
+      primaryCta: "Request Pipeline Audit",
+      secondaryCta: "Team login",
+      proofPoints: [
+        "Pipeline, not impressions",
+        "From first click to CRM-ready opportunity",
+        "Not an agency, not just a website, not only ads",
+      ],
+    },
+    loginPanel: {
+      eyebrow: "Workspace access",
+      title: "Sign in to the protected CRM workspace",
+      description:
+        "For Novalure team members, clients and approved workspaces. Access is controlled and not publicly bookable.",
+    },
+    companySystem: {
+      eyebrow: "Company and system",
+      title: "Two public signals, one operating model.",
+      description:
+        "novalure.eu builds trust, explains the PropTech Sales System and starts the private audit. novalure-crm.app is the protected operating layer behind the lead infrastructure.",
+      publicLayer: {
+        label: "novalure.eu",
+        title: "Public company layer",
+        body: "Positioning, playbooks, method, Pipeline Audit and the strategic language of the PropTech Sales System.",
+      },
+      protectedLayer: {
+        label: "novalure-crm.app",
+        title: "Protected system layer",
+        body: "Controlled CRM workspace for lead intake, follow-up context, pipeline visibility and approved reporting views.",
+      },
+      bridge: ["Audit", "Setup", "CRM workspace"],
+    },
+    problem: {
+      eyebrow: "The real leak",
+      title: "Many real estate teams generate leads, then lose revenue in follow-up.",
+      description:
+        "The issue is rarely only traffic. Leads arrive, but the next step is unclear, ownership changes by habit and campaign performance stays hard to judge from sales reality.",
+      points: [
+        "Leads come in, but nobody reliably sees what happens next.",
+        "Follow-up is too slow or inconsistent across owners and projects.",
+        "Campaign performance is difficult to connect to qualified conversations.",
+        "Appointments, tasks and pipeline status do not stay connected.",
+      ],
+    },
+    preview: {
+      eyebrow: "Controlled CRM preview",
+      title: "Enough visibility to build trust. Not enough to expose the system.",
+      description:
+        "The preview stays abstract: no customer names, no sensitive CRM screens and no full workflow reveal. It shows the operating idea behind Lead Center, project context, responsibility, next action and pipeline status.",
+      terms: ["Lead Center", "Next action", "Pipeline status", "Project context", "Responsibility"],
+      notice: "Access is private, reviewed and tied to approved workspaces.",
+    },
+    audiences: {
+      eyebrow: "Built for real estate sales work",
+      title: "For teams where lead quality only matters when it reaches pipeline.",
+      items: [
+        {
+          title: "Developers",
+          body: "Project leads, reservations, units and consultations need context before sales time is spent.",
+        },
+        {
+          title: "Broker teams",
+          body: "Seller leads, buyer leads, mandates and appointments need clear next action instead of scattered notes.",
+        },
+        {
+          title: "Project sales",
+          body: "Campaigns, lead quality, pipeline visibility and follow-up must stay connected after the first inquiry.",
+        },
+      ],
+    },
+    audit: {
+      eyebrow: "What the private audit reviews",
+      title: "First diagnose the lead system, then decide what should be built.",
+      description:
+        "The audit focuses on the bottlenecks around pipeline, handover and follow-up. It does not reveal Novalure's internal operating rules or technical setup.",
+      checks: [
+        "Lead sources",
+        "Response speed",
+        "Qualification",
+        "Ownership",
+        "Follow-up gaps",
+        "Pipeline visibility",
+        "Reporting needs",
+      ],
+    },
+    trust: {
+      eyebrow: "Trust boundaries",
+      title: "Confidential by design, independent by architecture.",
+      points: [
+        "Workspaces and projects stay separated.",
+        "Access is controlled for teams, clients and approved reviews.",
+        "No public customer data is shown on this page.",
+        "Novalure CRM stays independent from HubSpot unless a sync is explicitly scoped.",
+        "Microsoft 365 and Teams can support appointment workflows without turning the page into a tech spec.",
+      ],
+    },
+    finalCta: {
+      eyebrow: "Next step",
+      title: "Audit first. Then build the system.",
+      description:
+        "If leads are entering your business but pipeline clarity is missing, the right next step is a private Lead System and Pipeline Audit.",
+      primaryCta: "Request private audit",
+      secondaryCta: "Learn more about Novalure",
+    },
+    footerTagline:
+      "Lead infrastructure for real estate teams whose demand must become qualified conversations and CRM-ready opportunities.",
+    visuals: {
+      heroOperatingLayer: {
+        id: "ANIMATION_HERO_OPERATING_LAYER",
+        alt: "Abstract preview of a protected CRM workspace for real estate leads.",
+        assetDescription:
+          "Premium hero animation with anonymized lead and pipeline signals as a protected system layer.",
+        geminiPrompt:
+          "Create a premium animated abstract CRM operating layer for a real estate lead system. Dark elegant interface, anonymized blurred lead cards, subtle pipeline signals, project tags, next-action indicators, confidential system feeling. No readable customer data, no prices, no real screenshots, no people, no stock-photo style. Slow calm motion, 6-8 second seamless loop, high-end PropTech, real estate sales operations.",
+        labels: ["Lead source", "CRM", "Pipeline", "Next action"],
+      },
+      companySystemSplit: {
+        id: "ANIMATION_COMPANY_SYSTEM_SPLIT",
+        alt: "Diagram showing the separation between the Novalure company website and protected CRM system.",
+        assetDescription:
+          "Animated two-layer diagram: public Novalure brand and protected CRM workspace.",
+        geminiPrompt:
+          "Create a minimal premium animated diagram showing two connected layers: Novalure.eu as public brand, audit and playbook layer; Novalure CRM as protected operations system. Show a subtle flow from Pipeline Audit to protected CRM workspace. Real estate lead infrastructure, clean lines, elegant black and white palette with subtle accent. No pricing, no detailed UI, no sensitive data.",
+        labels: ["novalure.eu", "Pipeline Audit", "novalure-crm.app"],
+      },
+      leadLeakage: {
+        id: "ANIMATION_LEAD_LEAKAGE",
+        alt: "Visualization of how real estate leads are lost without a system and guided with CRM.",
+        assetDescription:
+          "Before-after animation for lead loss, follow-up gaps and structured pipeline guidance.",
+        geminiPrompt:
+          "Create a premium animated before-after visual for real estate lead operations. Left side: incoming leads from ads and funnels without clear follow-up, some fading out. Right side: the same leads become organized CRM cards with owner, status, next action and pipeline movement. No readable personal data, no prices, no detailed product UI. Calm professional motion, not flashy.",
+        labels: ["Loose inquiries", "No next action", "Owner", "Pipeline"],
+      },
+      lockedCrmPreview: {
+        id: "ANIMATION_LOCKED_CRM_PREVIEW",
+        alt: "Controlled anonymized preview of Lead Center and pipeline inside the CRM.",
+        assetDescription:
+          "Protected CRM preview with anonymized cards and subtly highlighted operating fields.",
+        geminiPrompt:
+          "Create an animated locked CRM preview for a real estate lead operations platform. Show anonymized CRM cards with source, project, owner, next action and pipeline status. Highlight these fields one by one with subtle motion. Keep all data generic or blurred. No real screenshots, no sensitive details, no full workflow logic, no prices. Premium confidential software preview.",
+        labels: ["Source", "Status", "Owner", "Next action", "Pipeline"],
+      },
+      auditToSystem: {
+        id: "ANIMATION_AUDIT_TO_SYSTEM",
+        alt: "Process from Pipeline Audit to configured lead operations system.",
+        assetDescription:
+          "Short process animation from audit to CRM-ready lead operations.",
+        geminiPrompt:
+          "Create a short premium animated process visual for Novalure: Pipeline Audit, bottleneck analysis, system setup, CRM-ready lead operations. Real estate sales context, clean minimal motion, high trust, no prices, no package names, no detailed internal workflows. Elegant and confidential.",
+        labels: ["Pipeline Audit", "Bottleneck analysis", "System setup", "CRM-ready operations"],
+      },
+    },
+  },
+  de: {
+    nav: {
+      companySystem: "Firma und System",
+      problem: "Lead-Verlust",
+      preview: "CRM-Vorschau",
+      audit: "Pipeline Audit",
+      login: "Team-Login",
+      auditCta: "Audit anfragen",
+    },
+    hero: {
+      eyebrow: "Geschützter Novalure CRM-Layer",
+      title: "Aus Immobilien-Leads wird ein geführter Vertriebsprozess.",
+      description:
+        "Der geschützte CRM-Arbeitsbereich hinter dem Novalure Lead-System. Hier werden Immobilien-Leads zu qualifizierten Vertriebsfällen mit Zuständigkeit, nächster Aktion und Pipeline-Transparenz.",
+      primaryCta: "Pipeline Audit anfragen",
+      secondaryCta: "Zum Team-Login",
+      proofPoints: [
+        "Pipeline, nicht Impressionen",
+        "From first click to CRM-ready opportunity",
+        "Not an agency, not just a website, not only ads",
+      ],
+    },
+    loginPanel: {
+      eyebrow: "Workspace-Zugang",
+      title: "In den geschützten CRM-Arbeitsbereich einloggen",
+      description:
+        "Für Novalure-Team, Kunden und freigegebene Workspaces. Der Zugang ist kontrolliert und nicht öffentlich buchbar.",
+    },
+    companySystem: {
+      eyebrow: "Firma und System",
+      title: "Zwei öffentliche Signale, ein operatives Modell.",
+      description:
+        "novalure.eu baut Vertrauen auf, erklärt das PropTech Sales System und startet das private Audit. novalure-crm.app ist der geschützte operative Layer hinter der Lead Infrastructure.",
+      publicLayer: {
+        label: "novalure.eu",
+        title: "Öffentliche Firmenebene",
+        body: "Positionierung, Playbooks, Methode, Pipeline Audit und die strategische Sprache des PropTech Sales Systems.",
+      },
+      protectedLayer: {
+        label: "novalure-crm.app",
+        title: "Geschützter System-Layer",
+        body: "Kontrollierter CRM-Arbeitsbereich für Lead-Zentrale, Follow-up-Kontext, Pipeline-Sicht und freigegebene Reporting-Ansichten.",
+      },
+      bridge: ["Audit", "Setup", "CRM-Arbeitsbereich"],
+    },
+    problem: {
+      eyebrow: "Die eigentliche Lücke",
+      title: "Viele Immobilien-Teams erzeugen Leads und verlieren Umsatz im Follow-up.",
+      description:
+        "Das Problem ist selten nur Traffic. Leads kommen rein, aber der nächste Schritt ist unklar, Zuständigkeit wechselt nach Gewohnheit und Kampagnenleistung bleibt schwer mit Vertriebsrealität zu verbinden.",
+      points: [
+        "Leads kommen rein, aber niemand sieht zuverlässig, was als Nächstes passiert.",
+        "Nachfassen ist zu langsam oder uneinheitlich über Personen und Projekte hinweg.",
+        "Kampagnenleistung lässt sich schwer mit qualifizierten Gesprächen verbinden.",
+        "Termine, Aufgaben und Pipeline-Status hängen nicht sauber zusammen.",
+      ],
+    },
+    preview: {
+      eyebrow: "Kontrollierte CRM-Vorschau",
+      title: "Genug Sichtbarkeit für Vertrauen. Nicht genug, um das System offenzulegen.",
+      description:
+        "Die Vorschau bleibt abstrakt: keine Kundennamen, keine sensiblen CRM-Screens und kein vollständiger Workflow. Sichtbar wird die operative Idee hinter Lead-Zentrale, Projektbezug, Verantwortlichkeit, nächster Aktion und Pipeline-Status.",
+      terms: ["Lead-Zentrale", "Nächste Aktion", "Pipeline-Status", "Projektbezug", "Verantwortlichkeit"],
+      notice: "Zugang bleibt privat, geprüft und an freigegebene Workspaces gebunden.",
+    },
+    audiences: {
+      eyebrow: "Gebaut für Immobilienvertrieb",
+      title: "Für Teams, bei denen Leadqualität erst zählt, wenn sie Pipeline erreicht.",
+      items: [
+        {
+          title: "Bauträger",
+          body: "Projektleads, Reservierungen, Einheiten und Beratung brauchen Kontext, bevor Vertriebszeit investiert wird.",
+        },
+        {
+          title: "Maklerteams",
+          body: "Verkäufer-Leads, Käufer-Leads, Mandate und Termine brauchen klare nächste Aktionen statt verstreuter Notizen.",
+        },
+        {
+          title: "Projektvertriebe",
+          body: "Kampagnen, Leadqualität, Pipeline-Sicht und Follow-up müssen nach der ersten Anfrage verbunden bleiben.",
+        },
+      ],
+    },
+    audit: {
+      eyebrow: "Was das private Audit prüft",
+      title: "Erst das Lead-System diagnostizieren, dann entscheiden, was gebaut wird.",
+      description:
+        "Das Audit fokussiert die Engpässe rund um Pipeline, Übergabe und Follow-up. Es erklärt nicht, wie Novalure interne Betriebsregeln oder technische Details löst.",
+      checks: [
+        "Leadquellen",
+        "Antwortgeschwindigkeit",
+        "Qualifizierung",
+        "Zuständigkeit",
+        "Follow-up-Lücken",
+        "Pipeline-Transparenz",
+        "Reporting-Bedarf",
+      ],
+    },
+    trust: {
+      eyebrow: "Vertrauensgrenzen",
+      title: "Vertraulich im Auftritt, unabhängig in der Architektur.",
+      points: [
+        "Workspaces und Projekte bleiben getrennt.",
+        "Zugriff ist kontrolliert für Teams, Kunden und freigegebene Prüfungen.",
+        "Auf dieser Seite werden keine öffentlichen Kundendaten gezeigt.",
+        "Novalure CRM bleibt unabhängig von HubSpot, außer ein Sync wird ausdrücklich geplant.",
+        "Microsoft 365 und Teams können Terminprozesse unterstützen, ohne die Seite zur Tech-Spezifikation zu machen.",
+      ],
+    },
+    finalCta: {
+      eyebrow: "Nächster Schritt",
+      title: "Erst prüfen, dann System bauen.",
+      description:
+        "Wenn Leads in Ihr Unternehmen kommen, aber Pipeline-Klarheit fehlt, ist der richtige nächste Schritt ein privates Lead-System- und Pipeline-Audit.",
+      primaryCta: "Privates Audit anfragen",
+      secondaryCta: "Mehr über Novalure erfahren",
+    },
+    footerTagline:
+      "Lead infrastructure for real estate teams, deren Nachfrage zu qualifizierten Gesprächen und CRM-ready Opportunities werden muss.",
+    visuals: {
+      heroOperatingLayer: {
+        id: "ANIMATION_HERO_OPERATING_LAYER",
+        alt: "Abstrakte Vorschau eines geschützten CRM-Arbeitsbereichs für Immobilien-Leads.",
+        assetDescription:
+          "Premium Hero-Animation mit anonymisierten Lead- und Pipeline-Signalen als geschützter System-Layer.",
+        geminiPrompt:
+          "Create a premium animated abstract CRM operating layer for a real estate lead system. Dark elegant interface, anonymized blurred lead cards, subtle pipeline signals, project tags, next-action indicators, confidential system feeling. No readable customer data, no prices, no real screenshots, no people, no stock-photo style. Slow calm motion, 6-8 second seamless loop, high-end PropTech, real estate sales operations.",
+        labels: ["Leadquelle", "CRM", "Pipeline", "Next Action"],
+      },
+      companySystemSplit: {
+        id: "ANIMATION_COMPANY_SYSTEM_SPLIT",
+        alt: "Diagramm zur Trennung zwischen Novalure Firmenwebsite und geschütztem CRM-System.",
+        assetDescription:
+          "Animiertes Zwei-Ebenen-Diagramm: öffentliche Novalure-Marke und geschützter CRM-Arbeitsbereich.",
+        geminiPrompt:
+          "Create a minimal premium animated diagram showing two connected layers: Novalure.eu as public brand, audit and playbook layer; Novalure CRM as protected operations system. Show a subtle flow from Pipeline Audit to protected CRM workspace. Real estate lead infrastructure, clean lines, elegant black and white palette with subtle accent. No pricing, no detailed UI, no sensitive data.",
+        labels: ["novalure.eu", "Pipeline Audit", "novalure-crm.app"],
+      },
+      leadLeakage: {
+        id: "ANIMATION_LEAD_LEAKAGE",
+        alt: "Visualisierung, wie Immobilien-Leads ohne System verloren gehen und mit CRM geführt werden.",
+        assetDescription:
+          "Vorher-Nachher-Animation für Lead-Verlust, Follow-up-Lücken und strukturierte Pipeline-Führung.",
+        geminiPrompt:
+          "Create a premium animated before-after visual for real estate lead operations. Left side: incoming leads from ads and funnels without clear follow-up, some fading out. Right side: the same leads become organized CRM cards with owner, status, next action and pipeline movement. No readable personal data, no prices, no detailed product UI. Calm professional motion, not flashy.",
+        labels: ["Lose Anfragen", "Keine nächste Aktion", "Owner", "Pipeline"],
+      },
+      lockedCrmPreview: {
+        id: "ANIMATION_LOCKED_CRM_PREVIEW",
+        alt: "Kontrollierte, anonymisierte Vorschau auf Lead-Zentrale und Pipeline im CRM.",
+        assetDescription:
+          "Geschützte CRM-Preview mit anonymisierten Karten und dezent hervorgehobenen Arbeitsfeldern.",
+        geminiPrompt:
+          "Create an animated locked CRM preview for a real estate lead operations platform. Show anonymized CRM cards with source, project, owner, next action and pipeline status. Highlight these fields one by one with subtle motion. Keep all data generic or blurred. No real screenshots, no sensitive details, no full workflow logic, no prices. Premium confidential software preview.",
+        labels: ["Quelle", "Status", "Zuständig", "Nächste Aktion", "Pipeline"],
+      },
+      auditToSystem: {
+        id: "ANIMATION_AUDIT_TO_SYSTEM",
+        alt: "Ablauf vom Pipeline Audit zum eingerichteten Lead-Operations-System.",
+        assetDescription:
+          "Kurze Prozessanimation vom Audit zur CRM-ready Lead Operations.",
+        geminiPrompt:
+          "Create a short premium animated process visual for Novalure: Pipeline Audit, bottleneck analysis, system setup, CRM-ready lead operations. Real estate sales context, clean minimal motion, high trust, no prices, no package names, no detailed internal workflows. Elegant and confidential.",
+        labels: ["Pipeline Audit", "Engpassanalyse", "System-Setup", "CRM-ready Lead Operations"],
+      },
+    },
+  },
+} as const;
+
 export const dashboardCopy = {
   en: {
     shell: {
@@ -9522,7 +9859,7 @@ export function getLoginPageCopy(language: LanguageCode) {
 }
 
 export function getCrmLandingPageCopy(language: LanguageCode) {
-  return crmLandingPageCopy[language] ?? crmLandingPageCopy[fallbackLanguage];
+  return crmPublicLandingPageCopy[language] ?? crmPublicLandingPageCopy[fallbackLanguage];
 }
 
 export function getDashboardOverviewCopy(language: LanguageCode) {
