@@ -226,6 +226,7 @@ function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
         className="h-full w-full border-0"
         loading="lazy"
         sandbox=""
+        scrolling="no"
         src={landingAssetPaths.auditToSystem}
         title={visual.alt}
       />
