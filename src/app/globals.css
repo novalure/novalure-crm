@@ -246,6 +246,14 @@ button.hover\:bg-emerald-50:hover {
   animation: crm-progress-line 7s ease-in-out infinite;
 }
 
+.crm-asset-media {
+  background: #050607;
+}
+
+.crm-reduced-media-fallback {
+  display: none;
+}
+
 @keyframes crm-flow-dot {
   0%,
   100% {
@@ -290,6 +298,14 @@ button.hover\:bg-emerald-50:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .crm-asset-media {
+    display: none !important;
+  }
+
+  .crm-reduced-media-fallback {
+    display: flex !important;
+  }
+
   .crm-flow-dot,
   .crm-pulse-ring,
   .crm-soft-lift,

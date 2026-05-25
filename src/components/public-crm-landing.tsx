@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
@@ -16,6 +17,14 @@ type LoginCopy = ReturnType<typeof getLoginPageCopy>;
 type LegalCopy = ReturnType<typeof getLoginLegalFooterCopy>;
 type PublicCopy = ReturnType<typeof getPublicPageCopy>;
 type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
+
+const landingAssetPaths = {
+  auditToSystem: "/landing-assets/audit-to-system.html",
+  companySystemSplit: "/landing-assets/company-system-split.png",
+  heroOperatingLayer: "/landing-assets/hero-operating-layer.mp4",
+  leadLeakage: "/landing-assets/lead-leakage.mp4",
+  lockedCrmPreview: "/landing-assets/locked-crm-preview.mp4",
+} as const;
 
 export type PublicCrmLandingLoginForm = {
   configured: boolean;
@@ -128,161 +137,98 @@ function VisualShell({
   );
 }
 
+function VideoAsset({
+  priority = false,
+  src,
+}: {
+  priority?: boolean;
+  src: string;
+}) {
+  return (
+    <video
+      aria-hidden="true"
+      autoPlay
+      className="crm-asset-media absolute inset-0 h-full w-full object-cover"
+      loop
+      muted
+      playsInline
+      preload={priority ? "metadata" : "none"}
+      src={src}
+    />
+  );
+}
+
+function ReducedMotionFallback({ visual }: { visual: VisualCopy }) {
+  return (
+    <div className="crm-reduced-media-fallback absolute inset-0 flex-col justify-end gap-4 bg-[#050607] p-5 md:p-7">
+      <div className="absolute inset-0 crm-asset-grid opacity-50" />
+      <div className="relative z-10 grid gap-3 sm:grid-cols-2">
+        {visual.labels.slice(0, 4).map((label, index) => (
+          <div className="rounded-md border border-white/[0.12] bg-white/[0.07] p-4" key={label}>
+            <span className="text-xs font-semibold text-[#9fd8be]">0{index + 1}</span>
+            <p className="mt-6 text-sm font-semibold leading-6 text-white">{label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HeroOperatingLayer({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="min-h-[360px] md:min-h-[440px]" visual={visual}>
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,#050607_0%,#0a1713_48%,#10211c_100%)]" />
-      <div className="absolute inset-0 crm-asset-grid opacity-70" />
-      <div className="relative z-10 flex min-h-[360px] flex-col justify-end gap-5 p-5 md:min-h-[440px] md:p-7">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {visual.labels.slice(0, 4).map((label, index) => (
-            <div
-              className="min-h-24 rounded-md border border-white/[0.12] bg-white/[0.07] p-4 backdrop-blur"
-              key={label}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#9fd8be] crm-pulse-ring" />
-                <span className="rounded-md border border-white/[0.12] px-2 py-1 text-xs text-[#c9d4ce]">
-                  0{index + 1}
-                </span>
-              </div>
-              <p className="mt-6 text-sm font-semibold text-white">{label}</p>
-              <div className="mt-3 h-1.5 rounded-md bg-white/[0.12]">
-                <div className="h-1.5 rounded-md bg-[#9fd8be]" style={{ width: `${42 + index * 13}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="relative h-10 rounded-md border border-white/[0.1] bg-white/[0.05]">
-          <span className="crm-flow-dot left-[8%]" />
-          <span className="crm-flow-dot left-[35%] [animation-delay:1.4s]" />
-          <span className="crm-flow-dot left-[62%] [animation-delay:2.8s]" />
-          <span className="crm-flow-dot left-[86%] [animation-delay:4.2s]" />
-        </div>
-      </div>
+    <VisualShell className="aspect-[16/10] min-h-[320px] md:min-h-[440px]" visual={visual}>
+      <VideoAsset priority src={landingAssetPaths.heroOperatingLayer} />
+      <div className="absolute inset-0 bg-[#050607]/15" />
+      <ReducedMotionFallback visual={visual} />
     </VisualShell>
   );
 }
 
 function CompanySystemVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="min-h-[300px] crm-noncritical-motion" visual={visual}>
-      <div className="grid min-h-[300px] gap-4 p-5 md:grid-cols-[1fr_auto_1fr] md:items-center md:p-7">
-        <div className="rounded-md border border-white/[0.12] bg-white/[0.07] p-5">
-          <p className="text-sm font-semibold text-[#9fd8be]">{visual.labels[0]}</p>
-          <div className="mt-5 space-y-3">
-            <div className="h-2 rounded-md bg-white/[0.2]" />
-            <div className="h-2 w-2/3 rounded-md bg-white/[0.12]" />
-            <div className="h-9 rounded-md border border-white/[0.12] bg-white/[0.05]" />
-          </div>
-        </div>
-        <div className="flex items-center justify-center">
-          <div className="h-px w-full bg-[#9fd8be]/60 md:h-28 md:w-px" />
-          <span className="absolute h-3 w-3 rounded-full bg-[#9fd8be] crm-flow-dot" />
-        </div>
-        <div className="rounded-md border border-white/[0.12] bg-white/[0.07] p-5">
-          <p className="text-sm font-semibold text-[#9fd8be]">{visual.labels[2]}</p>
-          <div className="mt-5 grid gap-3">
-            <div className="h-10 rounded-md border border-white/[0.12] bg-white/[0.05]" />
-            <div className="h-10 rounded-md border border-[#9fd8be]/30 bg-[#143027]" />
-            <div className="h-10 rounded-md border border-white/[0.12] bg-white/[0.05]" />
-          </div>
-        </div>
-      </div>
+    <VisualShell className="aspect-[1638/960] min-h-[280px]" visual={visual}>
+      <Image
+        alt=""
+        className="h-full w-full object-cover"
+        height={960}
+        loading="lazy"
+        sizes="(min-width: 1024px) 50vw, 100vw"
+        src={landingAssetPaths.companySystemSplit}
+        width={1638}
+      />
     </VisualShell>
   );
 }
 
 function LeadLeakageVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="min-h-[320px] crm-noncritical-motion" visual={visual}>
-      <div className="grid min-h-[320px] gap-4 p-5 md:grid-cols-2 md:p-7">
-        <div className="rounded-md border border-white/[0.12] bg-white/[0.05] p-5">
-          <p className="text-sm font-semibold text-[#d8c58e]">{visual.labels[0]}</p>
-          <div className="mt-5 grid gap-3">
-            {[0.94, 0.58, 0.24].map((opacity, index) => (
-              <div
-                className="flex items-center justify-between rounded-md border border-white/[0.12] bg-white/[0.06] px-3 py-3"
-                key={opacity}
-                style={{ opacity }}
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-[#d8c58e]" />
-                <span className="text-xs text-[#c9d4ce]">{visual.labels[index === 0 ? 0 : 1]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rounded-md border border-[#9fd8be]/30 bg-[#10251f] p-5">
-          <p className="text-sm font-semibold text-[#9fd8be]">{visual.labels[3]}</p>
-          <div className="mt-5 grid gap-3">
-            {visual.labels.slice(2, 4).map((label, index) => (
-              <div
-                className="rounded-md border border-white/[0.12] bg-white/[0.07] p-4 crm-soft-lift"
-                key={label}
-                style={{ animationDelay: `${index * 0.9}s` }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold">{label}</span>
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#9fd8be]" />
-                </div>
-                <div className="mt-3 h-1.5 rounded-md bg-white/[0.12]">
-                  <div className="h-1.5 rounded-md bg-[#9fd8be]" style={{ width: `${64 + index * 18}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+    <VisualShell className="aspect-video min-h-[280px] crm-noncritical-motion" visual={visual}>
+      <VideoAsset src={landingAssetPaths.leadLeakage} />
+      <ReducedMotionFallback visual={visual} />
     </VisualShell>
   );
 }
 
 function LockedCrmPreviewVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="min-h-[360px] crm-noncritical-motion" visual={visual}>
-      <div className="min-h-[360px] p-5 md:p-7">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <div className="h-2 w-24 rounded-md bg-white/[0.24]" />
-          <div className="rounded-md border border-[#9fd8be]/40 px-3 py-2 text-xs font-semibold text-[#9fd8be]">
-            {visual.id}
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-5">
-          {visual.labels.map((label, index) => (
-            <div
-              className="min-h-44 rounded-md border border-white/[0.12] bg-white/[0.07] p-3 crm-soft-lift"
-              key={label}
-              style={{ animationDelay: `${index * 0.55}s` }}
-            >
-              <div className="h-2 w-12 rounded-md bg-[#9fd8be]/70" />
-              <p className="mt-5 text-xs font-semibold uppercase text-[#c9d4ce]">{label}</p>
-              <div className="mt-5 space-y-3">
-                <div className="h-2 rounded-md bg-white/[0.22]" />
-                <div className="h-2 w-3/4 rounded-md bg-white/[0.14]" />
-                <div className="h-8 rounded-md border border-white/[0.1] bg-white/[0.04]" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <VisualShell className="aspect-video min-h-[300px] crm-noncritical-motion" visual={visual}>
+      <VideoAsset src={landingAssetPaths.lockedCrmPreview} />
+      <ReducedMotionFallback visual={visual} />
     </VisualShell>
   );
 }
 
 function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="min-h-[260px] crm-noncritical-motion" visual={visual}>
-      <div className="grid min-h-[260px] gap-3 p-5 sm:grid-cols-4 md:p-7">
-        {visual.labels.map((label, index) => (
-          <div className="relative rounded-md border border-white/[0.12] bg-white/[0.07] p-4" key={label}>
-            <span className="text-xs font-semibold text-[#9fd8be]">0{index + 1}</span>
-            <p className="mt-8 text-sm font-semibold leading-6 text-white">{label}</p>
-            <div className="absolute inset-x-4 bottom-4 h-1.5 rounded-md bg-white/[0.14]">
-              <div className="h-1.5 rounded-md bg-[#9fd8be] crm-progress-line" />
-            </div>
-          </div>
-        ))}
-      </div>
+    <VisualShell className="aspect-[2/1] min-h-[220px] crm-noncritical-motion" visual={visual}>
+      <iframe
+        aria-hidden="true"
+        className="h-full w-full border-0"
+        loading="lazy"
+        sandbox=""
+        src={landingAssetPaths.auditToSystem}
+        title={visual.alt}
+      />
     </VisualShell>
   );
 }
