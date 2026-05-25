@@ -125,7 +125,7 @@ function VisualShell({
   return (
     <div
       aria-label={visual.alt}
-      className={`relative overflow-hidden rounded-lg border border-white/[0.12] bg-[#090d0c] text-white shadow-lg ${className}`}
+      className={`relative w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/[0.12] bg-[#090d0c] text-white shadow-lg ${className}`}
       data-asset-description={visual.assetDescription}
       data-asset-id={visual.id}
       data-gemini-prompt={visual.geminiPrompt}
@@ -176,7 +176,7 @@ function ReducedMotionFallback({ visual }: { visual: VisualCopy }) {
 
 function HeroOperatingLayer({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="aspect-[16/10] min-h-[320px] md:min-h-[440px]" visual={visual}>
+    <VisualShell className="aspect-[16/10] min-h-0 sm:min-h-[320px] md:min-h-[440px]" visual={visual}>
       <VideoAsset priority src={landingAssetPaths.heroOperatingLayer} />
       <div className="absolute inset-0 bg-[#050607]/15" />
       <ReducedMotionFallback visual={visual} />
@@ -186,7 +186,7 @@ function HeroOperatingLayer({ visual }: { visual: VisualCopy }) {
 
 function CompanySystemVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="aspect-[1638/960] min-h-[280px]" visual={visual}>
+    <VisualShell className="aspect-[1638/960] min-h-0 sm:min-h-[280px]" visual={visual}>
       <Image
         alt=""
         className="h-full w-full object-cover"
@@ -202,7 +202,7 @@ function CompanySystemVisual({ visual }: { visual: VisualCopy }) {
 
 function LeadLeakageVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="aspect-video min-h-[280px] crm-noncritical-motion" visual={visual}>
+    <VisualShell className="aspect-video min-h-0 sm:min-h-[280px] crm-noncritical-motion" visual={visual}>
       <VideoAsset src={landingAssetPaths.leadLeakage} />
       <ReducedMotionFallback visual={visual} />
     </VisualShell>
@@ -211,7 +211,7 @@ function LeadLeakageVisual({ visual }: { visual: VisualCopy }) {
 
 function LockedCrmPreviewVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="aspect-video min-h-[300px] crm-noncritical-motion" visual={visual}>
+    <VisualShell className="aspect-video min-h-0 sm:min-h-[300px] crm-noncritical-motion" visual={visual}>
       <VideoAsset src={landingAssetPaths.lockedCrmPreview} />
       <ReducedMotionFallback visual={visual} />
     </VisualShell>
@@ -220,7 +220,7 @@ function LockedCrmPreviewVisual({ visual }: { visual: VisualCopy }) {
 
 function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
   return (
-    <VisualShell className="aspect-[2/1] min-h-[220px] crm-noncritical-motion" visual={visual}>
+    <VisualShell className="aspect-[2/1] min-h-0 sm:min-h-[220px] crm-noncritical-motion" visual={visual}>
       <VideoAsset src={landingAssetPaths.auditToSystem} />
       <ReducedMotionFallback visual={visual} />
     </VisualShell>

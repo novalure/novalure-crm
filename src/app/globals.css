@@ -248,6 +248,7 @@ button.hover\:bg-emerald-50:hover {
 
 .crm-asset-media {
   background: #050607;
+  max-width: 100%;
 }
 
 .crm-reduced-media-fallback {
@@ -330,5 +331,9 @@ button.hover\:bg-emerald-50:hover {
   .crm-noncritical-motion .crm-progress-line {
     animation: none !important;
     transform: none !important;
+  }
+
+  .crm-asset-media {
+    object-fit: contain;
   }
 }
