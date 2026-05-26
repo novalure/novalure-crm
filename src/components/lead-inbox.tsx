@@ -83,10 +83,6 @@ const sourceOptions: LeadSource[] = [
   "Newsletter",
   "Microsoft 365",
   "Google Meet",
-  "willhaben",
-  "ImmobilienScout",
-  "Empfehlung",
-  "Website",
   "Manual",
 ];
 
@@ -156,10 +152,10 @@ function splitCriteria(value: string) {
 
 function getInitialDraft(leads: Lead[], contacts: Contact[], projects: Project[]) {
   return {
-    contactId: contacts[0]?.id ?? "",
+    contactId: "",
     projectId: projects[0]?.id ?? "",
     source: "Manual" as LeadSource,
-    type: contacts[0]?.role ?? ("Käufer" as LeadType),
+    type: "Käufer" as LeadType,
     score: 70,
     budget: "",
     address: "",
@@ -540,10 +536,10 @@ export function LeadInbox({
     setNotice(text.noteSaved);
   };
 
-  const createLead = async () => {
+  const createLead = async (createTaskAfterSave = false) => {
     setFormError("");
 
-    if (!leadDraft.contactId || !leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
+    if (!leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
       setFormError(text.required);
       return;
     }
@@ -617,6 +613,28 @@ export function LeadInbox({
       setLeadDraft(getInitialDraft(leads, contacts, projects));
       addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
       setNotice(text.newLeadSaved);
+      if (createTaskAfterSave) {
+        await fetch("/api/crm/recommendation-runtime", {
+          body: JSON.stringify({
+            actionType: savedLead.hotStatus || savedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
+            channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
+            contactId: savedLead.contactId || null,
+            email: contact?.email ?? null,
+            leadId: savedLead.id,
+            operation: "follow_up_action",
+            outcome: "planned",
+            phone: contact?.phone ?? null,
+            projectId: savedLead.projectId,
+            purpose: "salesFollowUp",
+            taskTitle: savedLead.nextAction || savedLead.intent,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }).catch(() => undefined);
+        setCreatedTaskLeadIds((current) =>
+          current.includes(savedLead.id) ? current : [...current, savedLead.id],
+        );
+      }
     } catch {
       setFormError(text.saveError);
     }
@@ -723,7 +741,7 @@ export function LeadInbox({
 
           {showCreateForm ? (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid gap-3 lg:grid-cols-4">
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.contact}
                   <select
@@ -739,6 +757,7 @@ export function LeadInbox({
                     }}
                     value={leadDraft.contactId}
                   >
+                    <option value="">{text.contactUnknown}</option>
                     {contacts.map((contact) => (
                       <option key={contact.id} value={contact.id}>
                         {contact.name}
@@ -788,31 +807,49 @@ export function LeadInbox({
                     ))}
                   </select>
                 </label>
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
                 <label className="grid gap-1 text-sm font-semibold">
-                  {text.score}
-                  <input
-                    className="rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    max={100}
-                    min={0}
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, score: Number(event.target.value) }))}
-                    type="number"
-                    value={leadDraft.score}
+                  {text.intent}
+                  <textarea
+                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
+                    onChange={(event) => setLeadDraft((current) => ({ ...current, intent: event.target.value }))}
+                    value={leadDraft.intent}
                   />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold">
-                  {text.budget}
-                  <input
-                    className="rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, budget: event.target.value }))}
-                    placeholder={text.budgetPlaceholder}
-                    value={leadDraft.budget}
+                  {text.nextAction}
+                  <textarea
+                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
+                    onChange={(event) => setLeadDraft((current) => ({ ...current, nextAction: event.target.value }))}
+                    value={leadDraft.nextAction}
                   />
                 </label>
               </div>
               {leadDraft.type === "Verkäufer" || leadDraft.type === "Käufer" ? (
-                <div className="mt-3 rounded-md border border-emerald-200 bg-white p-3">
-                  <p className="text-sm font-semibold text-slate-950">{text.brokerProfileTitle}</p>
+                <details className="mt-3 rounded-md border border-emerald-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-950">{text.advancedFieldsTitle}</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.score}
+                      <input
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        max={100}
+                        min={0}
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, score: Number(event.target.value) }))}
+                        type="number"
+                        value={leadDraft.score}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm font-semibold">
+                      {text.budget}
+                      <input
+                        className="rounded-md border border-emerald-200 px-3 py-2"
+                        onChange={(event) => setLeadDraft((current) => ({ ...current, budget: event.target.value }))}
+                        placeholder={text.budgetPlaceholder}
+                        value={leadDraft.budget}
+                      />
+                    </label>
                     <label className="grid gap-1 text-sm font-semibold">
                       {text.address}
                       <input
@@ -968,36 +1005,40 @@ export function LeadInbox({
                       </>
                     )}
                   </div>
-                </div>
+                </details>
               ) : null}
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <label className="grid gap-1 text-sm font-semibold">
-                  {text.intent}
-                  <textarea
-                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, intent: event.target.value }))}
-                    value={leadDraft.intent}
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-semibold">
-                  {text.nextAction}
-                  <textarea
-                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, nextAction: event.target.value }))}
-                    value={leadDraft.nextAction}
-                  />
-                </label>
-              </div>
               {formError ? <p className="mt-3 text-sm font-semibold text-red-700">{formError}</p> : null}
-              <button
-                className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => {
-                  void createLead();
-                }}
-                type="button"
-              >
-                {text.saveLead}
-              </button>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                  onClick={() => {
+                    void createLead();
+                  }}
+                  type="button"
+                >
+                  {text.saveLead}
+                </button>
+                <button
+                  className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100"
+                  onClick={() => {
+                    void createLead(true);
+                  }}
+                  type="button"
+                >
+                  {text.saveAndCreateTask}
+                </button>
+                <button
+                  className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setFormError("");
+                    setLeadDraft(getInitialDraft(leads, contacts, projects));
+                  }}
+                  type="button"
+                >
+                  {text.cancel}
+                </button>
+              </div>
             </div>
           ) : null}
 

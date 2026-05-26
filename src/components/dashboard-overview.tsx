@@ -22,7 +22,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 
-const NOW = new Date("2026-05-11T15:30:00+02:00");
+const NOW = new Date();
 const COMMISSION_RATE = 0.03;
 const MONTH_TARGET_COMMISSION = 120000;
 const VIEW_STORAGE_KEY = "novalure-dashboard-views-v4";
@@ -198,7 +198,7 @@ const widgetCatalog: Record<WidgetId, { kind: "KPI" | "Diagramm" | "Liste" }> = 
 
 const defaultFilters: DashboardFilters = {
   leadTypes: ["Käufer", "Verkäufer", "Investor"],
-  period: "Woche",
+  period: "Monat",
   employeeId: "all",
   region: "Alle",
   sources: [...sourceOptions],
@@ -376,11 +376,20 @@ function daysBetween(from: string, to = NOW.toISOString()) {
 
 function isInPeriod(value: string, period: PeriodOption) {
   const date = parseDateForComparison(value);
-  if (period === "Heute") return date.toDateString() === NOW.toDateString();
-  if (period === "Woche") return date >= new Date("2026-05-04T00:00:00+02:00") && date <= NOW;
-  if (period === "Monat" || period === "Custom") return date.getFullYear() === 2026 && date.getMonth() === 4;
-  if (period === "Quartal") return date >= new Date("2026-04-01T00:00:00+02:00") && date <= NOW;
-  return date >= new Date("2026-01-01T00:00:00+02:00") && date <= NOW;
+  const todayStart = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate());
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(todayStart.getDate() + 1);
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(todayStart.getDate() - 6);
+  const monthStart = new Date(NOW.getFullYear(), NOW.getMonth(), 1);
+  const quarterStart = new Date(NOW.getFullYear(), Math.floor(NOW.getMonth() / 3) * 3, 1);
+  const yearStart = new Date(NOW.getFullYear(), 0, 1);
+
+  if (period === "Heute") return date >= todayStart && date < tomorrowStart;
+  if (period === "Woche") return date >= weekStart && date <= NOW;
+  if (period === "Monat" || period === "Custom") return date >= monthStart && date <= NOW;
+  if (period === "Quartal") return date >= quarterStart && date <= NOW;
+  return date >= yearStart && date <= NOW;
 }
 
 function parseDateForComparison(value: string) {
@@ -390,6 +399,15 @@ function parseDateForComparison(value: string) {
   }
 
   return new Date(value);
+}
+
+function isSameLocalDay(value: string, comparison = NOW) {
+  const date = parseDateForComparison(value);
+  return (
+    date.getFullYear() === comparison.getFullYear() &&
+    date.getMonth() === comparison.getMonth() &&
+    date.getDate() === comparison.getDate()
+  );
 }
 
 function getAging(lead: Lead) {
@@ -538,8 +556,13 @@ export function DashboardOverview({
   });
   const trendMax = Math.max(1, ...requestTrend.map((item) => item.count));
   const todayItems = [
-    ...tasks.filter((task) => task.status === "open" && task.due.includes("Heute")).map((task) => ({ id: task.id, title: task.title, meta: task.due, priority: task.priority })),
-    ...calendarEvents.filter((event) => event.startsAt.slice(0, 10) === "2026-05-11").map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(event.startsAt)), priority: event.location })),
+    ...tasks
+      .filter((task) => {
+        const due = task.due.toLowerCase();
+        return task.status === "open" && (due.includes("heute") || due.includes("today") || isSameLocalDay(task.due));
+      })
+      .map((task) => ({ id: task.id, title: task.title, meta: task.due, priority: task.priority })),
+    ...calendarEvents.filter((event) => isSameLocalDay(event.startsAt)).map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(event.startsAt)), priority: event.location })),
   ];
   const mandateRows = sellerListings.filter((listing) => listing.mandateEndsAt).map((listing) => ({ listing, daysLeft: daysBetween(NOW.toISOString(), listing.mandateEndsAt) })).filter((item) => item.daysLeft <= 60).sort((a, b) => a.daysLeft - b.daysLeft);
   const matchRows = sellerListings.flatMap((listing) => filteredLeads.filter((lead) => lead.type === "Käufer" || lead.type === "Investor").map((lead) => {
@@ -728,7 +751,7 @@ export function DashboardOverview({
           </div>
           <div className="grid shrink-0 grid-cols-3 gap-1">
             <button className="grid h-7 w-7 place-items-center rounded-md border border-stone-200 text-xs font-semibold" onClick={() => setCollapsedWidgets((current) => current.includes(widget) ? current.filter((item) => item !== widget) : [...current, widget])} title={collapsedWidgets.includes(widget) ? copy.grid.expand : copy.grid.collapse} type="button">{collapsedWidgets.includes(widget) ? "+" : "-"}</button>
-            <button className="grid h-7 w-7 place-items-center rounded-md border border-stone-200 text-xs font-semibold" onClick={() => setSettingsWidget(settingsWidget === widget ? null : widget)} title={copy.grid.settingsTitle} type="button">Opt</button>
+            <button className="min-h-7 rounded-md border border-stone-200 px-2 text-xs font-semibold" onClick={() => setSettingsWidget(settingsWidget === widget ? null : widget)} title={copy.grid.settingsTitle} type="button">{copy.grid.settingsButton}</button>
             <button className="grid h-7 w-7 place-items-center rounded-md border border-red-200 text-xs font-semibold text-red-700" onClick={() => removeWidget(widget)} title={copy.grid.remove} type="button">x</button>
           </div>
         </div>

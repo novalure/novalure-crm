@@ -219,6 +219,9 @@ const navigationPresetOrder: NavigationPresetId[] = [
   "novalureInternal",
   "realEstateBroker",
   "propertyDeveloper",
+  "sales",
+  "management",
+  "assistant",
   "managedService",
   "hybridRealEstate",
 ];
@@ -709,6 +712,25 @@ function readStoredLanguage(storageKey: string, fallback = defaultLanguage) {
   return resolveLanguage(window.localStorage.getItem(storageKey), fallback);
 }
 
+function readUrlLanguage(): LanguageCode | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const queryLanguage = new URLSearchParams(window.location.search).get("lang");
+  if (!queryLanguage) return null;
+
+  return resolveLanguage(queryLanguage, defaultLanguage);
+}
+
+function getBrowserLanguageFallback(): LanguageCode {
+  if (typeof window === "undefined") {
+    return defaultLanguage;
+  }
+
+  return window.navigator.language.toLowerCase().startsWith("de") ? "de" : defaultLanguage;
+}
+
 function isNavigationPresetId(value: unknown): value is NavigationPresetId {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(navigationPresets, value);
 }
@@ -904,6 +926,23 @@ type SettingsCommandCenterCopy = {
   notConnected: string;
   moduleSources: string;
   missingTables: string;
+  adminAreasTitle?: string;
+  adminAreasDescription?: string;
+  adminAreas?: string[];
+  rolesTitle?: string;
+  rolesDescription?: string;
+  roleMatrix?: Array<{
+    role: string;
+    access: string;
+    canCreate: string;
+    canEdit: string;
+    protectedAction: string;
+  }>;
+  technicalDetails?: string;
+  access?: string;
+  create?: string;
+  edit?: string;
+  protectedActions?: string;
 };
 
 type CommandCentersCopy = {
@@ -968,7 +1007,7 @@ const fallbackCommandCentersCopy: CommandCentersCopy = {
   },
   settings: {
     title: "Settings",
-    description: "Workspace setup, calendar provider, role profile, database status and integration status without exposing secrets.",
+    description: "Workspace, projects, roles, rights and integrations in one admin view.",
     workspaceSetup: "Workspace setup",
     calendarProvider: "Calendar provider",
     roleProfile: "Role / profile",
@@ -978,6 +1017,26 @@ const fallbackCommandCentersCopy: CommandCentersCopy = {
     notConnected: "Not connected",
     moduleSources: "Module sources",
     missingTables: "Missing tables",
+    adminAreasTitle: "Admin structure",
+    adminAreasDescription: "Manage the areas that define daily CRM work.",
+    adminAreas: ["Workspace", "Projects", "Users", "Roles & rights", "Calendar", "Teams", "Newsletter", "Bot channels", "Data hygiene", "Language", "Integrations", "Security"],
+    rolesTitle: "Roles and permissions",
+    rolesDescription: "Show what each role can see and which actions need admin control.",
+    roleMatrix: [
+      { role: "Admin", access: "All areas", canCreate: "yes", canEdit: "yes", protectedAction: "roles, integrations, bot activation" },
+      { role: "Management", access: "Forecast, analytics, risks", canCreate: "limited", canEdit: "limited", protectedAction: "exports and settings" },
+      { role: "Sales lead", access: "Pipeline, owners, tasks", canCreate: "yes", canEdit: "yes", protectedAction: "delete and send" },
+      { role: "Broker / sales", access: "Leads, contacts, tasks, deals", canCreate: "yes", canEdit: "own records", protectedAction: "newsletter and bot activation" },
+      { role: "Project manager", access: "Projects, objects, meetings", canCreate: "yes", canEdit: "project records", protectedAction: "workspace settings" },
+      { role: "Marketing", access: "Funnels, newsletter, consent", canCreate: "yes", canEdit: "campaigns", protectedAction: "send only with opt-in" },
+      { role: "Backoffice", access: "Contacts, consents, tasks", canCreate: "yes", canEdit: "data quality", protectedAction: "delete and integrations" },
+      { role: "Read only", access: "Dashboards and reports", canCreate: "no", canEdit: "no", protectedAction: "none" },
+    ],
+    technicalDetails: "Technical details",
+    access: "Access",
+    create: "Create",
+    edit: "Edit",
+    protectedActions: "Protected actions",
   },
 };
 
@@ -1214,6 +1273,8 @@ function SettingsCommandCenter({
 }) {
   const panelCopy = getCommandCentersCopy(copy).settings;
   const modules = Object.entries(moduleSources).slice(0, 8);
+  const roleMatrix = panelCopy.roleMatrix ?? fallbackCommandCentersCopy.settings.roleMatrix ?? [];
+  const adminAreas = panelCopy.adminAreas ?? fallbackCommandCentersCopy.settings.adminAreas ?? [];
 
   return (
     <section className="grid gap-4">
@@ -1222,12 +1283,50 @@ function SettingsCommandCenter({
         <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
         <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
       </article>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <article className="rounded-lg border border-stone-200 bg-white p-5">
+        <h4 className="text-lg font-semibold text-slate-950">{panelCopy.adminAreasTitle}</h4>
+        <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.adminAreasDescription}</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {adminAreas.map((area) => (
+            <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-slate-900" key={area}>
+              {area}
+            </div>
+          ))}
+        </div>
+      </article>
+      <article className="rounded-lg border border-stone-200 bg-white p-5">
+        <h4 className="text-lg font-semibold text-slate-950">{panelCopy.rolesTitle}</h4>
+        <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.rolesDescription}</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[760px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
+              <tr>
+                <th className="py-2 pr-4 font-semibold">{panelCopy.roleProfile}</th>
+                <th className="py-2 pr-4 font-semibold">{panelCopy.access}</th>
+                <th className="py-2 pr-4 font-semibold">{panelCopy.create}</th>
+                <th className="py-2 pr-4 font-semibold">{panelCopy.edit}</th>
+                <th className="py-2 pr-4 font-semibold">{panelCopy.protectedActions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roleMatrix.map((row) => (
+                <tr className="border-t border-stone-200" key={row.role}>
+                  <td className="py-3 pr-4 font-semibold text-slate-950">{row.role}</td>
+                  <td className="py-3 pr-4 text-stone-700">{row.access}</td>
+                  <td className="py-3 pr-4 text-stone-700">{row.canCreate}</td>
+                  <td className="py-3 pr-4 text-stone-700">{row.canEdit}</td>
+                  <td className="py-3 pr-4 text-stone-700">{row.protectedAction}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
           [panelCopy.workspaceSetup, copy.workspaceMode.customerTypeLabels[context.customerType]],
           [panelCopy.calendarProvider, copy.workspaceMode.calendarProviderLabels[context.activeCalendarProvider]],
           [panelCopy.roleProfile, profileLabel],
-          [panelCopy.databaseStatus, dataSource],
           [panelCopy.integrations, context.connectedCalendarProviders.length ? context.connectedCalendarProviders.join(", ") : panelCopy.notConnected],
           [panelCopy.operatingModel, copy.workspaceMode.operatingModelLabels[context.operatingModel]],
         ].map(([label, value]) => (
@@ -1237,9 +1336,13 @@ function SettingsCommandCenter({
           </div>
         ))}
       </div>
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
-        <h4 className="text-lg font-semibold text-slate-950">{panelCopy.moduleSources}</h4>
-        <div className="mt-4 grid gap-2 md:grid-cols-2">
+      <details className="rounded-lg border border-stone-200 bg-white p-5">
+        <summary className="cursor-pointer text-lg font-semibold text-slate-950">{panelCopy.technicalDetails}</summary>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{panelCopy.databaseStatus}</p>
+            <p className="mt-1 break-words text-sm font-semibold text-slate-950">{dataSource}</p>
+          </div>
           {modules.map(([moduleName, source]) => (
             <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-stone-50 p-3" key={moduleName}>
               <span className="break-words text-sm font-semibold text-slate-900">{moduleName}</span>
@@ -1252,8 +1355,265 @@ function SettingsCommandCenter({
             {panelCopy.missingTables}: {missingTables.join(", ")}
           </p>
         ) : null}
-      </article>
+      </details>
     </section>
+  );
+}
+
+function WorkspaceContextBar({
+  areaLabel,
+  copy,
+  dataScopeLabel,
+  profileLabel,
+  projectLabel,
+  workspaceName,
+}: {
+  areaLabel: string;
+  copy: ReturnType<typeof getDashboardCopy>;
+  dataScopeLabel: string;
+  profileLabel: string;
+  projectLabel: string;
+  workspaceName: string;
+}) {
+  const contextCopy = (copy as typeof copy & {
+    workspaceContextBar?: {
+      area: string;
+      dataScope: string;
+      label: string;
+      profile: string;
+      project: string;
+      workspace: string;
+    };
+  }).workspaceContextBar ?? {
+    area: "Area",
+    dataScope: "Data scope",
+    label: "Work context",
+    profile: "Role / profile",
+    project: "Project filter",
+    workspace: "Workspace",
+  };
+
+  const chips = [
+    [contextCopy.workspace, workspaceName],
+    [contextCopy.project, projectLabel],
+    [contextCopy.profile, profileLabel],
+    [contextCopy.area, areaLabel],
+    [contextCopy.dataScope, dataScopeLabel],
+  ];
+
+  return (
+    <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{contextCopy.label}</p>
+      <h3 className="mt-1 break-words text-base font-semibold text-slate-950">
+        {workspaceName} &gt; {projectLabel} &gt; {profileLabel} &gt; {areaLabel}
+      </h3>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        {chips.map(([label, value]) => (
+          <span className="rounded-md bg-stone-50 px-2.5 py-1.5 font-semibold text-stone-700" key={label}>
+            {label}: <span className="text-slate-950">{value}</span>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type RolePriorityPanelCopy = {
+  description: string;
+  metrics: Record<
+    "hotLeads" | "openTasks" | "noOwner" | "appointments" | "pipeline" | "riskDeals" | "unlinkedTasks",
+    string
+  >;
+  nextStepsLabel: string;
+  profiles: Partial<Record<NavigationPresetId | "default", { description: string; nextSteps: string[]; title: string }>>;
+  title: string;
+};
+
+function parseRolePanelDealValue(value: string) {
+  const lowerValue = value.toLowerCase();
+  const isMillion = lowerValue.includes("mio");
+  const normalized = lowerValue
+    .replace(/mio\.?/g, "")
+    .replace(/eur/g, "")
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized.replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) ? (isMillion ? parsed * 1_000_000 : parsed) : 0;
+}
+
+function RolePriorityPanel({
+  copy,
+  deals,
+  events,
+  leads,
+  language,
+  presetId,
+  tasks,
+}: {
+  copy: ReturnType<typeof getDashboardCopy>;
+  deals: Deal[];
+  events: CalendarEvent[];
+  leads: Lead[];
+  language: LanguageCode;
+  presetId: NavigationPresetId;
+  tasks: Task[];
+}) {
+  const roleCopy = (copy as typeof copy & { rolePriorities?: RolePriorityPanelCopy }).rolePriorities ?? {
+    description: "Role-specific start priorities for daily CRM work.",
+    metrics: {
+      appointments: "Appointments",
+      hotLeads: "Hot leads",
+      noOwner: "Without owner",
+      openTasks: "Open tasks",
+      pipeline: "Pipeline value",
+      riskDeals: "Risk deals",
+      unlinkedTasks: "Unlinked tasks",
+    },
+    nextStepsLabel: "Next steps",
+    profiles: {
+      default: {
+        description: "Start with the cases that need attention now.",
+        nextSteps: ["Review hot leads", "Clear today's tasks", "Check pipeline risks"],
+        title: "Today important",
+      },
+    },
+    title: "Role start",
+  };
+  const profile = roleCopy.profiles[presetId] ?? roleCopy.profiles.default;
+  const openTasks = tasks.filter((task) => task.status === "open");
+  const now = new Date();
+  const pipelineValue = deals
+    .filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert"].includes(deal.stage))
+    .reduce((sum, deal) => sum + parseRolePanelDealValue(deal.value) * (deal.probability / 100), 0);
+  const locale = language === "de" ? "de-AT" : "en-US";
+  const metricValues = {
+    appointments: events.filter((event) => new Date(event.startsAt).getTime() >= now.getTime()).length,
+    hotLeads: leads.filter((lead) => lead.score >= 80 || lead.hotStatus).length,
+    noOwner: leads.filter((lead) => !lead.assignedToUserId).length,
+    openTasks: openTasks.length,
+    pipeline: new Intl.NumberFormat(locale, { currency: "EUR", maximumFractionDigits: 0, notation: "compact", style: "currency" }).format(pipelineValue),
+    riskDeals: deals.filter((deal) => deal.riskLevel === "hoch" || deal.probability < 45).length,
+    unlinkedTasks: openTasks.filter((task) => !task.contactId || !task.projectId).length,
+  };
+  const prioritizedMetricKeys: Array<keyof typeof metricValues> =
+    presetId === "management"
+      ? ["pipeline", "riskDeals", "hotLeads", "appointments"]
+      : presetId === "assistant"
+        ? ["unlinkedTasks", "noOwner", "openTasks", "appointments"]
+        : presetId === "sales" || presetId === "realEstateBroker"
+          ? ["hotLeads", "openTasks", "appointments", "pipeline"]
+          : presetId === "propertyDeveloper"
+            ? ["hotLeads", "appointments", "pipeline", "riskDeals"]
+            : presetId === "novalureInternal" || presetId === "managedService"
+              ? ["noOwner", "openTasks", "riskDeals", "appointments"]
+              : ["hotLeads", "openTasks", "pipeline", "appointments"];
+
+  return (
+    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">{roleCopy.title}</p>
+          <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">{profile?.title}</h3>
+          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-emerald-950">{profile?.description ?? roleCopy.description}</p>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">{roleCopy.nextStepsLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(profile?.nextSteps ?? []).map((step) => (
+              <span className="rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-950" key={step}>
+                {step}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {prioritizedMetricKeys.map((key) => (
+            <div className="rounded-md border border-emerald-200 bg-white p-3" key={key}>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{roleCopy.metrics[key]}</p>
+              <p className="mt-2 text-xl font-semibold text-slate-950">{metricValues[key]}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceSetupDetails({
+  activeProjects,
+  canSwitch,
+  context,
+  copy,
+  leads,
+  onChange,
+  onSwitch,
+  profileLabel,
+  saveState,
+  switchState,
+  tasks,
+  units,
+  workspaces,
+}: {
+  activeProjects: number;
+  canSwitch: boolean;
+  context: WorkspaceProductContext;
+  copy: ReturnType<typeof getDashboardCopy>;
+  leads: { status: string; type: string }[];
+  onChange: <Key extends keyof WorkspaceSetupState>(
+    key: Key,
+    value: WorkspaceSetupState[Key],
+  ) => void;
+  onSwitch: (workspaceId: string) => void;
+  profileLabel: string;
+  saveState: WorkspaceSetupSaveState;
+  switchState: "idle" | "loading" | "error";
+  tasks: { status: string }[];
+  units: { status: string }[];
+  workspaces: ManagedWorkspaceOption[];
+}) {
+  const setupCopy = (copy as typeof copy & {
+    compactSetup?: {
+      description: string;
+      title: string;
+    };
+  }).compactSetup ?? {
+    description: "Workspace setup is available here when role, project or integration defaults need to change.",
+    title: "Workspace setup and admin defaults",
+  };
+
+  return (
+    <details className="rounded-lg border border-stone-200 bg-white p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+        {setupCopy.title}
+      </summary>
+      <p className="mt-2 break-words text-sm text-stone-600">{setupCopy.description}</p>
+      <div className="mt-4 grid gap-4">
+        <WorkspaceModePanel
+          context={context}
+          copy={copy}
+          onChange={onChange}
+          saveState={saveState}
+        />
+
+        <WorkspaceScopePanel
+          activeProjects={activeProjects}
+          canSwitch={canSwitch}
+          context={context}
+          copy={copy}
+          onSwitch={onSwitch}
+          profileLabel={profileLabel}
+          switchState={switchState}
+          workspaces={workspaces}
+        />
+
+        <WorkspaceModeKpis
+          context={context}
+          copy={copy}
+          leads={leads}
+          tasks={tasks}
+          units={units}
+        />
+      </div>
+    </details>
   );
 }
 
@@ -2132,6 +2492,10 @@ export function CrmWorkspace({
     : visibleActiveNavigationEntry.section;
   const focusedNavigationItems = profileNavigationItems;
   const activePresetProfile = copy.navigationPresets.profiles[normalizedActivePresetId];
+  const activeAreaLabel =
+    navigationLabels[visibleActiveNavigationEntry.id] ??
+    navigationLabels[visibleActiveNavigationEntry.section] ??
+    activePresetProfile.label;
   const visibleLeads = activeProject
     ? leads.filter((lead) => lead.projectId === activeProject.id)
     : leads;
@@ -2424,7 +2788,7 @@ export function CrmWorkspace({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      setLanguage(readStoredLanguage(languageStorageKeys.system));
+      setLanguage(readUrlLanguage() ?? readStoredLanguage(languageStorageKeys.system, getBrowserLanguageFallback()));
       setLanguageHydrated(true);
     });
 
@@ -2932,45 +3296,40 @@ export function CrmWorkspace({
           </header>
 
           <div className="min-w-0 space-y-6 px-4 py-6 md:px-8">
-            <WorkspaceModePanel
-              context={workspaceContext}
+            <WorkspaceContextBar
+              areaLabel={activeAreaLabel}
               copy={copy}
-              onChange={handleWorkspaceSetupChange}
-              saveState={workspaceSetupSaveState}
-            />
-
-            <WorkspaceScopePanel
-              activeProjects={allProjects.length}
-              canSwitch={canUseWorkspaceSwitch}
-              context={workspaceContext}
-              copy={copy}
-              onSwitch={(workspaceId) => void handleWorkspaceSwitch(workspaceId)}
+              dataScopeLabel={activeProject ? activeProject.name : copy.header.allProjects}
               profileLabel={activePresetProfile.label}
-              switchState={workspaceSwitchState}
-              workspaces={availableWorkspaces}
+              projectLabel={projectScopeLabel}
+              workspaceName={workspaceContext.workspaceName}
             />
 
-            <WorkspaceModeKpis
-              context={workspaceContext}
-              copy={copy}
-              leads={visibleLeads}
-              tasks={visibleTasks}
-              units={propertyUnitRecords.filter(
-                (unit) => !activeProject || unit.projectId === activeProject.id,
-              )}
-            />
+            {visibleActiveSection === "dashboard" ? (
+              <RolePriorityPanel
+                copy={copy}
+                deals={visibleDeals}
+                events={visibleCalendarEvents}
+                language={language}
+                leads={visibleLeads}
+                presetId={normalizedActivePresetId}
+                tasks={visibleTasks}
+              />
+            ) : null}
 
-            <MobileDailyWork
-              contacts={visibleContacts}
-              events={visibleCalendarEvents}
-              language={language}
-              leads={visibleLeads}
-              onOpenSection={handleSectionChange}
-              panels={normalizedActivePreset.mobilePanels}
-              projects={allProjects}
-              tasks={visibleTasks}
-              users={users}
-            />
+            {visibleActiveSection === "dashboard" ? (
+              <MobileDailyWork
+                contacts={visibleContacts}
+                events={visibleCalendarEvents}
+                language={language}
+                leads={visibleLeads}
+                onOpenSection={handleSectionChange}
+                panels={normalizedActivePreset.mobilePanels}
+                projects={allProjects}
+                tasks={visibleTasks}
+                users={users}
+              />
+            ) : null}
 
             {visibleActiveSection === "dashboard" ? (
               <DashboardOverview
@@ -3389,6 +3748,24 @@ export function CrmWorkspace({
                 users={users}
               />
             ) : null}
+
+            <WorkspaceSetupDetails
+              activeProjects={allProjects.length}
+              canSwitch={canUseWorkspaceSwitch}
+              context={workspaceContext}
+              copy={copy}
+              leads={visibleLeads}
+              onChange={handleWorkspaceSetupChange}
+              onSwitch={(workspaceId) => void handleWorkspaceSwitch(workspaceId)}
+              profileLabel={activePresetProfile.label}
+              saveState={workspaceSetupSaveState}
+              switchState={workspaceSwitchState}
+              tasks={visibleTasks}
+              units={propertyUnitRecords.filter(
+                (unit) => !activeProject || unit.projectId === activeProject.id,
+              )}
+              workspaces={availableWorkspaces}
+            />
           </div>
         </section>
       </div>

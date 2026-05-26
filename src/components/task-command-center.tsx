@@ -20,7 +20,7 @@ type TaskCommandCenterProps = {
   tasks: Task[];
 };
 
-type TaskView = "focus" | "today" | "high" | "followUp" | "all";
+type TaskView = "focus" | "today" | "overdue" | "high" | "unlinked" | "followUp" | "all";
 
 const priorityStyles = {
   Hoch: "border-red-200 bg-red-50 text-red-900",
@@ -33,40 +33,48 @@ const viewStyles = {
   idle: "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50",
 };
 
+function parseTaskDueDate(due: string, now = new Date()) {
+  const normalized = due.trim().toLowerCase();
+  const timeMatch = normalized.match(/(\d{1,2}):(\d{2})/);
+  const hours = timeMatch ? Number(timeMatch[1]) : 23;
+  const minutes = timeMatch ? Number(timeMatch[2]) : 59;
+
+  if (normalized.includes("heute") || normalized.includes("today")) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+  }
+
+  if (normalized.includes("morgen") || normalized.includes("tomorrow")) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hours, minutes, 0, 0);
+  }
+
+  if (normalized.includes("woche") || normalized.includes("week")) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 0, 0);
+  }
+
+  const parsed = new Date(due);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function getDueRank(due: string) {
-  const parsed = new Date(due).getTime();
-  if (Number.isFinite(parsed)) {
-    return Math.round(parsed / 60000);
-  }
-
-  if (due.includes("Heute")) {
-    const match = due.match(/(\d{1,2}):(\d{2})/);
-    return match ? Number(match[1]) * 60 + Number(match[2]) : 600;
-  }
-
-  if (due.includes("Morgen")) {
-    return 24 * 60;
-  }
-
-  if (due.includes("Woche")) {
-    return 7 * 24 * 60;
-  }
-
-  return 30 * 24 * 60;
+  const parsed = parseTaskDueDate(due);
+  return parsed ? Math.round(parsed.getTime() / 60000) : Number.MAX_SAFE_INTEGER;
 }
 
 function isDueToday(due: string) {
-  if (due.includes("Heute") || due.includes("Today")) return true;
-
-  const parsed = new Date(due);
-  if (Number.isNaN(parsed.getTime())) return false;
-
+  const parsed = parseTaskDueDate(due);
+  if (!parsed) return false;
   const today = new Date();
+
   return (
     parsed.getFullYear() === today.getFullYear() &&
     parsed.getMonth() === today.getMonth() &&
     parsed.getDate() === today.getDate()
   );
+}
+
+function isOverdue(due: string) {
+  const parsed = parseTaskDueDate(due);
+  return parsed ? parsed.getTime() < new Date().getTime() : false;
 }
 
 function getPriorityRank(priority: Task["priority"]) {
@@ -124,17 +132,20 @@ export function TaskCommandCenter({
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
   const dueTodayTasks = openTasks.filter((item) => isDueToday(item.task.due));
-  const overdueTasks = dueTodayTasks.filter((item) => getDueRank(item.task.due) < 15 * 60 + 30);
+  const overdueTasks = openTasks.filter((item) => isOverdue(item.task.due));
   const highPriorityTasks = openTasks.filter((item) => item.task.priority === "Hoch");
   const followUpTasks = openTasks.filter((item) => Boolean(item.lead || item.contact));
+  const unlinkedTasks = openTasks.filter((item) => !item.contact || !item.project);
   const filteredTasks = decoratedTasks
     .filter((item) => {
       const normalizedQuery = searchTerm.trim().toLowerCase();
       const matchesView =
         activeView === "all" ||
         (activeView === "focus" && !item.isCompleted) ||
-        (activeView === "today" && isDueToday(item.task.due)) ||
-        (activeView === "high" && item.task.priority === "Hoch") ||
+        (activeView === "today" && !item.isCompleted && isDueToday(item.task.due)) ||
+        (activeView === "overdue" && !item.isCompleted && isOverdue(item.task.due)) ||
+        (activeView === "high" && !item.isCompleted && item.task.priority === "Hoch") ||
+        (activeView === "unlinked" && !item.isCompleted && (!item.contact || !item.project)) ||
         (activeView === "followUp" && Boolean(item.lead || item.contact));
       const searchable = [
         item.task.title,
@@ -159,7 +170,9 @@ export function TaskCommandCenter({
   const views: Array<{ id: TaskView; label: string; count: number }> = [
     { id: "focus", label: text.focus, count: openTasks.length },
     { id: "today", label: text.today, count: dueTodayTasks.length },
+    { id: "overdue", label: text.overdue, count: overdueTasks.length },
     { id: "high", label: text.high, count: highPriorityTasks.length },
+    { id: "unlinked", label: text.unlinked, count: unlinkedTasks.length },
     { id: "followUp", label: text.followUp, count: followUpTasks.length },
     { id: "all", label: text.all, count: decoratedTasks.length },
   ];
@@ -419,12 +432,17 @@ export function TaskCommandCenter({
           ) : null}
 
           <div className="mt-4 rounded-lg bg-slate-950 p-4 text-white">
-            <p className="text-sm font-semibold">{text.fieldMappingReady}</p>
-            <div className="mt-3 grid gap-2 text-xs text-slate-200">
-              <span>task_subject · {selectedTask?.task.title ? text.open : "-"}</span>
-              <span>task_priority · {selectedTask?.task.priority ? getCrmTaskPriorityLabel(selectedTask.task.priority, language) : "-"}</span>
-              <span>task_due_at · {selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : "-"}</span>
-              <span>linked_record · {selectedTask?.contact?.name ?? selectedTask?.project?.name ?? "-"}</span>
+            <p className="text-sm font-semibold">{text.taskReliability}</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-md bg-white/10 px-2 py-1 font-semibold">
+                {selectedTask && isOverdue(selectedTask.task.due) ? text.overdue : text.due}
+              </span>
+              <span className="rounded-md bg-white/10 px-2 py-1 font-semibold">
+                {selectedTask?.contact ? text.linkedContact : text.noContact}
+              </span>
+              <span className="rounded-md bg-white/10 px-2 py-1 font-semibold">
+                {selectedTask?.project ? text.project : text.noProject}
+              </span>
             </div>
           </div>
 

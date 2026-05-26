@@ -606,7 +606,9 @@ const liveNewsletterMessage =
         ? text.liveSendError
         : liveNewsletterAction.status === "running"
           ? text.liveSendRunning
-          : text.liveSendIdle);
+          : campaignRecipientEmails.length
+            ? text.liveSendIdle
+            : text.liveSendNoRecipients);
   const isBuilderMode = activeArea === "builder";
 
   useEffect(() => {
@@ -1433,6 +1435,8 @@ const liveNewsletterMessage =
                     ? "border-red-200 bg-red-50 text-red-900"
                     : liveNewsletterAction.status === "success"
                       ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : !campaignRecipientEmails.length
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
                       : "border-stone-200 bg-stone-50 text-stone-700"
                 }`}
               >
@@ -1721,6 +1725,8 @@ const liveNewsletterMessage =
                   ? "border-red-200 bg-red-50 text-red-900"
                   : liveNewsletterAction.status === "success"
                     ? "border-emerald-200 bg-white text-emerald-900"
+                    : !campaignRecipientEmails.length
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
                     : "border-emerald-200 bg-white/70 text-emerald-900"
               }`}
             >

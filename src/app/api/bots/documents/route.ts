@@ -42,11 +42,27 @@ function getConsentChannel(channel: string, recipientEmail?: string | null): Con
   return recipientEmail ? "E-Mail" : "WhatsApp";
 }
 
+async function safeListWorkspaceMedia(workspaceId: string) {
+  try {
+    return await listWorkspaceMedia(workspaceId);
+  } catch {
+    return {
+      assets: [],
+      quota: {
+        limitBytes: 0,
+        maxFileBytes: 0,
+        remainingBytes: 0,
+        usedBytes: 0,
+      },
+    };
+  }
+}
+
 export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
-  const media = await listWorkspaceMedia(auth.session.workspaceId);
+  const media = await safeListWorkspaceMedia(auth.session.workspaceId);
   return NextResponse.json({
     assets: media.assets,
     documentTypes: ["expose", "offer", "pdf", "checklist"],
@@ -64,7 +80,7 @@ export async function POST(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
-  const media = await listWorkspaceMedia(auth.session.workspaceId);
+  const media = await safeListWorkspaceMedia(auth.session.workspaceId);
   const mediaAssetId = typeof input.mediaAssetId === "string" ? input.mediaAssetId : "";
   const asset = media.assets.find((item) => item.id === mediaAssetId) ?? null;
 
