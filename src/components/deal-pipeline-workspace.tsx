@@ -289,6 +289,10 @@ function parseEuroValue(value: string) {
 }
 
 function formatEuro(value: number, locale: string) {
+  if (!Number.isFinite(value)) {
+    return locale.startsWith("de") ? "Wert offen" : "Value pending";
+  }
+
   return new Intl.NumberFormat(locale, {
     currency: "EUR",
     maximumFractionDigits: 0,
@@ -448,7 +452,8 @@ function getLeadBudget(lead: Lead | undefined, locale: string) {
   }
 
   if (lead.sellerProfile) {
-    return formatEuro(lead.sellerProfile.askingPrice || lead.sellerProfile.marketValue, locale);
+    const sellerValue = lead.sellerProfile.askingPrice || lead.sellerProfile.marketValue;
+    return Number.isFinite(sellerValue) && sellerValue > 0 ? formatEuro(sellerValue, locale) : "";
   }
 
   return "";
