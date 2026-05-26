@@ -19,6 +19,7 @@ type PublicCopy = ReturnType<typeof getPublicPageCopy>;
 type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
 
 const landingAssetPaths = {
+  auditReviewLoop: "/landing-assets/audit-to-system.html",
   auditToSystem: "/landing-assets/lead-ops-process-visual-2400x1200.mp4",
   companySystemSplit: "/landing-assets/company-system-split.png",
   heroOperatingLayer: "/landing-assets/hero-operating-layer.mp4",
@@ -230,6 +231,22 @@ function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
     <VisualShell className="aspect-[2/1] min-h-0 sm:min-h-[220px] crm-noncritical-motion" visual={visual}>
       <VideoAsset src={landingAssetPaths.auditToSystem} />
       <ReducedMotionFallback visual={visual} />
+    </VisualShell>
+  );
+}
+
+function AuditReviewLoopVisual({ visual }: { visual: VisualCopy }) {
+  return (
+    <VisualShell className="aspect-[4/3] min-h-0 sm:aspect-[2/1] sm:min-h-[220px] crm-noncritical-motion" visual={visual}>
+      <iframe
+        aria-hidden="true"
+        className="h-full w-full border-0"
+        loading="lazy"
+        sandbox=""
+        scrolling="no"
+        src={landingAssetPaths.auditReviewLoop}
+        title={visual.alt}
+      />
     </VisualShell>
   );
 }
@@ -536,7 +553,7 @@ export function PublicCrmLanding({
               ))}
             </div>
           </div>
-          <AuditToSystemVisual visual={copy.visuals.auditToSystem} />
+          <AuditReviewLoopVisual visual={copy.visuals.auditToSystem} />
         </div>
       </section>
 
