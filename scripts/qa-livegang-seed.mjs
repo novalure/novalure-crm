@@ -880,6 +880,179 @@ async function upsertObjectData(record, projectId, ids) {
   }
 }
 
+async function upsertBotAndKnowledge(record, projectId) {
+  if (record.workspace.customerType !== "property_developer") return;
+
+  const botId = stableUuid(`bot:${record.workspace.id}:sales-concierge`);
+  const sourceId = stableUuid(`knowledge:${record.workspace.id}:seeblick`);
+  const knowledgeText = [
+    "Projekt Seeblick umfasst freigegebene Wohnungen A-01, A-02 und B-12.",
+    "Wohnung A-01 hat 3 Zimmer, ca. 82 m2, Balkon und einen freigegebenen Richtpreis von 420000 EUR.",
+    "Wohnung A-02 hat 2 Zimmer, ca. 61 m2, Loggia und einen freigegebenen Richtpreis von 335000 EUR.",
+    "Wohnung B-12 hat 4 Zimmer, ca. 104 m2, Terrasse und einen freigegebenen Richtpreis von 690000 EUR.",
+    "Nicht freigegebene Preise, Reservierungen und Finanzierungszusagen muessen an das Verkaufsteam uebergeben werden.",
+  ].join(" ");
+  const config = {
+    channels: [
+      {
+        id: "qa_seeblick_webchat",
+        channel: "Webchat",
+        active: true,
+        greetingDe: "Hallo, ich beantworte Fragen nur aus freigegebenem Projektwissen.",
+        greetingEn: "Hi, I answer only from approved project knowledge.",
+        handoffRules: ["fehlende Wissensquelle", "Rechtsfrage", "Finanzierungszusage", "Preisverhandlung"],
+        setupStatus: "connected",
+        webhookPath: "/api/bots/chat",
+      },
+    ],
+    tools: [
+      { id: "tool_search_knowledge", name: "search_approved_knowledge", enabled: true },
+      { id: "tool_capture_customer_data", name: "capture_customer_data", enabled: true },
+      { id: "tool_escalate_to_human", name: "escalate_to_human", enabled: true },
+    ],
+    setupChecklist: [
+      { done: true, label: "Webchat verbunden", owner: "admin" },
+      { done: true, label: "Freigegebene Wissensquelle vorhanden", owner: "team" },
+      { done: true, label: "Handoff-Regeln hinterlegt", owner: "team" },
+    ],
+    documentLibrary: [],
+    actionPolicies: [
+      {
+        action: "Antwort senden",
+        approval: "audit",
+        rule: "Antworten duerfen nur aus freigegebenem Wissen mit Quelle entstehen.",
+      },
+      {
+        action: "Unklare Frage uebergeben",
+        approval: "required",
+        rule: "Ohne Treffer in der Wissensbasis wird an das Verkaufsteam uebergeben.",
+      },
+    ],
+    qaSeed: "livegang-8-10",
+  };
+
+  await queryOne(
+    `
+      insert into bots (
+        id,
+        workspace_id,
+        project_id,
+        name,
+        description,
+        role,
+        status,
+        model,
+        strict_knowledge,
+        audience,
+        language,
+        tone,
+        answer_length,
+        brand_voice,
+        config
+      )
+      values (
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        'QA Seeblick Sales Bot',
+        'Beantwortet Projektfragen nur aus freigegebenem Seeblick-Wissen und uebergibt ohne Quelle an das Team.',
+        'sales_qualifier',
+        'active',
+        'openai/gpt-5.4',
+        true,
+        'Projekt Seeblick Interessenten',
+        'de',
+        'klar, freundlich, vorsichtig',
+        'normal',
+        'Novalure Real Estate Advisory',
+        $4::jsonb
+      )
+      on conflict (id) do update set
+        project_id = excluded.project_id,
+        name = excluded.name,
+        description = excluded.description,
+        role = excluded.role,
+        status = excluded.status,
+        model = excluded.model,
+        strict_knowledge = excluded.strict_knowledge,
+        audience = excluded.audience,
+        language = excluded.language,
+        tone = excluded.tone,
+        answer_length = excluded.answer_length,
+        brand_voice = excluded.brand_voice,
+        config = bots.config || excluded.config,
+        updated_at = now()
+      returning id
+    `,
+    [botId, record.workspace.id, projectId, json(config)],
+  );
+
+  await queryOne(
+    `
+      insert into knowledge_sources (
+        id,
+        workspace_id,
+        project_id,
+        name,
+        source_type,
+        status,
+        coverage,
+        item_count,
+        location,
+        metadata
+      )
+      values (
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        'Projektinfo Seeblick',
+        'text',
+        'Vector bereit',
+        '100%',
+        1,
+        'QA Seed',
+        $4::jsonb
+      )
+      on conflict (id) do update set
+        project_id = excluded.project_id,
+        name = excluded.name,
+        source_type = excluded.source_type,
+        status = excluded.status,
+        coverage = excluded.coverage,
+        item_count = excluded.item_count,
+        location = excluded.location,
+        metadata = knowledge_sources.metadata || excluded.metadata,
+        updated_at = now()
+      returning id
+    `,
+    [sourceId, record.workspace.id, projectId, json({ approval: "approved", qaSeed: "livegang-8-10" })],
+  );
+
+  await queryOne(
+    `
+      insert into knowledge_chunks (
+        source_id,
+        chunk_index,
+        content,
+        citation_title,
+        citation_url,
+        token_count,
+        embedding_model,
+        metadata
+      )
+      values ($1::uuid, 0, $2, 'Projektinfo Seeblick', null, 80, 'deterministic-local-1536', $3::jsonb)
+      on conflict (source_id, chunk_index) do update set
+        content = excluded.content,
+        citation_title = excluded.citation_title,
+        token_count = excluded.token_count,
+        embedding_model = excluded.embedding_model,
+        metadata = knowledge_chunks.metadata || excluded.metadata
+      returning id
+    `,
+    [sourceId, knowledgeText, json({ embeddingReady: true, qaSeed: "livegang-8-10" })],
+  );
+}
+
 async function main() {
   const passwordHash = await hashPassword(qaPassword);
 
@@ -896,6 +1069,7 @@ async function main() {
     await upsertPipeline(record.workspace, projectId);
     const ids = await upsertCoreRecords(record, projectId);
     await upsertObjectData(record, projectId, ids);
+    await upsertBotAndKnowledge(record, projectId);
     for (const user of users.filter((item) => item.workspace.id === record.workspace.id && item.role !== "assistant")) {
       await upsertPipelinePermission(record.workspace, projectId, user);
     }

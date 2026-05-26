@@ -56,21 +56,44 @@ function fallbackReply(input: {
   knowledgeContext?: Array<{ title: string; excerpt: string; citationUrl?: string | null }>;
   qualificationSummary?: string;
 }): ModelReply {
+  const approvedContext = (input.knowledgeContext ?? [])
+    .filter((source) => source.title.trim() && source.excerpt.trim())
+    .slice(0, 3);
+
+  if (approvedContext.length) {
+    const excerpts = approvedContext
+      .map((source, index) => {
+        const citation = source.citationUrl ? ` (${source.citationUrl})` : "";
+        return `${index + 1}. ${source.title}${citation}: ${source.excerpt}`;
+      })
+      .join("\n");
+    const text =
+      input.language === "de"
+        ? `Auf Basis der freigegebenen Wissensquelle kann ich Folgendes nennen:\n${excerpts}\n\nFuer Details oder unklare Punkte bereite ich die Uebergabe an das Team vor.`
+        : `Based on the approved knowledge source, I can share this:\n${excerpts}\n\nFor details or unclear points, I will prepare a handoff to the team.`;
+
+    return {
+      text,
+      provider: "deterministic-fallback",
+      model: "offline-crm-grounded-reply",
+      external: false,
+      reason: "NOVALURE_LLM_BASE_URL or NOVALURE_LLM_API_KEY is not configured",
+    };
+  }
+
   const sourceLine = input.knowledgeTitles.length
     ? input.knowledgeTitles.slice(0, 3).join(", ")
     : input.language === "de"
       ? "keine freigegebenen Quellen gefunden"
       : "no approved sources found";
 
-  const text =
-    input.language === "de"
-      ? `Ich habe die Anfrage geprüft und nutze aktuell diesen Kontext: ${sourceLine}. ${input.qualificationSummary ?? "Der Lead wird nach den aktiven Bot-Regeln im CRM verarbeitet und auditiert."}`
-      : `I reviewed the request and used this context: ${sourceLine}. ${input.qualificationSummary ?? "The lead is handled in CRM under the active bot policy and audit trail."}`;
-
   return {
-    text,
+    text:
+      input.language === "de"
+        ? `Dazu habe ich aktuell keine freigegebene Wissensquelle (${sourceLine}). Ich speichere die Anfrage im CRM und bereite die Uebergabe an das Team vor.`
+        : `I do not currently have an approved knowledge source (${sourceLine}). I will save the enquiry in CRM and prepare a handoff to the team.`,
     provider: "deterministic-fallback",
-    model: "offline-crm-safe-reply",
+    model: "offline-crm-handoff-reply",
     external: false,
     reason: "NOVALURE_LLM_BASE_URL or NOVALURE_LLM_API_KEY is not configured",
   };
