@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:phase0": "node --test scripts/phase0-smoke-tests.mjs",
+    "test:phase1": "node --test scripts/phase1-persistence-smoke-tests.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs"

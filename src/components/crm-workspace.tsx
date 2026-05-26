@@ -2750,7 +2750,8 @@ export function CrmWorkspace({
   const [importNotice, setImportNotice] = useState("");
   const [importSource, setImportSource] = useState<ImportSource>("hubspot");
   const [projectNotice, setProjectNotice] = useState("");
-  const [sessionProjects, setSessionProjects] = useState<Project[]>([]);
+  const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
+  const [isProjectSaving, setIsProjectSaving] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(defaultLanguage);
   const [languageHydrated, setLanguageHydrated] = useState(false);
   const copy = getDashboardCopy(language);
@@ -2868,7 +2869,6 @@ export function CrmWorkspace({
     const nextActiveWorkspace = nextWorkspace ?? { ...activeWorkspace, id: workspaceId };
     setWorkspaceSwitchState("loading");
     setActiveProjectId("all");
-    setSessionProjects([]);
     setActiveWorkspace(nextActiveWorkspace);
     setWorkspaceSetup({
       activeCalendarProvider: nextActiveWorkspace.activeCalendarProvider ?? "none",
@@ -2914,7 +2914,7 @@ export function CrmWorkspace({
   const propertyBuildingRecords = liveCoreData.propertyBuildings;
   const propertyUnitRecords = liveCoreData.propertyUnits;
   const propertyReservationRecords = liveCoreData.propertyReservations;
-  const allProjects = [...sessionProjects, ...projectRecords];
+  const allProjects = projectRecords;
   const workspaceContext = createWorkspaceProductContext({
     activeCalendarProvider: workspaceSetup.activeCalendarProvider ?? activeWorkspace.activeCalendarProvider,
     customerType: workspaceSetup.customerType ?? activeWorkspace.customerType,
@@ -3159,6 +3159,7 @@ export function CrmWorkspace({
 
   function openProjectWizard() {
     setProjectNotice("");
+    setProjectNoticeTone("success");
     setActionModal("project");
   }
 
@@ -3169,24 +3170,19 @@ export function CrmWorkspace({
   }
 
   async function handlePrepareProject() {
+    if (isProjectSaving) return;
+
     if (!canPrepareProject) {
+      setProjectNoticeTone("error");
       setProjectNotice(copy.dialogs.project.requiredNotice);
       return;
     }
 
-    const projectSlug = projectDraft.name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    const nextProject: Project = {
+    const nextProject: Partial<Project> = {
       customerType: projectDraft.customerType,
       defaultOperatingModel: projectDraft.operatingModel,
       defaultPipelineId: projectDraft.pipelineId,
-      id: `project_session_${sessionProjects.length + 1}_${projectSlug || "projekt"}`,
-      leads: 0,
       name: projectDraft.name.trim(),
-      revenue: "0",
       setupDefaults: {
         calendarProvider: projectDraft.calendarProvider,
         meetingProvider: projectDraft.meetingProvider,
@@ -3197,6 +3193,9 @@ export function CrmWorkspace({
       workspaceId: activeWorkspace.id,
     };
 
+    setIsProjectSaving(true);
+    setProjectNotice("");
+    let saved = false;
     try {
       const response = await fetch("/api/crm/projects", {
         body: JSON.stringify({
@@ -3214,19 +3213,38 @@ export function CrmWorkspace({
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const payload = response.ok ? await response.json() as { project?: Project } : null;
-      const persistedProject = payload?.project ?? nextProject;
+      const payload = await response.json().catch(() => null) as { error?: string; project?: Project } | null;
 
-      setSessionProjects((current) => [persistedProject, ...current.filter((project) => project.id !== persistedProject.id)]);
+      if (!response.ok || !payload?.project) {
+        throw new Error(payload?.error ?? copy.dialogs.project.saveError);
+      }
+
+      const persistedProject = payload.project;
+
+      setLiveCoreData((current) => ({
+        ...current,
+        projects: [
+          persistedProject,
+          ...current.projects.filter((project) => project.id !== persistedProject.id),
+        ],
+      }));
+      setActiveWorkspace((current) => ({
+        ...current,
+        activeProjects: Math.max(current.activeProjects ?? 0, projectRecords.length + 1),
+      }));
       setActiveProjectId(persistedProject.id);
+      setProjectNoticeTone("success");
       setProjectNotice(copy.dialogs.project.preparedNotice(persistedProject.name));
-      void refreshCoreData();
-    } catch {
-      setSessionProjects((current) => [nextProject, ...current]);
-      setActiveProjectId(nextProject.id);
-      setProjectNotice(copy.dialogs.project.preparedNotice(nextProject.name));
+      setProjectDraft((current) => ({ ...current, name: "", notes: "" }));
+      await refreshCoreData();
+      saved = true;
+    } catch (error) {
+      setProjectNoticeTone("error");
+      setProjectNotice(error instanceof Error ? error.message : copy.dialogs.project.saveError);
+    } finally {
+      setIsProjectSaving(false);
     }
-    handleSectionChange("dashboard");
+    if (saved) handleSectionChange("dashboard");
   }
 
   useEffect(() => {
@@ -4004,6 +4022,7 @@ export function CrmWorkspace({
                 conversations={visibleConversations}
                 leads={activeLeadInboxLeads}
                 language={language}
+                onLeadsChanged={refreshCoreData}
                 projects={allProjects}
                 users={users}
               />
@@ -4393,11 +4412,11 @@ export function CrmWorkspace({
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-                disabled={!canPrepareProject}
+                disabled={!canPrepareProject || isProjectSaving}
                 onClick={handlePrepareProject}
                 type="button"
               >
-                {copy.dialogs.project.prepare}
+                {isProjectSaving ? copy.dialogs.project.saving : copy.dialogs.project.prepare}
               </button>
             </>
           }
@@ -4666,7 +4685,11 @@ export function CrmWorkspace({
               </div>
 
               {projectNotice ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+                <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                  projectNoticeTone === "error"
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-900"
+                }`}>
                   {projectNotice}
                 </div>
               ) : null}
