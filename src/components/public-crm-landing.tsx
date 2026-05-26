@@ -464,8 +464,10 @@ export function PublicCrmLanding({
 
       <section className="bg-white px-4 py-14" id="problem">
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <LeadLeakageVisual visual={copy.visuals.leadLeakage} />
-          <div>
+          <div className="order-2 lg:order-1">
+            <LeadLeakageVisual visual={copy.visuals.leadLeakage} />
+          </div>
+          <div className="order-1 lg:order-2">
             <SectionIntro
               description={copy.problem.description}
               eyebrow={copy.problem.eyebrow}
