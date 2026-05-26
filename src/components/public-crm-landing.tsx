@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CookieConsentButton } from "@/components/cookie-consent-button";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import {
   getCrmLandingPageCopy,
@@ -358,6 +359,7 @@ export function PublicCrmLanding({
   const novalureHref = getNovalureHref(language);
   const loginHref = showLoginForm ? "#workspace-login" : withPublicLanguage("/login", language);
   const secondaryHeroHref = loginHref;
+  const cookieHref = withPublicLanguage("/cookies", language);
 
   return (
     <main className="min-h-dvh bg-[#f8f7f1] text-[#111614]" lang={language}>
@@ -626,6 +628,7 @@ export function PublicCrmLanding({
           </nav>
         </div>
       </footer>
+      <CookieConsentButton cookieHref={cookieHref} copy={copy.cookieConsent} />
     </main>
   );
 }

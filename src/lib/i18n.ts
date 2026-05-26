@@ -616,6 +616,23 @@ export const crmPublicLandingPageCopy = {
       primaryCta: "Request private audit",
       secondaryCta: "Learn more about Novalure",
     },
+    cookieConsent: {
+      title: "Cookie choices",
+      description:
+        "Novalure CRM uses necessary cookies for security, language, login and requested platform functions. Optional analytics or marketing technologies stay off unless you accept them.",
+      necessaryTitle: "Necessary",
+      necessaryDescription:
+        "Required for page delivery, security, login sessions and remembering your cookie choice.",
+      optionalTitle: "Optional analytics and marketing",
+      optionalDescription:
+        "Used only after consent to understand demand, campaign performance and CRM-ready lead journeys.",
+      rejectOptional: "Reject optional",
+      acceptAll: "Accept optional",
+      detailsLink: "Read the Cookie Notice",
+      manageButton: "Cookies",
+      savedNecessary: "Optional cookies are rejected.",
+      savedAll: "Optional cookies are accepted.",
+    },
     footerTagline:
       "Lead infrastructure for real estate teams whose demand must become qualified conversations and CRM-ready opportunities.",
     visuals: {
@@ -782,6 +799,23 @@ export const crmPublicLandingPageCopy = {
         "Wenn Leads in Ihr Unternehmen kommen, aber Pipeline-Klarheit fehlt, ist der richtige nächste Schritt ein privates Lead-System- und Pipeline-Audit.",
       primaryCta: "Privates Audit anfragen",
       secondaryCta: "Mehr über Novalure erfahren",
+    },
+    cookieConsent: {
+      title: "Cookie-Auswahl",
+      description:
+        "Novalure CRM nutzt notwendige Cookies für Sicherheit, Sprache, Login und angeforderte Plattformfunktionen. Optionale Analyse- oder Marketing-Technologien bleiben aus, bis Sie zustimmen.",
+      necessaryTitle: "Notwendig",
+      necessaryDescription:
+        "Erforderlich für Seitenauslieferung, Sicherheit, Login-Sessions und das Speichern Ihrer Cookie-Auswahl.",
+      optionalTitle: "Optionale Analyse und Marketing",
+      optionalDescription:
+        "Nur nach Einwilligung genutzt, um Nachfrage, Kampagnenleistung und CRM-ready Lead-Journeys zu verstehen.",
+      rejectOptional: "Optionale ablehnen",
+      acceptAll: "Optionale akzeptieren",
+      detailsLink: "Cookie-Hinweis lesen",
+      manageButton: "Cookies",
+      savedNecessary: "Optionale Cookies sind abgelehnt.",
+      savedAll: "Optionale Cookies sind akzeptiert.",
     },
     footerTagline:
       "Lead infrastructure for real estate teams, deren Nachfrage zu qualifizierten Gesprächen und CRM-ready Opportunities werden muss.",
