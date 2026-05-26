@@ -153,6 +153,7 @@ type TaskRow = {
   due: string | Date | null;
   id: string;
   leadId: string | null;
+  ownerUserId: string | null;
   priority: Task["priority"];
   project: string | null;
   projectId: string | null;
@@ -193,6 +194,82 @@ export type RepositoryWriteResult<T> =
 
 export function normalizeWriteProjectId(value: unknown) {
   return typeof value === "string" && isUuid(value) ? value : null;
+}
+
+function canManageWorkspaceRecords(session: AppSession) {
+  if (session.role === "owner" || session.role === "admin") return true;
+
+  return [
+    "platform_admin",
+    "novalure_onboarding",
+    "novalure_customer_success",
+    "novalure_operator",
+    "customer_owner",
+    "workspace_admin",
+    "team_member",
+  ].includes(session.productRole);
+}
+
+function isOwnRecordOnlySession(session: AppSession) {
+  return session.productRole === "broker_agent";
+}
+
+function isProjectScopedSalesSession(session: AppSession) {
+  return session.productRole === "developer_sales" || session.productRole === "project_sales_member";
+}
+
+async function hasProjectEditPermission(input: { projectId: string | null | undefined; session: AppSession }) {
+  if (!isUuid(input.session.userId) || !isUuid(input.projectId)) return false;
+
+  try {
+    const permission = await queryOne<{ canEditDeals: boolean }>(
+      `
+        select can_edit_deals as "canEditDeals"
+        from project_pipeline_permissions
+        where workspace_id = $1
+          and project_id = $2
+          and user_id = $3
+        limit 1
+      `,
+      [input.session.workspaceId, input.projectId, input.session.userId],
+    );
+
+    return Boolean(permission?.canEditDeals);
+  } catch {
+    return false;
+  }
+}
+
+async function assertRecordWriteAccess(input: {
+  entityLabel: string;
+  existingOwnerUserId?: string | null;
+  ownerUserId?: string | null;
+  projectId?: string | null;
+  session: AppSession;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (canManageWorkspaceRecords(input.session)) {
+    return { ok: true };
+  }
+
+  const effectiveOwnerUserId = input.existingOwnerUserId ?? input.ownerUserId ?? null;
+
+  if (isOwnRecordOnlySession(input.session)) {
+    return effectiveOwnerUserId === input.session.userId
+      ? { ok: true }
+      : { ok: false, reason: `${input.entityLabel} can only be changed by the assigned owner` };
+  }
+
+  if (isProjectScopedSalesSession(input.session)) {
+    if (effectiveOwnerUserId === input.session.userId) {
+      return { ok: true };
+    }
+
+    return await hasProjectEditPermission({ projectId: input.projectId, session: input.session })
+      ? { ok: true }
+      : { ok: false, reason: `${input.entityLabel} requires project edit permission` };
+  }
+
+  return { ok: false, reason: `${input.entityLabel} write permission is not allowed for this role` };
 }
 
 const dealStages: DealStage[] = [
@@ -451,6 +528,15 @@ export async function upsertDealRecord(input: {
   if (!name || (!existing && !contactId)) {
     return { persisted: false, reason: "Deal name and contact are required" };
   }
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Deal",
+    existingOwnerUserId: existing?.ownerUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const stageChanged = Boolean(existing && existing.stage !== stage);
   const closeState = resolveDealCloseState({
@@ -913,9 +999,19 @@ export async function upsertTaskRecord(input: {
   const projectId = normalizeWriteProjectId(input.task.projectId) ?? existing?.projectId ?? await resolveFallbackProjectId(input.session.workspaceId);
   const contactId = normalizeWriteProjectId(input.task.contactId) ?? existing?.contactId ?? null;
   const leadId = normalizeWriteProjectId(input.task.leadId) ?? existing?.leadId ?? null;
+  const ownerUserId = existing?.ownerUserId ?? normalizeWriteProjectId(input.session.userId);
   const title = cleanString(input.task.title) || existing?.title || "";
 
   if (!title) return { persisted: false, reason: "Task title is required" };
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Task",
+    existingOwnerUserId: existing?.ownerUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const row = existing
     ? await queryOne<TaskRow>(
@@ -938,6 +1034,7 @@ export async function upsertTaskRecord(input: {
             project_id as "projectId",
             contact_id as "contactId",
             lead_id as "leadId",
+            owner_user_id as "ownerUserId",
             title,
             due_at as due,
             priority,
@@ -978,6 +1075,7 @@ export async function upsertTaskRecord(input: {
             project_id as "projectId",
             contact_id as "contactId",
             lead_id as "leadId",
+            owner_user_id as "ownerUserId",
             title,
             due_at as due,
             priority,
@@ -989,7 +1087,7 @@ export async function upsertTaskRecord(input: {
           projectId,
           contactId,
           leadId,
-          normalizeWriteProjectId(input.session.userId),
+          ownerUserId,
           title,
           cleanDateInput(input.task.due) || null,
           input.task.priority ?? "Normal",
@@ -1065,6 +1163,15 @@ export async function upsertLeadRecord(input: {
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
   const status = (cleanString(input.lead.status) || existing?.status || "Neu") as Lead["status"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Lead",
+    existingOwnerUserId: existing?.assignedToUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const row = existing
     ? await queryOne<LeadRow>(
@@ -2684,6 +2791,7 @@ const taskSelectSql = `
     t.project_id as "projectId",
     t.contact_id as "contactId",
     t.lead_id as "leadId",
+    t.owner_user_id as "ownerUserId",
     t.title,
     p.name as project,
     t.due_at as due,
@@ -3000,7 +3108,7 @@ async function assertPipelineStagePermission(input: {
   session: AppSession;
   targetStage: DealStage;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if (input.session.role === "owner" || input.session.role === "admin") {
+  if (canManageWorkspaceRecords(input.session)) {
     return { ok: true };
   }
 
