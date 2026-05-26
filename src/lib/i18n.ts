@@ -108,7 +108,7 @@ export const loginPageCopy = {
     passcodeHideLabel: "Hide access code",
     passcodeShowLabel: "Show access code",
     submit: "Sign in",
-    placeholderEmail: "franz@novalure.local",
+    placeholderEmail: "franz@novalure.eu",
     notConfigured: "Login is not fully configured yet.",
     errors: {
       login_not_configured:
@@ -166,7 +166,7 @@ export const loginPageCopy = {
     passcodeHideLabel: "Zugangscode ausblenden",
     passcodeShowLabel: "Zugangscode anzeigen",
     submit: "Einloggen",
-    placeholderEmail: "franz@novalure.local",
+    placeholderEmail: "franz@novalure.eu",
     notConfigured: "Login ist noch nicht vollständig konfiguriert.",
     errors: {
       login_not_configured:
@@ -2971,7 +2971,7 @@ export const crmAnalysisBotCopy = {
       maturityNextSteps: {
         "next.auditCoverage": "Add audit records for write paths, customer access and stage changes.",
         "next.completeRecommendationRuntime": "Run the analysis recommendation completion so the remaining work is stored as operational evidence.",
-        "next.closePersistenceLoop": "Connect the remaining local UI changes to server actions and repository writes.",
+        "next.closePersistenceLoop": "Connect the remaining draft changes to server actions and repository writes.",
         "next.speedToLeadEscalation": "Create Teams alerts and owner escalation for overdue first-response SLAs.",
         "next.leadInboxWritePath": "Persist inbound leads, duplicate decisions and contact updates from every channel.",
         "next.operationalFollowUps": "Connect follow-up buttons to productive sends, tasks, consent checks, audit and analytics.",
@@ -2994,7 +2994,7 @@ export const crmAnalysisBotCopy = {
         "next.customerAccessAutomation": "Add onboarding analytics, Teams risk alerts and customer-success automation.",
       },
       maturityActions: {
-        persistentUiChanges: "Persist UI changes instead of leaving them in local or demo state.",
+        persistentUiChanges: "Persist UI changes instead of leaving them in draft or demo state.",
         realApiWritePaths: "Add real API write paths for CRM changes.",
         stageHistoryLostReasons: "Add stage history and lost reasons to the deal pipeline.",
         unitsBoard: "Create the units board.",
@@ -3116,7 +3116,7 @@ export const crmAnalysisBotCopy = {
       pipeline: {
         title: "Deal pipeline",
         evidence: (dealCount: string) =>
-          `${dealCount} deals are visible with stage, owner, risk, probability, expected close date and local editing support.`,
+          `${dealCount} deals are visible with stage, owner, risk, probability, expected close date and inline editing support.`,
         nextStep:
           "Connect pipeline changes to persistent storage, stage history, lost reasons and project-specific sales permissions.",
       },
@@ -3803,7 +3803,7 @@ export const crmAnalysisBotCopy = {
       maturityNextSteps: {
         "next.auditCoverage": "Audit-Einträge für Schreibpfade, Kundenzugänge und Stage-Wechsel ergänzen.",
         "next.completeRecommendationRuntime": "Analysebot-Empfehlungen umsetzen, damit die Restarbeit als operativer Nachweis gespeichert ist.",
-        "next.closePersistenceLoop": "Verbleibende lokale UI-Änderungen an Server Actions und Repository Writes anbinden.",
+        "next.closePersistenceLoop": "Verbleibende Entwurfsänderungen an Server Actions und Repository Writes anbinden.",
         "next.speedToLeadEscalation": "Teams-Alarme und Owner-Eskalation für überfällige First-Response-SLAs erstellen.",
         "next.leadInboxWritePath": "Inbound-Leads, Duplikatentscheidungen und Kontaktupdates aus jedem Kanal persistieren.",
         "next.operationalFollowUps": "Follow-up-Buttons mit produktiven Sends, Aufgaben, Consent-Checks, Audit und Analytics verbinden.",
@@ -3826,7 +3826,7 @@ export const crmAnalysisBotCopy = {
         "next.customerAccessAutomation": "Onboarding-Analytics, Teams-Risikoalarme und Customer-Success-Automation ergänzen.",
       },
       maturityActions: {
-        persistentUiChanges: "UI-Änderungen persistieren, statt sie lokal oder im Demo-Zustand zu belassen.",
+        persistentUiChanges: "UI-Änderungen persistieren, statt sie im Entwurfs- oder Demo-Zustand zu belassen.",
         realApiWritePaths: "Echte API-Schreibpfade für CRM-Änderungen ergänzen.",
         stageHistoryLostReasons: "Stage-History und Lost Reasons in der Deal Pipeline ergänzen.",
         unitsBoard: "Einheitenboard erstellen.",
@@ -3948,7 +3948,7 @@ export const crmAnalysisBotCopy = {
       pipeline: {
         title: "Deal Pipeline",
         evidence: (dealCount: string) =>
-          `${dealCount} Deals sind mit Phase, Owner, Risiko, Wahrscheinlichkeit, erwarteter Abschlusszeit und lokaler Bearbeitung sichtbar.`,
+          `${dealCount} Deals sind mit Phase, Owner, Risiko, Wahrscheinlichkeit, erwarteter Abschlusszeit und Inline-Bearbeitung sichtbar.`,
         nextStep:
           "Pipeline-Änderungen persistieren und Phasenhistorie, Verlustgründe sowie projektspezifische Vertriebsrechte ergänzen.",
       },
@@ -4607,8 +4607,8 @@ export const leadInboxCommandCopy = {
     consentBlocked: "Follow-up saved, but outreach is blocked by consent policy.",
     activity: "Activity",
     originalConversation: "Original conversation",
-    localActivity: "Local actions",
-    taskCreated: "Task created in this session",
+    localActivity: "Recent actions",
+    taskCreated: "Task created",
     changed: "Lead updated",
     accepted: "Pipeline handover prepared",
     acceptedDetail: "Status, owner and next action are prepared for the pipeline.",
@@ -4708,8 +4708,8 @@ export const leadInboxCommandCopy = {
     consentBlocked: "Follow-up gespeichert, Ansprache ist durch Consent-Policy blockiert.",
     activity: "Aktivität",
     originalConversation: "Original-Konversation",
-    localActivity: "Lokale Aktionen",
-    taskCreated: "Aufgabe wurde in dieser Sitzung angelegt",
+    localActivity: "Aktuelle Aktionen",
+    taskCreated: "Aufgabe wurde angelegt",
     changed: "Lead wurde aktualisiert",
     accepted: "Pipeline-Übergabe vorbereitet",
     acceptedDetail: "Status, Owner und nächste Aktion sind für die Pipeline vorbereitet.",
@@ -7717,7 +7717,7 @@ export const leadSequenceCommandCenterCopy = {
     stepAddedNotice: "Step added to this sequence draft.",
     stepDuplicatedNotice: "Step duplicated in this sequence draft.",
     stepRemovedNotice: "Step removed from this sequence draft.",
-    savedNotice: "Sequence draft saved locally in this workspace.",
+    savedNotice: "Sequence draft saved in this workspace.",
     copySuffix: "Copy",
     closeEditor: "Close editor",
     editorTitle: "Sequence editor",
@@ -7762,7 +7762,7 @@ export const leadSequenceCommandCenterCopy = {
       newStepDelay: "After 1 day",
       newStepTitle: "New follow-up step",
     },
-    dragHint: "Drag timeline cards or use the arrow buttons to adjust the order for this session.",
+    dragHint: "Drag timeline cards or use the arrow buttons to adjust this draft order.",
     simulatorHint:
       "The simulator does not send messages. It shows how consent, channel rules, replies, appointments and frequency limits affect the next actions.",
     complianceTitle: "Required safeguards",
@@ -7872,7 +7872,7 @@ export const leadSequenceCommandCenterCopy = {
     stepAddedNotice: "Schritt wurde diesem Sequenzentwurf hinzugefügt.",
     stepDuplicatedNotice: "Schritt wurde in diesem Sequenzentwurf dupliziert.",
     stepRemovedNotice: "Schritt wurde aus diesem Sequenzentwurf entfernt.",
-    savedNotice: "Sequenzentwurf wurde lokal in diesem Workspace gespeichert.",
+    savedNotice: "Sequenzentwurf wurde in diesem Workspace gespeichert.",
     copySuffix: "Kopie",
     closeEditor: "Editor schließen",
     editorTitle: "Sequenz-Editor",
@@ -7912,7 +7912,7 @@ export const leadSequenceCommandCenterCopy = {
       rules: "Regeln",
       simulator: "Simulator",
     },
-    dragHint: "Timeline-Karten ziehen oder Pfeile nutzen, um die Reihenfolge für diese Sitzung anzupassen.",
+    dragHint: "Timeline-Karten ziehen oder Pfeile nutzen, um die Entwurfsreihenfolge anzupassen.",
     simulatorHint:
       "Der Simulator sendet nichts. Er zeigt, wie Consent, Kanalregeln, Antworten, Termine und Frequenzgrenzen die nächsten Aktionen beeinflussen.",
     complianceTitle: "Pflicht-Schutzregeln",
@@ -8172,7 +8172,7 @@ export const formCommandCenterCopy = {
       projectScope: "Project scope",
       formList: "Form list",
       databaseActive: "Database active",
-      localPreview: "Local preview",
+      localPreview: "Draft preview",
     },
     crm: {
       mapping: "CRM mapping",
@@ -8463,7 +8463,7 @@ export const formCommandCenterCopy = {
       projectScope: "Projektfilter",
       formList: "Formularliste",
       databaseActive: "Datenbank aktiv",
-      localPreview: "Lokale Vorschau",
+      localPreview: "Entwurfsvorschau",
     },
     crm: {
       mapping: "CRM-Zuordnung",
@@ -9181,13 +9181,13 @@ export const calendarCommandCenterCopy = {
       retrySent: "Nachricht wurde erneut gesendet.",
       retryQueued: "Nachricht wurde erneut in die Warteschlange gestellt.",
       retryCatch: "Die Nachricht konnte gerade nicht erneut verarbeitet werden.",
-      localSettingsLoaded: "Lokale Meeting-Einstellungen geladen.",
+      localSettingsLoaded: "Meeting-Entwurf geladen.",
       savedSettingsLoaded: "Gespeicherte Meeting-Einstellungen geladen.",
       savingSettings: "Meeting-Einstellungen werden gespeichert.",
-      localSavedDbWaiting: (error: string) => `Lokal gespeichert. Datenbank wartet: ${error}`,
-      localSavedDbUnconfirmed: "Lokal gespeichert. Datenbank konnte noch nicht bestätigen.",
+      localSavedDbWaiting: (error: string) => `Entwurf behalten. Datenbank wartet: ${error}`,
+      localSavedDbUnconfirmed: "Entwurf behalten. Datenbank konnte noch nicht bestätigen.",
       settingsSaved: "Meeting-Einstellungen gespeichert.",
-      localSavedApiUnavailable: "Lokal gespeichert. API ist gerade nicht erreichbar.",
+      localSavedApiUnavailable: "Entwurf behalten. API ist gerade nicht erreichbar.",
       noTestEmail: "Keine Test-E-Mail-Adresse gefunden.",
       preparingTestMail: (to: string) => `Test-Mail wird für ${to} vorbereitet.`,
       testMailError: "Test-Mail konnte nicht vorbereitet werden.",
@@ -9635,13 +9635,13 @@ export const calendarCommandCenterCopy = {
       retrySent: "Message was sent again.",
       retryQueued: "Message was queued again.",
       retryCatch: "The message could not be processed again right now.",
-      localSettingsLoaded: "Local meeting settings loaded.",
+      localSettingsLoaded: "Meeting draft loaded.",
       savedSettingsLoaded: "Saved meeting settings loaded.",
       savingSettings: "Meeting settings are being saved.",
-      localSavedDbWaiting: (error: string) => `Saved locally. Database is waiting: ${error}`,
-      localSavedDbUnconfirmed: "Saved locally. Database could not confirm yet.",
+      localSavedDbWaiting: (error: string) => `Draft kept. Database is waiting: ${error}`,
+      localSavedDbUnconfirmed: "Draft kept. Database could not confirm yet.",
       settingsSaved: "Meeting settings saved.",
-      localSavedApiUnavailable: "Saved locally. API is currently unavailable.",
+      localSavedApiUnavailable: "Draft kept. API is currently unavailable.",
       noTestEmail: "No test email address found.",
       preparingTestMail: (to: string) => `Preparing test email for ${to}.`,
       testMailError: "Test email could not be prepared.",
