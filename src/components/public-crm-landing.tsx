@@ -21,7 +21,7 @@ type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
 const landingAssetPaths = {
   auditToSystem: "/landing-assets/lead-ops-process-visual-2400x1200.mp4",
   companySystemSplit: "/landing-assets/company-system-split.png",
-  heroOperatingLayer: "/landing-assets/novalure-hero-desktop.webm",
+  heroOperatingLayer: "/landing-assets/novalure-hero-alpha-2560x1440.webm",
   heroOperatingLayerMobile: "/landing-assets/novalure-hero-mobile-4x5.webm",
   leadLeakage: "/landing-assets/lead-leakage.mp4",
   lockedCrmPreview: "/landing-assets/locked-crm-preview.mp4",
