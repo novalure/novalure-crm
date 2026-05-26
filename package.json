@@ -11,6 +11,7 @@
     "test:phase1": "node --test scripts/phase1-persistence-smoke-tests.mjs",
     "test:phase2": "node --test scripts/phase2-pipeline-smoke-tests.mjs",
     "test:phase3": "node --test scripts/phase3-rbac-smoke-tests.mjs",
+    "test:phase4": "node --test scripts/phase4-validation-smoke-tests.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs"

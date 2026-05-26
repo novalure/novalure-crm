@@ -10,6 +10,13 @@ async function readJson(request: Request) {
   }
 }
 
+function getTaskWriteStatus(reason: string) {
+  if (reason.includes("permission") || reason.includes("not allowed")) return 403;
+  if (reason.includes("not found")) return 404;
+  if (reason.includes("required") || reason.includes("Invalid") || reason.includes("too long")) return 400;
+  return 503;
+}
+
 export async function POST(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "workspace:operate" });
   if (!auth.ok) return auth.response;
@@ -24,7 +31,7 @@ export async function POST(request: Request) {
   const result = await upsertTaskRecord({ session: auth.session, task });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 503 });
+    return NextResponse.json({ error: result.reason }, { status: getTaskWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ persisted: true, task: result.data });

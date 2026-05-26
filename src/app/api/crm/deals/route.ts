@@ -13,7 +13,14 @@ async function readJson(request: Request) {
 function getDealWriteStatus(reason: string) {
   if (reason.includes("permission")) return 403;
   if (reason.includes("not found")) return 404;
-  if (reason.includes("required") || reason.includes("Invalid") || reason.includes("not configured")) return 400;
+  if (
+    reason.includes("required") ||
+    reason.includes("Invalid") ||
+    reason.includes("too long") ||
+    reason.includes("greater than zero") ||
+    reason.includes("implausibly") ||
+    reason.includes("not configured")
+  ) return 400;
   return 503;
 }
 

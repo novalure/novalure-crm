@@ -309,6 +309,43 @@ const dealCloseReasonCategories: DealCloseReasonCategory[] = [
   "won",
   "other",
 ];
+const maxShortTextLength = 180;
+const maxLongTextLength = 1200;
+const maxDealValueCents = 500_000_000 * 100;
+
+function hasExplicitInput(value: unknown) {
+  return value !== undefined && value !== null && String(value).trim().length > 0;
+}
+
+function isValidEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validateTextLength(value: unknown, field: string, maxLength: number) {
+  if (!hasExplicitInput(value)) return null;
+  return String(value).trim().length <= maxLength ? null : `${field} is too long`;
+}
+
+function validateEmailInput(value: unknown) {
+  if (!hasExplicitInput(value)) return null;
+  const email = String(value).trim();
+  return isValidEmailAddress(email) ? null : "Invalid email address";
+}
+
+function validateDealValueInput(value: unknown) {
+  if (!hasExplicitInput(value)) return null;
+  const cents = toCents(value);
+  if (cents <= 0) return "Deal value must be greater than zero";
+  if (cents > maxDealValueCents) return "Deal value is implausibly high";
+  return null;
+}
+
+function validateFutureDateInput(value: unknown, field: string) {
+  if (!hasExplicitInput(value)) return null;
+  const parsed = new Date(cleanDateInput(value)).getTime();
+  if (!Number.isFinite(parsed)) return `${field} is invalid`;
+  return parsed >= Date.now() - 60_000 ? null : `${field} cannot be in the past`;
+}
 
 export async function listDashboardViews(input: {
   session: AppSession;
@@ -498,6 +535,12 @@ export async function upsertDealRecord(input: {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
+
+  const validationError =
+    validateTextLength(input.deal.name, "Deal name", maxShortTextLength) ??
+    validateTextLength(input.deal.nextAction, "Next action", maxLongTextLength) ??
+    validateDealValueInput(input.deal.value);
+  if (validationError) return { persisted: false, reason: validationError };
 
   const existing = isUuid(input.deal.id)
     ? await queryOne<DealRow>(
@@ -988,6 +1031,9 @@ export async function upsertTaskRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError = validateTextLength(input.task.title, "Task title", maxShortTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.task.id)
     ? await queryOne<TaskRow>(
         `${taskSelectSql}
@@ -1130,6 +1176,12 @@ export async function upsertLeadRecord(input: {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
+
+  const validationError =
+    validateTextLength(input.lead.intent, "Lead intent", maxLongTextLength) ??
+    validateTextLength(input.lead.nextAction, "Lead next action", maxLongTextLength) ??
+    validateFutureDateInput(input.lead.nextContactAt, "Next contact date");
+  if (validationError) return { persisted: false, reason: validationError };
 
   const existing = isUuid(input.lead.id)
     ? await queryOne<LeadRow>(
@@ -1415,6 +1467,12 @@ export async function upsertContactRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError =
+    validateEmailInput(input.contact.email) ??
+    validateTextLength(input.contact.name, "Contact name", maxShortTextLength) ??
+    validateTextLength(input.contact.intent, "Contact intent", maxLongTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.contact.id)
     ? await queryOne<ContactRow>(
         `${contactSelectSql}
@@ -1424,6 +1482,26 @@ export async function upsertContactRecord(input: {
         [input.contact.id, input.session.workspaceId],
       )
     : null;
+  const normalizedEmail = cleanString(input.contact.email);
+  if (normalizedEmail) {
+    const duplicate = await queryOne<IdRow>(
+      `
+        select id
+        from contacts
+        where workspace_id = $1
+          and archived_at is null
+          and lower(email) = lower($2)
+          and ($3::uuid is null or id <> $3::uuid)
+        limit 1
+      `,
+      [input.session.workspaceId, normalizedEmail, existing?.id ?? null],
+    );
+
+    if (duplicate) {
+      return { persisted: false, reason: "Duplicate contact email" };
+    }
+  }
+
   const resolvedProject = await resolveContactProjectId({
     existingProjectId: existing?.projectId ?? null,
     requestedProjectId: input.contact.projectId,
