@@ -4058,6 +4058,7 @@ export function CrmWorkspace({
                 deals={visibleDeals}
                 language={language}
                 leads={visibleLeads}
+                onDealsChanged={refreshCoreData}
                 organizations={visibleOrganizations}
                 pipeline={visiblePipeline}
                 projectPipelinePermissions={projectPipelinePermissions.filter(
