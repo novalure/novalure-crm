@@ -21,8 +21,7 @@ type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
 const landingAssetPaths = {
   auditToSystem: "/landing-assets/lead-ops-process-visual-2400x1200.mp4",
   companySystemSplit: "/landing-assets/company-system-split.png",
-  heroOperatingLayer: "/landing-assets/novalure-hero-alpha-2560x1440.webm",
-  heroOperatingLayerMobile: "/landing-assets/novalure-hero-mobile-4x5.webm",
+  heroOperatingLayer: "/landing-assets/hero-operating-layer.mp4",
   leadLeakage: "/landing-assets/lead-leakage.mp4",
   lockedCrmPreview: "/landing-assets/locked-crm-preview.mp4",
 } as const;
@@ -185,11 +184,7 @@ function ReducedMotionFallback({ visual }: { visual: VisualCopy }) {
 function HeroOperatingLayer({ visual }: { visual: VisualCopy }) {
   return (
     <VisualShell className="aspect-[4/5] min-h-0 sm:aspect-[16/10] sm:min-h-[320px] md:min-h-[440px]" visual={visual}>
-      <VideoAsset
-        mobileSrc={landingAssetPaths.heroOperatingLayerMobile}
-        priority
-        src={landingAssetPaths.heroOperatingLayer}
-      />
+      <VideoAsset priority src={landingAssetPaths.heroOperatingLayer} />
       <div className="absolute inset-0 bg-[#050607]/15" />
       <ReducedMotionFallback visual={visual} />
     </VisualShell>
