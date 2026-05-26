@@ -34,6 +34,7 @@ type LeadInboxProps = {
   conversations: Conversation[];
   leads: Lead[];
   language: LanguageCode;
+  onLeadsChanged?: () => Promise<boolean | void> | boolean | void;
   projects: Project[];
   users: WorkspaceUser[];
 };
@@ -187,6 +188,7 @@ export function LeadInbox({
   conversations = [],
   leads = [],
   language,
+  onLeadsChanged,
   projects = [],
   users = [],
 }: LeadInboxProps) {
@@ -213,6 +215,7 @@ export function LeadInbox({
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [createdTaskLeadIds, setCreatedTaskLeadIds] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [leadSaving, setLeadSaving] = useState(false);
 
   const effectiveLeads = useMemo(
     () => [
@@ -363,6 +366,23 @@ export function LeadInbox({
     }));
   };
 
+  const clearPersistedLeadLocalState = (leadId: string) => {
+    setLeadOverrides((current) => {
+      if (!current[leadId]) return current;
+      const next = { ...current };
+      delete next[leadId];
+      return next;
+    });
+    setSessionLeads((current) => current.filter((lead) => lead.id !== leadId));
+  };
+
+  const refreshPersistedLeads = async (leadId: string) => {
+    const refreshed = await onLeadsChanged?.();
+    if (refreshed !== false) {
+      clearPersistedLeadLocalState(leadId);
+    }
+  };
+
   const persistLead = async (lead: Partial<LocalLead>) => {
     const response = await fetch("/api/crm/leads", {
       body: JSON.stringify({ lead }),
@@ -375,6 +395,9 @@ export function LeadInbox({
     }
 
     const payload = await response.json() as { lead?: Lead };
+    if (!payload.lead) {
+      throw new Error(text.saveError);
+    }
     return payload.lead;
   };
 
@@ -393,6 +416,7 @@ export function LeadInbox({
     addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
     try {
       await persistLead({ ...selectedLead, ...patch });
+      await refreshPersistedLeads(selectedLead.id);
       setNotice(text.changed);
     } catch {
       setNotice(text.saveError);
@@ -411,6 +435,7 @@ export function LeadInbox({
     addActivity(leadId, text.accepted, text.acceptedDetail, "success");
     try {
       await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      await refreshPersistedLeads(leadId);
       setNotice(text.accepted);
     } catch {
       setNotice(text.saveError);
@@ -426,6 +451,7 @@ export function LeadInbox({
     addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
     try {
       await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      await refreshPersistedLeads(leadId);
       setNotice(nextStatus === "Archiviert" ? text.archivedNow : text.restored);
     } catch {
       setNotice(text.saveError);
@@ -537,6 +563,8 @@ export function LeadInbox({
   };
 
   const createLead = async (createTaskAfterSave = false) => {
+    if (leadSaving) return;
+
     setFormError("");
 
     if (!leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
@@ -544,6 +572,7 @@ export function LeadInbox({
       return;
     }
 
+    setLeadSaving(true);
     const contact = contacts.find((item) => item.id === leadDraft.contactId);
     const now = new Date();
     const nextLead: LocalLead = {
@@ -613,6 +642,7 @@ export function LeadInbox({
       setLeadDraft(getInitialDraft(leads, contacts, projects));
       addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
       setNotice(text.newLeadSaved);
+      await refreshPersistedLeads(savedLead.id);
       if (createTaskAfterSave) {
         await fetch("/api/crm/recommendation-runtime", {
           body: JSON.stringify({
@@ -637,6 +667,8 @@ export function LeadInbox({
       }
     } catch {
       setFormError(text.saveError);
+    } finally {
+      setLeadSaving(false);
     }
   };
 
@@ -1010,7 +1042,8 @@ export function LeadInbox({
               {formError ? <p className="mt-3 text-sm font-semibold text-red-700">{formError}</p> : null}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
-                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+                  disabled={leadSaving}
                   onClick={() => {
                     void createLead();
                   }}
@@ -1019,7 +1052,8 @@ export function LeadInbox({
                   {text.saveLead}
                 </button>
                 <button
-                  className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100"
+                  className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
+                  disabled={leadSaving}
                   onClick={() => {
                     void createLead(true);
                   }}

@@ -14,6 +14,8 @@ function getWriteErrorStatus(reason: string) {
   if (
     reason.includes("required") ||
     reason.includes("Invalid") ||
+    reason.includes("Duplicate") ||
+    reason.includes("too long") ||
     reason.includes("Valid project") ||
     reason.includes("Valid organization")
   ) {

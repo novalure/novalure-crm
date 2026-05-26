@@ -1510,8 +1510,8 @@ function CommunicationCommandCenter({
   );
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{projectLabel}</p>
         <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
         <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
@@ -1530,7 +1530,7 @@ function CommunicationCommandCenter({
         ))}
       </div>
 
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         {sortedConversations.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-[860px] w-full text-left text-sm">
@@ -1634,27 +1634,27 @@ function SettingsCommandCenter({
   };
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{context.workspaceName}</p>
         <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
         <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
       </article>
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <h4 className="text-lg font-semibold text-slate-950">{panelCopy.adminAreasTitle}</h4>
         <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.adminAreasDescription}</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {adminAreas.map((area) => (
-            <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-slate-900" key={area}>
+            <div className="min-w-0 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-slate-900" key={area}>
               {area}
             </div>
           ))}
         </div>
       </article>
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <h4 className="text-lg font-semibold text-slate-950">{panelCopy.rolesTitle}</h4>
         <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.rolesDescription}</p>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 max-w-full overflow-x-auto">
           <table className="min-w-[760px] text-left text-sm">
             <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
               <tr>
@@ -1679,7 +1679,7 @@ function SettingsCommandCenter({
           </table>
         </div>
       </article>
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <h4 className="text-lg font-semibold text-slate-950">{panelCopy.fieldStructureTitle}</h4>
@@ -1705,8 +1705,8 @@ function SettingsCommandCenter({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-          <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+        <div className="mt-5 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <div className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 p-4">
             <h5 className="text-sm font-semibold text-slate-950">{panelCopy.fieldGroupsTitle}</h5>
             <div className="mt-3 flex flex-wrap gap-2">
               {panelCopy.fieldGroups.map((group) => (
@@ -1717,9 +1717,9 @@ function SettingsCommandCenter({
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
             {defaultFieldSections.map(({ fields, title }) => (
-              <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={title}>
+              <div className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 p-4" key={title}>
                 <h5 className="text-sm font-semibold text-slate-950">{title}</h5>
                 <div className="mt-3 grid gap-2">
                   {fields.slice(0, 8).map((field) => (
@@ -1736,19 +1736,19 @@ function SettingsCommandCenter({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.85fr]">
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
+        <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
+          <div className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
             <h5 className="text-sm font-semibold text-slate-950">{panelCopy.roleRecommendationsTitle}</h5>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {panelCopy.roleFieldRecommendations.map((item) => (
-                <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={item.role}>
+                <div className="min-w-0 rounded-md border border-stone-200 bg-stone-50 p-3" key={item.role}>
                   <p className="text-sm font-semibold text-slate-950">{item.role}</p>
                   <p className="mt-2 break-words text-xs text-stone-600">{item.fields.join(" · ")}</p>
                 </div>
               ))}
             </div>
           </div>
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
+          <div className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
             <h5 className="text-sm font-semibold text-slate-950">{panelCopy.customFieldsTitle}</h5>
             <div className="mt-3 flex flex-wrap gap-2">
               {customFields.length ? customFields.map((field) => (
@@ -1767,7 +1767,7 @@ function SettingsCommandCenter({
           </div>
         </div>
       </article>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
           [panelCopy.workspaceSetup, copy.workspaceMode.customerTypeLabels[context.customerType]],
           [panelCopy.calendarProvider, copy.workspaceMode.calendarProviderLabels[context.activeCalendarProvider]],
@@ -1775,16 +1775,16 @@ function SettingsCommandCenter({
           [panelCopy.integrations, context.connectedCalendarProviders.length ? context.connectedCalendarProviders.join(", ") : panelCopy.notConnected],
           [panelCopy.operatingModel, copy.workspaceMode.operatingModelLabels[context.operatingModel]],
         ].map(([label, value]) => (
-          <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
+          <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4" key={label}>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
             <p className="mt-2 break-words text-sm font-semibold text-slate-950">{value}</p>
           </div>
         ))}
       </div>
-      <details className="rounded-lg border border-stone-200 bg-white p-5">
+      <details className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <summary className="cursor-pointer text-lg font-semibold text-slate-950">{panelCopy.technicalDetails}</summary>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+        <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2">
+          <div className="min-w-0 rounded-md border border-stone-200 bg-stone-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{panelCopy.databaseStatus}</p>
             <p className="mt-1 break-words text-sm font-semibold text-slate-950">{dataSource}</p>
           </div>
@@ -2750,7 +2750,8 @@ export function CrmWorkspace({
   const [importNotice, setImportNotice] = useState("");
   const [importSource, setImportSource] = useState<ImportSource>("hubspot");
   const [projectNotice, setProjectNotice] = useState("");
-  const [sessionProjects, setSessionProjects] = useState<Project[]>([]);
+  const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
+  const [isProjectSaving, setIsProjectSaving] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(defaultLanguage);
   const [languageHydrated, setLanguageHydrated] = useState(false);
   const copy = getDashboardCopy(language);
@@ -2868,7 +2869,6 @@ export function CrmWorkspace({
     const nextActiveWorkspace = nextWorkspace ?? { ...activeWorkspace, id: workspaceId };
     setWorkspaceSwitchState("loading");
     setActiveProjectId("all");
-    setSessionProjects([]);
     setActiveWorkspace(nextActiveWorkspace);
     setWorkspaceSetup({
       activeCalendarProvider: nextActiveWorkspace.activeCalendarProvider ?? "none",
@@ -2914,7 +2914,7 @@ export function CrmWorkspace({
   const propertyBuildingRecords = liveCoreData.propertyBuildings;
   const propertyUnitRecords = liveCoreData.propertyUnits;
   const propertyReservationRecords = liveCoreData.propertyReservations;
-  const allProjects = [...sessionProjects, ...projectRecords];
+  const allProjects = projectRecords;
   const workspaceContext = createWorkspaceProductContext({
     activeCalendarProvider: workspaceSetup.activeCalendarProvider ?? activeWorkspace.activeCalendarProvider,
     customerType: workspaceSetup.customerType ?? activeWorkspace.customerType,
@@ -3159,6 +3159,7 @@ export function CrmWorkspace({
 
   function openProjectWizard() {
     setProjectNotice("");
+    setProjectNoticeTone("success");
     setActionModal("project");
   }
 
@@ -3169,24 +3170,19 @@ export function CrmWorkspace({
   }
 
   async function handlePrepareProject() {
+    if (isProjectSaving) return;
+
     if (!canPrepareProject) {
+      setProjectNoticeTone("error");
       setProjectNotice(copy.dialogs.project.requiredNotice);
       return;
     }
 
-    const projectSlug = projectDraft.name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    const nextProject: Project = {
+    const nextProject: Partial<Project> = {
       customerType: projectDraft.customerType,
       defaultOperatingModel: projectDraft.operatingModel,
       defaultPipelineId: projectDraft.pipelineId,
-      id: `project_session_${sessionProjects.length + 1}_${projectSlug || "projekt"}`,
-      leads: 0,
       name: projectDraft.name.trim(),
-      revenue: "0",
       setupDefaults: {
         calendarProvider: projectDraft.calendarProvider,
         meetingProvider: projectDraft.meetingProvider,
@@ -3197,6 +3193,9 @@ export function CrmWorkspace({
       workspaceId: activeWorkspace.id,
     };
 
+    setIsProjectSaving(true);
+    setProjectNotice("");
+    let saved = false;
     try {
       const response = await fetch("/api/crm/projects", {
         body: JSON.stringify({
@@ -3214,19 +3213,38 @@ export function CrmWorkspace({
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const payload = response.ok ? await response.json() as { project?: Project } : null;
-      const persistedProject = payload?.project ?? nextProject;
+      const payload = await response.json().catch(() => null) as { error?: string; project?: Project } | null;
 
-      setSessionProjects((current) => [persistedProject, ...current.filter((project) => project.id !== persistedProject.id)]);
+      if (!response.ok || !payload?.project) {
+        throw new Error(payload?.error ?? copy.dialogs.project.saveError);
+      }
+
+      const persistedProject = payload.project;
+
+      setLiveCoreData((current) => ({
+        ...current,
+        projects: [
+          persistedProject,
+          ...current.projects.filter((project) => project.id !== persistedProject.id),
+        ],
+      }));
+      setActiveWorkspace((current) => ({
+        ...current,
+        activeProjects: Math.max(current.activeProjects ?? 0, projectRecords.length + 1),
+      }));
       setActiveProjectId(persistedProject.id);
+      setProjectNoticeTone("success");
       setProjectNotice(copy.dialogs.project.preparedNotice(persistedProject.name));
-      void refreshCoreData();
-    } catch {
-      setSessionProjects((current) => [nextProject, ...current]);
-      setActiveProjectId(nextProject.id);
-      setProjectNotice(copy.dialogs.project.preparedNotice(nextProject.name));
+      setProjectDraft((current) => ({ ...current, name: "", notes: "" }));
+      await refreshCoreData();
+      saved = true;
+    } catch (error) {
+      setProjectNoticeTone("error");
+      setProjectNotice(error instanceof Error ? error.message : copy.dialogs.project.saveError);
+    } finally {
+      setIsProjectSaving(false);
     }
-    handleSectionChange("dashboard");
+    if (saved) handleSectionChange("dashboard");
   }
 
   useEffect(() => {
@@ -4004,6 +4022,7 @@ export function CrmWorkspace({
                 conversations={visibleConversations}
                 leads={activeLeadInboxLeads}
                 language={language}
+                onLeadsChanged={refreshCoreData}
                 projects={allProjects}
                 users={users}
               />
@@ -4039,6 +4058,7 @@ export function CrmWorkspace({
                 deals={visibleDeals}
                 language={language}
                 leads={visibleLeads}
+                onDealsChanged={refreshCoreData}
                 organizations={visibleOrganizations}
                 pipeline={visiblePipeline}
                 projectPipelinePermissions={projectPipelinePermissions.filter(
@@ -4393,11 +4413,11 @@ export function CrmWorkspace({
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-                disabled={!canPrepareProject}
+                disabled={!canPrepareProject || isProjectSaving}
                 onClick={handlePrepareProject}
                 type="button"
               >
-                {copy.dialogs.project.prepare}
+                {isProjectSaving ? copy.dialogs.project.saving : copy.dialogs.project.prepare}
               </button>
             </>
           }
@@ -4666,7 +4686,11 @@ export function CrmWorkspace({
               </div>
 
               {projectNotice ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+                <div className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                  projectNoticeTone === "error"
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-900"
+                }`}>
                   {projectNotice}
                 </div>
               ) : null}

@@ -59,6 +59,7 @@ type LiveBotConversation = {
 type BotRunSummary = {
   approvalId?: string | null;
   documentRequested?: boolean;
+  humanHandoffRequired?: boolean;
   humanApprovalRequired?: boolean;
   meetingRequested?: boolean;
   nextAction?: string;
@@ -175,6 +176,19 @@ type BotDocumentsApiResponse = {
 
 type BotEvaluationsApiResponse = {
   runs?: BotEvaluationRun[];
+  source?: string;
+};
+
+type KnowledgeApiResponse = {
+  sources?: Array<{
+    chunkCount?: number;
+    embeddedChunkCount?: number;
+    id: string;
+    itemCount?: number;
+    projectId?: string | null;
+    status: string;
+    title: string;
+  }>;
   source?: string;
 };
 
@@ -312,6 +326,25 @@ function getNumberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function knowledgeItemFromApi(source: NonNullable<KnowledgeApiResponse["sources"]>[number]): KnowledgeItem {
+  const chunks = Math.max(1, Number(source.chunkCount ?? source.itemCount ?? source.embeddedChunkCount ?? 1));
+  const embedded = Math.max(0, Number(source.embeddedChunkCount ?? 0));
+  const normalizedStatus = source.status.trim().toLowerCase();
+  const approved =
+    embedded > 0 ||
+    ["approved", "synced", "vector_ready", "vector bereit"].includes(normalizedStatus);
+
+  return {
+    id: source.id,
+    workspaceId: "",
+    projectId: source.projectId ?? "",
+    name: source.title,
+    items: chunks,
+    coverage: `${Math.min(100, Math.round((embedded / chunks) * 100))}%`,
+    status: approved ? "approved" : "needs-review",
+  };
+}
+
 function getDocumentDeliveryError(documentSend: BotActionDocumentSend) {
   if (!isRecord(documentSend.metadata) || !isRecord(documentSend.metadata.delivery)) return null;
 
@@ -397,8 +430,8 @@ function ConversationActionSummary({
       <div className="min-w-0 rounded-md bg-stone-50 p-3">
         <p className="break-words text-xs font-semibold uppercase leading-5 tracking-[0.08em] text-stone-500">{text.requiresApproval}</p>
         <p className="mt-1">
-          <Pill tone={summary.humanApprovalRequired ? "rose" : "green"}>
-            {summary.humanApprovalRequired ? text.humanApproval : text.automatic}
+          <Pill tone={summary.humanApprovalRequired || summary.humanHandoffRequired ? "rose" : "green"}>
+            {summary.humanApprovalRequired || summary.humanHandoffRequired ? text.humanApproval : text.automatic}
           </Pill>
         </p>
       </div>
@@ -442,16 +475,18 @@ export function BotCommandCenter({
   const [meetingBookings, setMeetingBookings] = useState<BotActionMeetingBooking[]>([]);
   const [liveConversations, setLiveConversations] = useState<LiveBotConversation[]>([]);
   const [liveWebhookEvents, setLiveWebhookEvents] = useState<ChannelApiResponse["recentWebhookEvents"]>([]);
+  const [liveKnowledgeItems, setLiveKnowledgeItems] = useState<KnowledgeItem[]>([]);
   const [autonomyControls, setAutonomyControls] = useState<ChannelApiResponse["autonomyControls"] | null>(null);
   const [policyRules, setPolicyRules] = useState<NonNullable<ChannelApiResponse["policyRules"]>>([]);
   const [liveStatus, setLiveStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showAdvancedTechnology, setShowAdvancedTechnology] = useState(false);
+  const displayedKnowledgeItems = liveKnowledgeItems.length ? liveKnowledgeItems : knowledgeItems;
   const approvalTools = tools.filter((tool) => tool.requiresHumanApproval);
   const allChannels = bots.flatMap((bot) => bot.channels.map((channel) => ({ bot, channel })));
   const connectedChannels = allChannels.filter(({ channel }) => channel.active || channel.setupStatus === "connected");
   const setupItems = bots.flatMap((bot) => bot.setupChecklist ?? []);
   const doneSetupItems = setupItems.filter((item) => item.done);
-  const approvedKnowledgeItems = knowledgeItems.filter((item) => item.status === "approved");
+  const approvedKnowledgeItems = displayedKnowledgeItems.filter((item) => item.status === "approved");
   const actionPolicies = bots.flatMap((bot) =>
     (bot.actionPolicies ?? []).map((policy) => ({
       ...policy,
@@ -616,12 +651,13 @@ export function BotCommandCenter({
         setLiveStatus("loading");
         setApprovalLoadStatus("loading");
         setBotActionStatus("loading");
-        const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse] = await Promise.all([
+        const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
           fetch("/api/bots/chat?limit=12"),
           fetch("/api/bots/channels"),
           fetch("/api/approvals?status=pending"),
           fetch("/api/bots/actions"),
           fetch("/api/bots/documents"),
+          fetch("/api/bots/knowledge?limit=50"),
         ]);
 
         if (!chatResponse.ok || !channelResponse.ok || !approvalResponse.ok || !actionResponse.ok || !documentResponse.ok) {
@@ -633,6 +669,7 @@ export function BotCommandCenter({
         const approvalData = (await approvalResponse.json()) as ApprovalsApiResponse;
         const actionData = (await actionResponse.json()) as BotActionsApiResponse;
         const documentData = (await documentResponse.json()) as BotDocumentsApiResponse;
+        const knowledgeData = knowledgeResponse.ok ? (await knowledgeResponse.json()) as KnowledgeApiResponse : null;
 
         if (cancelled) return;
 
@@ -665,6 +702,9 @@ export function BotCommandCenter({
         setDocumentQuota(documentData.quota ?? null);
         setDocumentSends(actionData.documentSends ?? []);
         setMeetingBookings(actionData.meetingBookings ?? []);
+        if (knowledgeData?.sources?.length) {
+          setLiveKnowledgeItems(knowledgeData.sources.map(knowledgeItemFromApi));
+        }
         setApprovalLoadStatus("ready");
         setBotActionStatus("ready");
         setLiveStatus("ready");
@@ -1441,7 +1481,7 @@ export function BotCommandCenter({
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.knowledgeSources}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{knowledgeItems.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{displayedKnowledgeItems.length}</p>
               </div>
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.approvedKnowledge}</p>
@@ -1455,8 +1495,8 @@ export function BotCommandCenter({
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              {knowledgeItems.length ? (
-                knowledgeItems.map((item) => (
+              {displayedKnowledgeItems.length ? (
+                displayedKnowledgeItems.map((item) => (
                   <div className="flex items-center justify-between gap-3 rounded-md border border-stone-200 p-3" key={item.id}>
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-slate-950">{item.name}</p>

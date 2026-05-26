@@ -1655,6 +1655,34 @@ export async function linkBotConversationToCrmEntities(input: {
   return row?.id ?? null;
 }
 
+export async function updateBotConversationStatus(input: {
+  session: AppSession;
+  conversationId?: string | null;
+  status: "open" | "handoff" | "resolved";
+  metadata?: unknown;
+}) {
+  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_conversations
+      set status = $3,
+          metadata = metadata || $4::jsonb,
+          updated_at = now()
+      where id = $1 and workspace_id = $2
+      returning id
+    `,
+    [
+      input.conversationId,
+      input.session.workspaceId,
+      input.status,
+      JSON.stringify(input.metadata ?? {}),
+    ],
+  );
+
+  return row?.id ?? null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
 }

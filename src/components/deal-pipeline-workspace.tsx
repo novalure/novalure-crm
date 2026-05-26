@@ -51,6 +51,7 @@ type DealPipelineWorkspaceProps = {
   sellerListings: SellerListing[];
   tasks: Task[];
   users: WorkspaceUser[];
+  onDealsChanged?: () => Promise<boolean | void> | boolean | void;
 };
 
 type DealPatch = Partial<
@@ -132,9 +133,6 @@ const CLOSE_REASON_OPTIONS: DealCloseReasonCategory[] = [
 const PERIOD_OPTIONS: PeriodFilter[] = ["all", "today", "week", "month", "quarter"];
 const PRIORITY_OPTIONS: Array<Task["priority"]> = ["Hoch", "Mittel", "Normal"];
 
-const DEAL_PATCH_STORAGE_KEY = "novalure-pipeline-deal-patches-v2";
-const MANUAL_DEAL_STORAGE_KEY = "novalure-pipeline-manual-deals-v2";
-const STAGE_HISTORY_STORAGE_KEY = "novalure-pipeline-stage-history-v1";
 const NOW = new Date();
 const TODAY_START = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).getTime();
 
@@ -237,19 +235,6 @@ function getStageConfigs(input: {
   }
 
   return getFallbackStageConfigs();
-}
-
-function loadStoredRecord<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  try {
-    const stored = window.localStorage.getItem(key);
-    return stored ? (JSON.parse(stored) as T) : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 function normalizeDealStage(stage: string, orderedStages: DealStage[] = ORDERED_STAGE_TITLES): DealStage {
@@ -482,6 +467,7 @@ export function DealPipelineWorkspace({
   language,
   leads,
   organizations,
+  onDealsChanged,
   pipeline,
   projectPipelinePermissions,
   crmPipelines,
@@ -502,16 +488,10 @@ export function DealPipelineWorkspace({
   };
   const locale = getLocale(language);
   const initialContact = contacts[0];
-  const [dealPatches, setDealPatches] = useState<Record<string, DealPatch>>(() =>
-    loadStoredRecord<Record<string, DealPatch>>(DEAL_PATCH_STORAGE_KEY, {}),
-  );
+  const [dealPatches, setDealPatches] = useState<Record<string, DealPatch>>({});
   const [persistedDealOverrides, setPersistedDealOverrides] = useState<Record<string, Deal>>({});
-  const [manualDeals, setManualDeals] = useState<Deal[]>(() =>
-    loadStoredRecord<Deal[]>(MANUAL_DEAL_STORAGE_KEY, []),
-  );
-  const [stageHistory, setStageHistory] = useState<Record<string, StageHistoryEntry[]>>(() =>
-    loadStoredRecord<Record<string, StageHistoryEntry[]>>(STAGE_HISTORY_STORAGE_KEY, {}),
-  );
+  const [manualDeals, setManualDeals] = useState<Deal[]>([]);
+  const [stageHistory, setStageHistory] = useState<Record<string, StageHistoryEntry[]>>({});
   const [selectedDealId, setSelectedDealId] = useState(deals[0]?.id ?? "");
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -530,6 +510,7 @@ export function DealPipelineWorkspace({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [savingDealId, setSavingDealId] = useState("");
+  const [creatingDeal, setCreatingDeal] = useState(false);
   const [newDeal, setNewDeal] = useState({
     contactId: initialContact?.id ?? "",
     expectedCloseDate: "2026-06-30",
@@ -575,18 +556,6 @@ export function DealPipelineWorkspace({
     [projectFilter, projectPipelinePermissions],
   );
   const workspaceQuery = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
-
-  useEffect(() => {
-    window.localStorage.setItem(DEAL_PATCH_STORAGE_KEY, JSON.stringify(dealPatches));
-  }, [dealPatches]);
-
-  useEffect(() => {
-    window.localStorage.setItem(MANUAL_DEAL_STORAGE_KEY, JSON.stringify(manualDeals));
-  }, [manualDeals]);
-
-  useEffect(() => {
-    window.localStorage.setItem(STAGE_HISTORY_STORAGE_KEY, JSON.stringify(stageHistory));
-  }, [stageHistory]);
 
   useEffect(() => {
     if (!selectedDealId) return;
@@ -926,6 +895,31 @@ export function DealPipelineWorkspace({
     }
   };
 
+  const refreshDealsFromSource = async () => {
+    if (!onDealsChanged) {
+      return false;
+    }
+
+    try {
+      const refreshed = await onDealsChanged();
+      return refreshed !== false;
+    } catch {
+      return false;
+    }
+  };
+
+  const removeServerSyncedDealOverlay = (dealId: string, previousDealId = dealId) => {
+    setPersistedDealOverrides((current) => {
+      if (!current[dealId] && !current[previousDealId]) return current;
+
+      const next = { ...current };
+      delete next[dealId];
+      delete next[previousDealId];
+      return next;
+    });
+    setManualDeals((current) => current.filter((item) => item.id !== dealId && item.id !== previousDealId));
+  };
+
   const getObjectLabel = (item: DealView | undefined) => {
     if (!item) {
       return text.noObject;
@@ -1082,6 +1076,11 @@ export function DealPipelineWorkspace({
       });
       setSelectedDealId(persistedDeal.id);
     }
+
+    const refreshed = await refreshDealsFromSource();
+    if (refreshed) {
+      removeServerSyncedDealOverlay(persistedDeal.id, deal.id);
+    }
   };
 
   const requestStageChange = (deal: Deal, targetStage: DealStage) => {
@@ -1144,11 +1143,17 @@ export function DealPipelineWorkspace({
   };
 
   const createDeal = async () => {
+    if (creatingDeal) {
+      return;
+    }
+
     const contact = contacts.find((item) => item.id === createContactId);
     if (!contact) {
       return;
     }
 
+    setCreatingDeal(true);
+    setSavedMessage("");
     const project = projects.find((item) => item.id === contact.projectId);
     const now = new Date();
     const probability = Number(newDeal.probability);
@@ -1170,29 +1175,45 @@ export function DealPipelineWorkspace({
       nextAction: contact.intent || text.defaultNextAction,
     };
 
-    const persistedDeal = await persistDeal(deal);
-    const nextDeal = persistedDeal ?? deal;
+    try {
+      const persistedDeal = await persistDeal(deal);
+      if (!persistedDeal) {
+        setSavedMessage(text.createFailed);
+        return;
+      }
 
-    setManualDeals((current) => [nextDeal, ...current.filter((item) => item.id !== nextDeal.id)]);
-    setSelectedDealId(nextDeal.id);
-    setStageFilter("all");
-    setRiskFilter("all");
-    setOwnerFilter("all");
-    setProjectFilter("all");
-    setLeadTypeFilter("all");
-    setSourceFilter("all");
-    setPriorityFilter("all");
-    setSearchTerm("");
-    setIsCreateOpen(false);
-    setSavedMessage(text.createdDeal(project?.name ?? contact.project));
+      setManualDeals((current) => [persistedDeal, ...current.filter((item) => item.id !== persistedDeal.id)]);
+      setSelectedDealId(persistedDeal.id);
+      setStageFilter("all");
+      setRiskFilter("all");
+      setOwnerFilter("all");
+      setProjectFilter("all");
+      setLeadTypeFilter("all");
+      setSourceFilter("all");
+      setPriorityFilter("all");
+      setSearchTerm("");
+      setNewDeal((current) => ({
+        ...current,
+        name: "",
+        probability: 50,
+        stage: firstWorkStage,
+        value: "250.000",
+      }));
+      setIsCreateOpen(false);
+      setSavedMessage(text.createdDeal(project?.name ?? contact.project));
+
+      const refreshed = await refreshDealsFromSource();
+      if (refreshed) {
+        removeServerSyncedDealOverlay(persistedDeal.id);
+      }
+    } finally {
+      setCreatingDeal(false);
+    }
   };
 
-  const resetLocalState = () => {
+  const discardDraftChanges = () => {
     setDealPatches({});
-    setManualDeals([]);
-    setStageHistory({});
-    setSelectedDealId(deals[0]?.id ?? "");
-    setSavedMessage(text.localReset);
+    setSavedMessage(text.draftDiscarded);
   };
 
   const clearQuickFilters = () => {
@@ -1298,9 +1319,9 @@ export function DealPipelineWorkspace({
   };
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-4 md:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+        <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               {projectLabel}
@@ -1308,16 +1329,17 @@ export function DealPipelineWorkspace({
             <h3 className="mt-1 text-2xl font-semibold">{text.title}</h3>
             <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">{text.description}</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:justify-end">
             <button
-              className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-              onClick={resetLocalState}
+              className="w-full rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 sm:w-auto"
+              disabled={Object.keys(dealPatches).length === 0}
+              onClick={discardDraftChanges}
               type="button"
             >
-              {text.reset}
+              {text.discardDraft}
             </button>
             <button
-              className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
               onClick={() => setIsCreateOpen((current) => !current)}
               type="button"
             >
@@ -1427,18 +1449,18 @@ export function DealPipelineWorkspace({
               </label>
             </div>
             <button
-              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300"
-              disabled={contacts.length === 0}
+              className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
+              disabled={contacts.length === 0 || creatingDeal}
               onClick={() => void createDeal()}
               type="button"
             >
-              {text.create}
+              {creatingDeal ? text.creating : text.create}
             </button>
           </div>
         ) : null}
       </article>
 
-      <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
             {text.search}
@@ -1531,15 +1553,15 @@ export function DealPipelineWorkspace({
               ))}
             </select>
           </label>
-          <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100" onClick={clearQuickFilters} type="button">
+          <button className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100 sm:w-auto" onClick={clearQuickFilters} type="button">
             {text.clearQuickFilters}
           </button>
         </div>
       </article>
 
-      <section className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="grid gap-4">
-          <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 gap-4">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-950">{text.endStatus}</h4>
@@ -1547,7 +1569,7 @@ export function DealPipelineWorkspace({
               </div>
               <p className="text-sm font-semibold text-stone-500">{text.dragHint}</p>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 max-w-full overflow-x-auto">
               <div
                 className="grid min-w-[720px] gap-2"
                 style={{ gridTemplateColumns: `repeat(${Math.max(endStageTitles.length, 1)}, minmax(220px, 1fr))` }}
@@ -1592,14 +1614,14 @@ export function DealPipelineWorkspace({
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-3">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-3">
             <div className="mb-3 flex flex-col gap-1 px-1 md:flex-row md:items-end md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-950">{text.workBoard}</h4>
                 <p className="text-sm text-stone-500">{text.dragHint}</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <div
                 className="grid gap-2"
                 style={{
@@ -1685,7 +1707,7 @@ export function DealPipelineWorkspace({
           </article>
         </div>
 
-        <aside className="rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+        <aside className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4 md:p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
             {text.selectedDeal}
           </p>
@@ -1826,7 +1848,7 @@ export function DealPipelineWorkspace({
                 onClick={() => {
                   if (!selectedDeal) return;
                   setSavingDealId(selectedDeal.id);
-                  void persistDeal(selectedDeal).then((persistedDeal) => {
+                  void persistDeal(selectedDeal).then(async (persistedDeal) => {
                     if (!persistedDeal) {
                       setSavedMessage(text.saveFailed);
                       return;
@@ -1844,6 +1866,10 @@ export function DealPipelineWorkspace({
                       setSelectedDealId(persistedDeal.id);
                     }
                     setSavedMessage(text.saved);
+                    const refreshed = await refreshDealsFromSource();
+                    if (refreshed) {
+                      removeServerSyncedDealOverlay(persistedDeal.id, selectedDeal.id);
+                    }
                   }).finally(() => {
                     setSavingDealId("");
                   });
@@ -1930,8 +1956,8 @@ export function DealPipelineWorkspace({
         </aside>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-        <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+        <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.fieldMapping}</h4>
@@ -1943,7 +1969,7 @@ export function DealPipelineWorkspace({
               {text.importReady}
             </span>
           </div>
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 max-w-full overflow-x-auto">
             <table className="w-full min-w-[680px] border-collapse text-left text-sm">
               <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
                 <tr>
@@ -1969,7 +1995,7 @@ export function DealPipelineWorkspace({
           </div>
         </article>
 
-        <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
+        <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
           <h4 className="text-lg font-semibold">{text.pipelineSetup}</h4>
           <p className="mt-2 break-words text-sm text-slate-300">{text.setupDescription}</p>
           <p className="mt-2 break-words text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">

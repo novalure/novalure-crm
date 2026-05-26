@@ -153,6 +153,7 @@ type TaskRow = {
   due: string | Date | null;
   id: string;
   leadId: string | null;
+  ownerUserId: string | null;
   priority: Task["priority"];
   project: string | null;
   projectId: string | null;
@@ -195,6 +196,82 @@ export function normalizeWriteProjectId(value: unknown) {
   return typeof value === "string" && isUuid(value) ? value : null;
 }
 
+function canManageWorkspaceRecords(session: AppSession) {
+  if (session.role === "owner" || session.role === "admin") return true;
+
+  return [
+    "platform_admin",
+    "novalure_onboarding",
+    "novalure_customer_success",
+    "novalure_operator",
+    "customer_owner",
+    "workspace_admin",
+    "team_member",
+  ].includes(session.productRole);
+}
+
+function isOwnRecordOnlySession(session: AppSession) {
+  return session.productRole === "broker_agent";
+}
+
+function isProjectScopedSalesSession(session: AppSession) {
+  return session.productRole === "developer_sales" || session.productRole === "project_sales_member";
+}
+
+async function hasProjectEditPermission(input: { projectId: string | null | undefined; session: AppSession }) {
+  if (!isUuid(input.session.userId) || !isUuid(input.projectId)) return false;
+
+  try {
+    const permission = await queryOne<{ canEditDeals: boolean }>(
+      `
+        select can_edit_deals as "canEditDeals"
+        from project_pipeline_permissions
+        where workspace_id = $1
+          and project_id = $2
+          and user_id = $3
+        limit 1
+      `,
+      [input.session.workspaceId, input.projectId, input.session.userId],
+    );
+
+    return Boolean(permission?.canEditDeals);
+  } catch {
+    return false;
+  }
+}
+
+async function assertRecordWriteAccess(input: {
+  entityLabel: string;
+  existingOwnerUserId?: string | null;
+  ownerUserId?: string | null;
+  projectId?: string | null;
+  session: AppSession;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (canManageWorkspaceRecords(input.session)) {
+    return { ok: true };
+  }
+
+  const effectiveOwnerUserId = input.existingOwnerUserId ?? input.ownerUserId ?? null;
+
+  if (isOwnRecordOnlySession(input.session)) {
+    return effectiveOwnerUserId === input.session.userId
+      ? { ok: true }
+      : { ok: false, reason: `${input.entityLabel} can only be changed by the assigned owner` };
+  }
+
+  if (isProjectScopedSalesSession(input.session)) {
+    if (effectiveOwnerUserId === input.session.userId) {
+      return { ok: true };
+    }
+
+    return await hasProjectEditPermission({ projectId: input.projectId, session: input.session })
+      ? { ok: true }
+      : { ok: false, reason: `${input.entityLabel} requires project edit permission` };
+  }
+
+  return { ok: false, reason: `${input.entityLabel} write permission is not allowed for this role` };
+}
+
 const dealStages: DealStage[] = [
   "Neu",
   "Qualifizieren",
@@ -232,6 +309,43 @@ const dealCloseReasonCategories: DealCloseReasonCategory[] = [
   "won",
   "other",
 ];
+const maxShortTextLength = 180;
+const maxLongTextLength = 1200;
+const maxDealValueCents = 500_000_000 * 100;
+
+function hasExplicitInput(value: unknown) {
+  return value !== undefined && value !== null && String(value).trim().length > 0;
+}
+
+function isValidEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validateTextLength(value: unknown, field: string, maxLength: number) {
+  if (!hasExplicitInput(value)) return null;
+  return String(value).trim().length <= maxLength ? null : `${field} is too long`;
+}
+
+function validateEmailInput(value: unknown) {
+  if (!hasExplicitInput(value)) return null;
+  const email = String(value).trim();
+  return isValidEmailAddress(email) ? null : "Invalid email address";
+}
+
+function validateDealValueInput(value: unknown) {
+  if (!hasExplicitInput(value)) return null;
+  const cents = toCents(value);
+  if (cents <= 0) return "Deal value must be greater than zero";
+  if (cents > maxDealValueCents) return "Deal value is implausibly high";
+  return null;
+}
+
+function validateFutureDateInput(value: unknown, field: string) {
+  if (!hasExplicitInput(value)) return null;
+  const parsed = new Date(cleanDateInput(value)).getTime();
+  if (!Number.isFinite(parsed)) return `${field} is invalid`;
+  return parsed >= Date.now() - 60_000 ? null : `${field} cannot be in the past`;
+}
 
 export async function listDashboardViews(input: {
   session: AppSession;
@@ -422,6 +536,12 @@ export async function upsertDealRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError =
+    validateTextLength(input.deal.name, "Deal name", maxShortTextLength) ??
+    validateTextLength(input.deal.nextAction, "Next action", maxLongTextLength) ??
+    validateDealValueInput(input.deal.value);
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.deal.id)
     ? await queryOne<DealRow>(
         `${dealSelectSql}
@@ -451,6 +571,15 @@ export async function upsertDealRecord(input: {
   if (!name || (!existing && !contactId)) {
     return { persisted: false, reason: "Deal name and contact are required" };
   }
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Deal",
+    existingOwnerUserId: existing?.ownerUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const stageChanged = Boolean(existing && existing.stage !== stage);
   const closeState = resolveDealCloseState({
@@ -902,6 +1031,9 @@ export async function upsertTaskRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError = validateTextLength(input.task.title, "Task title", maxShortTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.task.id)
     ? await queryOne<TaskRow>(
         `${taskSelectSql}
@@ -913,9 +1045,19 @@ export async function upsertTaskRecord(input: {
   const projectId = normalizeWriteProjectId(input.task.projectId) ?? existing?.projectId ?? await resolveFallbackProjectId(input.session.workspaceId);
   const contactId = normalizeWriteProjectId(input.task.contactId) ?? existing?.contactId ?? null;
   const leadId = normalizeWriteProjectId(input.task.leadId) ?? existing?.leadId ?? null;
+  const ownerUserId = existing?.ownerUserId ?? normalizeWriteProjectId(input.session.userId);
   const title = cleanString(input.task.title) || existing?.title || "";
 
   if (!title) return { persisted: false, reason: "Task title is required" };
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Task",
+    existingOwnerUserId: existing?.ownerUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const row = existing
     ? await queryOne<TaskRow>(
@@ -938,6 +1080,7 @@ export async function upsertTaskRecord(input: {
             project_id as "projectId",
             contact_id as "contactId",
             lead_id as "leadId",
+            owner_user_id as "ownerUserId",
             title,
             due_at as due,
             priority,
@@ -978,6 +1121,7 @@ export async function upsertTaskRecord(input: {
             project_id as "projectId",
             contact_id as "contactId",
             lead_id as "leadId",
+            owner_user_id as "ownerUserId",
             title,
             due_at as due,
             priority,
@@ -989,7 +1133,7 @@ export async function upsertTaskRecord(input: {
           projectId,
           contactId,
           leadId,
-          normalizeWriteProjectId(input.session.userId),
+          ownerUserId,
           title,
           cleanDateInput(input.task.due) || null,
           input.task.priority ?? "Normal",
@@ -1033,6 +1177,12 @@ export async function upsertLeadRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError =
+    validateTextLength(input.lead.intent, "Lead intent", maxLongTextLength) ??
+    validateTextLength(input.lead.nextAction, "Lead next action", maxLongTextLength) ??
+    validateFutureDateInput(input.lead.nextContactAt, "Next contact date");
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.lead.id)
     ? await queryOne<LeadRow>(
         `${leadSelectSql}
@@ -1065,6 +1215,15 @@ export async function upsertLeadRecord(input: {
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
   const status = (cleanString(input.lead.status) || existing?.status || "Neu") as Lead["status"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Lead",
+    existingOwnerUserId: existing?.assignedToUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
   const row = existing
     ? await queryOne<LeadRow>(
@@ -1308,6 +1467,12 @@ export async function upsertContactRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  const validationError =
+    validateEmailInput(input.contact.email) ??
+    validateTextLength(input.contact.name, "Contact name", maxShortTextLength) ??
+    validateTextLength(input.contact.intent, "Contact intent", maxLongTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
   const existing = isUuid(input.contact.id)
     ? await queryOne<ContactRow>(
         `${contactSelectSql}
@@ -1317,6 +1482,26 @@ export async function upsertContactRecord(input: {
         [input.contact.id, input.session.workspaceId],
       )
     : null;
+  const normalizedEmail = cleanString(input.contact.email);
+  if (normalizedEmail) {
+    const duplicate = await queryOne<IdRow>(
+      `
+        select id
+        from contacts
+        where workspace_id = $1
+          and archived_at is null
+          and lower(email) = lower($2)
+          and ($3::uuid is null or id <> $3::uuid)
+        limit 1
+      `,
+      [input.session.workspaceId, normalizedEmail, existing?.id ?? null],
+    );
+
+    if (duplicate) {
+      return { persisted: false, reason: "Duplicate contact email" };
+    }
+  }
+
   const resolvedProject = await resolveContactProjectId({
     existingProjectId: existing?.projectId ?? null,
     requestedProjectId: input.contact.projectId,
@@ -2684,6 +2869,7 @@ const taskSelectSql = `
     t.project_id as "projectId",
     t.contact_id as "contactId",
     t.lead_id as "leadId",
+    t.owner_user_id as "ownerUserId",
     t.title,
     p.name as project,
     t.due_at as due,
@@ -3000,7 +3186,7 @@ async function assertPipelineStagePermission(input: {
   session: AppSession;
   targetStage: DealStage;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if (input.session.role === "owner" || input.session.role === "admin") {
+  if (canManageWorkspaceRecords(input.session)) {
     return { ok: true };
   }
 

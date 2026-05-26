@@ -28,6 +28,7 @@ import {
   linkBotConversationToCrmEntities,
   listBotMessages,
   searchPersistedKnowledge,
+  updateBotConversationStatus,
   updateBotDocumentSendDelivery,
   upsertBotCrmEntities,
   writeAuditLog,
@@ -61,6 +62,7 @@ export type BotChatRunResult = {
   runSummary: {
     approvalId: string | null;
     documentRequested: boolean;
+    humanHandoffRequired: boolean;
     humanApprovalRequired: boolean;
     meetingRequested: boolean;
     nextAction: string;
@@ -1018,6 +1020,16 @@ export async function runBotChat(input: {
         sources: knowledgeSources,
         text: safeReply.text,
       });
+  const requiresHumanHandoff = Boolean(
+    customerFacing &&
+      controls.strictKnowledge &&
+      (modelBlockedForKnowledge || (safeReply.blocked && !hasApprovedKnowledge && !meetingContext?.slots.length)),
+  );
+  const handoffReason = requiresHumanHandoff
+    ? modelBlockedForKnowledge
+      ? "approved_knowledge_required"
+      : "policy_safe_reply"
+    : null;
   const modelDecision = evaluateBotAction({
     action: "model_reply",
     controls,
@@ -1121,8 +1133,12 @@ export async function runBotChat(input: {
     meeting: Boolean(meetingSlots),
   };
   const score = "score" in qualification && typeof qualification.score === "number" ? qualification.score : null;
-  const nextAction = documentDecision
-    ? documentDecision.mode === "block"
+  const nextAction = requiresHumanHandoff
+    ? language === "de"
+      ? "Anfrage an das Team uebergeben: keine freigegebene Wissensquelle gefunden"
+      : "Hand the enquiry to the team: no approved knowledge source found"
+    : documentDecision
+      ? documentDecision.mode === "block"
       ? language === "de"
         ? "Dokumentversand durch Policy blockiert"
         : "Document delivery blocked by policy"
@@ -1174,6 +1190,7 @@ export async function runBotChat(input: {
   const runSummary = {
     approvalId,
     documentRequested: requestedActions.document,
+    humanHandoffRequired: requiresHumanHandoff,
     humanApprovalRequired: Boolean(approvalId),
     meetingRequested: requestedActions.meeting,
     nextAction,
@@ -1214,6 +1231,21 @@ export async function runBotChat(input: {
     model: modelReply.model,
     role: "assistant",
   });
+
+  if (requiresHumanHandoff) {
+    await updateBotConversationStatus({
+      session,
+      conversationId,
+      status: "handoff",
+      metadata: {
+        handoff: {
+          at: new Date().toISOString(),
+          reason: handoffReason,
+          sourceCount: knowledgeSources.length,
+        },
+      },
+    });
+  }
 
   await writeAuditLog({
     session,

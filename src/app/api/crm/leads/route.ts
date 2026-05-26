@@ -10,6 +10,18 @@ async function readJson(request: Request) {
   }
 }
 
+function getLeadWriteStatus(reason: string) {
+  if (reason.includes("permission") || reason.includes("not allowed")) return 403;
+  if (reason.includes("not found")) return 404;
+  if (
+    reason.includes("required") ||
+    reason.includes("Invalid") ||
+    reason.includes("too long") ||
+    reason.includes("cannot be in the past")
+  ) return 400;
+  return 503;
+}
+
 export async function POST(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
   if (!auth.ok) return auth.response;
@@ -24,7 +36,7 @@ export async function POST(request: Request) {
   const result = await upsertLeadRecord({ lead, session: auth.session });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 503 });
+    return NextResponse.json({ error: result.reason }, { status: getLeadWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ lead: result.data, persisted: true });
