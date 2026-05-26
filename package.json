@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:phase0": "node --test scripts/phase0-smoke-tests.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs"
