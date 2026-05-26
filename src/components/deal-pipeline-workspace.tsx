@@ -135,8 +135,8 @@ const PRIORITY_OPTIONS: Array<Task["priority"]> = ["Hoch", "Mittel", "Normal"];
 const DEAL_PATCH_STORAGE_KEY = "novalure-pipeline-deal-patches-v2";
 const MANUAL_DEAL_STORAGE_KEY = "novalure-pipeline-manual-deals-v2";
 const STAGE_HISTORY_STORAGE_KEY = "novalure-pipeline-stage-history-v1";
-const NOW = new Date("2026-05-11T15:30:00+02:00");
-const TODAY_START = new Date("2026-05-11T00:00:00+02:00").getTime();
+const NOW = new Date();
+const TODAY_START = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).getTime();
 
 const riskStyles: Record<Deal["riskLevel"], string> = {
   niedrig: "border-emerald-200 bg-emerald-50 text-emerald-900",

@@ -458,6 +458,7 @@ export function BotCommandCenter({
       botName: bot.name,
     })),
   );
+  const activeBotCount = bots.filter((bot) => bot.status === "active").length;
   const approvalCount =
     approvalTools.length +
     callInsights.filter((insight) => insight.requiresApproval).length +
@@ -515,7 +516,9 @@ export function BotCommandCenter({
     title: conversation.title,
     updatedAt: conversation.updatedAt,
   }));
-  const displayConversations = liveConversations.length ? liveConversations : demoConversations;
+  const displayConversations = activeBotCount > 0
+    ? liveConversations.length ? liveConversations : demoConversations
+    : [];
   const sendableDocumentAssets = documentAssets.filter(isSendableDocumentAsset);
   const openConversationCount = displayConversations.filter((conversation) => conversation.status !== "resolved").length;
   const endpointCards = [
@@ -923,13 +926,24 @@ export function BotCommandCenter({
             ))}
           </div>
         </div>
+        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-semibold text-emerald-950">{text.guardrailTitle}</p>
+          <p className="mt-1 text-sm leading-6 text-emerald-900">{text.guardrailDescription}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {text.guardrailItems.map((item) => (
+              <span className="rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-950" key={item}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {activeTab === "overview" ? (
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {[
-              [text.activeBots, bots.length],
+              [text.activeBots, activeBotCount],
               [text.connectedChannels, connectedChannels.length],
               [text.approvals, pendingApprovalCount],
               [text.openConversations, openConversationCount],

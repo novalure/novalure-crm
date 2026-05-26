@@ -626,7 +626,7 @@ export function CalendarCommandCenter({
   const defaultCalendarIntegrations = createDefaultCalendarIntegrations(text);
   const defaultShareConfig = createDefaultShareConfig(text);
   const defaultMeetingAutomation = createDefaultMeetingAutomation(text);
-  const today = new Date("2026-05-11T15:30:00+02:00");
+  const today = new Date();
   const [activeView, setActiveView] = useState<CalendarView>("today");
   const [calendarIntegrations, setCalendarIntegrations] = useState<CalendarIntegrationState>(() => {
     const connectedProvider = getCalendarProviderFromSearchParam("calendar_connected");
@@ -1404,7 +1404,9 @@ export function CalendarCommandCenter({
         ? text.liveSyncError
         : liveCalendarAction.status === "running"
           ? text.liveSyncRunning
-          : text.liveSyncIdle);
+          : selectedProviderConfig.connected
+            ? text.liveSyncIdle
+            : text.calendarSetup.missingConnection);
 
   const syncLiveTeamsMeeting = async () => {
     setLiveCalendarAction({ status: "running" });
@@ -1412,6 +1414,10 @@ export function CalendarCommandCenter({
     try {
       if (!selectedEvent) {
         throw new Error(text.noEvents);
+      }
+
+      if (!selectedProviderConfig.connected) {
+        throw new Error(text.calendarSetup.missingConnection);
       }
 
       const body = [
@@ -2742,7 +2748,7 @@ export function CalendarCommandCenter({
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
             <button
               className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-              disabled={liveCalendarAction.status === "running" || !selectedEvent}
+              disabled={liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
               onClick={syncLiveTeamsMeeting}
               type="button"
             >
