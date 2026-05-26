@@ -234,7 +234,7 @@ export function getDefaultPipelineTemplates(
       {
         isDefault: true,
         key: "managed_customer_pipeline",
-        name: "Managed-Service Pipeline",
+        name: "Servicebetrieb-Pipeline",
         purpose: "managed_service",
         stages: [
           { key: "new", name: "Neu", probability: 5, slaHours: 1 },

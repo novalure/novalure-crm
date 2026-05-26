@@ -1331,7 +1331,7 @@ export function UnitBoard({
                             <div className="rounded-md border border-emerald-100 bg-emerald-50 p-2" key={match.lead.id}>
                               <div className="flex items-start justify-between gap-2">
                                 <p className="break-words text-xs font-semibold text-emerald-950">
-                                  {match.contact?.name ?? match.lead.id}
+                                  {match.contact?.name ?? text.noBuyer}
                                 </p>
                                 <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
                                   {text.matchScore(match.score)}

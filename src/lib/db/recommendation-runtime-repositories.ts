@@ -2653,7 +2653,7 @@ async function completeInventoryOperationalProof(input: {
       const deal = deals[index];
       const probability = normalizeNumber(deal?.probability, 35);
       const status = deal?.stage === "Gewonnen" ? "sold" : probability >= 70 ? "reserved" : index === plannedUnitCount - 1 ? "blocked" : "available";
-      const unitNumber = `AUTO-${project.id.slice(0, 4).toUpperCase()}-${index + 1}`;
+      const unitNumber = `Einheit ${index + 3}.${String(index + 1).padStart(2, "0")}`;
       const unit = await queryOne<IdRow>(
         `
           insert into property_units (

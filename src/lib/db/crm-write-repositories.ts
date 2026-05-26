@@ -2194,7 +2194,7 @@ function createModeSetupDefaults(
     return {
       automations: ["sla_queue", "follow_up_queue", "approval_queue", "customer_report"],
       pipelines: ["SLA-Queue", "Follow-up-Queue", "Freigabequeue", "Kundenreport"],
-      templates: ["Managed-Service Tagesreport", "Freigabeanfrage", "SLA-Follow-up"],
+      templates: ["Servicebetrieb Tagesreport", "Freigabeanfrage", "SLA-Follow-up"],
     };
   }
 

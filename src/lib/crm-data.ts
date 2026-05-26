@@ -286,7 +286,7 @@ export const contacts: Contact[] = [
     source: "Website Funnel",
     intent: "Besichtigung",
     consent: "Newsletter ja",
-    email: "mira.klein@example.test",
+    email: "mira.klein@demo.novalure-crm.app",
   },
   {
     id: "contact_daniel_hofer",
@@ -323,7 +323,7 @@ export const contacts: Contact[] = [
     source: "Website Funnel",
     intent: "Besichtigung",
     consent: "Newsletter ja",
-    email: "elena.markovic@example.test",
+    email: "elena.markovic@demo.novalure-crm.app",
   },
   {
     id: "contact_lukas_falkner",
@@ -1851,7 +1851,7 @@ export const newsletterSuppressions: NewsletterSuppression[] = [
   {
     id: "suppression_old_bounce",
     workspaceId: workspace.id,
-    email: "old.lead@example.test",
+    email: "old.lead@demo.novalure-crm.app",
     reason: "bounce",
     source: "Resend",
     capturedAt: "2026-05-04T10:12:00+02:00",
@@ -1859,7 +1859,7 @@ export const newsletterSuppressions: NewsletterSuppression[] = [
   {
     id: "suppression_unsubscribe",
     workspaceId: workspace.id,
-    email: "abmeldung@example.test",
+    email: "abmeldung@demo.novalure-crm.app",
     reason: "unsubscribe",
     source: "Preference Center",
     capturedAt: "2026-05-08T18:30:00+02:00",
