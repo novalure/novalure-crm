@@ -39,6 +39,38 @@ import type {
 } from "@/lib/crm-types";
 import { botSelfServeSetup } from "@/lib/bots/omnichannel";
 
+function dateAtOffset(days: number, hour = 10, minute = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
+function isoAtOffset(days: number, hour = 10, minute = 0) {
+  return dateAtOffset(days, hour, minute).toISOString();
+}
+
+function isoInHours(hoursFromNow: number) {
+  return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString();
+}
+
+function dateOnlyAtOffset(days: number) {
+  return dateAtOffset(days, 12, 0).toISOString().slice(0, 10);
+}
+
+function dueLabelInHours(hoursFromNow: number) {
+  const now = new Date();
+  const date = new Date(now.getTime() + hoursFromNow * 60 * 60 * 1000);
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDelta = Math.round((target - today) / (24 * 60 * 60 * 1000));
+
+  if (dayDelta === 0) return `Heute ${time}`;
+  if (dayDelta === 1) return `Morgen ${time}`;
+  return date.toISOString().slice(0, 10);
+}
+
 export const workspace: Workspace = {
   id: "ws_novalure",
   name: "Novalure",
@@ -395,10 +427,10 @@ export const leads: Lead[] = [
     score: 91,
     intent: "Verkaufsabsicht in 3 Monaten",
     nextAction: "Rückruf heute",
-    receivedAt: "2026-05-11T09:20:00+02:00",
-    slaDueAt: "2026-05-11T14:30:00+02:00",
-    lastContactAt: "2026-04-03T09:22:00+02:00",
-    nextContactAt: "2026-05-11T14:30:00+02:00",
+    receivedAt: isoInHours(-2),
+    slaDueAt: isoInHours(3),
+    lastContactAt: isoInHours(-1),
+    nextContactAt: isoInHours(3),
     region: "Tirol",
     objectType: "Wohnung",
     rooms: 3,
@@ -428,10 +460,10 @@ export const leads: Lead[] = [
     budget: "bis 520.000 Euro",
     intent: "Finanzierung vorgeprüft, 3 Zimmer in Graz",
     nextAction: "Termin vorschlagen",
-    receivedAt: "2026-05-10T17:45:00+02:00",
-    slaDueAt: "2026-05-11T16:00:00+02:00",
-    lastContactAt: "2026-05-02T17:48:00+02:00",
-    nextContactAt: "2026-05-11T16:00:00+02:00",
+    receivedAt: isoInHours(-18),
+    slaDueAt: isoInHours(6),
+    lastContactAt: isoInHours(-12),
+    nextContactAt: isoInHours(6),
     region: "Steiermark",
     objectType: "Wohnung",
     rooms: 3,
@@ -456,10 +488,10 @@ export const leads: Lead[] = [
     budget: "ab 450.000 Euro",
     intent: "Kapitalanlage mit Vermietungspotenzial",
     nextAction: "Exposé senden",
-    receivedAt: "2026-05-11T08:10:00+02:00",
-    slaDueAt: "2026-05-11T12:00:00+02:00",
-    lastContactAt: "2026-04-21T08:13:00+02:00",
-    nextContactAt: "2026-05-12T11:30:00+02:00",
+    receivedAt: isoInHours(-4),
+    slaDueAt: isoInHours(2),
+    lastContactAt: isoInHours(-3),
+    nextContactAt: isoInHours(24),
     region: "Tirol",
     objectType: "Wohnung",
     areaSqm: 70,
@@ -486,10 +518,10 @@ export const leads: Lead[] = [
     budget: "480.000 bis 610.000 Euro",
     intent: "Reservierungsnah, sucht familienfreundliche Wohnung",
     nextAction: "Besichtigungsunterlagen vorbereiten",
-    receivedAt: "2026-05-08T12:40:00+02:00",
-    slaDueAt: "2026-05-11T15:45:00+02:00",
-    lastContactAt: "2026-04-30T12:40:00+02:00",
-    nextContactAt: "2026-05-11T15:45:00+02:00",
+    receivedAt: isoInHours(-48),
+    slaDueAt: isoInHours(28),
+    lastContactAt: isoInHours(-20),
+    nextContactAt: isoInHours(28),
     region: "Steiermark",
     objectType: "Neubau",
     rooms: 4,
@@ -515,10 +547,10 @@ export const leads: Lead[] = [
     budget: "ab 1.200.000 Euro",
     intent: "Sucht Zinshaus mit stabiler Vermietung",
     nextAction: "Entscheider anrufen",
-    receivedAt: "2026-05-05T11:10:00+02:00",
-    slaDueAt: "2026-05-12T10:00:00+02:00",
-    lastContactAt: "2026-05-10T11:15:00+02:00",
-    nextContactAt: "2026-05-12T10:00:00+02:00",
+    receivedAt: isoInHours(-72),
+    slaDueAt: isoInHours(48),
+    lastContactAt: isoInHours(-24),
+    nextContactAt: isoInHours(48),
     region: "Wien",
     objectType: "Zinshaus",
     areaSqm: 420,
@@ -679,7 +711,7 @@ export const propertyReservations: PropertyReservation[] = [
     contactId: "contact_mira_klein",
     dealId: "deal_mira_klein",
     status: "reserved",
-    expiresAt: "2026-05-24T18:00:00+02:00",
+    expiresAt: isoAtOffset(3, 18, 0),
     depositCents: 1000000,
     contractMilestone: "offer_sent",
     nextAction: "Finanzierungsnachweis und Optionsfrist bestätigen.",
@@ -692,7 +724,7 @@ export const propertyReservations: PropertyReservation[] = [
     contactId: "contact_elena_markovic",
     dealId: "deal_elena_markovic",
     status: "hold",
-    expiresAt: "2026-05-21T12:00:00+02:00",
+    expiresAt: isoAtOffset(5, 12, 0),
     depositCents: 0,
     contractMilestone: "not_started",
     nextAction: "Besichtigung abschließen und Reservierungsentscheidung einholen.",
@@ -712,7 +744,7 @@ export const deals: Deal[] = [
     stage: "Neu",
     value: "420.000",
     probability: 42,
-    expectedCloseDate: "2026-08-15",
+    expectedCloseDate: dateOnlyAtOffset(75),
     riskLevel: "mittel",
     source: "WhatsApp",
     nextAction: "Rückruf heute",
@@ -729,7 +761,7 @@ export const deals: Deal[] = [
     stage: "Termin vereinbaren",
     value: "510.000",
     probability: 64,
-    expectedCloseDate: "2026-06-20",
+    expectedCloseDate: dateOnlyAtOffset(45),
     riskLevel: "niedrig",
     source: "Website Funnel",
     nextAction: "Termin vorschlagen",
@@ -746,7 +778,7 @@ export const deals: Deal[] = [
     stage: "Neu",
     value: "450.000",
     probability: 38,
-    expectedCloseDate: "2026-07-31",
+    expectedCloseDate: dateOnlyAtOffset(60),
     riskLevel: "mittel",
     source: "Instagram",
     nextAction: "Exposé senden",
@@ -762,7 +794,7 @@ export const deals: Deal[] = [
     stage: "Termin gebucht",
     value: "620.000",
     probability: 58,
-    expectedCloseDate: "2026-07-10",
+    expectedCloseDate: dateOnlyAtOffset(40),
     riskLevel: "niedrig",
     source: "Microsoft 365",
     nextAction: "Teams Link prüfen",
@@ -778,7 +810,7 @@ export const deals: Deal[] = [
     stage: "Besichtigung/Beratung",
     value: "510.000",
     probability: 78,
-    expectedCloseDate: "2026-06-05",
+    expectedCloseDate: dateOnlyAtOffset(28),
     riskLevel: "niedrig",
     source: "Website Funnel",
     nextAction: "Unterlagen vorbereiten",
@@ -794,7 +826,7 @@ export const deals: Deal[] = [
     stage: "Gewonnen",
     value: "284.000",
     probability: 86,
-    expectedCloseDate: "2026-05-28",
+    expectedCloseDate: dateOnlyAtOffset(14),
     riskLevel: "mittel",
     source: "Manual",
     nextAction: "Entscheider anrufen",
@@ -920,7 +952,7 @@ export const tasks: Task[] = [
     leadId: "lead_anna_berger",
     title: "Rückruf Verkäufer-Lead Anna Berger",
     project: "Seller Leads Linz",
-    due: "Heute 14:30",
+    due: dueLabelInHours(2),
     priority: "Hoch",
     status: "open",
   },
@@ -930,7 +962,7 @@ export const tasks: Task[] = [
     projectId: "project_wohnpark_graz",
     title: "Wissensdatenbank für Neubau Graz prüfen",
     project: "Wohnpark Graz",
-    due: "Heute 16:00",
+    due: dueLabelInHours(5),
     priority: "Mittel",
     status: "open",
   },
@@ -940,7 +972,7 @@ export const tasks: Task[] = [
     projectId: "project_novalure_eu",
     title: "Newsletter Opt-in Segment Käufer aktualisieren",
     project: "Novalure.eu",
-    due: "Morgen",
+    due: dueLabelInHours(24),
     priority: "Mittel",
     status: "open",
   },
@@ -950,7 +982,7 @@ export const tasks: Task[] = [
     projectId: "project_wohnpark_graz",
     title: "Teams-Kalender Projekt Wohnpark verbinden",
     project: "Wohnpark Graz",
-    due: "Diese Woche",
+    due: dueLabelInHours(72),
     priority: "Normal",
     status: "open",
   },
@@ -961,7 +993,7 @@ export const tasks: Task[] = [
     contactId: "contact_elena_markovic",
     title: "Besichtigungsunterlagen für Elena Markovic vorbereiten",
     project: "Wohnpark Graz",
-    due: "Heute 15:45",
+    due: dueLabelInHours(3),
     priority: "Hoch",
     status: "open",
   },
@@ -972,7 +1004,7 @@ export const tasks: Task[] = [
     contactId: "contact_lukas_falkner",
     title: "Entscheider bei Falkner GmbH anrufen",
     project: "Novalure.eu",
-    due: "Morgen",
+    due: dueLabelInHours(26),
     priority: "Mittel",
     status: "open",
   },
@@ -986,8 +1018,8 @@ export const calendarEvents: CalendarEvent[] = [
     contactId: "contact_mira_klein",
     leadId: "lead_mira_klein",
     title: "Besichtigung Einheit B12 mit Mira Klein",
-    startsAt: "2026-05-11T16:30:00+02:00",
-    endsAt: "2026-05-11T17:15:00+02:00",
+    startsAt: isoAtOffset(1, 16, 30),
+    endsAt: isoAtOffset(1, 17, 15),
     location: "Teams",
     calendarProvider: "microsoft",
     meetingProvider: "microsoft-teams",
@@ -1007,8 +1039,8 @@ export const calendarEvents: CalendarEvent[] = [
     projectId: "project_wohnpark_graz",
     contactId: "contact_thomas_reiter",
     title: "Projektgespräch Reiter Development",
-    startsAt: "2026-05-12T09:00:00+02:00",
-    endsAt: "2026-05-12T10:00:00+02:00",
+    startsAt: isoAtOffset(2, 9, 0),
+    endsAt: isoAtOffset(2, 10, 0),
     location: "Teams",
     calendarProvider: "microsoft",
     meetingProvider: "microsoft-teams",
@@ -1029,8 +1061,8 @@ export const calendarEvents: CalendarEvent[] = [
     contactId: "contact_anna_berger",
     leadId: "lead_anna_berger",
     title: "Rückruf Verkauf Eigentumswohnung Berger",
-    startsAt: "2026-05-11T14:30:00+02:00",
-    endsAt: "2026-05-11T14:45:00+02:00",
+    startsAt: isoInHours(4),
+    endsAt: isoInHours(4.25),
     location: "Telefon",
     calendarProvider: "manual",
     meetingProvider: "phone",
@@ -1050,8 +1082,8 @@ export const calendarEvents: CalendarEvent[] = [
     contactId: "contact_daniel_hofer",
     leadId: "lead_daniel_hofer",
     title: "Investment-Call Daniel Hofer",
-    startsAt: "2026-05-12T11:30:00+02:00",
-    endsAt: "2026-05-12T12:00:00+02:00",
+    startsAt: isoAtOffset(3, 11, 30),
+    endsAt: isoAtOffset(3, 12, 0),
     location: "Google Meet",
     calendarProvider: "google",
     meetingProvider: "google-meet",
