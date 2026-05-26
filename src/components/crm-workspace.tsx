@@ -49,6 +49,9 @@ import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type {
   CalendarEvent,
   BrokerMandate,
+  ConsentRecord,
+  Contact,
+  Conversation,
   CustomerWorkspaceAccess,
   BuyerSearchProfile,
   Deal,
@@ -58,6 +61,7 @@ import type {
   PropertyUnit,
   SellerListing,
   Task,
+  WorkspaceUser,
   WorkspaceRole,
 } from "@/lib/crm-types";
 import {
@@ -94,6 +98,7 @@ type DashboardSection =
   | "onboarding"
   | "customerSuccess"
   | "contacts"
+  | "communication"
   | "dataHygiene"
   | "tasks"
   | "sequences"
@@ -142,8 +147,12 @@ type NavigationPresetId =
   | "managedService"
   | "hybridRealEstate"
   | "sales"
+  | "salesLead"
+  | "marketing"
   | "assistant"
-  | "management";
+  | "management"
+  | "newUser"
+  | "admin";
 
 type NavigationEntryId =
   | "analysis"
@@ -157,6 +166,7 @@ type NavigationEntryId =
   | "calendar"
   | "consultations"
   | "contacts"
+  | "communication"
   | "customerAccess"
   | "customerReport"
   | "customerSuccess"
@@ -220,8 +230,12 @@ const navigationPresetOrder: NavigationPresetId[] = [
   "realEstateBroker",
   "propertyDeveloper",
   "sales",
+  "salesLead",
   "management",
+  "marketing",
   "assistant",
+  "newUser",
+  "admin",
   "managedService",
   "hybridRealEstate",
 ];
@@ -257,6 +271,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "sellerLeads",
       "buyerLeads",
       "contacts",
+      "communication",
       "objectsMandates",
       "pipelines",
       "tasks",
@@ -282,6 +297,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "projectPipeline",
       "tasks",
       "calendar",
+      "communication",
       "buyerProfiles",
       "projectAnalytics",
     ],
@@ -296,6 +312,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "managedService",
       "slaCockpit",
       "leadInbox",
+      "communication",
       "tasks",
       "followUpQueue",
       "approvals",
@@ -321,6 +338,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "reservations",
       "pipelines",
       "contacts",
+      "communication",
       "tasks",
       "calendar",
       "funnels",
@@ -336,14 +354,28 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   sales: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dailyQueue", "leadInbox", "contacts", "pipelines", "tasks", "calendar"],
+    navigationEntries: ["dailyQueue", "leadInbox", "contacts", "communication", "pipelines", "tasks", "calendar"],
     startSection: "tasks",
     startEntry: "dailyQueue",
     quickActions: ["leadInbox", "pipeline", "tasks", "meetings"],
   },
+  salesLead: {
+    mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
+    navigationEntries: ["dashboard", "pipelines", "leadInbox", "tasks", "contacts", "communication", "analytics"],
+    startSection: "dashboard",
+    startEntry: "dashboard",
+    quickActions: ["leadInbox", "pipeline", "tasks", "dataHygiene"],
+  },
+  marketing: {
+    mobilePanels: ["hotLeads", "meetings", "tasks"],
+    navigationEntries: ["dashboard", "funnels", "newsletter", "leadInbox", "forms", "analytics", "communication"],
+    startSection: "dashboard",
+    startEntry: "dashboard",
+    quickActions: ["funnels", "newsletter", "leadInbox", "analysis"],
+  },
   assistant: {
     mobilePanels: ["meetings", "tasks"],
-    navigationEntries: ["tasks", "calendar", "contacts", "forms", "leadInbox"],
+    navigationEntries: ["tasks", "dataHygiene", "contacts", "calendar", "communication", "forms", "leadInbox"],
     startSection: "tasks",
     startEntry: "tasks",
     quickActions: ["tasks", "meetings", "forms", "leadInbox"],
@@ -354,6 +386,32 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     startSection: "analytics",
     startEntry: "analytics",
     quickActions: ["dashboard", "analysis", "pipeline", "dataHygiene"],
+  },
+  newUser: {
+    mobilePanels: ["hotLeads", "meetings", "tasks"],
+    navigationEntries: ["dashboard", "leadInbox", "tasks", "calendar", "pipelines"],
+    startSection: "dashboard",
+    startEntry: "dashboard",
+    quickActions: ["leadInbox", "tasks", "meetings", "pipeline"],
+  },
+  admin: {
+    mobilePanels: ["overdueSla", "meetings", "tasks"],
+    navigationEntries: [
+      "dashboard",
+      "projects",
+      "settings",
+      "dataHygiene",
+      "contacts",
+      "communication",
+      "calendar",
+      "newsletter",
+      "bots",
+      "knowledge",
+      "analytics",
+    ],
+    startSection: "settings",
+    startEntry: "settings",
+    quickActions: ["dataHygiene", "leadInbox", "newsletter", "bots", "newProject"],
   },
 };
 
@@ -391,6 +449,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   calendar: { id: "calendar", section: "calendar" },
   consultations: { id: "consultations", section: "calendar" },
   contacts: { id: "contacts", section: "contacts" },
+  communication: { id: "communication", section: "communication" },
   customerAccess: { id: "customerAccess", section: "customerAccess" },
   customerReport: { id: "customerReport", section: "managedService" },
   customerSuccess: { id: "customerSuccess", section: "customerSuccess" },
@@ -440,13 +499,13 @@ function getAllowedNavigationPresetIds(context: WorkspaceProductContext): Naviga
 
   if (context.productRole === "assistant_backoffice") return ["assistant", getDefaultNavigationPresetId(context)];
   if (context.productRole === "developer_sales" || context.productRole === "project_sales_member") {
-    return ["sales", "propertyDeveloper"];
+    return ["sales", "salesLead", "propertyDeveloper", "newUser"];
   }
   if (context.productRole === "broker_agent" || context.productRole === "team_member") {
-    return ["sales", "realEstateBroker"];
+    return ["sales", "newUser", "realEstateBroker"];
   }
   if (context.productRole === "customer_owner" || context.productRole === "workspace_admin") {
-    return [getDefaultNavigationPresetId(context), "sales", "assistant", "management"];
+    return [getDefaultNavigationPresetId(context), "management", "salesLead", "sales", "marketing", "assistant", "admin", "newUser"];
   }
   if (context.operatingModel === "managed_by_novalure") return ["managedService"];
   if (context.customerType === "property_developer") return ["propertyDeveloper"];
@@ -476,6 +535,28 @@ const actionStatusStyles = {
   ready: "border-emerald-200 bg-emerald-50 text-emerald-900",
   warning: "border-amber-200 bg-amber-50 text-amber-900",
 } as const;
+
+const normalRoleHiddenRecordPatterns = [
+  /\bqa\b/i,
+  /qa crm audit/i,
+  /qa contact db first ui/i,
+  /qa date deal/i,
+  /qa public lead/i,
+  /example\.test/i,
+  /\bAUTO-[A-Z0-9-]+/i,
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i,
+  /\uFFFD/,
+  /Ã/,
+];
+
+function isVisibleBusinessRecord(values: Array<string | number | null | undefined>) {
+  const searchable = values
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value))
+    .join(" ");
+
+  return !normalRoleHiddenRecordPatterns.some((pattern) => pattern.test(searchable));
+}
 
 function ModalShell({
   children,
@@ -585,6 +666,13 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
       return (
         <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
           <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20c.9-3.4 3.4-5 7-5s6.1 1.6 7 5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+        </svg>
+      );
+    case "communication":
+      return (
+        <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
+          <path d="M5 6.5h14v9H9l-4 3z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M8.5 10h7M8.5 13h4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
         </svg>
       );
     case "dataHygiene":
@@ -914,6 +1002,28 @@ type AnalyticsCommandCenterCopy = {
   empty: string;
 };
 
+type CommunicationCommandCenterCopy = {
+  title: string;
+  description: string;
+  conversations: string;
+  channel: string;
+  contact: string;
+  project: string;
+  lastMessage: string;
+  nextAction: string;
+  owner: string;
+  mode: string;
+  consent: string;
+  botMode: string;
+  manualMode: string;
+  contactUnknown: string;
+  noNextAction: string;
+  noOwner: string;
+  noConsent: string;
+  empty: string;
+  emptyCta: string;
+};
+
 type SettingsCommandCenterCopy = {
   title: string;
   description: string;
@@ -938,6 +1048,24 @@ type SettingsCommandCenterCopy = {
     canEdit: string;
     protectedAction: string;
   }>;
+  fieldStructureTitle: string;
+  fieldStructureDescription: string;
+  fieldGroupsTitle: string;
+  contactFieldsTitle: string;
+  companyFieldsTitle: string;
+  roleRecommendationsTitle: string;
+  customFieldsTitle: string;
+  fieldDraftLabel: string;
+  fieldDraftPlaceholder: string;
+  addField: string;
+  emptyCustomFields: string;
+  recommended: string;
+  optional: string;
+  qualityChecked: string;
+  fieldGroups: string[];
+  contactFieldDefaults: string[];
+  companyFieldDefaults: string[];
+  roleFieldRecommendations: Array<{ role: string; fields: string[] }>;
   technicalDetails?: string;
   access?: string;
   create?: string;
@@ -950,6 +1078,7 @@ type CommandCentersCopy = {
   mandates: ObjectCommandCenterCopy;
   inventory: ObjectCommandCenterCopy;
   analytics: AnalyticsCommandCenterCopy;
+  communication: CommunicationCommandCenterCopy;
   settings: SettingsCommandCenterCopy;
 };
 
@@ -1005,6 +1134,28 @@ const fallbackCommandCentersCopy: CommandCentersCopy = {
     sources: "Lead sources",
     empty: "No lead source data in this filter.",
   },
+  communication: {
+    title: "Communication",
+    description: "All conversations by channel, contact, project, next action, owner and consent status.",
+    conversations: "Conversations",
+    channel: "Channel",
+    contact: "Contact",
+    project: "Project",
+    lastMessage: "Last message",
+    nextAction: "Next action",
+    owner: "Owner",
+    mode: "Mode",
+    consent: "Consent",
+    botMode: "Bot / prepared",
+    manualMode: "Manual",
+    contactUnknown: "Contact not known yet",
+    noNextAction: "No next action set",
+    noOwner: "No owner assigned",
+    noConsent: "Consent not documented",
+    empty:
+      "There are no conversations in the current project filter yet. Once leads arrive by form, WhatsApp, email or bot, they appear here with the next action.",
+    emptyCta: "Open Lead Inbox",
+  },
   settings: {
     title: "Settings",
     description: "Workspace, projects, roles, rights and integrations in one admin view.",
@@ -1032,6 +1183,71 @@ const fallbackCommandCentersCopy: CommandCentersCopy = {
       { role: "Backoffice", access: "Contacts, consents, tasks", canCreate: "yes", canEdit: "data quality", protectedAction: "delete and integrations" },
       { role: "Read only", access: "Dashboards and reports", canCreate: "no", canEdit: "no", protectedAction: "none" },
     ],
+    fieldStructureTitle: "Fields & contact structure",
+    fieldStructureDescription:
+      "Define which contact and company fields are available, recommended, quality-checked or shown first by role. Fields stay optional unless an admin explicitly marks them required.",
+    fieldGroupsTitle: "Field groups",
+    contactFieldsTitle: "Recommended contact fields",
+    companyFieldsTitle: "Recommended company fields",
+    roleRecommendationsTitle: "Role-first fields",
+    customFieldsTitle: "Workspace custom fields",
+    fieldDraftLabel: "New optional field",
+    fieldDraftPlaceholder: "e.g. Preferred viewing day",
+    addField: "Add field",
+    emptyCustomFields:
+      "Novalure CRM uses recommended standard fields for real estate contacts. You can add workspace-specific contact and company fields here.",
+    recommended: "Recommended",
+    optional: "Optional",
+    qualityChecked: "Data quality",
+    fieldGroups: [
+      "Overview",
+      "Person",
+      "Contact routes",
+      "Address",
+      "Company",
+      "Real estate profile",
+      "CRM control",
+      "Consent",
+      "Relationships",
+      "Timeline",
+      "Admin / technical details",
+    ],
+    contactFieldDefaults: [
+      "Salutation",
+      "First name",
+      "Last name",
+      "Full name",
+      "Email",
+      "Phone",
+      "Mobile / WhatsApp",
+      "Preferred contact route",
+      "Best contact time",
+      "Language",
+      "Address",
+      "Company",
+      "LinkedIn",
+      "Note",
+    ],
+    companyFieldDefaults: [
+      "Company name",
+      "Website",
+      "Domain",
+      "Phone",
+      "General email",
+      "Industry",
+      "Company type",
+      "Employees",
+      "Address",
+      "Main contact",
+      "Real estate role",
+      "Note",
+    ],
+    roleFieldRecommendations: [
+      { role: "Broker / sales", fields: ["Phone", "WhatsApp", "Project", "Lead type", "Next action"] },
+      { role: "Backoffice", fields: ["Email", "Phone", "Address", "Consent", "Company", "Duplicate check"] },
+      { role: "Marketing", fields: ["Opt-ins", "Segments", "Source", "Campaign", "Newsletter status"] },
+      { role: "Management", fields: ["Project", "Deal value", "Status", "Owner", "Last contact"] },
+    ],
     technicalDetails: "Technical details",
     access: "Access",
     create: "Create",
@@ -1041,8 +1257,16 @@ const fallbackCommandCentersCopy: CommandCentersCopy = {
 };
 
 function getCommandCentersCopy(copy: ReturnType<typeof getDashboardCopy>): CommandCentersCopy {
-  return (copy as ReturnType<typeof getDashboardCopy> & { commandCenters?: CommandCentersCopy }).commandCenters
-    ?? fallbackCommandCentersCopy;
+  const localized = (copy as ReturnType<typeof getDashboardCopy> & { commandCenters?: Partial<CommandCentersCopy> }).commandCenters;
+
+  return {
+    ...fallbackCommandCentersCopy,
+    ...localized,
+    settings: {
+      ...fallbackCommandCentersCopy.settings,
+      ...(localized?.settings ?? {}),
+    },
+  };
 }
 
 function ProjectsCommandCenter({
@@ -1256,6 +1480,127 @@ function AnalyticsCommandCenter({
   );
 }
 
+function CommunicationCommandCenter({
+  consents,
+  contacts,
+  conversations,
+  copy,
+  language,
+  leads,
+  onOpenLeadInbox,
+  projectLabel,
+  projects,
+  users,
+}: {
+  consents: ConsentRecord[];
+  contacts: Contact[];
+  conversations: Conversation[];
+  copy: ReturnType<typeof getDashboardCopy>;
+  language: LanguageCode;
+  leads: Lead[];
+  onOpenLeadInbox: () => void;
+  projectLabel: string;
+  projects: Project[];
+  users: WorkspaceUser[];
+}) {
+  const panelCopy = getCommandCentersCopy(copy).communication;
+  const locale = language === "de" ? "de-AT" : "en-GB";
+  const sortedConversations = [...conversations].sort(
+    (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+  );
+
+  return (
+    <section className="grid gap-4">
+      <article className="rounded-lg border border-stone-200 bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{projectLabel}</p>
+        <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
+        <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
+      </article>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        {[
+          [panelCopy.conversations, sortedConversations.length],
+          [panelCopy.noOwner, leads.filter((lead) => !lead.assignedToUserId).length],
+          [panelCopy.noConsent, contacts.filter((contact) => !consents.some((consent) => consent.contactId === contact.id)).length],
+        ].map(([label, value]) => (
+          <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
+            <p className="break-words text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <article className="rounded-lg border border-stone-200 bg-white p-5">
+        {sortedConversations.length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-[860px] w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
+                <tr>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.channel}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.contact}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.project}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.lastMessage}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.nextAction}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.owner}</th>
+                  <th className="py-2 pr-4 font-semibold">{panelCopy.mode}</th>
+                  <th className="py-2 font-semibold">{panelCopy.consent}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedConversations.map((conversation) => {
+                  const contact = contacts.find((item) => item.id === conversation.contactId);
+                  const lead = leads.find((item) => item.id === conversation.leadId || item.contactId === conversation.contactId);
+                  const project = projects.find((item) => item.id === conversation.projectId);
+                  const owner = lead?.assignedToUserId ? users.find((user) => user.id === lead.assignedToUserId) : undefined;
+                  const consent = consents.find((item) => item.contactId === conversation.contactId);
+                  const isBotMode = conversation.summary.toLowerCase().includes("bot") || conversation.channel === "WhatsApp";
+
+                  return (
+                    <tr className="border-t border-stone-200 align-top" key={conversation.id}>
+                      <td className="py-3 pr-4 font-semibold text-slate-950">{conversation.channel}</td>
+                      <td className="py-3 pr-4 text-stone-700">{contact?.name ?? panelCopy.contactUnknown}</td>
+                      <td className="py-3 pr-4 text-stone-700">{project?.name ?? projectLabel}</td>
+                      <td className="py-3 pr-4 text-stone-700">
+                        <span className="block font-semibold text-slate-900">{conversation.summary}</span>
+                        <span className="mt-1 block text-xs text-stone-500">
+                          {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(conversation.lastMessageAt))}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 text-stone-700">{lead?.nextAction || panelCopy.noNextAction}</td>
+                      <td className="py-3 pr-4 text-stone-700">{owner?.name ?? panelCopy.noOwner}</td>
+                      <td className="py-3 pr-4">
+                        <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">
+                          {isBotMode ? panelCopy.botMode : panelCopy.manualMode}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${consent ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+                          {consent ? `${consent.channel}: ${consent.status}` : panelCopy.noConsent}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-sm text-stone-600">
+            <p className="max-w-3xl break-words">{panelCopy.empty}</p>
+            <button
+              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              onClick={onOpenLeadInbox}
+              type="button"
+            >
+              {panelCopy.emptyCta}
+            </button>
+          </div>
+        )}
+      </article>
+    </section>
+  );
+}
+
 function SettingsCommandCenter({
   context,
   copy,
@@ -1272,9 +1617,21 @@ function SettingsCommandCenter({
   profileLabel: string;
 }) {
   const panelCopy = getCommandCentersCopy(copy).settings;
+  const [fieldDraft, setFieldDraft] = useState("");
+  const [customFields, setCustomFields] = useState<string[]>([]);
   const modules = Object.entries(moduleSources).slice(0, 8);
   const roleMatrix = panelCopy.roleMatrix ?? fallbackCommandCentersCopy.settings.roleMatrix ?? [];
   const adminAreas = panelCopy.adminAreas ?? fallbackCommandCentersCopy.settings.adminAreas ?? [];
+  const defaultFieldSections = [
+    { fields: panelCopy.contactFieldDefaults, title: panelCopy.contactFieldsTitle },
+    { fields: panelCopy.companyFieldDefaults, title: panelCopy.companyFieldsTitle },
+  ];
+  const addCustomField = () => {
+    const nextField = fieldDraft.trim();
+    if (!nextField) return;
+    setCustomFields((current) => current.includes(nextField) ? current : [...current, nextField]);
+    setFieldDraft("");
+  };
 
   return (
     <section className="grid gap-4">
@@ -1320,6 +1677,94 @@ function SettingsCommandCenter({
               ))}
             </tbody>
           </table>
+        </div>
+      </article>
+      <article className="rounded-lg border border-stone-200 bg-white p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <h4 className="text-lg font-semibold text-slate-950">{panelCopy.fieldStructureTitle}</h4>
+            <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.fieldStructureDescription}</p>
+          </div>
+          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(220px,1fr)_auto]">
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+              {panelCopy.fieldDraftLabel}
+              <input
+                className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                onChange={(event) => setFieldDraft(event.target.value)}
+                placeholder={panelCopy.fieldDraftPlaceholder}
+                value={fieldDraft}
+              />
+            </label>
+            <button
+              className="self-end rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              onClick={addCustomField}
+              type="button"
+            >
+              {panelCopy.addField}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
+            <h5 className="text-sm font-semibold text-slate-950">{panelCopy.fieldGroupsTitle}</h5>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {panelCopy.fieldGroups.map((group) => (
+                <span className="rounded-md bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700" key={group}>
+                  {group}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {defaultFieldSections.map(({ fields, title }) => (
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={title}>
+                <h5 className="text-sm font-semibold text-slate-950">{title}</h5>
+                <div className="mt-3 grid gap-2">
+                  {fields.slice(0, 8).map((field) => (
+                    <div className="flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-sm" key={field}>
+                      <span className="break-words font-semibold text-slate-900">{field}</span>
+                      <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                        {panelCopy.recommended}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.85fr]">
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <h5 className="text-sm font-semibold text-slate-950">{panelCopy.roleRecommendationsTitle}</h5>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {panelCopy.roleFieldRecommendations.map((item) => (
+                <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={item.role}>
+                  <p className="text-sm font-semibold text-slate-950">{item.role}</p>
+                  <p className="mt-2 break-words text-xs text-stone-600">{item.fields.join(" · ")}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <h5 className="text-sm font-semibold text-slate-950">{panelCopy.customFieldsTitle}</h5>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {customFields.length ? customFields.map((field) => (
+                <span className="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-900" key={field}>
+                  {field} · {panelCopy.optional}
+                </span>
+              )) : (
+                <p className="break-words rounded-md border border-dashed border-stone-300 bg-stone-50 p-3 text-sm text-stone-600">
+                  {panelCopy.emptyCustomFields}
+                </p>
+              )}
+            </div>
+            <p className="mt-3 text-xs font-semibold text-emerald-800">
+              {panelCopy.qualityChecked}: {panelCopy.contactFieldDefaults.slice(0, 5).join(", ")}
+            </p>
+          </div>
         </div>
       </article>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1499,8 +1944,16 @@ function RolePriorityPanel({
   const prioritizedMetricKeys: Array<keyof typeof metricValues> =
     presetId === "management"
       ? ["pipeline", "riskDeals", "hotLeads", "appointments"]
+      : presetId === "salesLead"
+        ? ["noOwner", "riskDeals", "openTasks", "pipeline"]
+      : presetId === "marketing"
+        ? ["hotLeads", "appointments", "pipeline", "openTasks"]
       : presetId === "assistant"
         ? ["unlinkedTasks", "noOwner", "openTasks", "appointments"]
+        : presetId === "admin"
+          ? ["noOwner", "unlinkedTasks", "openTasks", "riskDeals"]
+        : presetId === "newUser"
+          ? ["hotLeads", "openTasks", "appointments", "pipeline"]
         : presetId === "sales" || presetId === "realEstateBroker"
           ? ["hotLeads", "openTasks", "appointments", "pipeline"]
           : presetId === "propertyDeveloper"
@@ -2432,16 +2885,26 @@ export function CrmWorkspace({
     }
   }
 
-  const contacts = liveCoreData.contacts;
+  const contacts = liveCoreData.contacts.filter((contact) =>
+    isVisibleBusinessRecord([contact.name, contact.email, contact.phone, contact.intent, contact.source]),
+  );
   const brokerMandates = liveCoreData.brokerMandates ?? [];
   const buyerSearchProfiles = liveCoreData.buyerSearchProfiles ?? [];
-  const calendarEvents = liveCoreData.calendarEvents;
-  const leads = liveCoreData.leads;
-  const deals = liveCoreData.deals;
+  const calendarEvents = liveCoreData.calendarEvents.filter((event) =>
+    isVisibleBusinessRecord([event.title, event.outcomeGoal]),
+  );
+  const leads = liveCoreData.leads.filter((lead) =>
+    isVisibleBusinessRecord([lead.intent, lead.nextAction, lead.source, lead.status]),
+  );
+  const deals = liveCoreData.deals.filter((deal) =>
+    isVisibleBusinessRecord([deal.name, deal.nextAction, deal.source]),
+  );
   const crmPipelines = liveCoreData.crmPipelines ?? [];
   const crmPipelineStages = liveCoreData.crmPipelineStages ?? [];
   const projectPipelinePermissions = liveCoreData.projectPipelinePermissions ?? [];
-  const tasks = liveCoreData.tasks;
+  const tasks = liveCoreData.tasks.filter((task) =>
+    isVisibleBusinessRecord([task.title]),
+  );
   const projectRecords = liveCoreData.projects;
   const funnelRecords = liveCoreData.funnels;
   const funnelStepRecords = liveCoreData.funnelSteps;
@@ -2507,14 +2970,24 @@ export function CrmWorkspace({
     ? contacts.filter((contact) => contact.projectId === activeProject.id)
     : contacts;
   const visibleOrganizations = activeProject
-    ? organizations.filter((organization) => organization.projectId === activeProject.id)
-    : organizations;
+    ? organizations.filter((organization) =>
+        organization.projectId === activeProject.id &&
+        isVisibleBusinessRecord([organization.name, organization.domain, organization.city]),
+      )
+    : organizations.filter((organization) =>
+        isVisibleBusinessRecord([organization.name, organization.domain, organization.city]),
+      );
   const visibleContactRelationships = activeProject
     ? contactRelationships.filter((relationship) => relationship.projectId === activeProject.id)
     : contactRelationships;
   const visibleContactTimeline = activeProject
-    ? contactTimeline.filter((item) => item.projectId === activeProject.id)
-    : contactTimeline;
+    ? contactTimeline.filter((item) =>
+        item.projectId === activeProject.id &&
+        isVisibleBusinessRecord([item.title, item.detail]),
+      )
+    : contactTimeline.filter((item) =>
+        isVisibleBusinessRecord([item.title, item.detail]),
+      );
   const visibleTasks = activeProject
     ? tasks.filter((task) => task.projectId === activeProject.id)
     : tasks;
@@ -2522,8 +2995,13 @@ export function CrmWorkspace({
     ? consents.filter((consent) => !consent.projectId || consent.projectId === activeProject.id)
     : consents;
   const visibleConversations = activeProject
-    ? conversations.filter((conversation) => conversation.projectId === activeProject.id)
-    : conversations;
+    ? conversations.filter((conversation) =>
+        conversation.projectId === activeProject.id &&
+        isVisibleBusinessRecord([conversation.summary, conversation.channel, conversation.sentiment]),
+      )
+    : conversations.filter((conversation) =>
+        isVisibleBusinessRecord([conversation.summary, conversation.channel, conversation.sentiment]),
+      );
   const visibleDeals = activeProject
     ? deals.filter((deal) => deal.projectId === activeProject.id)
     : deals;
@@ -3502,6 +3980,21 @@ export function CrmWorkspace({
               />
             ) : null}
 
+            {visibleActiveSection === "communication" ? (
+              <CommunicationCommandCenter
+                consents={visibleConsents}
+                contacts={visibleContacts}
+                conversations={visibleConversations}
+                copy={copy}
+                language={language}
+                leads={visibleLeads}
+                onOpenLeadInbox={() => handleSectionChange("leadInbox")}
+                projectLabel={projectScopeLabel}
+                projects={allProjects}
+                users={users}
+              />
+            ) : null}
+
             {visibleActiveSection === "leadInbox" ? (
               <LeadInbox
                 brokerMandates={brokerMandates}
@@ -3610,6 +4103,11 @@ export function CrmWorkspace({
                   organizations={visibleOrganizations}
                   projects={allProjects}
                   relationships={visibleContactRelationships}
+                  showTechnicalFields={
+                    (normalizedActivePresetId === "admin" || normalizedActivePresetId === "novalureInternal") &&
+                    (hasProductCapability(workspaceContext.productRole, "workspace:admin") ||
+                      hasProductCapability(workspaceContext.productRole, "novalure:internal"))
+                  }
                   tasks={visibleTasks}
                   timeline={visibleContactTimeline}
                   users={users}

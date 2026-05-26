@@ -322,6 +322,9 @@ function LoginAccessPanel({
                 required
                 showLabel={login.passcodeShowLabel}
               />
+              <p className="text-sm font-normal leading-6 text-[#50645b]">
+                {login.passcodeHelp}
+              </p>
             </div>
             <div className="flex justify-end">
               <Link
@@ -452,6 +455,10 @@ export function PublicCrmLanding({
         </div>
       </section>
 
+      {showLoginForm && loginCopy && loginForm ? (
+        <LoginAccessPanel form={loginForm} login={loginCopy} panel={copy.loginPanel} />
+      ) : null}
+
       <section className="border-b border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14" id="company-system">
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
@@ -571,10 +578,6 @@ export function PublicCrmLanding({
           </div>
         </div>
       </section>
-
-      {showLoginForm && loginCopy && loginForm ? (
-        <LoginAccessPanel form={loginForm} login={loginCopy} panel={copy.loginPanel} />
-      ) : null}
 
       <section className="bg-[#f8f7f1] px-4 py-14">
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">

@@ -34,13 +34,36 @@ type ContactCommandCenterProps = {
   organizations: Organization[];
   projects: Project[];
   relationships: ContactRelationship[];
+  showTechnicalFields?: boolean;
   tasks: Task[];
   timeline: ContactTimelineItem[];
   users: WorkspaceUser[];
 };
 
 type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates";
-type ContactEditableField = "name" | "role" | "project" | "source" | "intent" | "consent" | "email" | "phone";
+type ContactDetailTab =
+  | "overview"
+  | "person"
+  | "contactRoutes"
+  | "address"
+  | "company"
+  | "realEstate"
+  | "crm"
+  | "consent"
+  | "relationships"
+  | "timeline"
+  | "admin";
+type ContactEditableField =
+  | "name"
+  | "role"
+  | "project"
+  | "source"
+  | "intent"
+  | "consent"
+  | "email"
+  | "phone"
+  | "organizationId";
+type ContactKind = "person" | "company" | "companyContact";
 
 const LEGACY_CONTACT_STORAGE_KEY = "novalure-contact-records-v1";
 
@@ -116,6 +139,7 @@ export function ContactCommandCenter({
   organizations,
   projects,
   relationships,
+  showTechnicalFields = false,
   tasks,
   timeline,
   users,
@@ -145,6 +169,8 @@ export function ContactCommandCenter({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [archiveConfirmContactId, setArchiveConfirmContactId] = useState("");
   const [feedback, setFeedback] = useState<ContactFeedback | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<ContactDetailTab>("overview");
+  const [newContactKind, setNewContactKind] = useState<ContactKind>("person");
   const [newContact, setNewContact] = useState<Contact>(() =>
     createContactDraft({ contacts, organizations, projects }),
   );
@@ -330,6 +356,32 @@ export function ContactCommandCenter({
     (qualityChecks.filter((check) => check.status === "ok").length / qualityChecks.length) * 100,
   );
   const readyMappingCount = dataModelMapping.filter((item) => item.ready).length;
+  const contactDetailTabs: Array<{ id: ContactDetailTab; label: string }> = [
+    { id: "overview", label: copy.tabs.overview },
+    { id: "person", label: copy.tabs.person },
+    { id: "contactRoutes", label: copy.tabs.contactRoutes },
+    { id: "address", label: copy.tabs.address },
+    { id: "company", label: copy.tabs.company },
+    { id: "realEstate", label: copy.tabs.realEstate },
+    { id: "crm", label: copy.tabs.crm },
+    { id: "consent", label: copy.tabs.consent },
+    { id: "relationships", label: copy.tabs.relationships },
+    { id: "timeline", label: copy.tabs.timeline },
+    ...(showTechnicalFields ? [{ id: "admin" as const, label: copy.tabs.admin }] : []),
+  ];
+  const recommendedByTab: Record<ContactDetailTab, string[]> = {
+    admin: [copy.adminFieldIds, copy.adminImportSource, copy.adminMapping],
+    address: [copy.street, copy.postalCode, copy.city, copy.country],
+    company: [copy.companyName, copy.companyType, copy.companyWebsite, copy.decisionMaker],
+    consent: [copy.newsletterAllowed, copy.phoneAllowed, copy.whatsappAllowed, copy.legalBasis],
+    contactRoutes: [copy.email, copy.phone, copy.mobileWhatsapp, copy.preferredContactRoute],
+    crm: [copy.project, copy.owner, copy.nextAction, copy.source],
+    overview: [copy.name, copy.project, copy.owner, copy.nextAction],
+    person: [copy.salutation, copy.firstName, copy.lastName, copy.preferredName],
+    realEstate: [copy.role, copy.budget, copy.desiredLocation, copy.financing],
+    relationships: [copy.organizationRecord, copy.relationshipMap, copy.openDeals],
+    timeline: [copy.lastActivity, copy.openTasks, copy.timeline],
+  };
 
   const contactViews: Array<{ id: ContactView; label: string; count: number }> = [
     { id: "all", label: copy.allContacts, count: contactRecords.length },
@@ -575,6 +627,20 @@ export function ContactCommandCenter({
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {copy.contactKind}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => setNewContactKind(event.target.value as ContactKind)}
+                  value={newContactKind}
+                >
+                  {copy.contactKindOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {copy.name}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
@@ -649,6 +715,26 @@ export function ContactCommandCenter({
                 </select>
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {copy.organizationRecord}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setNewContact((current) => ({
+                      ...current,
+                      organizationId: event.target.value || undefined,
+                    }))
+                  }
+                  value={newContact.organizationId ?? ""}
+                >
+                  <option value="">{copy.noOrganization}</option>
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {copy.need}
                 <input
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
@@ -665,13 +751,21 @@ export function ContactCommandCenter({
                 />
               </label>
             </div>
-            <button
-              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={() => void createContact()}
-              type="button"
-            >
-              {copy.saveContact}
-            </button>
+            <p className="mt-4 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+              {copy.quickCreateHelp}
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {[copy.saveContact, copy.saveAndTask, copy.saveAndLead].map((label) => (
+                <button
+                  className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                  key={label}
+                  onClick={() => void createContact()}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
       </article>
@@ -815,6 +909,37 @@ export function ContactCommandCenter({
                 ) : null}
               </div>
 
+              <div className="mt-5 rounded-lg border border-stone-200 bg-white p-3">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {contactDetailTabs.map((tab) => (
+                    <button
+                      className={`shrink-0 rounded-md border px-3 py-2 text-xs font-semibold ${
+                        activeDetailTab === tab.id
+                          ? "border-slate-950 bg-slate-950 text-white"
+                          : "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50"
+                      }`}
+                      key={tab.id}
+                      onClick={() => setActiveDetailTab(tab.id)}
+                      type="button"
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-md bg-stone-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                    {copy.recommendedForTab}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {recommendedByTab[activeDetailTab].map((field) => (
+                      <span className="rounded-md bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700" key={field}>
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <h5 className="text-sm font-semibold">
@@ -911,6 +1036,21 @@ export function ContactCommandCenter({
                       {sourceOptions.map((source) => (
                         <option key={source} value={source}>
                           {getCrmSourceLabel(source, language)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                    {copy.organizationRecord}
+                    <select
+                      className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                      onChange={(event) => updateSelectedContact("organizationId", event.target.value)}
+                      value={selectedContact.organizationId ?? ""}
+                    >
+                      <option value="">{copy.noOrganization}</option>
+                      {organizations.map((organization) => (
+                        <option key={organization.id} value={organization.id}>
+                          {organization.name}
                         </option>
                       ))}
                     </select>
@@ -1088,54 +1228,56 @@ export function ContactCommandCenter({
           </section>
 
           <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
-            <details className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
-              <summary className="cursor-pointer text-lg font-semibold">{copy.dataModelMapping}</summary>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h4 className="text-lg font-semibold">{copy.dataModelMapping}</h4>
-                  <p className="mt-1 break-words text-sm text-stone-500">
-                    {readyMappingCount}/{dataModelMapping.length} {copy.ready}
-                  </p>
+            {showTechnicalFields ? (
+              <details className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
+                <summary className="cursor-pointer text-lg font-semibold">{copy.dataModelMapping}</summary>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="text-lg font-semibold">{copy.dataModelMapping}</h4>
+                    <p className="mt-1 break-words text-sm text-stone-500">
+                      {readyMappingCount}/{dataModelMapping.length} {copy.ready}
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                    {copy.recordBundle}
+                  </span>
                 </div>
-                <span className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                  {copy.recordBundle}
-                </span>
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[620px] border-collapse text-left text-sm">
-                  <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
-                    <tr>
-                      <th className="py-2 pr-3 font-semibold">{copy.tableNovalure}</th>
-                      <th className="py-2 pr-3 font-semibold">{copy.tableValue}</th>
-                      <th className="py-2 pr-3 font-semibold">{copy.tableTargetField}</th>
-                      <th className="py-2 font-semibold">{copy.tableStatus}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {dataModelMapping.map((item) => (
-                      <tr key={item.label}>
-                        <td className="py-3 pr-3 font-semibold text-slate-900">{item.label}</td>
-                        <td className="py-3 pr-3 text-stone-600">
-                          {item.novalure ?? copy.noValue}
-                        </td>
-                        <td className="py-3 pr-3 text-stone-600">{item.targetField}</td>
-                        <td className="py-3">
-                          <span
-                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                              item.ready
-                                ? "bg-emerald-50 text-emerald-800"
-                                : "bg-amber-50 text-amber-800"
-                            }`}
-                          >
-                            {item.ready ? copy.ready : copy.warning}
-                          </span>
-                        </td>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+                    <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
+                      <tr>
+                        <th className="py-2 pr-3 font-semibold">{copy.tableNovalure}</th>
+                        <th className="py-2 pr-3 font-semibold">{copy.tableValue}</th>
+                        <th className="py-2 pr-3 font-semibold">{copy.tableTargetField}</th>
+                        <th className="py-2 font-semibold">{copy.tableStatus}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {dataModelMapping.map((item) => (
+                        <tr key={item.label}>
+                          <td className="py-3 pr-3 font-semibold text-slate-900">{item.label}</td>
+                          <td className="py-3 pr-3 text-stone-600">
+                            {item.novalure ?? copy.noValue}
+                          </td>
+                          <td className="py-3 pr-3 text-stone-600">{item.targetField}</td>
+                          <td className="py-3">
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                item.ready
+                                  ? "bg-emerald-50 text-emerald-800"
+                                  : "bg-amber-50 text-amber-800"
+                              }`}
+                            >
+                              {item.ready ? copy.ready : copy.warning}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ) : null}
 
             <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
               <h4 className="text-lg font-semibold">{copy.dataPrincipleTitle}</h4>
