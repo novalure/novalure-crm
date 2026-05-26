@@ -1319,8 +1319,8 @@ export function DealPipelineWorkspace({
   };
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4 md:p-5">
         <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-end 2xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
@@ -1329,9 +1329,9 @@ export function DealPipelineWorkspace({
             <h3 className="mt-1 text-2xl font-semibold">{text.title}</h3>
             <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">{text.description}</p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:justify-end">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:justify-end">
             <button
-              className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
+              className="w-full rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 sm:w-auto"
               disabled={Object.keys(dealPatches).length === 0}
               onClick={discardDraftChanges}
               type="button"
@@ -1339,7 +1339,7 @@ export function DealPipelineWorkspace({
               {text.discardDraft}
             </button>
             <button
-              className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
               onClick={() => setIsCreateOpen((current) => !current)}
               type="button"
             >
@@ -1449,7 +1449,7 @@ export function DealPipelineWorkspace({
               </label>
             </div>
             <button
-              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+              className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
               disabled={contacts.length === 0 || creatingDeal}
               onClick={() => void createDeal()}
               type="button"
@@ -1460,7 +1460,7 @@ export function DealPipelineWorkspace({
         ) : null}
       </article>
 
-      <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
             {text.search}
@@ -1553,15 +1553,15 @@ export function DealPipelineWorkspace({
               ))}
             </select>
           </label>
-          <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100" onClick={clearQuickFilters} type="button">
+          <button className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100 sm:w-auto" onClick={clearQuickFilters} type="button">
             {text.clearQuickFilters}
           </button>
         </div>
       </article>
 
-      <section className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="grid gap-4">
-          <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 gap-4">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-950">{text.endStatus}</h4>
@@ -1569,7 +1569,7 @@ export function DealPipelineWorkspace({
               </div>
               <p className="text-sm font-semibold text-stone-500">{text.dragHint}</p>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 max-w-full overflow-x-auto">
               <div
                 className="grid min-w-[720px] gap-2"
                 style={{ gridTemplateColumns: `repeat(${Math.max(endStageTitles.length, 1)}, minmax(220px, 1fr))` }}
@@ -1614,14 +1614,14 @@ export function DealPipelineWorkspace({
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-3">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-3">
             <div className="mb-3 flex flex-col gap-1 px-1 md:flex-row md:items-end md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-950">{text.workBoard}</h4>
                 <p className="text-sm text-stone-500">{text.dragHint}</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <div
                 className="grid gap-2"
                 style={{
@@ -1707,7 +1707,7 @@ export function DealPipelineWorkspace({
           </article>
         </div>
 
-        <aside className="rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+        <aside className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-4 md:p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
             {text.selectedDeal}
           </p>
@@ -1956,8 +1956,8 @@ export function DealPipelineWorkspace({
         </aside>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-        <article className="rounded-lg border border-stone-200 bg-white p-5">
+      <section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+        <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.fieldMapping}</h4>
@@ -1969,7 +1969,7 @@ export function DealPipelineWorkspace({
               {text.importReady}
             </span>
           </div>
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 max-w-full overflow-x-auto">
             <table className="w-full min-w-[680px] border-collapse text-left text-sm">
               <thead className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
                 <tr>
@@ -1995,7 +1995,7 @@ export function DealPipelineWorkspace({
           </div>
         </article>
 
-        <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
+        <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
           <h4 className="text-lg font-semibold">{text.pipelineSetup}</h4>
           <p className="mt-2 break-words text-sm text-slate-300">{text.setupDescription}</p>
           <p className="mt-2 break-words text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
