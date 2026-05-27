@@ -412,10 +412,10 @@ export function LeadInbox({
       nextAction: activeFieldDraft.nextAction,
     } satisfies Partial<LocalLead>;
 
-    updateLead(selectedLead.id, patch);
-    addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
     try {
       await persistLead({ ...selectedLead, ...patch });
+      updateLead(selectedLead.id, patch);
+      addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
       await refreshPersistedLeads(selectedLead.id);
       setNotice(text.changed);
     } catch {
@@ -431,10 +431,10 @@ export function LeadInbox({
       assignedToUserId: lead?.assignedToUserId ?? fallbackOwnerId,
     } satisfies Partial<LocalLead>;
 
-    updateLead(leadId, patch);
-    addActivity(leadId, text.accepted, text.acceptedDetail, "success");
     try {
       await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      updateLead(leadId, patch);
+      addActivity(leadId, text.accepted, text.acceptedDetail, "success");
       await refreshPersistedLeads(leadId);
       setNotice(text.accepted);
     } catch {
@@ -447,10 +447,10 @@ export function LeadInbox({
     const nextStatus = lead?.status === "Archiviert" ? "Qualifizieren" : "Archiviert";
     const patch = { status: nextStatus } satisfies Partial<LocalLead>;
 
-    updateLead(leadId, patch);
-    addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
     try {
       await persistLead({ ...(lead ?? {}), ...patch, id: leadId });
+      updateLead(leadId, patch);
+      addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
       await refreshPersistedLeads(leadId);
       setNotice(nextStatus === "Archiviert" ? text.archivedNow : text.restored);
     } catch {
@@ -552,14 +552,35 @@ export function LeadInbox({
     }
   };
 
-  const addNote = () => {
+  const addNote = async () => {
     if (!selectedLead || !noteDraft.trim()) {
       return;
     }
 
-    addActivity(selectedLead.id, text.noteSaved, noteDraft.trim(), "info");
-    setNoteDraft("");
-    setNotice(text.noteSaved);
+    const detail = noteDraft.trim();
+    try {
+      const response = await fetch("/api/crm/notes", {
+        body: JSON.stringify({
+          note: {
+            contactId: selectedLead.contactId || undefined,
+            detail,
+            leadId: selectedLead.id,
+            projectId: selectedLead.projectId,
+            title: text.noteSaved,
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) throw new Error(text.saveError);
+
+      addActivity(selectedLead.id, text.noteSaved, detail, "info");
+      setNoteDraft("");
+      setNotice(text.noteSaved);
+    } catch {
+      setNotice(text.saveError);
+    }
   };
 
   const createLead = async (createTaskAfterSave = false) => {

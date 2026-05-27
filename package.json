@@ -18,7 +18,8 @@
     "test:phase8": "node --test scripts/phase8-acceptance-smoke-tests.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
-    "qa:livegang:api": "node scripts/qa-livegang-api.mjs"
+    "qa:livegang:api": "node scripts/qa-livegang-api.mjs",
+    "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

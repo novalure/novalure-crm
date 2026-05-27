@@ -1,5 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import type {
+  CalendarEvent,
   Contact,
   CrmBot,
   Deal,
@@ -177,6 +178,50 @@ type FunnelRow = {
   workspaceId: string;
 };
 
+type NoteRow = {
+  channel: string;
+  contactId: string;
+  detail: string;
+  id: string;
+  metadata: Record<string, unknown> | null;
+  occurredAt: string | Date;
+  organizationId: string | null;
+  outcome: "offen" | "erledigt" | "risiko" | "info";
+  projectId: string | null;
+  title: string;
+  workspaceId: string;
+};
+
+type CalendarEventWriteRow = {
+  contactId: string | null;
+  endsAt: string | Date;
+  id: string;
+  leadId: string | null;
+  location: string;
+  metadata: Record<string, unknown> | null;
+  outcomeGoal: string;
+  ownerUserId: string | null;
+  preparation: unknown;
+  projectId: string | null;
+  startsAt: string | Date;
+  status: string;
+  teamsJoinUrl: string | null;
+  title: string;
+  workspaceId: string;
+};
+
+type ProjectWriteRow = {
+  customerType: Project["customerType"] | null;
+  defaultOperatingModel: Project["defaultOperatingModel"] | null;
+  defaultPipelineId: string | null;
+  id: string;
+  name: string;
+  setupDefaults: Project["setupDefaults"] | null;
+  status: Project["status"];
+  type: string;
+  workspaceId: string;
+};
+
 export type DashboardViewRecord = {
   filters: unknown;
   id: string;
@@ -191,6 +236,18 @@ export type DashboardViewRecord = {
 export type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
   | { persisted: false; reason: string };
+
+export type CrmNoteRecord = {
+  contactId: string;
+  detail: string;
+  id: string;
+  leadId?: string;
+  occurredAt: string;
+  outcome: "offen" | "erledigt" | "risiko" | "info";
+  projectId?: string;
+  title: string;
+  workspaceId: string;
+};
 
 export function normalizeWriteProjectId(value: unknown) {
   return typeof value === "string" && isUuid(value) ? value : null;
@@ -1169,6 +1226,535 @@ export async function upsertTaskRecord(input: {
   return { data: toTask(row), persisted: true };
 }
 
+export async function listNoteRecords(input: {
+  contactId?: string | null;
+  leadId?: string | null;
+  session: AppSession;
+}): Promise<{ notes: CrmNoteRecord[]; persisted: true } | { persisted: false; reason: string }> {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+
+  const leadId = normalizeWriteProjectId(input.leadId);
+  const contactId = normalizeWriteProjectId(input.contactId);
+  if (!leadId && !contactId) return { persisted: false, reason: "Lead or contact id is required" };
+
+  const rows = await queryRows<NoteRow>(
+    `
+      select
+        id,
+        workspace_id as "workspaceId",
+        contact_id as "contactId",
+        project_id as "projectId",
+        organization_id as "organizationId",
+        channel,
+        title,
+        detail,
+        outcome,
+        occurred_at as "occurredAt",
+        metadata
+      from contact_timeline_items
+      where workspace_id = $1
+        and channel = 'Notiz'
+        and ($2::uuid is null or metadata->>'leadId' = $2::text)
+        and ($3::uuid is null or contact_id = $3::uuid)
+      order by occurred_at desc
+      limit 100
+    `,
+    [input.session.workspaceId, leadId, contactId],
+  );
+
+  return { notes: rows.map(toNoteRecord), persisted: true };
+}
+
+export async function upsertNoteRecord(input: {
+  note: Record<string, unknown>;
+  session: AppSession;
+}): Promise<RepositoryWriteResult<CrmNoteRecord>> {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+
+  const validationError =
+    validateTextLength(input.note.title, "Note title", maxShortTextLength) ??
+    validateTextLength(input.note.detail, "Note detail", maxLongTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
+  const existing = isUuid(String(input.note.id ?? ""))
+    ? await queryOne<NoteRow>(
+        `
+          select
+            id,
+            workspace_id as "workspaceId",
+            contact_id as "contactId",
+            project_id as "projectId",
+            organization_id as "organizationId",
+            channel,
+            title,
+            detail,
+            outcome,
+            occurred_at as "occurredAt",
+            metadata
+          from contact_timeline_items
+          where id = $1 and workspace_id = $2 and channel = 'Notiz'
+          limit 1
+        `,
+        [input.note.id, input.session.workspaceId],
+      )
+    : null;
+
+  const leadId = normalizeWriteProjectId(input.note.leadId) ?? normalizeWriteProjectId(existing?.metadata?.leadId);
+  const lead = leadId
+    ? await queryOne<{
+        assignedToUserId: string | null;
+        contactId: string | null;
+        projectId: string | null;
+      }>(
+        `
+          select
+            assigned_to_user_id as "assignedToUserId",
+            contact_id as "contactId",
+            project_id as "projectId"
+          from leads
+          where id = $1 and workspace_id = $2
+          limit 1
+        `,
+        [leadId, input.session.workspaceId],
+      )
+    : null;
+  if (leadId && !lead) return { persisted: false, reason: "Lead not found" };
+
+  const requestedContactId =
+    normalizeWriteProjectId(input.note.contactId) ??
+    existing?.contactId ??
+    lead?.contactId ??
+    null;
+  if (!requestedContactId) {
+    return { persisted: false, reason: "Note requires a contact or a lead with contact" };
+  }
+
+  const contact = await queryOne<{ id: string; organizationId: string | null; projectId: string | null }>(
+    `
+      select id, organization_id as "organizationId", project_id as "projectId"
+      from contacts
+      where id = $1 and workspace_id = $2 and archived_at is null
+      limit 1
+    `,
+    [requestedContactId, input.session.workspaceId],
+  );
+  if (!contact) return { persisted: false, reason: "Contact not found" };
+
+  const projectId =
+    normalizeWriteProjectId(input.note.projectId) ??
+    existing?.projectId ??
+    lead?.projectId ??
+    contact.projectId ??
+    null;
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Note",
+    existingOwnerUserId: lead?.assignedToUserId,
+    ownerUserId: lead?.assignedToUserId ?? normalizeWriteProjectId(input.session.userId),
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
+
+  const detail = cleanString(input.note.detail);
+  const title = cleanString(input.note.title) || detail.slice(0, maxShortTextLength) || existing?.title || "Notiz";
+  if (!detail && !existing?.detail) return { persisted: false, reason: "Note detail is required" };
+
+  const outcome = normalizeTimelineOutcome(input.note.outcome ?? existing?.outcome);
+  const occurredAt =
+    cleanDateInput(input.note.occurredAt) ||
+    toIso(existing?.occurredAt ?? null) ||
+    new Date().toISOString();
+  const metadata = {
+    ...(existing?.metadata ?? {}),
+    ...asObject(input.note.metadata),
+    leadId,
+    source: "crm_notes",
+    updatedByUserId: input.session.userId,
+  };
+
+  const row = existing
+    ? await queryOne<NoteRow>(
+        `
+          update contact_timeline_items
+          set
+            contact_id = $3::uuid,
+            project_id = $4::uuid,
+            organization_id = $5::uuid,
+            title = $6,
+            detail = $7,
+            outcome = $8,
+            occurred_at = $9::timestamptz,
+            metadata = $10::jsonb
+          where id = $1 and workspace_id = $2 and channel = 'Notiz'
+          returning
+            id,
+            workspace_id as "workspaceId",
+            contact_id as "contactId",
+            project_id as "projectId",
+            organization_id as "organizationId",
+            channel,
+            title,
+            detail,
+            outcome,
+            occurred_at as "occurredAt",
+            metadata
+        `,
+        [
+          existing.id,
+          input.session.workspaceId,
+          requestedContactId,
+          projectId,
+          contact.organizationId,
+          title,
+          detail || existing.detail,
+          outcome,
+          occurredAt,
+          JSON.stringify(metadata),
+        ],
+      )
+    : await queryOne<NoteRow>(
+        `
+          insert into contact_timeline_items (
+            workspace_id,
+            contact_id,
+            project_id,
+            organization_id,
+            channel,
+            title,
+            detail,
+            outcome,
+            occurred_at,
+            metadata
+          )
+          values ($1, $2::uuid, $3::uuid, $4::uuid, 'Notiz', $5, $6, $7, $8::timestamptz, $9::jsonb)
+          returning
+            id,
+            workspace_id as "workspaceId",
+            contact_id as "contactId",
+            project_id as "projectId",
+            organization_id as "organizationId",
+            channel,
+            title,
+            detail,
+            outcome,
+            occurred_at as "occurredAt",
+            metadata
+        `,
+        [
+          input.session.workspaceId,
+          requestedContactId,
+          projectId,
+          contact.organizationId,
+          title,
+          detail,
+          outcome,
+          occurredAt,
+          JSON.stringify({ ...metadata, createdByUserId: input.session.userId }),
+        ],
+      );
+
+  if (!row) return { persisted: false, reason: "Note could not be saved" };
+
+  const note = toNoteRecord(row);
+  await writeAuditLog({
+    action: existing ? "note.updated" : "note.created",
+    after: note,
+    before: existing ? toNoteRecord(existing) : null,
+    entityId: note.id,
+    entityType: "note",
+    projectId: note.projectId,
+    session: input.session,
+  });
+
+  return { data: note, persisted: true };
+}
+
+export async function listCalendarEventRecords(input: {
+  contactId?: string | null;
+  leadId?: string | null;
+  session: AppSession;
+}): Promise<{ events: CalendarEvent[]; persisted: true } | { persisted: false; reason: string }> {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+
+  const leadId = normalizeWriteProjectId(input.leadId);
+  const contactId = normalizeWriteProjectId(input.contactId);
+  if (!leadId && !contactId) return { persisted: false, reason: "Lead or contact id is required" };
+
+  const rows = await queryRows<CalendarEventWriteRow>(
+    `
+      select
+        id,
+        workspace_id as "workspaceId",
+        project_id as "projectId",
+        contact_id as "contactId",
+        lead_id as "leadId",
+        owner_user_id as "ownerUserId",
+        title,
+        starts_at as "startsAt",
+        ends_at as "endsAt",
+        location,
+        status,
+        preparation,
+        outcome_goal as "outcomeGoal",
+        teams_join_url as "teamsJoinUrl",
+        metadata
+      from calendar_events
+      where workspace_id = $1
+        and ($2::uuid is null or lead_id = $2::uuid)
+        and ($3::uuid is null or contact_id = $3::uuid)
+      order by starts_at asc
+      limit 100
+    `,
+    [input.session.workspaceId, leadId, contactId],
+  );
+
+  return { events: rows.map(toCalendarEventRecord), persisted: true };
+}
+
+export async function upsertCalendarEventRecord(input: {
+  event: Record<string, unknown>;
+  session: AppSession;
+}): Promise<RepositoryWriteResult<CalendarEvent>> {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+
+  const validationError =
+    validateTextLength(input.event.title, "Calendar event title", maxShortTextLength) ??
+    validateTextLength(input.event.outcomeGoal, "Calendar event outcome goal", maxLongTextLength);
+  if (validationError) return { persisted: false, reason: validationError };
+
+  const existing = isUuid(String(input.event.id ?? ""))
+    ? await queryOne<CalendarEventWriteRow>(
+        `
+          select
+            id,
+            workspace_id as "workspaceId",
+            project_id as "projectId",
+            contact_id as "contactId",
+            lead_id as "leadId",
+            owner_user_id as "ownerUserId",
+            title,
+            starts_at as "startsAt",
+            ends_at as "endsAt",
+            location,
+            status,
+            preparation,
+            outcome_goal as "outcomeGoal",
+            teams_join_url as "teamsJoinUrl",
+            metadata
+          from calendar_events
+          where id = $1 and workspace_id = $2
+          limit 1
+        `,
+        [input.event.id, input.session.workspaceId],
+      )
+    : null;
+
+  const leadId = normalizeWriteProjectId(input.event.leadId) ?? existing?.leadId ?? null;
+  const lead = leadId
+    ? await queryOne<{
+        assignedToUserId: string | null;
+        contactId: string | null;
+        projectId: string | null;
+      }>(
+        `
+          select
+            assigned_to_user_id as "assignedToUserId",
+            contact_id as "contactId",
+            project_id as "projectId"
+          from leads
+          where id = $1 and workspace_id = $2
+          limit 1
+        `,
+        [leadId, input.session.workspaceId],
+      )
+    : null;
+  if (leadId && !lead) return { persisted: false, reason: "Lead not found" };
+
+  const contactId = normalizeWriteProjectId(input.event.contactId) ?? existing?.contactId ?? lead?.contactId ?? null;
+  const contact = contactId
+    ? await queryOne<{ id: string; projectId: string | null }>(
+        `
+          select id, project_id as "projectId"
+          from contacts
+          where id = $1 and workspace_id = $2 and archived_at is null
+          limit 1
+        `,
+        [contactId, input.session.workspaceId],
+      )
+    : null;
+  if (contactId && !contact) return { persisted: false, reason: "Contact not found" };
+
+  const projectId =
+    normalizeWriteProjectId(input.event.projectId) ??
+    existing?.projectId ??
+    lead?.projectId ??
+    contact?.projectId ??
+    await resolveFallbackProjectId(input.session.workspaceId);
+  const ownerUserId =
+    normalizeWriteProjectId(input.event.ownerUserId) ??
+    existing?.ownerUserId ??
+    lead?.assignedToUserId ??
+    normalizeWriteProjectId(input.session.userId);
+  const title = cleanString(input.event.title) || existing?.title || "";
+  if (!title) return { persisted: false, reason: "Calendar event title is required" };
+
+  const startsAt = cleanDateInput(input.event.startsAt) || toIso(existing?.startsAt ?? null);
+  const endsAt = cleanDateInput(input.event.endsAt) || toIso(existing?.endsAt ?? null);
+  if (!startsAt || !endsAt) return { persisted: false, reason: "Calendar event start and end are required" };
+  if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    return { persisted: false, reason: "Calendar event end must be after start" };
+  }
+
+  const writeAccess = await assertRecordWriteAccess({
+    entityLabel: "Calendar event",
+    existingOwnerUserId: existing?.ownerUserId ?? lead?.assignedToUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
+
+  const metadata = {
+    ...(existing?.metadata ?? {}),
+    ...asObject(input.event.metadata),
+    calendarProvider: "manual",
+    externalCommunication: false,
+    meetingProvider: cleanString(input.event.meetingProvider) || "manual-link",
+    source: "crm_internal_calendar_event",
+    updatedByUserId: input.session.userId,
+  };
+
+  const row = existing
+    ? await queryOne<CalendarEventWriteRow>(
+        `
+          update calendar_events
+          set
+            project_id = $3::uuid,
+            contact_id = $4::uuid,
+            lead_id = $5::uuid,
+            owner_user_id = $6::uuid,
+            title = $7,
+            starts_at = $8::timestamptz,
+            ends_at = $9::timestamptz,
+            location = $10,
+            status = $11,
+            preparation = $12::jsonb,
+            outcome_goal = $13,
+            teams_join_url = null,
+            metadata = $14::jsonb,
+            updated_at = now()
+          where id = $1 and workspace_id = $2
+          returning
+            id,
+            workspace_id as "workspaceId",
+            project_id as "projectId",
+            contact_id as "contactId",
+            lead_id as "leadId",
+            owner_user_id as "ownerUserId",
+            title,
+            starts_at as "startsAt",
+            ends_at as "endsAt",
+            location,
+            status,
+            preparation,
+            outcome_goal as "outcomeGoal",
+            teams_join_url as "teamsJoinUrl",
+            metadata
+        `,
+        [
+          existing.id,
+          input.session.workspaceId,
+          projectId,
+          contactId,
+          leadId,
+          ownerUserId,
+          title,
+          startsAt,
+          endsAt,
+          normalizeCalendarEventLocation(input.event.location ?? existing.location),
+          normalizeCalendarEventStatus(input.event.status ?? existing.status),
+          JSON.stringify(normalizeStringArray(input.event.preparation ?? existing.preparation)),
+          cleanString(input.event.outcomeGoal) || existing.outcomeGoal || "",
+          JSON.stringify(metadata),
+        ],
+      )
+    : await queryOne<CalendarEventWriteRow>(
+        `
+          insert into calendar_events (
+            workspace_id,
+            project_id,
+            contact_id,
+            lead_id,
+            owner_user_id,
+            title,
+            starts_at,
+            ends_at,
+            location,
+            status,
+            preparation,
+            outcome_goal,
+            teams_join_url,
+            metadata
+          )
+          values ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::timestamptz, $8::timestamptz, $9, $10, $11::jsonb, $12, null, $13::jsonb)
+          returning
+            id,
+            workspace_id as "workspaceId",
+            project_id as "projectId",
+            contact_id as "contactId",
+            lead_id as "leadId",
+            owner_user_id as "ownerUserId",
+            title,
+            starts_at as "startsAt",
+            ends_at as "endsAt",
+            location,
+            status,
+            preparation,
+            outcome_goal as "outcomeGoal",
+            teams_join_url as "teamsJoinUrl",
+            metadata
+        `,
+        [
+          input.session.workspaceId,
+          projectId,
+          contactId,
+          leadId,
+          ownerUserId,
+          title,
+          startsAt,
+          endsAt,
+          normalizeCalendarEventLocation(input.event.location),
+          normalizeCalendarEventStatus(input.event.status),
+          JSON.stringify(normalizeStringArray(input.event.preparation)),
+          cleanString(input.event.outcomeGoal),
+          JSON.stringify({ ...metadata, createdByUserId: input.session.userId }),
+        ],
+      );
+
+  if (!row) return { persisted: false, reason: "Calendar event could not be saved" };
+
+  const event = toCalendarEventRecord(row);
+  await writeAuditLog({
+    action: existing ? "calendar_event.updated" : "calendar_event.created",
+    after: event,
+    before: existing ? toCalendarEventRecord(existing) : null,
+    entityId: event.id,
+    entityType: "calendar_event",
+    projectId: event.projectId,
+    session: input.session,
+  });
+
+  return { data: event, persisted: true };
+}
+
 export async function upsertLeadRecord(input: {
   lead: Partial<Lead>;
   session: AppSession;
@@ -1209,6 +1795,8 @@ export async function upsertLeadRecord(input: {
     toIso(existing?.slaDueAt ?? null) ||
     new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const manualFirstResponseAt = cleanDateInput(input.lead.lastContactAt);
+  const lastContactAt = manualFirstResponseAt || toNullableIso(existing?.lastContactAt ?? null);
+  const nextContactAt = cleanDateInput(input.lead.nextContactAt) || toNullableIso(existing?.nextContactAt ?? null);
   const intent = cleanString(input.lead.intent) || existing?.intent || "Neuer Lead";
   const nextAction = cleanString(input.lead.nextAction) || existing?.nextAction || "Kontakt aufnehmen";
   const source = (cleanString(input.lead.source) || existing?.source || contact?.source || "Manual") as Lead["source"];
@@ -1272,8 +1860,8 @@ export async function upsertLeadRecord(input: {
           nextAction,
           receivedAt,
           slaDueAt,
-          manualFirstResponseAt || toIso(existing.lastContactAt),
-          cleanDateInput(input.lead.nextContactAt) || toIso(existing.nextContactAt),
+          lastContactAt,
+          nextContactAt,
           cleanString(input.lead.region) || existing.region || "",
           cleanString(input.lead.objectType) || existing.objectType || "",
           input.lead.rooms ?? existing.rooms ?? null,
@@ -2286,17 +2874,7 @@ export async function createProjectRecord(input: {
       ? rawSetupDefaults.teamStructure
       : input.session.workspaceTeamStructure ?? undefined,
   };
-  const row = await queryOne<{
-    customerType: Project["customerType"] | null;
-    defaultOperatingModel: Project["defaultOperatingModel"] | null;
-    defaultPipelineId: string | null;
-    id: string;
-    name: string;
-    setupDefaults: Project["setupDefaults"] | null;
-    status: Project["status"];
-    type: string;
-    workspaceId: string;
-  }>(
+  const row = await queryOne<ProjectWriteRow>(
     `
       insert into projects (
         workspace_id,
@@ -2354,20 +2932,137 @@ export async function createProjectRecord(input: {
   });
 
   return {
-    data: {
-      defaultPipelineId: pipelineSetup.defaultPipelineId ?? row.defaultPipelineId ?? "",
-      customerType: row.customerType ?? undefined,
-      defaultOperatingModel: row.defaultOperatingModel ?? undefined,
-      id: row.id,
-      leads: 0,
-      name: row.name,
-      revenue: "0",
-      setupDefaults: row.setupDefaults ?? undefined,
-      status: row.status,
-      type: row.type,
-      workspaceId: row.workspaceId,
-    },
+    data: toProjectWriteResult(row, pipelineSetup.defaultPipelineId),
     persisted: true,
+  };
+}
+
+export async function updateProjectRecord(input: {
+  project: Partial<Project>;
+  session: AppSession;
+}): Promise<RepositoryWriteResult<Project>> {
+  if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+
+  if (!isUuid(input.project.id)) {
+    return { persisted: false, reason: "Project id is required" };
+  }
+
+  const existing = await queryOne<ProjectWriteRow>(
+    `
+      select
+        id,
+        workspace_id as "workspaceId",
+        name,
+        type,
+        status,
+        customer_type as "customerType",
+        default_operating_model as "defaultOperatingModel",
+        setup_defaults as "setupDefaults",
+        default_pipeline_id as "defaultPipelineId"
+      from projects
+      where id = $1 and workspace_id = $2
+      limit 1
+    `,
+    [input.project.id, input.session.workspaceId],
+  );
+
+  if (!existing) return { persisted: false, reason: "Project not found" };
+
+  const name = cleanString(input.project.name) || existing.name;
+  if (!name) return { persisted: false, reason: "Project name is required" };
+
+  const customerType = isWorkspaceCustomerType(input.project.customerType)
+    ? input.project.customerType
+    : existing.customerType;
+  const defaultOperatingModel = isWorkspaceOperatingModel(input.project.defaultOperatingModel)
+    ? input.project.defaultOperatingModel
+    : existing.defaultOperatingModel;
+  const rawSetupDefaults = asObject(input.project.setupDefaults);
+  const setupDefaults = {
+    ...(existing.setupDefaults ?? createModeSetupDefaults(customerType, defaultOperatingModel)),
+    ...rawSetupDefaults,
+    calendarProvider: isCalendarProviderChoice(rawSetupDefaults.calendarProvider)
+      ? rawSetupDefaults.calendarProvider
+      : existing.setupDefaults?.calendarProvider ?? input.session.workspaceActiveCalendarProvider ?? "none",
+    meetingProvider:
+      cleanString(rawSetupDefaults.meetingProvider) ||
+      existing.setupDefaults?.meetingProvider ||
+      undefined,
+    teamStructure: isWorkspaceTeamStructure(rawSetupDefaults.teamStructure)
+      ? rawSetupDefaults.teamStructure
+      : existing.setupDefaults?.teamStructure ?? input.session.workspaceTeamStructure ?? undefined,
+  };
+  const defaultPipelineId = normalizeWriteProjectId(input.project.defaultPipelineId) ?? existing.defaultPipelineId;
+
+  const row = await queryOne<ProjectWriteRow>(
+    `
+      update projects
+      set
+        name = $3,
+        type = $4,
+        status = $5,
+        customer_type = $6,
+        default_operating_model = $7,
+        setup_defaults = $8::jsonb,
+        default_pipeline_id = $9::uuid,
+        updated_at = now()
+      where id = $1 and workspace_id = $2
+      returning
+        id,
+        workspace_id as "workspaceId",
+        name,
+        type,
+        status,
+        customer_type as "customerType",
+        default_operating_model as "defaultOperatingModel",
+        setup_defaults as "setupDefaults",
+        default_pipeline_id as "defaultPipelineId"
+    `,
+    [
+      existing.id,
+      input.session.workspaceId,
+      name,
+      cleanString(input.project.type) || existing.type,
+      cleanString(input.project.status) || existing.status,
+      customerType,
+      defaultOperatingModel,
+      JSON.stringify(setupDefaults),
+      defaultPipelineId,
+    ],
+  );
+
+  if (!row) return { persisted: false, reason: "Project could not be saved" };
+
+  await writeAuditLog({
+    action: "project.updated",
+    after: row,
+    before: existing,
+    entityId: row.id,
+    entityType: "project",
+    session: input.session,
+  });
+
+  return {
+    data: toProjectWriteResult(row),
+    persisted: true,
+  };
+}
+
+function toProjectWriteResult(row: ProjectWriteRow, defaultPipelineId = row.defaultPipelineId): Project {
+  return {
+    defaultPipelineId: defaultPipelineId ?? "",
+    customerType: row.customerType ?? undefined,
+    defaultOperatingModel: row.defaultOperatingModel ?? undefined,
+    id: row.id,
+    leads: 0,
+    name: row.name,
+    revenue: "0",
+    setupDefaults: row.setupDefaults ?? undefined,
+    status: row.status,
+    type: row.type,
+    workspaceId: row.workspaceId,
   };
 }
 
@@ -3004,6 +3699,78 @@ function toTask(row: TaskRow): Task {
   };
 }
 
+function normalizeTimelineOutcome(value: unknown): CrmNoteRecord["outcome"] {
+  return value === "offen" || value === "erledigt" || value === "risiko" || value === "info" ? value : "info";
+}
+
+function toNoteRecord(row: NoteRow): CrmNoteRecord {
+  const metadata = asObject(row.metadata);
+  return {
+    contactId: row.contactId,
+    detail: row.detail,
+    id: row.id,
+    leadId: normalizeWriteProjectId(metadata.leadId) ?? undefined,
+    occurredAt: toIso(row.occurredAt),
+    outcome: normalizeTimelineOutcome(row.outcome),
+    projectId: row.projectId ?? undefined,
+    title: row.title,
+    workspaceId: row.workspaceId,
+  };
+}
+
+function normalizeCalendarEventLocation(value: unknown): CalendarEvent["location"] {
+  if (value === "Teams" || value === "Google Meet" || value === "Vor Ort" || value === "Telefon" || value === "Extern") {
+    return value;
+  }
+  return "Telefon";
+}
+
+function normalizeCalendarEventStatus(value: unknown): CalendarEvent["status"] {
+  if (value === "geplant" || value === "vorbereiten" || value === "bestätigt" || value === "nachfassen") {
+    return value;
+  }
+  return "geplant";
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(String).map((item) => item.trim()).filter(Boolean);
+}
+
+function toCalendarEventRecord(row: CalendarEventWriteRow): CalendarEvent {
+  const metadata = asObject(row.metadata);
+  const calendarProvider = metadata.calendarProvider === "microsoft" || metadata.calendarProvider === "google"
+    ? metadata.calendarProvider
+    : "manual";
+  const meetingProvider = metadata.meetingProvider === "microsoft-teams" ||
+    metadata.meetingProvider === "google-meet" ||
+    metadata.meetingProvider === "manual-link" ||
+    metadata.meetingProvider === "phone"
+    ? metadata.meetingProvider
+    : "manual-link";
+
+  return {
+    calendarProvider,
+    contactId: row.contactId ?? undefined,
+    endsAt: toIso(row.endsAt),
+    externalCalendarId: typeof metadata.externalCalendarId === "string" ? metadata.externalCalendarId : undefined,
+    googleMeetJoinUrl: typeof metadata.googleMeetJoinUrl === "string" ? metadata.googleMeetJoinUrl : undefined,
+    id: row.id,
+    leadId: row.leadId ?? undefined,
+    location: normalizeCalendarEventLocation(row.location),
+    meetingProvider,
+    outcomeGoal: row.outcomeGoal,
+    ownerUserId: row.ownerUserId ?? undefined,
+    preparation: normalizeStringArray(row.preparation),
+    projectId: row.projectId ?? "",
+    startsAt: toIso(row.startsAt),
+    status: normalizeCalendarEventStatus(row.status),
+    teamsJoinUrl: row.teamsJoinUrl ?? undefined,
+    title: row.title,
+    workspaceId: row.workspaceId,
+  };
+}
+
 function toFunnel(row: FunnelRow): Funnel {
   return {
     audience: row.audience,
@@ -3304,6 +4071,11 @@ function normalizeDateOnly(value: unknown) {
 function toIso(value: string | Date | null) {
   if (!value) return "";
   return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function toNullableIso(value: string | Date | null | undefined) {
+  const iso = toIso(value ?? null);
+  return iso || null;
 }
 
 function toOptionalIso(value: string | Date | null | undefined) {
