@@ -14,6 +14,8 @@ import type {
 } from "@/lib/crm-types";
 import {
   getContactCommandCenterCopy,
+  getCrmConsentChannelLabel,
+  getCrmConsentStatusLabel,
   getCrmLeadTypeLabel,
   getCrmLifecycleLabel,
   getCrmOrganizationTypeLabel,
@@ -338,7 +340,9 @@ export function ContactCommandCenter({
     },
     {
       label: copy.qualityConsent,
-      detail: selectedConsents.map((consent) => `${consent.channel}: ${consent.status}`).join(", "),
+      detail: selectedConsents
+        .map((consent) => `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`)
+        .join(", "),
       status: selectedConsents.length > 0 ? "ok" : "warning",
     },
     {
@@ -1206,7 +1210,7 @@ export function ContactCommandCenter({
                     className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800"
                     key={consent.id}
                   >
-                    {consent.channel}: {consent.status}
+                    {getCrmConsentChannelLabel(consent.channel, language)}: {getCrmConsentStatusLabel(consent.status, language)}
                   </span>
                 ))}
                 {selectedConsents.length === 0 ? (

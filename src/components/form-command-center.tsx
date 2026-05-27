@@ -854,7 +854,7 @@ export function FormCommandCenter({
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold">{copy.builder.structure}</p>
               <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${statusStyles[selectedForm.status]}`}>
-                {selectedForm.status}
+                {copy.builder.statusOptions[selectedForm.status]}
               </span>
             </div>
 
@@ -934,7 +934,7 @@ export function FormCommandCenter({
                 >
                   <span className="block font-semibold">{index + 1}. {field.label}</span>
                   <span className="mt-1 block break-words text-xs text-stone-500">
-                    {field.type} · {selectedSteps.find((step) => step.id === field.stepId)?.title ?? copy.fields.hiddenValue} ·{" "}
+                    {copy.fieldTypes[field.type]} · {selectedSteps.find((step) => step.id === field.stepId)?.title ?? copy.fields.hiddenValue} ·{" "}
                     {field.required ? copy.fields.required : copy.fields.optional}
                   </span>
                 </button>
@@ -1333,7 +1333,7 @@ export function FormCommandCenter({
                     </span>
                   </span>
                   <span className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${isSelected ? "border-white/15 bg-white/10 text-white" : statusStyles[form.status]}`}>
-                    {form.status}
+                    {copy.builder.statusOptions[form.status]}
                   </span>
                 </span>
                 <span className="mt-3 grid gap-2 text-xs">

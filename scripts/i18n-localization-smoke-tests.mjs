@@ -141,7 +141,12 @@ function localizedExports(sourceText) {
 
 const i18nSource = readProjectFile("src/lib/i18n.ts");
 const leadInboxSource = readProjectFile("src/components/lead-inbox.tsx");
+const botSource = readProjectFile("src/components/bot-command-center.tsx");
+const calendarCommandCenterSource = readProjectFile("src/components/calendar-command-center.tsx");
+const contactCommandCenterSource = readProjectFile("src/components/contact-command-center.tsx");
 const dashboardSource = readProjectFile("src/components/dashboard-overview.tsx");
+const formCommandCenterSource = readProjectFile("src/components/form-command-center.tsx");
+const funnelCommandCenterSource = readProjectFile("src/components/funnel-command-center.tsx");
 const workspaceSource = readProjectFile("src/components/crm-workspace.tsx");
 const layoutSource = readProjectFile("src/app/layout.tsx");
 const htmlSyncSource = readProjectFile("src/components/language-html-sync.tsx");
@@ -206,11 +211,31 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(i18nSource, /export function getCrmLeadTypeKey/);
   assert.match(i18nSource, /export function getCrmSourceKey/);
   assert.match(i18nSource, /export function getCrmStatusKey/);
+  assert.match(i18nSource, /export function getCrmEnumLabel/);
+  assert.match(i18nSource, /export function getCrmPropertyTypeLabel/);
+  assert.match(i18nSource, /export function getCrmFinancingStatusLabel/);
+  assert.match(i18nSource, /export function getCrmConsentChannelLabel/);
+  assert.match(i18nSource, /export function getCrmConsentStatusLabel/);
   assert.match(leadInboxSource, /getCrmLeadTypeLabel\(item\.lead\.type, language\)/);
   assert.match(leadInboxSource, /getCrmSourceLabel\(item\.lead\.source, language\)/);
+  assert.match(leadInboxSource, /getCrmPropertyTypeLabel\(propertyType, language\)/);
+  assert.match(leadInboxSource, /getCrmFinancingStatusLabel\(status, language\)/);
+  assert.match(botSource, /getBotVisibleStatusLabel\(conversation\.status, text, language\)/);
+  assert.match(botSource, /getBotVisibleStatusLabel\(event\.status, text, language\)/);
+  assert.match(botSource, /getBotVisibleStatusLabel\(documentSend\.status, text, language\)/);
+  assert.match(calendarCommandCenterSource, /getCrmEnumLabel\(booking\.source, language\)/);
+  assert.match(contactCommandCenterSource, /getCrmConsentChannelLabel\(consent\.channel, language\)/);
+  assert.match(contactCommandCenterSource, /getCrmConsentStatusLabel\(consent\.status, language\)/);
   assert.match(dashboardSource, /getCrmLeadTypeLabel\(type, language\)/);
   assert.match(dashboardSource, /getCrmSourceLabel\(source, language\)/);
+  assert.match(formCommandCenterSource, /copy\.builder\.statusOptions\[form\.status\]/);
+  assert.match(formCommandCenterSource, /copy\.fieldTypes\[field\.type\]/);
+  assert.match(funnelCommandCenterSource, /text\.messages\.statusTriggerStages/);
+  assert.match(funnelCommandCenterSource, /getCrmEnumLabel\(item\.status, language\)/);
+  assert.match(workspaceSource, /getCrmConsentChannelLabel\(consent\.channel, language\)/);
+  assert.match(workspaceSource, /getCrmEnumLabel\(dataSource, language\)/);
   assert.match(workspaceSource, /getCrmLeadTypeKey\(lead\.type\)/);
+  assert.match(workspaceSource, /getCrmSourceLabel\(source, language\)/);
 });
 
 test("system language persists to document html lang", () => {

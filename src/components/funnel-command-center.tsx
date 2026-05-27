@@ -8,6 +8,7 @@ import type { Funnel, FunnelStep, Lead, Project, WorkspaceUser } from "@/lib/crm
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
 import {
   formatNumber,
+  getCrmEnumLabel,
   getCrmLeadTypeLabel,
   getCrmSourceLabel,
   getCrmStatusLabel,
@@ -1303,7 +1304,7 @@ export function FunnelCommandCenter({
               <div className={`${cardClass} 2xl:col-span-2`}>
                 <p className="text-sm font-semibold">{text.messages.statusTriggers}</p>
                 <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  {["Neu", "Qualifiziert", "Termin offen", "Besichtigung gebucht"].map((stage, index) => (
+                  {text.messages.statusTriggerStages.map((stage, index) => (
                     <div className="rounded-md bg-stone-50 p-3 text-sm" key={stage}>
                       <p className="font-semibold">{stage}</p>
                       <p className="mt-1 text-stone-600">{text.messages.triggerDescriptions[index] ?? text.messages.triggerDescriptions[0]}</p>
@@ -1348,7 +1349,7 @@ export function FunnelCommandCenter({
                 <p className="text-sm font-semibold">{text.tracking.monitor}</p>
                 <div className="mt-3 grid gap-2">
                   {monitor.map((item, index) => (
-                    <div className="rounded-md bg-white/10 p-3 text-sm" key={`${item.label}_${index}`}><p className="font-semibold">{item.label} · {item.status}</p><p className="mt-1 break-words text-slate-300">{item.detail}</p></div>
+                    <div className="rounded-md bg-white/10 p-3 text-sm" key={`${item.label}_${index}`}><p className="font-semibold">{item.label} · {getCrmEnumLabel(item.status, language)}</p><p className="mt-1 break-words text-slate-300">{item.detail}</p></div>
                   ))}
                 </div>
                 <pre className="mt-4 max-w-full overflow-auto rounded-md bg-black/30 p-3 text-xs text-slate-200">{generatedSnippet}</pre>

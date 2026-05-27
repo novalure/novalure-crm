@@ -5581,6 +5581,7 @@ export const funnelCommandCenterCopy = {
       leadMagnetPlaceholder: "PDF, checklist, valuation, project update",
       newsletterSegment: "Newsletter segment",
       statusTriggers: "CRM status triggers",
+      statusTriggerStages: ["New", "Qualified", "Appointment open", "Viewing booked"],
       triggerDescriptions: ["Confirm immediately", "Notify sales", "Send reminder", "Send preparation"],
     },
     tracking: {
@@ -5866,6 +5867,7 @@ export const funnelCommandCenterCopy = {
       leadMagnetPlaceholder: "PDF, Checkliste, Bewertung, Projekt-Update",
       newsletterSegment: "Newsletter Segment",
       statusTriggers: "CRM-Status-Trigger",
+      statusTriggerStages: ["Neu", "Qualifiziert", "Termin offen", "Besichtigung gebucht"],
       triggerDescriptions: ["Sofort bestätigen", "Sales informieren", "Reminder senden", "Vorbereitung senden"],
     },
     tracking: {
@@ -9734,6 +9736,39 @@ const crmSourceLabels: Record<string, Record<LanguageCode, string>> = {
   ImmobilienScout: { en: "ImmobilienScout", de: "ImmobilienScout" },
 };
 
+const crmPropertyTypeLabels: Record<string, Record<LanguageCode, string>> = {
+  Wohnung: { en: "Apartment", de: "Wohnung" },
+  Haus: { en: "House", de: "Haus" },
+  Neubau: { en: "New build", de: "Neubau" },
+  Zinshaus: { en: "Apartment building", de: "Zinshaus" },
+  Gewerbe: { en: "Commercial", de: "Gewerbe" },
+  Grundstück: { en: "Land", de: "Grundstück" },
+  "Grundst?ck": { en: "Land", de: "Grundstück" },
+  Portfolio: { en: "Portfolio", de: "Portfolio" },
+};
+
+const crmFinancingStatusLabels: Record<string, Record<LanguageCode, string>> = {
+  offen: { en: "Open", de: "Offen" },
+  vorqualifiziert: { en: "Pre-qualified", de: "Vorqualifiziert" },
+  Eigenmittel: { en: "Equity available", de: "Eigenmittel" },
+  Finanzierungszusage: { en: "Financing approved", de: "Finanzierungszusage" },
+};
+
+const crmConsentChannelLabels: Record<string, Record<LanguageCode, string>> = {
+  Newsletter: { en: "Newsletter", de: "Newsletter" },
+  WhatsApp: { en: "WhatsApp", de: "WhatsApp" },
+  Instagram: { en: "Instagram", de: "Instagram" },
+  Telefon: { en: "Phone", de: "Telefon" },
+  "E-Mail": { en: "Email", de: "E-Mail" },
+};
+
+const crmConsentStatusLabels: Record<string, Record<LanguageCode, string>> = {
+  "Opt-in": { en: "Opt-in", de: "Opt-in" },
+  "Opt-out": { en: "Opt-out", de: "Opt-out" },
+  "Nur CRM": { en: "CRM only", de: "Nur CRM" },
+  Unbekannt: { en: "Unknown", de: "Unbekannt" },
+};
+
 const crmLeadTypeAliases: Record<string, string> = {
   bautrager: "Bauträger",
   bautraeger: "Bauträger",
@@ -9765,6 +9800,52 @@ const crmSourceAliases: Record<string, string> = {
   website_funnel: "Website Funnel",
   whatsapp: "WhatsApp",
   willhaben: "willhaben",
+};
+
+const crmPropertyTypeAliases: Record<string, string> = {
+  apartment: "Wohnung",
+  commercial: "Gewerbe",
+  gewerbe: "Gewerbe",
+  grundstuck: "Grundstück",
+  grundstueck: "Grundstück",
+  haus: "Haus",
+  house: "Haus",
+  land: "Grundstück",
+  neubau: "Neubau",
+  new_build: "Neubau",
+  portfolio: "Portfolio",
+  wohnung: "Wohnung",
+  zinshaus: "Zinshaus",
+};
+
+const crmFinancingStatusAliases: Record<string, string> = {
+  eigenmittel: "Eigenmittel",
+  financing_approved: "Finanzierungszusage",
+  finanzierungszusage: "Finanzierungszusage",
+  offen: "offen",
+  open: "offen",
+  pre_qualified: "vorqualifiziert",
+  prequalified: "vorqualifiziert",
+  vorqualifiziert: "vorqualifiziert",
+};
+
+const crmConsentChannelAliases: Record<string, string> = {
+  email: "E-Mail",
+  e_mail: "E-Mail",
+  instagram: "Instagram",
+  newsletter: "Newsletter",
+  phone: "Telefon",
+  telefon: "Telefon",
+  whatsapp: "WhatsApp",
+};
+
+const crmConsentStatusAliases: Record<string, string> = {
+  crm_only: "Nur CRM",
+  nur_crm: "Nur CRM",
+  opt_in: "Opt-in",
+  opt_out: "Opt-out",
+  unknown: "Unbekannt",
+  unbekannt: "Unbekannt",
 };
 
 const funnelTemplateUseCaseLabels: Record<string, Record<LanguageCode, string>> = {
@@ -9925,6 +10006,59 @@ const crmStatusAliases: Record<string, string> = {
   training: "Training",
   ubergabe: "Übergabe",
   uebergabe: "Übergabe",
+};
+
+const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
+  active: { en: "Active", de: "Aktiv" },
+  approved: { en: "Approved", de: "Freigegeben" },
+  available: { en: "Available", de: "Verfügbar" },
+  blocked: { en: "Blocked", de: "Blockiert" },
+  cancelled: { en: "Cancelled", de: "Abgebrochen" },
+  complete: { en: "Complete", de: "Vollständig" },
+  completed: { en: "Completed", de: "Abgeschlossen" },
+  confirmed: { en: "Confirmed", de: "Bestätigt" },
+  connected: { en: "Connected", de: "Verbunden" },
+  database: { en: "Database", de: "Datenbank" },
+  demo: { en: "Demo fallback", de: "Demo-Fallback" },
+  denied: { en: "Denied", de: "Abgelehnt" },
+  draft: { en: "Draft", de: "Entwurf" },
+  error: { en: "Error", de: "Fehler" },
+  expired: { en: "Expired", de: "Abgelaufen" },
+  failed: { en: "Failed", de: "Fehlgeschlagen" },
+  fallback: { en: "Fallback", de: "Fallback" },
+  handoff: { en: "Handoff", de: "Übergabe" },
+  hold: { en: "On hold", de: "Reserviert" },
+  incomplete: { en: "Incomplete", de: "Unvollständig" },
+  live: { en: "Live", de: "Live" },
+  needs_review: { en: "Needs review", de: "Prüfen" },
+  "needs-review": { en: "Needs review", de: "Prüfen" },
+  not_connected: { en: "Not connected", de: "Nicht verbunden" },
+  open: { en: "Open", de: "Offen" },
+  paused: { en: "Paused", de: "Pausiert" },
+  pending: { en: "Pending", de: "Offen" },
+  queued: { en: "Queued", de: "In Warteschlange" },
+  ready: { en: "Ready", de: "Bereit" },
+  ready_to_send: { en: "Ready to send", de: "Bereit zum Senden" },
+  requested: { en: "Requested", de: "Angefragt" },
+  reserved: { en: "Reserved", de: "Reserviert" },
+  resolved: { en: "Resolved", de: "Erledigt" },
+  routed: { en: "Routed", de: "Weitergeleitet" },
+  sent: { en: "Sent", de: "Gesendet" },
+  sold: { en: "Sold", de: "Verkauft" },
+  synced: { en: "Synced", de: "Synchronisiert" },
+  test: { en: "Test mode", de: "Testmodus" },
+  vector_ready: { en: "Vector ready", de: "Vektor bereit" },
+};
+
+const crmGenericEnumAliases: Record<string, string> = {
+  needs_review: "needs_review",
+  needs_reviewed: "needs_review",
+  needs_reviewing: "needs_review",
+  needs_review_status: "needs_review",
+  needs_reviewed_status: "needs_review",
+  ready_to_send: "ready_to_send",
+  vector_bereit: "vector_ready",
+  vector_ready: "vector_ready",
 };
 
 export function isLanguageCode(value: unknown): value is LanguageCode {
@@ -10592,6 +10726,26 @@ export function getCrmSourceLabel(source: string, language: LanguageCode) {
 export function getCrmSourceKey(source: string) {
   const trimmedSource = source.trim();
   return crmSourceAliases[normalizeEnumLookupKey(trimmedSource)] ?? trimmedSource;
+}
+
+export function getCrmPropertyTypeLabel(propertyType: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmPropertyTypeLabels, crmPropertyTypeAliases, propertyType, language);
+}
+
+export function getCrmFinancingStatusLabel(status: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmFinancingStatusLabels, crmFinancingStatusAliases, status, language);
+}
+
+export function getCrmConsentChannelLabel(channel: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmConsentChannelLabels, crmConsentChannelAliases, channel, language);
+}
+
+export function getCrmConsentStatusLabel(status: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmConsentStatusLabels, crmConsentStatusAliases, status, language);
+}
+
+export function getCrmEnumLabel(value: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmGenericEnumLabels, crmGenericEnumAliases, value, language);
 }
 
 export function getFunnelTemplateUseCaseLabel(value: string, language: LanguageCode) {

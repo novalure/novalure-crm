@@ -18,6 +18,9 @@ import type {
 } from "@/lib/crm-types";
 import {
   getCrmLeadTypeLabel,
+  getCrmEnumLabel,
+  getCrmFinancingStatusLabel,
+  getCrmPropertyTypeLabel,
   getCrmSourceLabel,
   getCrmStatusLabel,
   getDashboardCopy,
@@ -920,7 +923,7 @@ export function LeadInbox({
                       >
                         {propertyTypeOptions.map((propertyType) => (
                           <option key={propertyType} value={propertyType}>
-                            {propertyType}
+                            {getCrmPropertyTypeLabel(propertyType, language)}
                           </option>
                         ))}
                       </select>
@@ -1026,7 +1029,7 @@ export function LeadInbox({
                           >
                             {financingStatusOptions.map((status) => (
                               <option key={status} value={status}>
-                                {status}
+                                {getCrmFinancingStatusLabel(status, language)}
                               </option>
                             ))}
                           </select>
@@ -1226,7 +1229,7 @@ export function LeadInbox({
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.mandateStatus}</span>
-                        <span className="break-words font-semibold">{selected.brokerMandate.mandateStatus}</span>
+                        <span className="break-words font-semibold">{getCrmEnumLabel(selected.brokerMandate.mandateStatus, language)}</span>
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.marketValue}</span>
@@ -1234,7 +1237,7 @@ export function LeadInbox({
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.documentsStatus}</span>
-                        <span className="break-words font-semibold">{selected.brokerMandate.documentsStatus ?? "-"}</span>
+                        <span className="break-words font-semibold">{selected.brokerMandate.documentsStatus ? getCrmEnumLabel(selected.brokerMandate.documentsStatus, language) : "-"}</span>
                       </p>
                     </div>
                   ) : selected.buyerSearchProfile ? (
@@ -1247,7 +1250,7 @@ export function LeadInbox({
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.financingStatus}</span>
-                        <span className="break-words font-semibold">{selected.buyerSearchProfile.financingStatus ?? "-"}</span>
+                        <span className="break-words font-semibold">{selected.buyerSearchProfile.financingStatus ? getCrmFinancingStatusLabel(selected.buyerSearchProfile.financingStatus, language) : "-"}</span>
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.address}</span>
@@ -1255,7 +1258,7 @@ export function LeadInbox({
                       </p>
                       <p className="rounded-md bg-white p-2">
                         <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{text.matchingStatus}</span>
-                        <span className="break-words font-semibold">{selected.buyerSearchProfile.matchingStatus}</span>
+                        <span className="break-words font-semibold">{getCrmEnumLabel(selected.buyerSearchProfile.matchingStatus, language)}</span>
                       </p>
                     </div>
                   ) : null}
