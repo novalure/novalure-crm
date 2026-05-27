@@ -847,7 +847,7 @@ export const crmPublicLandingPageCopy = {
           "Vorher-Nachher-Animation für Lead-Verlust, Follow-up-Lücken und strukturierte Pipeline-Führung.",
         geminiPrompt:
           "Create a premium animated before-after visual for real estate lead operations. Left side: incoming leads from ads and funnels without clear follow-up, some fading out. Right side: the same leads become organized CRM cards with owner, status, next action and pipeline movement. No readable personal data, no prices, no detailed product UI. Calm professional motion, not flashy.",
-        labels: ["Lose Anfragen", "Keine nächste Aktion", "Owner", "Pipeline"],
+        labels: ["Lose Anfragen", "Keine nächste Aktion", "Zuständig", "Pipeline"],
       },
       lockedCrmPreview: {
         id: "ANIMATION_LOCKED_CRM_PREVIEW",
@@ -2468,7 +2468,7 @@ export const unitBoardCopy = {
     reservedUnits: "Reserviert",
     blockedUnits: "Blockiert",
     soldUnits: "Verkauft",
-    buyerMatches: "Buyer Matches",
+    buyerMatches: "Käufer-Matches",
     inventoryValue: "Bestandswert",
     averagePricePerSqm: "Ø Preis/m2",
     availableShare: "Frei-Quote",
@@ -3948,7 +3948,7 @@ export const crmAnalysisBotCopy = {
       pipeline: {
         title: "Deal Pipeline",
         evidence: (dealCount: string) =>
-          `${dealCount} Deals sind mit Phase, Owner, Risiko, Wahrscheinlichkeit, erwarteter Abschlusszeit und Inline-Bearbeitung sichtbar.`,
+          `${dealCount} Deals sind mit Phase, Zuständigkeit, Risiko, Wahrscheinlichkeit, erwarteter Abschlusszeit und Inline-Bearbeitung sichtbar.`,
         nextStep:
           "Pipeline-Änderungen persistieren und Phasenhistorie, Verlustgründe sowie projektspezifische Vertriebsrechte ergänzen.",
       },
@@ -4132,7 +4132,7 @@ export const crmAnalysisBotCopy = {
         audience: "developer",
         title: "Projektvertriebs-Reporting vertiefen",
         why:
-          "Einheitenboard, Buyer Matches, Reservierungen, Slots, Audits, Angebotsmeilensteine und Lost Offers sind vorhanden. Jetzt braucht der Bauträger-Vertrieb tieferes Reporting darauf.",
+          "Einheitenboard, Käufer-Matches, Reservierungen, Slots, Audits, Angebotsmeilensteine und Lost Offers sind vorhanden. Jetzt braucht der Bauträger-Vertrieb tieferes Reporting darauf.",
         impact: "Macht das Produkt eindeutig spezialisiert für Bauträger.",
         effort: "Mittel",
         nextStep:
@@ -4169,7 +4169,7 @@ export const crmAnalysisBotCopy = {
         impact: "Hilft Bauträgern, viele Einheiten ohne Excel zu steuern.",
         effort: "Mittel",
         nextStep:
-          "No-Shows, erledigte Besichtigungen, offene Angebote, verlorene Angebote und Vertragsalter nach Projekt und Owner auswerten.",
+          "No-Shows, erledigte Besichtigungen, offene Angebote, verlorene Angebote und Vertragsalter nach Projekt und Zuständigkeit auswerten.",
       },
       {
         priority: "p1",
@@ -4202,7 +4202,7 @@ export const crmAnalysisBotCopy = {
         impact: "Hält Kundenzugriffe und interne Novalure-Zugriffe bei wachsender Nutzung sauber.",
         effort: "Mittel",
         nextStep:
-          "Modulrechte-Audits nach Releases laufen lassen und public guarded routes, fehlende Projektchecks oder Owner/Admin-Aktionen markieren.",
+          "Modulrechte-Audits nach Releases laufen lassen und public guarded routes, fehlende Projektchecks oder Aktionen von Zuständigen/Admins markieren.",
       },
       {
         priority: "p2",
@@ -5049,10 +5049,10 @@ export const dealPipelineCommandCopy = {
     pipelineSetup: "Pipeline-Setup",
     staticFallback: "Statischer Fallback",
     setupDescription:
-      "Die Phasen bleiben mit dem vorhandenen Projektfilter synchron. Deal, Kontakt, Organisation, Besitzer, Aufgaben, Termine und Immobilienkontext sind sichtbar verbunden.",
+      "Die Phasen bleiben mit dem vorhandenen Projektfilter synchron. Deal, Kontakt, Organisation, Zuständigkeit, Aufgaben, Termine und Immobilienkontext sind sichtbar verbunden.",
     pipelinePermissions: "Pipeline-Rechte",
     pipelinePermissionsDescription:
-      "Explizite Projektberechtigungen aus der Datenbank. Owner und Admins behalten implizit volle Rechte.",
+      "Explizite Projektberechtigungen aus der Datenbank. Zuständige und Admins behalten implizit volle Rechte.",
     pipelinePermissionsEmpty: "Keine expliziten Projekt-Pipeline-Rechte für diesen Filter.",
     permissionEdit: "Bearbeiten",
     permissionMove: "Verschieben",
@@ -5944,7 +5944,7 @@ export const funnelCommandCenterCopy = {
       projectContext: "Projekt-Kontext",
       project: "Projekt",
       leadGoal: "Lead-Ziel",
-      owner: "Owner",
+      owner: "Zuständig",
       unassigned: "Nicht zugewiesen",
     },
     preview: {
