@@ -11,7 +11,13 @@ async function readJson(request: Request) {
 }
 
 function getDealWriteStatus(reason: string) {
-  if (reason.includes("permission")) return 403;
+  const normalizedReason = reason.toLowerCase();
+  if (
+    reason.includes("not available in this workspace") ||
+    normalizedReason.includes("permission") ||
+    normalizedReason.includes("not allowed") ||
+    normalizedReason.includes("only be changed")
+  ) return 403;
   if (reason.includes("not found")) return 404;
   if (
     reason.includes("required") ||

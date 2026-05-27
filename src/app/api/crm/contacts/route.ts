@@ -11,6 +11,8 @@ async function readJson(request: Request) {
 }
 
 function getWriteErrorStatus(reason: string) {
+  const normalizedReason = reason.toLowerCase();
+
   if (
     reason.includes("required") ||
     reason.includes("Invalid") ||
@@ -22,7 +24,12 @@ function getWriteErrorStatus(reason: string) {
     return 400;
   }
 
-  if (reason.includes("not available in this workspace")) {
+  if (
+    reason.includes("not available in this workspace") ||
+    normalizedReason.includes("permission") ||
+    normalizedReason.includes("not allowed") ||
+    normalizedReason.includes("only be changed")
+  ) {
     return 403;
   }
 
@@ -95,7 +102,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "settings:manage" });
   if (!auth.ok) return auth.response;
 
   let body: Record<string, unknown> | null = null;

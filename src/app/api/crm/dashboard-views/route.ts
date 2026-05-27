@@ -10,6 +10,19 @@ async function readJson(request: Request) {
   }
 }
 
+function getDashboardViewWriteStatus(reason: string) {
+  const normalizedReason = reason.toLowerCase();
+  if (
+    reason.includes("not available in this workspace") ||
+    normalizedReason.includes("permission") ||
+    normalizedReason.includes("not allowed") ||
+    normalizedReason.includes("only be changed")
+  ) return 403;
+  if (reason.includes("not found")) return 404;
+  if (reason.includes("required") || reason.includes("Invalid") || reason.includes("too long")) return 400;
+  return 503;
+}
+
 export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
@@ -40,7 +53,7 @@ export async function POST(request: Request) {
   });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 503 });
+    return NextResponse.json({ error: result.reason }, { status: getDashboardViewWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ persisted: true, view: result.data });
