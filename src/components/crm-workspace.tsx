@@ -1040,10 +1040,10 @@ type SettingsCommandCenterCopy = {
   missingTables: string;
   adminAreasTitle?: string;
   adminAreasDescription?: string;
-  adminAreas?: string[];
+  adminAreas?: readonly string[];
   rolesTitle?: string;
   rolesDescription?: string;
-  roleMatrix?: Array<{
+  roleMatrix?: ReadonlyArray<{
     role: string;
     access: string;
     canCreate: string;
@@ -1064,10 +1064,10 @@ type SettingsCommandCenterCopy = {
   recommended: string;
   optional: string;
   qualityChecked: string;
-  fieldGroups: string[];
-  contactFieldDefaults: string[];
-  companyFieldDefaults: string[];
-  roleFieldRecommendations: Array<{ role: string; fields: string[] }>;
+  fieldGroups: readonly string[];
+  contactFieldDefaults: readonly string[];
+  companyFieldDefaults: readonly string[];
+  roleFieldRecommendations: ReadonlyArray<{ role: string; fields: readonly string[] }>;
   technicalDetails?: string;
   access?: string;
   create?: string;
@@ -1084,188 +1084,28 @@ type CommandCentersCopy = {
   settings: SettingsCommandCenterCopy;
 };
 
-const fallbackCommandCentersCopy: CommandCentersCopy = {
-  projects: {
-    title: "Project overview",
-    description: "Projects show leads, deals, open tasks and the assigned default pipeline.",
-    leads: "Leads",
-    deals: "Deals",
-    tasks: "Open tasks",
-    pipeline: "Pipeline",
-    noPipeline: "Setup pending",
-  },
-  mandates: {
-    title: "Objects / mandates",
-    description: "Broker objects, seller mandates and buyer search profiles are managed separately from contacts.",
-    sellerListings: "Seller listings",
-    brokerMandates: "Mandates",
-    buyerProfiles: "Buyer profiles",
-    active: "Active",
-    units: "Units",
-    available: "Available",
-    reserved: "Reserved",
-    sold: "Sold",
-    focusTitle: "Current object work",
-    empty: "No objects or mandates in this filter.",
-  },
-  inventory: {
-    title: "Units / inventory",
-    description: "Developer inventory, reservations and sold units are separated from broker mandates.",
-    sellerListings: "Seller listings",
-    brokerMandates: "Mandates",
-    buyerProfiles: "Buyer profiles",
-    active: "Active",
-    units: "Units",
-    available: "Available",
-    reserved: "Reserved",
-    sold: "Sold",
-    focusTitle: "Current inventory",
-    empty: "No units in this filter.",
-  },
-  analytics: {
-    title: "Analytics",
-    description: "Management view for lead sources, conversion, pipeline value, appointments, tasks and speed-to-lead.",
-    leads: "Leads",
-    conversion: "Conversion",
-    pipelineValue: "Pipeline value",
-    weightedValue: "Weighted value",
-    meetings: "Meetings",
-    tasks: "Tasks",
-    overdueTasks: "Overdue tasks",
-    speedToLead: "Within SLA",
-    sources: "Lead sources",
-    empty: "No lead source data in this filter.",
-  },
-  communication: {
-    title: "Communication",
-    description: "All conversations by channel, contact, project, next action, owner and consent status.",
-    conversations: "Conversations",
-    channel: "Channel",
-    contact: "Contact",
-    project: "Project",
-    lastMessage: "Last message",
-    nextAction: "Next action",
-    owner: "Owner",
-    mode: "Mode",
-    consent: "Consent",
-    botMode: "Bot / prepared",
-    manualMode: "Manual",
-    contactUnknown: "Contact not known yet",
-    noNextAction: "No next action set",
-    noOwner: "No owner assigned",
-    noConsent: "Consent not documented",
-    empty:
-      "There are no conversations in the current project filter yet. Once leads arrive by form, WhatsApp, email or bot, they appear here with the next action.",
-    emptyCta: "Open Lead Inbox",
-  },
-  settings: {
-    title: "Settings",
-    description: "Workspace, projects, roles, rights and integrations in one admin view.",
-    workspaceSetup: "Workspace setup",
-    calendarProvider: "Calendar provider",
-    roleProfile: "Role / profile",
-    databaseStatus: "Database status",
-    integrations: "Integrations",
-    operatingModel: "Operating model",
-    notConnected: "Not connected",
-    moduleSources: "Module sources",
-    missingTables: "Missing tables",
-    adminAreasTitle: "Admin structure",
-    adminAreasDescription: "Manage the areas that define daily CRM work.",
-    adminAreas: ["Workspace", "Projects", "Users", "Roles & rights", "Calendar", "Teams", "Newsletter", "Bot channels", "Data hygiene", "Language", "Integrations", "Security"],
-    rolesTitle: "Roles and permissions",
-    rolesDescription: "Show what each role can see and which actions need admin control.",
-    roleMatrix: [
-      { role: "Admin", access: "All areas", canCreate: "yes", canEdit: "yes", protectedAction: "roles, integrations, bot activation" },
-      { role: "Management", access: "Forecast, analytics, risks", canCreate: "limited", canEdit: "limited", protectedAction: "exports and settings" },
-      { role: "Sales lead", access: "Pipeline, owners, tasks", canCreate: "yes", canEdit: "yes", protectedAction: "delete and send" },
-      { role: "Broker / sales", access: "Leads, contacts, tasks, deals", canCreate: "yes", canEdit: "own records", protectedAction: "newsletter and bot activation" },
-      { role: "Project manager", access: "Projects, objects, meetings", canCreate: "yes", canEdit: "project records", protectedAction: "workspace settings" },
-      { role: "Marketing", access: "Funnels, newsletter, consent", canCreate: "yes", canEdit: "campaigns", protectedAction: "send only with opt-in" },
-      { role: "Backoffice", access: "Contacts, consents, tasks", canCreate: "yes", canEdit: "data quality", protectedAction: "delete and integrations" },
-      { role: "Read only", access: "Dashboards and reports", canCreate: "no", canEdit: "no", protectedAction: "none" },
-    ],
-    fieldStructureTitle: "Fields & contact structure",
-    fieldStructureDescription:
-      "Define which contact and company fields are available, recommended, quality-checked or shown first by role. Fields stay optional unless an admin explicitly marks them required.",
-    fieldGroupsTitle: "Field groups",
-    contactFieldsTitle: "Recommended contact fields",
-    companyFieldsTitle: "Recommended company fields",
-    roleRecommendationsTitle: "Role-first fields",
-    customFieldsTitle: "Workspace custom fields",
-    fieldDraftLabel: "New optional field",
-    fieldDraftPlaceholder: "e.g. Preferred viewing day",
-    addField: "Add field",
-    emptyCustomFields:
-      "Novalure CRM uses recommended standard fields for real estate contacts. You can add workspace-specific contact and company fields here.",
-    recommended: "Recommended",
-    optional: "Optional",
-    qualityChecked: "Data quality",
-    fieldGroups: [
-      "Overview",
-      "Person",
-      "Contact routes",
-      "Address",
-      "Company",
-      "Real estate profile",
-      "CRM control",
-      "Consent",
-      "Relationships",
-      "Timeline",
-      "Admin / technical details",
-    ],
-    contactFieldDefaults: [
-      "Salutation",
-      "First name",
-      "Last name",
-      "Full name",
-      "Email",
-      "Phone",
-      "Mobile / WhatsApp",
-      "Preferred contact route",
-      "Best contact time",
-      "Language",
-      "Address",
-      "Company",
-      "LinkedIn",
-      "Note",
-    ],
-    companyFieldDefaults: [
-      "Company name",
-      "Website",
-      "Domain",
-      "Phone",
-      "General email",
-      "Industry",
-      "Company type",
-      "Employees",
-      "Address",
-      "Main contact",
-      "Real estate role",
-      "Note",
-    ],
-    roleFieldRecommendations: [
-      { role: "Broker / sales", fields: ["Phone", "WhatsApp", "Project", "Lead type", "Next action"] },
-      { role: "Backoffice", fields: ["Email", "Phone", "Address", "Consent", "Company", "Duplicate check"] },
-      { role: "Marketing", fields: ["Opt-ins", "Segments", "Source", "Campaign", "Newsletter status"] },
-      { role: "Management", fields: ["Project", "Deal value", "Status", "Owner", "Last contact"] },
-    ],
-    technicalDetails: "Technical details",
-    access: "Access",
-    create: "Create",
-    edit: "Edit",
-    protectedActions: "Protected actions",
-  },
-};
+function getFallbackCommandCentersCopy(language: LanguageCode): CommandCentersCopy {
+  const fallbackCopy = getDashboardCopy(language).commandCenters ?? getDashboardCopy(defaultLanguage).commandCenters;
 
-function getCommandCentersCopy(copy: ReturnType<typeof getDashboardCopy>): CommandCentersCopy {
+  return fallbackCopy as CommandCentersCopy;
+}
+
+function inferDashboardCopyLanguage(copy: ReturnType<typeof getDashboardCopy>): LanguageCode {
+  return getDashboardCopy("en") === copy ? "en" : defaultLanguage;
+}
+
+function getCommandCentersCopy(
+  copy: ReturnType<typeof getDashboardCopy>,
+  language: LanguageCode = inferDashboardCopyLanguage(copy),
+): CommandCentersCopy {
   const localized = (copy as ReturnType<typeof getDashboardCopy> & { commandCenters?: Partial<CommandCentersCopy> }).commandCenters;
+  const fallback = getFallbackCommandCentersCopy(language);
 
   return {
-    ...fallbackCommandCentersCopy,
+    ...fallback,
     ...localized,
     settings: {
-      ...fallbackCommandCentersCopy.settings,
+      ...fallback.settings,
       ...(localized?.settings ?? {}),
     },
   };
@@ -1624,8 +1464,8 @@ function SettingsCommandCenter({
   const [fieldDraft, setFieldDraft] = useState("");
   const [customFields, setCustomFields] = useState<string[]>([]);
   const modules = Object.entries(moduleSources).slice(0, 8);
-  const roleMatrix = panelCopy.roleMatrix ?? fallbackCommandCentersCopy.settings.roleMatrix ?? [];
-  const adminAreas = panelCopy.adminAreas ?? fallbackCommandCentersCopy.settings.adminAreas ?? [];
+  const roleMatrix = panelCopy.roleMatrix ?? [];
+  const adminAreas = panelCopy.adminAreas ?? [];
   const defaultFieldSections = [
     { fields: panelCopy.contactFieldDefaults, title: panelCopy.contactFieldsTitle },
     { fields: panelCopy.companyFieldDefaults, title: panelCopy.companyFieldsTitle },

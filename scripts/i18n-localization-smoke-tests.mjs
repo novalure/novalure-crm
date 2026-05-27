@@ -64,6 +64,55 @@ function collectLeafKeys(objectLiteral, prefix = []) {
   return keys.sort();
 }
 
+function collectTextFragments(node, prefix = []) {
+  const expression = unwrapExpression(node);
+
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return [{ path: prefix.join("."), text: expression.text }];
+  }
+
+  if (ts.isTemplateExpression(expression)) {
+    return [
+      {
+        path: prefix.join("."),
+        text: [
+          expression.head.text,
+          ...expression.templateSpans.map((span) => span.literal.text),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
+    ];
+  }
+
+  if (ts.isArrayLiteralExpression(expression)) {
+    return expression.elements.flatMap((element, index) =>
+      collectTextFragments(element, [...prefix, `[${index}]`]),
+    );
+  }
+
+  if (ts.isObjectLiteralExpression(expression)) {
+    return expression.properties.flatMap((property) => {
+      if (!ts.isPropertyAssignment(property)) return [];
+      const key = propertyName(property.name);
+      if (!key) return [];
+
+      return collectTextFragments(property.initializer, [...prefix, key]);
+    });
+  }
+
+  if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
+    return collectTextFragments(expression.body, [...prefix, "<function>"]);
+  }
+
+  const fragments = [];
+  ts.forEachChild(expression, (child) => {
+    fragments.push(...collectTextFragments(child, prefix));
+  });
+
+  return fragments;
+}
+
 function localizedExports(sourceText) {
   const sourceFile = ts.createSourceFile("i18n.ts", sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const exports = [];
@@ -132,6 +181,25 @@ test("confirmed German lead inbox copy regressions stay fixed", () => {
   assert.match(i18nSource, /bulkFollowUp:\s*"Sammel-Follow-up"/);
   assert.match(i18nSource, /bulkFollowUpEmpty:\s*"Kein Lead für Sammel-Follow-up verfügbar\."/);
   assert.match(i18nSource, /buyer:\s*"Käufer"/);
+});
+
+test("German localized copy does not keep known English role or type remnants", () => {
+  const findings = [];
+  const forbiddenTerms = ["Owner", "Buyer", "Bulk-Follow-up"];
+
+  for (const localizedExport of localizedExports(i18nSource)) {
+    for (const fragment of collectTextFragments(localizedExport.de, [localizedExport.name, "de"])) {
+      if (fragment.path.includes(".geminiPrompt")) continue;
+
+      for (const forbiddenTerm of forbiddenTerms) {
+        if (fragment.text.includes(forbiddenTerm)) {
+          findings.push(`${fragment.path}: ${forbiddenTerm} in "${fragment.text}"`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(findings, [], "German visible i18n copy still contains English remnants");
 });
 
 test("critical CRM enum surfaces use localized labels instead of raw values", () => {
