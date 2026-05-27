@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { cookies, headers } from "next/headers";
 import { LanguageHtmlSync } from "@/components/language-html-sync";
+import {
+  defaultLanguage,
+  languageCookieName,
+  languageRequestHeaderName,
+  resolveLanguage,
+} from "@/lib/language-runtime";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,13 +22,24 @@ export const viewport: Viewport = {
   themeColor: "#d9ecff",
 };
 
-export default function RootLayout({
+async function getInitialLanguage() {
+  const requestHeaders = await headers();
+  const headerLanguage = requestHeaders.get(languageRequestHeaderName);
+  if (headerLanguage) return resolveLanguage(headerLanguage, defaultLanguage);
+
+  const cookieStore = await cookies();
+  return resolveLanguage(cookieStore.get(languageCookieName)?.value, defaultLanguage);
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const language = await getInitialLanguage();
+
   return (
-    <html lang="de" className="h-full">
+    <html lang={language} className="h-full">
       <body className="flex min-h-full flex-col antialiased">
         <LanguageHtmlSync />
         {children}

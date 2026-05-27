@@ -1,4 +1,19 @@
-export type LanguageCode = "en" | "de";
+import {
+  fallbackLanguage,
+  languageCookieName,
+  resolveLanguage,
+  type LanguageCode,
+} from "@/lib/language-runtime";
+
+export {
+  defaultLanguage,
+  fallbackLanguage,
+  isLanguageCode,
+  languageCookieName,
+  languageRequestHeaderName,
+  resolveLanguage,
+  type LanguageCode,
+} from "@/lib/language-runtime";
 
 export type BotLanguageMode = "auto" | "fixed";
 
@@ -9,9 +24,6 @@ export type LanguageOption = {
   locale: string;
 };
 
-export const defaultLanguage: LanguageCode = "de";
-
-export const fallbackLanguage: LanguageCode = defaultLanguage;
 export const displayTimeZone = "Europe/Vienna";
 
 export const supportedLanguages: LanguageOption[] = [
@@ -30,7 +42,7 @@ export const supportedLanguages: LanguageOption[] = [
 ];
 
 export const languageStorageKeys = {
-  system: "novalure.system-language",
+  system: languageCookieName,
   bot: "novalure.bot-language",
   botMode: "novalure.bot-language-mode",
 } as const;
@@ -10061,16 +10073,8 @@ const crmGenericEnumAliases: Record<string, string> = {
   vector_ready: "vector_ready",
 };
 
-export function isLanguageCode(value: unknown): value is LanguageCode {
-  return value === "en" || value === "de";
-}
-
 export function isBotLanguageMode(value: unknown): value is BotLanguageMode {
   return value === "auto" || value === "fixed";
-}
-
-export function resolveLanguage(value: unknown, fallback = defaultLanguage): LanguageCode {
-  return isLanguageCode(value) ? value : fallback;
 }
 
 export function resolveRequestLanguage(request: Request, fallback = fallbackLanguage): LanguageCode {
