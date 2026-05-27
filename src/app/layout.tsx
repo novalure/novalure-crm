@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { LanguageHtmlSync } from "@/components/language-html-sync";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,8 +21,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className="flex min-h-full flex-col antialiased">{children}</body>
+    <html lang="de" className="h-full">
+      <body className="flex min-h-full flex-col antialiased">
+        <LanguageHtmlSync />
+        {children}
+      </body>
     </html>
   );
 }

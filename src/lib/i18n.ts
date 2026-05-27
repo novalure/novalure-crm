@@ -9,23 +9,23 @@ export type LanguageOption = {
   locale: string;
 };
 
-export const defaultLanguage: LanguageCode = "en";
+export const defaultLanguage: LanguageCode = "de";
 
 export const fallbackLanguage: LanguageCode = defaultLanguage;
 export const displayTimeZone = "Europe/Vienna";
 
 export const supportedLanguages: LanguageOption[] = [
   {
-    code: "en",
-    nativeName: "English",
-    label: "English",
-    locale: "en-GB",
-  },
-  {
     code: "de",
     nativeName: "Deutsch",
     label: "German",
     locale: "de-AT",
+  },
+  {
+    code: "en",
+    nativeName: "English",
+    label: "English",
+    locale: "en-GB",
   },
 ];
 
@@ -1739,7 +1739,7 @@ export const dashboardCopy = {
       autoMode: "Automatisch erkennen",
       fixedMode: "Fix verwenden",
       helper:
-        "Englisch ist Standard und Fallback. Deutsch kann für Österreich und DACH-Workspaces ausgewählt werden.",
+        "Deutsch ist Standard und Fallback. Englisch kann für internationale Workspaces ausgewählt werden.",
       customerContext: "Spracheinstellungen",
     },
     workspaceContextBar: {
@@ -1762,7 +1762,7 @@ export const dashboardCopy = {
       metrics: {
         hotLeads: "Heiße Leads",
         openTasks: "Offene Aufgaben",
-        noOwner: "Ohne Zuständige",
+        noOwner: "Ohne Zuständigen",
         appointments: "Termine",
         pipeline: "Pipelinewert",
         riskDeals: "Risiko-Deals",
@@ -1786,8 +1786,8 @@ export const dashboardCopy = {
         },
         salesLead: {
           title: "Vertriebs-Cockpit",
-          description: "Steuere Owner-Lücken, überfällige Follow-ups, Deals ohne nächste Aktion und wertvolle Risiko-Deals.",
-          nextSteps: ["Owner-Lücken prüfen", "Zu lange Phasen ansehen", "SLA-Brüche klären", "Nächste Aktionen setzen"],
+          description: "Steuere Zuständigkeitslücken, überfällige Follow-ups, Deals ohne nächste Aktion und wertvolle Risiko-Deals.",
+          nextSteps: ["Zuständigkeitslücken prüfen", "Zu lange Phasen ansehen", "SLA-Brüche klären", "Nächste Aktionen setzen"],
         },
         marketing: {
           title: "Marketing-Cockpit",
@@ -3485,7 +3485,7 @@ export const crmAnalysisBotCopy = {
       allowedBlocked: (allowed: string, blocked: string) => `${allowed} erlaubt / ${blocked} blockiert`,
       botChecks: "Bot-Antwortchecks",
       botReviewIssues: "Bot-Review-Queue",
-      bulkBatches: "Bulk-Follow-up-Läufe",
+      bulkBatches: "Sammel-Follow-up-Läufe",
       checking: "Runtime-Prüfungen werden gespeichert.",
       cleanup: "Cleanup-Aktionen",
       completeError: "Empfehlungs-Umsetzung konnte nicht abgeschlossen werden. Fehlende Migrationen oder blockierte Moduldaten prüfen.",
@@ -3628,8 +3628,8 @@ export const crmAnalysisBotCopy = {
       },
       maturityModuleDescriptions: {
         dataPersistence: "15% Gewichtung für Schema, Loader, Migrationen, Workspace-/Projekttrennung und verlässliche Schreibpfade.",
-        leadInbox: "10% Gewichtung für Lead-Eingang, Kontakte, SLA-Signale, Owner-Routing und Kontaktarbeit.",
-        dealPipeline: "10% Gewichtung für Projektpipelines, Phasenarbeit, Deal-Owner, Historie und Verlustgründe.",
+        leadInbox: "10% Gewichtung für Lead-Eingang, Kontakte, SLA-Signale, Zuständigkeits-Routing und Kontaktarbeit.",
+        dealPipeline: "10% Gewichtung für Projektpipelines, Phasenarbeit, Deal-Zuständigkeit, Historie und Verlustgründe.",
         tasksSequences: "8% Gewichtung für tägliche Aufgaben, Follow-up-Vorlagen, Einschreibungen, Erinnerungen und Stop-Regeln.",
         funnelsForms: "10% Gewichtung für Builder, Public Runtime, Submits, Consent Tracking und CRM-Übergabe.",
         botGovernance: "10% Gewichtung für Strict Knowledge, freigegebene Quellen, Evaluation, Red-Team-Tests und Handoff.",
@@ -3681,16 +3681,16 @@ export const crmAnalysisBotCopy = {
         "present.workspaceProjectIds": "Workspace- und Projekt-IDs sind modelliert.",
         "present.leadScoring": "Lead-Score und Hot-Status existieren.",
         "present.speedToLeadEvents": "Speed-to-Lead-Events und SLA-Prüfungen werden persistiert.",
-        "present.ownerEscalation": "Owner-Eskalation für überfällige SLAs existiert.",
+        "present.ownerEscalation": "Zuständigkeits-Eskalation für überfällige SLAs existiert.",
         "present.productiveFollowUps": "Follow-up-Aktionen schreiben Consent-, Aufgaben-, Audit- und Analytics-Records.",
         "present.outreachDeliveryRuntime": "Follow-up-Outreach-Deliveries werden nach Kanal und Consent-Ergebnis persistiert.",
         "present.cleanupWorkflow": "Datenqualitäts-Cleanup-Aktionen werden persistiert.",
-        "present.bulkFollowUpRuntime": "Bulk-Follow-up-Läufe der Lead Inbox werden persistiert.",
+        "present.bulkFollowUpRuntime": "Sammel-Follow-up-Läufe der Lead Inbox werden persistiert.",
         "present.contactContext": "Kontakte tragen Projekt-, Quellen- und Consent-Kontext.",
         "present.nextActions": "Nächste Aktionen sind sichtbar.",
         "present.pipelineStages": "Pipeline-Phasen sind sichtbar.",
         "present.dealRisk": "Deal-Risiko und Wahrscheinlichkeit sind modelliert.",
-        "present.dealOwnership": "Deal-Owner können zugeordnet werden.",
+        "present.dealOwnership": "Deal-Zuständige können zugeordnet werden.",
         "present.stageHistoryRuntime": "Stage-Wechsel schreiben Historie und Audit-Kontext.",
         "present.lostReasons": "Lost und Disqualifizierungsgründe sind strukturiert.",
         "present.pipelinePermissions": "Projekt-Pipeline-Rechte werden serverseitig erzwungen.",
@@ -3804,7 +3804,7 @@ export const crmAnalysisBotCopy = {
         "next.auditCoverage": "Audit-Einträge für Schreibpfade, Kundenzugänge und Stage-Wechsel ergänzen.",
         "next.completeRecommendationRuntime": "Analysebot-Empfehlungen umsetzen, damit die Restarbeit als operativer Nachweis gespeichert ist.",
         "next.closePersistenceLoop": "Verbleibende Entwurfsänderungen an Server Actions und Repository Writes anbinden.",
-        "next.speedToLeadEscalation": "Teams-Alarme und Owner-Eskalation für überfällige First-Response-SLAs erstellen.",
+        "next.speedToLeadEscalation": "Teams-Alarme und Zuständigkeits-Eskalation für überfällige First-Response-SLAs erstellen.",
         "next.leadInboxWritePath": "Inbound-Leads, Duplikatentscheidungen und Kontaktupdates aus jedem Kanal persistieren.",
         "next.operationalFollowUps": "Follow-up-Buttons mit produktiven Sends, Aufgaben, Consent-Checks, Audit und Analytics verbinden.",
         "next.leadInboxProductivity": "Bulk-Lead-Aktionen, Duplikat-Merge und schnellere Kontaktbereinigung ergänzen.",
@@ -3893,7 +3893,7 @@ export const crmAnalysisBotCopy = {
       },
       moduleDescriptions: {
         productionData: "Migrationen für persistente Ansichten, Phasenhistorie und auditfähige Änderungen.",
-        speedToLead: "SLA-Prüfung, Owner-Routing und Eskalationssignale für neue Leads.",
+        speedToLead: "SLA-Prüfung, Zuständigkeits-Routing und Eskalationssignale für neue Leads.",
         inventory: "Einheitenbuch mit Preis, Status, Käufer-/Deal-Link und Reservierungsfristen.",
         botGovernance: "Strict Knowledge, freigegebene Quellen, Kanal-Setup und Handoff-Prüfung.",
         consentGating: "Laufzeitentscheidungen für Newsletter, WhatsApp und E-Mail-Aktionen.",
@@ -4033,7 +4033,7 @@ export const crmAnalysisBotCopy = {
         title: "Pipeline-Management-Reporting vertiefen",
         why: "Stage-Historie und Rechte existieren, aber Forecast und Bulk-Arbeit kosten noch Punkte.",
         impact: "Verbessert Kontrolle über Pipeline-Wert und Lost Reasons.",
-        nextStep: "Forecast-Views, Owner-Filter, Bulk-Updates und Lost-Reason-Summaries ergänzen.",
+        nextStep: "Forecast-Views, Zuständigen-Filter, Sammelupdates und Lost-Reason-Summaries ergänzen.",
       },
       tasksSequences: {
         title: "Sequenzen im Tagesbetrieb messbar machen",
@@ -4633,7 +4633,7 @@ export const leadInboxCommandCopy = {
     queue: "Neu",
     hot: "Heiß",
     due: "SLA fällig",
-    unassignedView: "Ohne Owner",
+    unassignedView: "Ohne Zuständigen",
     handover: "Übergabe",
     archived: "Archiv",
     all: "Alle",
@@ -4693,10 +4693,10 @@ export const leadInboxCommandCopy = {
     addNote: "Notiz hinzufügen",
     notePlaceholder: "Kurze Gesprächsnotiz, Einwand, Zusage oder nächster Schritt",
     createTask: "Aufgabe anlegen",
-    bulkFollowUp: "Bulk-Follow-up",
+    bulkFollowUp: "Sammel-Follow-up",
     bulkFollowUpDone: (count: number, blocked: number, failed: number) =>
       `${count} Follow-up-Aktion(en) vorbereitet. ${blocked} durch Consent blockiert, ${failed} fehlgeschlagen.`,
-    bulkFollowUpEmpty: "Kein Lead für Bulk-Follow-up verfügbar.",
+    bulkFollowUpEmpty: "Kein Lead für Sammel-Follow-up verfügbar.",
     accept: "In Pipeline übernehmen",
     archive: "Archivieren",
     restore: "Wieder öffnen",
@@ -4712,7 +4712,7 @@ export const leadInboxCommandCopy = {
     taskCreated: "Aufgabe wurde angelegt",
     changed: "Lead wurde aktualisiert",
     accepted: "Pipeline-Übergabe vorbereitet",
-    acceptedDetail: "Status, Owner und nächste Aktion sind für die Pipeline vorbereitet.",
+    acceptedDetail: "Status, Zuständigkeit und nächste Aktion sind für die Pipeline vorbereitet.",
     archivedNow: "Lead wurde archiviert",
     restored: "Lead wurde wieder geöffnet",
     noteSaved: "Notiz gespeichert",
@@ -7939,10 +7939,10 @@ export const leadSequenceCommandCenterCopy = {
       no_reply: "Keine Antwort",
     },
     ownerLabels: {
-      contact_owner: "Kontakt-Owner",
-      project_owner: "Projekt-Owner",
+      contact_owner: "Kontakt-Zuständiger",
+      project_owner: "Projekt-Zuständiger",
       team_rotation: "Team-Rotation",
-      manual: "Manueller Owner",
+      manual: "Manuelle Zuständigkeit",
     },
     stopRuleLabels: {
       reply_received: "Antwort erhalten",
@@ -8471,8 +8471,8 @@ export const formCommandCenterCopy = {
       pipelineStage: "Pipeline / Stufe",
       ownership: "Zuständigkeit",
       roundRobin: "Round Robin",
-      fixedOwner: "Fester Owner",
-      owner: "Owner",
+      fixedOwner: "Feste Zuständigkeit",
+      owner: "Zuständig",
       tags: "Tags",
       campaign: "Kampagne",
       connections: "Verbindungen",
@@ -9674,6 +9674,41 @@ export const calendarCommandCenterCopy = {
   },
 } as const;
 
+type EnumLabelMap = Record<string, Record<LanguageCode, string>>;
+
+function normalizeEnumLookupKey(value: string) {
+  return value
+    .trim()
+    .toLocaleLowerCase("de-AT")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function humanizeUnknownEnumValue(value: string, language: LanguageCode) {
+  const cleaned = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return value;
+
+  return cleaned.charAt(0).toLocaleUpperCase(getLocale(language)) + cleaned.slice(1);
+}
+
+function getLocalizedEnumLabel(
+  labels: EnumLabelMap,
+  aliases: Record<string, string>,
+  value: string,
+  language: LanguageCode,
+) {
+  const trimmedValue = value.trim();
+  const directLabel = labels[trimmedValue]?.[language];
+  if (directLabel) return directLabel;
+
+  const alias = aliases[normalizeEnumLookupKey(trimmedValue)];
+  const aliasLabel = alias ? labels[alias]?.[language] : undefined;
+  return aliasLabel ?? humanizeUnknownEnumValue(trimmedValue, language);
+}
+
 const crmLeadTypeLabels: Record<string, Record<LanguageCode, string>> = {
   Käufer: { en: "Buyer", de: "Käufer" },
   "K?ufer": { en: "Buyer", de: "Käufer" },
@@ -9697,6 +9732,39 @@ const crmSourceLabels: Record<string, Record<LanguageCode, string>> = {
   "Google Meet": { en: "Google Meet", de: "Google Meet" },
   willhaben: { en: "willhaben", de: "willhaben" },
   ImmobilienScout: { en: "ImmobilienScout", de: "ImmobilienScout" },
+};
+
+const crmLeadTypeAliases: Record<string, string> = {
+  bautrager: "Bauträger",
+  bautraeger: "Bauträger",
+  broker: "Makler",
+  buyer: "Käufer",
+  developer: "Bauträger",
+  investor: "Investor",
+  k_ufer: "Käufer",
+  kaufer: "Käufer",
+  kaeufer: "Käufer",
+  makler: "Makler",
+  seller: "Verkäufer",
+  verk_ufer: "Verkäufer",
+  verkaufer: "Verkäufer",
+  verkaeufer: "Verkäufer",
+};
+
+const crmSourceAliases: Record<string, string> = {
+  google_meet: "Google Meet",
+  immobilienscout: "ImmobilienScout",
+  instagram: "Instagram",
+  manual: "Manual",
+  manuell: "Manual",
+  microsoft_365: "Microsoft 365",
+  newsletter: "Newsletter",
+  referral: "Empfehlung",
+  empfehlung: "Empfehlung",
+  website: "Website",
+  website_funnel: "Website Funnel",
+  whatsapp: "WhatsApp",
+  willhaben: "willhaben",
 };
 
 const funnelTemplateUseCaseLabels: Record<string, Record<LanguageCode, string>> = {
@@ -9830,6 +9898,35 @@ const crmStatusLabels: Record<string, Record<LanguageCode, string>> = {
   Geplant: { en: "Scheduled", de: "Geplant" },
 };
 
+const crmStatusAliases: Record<string, string> = {
+  active: "Aktiv",
+  aktiv: "Aktiv",
+  archived: "Archiviert",
+  archive: "Archiviert",
+  archiviert: "Archiviert",
+  blocked: "blockiert",
+  blockiert: "blockiert",
+  connect: "Verbinden",
+  connecting: "Verbinden",
+  draft: "entwurf",
+  entwurf: "entwurf",
+  handover: "Übergabe",
+  new: "Neu",
+  neu: "Neu",
+  optimize: "optimieren",
+  optimieren: "optimieren",
+  qualifying: "Qualifizieren",
+  qualifizieren: "Qualifizieren",
+  ready: "Bereit",
+  review: "Review",
+  scheduled: "Geplant",
+  scaling: "Skaliert",
+  termin_offen: "Termin offen",
+  training: "Training",
+  ubergabe: "Übergabe",
+  uebergabe: "Übergabe",
+};
+
 export function isLanguageCode(value: unknown): value is LanguageCode {
   return value === "en" || value === "de";
 }
@@ -9915,7 +10012,7 @@ export const mobileDailyWorkCopy = {
     labels: {
       contact: "Kontakt",
       noContactRoute: "Kein Kontaktweg",
-      noOwner: "Kein Owner",
+      noOwner: "Kein Zuständiger",
       noPhone: "Kein Telefon",
       noEmail: "Keine E-Mail",
       project: "Projekt",
@@ -10040,7 +10137,7 @@ export const dataHygieneBoardCopy = {
       ignoreIssue: "Ignorieren",
       markResolved: "Erledigt",
       mergeDuplicate: "Merge vorbereiten",
-      notifyOwner: "Owner informieren",
+      notifyOwner: "Zuständigen informieren",
       quickEditContact: "Schnellbearbeitung",
     },
     actionNotice: (action: string, label: string) => `${action} für ${label} vorbereitet.`,
@@ -10058,7 +10155,7 @@ export const dataHygieneBoardCopy = {
       lastContact: "Letzter Kontakt",
       nextAction: "Nächste Aktion",
       noNextAction: "Keine nächste Aktion",
-      owner: "Owner",
+      owner: "Zuständig",
       project: "Projekt",
       unknown: "Unbekannt",
       unassignedProject: "Projekt nicht zugeordnet",
@@ -10314,7 +10411,7 @@ export const customerAccessCockpitCopy = {
     productRoles: {
       assistant_backoffice: "Backoffice-Assistenz",
       broker_agent: "Makler-Agent",
-      customer_owner: "Kunden-Owner",
+      customer_owner: "Kundenverantwortlicher",
       developer_sales: "Bauträger-Vertrieb",
       external_partner: "Externer Partner",
       novalure_customer_success: "Novalure Customer Success",
@@ -10471,15 +10568,30 @@ export function getLocale(language: LanguageCode) {
 }
 
 export function getCrmStatusLabel(status: string, language: LanguageCode) {
-  return crmStatusLabels[status]?.[language] ?? status;
+  return getLocalizedEnumLabel(crmStatusLabels, crmStatusAliases, status, language);
+}
+
+export function getCrmStatusKey(status: string) {
+  const trimmedStatus = status.trim();
+  return crmStatusAliases[normalizeEnumLookupKey(trimmedStatus)] ?? trimmedStatus;
 }
 
 export function getCrmLeadTypeLabel(type: string, language: LanguageCode) {
-  return crmLeadTypeLabels[type]?.[language] ?? type;
+  return getLocalizedEnumLabel(crmLeadTypeLabels, crmLeadTypeAliases, type, language);
+}
+
+export function getCrmLeadTypeKey(type: string) {
+  const trimmedType = type.trim();
+  return crmLeadTypeAliases[normalizeEnumLookupKey(trimmedType)] ?? trimmedType;
 }
 
 export function getCrmSourceLabel(source: string, language: LanguageCode) {
-  return crmSourceLabels[source]?.[language] ?? source;
+  return getLocalizedEnumLabel(crmSourceLabels, crmSourceAliases, source, language);
+}
+
+export function getCrmSourceKey(source: string) {
+  const trimmedSource = source.trim();
+  return crmSourceAliases[normalizeEnumLookupKey(trimmedSource)] ?? trimmedSource;
 }
 
 export function getFunnelTemplateUseCaseLabel(value: string, language: LanguageCode) {
