@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-import { defaultLanguage, languageStorageKeys, resolveLanguage, type LanguageCode } from "@/lib/i18n";
+import {
+  defaultLanguage,
+  languageCookieName,
+  languageStorageKeys,
+  resolveLanguage,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type LanguageChangeEvent = CustomEvent<{ language?: LanguageCode }>;
 
 function applyDocumentLanguage(language: LanguageCode) {
   document.documentElement.lang = language;
+  document.cookie = `${languageCookieName}=${language}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 function readStoredSystemLanguage() {

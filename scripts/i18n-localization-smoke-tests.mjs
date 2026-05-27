@@ -150,6 +150,8 @@ const funnelCommandCenterSource = readProjectFile("src/components/funnel-command
 const workspaceSource = readProjectFile("src/components/crm-workspace.tsx");
 const layoutSource = readProjectFile("src/app/layout.tsx");
 const htmlSyncSource = readProjectFile("src/components/language-html-sync.tsx");
+const languageRuntimeSource = readProjectFile("src/lib/language-runtime.ts");
+const proxySource = readProjectFile("src/proxy.ts");
 
 test("localized i18n exports keep matching de/en key structure", () => {
   for (const localizedExport of localizedExports(i18nSource)) {
@@ -239,10 +241,18 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
 });
 
 test("system language persists to document html lang", () => {
-  assert.match(layoutSource, /<html lang="de"/);
+  assert.match(languageRuntimeSource, /languageCookieName = "novalure\.system-language"/);
+  assert.match(languageRuntimeSource, /languageRequestHeaderName = "x-novalure-language"/);
+  assert.match(proxySource, /export function proxy\(request: NextRequest\)/);
+  assert.match(proxySource, /requestHeaders\.set\(languageRequestHeaderName, language\)/);
+  assert.match(proxySource, /response\.cookies\.set\(languageCookieName, requestedLanguage/);
+  assert.match(layoutSource, /headers\(\)/);
+  assert.match(layoutSource, /cookies\(\)/);
+  assert.match(layoutSource, /<html lang=\{language\}/);
   assert.match(layoutSource, /<LanguageHtmlSync \/>/);
   assert.match(htmlSyncSource, /languageStorageKeys\.system/);
   assert.match(htmlSyncSource, /document\.documentElement\.lang = language/);
+  assert.match(htmlSyncSource, /document\.cookie = `\$\{languageCookieName\}=\$\{language\}/);
   assert.match(workspaceSource, /window\.localStorage\.setItem\(languageStorageKeys\.system, language\)/);
   assert.match(workspaceSource, /document\.documentElement\.lang = language/);
 });
