@@ -11,6 +11,19 @@ async function readJson(request: Request) {
   }
 }
 
+function getFunnelWriteStatus(reason: string) {
+  const normalizedReason = reason.toLowerCase();
+  if (
+    reason.includes("not available in this workspace") ||
+    normalizedReason.includes("permission") ||
+    normalizedReason.includes("not allowed") ||
+    normalizedReason.includes("only be changed")
+  ) return 403;
+  if (reason.includes("not found")) return 404;
+  if (reason.includes("required") || reason.includes("Invalid") || reason.includes("too long")) return 400;
+  return 503;
+}
+
 export async function POST(request: Request) {
   const auth = await requirePermissionAndProductCapability(request, "crm:write", "funnels:publish");
   if (!auth.ok) return auth.response;
@@ -43,7 +56,7 @@ export async function POST(request: Request) {
   const result = await upsertFunnelDraft({ funnel, session: auth.session, steps });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 503 });
+    return NextResponse.json({ error: result.reason }, { status: getFunnelWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ persisted: true, preflight, ...result.data });

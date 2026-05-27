@@ -267,6 +267,18 @@ function canManageWorkspaceRecords(session: AppSession) {
   ].includes(session.productRole);
 }
 
+function canArchiveWorkspaceRecords(session: AppSession) {
+  if (session.role === "owner" || session.role === "admin") return true;
+
+  return [
+    "platform_admin",
+    "novalure_onboarding",
+    "novalure_customer_success",
+    "customer_owner",
+    "workspace_admin",
+  ].includes(session.productRole);
+}
+
 function isOwnRecordOnlySession(session: AppSession) {
   return session.productRole === "broker_agent";
 }
@@ -459,7 +471,12 @@ export async function upsertDashboardView(input: {
   if (!name) return { persisted: false, reason: "Dashboard view name is required" };
 
   const userId = isUuid(input.session.userId) ? input.session.userId : null;
-  const projectId = normalizeWriteProjectId(input.projectId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    requestedProjectId: input.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const existingId = await resolveDashboardViewId({
     id: input.id,
     name,
@@ -608,7 +625,13 @@ export async function upsertDealRecord(input: {
       )
     : null;
   const contact = await resolveContactForWrite(input.session.workspaceId, input.deal.contactId ?? existing?.contactId);
-  const projectId = normalizeWriteProjectId(input.deal.projectId) ?? existing?.projectId ?? contact?.projectId ?? null;
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    existingProjectId: existing?.projectId ?? contact?.projectId ?? null,
+    requestedProjectId: input.deal.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const ownerUserId = normalizeWriteProjectId(input.deal.ownerUserId) ?? existing?.ownerUserId ?? normalizeWriteProjectId(input.session.userId);
   const contactId = contact?.id ?? existing?.contactId ?? null;
   const stageResult = await resolveValidDealStageForWrite({
@@ -1099,7 +1122,14 @@ export async function upsertTaskRecord(input: {
         [input.task.id, input.session.workspaceId],
       )
     : null;
-  const projectId = normalizeWriteProjectId(input.task.projectId) ?? existing?.projectId ?? await resolveFallbackProjectId(input.session.workspaceId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    existingProjectId: existing?.projectId ?? null,
+    fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
+    requestedProjectId: input.task.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const contactId = normalizeWriteProjectId(input.task.contactId) ?? existing?.contactId ?? null;
   const leadId = normalizeWriteProjectId(input.task.leadId) ?? existing?.leadId ?? null;
   const ownerUserId = existing?.ownerUserId ?? normalizeWriteProjectId(input.session.userId);
@@ -1344,12 +1374,13 @@ export async function upsertNoteRecord(input: {
   );
   if (!contact) return { persisted: false, reason: "Contact not found" };
 
-  const projectId =
-    normalizeWriteProjectId(input.note.projectId) ??
-    existing?.projectId ??
-    lead?.projectId ??
-    contact.projectId ??
-    null;
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    existingProjectId: existing?.projectId ?? lead?.projectId ?? contact.projectId ?? null,
+    requestedProjectId: input.note.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const writeAccess = await assertRecordWriteAccess({
     entityLabel: "Note",
     existingOwnerUserId: lead?.assignedToUserId,
@@ -1592,12 +1623,14 @@ export async function upsertCalendarEventRecord(input: {
     : null;
   if (contactId && !contact) return { persisted: false, reason: "Contact not found" };
 
-  const projectId =
-    normalizeWriteProjectId(input.event.projectId) ??
-    existing?.projectId ??
-    lead?.projectId ??
-    contact?.projectId ??
-    await resolveFallbackProjectId(input.session.workspaceId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    existingProjectId: existing?.projectId ?? lead?.projectId ?? contact?.projectId ?? null,
+    fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
+    requestedProjectId: input.event.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const ownerUserId =
     normalizeWriteProjectId(input.event.ownerUserId) ??
     existing?.ownerUserId ??
@@ -1778,11 +1811,14 @@ export async function upsertLeadRecord(input: {
       )
     : null;
   const contact = await resolveContactForWrite(input.session.workspaceId, input.lead.contactId ?? existing?.contactId);
-  const projectId =
-    normalizeWriteProjectId(input.lead.projectId) ??
-    existing?.projectId ??
-    contact?.projectId ??
-    await resolveFallbackProjectId(input.session.workspaceId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    existingProjectId: existing?.projectId ?? contact?.projectId ?? null,
+    fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
+    requestedProjectId: input.lead.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const contactId = contact?.id ?? existing?.contactId ?? normalizeWriteProjectId(input.lead.contactId);
   const ownerUserId =
     normalizeWriteProjectId(input.lead.assignedToUserId) ??
@@ -2244,6 +2280,10 @@ export async function archiveContactRecord(input: {
     return { persisted: false, reason: "Contact id is required" };
   }
 
+  if (!canArchiveWorkspaceRecords(input.session)) {
+    return { persisted: false, reason: "Contact archive requires workspace admin permission" };
+  }
+
   const existing = await queryOne<ContactRow>(
     `${contactSelectSql}
     where c.id = $1 and c.workspace_id = $2
@@ -2313,7 +2353,13 @@ export async function upsertFunnelDraft(input: {
   }
 
   const existingId = await resolveFunnelId(input.session.workspaceId, input.funnel.id);
-  const projectId = normalizeWriteProjectId(input.funnel.projectId) ?? await resolveFallbackProjectId(input.session.workspaceId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
+    requestedProjectId: input.funnel.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const ownerUserId = normalizeWriteProjectId(input.funnel.ownerUserId) ?? normalizeWriteProjectId(input.session.userId);
   const name = cleanString(input.funnel.name) || "CRM Funnel";
   const blueprint = {
@@ -2581,7 +2627,12 @@ export async function upsertBotSetup(input: {
   }
 
   const existingId = await resolveBotId(input.session.workspaceId, input.bot.id);
-  const projectId = normalizeWriteProjectId(input.bot.projectId);
+  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
+    requestedProjectId: input.bot.projectId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
+  const projectId = resolvedProject.projectId;
   const name = cleanString(input.bot.name) || "CRM Bot";
   const status = cleanString(input.bot.status) || "draft";
   const botModel = (input.bot as { model?: unknown }).model;
@@ -3194,30 +3245,56 @@ async function resolveContactProjectId(input: {
   requestedProjectId: unknown;
   workspaceId: string;
 }): Promise<{ ok: true; projectId: string | null } | { ok: false; reason: string }> {
+  return resolveWorkspaceProjectIdForWrite({
+    existingProjectId: input.existingProjectId,
+    fallbackProjectId: () => resolveFallbackProjectId(input.workspaceId),
+    requestedProjectId: input.requestedProjectId,
+    workspaceId: input.workspaceId,
+  });
+}
+
+async function resolveWorkspaceProjectIdForWrite(input: {
+  existingProjectId?: string | null;
+  fallbackProjectId?: string | null | (() => Promise<string | null>);
+  requestedProjectId: unknown;
+  workspaceId: string;
+}): Promise<{ ok: true; projectId: string | null } | { ok: false; reason: string }> {
   const requestedProjectId = cleanString(input.requestedProjectId);
 
   if (requestedProjectId) {
-    if (!isUuid(requestedProjectId)) {
-      return { ok: false, reason: "Valid project is required" };
-    }
-
-    const project = await queryOne<IdRow>(
-      "select id from projects where id = $1 and workspace_id = $2 limit 1",
-      [requestedProjectId, input.workspaceId],
-    );
-
-    if (!project) {
-      return { ok: false, reason: "Project is not available in this workspace" };
-    }
-
-    return { ok: true, projectId: project.id };
+    return resolveWorkspaceProjectById(requestedProjectId, input.workspaceId);
   }
 
   if (input.existingProjectId) {
-    return { ok: true, projectId: input.existingProjectId };
+    return resolveWorkspaceProjectById(input.existingProjectId, input.workspaceId);
   }
 
-  return { ok: true, projectId: await resolveFallbackProjectId(input.workspaceId) };
+  const fallbackProjectId =
+    typeof input.fallbackProjectId === "function"
+      ? await input.fallbackProjectId()
+      : input.fallbackProjectId;
+
+  return { ok: true, projectId: fallbackProjectId ?? null };
+}
+
+async function resolveWorkspaceProjectById(
+  projectId: string,
+  workspaceId: string,
+): Promise<{ ok: true; projectId: string } | { ok: false; reason: string }> {
+  if (!isUuid(projectId)) {
+    return { ok: false, reason: "Valid project is required" };
+  }
+
+  const project = await queryOne<IdRow>(
+    "select id from projects where id = $1 and workspace_id = $2 limit 1",
+    [projectId, workspaceId],
+  );
+
+  if (!project) {
+    return { ok: false, reason: "Project is not available in this workspace" };
+  }
+
+  return { ok: true, projectId: project.id };
 }
 
 async function resolveContactOrganizationId(input: {
