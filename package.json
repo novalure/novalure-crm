@@ -16,6 +16,7 @@
     "test:phase6": "node --test scripts/phase6-bot-grounding-smoke-tests.mjs",
     "test:phase7": "node --test scripts/phase7-mobile-smoke-tests.mjs",
     "test:phase8": "node --test scripts/phase8-acceptance-smoke-tests.mjs",
+    "test:i18n": "node --test scripts/i18n-localization-smoke-tests.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs",

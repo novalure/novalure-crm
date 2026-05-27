@@ -14,6 +14,7 @@ import type {
 import {
   formatNumber,
   getBotCommandCenterCopy,
+  getCrmEnumLabel,
   type LanguageCode,
 } from "@/lib/i18n";
 
@@ -65,6 +66,8 @@ type BotRunSummary = {
   nextAction?: string;
   score?: number | null;
 };
+
+type BotCommandCenterText = ReturnType<typeof getBotCommandCenterCopy>;
 
 type ApprovalDecision = "approved" | "denied" | "handoff";
 
@@ -259,6 +262,21 @@ const statusStyles: Record<string, string> = {
   Training: "bg-blue-100 text-blue-800",
   Verbinden: "bg-blue-100 text-blue-800",
 };
+
+function getBotVisibleStatusLabel(
+  status: string,
+  text: BotCommandCenterText,
+  language: LanguageCode,
+) {
+  return (
+    text.statusLabels[status as keyof typeof text.statusLabels] ??
+    text.botActionStatusLabels[status as keyof typeof text.botActionStatusLabels] ??
+    text.approvalStatusLabels[status as keyof typeof text.approvalStatusLabels] ??
+    text.setupStatusLabels[status as keyof typeof text.setupStatusLabels] ??
+    text.automationStatusLabels[status as keyof typeof text.automationStatusLabels] ??
+    getCrmEnumLabel(status, language)
+  );
+}
 
 function Pill({
   children,
@@ -1069,7 +1087,7 @@ export function BotCommandCenter({
                   <div className="flex items-start justify-between gap-3">
                     <p className="min-w-0 break-words text-sm font-semibold text-slate-950">{conversation.title}</p>
                     <StatusPill
-                      label={text.statusLabels[conversation.status as keyof typeof text.statusLabels] ?? conversation.status}
+                      label={getBotVisibleStatusLabel(conversation.status, text, language)}
                       status={conversation.status}
                     />
                   </div>
@@ -1115,7 +1133,7 @@ export function BotCommandCenter({
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="break-words text-base font-semibold text-slate-950">{conversation.title}</h4>
                           <StatusPill
-                            label={text.statusLabels[conversation.status as keyof typeof text.statusLabels] ?? conversation.status}
+                            label={getBotVisibleStatusLabel(conversation.status, text, language)}
                             status={conversation.status}
                           />
                         </div>
@@ -1152,7 +1170,9 @@ export function BotCommandCenter({
                         <p className="text-sm font-semibold text-slate-950">{event.channel}</p>
                         <p className="mt-1 text-xs text-stone-500">{event.contactRef ?? text.unknownContact}</p>
                       </div>
-                      <Pill tone={event.status === "routed" ? "green" : "slate"}>{event.status}</Pill>
+                      <Pill tone={event.status === "routed" ? "green" : "slate"}>
+                        {getBotVisibleStatusLabel(event.status, text, language)}
+                      </Pill>
                     </div>
                     <p className="mt-3 break-words text-sm text-stone-600">
                       {event.normalizedMessage?.text ?? text.noConversationPreview}
@@ -1269,7 +1289,7 @@ export function BotCommandCenter({
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="break-words text-base font-semibold text-slate-950">{approval.summary}</h4>
                           <StatusPill
-                            label={text.approvalStatusLabels[approval.status as keyof typeof text.approvalStatusLabels] ?? approval.status}
+                            label={getBotVisibleStatusLabel(approval.status, text, language)}
                             status={approval.status}
                           />
                         </div>
@@ -1289,7 +1309,7 @@ export function BotCommandCenter({
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         <Pill>{new Date(approval.createdAt).toLocaleString(language === "de" ? "de-AT" : "en-US")}</Pill>
-                        <Pill>{approval.entityType}</Pill>
+                        <Pill>{getCrmEnumLabel(approval.entityType, language)}</Pill>
                       </div>
                     </div>
 
@@ -1504,7 +1524,9 @@ export function BotCommandCenter({
                         {item.items} {text.chunks} · {item.coverage}
                       </p>
                     </div>
-                    <Pill tone={item.status === "approved" ? "green" : "amber"}>{item.status}</Pill>
+                    <Pill tone={item.status === "approved" ? "green" : "amber"}>
+                      {getBotVisibleStatusLabel(item.status, text, language)}
+                    </Pill>
                   </div>
                 ))
               ) : (
@@ -1529,7 +1551,9 @@ export function BotCommandCenter({
                     {(bot.documentLibrary ?? []).map((document) => (
                       <div className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-3 text-sm" key={document.id}>
                         <span className="break-words font-semibold text-slate-900">{document.name}</span>
-                        <Pill tone={document.status === "approved" ? "green" : "amber"}>{document.status}</Pill>
+                        <Pill tone={document.status === "approved" ? "green" : "amber"}>
+                          {getBotVisibleStatusLabel(document.status, text, language)}
+                        </Pill>
                       </div>
                     ))}
                     {!(bot.documentLibrary ?? []).length ? (
@@ -1599,7 +1623,7 @@ export function BotCommandCenter({
                               ) : null}
                             </div>
                             <StatusPill
-                              label={text.botActionStatusLabels[documentSend.status as keyof typeof text.botActionStatusLabels] ?? documentSend.status}
+                              label={getBotVisibleStatusLabel(documentSend.status, text, language)}
                               status={documentSend.status}
                             />
                           </div>
@@ -1693,7 +1717,7 @@ export function BotCommandCenter({
                               </p>
                             </div>
                             <StatusPill
-                              label={text.botActionStatusLabels[meetingBooking.status as keyof typeof text.botActionStatusLabels] ?? meetingBooking.status}
+                              label={getBotVisibleStatusLabel(meetingBooking.status, text, language)}
                               status={meetingBooking.status}
                             />
                           </div>

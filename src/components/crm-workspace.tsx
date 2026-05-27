@@ -77,7 +77,11 @@ import {
 import {
   defaultLanguage,
   getDashboardCopy,
+  getCrmConsentChannelLabel,
+  getCrmConsentStatusLabel,
+  getCrmEnumLabel,
   getCrmLeadTypeKey,
+  getCrmSourceLabel,
   getCrmStatusLabel,
   getLocale,
   languageStorageKeys,
@@ -1127,6 +1131,7 @@ function ProjectsCommandCenter({
   tasks: Task[];
 }) {
   const panelCopy = getCommandCentersCopy(copy).projects;
+  const language = inferDashboardCopyLanguage(copy);
 
   return (
     <section className="grid gap-4">
@@ -1149,7 +1154,7 @@ function ProjectsCommandCenter({
                   <p className="mt-1 break-words text-sm text-stone-500">{project.type}</p>
                 </div>
                 <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${statusStyles[project.status] ?? statusStyles.Review}`}>
-                  {project.status}
+                  {getCrmStatusLabel(project.status, language)}
                 </span>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
@@ -1193,6 +1198,7 @@ function ObjectMandateCommandCenter({
   sellerListings: SellerListing[];
 }) {
   const commandCentersCopy = getCommandCentersCopy(copy);
+  const language = inferDashboardCopyLanguage(copy);
   const panelCopy = context.customerType === "property_developer"
     ? commandCentersCopy.inventory
     : commandCentersCopy.mandates;
@@ -1235,7 +1241,7 @@ function ObjectMandateCommandCenter({
                 {"unitNumber" in item ? item.unitNumber : item.title}
               </p>
               <p className="mt-1 break-words text-xs text-stone-600">
-                {"status" in item ? item.status : item.region}
+                {"status" in item ? getCrmEnumLabel(item.status, language) : item.region}
               </p>
             </div>
           )) : (
@@ -1310,7 +1316,7 @@ function AnalyticsCommandCenter({
         <div className="mt-4 grid gap-2">
           {bySource.length ? bySource.map(([source, count]) => (
             <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-stone-50 p-3" key={source}>
-              <span className="break-words text-sm font-semibold text-slate-900">{source}</span>
+              <span className="break-words text-sm font-semibold text-slate-900">{getCrmSourceLabel(source, language)}</span>
               <span className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{count}</span>
             </div>
           )) : (
@@ -1419,7 +1425,9 @@ function CommunicationCommandCenter({
                       </td>
                       <td className="py-3">
                         <span className={`rounded-md px-2 py-1 text-xs font-semibold ${consent ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-                          {consent ? `${consent.channel}: ${consent.status}` : panelCopy.noConsent}
+                          {consent
+                            ? `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`
+                            : panelCopy.noConsent}
                         </span>
                       </td>
                     </tr>
@@ -1461,6 +1469,7 @@ function SettingsCommandCenter({
   profileLabel: string;
 }) {
   const panelCopy = getCommandCentersCopy(copy).settings;
+  const language = inferDashboardCopyLanguage(copy);
   const [fieldDraft, setFieldDraft] = useState("");
   const [customFields, setCustomFields] = useState<string[]>([]);
   const modules = Object.entries(moduleSources).slice(0, 8);
@@ -1630,12 +1639,12 @@ function SettingsCommandCenter({
         <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2">
           <div className="min-w-0 rounded-md border border-stone-200 bg-stone-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{panelCopy.databaseStatus}</p>
-            <p className="mt-1 break-words text-sm font-semibold text-slate-950">{dataSource}</p>
+            <p className="mt-1 break-words text-sm font-semibold text-slate-950">{getCrmEnumLabel(dataSource, language)}</p>
           </div>
           {modules.map(([moduleName, source]) => (
             <div className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-stone-50 p-3" key={moduleName}>
               <span className="break-words text-sm font-semibold text-slate-900">{moduleName}</span>
-              <span className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{source}</span>
+              <span className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{getCrmEnumLabel(source, language)}</span>
             </div>
           ))}
         </div>

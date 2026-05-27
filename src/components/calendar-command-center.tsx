@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, Contact, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
 import {
   getCalendarCommandCenterCopy,
+  getCrmEnumLabel,
   getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
   getLocale,
@@ -2866,7 +2867,7 @@ export function CalendarCommandCenter({
                             {booking.calendarProvider === "google" ? "Google" : "Microsoft"}
                           </span>
                           <span className="rounded-md bg-stone-50 px-2 py-1">
-                            {text.bookingOverview.source} {booking.source}
+                            {text.bookingOverview.source} {getCrmEnumLabel(booking.source, language)}
                           </span>
                         </div>
                         {booking.contactNote ? (
