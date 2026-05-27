@@ -16,6 +16,11 @@ import type {
   WorkspaceUser,
 } from "@/lib/crm-types";
 import {
+  getCrmLeadTypeKey,
+  getCrmLeadTypeLabel,
+  getCrmSourceKey,
+  getCrmSourceLabel,
+  getCrmStatusKey,
   getCrmStatusLabel,
   getDashboardOverviewCopy,
   languageOptionsByCode,
@@ -444,7 +449,6 @@ export function DashboardOverview({
 }: DashboardOverviewProps) {
   const locale = languageOptionsByCode[language].locale;
   const copy = getDashboardOverviewCopy(language);
-  const leadTypeLabels = copy.leadTypes as Record<string, string>;
   const periodLabels = copy.periods as Record<string, string>;
   const regionLabels = copy.regions as Record<string, string>;
   const widgetKindLabels = copy.widgetKinds as Record<string, string>;
@@ -507,7 +511,7 @@ export function DashboardOverview({
   const filteredLeads = useMemo(
     () => leads.filter((lead) => {
       const employeeMatch = filters.employeeId === "all" || (filters.employeeId === "mine" ? lead.assignedToUserId === users[0]?.id : lead.assignedToUserId === filters.employeeId);
-      return filters.leadTypes.includes(lead.type as LeadTypeFilter) && isInPeriod(lead.receivedAt, filters.period) && employeeMatch && (filters.region === "Alle" || lead.region === filters.region) && filters.sources.includes(lead.source);
+      return filters.leadTypes.includes(getCrmLeadTypeKey(lead.type) as LeadTypeFilter) && isInPeriod(lead.receivedAt, filters.period) && employeeMatch && (filters.region === "Alle" || lead.region === filters.region) && filters.sources.includes(getCrmSourceKey(lead.source) as (typeof sourceOptions)[number]);
     }),
     [filters, leads, users],
   );
@@ -523,7 +527,7 @@ export function DashboardOverview({
   const openDeals = filteredDeals.filter((deal) => !CLOSED_DEAL_STAGES.has(deal.stage));
   const overdueLeads = filteredLeads.filter((lead) => new Date(lead.nextContactAt ?? lead.slaDueAt).getTime() < NOW.getTime());
   const hotLeads = filteredLeads.filter((lead) => lead.score > 80 || lead.hotStatus);
-  const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => lead.type === type).length }));
+  const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === type).length }));
   const pipelineCommission = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100) * COMMISSION_RATE, 0);
   const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && isInPeriod(deal.expectedCloseDate, "Monat"));
   const monthClosingCommission = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value) * COMMISSION_RATE, 0);
@@ -538,14 +542,14 @@ export function DashboardOverview({
   const weekRequests = filteredLeads.filter((lead) => isInPeriod(lead.receivedAt, "Woche"));
 
   const sourceRows = sourceOptions.map((source) => {
-    const sourceLeads = filteredLeads.filter((lead) => lead.source === source);
-    const sourceClosings = filteredDeals.filter((deal) => deal.source === source && WON_DEAL_STAGES.has(deal.stage)).length;
+    const sourceLeads = filteredLeads.filter((lead) => getCrmSourceKey(lead.source) === source);
+    const sourceClosings = filteredDeals.filter((deal) => getCrmSourceKey(deal.source) === source && WON_DEAL_STAGES.has(deal.stage)).length;
     return { source, count: sourceLeads.length, conversion: Math.round((sourceClosings / Math.max(1, sourceLeads.length)) * 100) };
   }).filter((row) => row.count > 0).sort((a, b) => b.count - a.count);
 
   const statusRows = ["Neu", "Qualifizieren", "Termin offen", "Übergabe", "Archiviert"].map((status) => ({
     status,
-    count: filteredLeads.filter((lead) => lead.status === status).length,
+    count: filteredLeads.filter((lead) => getCrmStatusKey(lead.status) === status).length,
   }));
   const totalStatus = Math.max(1, statusRows.reduce((sum, row) => sum + row.count, 0));
   const requestTrend = Array.from({ length: 7 }, (_, index) => {
@@ -565,12 +569,15 @@ export function DashboardOverview({
     ...calendarEvents.filter((event) => isSameLocalDay(event.startsAt)).map((event) => ({ id: event.id, title: event.title, meta: new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(event.startsAt)), priority: event.location })),
   ];
   const mandateRows = sellerListings.filter((listing) => listing.mandateEndsAt).map((listing) => ({ listing, daysLeft: daysBetween(NOW.toISOString(), listing.mandateEndsAt) })).filter((item) => item.daysLeft <= 60).sort((a, b) => a.daysLeft - b.daysLeft);
-  const matchRows = sellerListings.flatMap((listing) => filteredLeads.filter((lead) => lead.type === "Käufer" || lead.type === "Investor").map((lead) => {
+  const matchRows = sellerListings.flatMap((listing) => filteredLeads.filter((lead) => {
+    const leadType = getCrmLeadTypeKey(lead.type);
+    return leadType === "Käufer" || leadType === "Investor";
+  }).map((lead) => {
     const budgetTo = lead.buyerProfile?.budgetTo ?? lead.investorProfile?.investmentVolumeTo ?? 0;
     const budgetFrom = lead.buyerProfile?.budgetFrom ?? lead.investorProfile?.investmentVolumeFrom ?? 0;
     const priceMatch = listing.targetPrice >= budgetFrom && listing.targetPrice <= budgetTo;
     const regionMatch = lead.region === listing.region;
-    const typeMatch = lead.objectType === listing.objectType || (lead.type === "Investor" && Boolean(listing.expectedGrossYield));
+    const typeMatch = lead.objectType === listing.objectType || (getCrmLeadTypeKey(lead.type) === "Investor" && Boolean(listing.expectedGrossYield));
     const yieldMatch = lead.investorProfile ? (listing.expectedGrossYield ?? 0) >= lead.investorProfile.netYieldExpectation : true;
     const score = [priceMatch, regionMatch, typeMatch, yieldMatch].filter(Boolean).length * 25;
     return { lead, listing, score };
@@ -699,7 +706,7 @@ export function DashboardOverview({
     if (collapsedWidgets.includes(widget)) return <div className="text-sm text-stone-500">{copy.grid.collapsed}</div>;
     switch (widget) {
       case "activeLeads":
-        return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => (leadTypeLabels[item.type] ?? item.type) + ": " + item.count).join(" | "), "bg-emerald-50");
+        return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => getCrmLeadTypeLabel(item.type, language) + ": " + item.count).join(" | "), "bg-emerald-50");
       case "pipelineValue":
         return renderKpi(copy.kpis.pipelineValue, formatEuro(pipelineCommission, locale), copy.kpis.expectedCommission(openDeals.length), "bg-blue-50");
       case "monthlyClosings":
@@ -713,11 +720,11 @@ export function DashboardOverview({
       case "averageClosingDays":
         return renderKpi(copy.kpis.averageClosingDays, String(avgClosingDays), copy.kpis.averageClosingDetail, "bg-white");
       case "newRequestsWeek":
-        return renderKpi(copy.kpis.newRequestsWeek, String(weekRequests.length), weekRequests.map((lead) => lead.source).slice(0, 3).join(" | "), "bg-white");
+        return renderKpi(copy.kpis.newRequestsWeek, String(weekRequests.length), weekRequests.map((lead) => getCrmSourceLabel(lead.source, language)).slice(0, 3).join(" | "), "bg-white");
       case "funnel":
-        return <FunnelWidget activeType={activeFunnelType} copy={copy.funnel} filteredDeals={filteredDeals} filteredLeads={filteredLeads} leadTypeLabels={leadTypeLabels} leads={leads} onTypeChange={setActiveFunnelType} />;
+        return <FunnelWidget activeType={activeFunnelType} copy={copy.funnel} filteredDeals={filteredDeals} filteredLeads={filteredLeads} language={language} leads={leads} onTypeChange={setActiveFunnelType} />;
       case "sourceBar":
-        return <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{row.source}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>;
+        return <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{getCrmSourceLabel(row.source, language)}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>;
       case "requestsLine":
         return <div className="flex h-full items-end gap-2 pt-4">{requestTrend.map((item) => <div className="flex flex-1 flex-col items-center gap-2" key={item.key}><div className="w-full rounded-t-md bg-emerald-700" style={{ height: String(Math.max(12, (item.count / trendMax) * 120)) + "px" }} /><span className="text-xs font-semibold text-stone-500">{item.label}</span></div>)}</div>;
       case "statusDonut":
@@ -729,7 +736,7 @@ export function DashboardOverview({
       case "hotLeadsList":
         return <ListRows rows={hotLeads.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: copy.lists.score + " " + lead.score + " | " + lead.intent, className: getAging(lead).className }))} empty={copy.lists.noHotLeads} />;
       case "newLeadsWeek":
-        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: lead.source + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
+        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: getCrmSourceLabel(lead.source, language) + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
       case "expiringMandates":
         return <ListRows rows={mandateRows.map(({ listing, daysLeft }) => ({ id: listing.id, title: listing.title, meta: copy.lists.expiresInDays(daysLeft) + " | " + formatEuro(listing.targetPrice, locale), className: daysLeft <= 30 ? "border-orange-200 bg-orange-50 text-orange-950" : "border-yellow-200 bg-yellow-50 text-yellow-950" }))} empty={copy.lists.noExpiringMandates} />;
       case "matchSuggestions":
@@ -784,14 +791,14 @@ export function DashboardOverview({
         <div className="mt-5 grid gap-3 xl:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_1.2fr]">
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.filters.leadType}</p>
-            <div className="mt-2 flex flex-wrap gap-2">{leadTypeOptions.map((type) => <label className="flex items-center gap-2 rounded-md bg-white px-2 py-1.5 text-sm font-semibold" key={type}><input checked={filters.leadTypes.includes(type)} onChange={() => toggleLeadType(type)} type="checkbox" />{leadTypeLabels[type] ?? type}</label>)}</div>
+            <div className="mt-2 flex flex-wrap gap-2">{leadTypeOptions.map((type) => <label className="flex items-center gap-2 rounded-md bg-white px-2 py-1.5 text-sm font-semibold" key={type}><input checked={filters.leadTypes.includes(type)} onChange={() => toggleLeadType(type)} type="checkbox" />{getCrmLeadTypeLabel(type, language)}</label>)}</div>
           </div>
           <label className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.filters.period}<select className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900" onChange={(event) => setFilters((current) => ({ ...current, period: event.target.value as PeriodOption }))} value={filters.period}>{periodOptions.map((period) => <option key={period} value={period}>{periodLabels[period] ?? period}</option>)}</select></label>
           <label className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.filters.employee}<select className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900" onChange={(event) => setFilters((current) => ({ ...current, employeeId: event.target.value }))} value={filters.employeeId}><option value="all">{copy.filters.all}</option><option value="mine">{copy.filters.mine}</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
           <label className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.filters.region}<select className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-900" onChange={(event) => setFilters((current) => ({ ...current, region: event.target.value as Region | "Alle" }))} value={filters.region}>{regionOptions.map((region) => <option key={region} value={region}>{regionLabels[region] ?? region}</option>)}</select></label>
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.filters.source}</p>
-            <div className="mt-2 flex max-h-24 flex-wrap gap-2 overflow-auto">{sourceOptions.map((source) => <label className="flex items-center gap-2 rounded-md bg-white px-2 py-1.5 text-xs font-semibold" key={source}><input checked={filters.sources.includes(source)} onChange={() => toggleSource(source)} type="checkbox" />{source}</label>)}</div>
+            <div className="mt-2 flex max-h-24 flex-wrap gap-2 overflow-auto">{sourceOptions.map((source) => <label className="flex items-center gap-2 rounded-md bg-white px-2 py-1.5 text-xs font-semibold" key={source}><input checked={filters.sources.includes(source)} onChange={() => toggleSource(source)} type="checkbox" />{getCrmSourceLabel(source, language)}</label>)}</div>
           </div>
         </div>
       </div>
@@ -831,7 +838,7 @@ function FunnelWidget({
   copy,
   filteredDeals,
   filteredLeads,
-  leadTypeLabels,
+  language,
   leads,
   onTypeChange,
 }: {
@@ -844,12 +851,12 @@ function FunnelWidget({
   };
   filteredDeals: Deal[];
   filteredLeads: Lead[];
-  leadTypeLabels: Record<string, string>;
+  language: LanguageCode;
   leads: Lead[];
   onTypeChange: (type: LeadTypeFilter) => void;
 }) {
-  const typeLeads = filteredLeads.filter((lead) => lead.type === activeType);
-  const typeDeals = filteredDeals.filter((deal) => getDealLead(deal, leads)?.type === activeType);
+  const typeLeads = filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === activeType);
+  const typeDeals = filteredDeals.filter((deal) => getCrmLeadTypeKey(getDealLead(deal, leads)?.type ?? "") === activeType);
   const rows = [
     { label: copy.inquiry, count: typeLeads.length },
     {
@@ -868,7 +875,7 @@ function FunnelWidget({
   ];
   const max = Math.max(1, ...rows.map((row) => row.count));
 
-  return <div><div className="mb-4 flex flex-wrap gap-2">{leadTypeOptions.map((type) => <button className={"rounded-md border px-3 py-1.5 text-sm font-semibold " + (activeType === type ? "border-slate-950 bg-slate-950 text-white" : "border-stone-300 bg-white text-stone-700")} key={type} onClick={() => onTypeChange(type)} type="button">{leadTypeLabels[type] ?? type}</button>)}</div><div className="grid gap-3">{rows.map((row) => <div className="grid gap-1" key={row.label}><div className="flex justify-between text-sm"><span className="font-semibold">{row.label}</span><span>{row.count}</span></div><div className="h-8 overflow-hidden rounded-md bg-stone-100"><div className="h-full rounded-md bg-emerald-700" style={{ width: String(Math.max(8, (row.count / max) * 100)) + "%" }} /></div></div>)}</div></div>;
+  return <div><div className="mb-4 flex flex-wrap gap-2">{leadTypeOptions.map((type) => <button className={"rounded-md border px-3 py-1.5 text-sm font-semibold " + (activeType === type ? "border-slate-950 bg-slate-950 text-white" : "border-stone-300 bg-white text-stone-700")} key={type} onClick={() => onTypeChange(type)} type="button">{getCrmLeadTypeLabel(type, language)}</button>)}</div><div className="grid gap-3">{rows.map((row) => <div className="grid gap-1" key={row.label}><div className="flex justify-between text-sm"><span className="font-semibold">{row.label}</span><span>{row.count}</span></div><div className="h-8 overflow-hidden rounded-md bg-stone-100"><div className="h-full rounded-md bg-emerald-700" style={{ width: String(Math.max(8, (row.count / max) * 100)) + "%" }} /></div></div>)}</div></div>;
 }
 
 function ListRows({ rows, empty }: { rows: Array<{ id: string; title: string; meta: string; className: string }>; empty: string }) {

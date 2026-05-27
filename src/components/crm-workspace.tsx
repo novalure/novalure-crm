@@ -77,7 +77,9 @@ import {
 import {
   defaultLanguage,
   getDashboardCopy,
+  getCrmLeadTypeKey,
   getCrmStatusLabel,
+  getLocale,
   languageStorageKeys,
   resolveLanguage,
   supportedLanguages,
@@ -920,8 +922,8 @@ function parseCrmMoney(value: string) {
   return Number.isFinite(parsed) ? parsed * multiplier : 0;
 }
 
-function formatCompactEuro(value: number) {
-  return new Intl.NumberFormat("de-AT", {
+function formatCompactEuro(value: number, language: LanguageCode) {
+  return new Intl.NumberFormat(getLocale(language), {
     currency: "EUR",
     maximumFractionDigits: 0,
     notation: value >= 1_000_000 ? "compact" : "standard",
@@ -1411,6 +1413,7 @@ function AnalyticsCommandCenter({
   calendarEvents,
   copy,
   deals,
+  language,
   leads,
   projectLabel,
   tasks,
@@ -1418,6 +1421,7 @@ function AnalyticsCommandCenter({
   calendarEvents: CalendarEvent[];
   copy: ReturnType<typeof getDashboardCopy>;
   deals: Deal[];
+  language: LanguageCode;
   leads: Lead[];
   projectLabel: string;
   tasks: Task[];
@@ -1448,8 +1452,8 @@ function AnalyticsCommandCenter({
         {[
           [panelCopy.leads, leads.length],
           [panelCopy.conversion, `${conversion}%`],
-          [panelCopy.pipelineValue, formatCompactEuro(pipelineValue)],
-          [panelCopy.weightedValue, formatCompactEuro(weightedValue)],
+          [panelCopy.pipelineValue, formatCompactEuro(pipelineValue, language)],
+          [panelCopy.weightedValue, formatCompactEuro(weightedValue, language)],
           [panelCopy.meetings, calendarEvents.length],
           [panelCopy.tasks, tasks.length],
           [panelCopy.overdueTasks, overdueTasks],
@@ -1504,7 +1508,7 @@ function CommunicationCommandCenter({
   users: WorkspaceUser[];
 }) {
   const panelCopy = getCommandCentersCopy(copy).communication;
-  const locale = language === "de" ? "de-AT" : "en-GB";
+  const locale = getLocale(language);
   const sortedConversations = [...conversations].sort(
     (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
   );
@@ -1931,7 +1935,7 @@ function RolePriorityPanel({
   const pipelineValue = deals
     .filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert"].includes(deal.stage))
     .reduce((sum, deal) => sum + parseRolePanelDealValue(deal.value) * (deal.probability / 100), 0);
-  const locale = language === "de" ? "de-AT" : "en-US";
+  const locale = getLocale(language);
   const metricValues = {
     appointments: events.filter((event) => new Date(event.startsAt).getTime() >= now.getTime()).length,
     hotLeads: leads.filter((lead) => lead.score >= 80 || lead.hotStatus).length,
@@ -2345,8 +2349,8 @@ function WorkspaceModeKpis({
   units: { status: string }[];
 }) {
   const kpiCopy = copy.workspaceMode.kpis;
-  const sellerLeads = leads.filter((lead) => lead.type === "Verkäufer").length;
-  const buyerLeads = leads.filter((lead) => lead.type === "Käufer").length;
+  const sellerLeads = leads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Verkäufer").length;
+  const buyerLeads = leads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Käufer").length;
   const openTasks = tasks.filter((task) => task.status === "open").length;
   const availableUnits = units.filter((unit) => unit.status === "available").length;
   const reservedUnits = units.filter((unit) => unit.status === "reserved").length;
@@ -2363,7 +2367,10 @@ function WorkspaceModeKpis({
       : context.operatingModel === "novalure_internal"
         ? [
             [kpiCopy.crmCustomerLeads, leads.length],
-            [kpiCopy.demosTrials, leads.filter((lead) => lead.type === "Makler" || lead.type === "Bauträger").length],
+            [kpiCopy.demosTrials, leads.filter((lead) => {
+              const leadType = getCrmLeadTypeKey(lead.type);
+              return leadType === "Makler" || leadType === "Bauträger";
+            }).length],
             [kpiCopy.openApprovals, openTasks],
             [kpiCopy.managedSla, tasks.length],
           ]
@@ -2964,7 +2971,7 @@ export function CrmWorkspace({
     : leads;
   const activeLeadTypes = visibleActiveNavigationEntry.leadTypes;
   const activeLeadInboxLeads = activeLeadTypes?.length
-    ? visibleLeads.filter((lead) => activeLeadTypes.includes(lead.type))
+    ? visibleLeads.filter((lead) => activeLeadTypes.includes(getCrmLeadTypeKey(lead.type)))
     : visibleLeads;
   const visibleContacts = activeProject
     ? contacts.filter((contact) => contact.projectId === activeProject.id)
@@ -3295,6 +3302,8 @@ export function CrmWorkspace({
     if (!languageHydrated) return;
 
     window.localStorage.setItem(languageStorageKeys.system, language);
+    document.documentElement.lang = language;
+    window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
   }, [language, languageHydrated]);
 
   function handleLanguageChange(nextLanguage: LanguageCode) {
@@ -3876,6 +3885,7 @@ export function CrmWorkspace({
                 calendarEvents={visibleCalendarEvents}
                 copy={copy}
                 deals={visibleDeals}
+                language={language}
                 leads={visibleLeads}
                 projectLabel={projectScopeLabel}
                 tasks={visibleTasks}
