@@ -182,7 +182,9 @@ type TaskRow = {
   projectId: string | null;
   contactId: string | null;
   leadId: string | null;
+  ownerUserId: string | null;
   title: string;
+  metadata: Record<string, unknown> | null;
   project: string | null;
   due: string | Date | null;
   priority: Task["priority"];
@@ -1326,6 +1328,7 @@ export async function loadCalendarEvents(workspaceId?: string): Promise<Calendar
       leadId: row.leadId ?? undefined,
       location: normalizeCalendarLocation(row.location),
       meetingProvider: getMeetingProviderFromMetadata(metadata),
+      notes: typeof metadata.notes === "string" ? metadata.notes : undefined,
       outcomeGoal: row.outcomeGoal,
       ownerUserId: row.ownerUserId ?? undefined,
       preparation: normalizeStringArray(row.preparation),
@@ -1507,7 +1510,9 @@ export async function loadTasks(workspaceId?: string): Promise<Task[]> {
       t.project_id as "projectId",
       t.contact_id as "contactId",
       t.lead_id as "leadId",
+      t.owner_user_id as "ownerUserId",
       t.title,
+      t.metadata,
       p.name as project,
       t.due_at as due,
       t.priority,
@@ -1522,11 +1527,13 @@ export async function loadTasks(workspaceId?: string): Promise<Task[]> {
   );
 
   return rows.map((row) => ({
+    description: typeof row.metadata?.description === "string" ? row.metadata.description : undefined,
     id: row.id,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
     contactId: row.contactId ?? undefined,
     leadId: row.leadId ?? undefined,
+    ownerUserId: row.ownerUserId ?? undefined,
     title: row.title,
     project: row.project ?? "",
     due: toIso(row.due),

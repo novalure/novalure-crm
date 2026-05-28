@@ -17,6 +17,7 @@ type CalendarCommandCenterProps = {
   events: CalendarEvent[];
   language: LanguageCode;
   leads: Lead[];
+  onEventsChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
   tasks: Task[];
@@ -123,6 +124,21 @@ type EmailDraftPreview = {
 type MeetingSettingsSaveStatus = "idle" | "loading" | "saving" | "saved" | "error";
 
 type MeetingNotificationStatus = "idle" | "sending" | "queued" | "sent" | "error";
+
+type NewCalendarEventDraft = {
+  contactId: string;
+  endsAt: string;
+  leadId: string;
+  location: CalendarEvent["location"];
+  meetingProvider: MeetingProvider;
+  notes: string;
+  outcomeGoal: string;
+  ownerUserId: string;
+  projectId: string;
+  startsAt: string;
+  status: CalendarEvent["status"];
+  title: string;
+};
 
 type MeetingSettingsApiPayload = {
   page?: {
@@ -598,11 +614,44 @@ function createDefaultMeetingAutomation(text: CalendarCommandCenterCopy): Meetin
   };
 }
 
+function toDateTimeLocalInput(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function createDefaultCalendarEventDraft(
+  projects: Project[],
+  users: WorkspaceUser[],
+  meetingProvider: MeetingProvider,
+): NewCalendarEventDraft {
+  const startsAt = new Date();
+  startsAt.setDate(startsAt.getDate() + 1);
+  startsAt.setHours(10, 0, 0, 0);
+  const endsAt = new Date(startsAt);
+  endsAt.setMinutes(endsAt.getMinutes() + 45);
+
+  return {
+    contactId: "",
+    endsAt: toDateTimeLocalInput(endsAt),
+    leadId: "",
+    location: meetingProvider === "phone" ? "Telefon" : "Extern",
+    meetingProvider,
+    notes: "",
+    outcomeGoal: "",
+    ownerUserId: users[0]?.id ?? "",
+    projectId: projects[0]?.id ?? "",
+    startsAt: toDateTimeLocalInput(startsAt),
+    status: "geplant",
+    title: "",
+  };
+}
+
 export function CalendarCommandCenter({
   contacts,
   events,
   language,
   leads,
+  onEventsChanged,
   projectLabel,
   projects,
   tasks,
@@ -652,7 +701,14 @@ export function CalendarCommandCenter({
   const [shareMode, setShareMode] = useState<MeetingShareMode>("link");
   const [shareNotice, setShareNotice] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [eventOverlays, setEventOverlays] = useState<CalendarEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState(events[0]?.id ?? "");
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [eventSaving, setEventSaving] = useState(false);
+  const [eventCreateNotice, setEventCreateNotice] = useState("");
+  const [eventDraft, setEventDraft] = useState<NewCalendarEventDraft>(() =>
+    createDefaultCalendarEventDraft(projects, users, defaultCalendarIntegrations.defaultMeetingProvider),
+  );
   const [liveCalendarAction, setLiveCalendarAction] = useState<LiveCalendarActionState>(
     () => getInitialLiveCalendarAction(text),
   );
@@ -933,9 +989,14 @@ export function CalendarCommandCenter({
     };
   }, []);
 
+  const effectiveEvents = useMemo(() => {
+    const overlayIds = new Set(eventOverlays.map((event) => event.id));
+    return [...eventOverlays, ...events.filter((event) => !overlayIds.has(event.id))];
+  }, [eventOverlays, events]);
+
   const decoratedEvents = useMemo(
     () =>
-      events
+      effectiveEvents
         .map((event) => {
           const contact = event.contactId
             ? contacts.find((item) => item.id === event.contactId)
@@ -949,7 +1010,7 @@ export function CalendarCommandCenter({
           return { event, contact, lead, owner, project };
         })
         .sort((a, b) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime()),
-    [contacts, events, leads, projects, users],
+    [contacts, effectiveEvents, leads, projects, users],
   );
 
   const todayEvents = decoratedEvents.filter((item) => isSameDay(item.event.startsAt, today));
@@ -997,8 +1058,61 @@ export function CalendarCommandCenter({
     { id: "prepare", label: text.prepare, count: prepareEvents.length },
     { id: "teams", label: text.teams, count: teamsEvents.length },
     { id: "followUp", label: text.followUp, count: followUpEvents.length },
-    { id: "bookings", label: "Buchungen", count: meetingBookingOverview.metrics.totalBookings },
+    { id: "bookings", label: text.bookings, count: meetingBookingOverview.metrics.totalBookings },
   ];
+
+  const updateEventDraft = (field: keyof NewCalendarEventDraft, value: string) => {
+    setEventDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const createCalendarEvent = async () => {
+    if (!eventDraft.title.trim()) {
+      setEventCreateNotice(text.eventTitleRequired);
+      return;
+    }
+
+    setEventSaving(true);
+    setEventCreateNotice("");
+    try {
+      const response = await fetch("/api/crm/calendar-events", {
+        body: JSON.stringify({
+          event: {
+            contactId: eventDraft.contactId || undefined,
+            endsAt: new Date(eventDraft.endsAt).toISOString(),
+            leadId: eventDraft.leadId || undefined,
+            location: eventDraft.location,
+            meetingProvider: eventDraft.meetingProvider,
+            notes: eventDraft.notes.trim() || undefined,
+            outcomeGoal: eventDraft.outcomeGoal.trim(),
+            ownerUserId: eventDraft.ownerUserId || undefined,
+            preparation: eventDraft.notes.trim() ? [eventDraft.notes.trim()] : [],
+            projectId: eventDraft.projectId || undefined,
+            startsAt: new Date(eventDraft.startsAt).toISOString(),
+            status: eventDraft.status,
+            title: eventDraft.title.trim(),
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; event?: CalendarEvent };
+
+      if (!response.ok || !payload.event) {
+        throw new Error(payload.error ?? text.eventCreateFailed);
+      }
+
+      setEventOverlays((current) => [payload.event!, ...current.filter((event) => event.id !== payload.event!.id)]);
+      setSelectedEventId(payload.event.id);
+      setEventDraft(createDefaultCalendarEventDraft(projects, users, calendarIntegrations.defaultMeetingProvider));
+      setIsCreateEventOpen(false);
+      setEventCreateNotice(text.eventCreated);
+      void onEventsChanged?.();
+    } catch (error) {
+      setEventCreateNotice(error instanceof Error ? error.message : text.eventCreateFailed);
+    } finally {
+      setEventSaving(false);
+    }
+  };
   const selectedProviderConfig = calendarIntegrations[calendarIntegrations.defaultProvider];
   const selectedProviderLabel = getCalendarProviderLabel(calendarIntegrations.defaultProvider, text);
   const selectedMeetingProviderLabel = getMeetingProviderLabel(
@@ -2170,6 +2284,193 @@ export function CalendarCommandCenter({
             ))}
           </div>
         </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            onClick={() => setIsCreateEventOpen((current) => !current)}
+            type="button"
+          >
+            {isCreateEventOpen ? text.cancel : text.newEvent}
+          </button>
+        </div>
+        {isCreateEventOpen ? (
+          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+            <div className="min-w-0">
+              <h4 className="text-lg font-semibold text-slate-950">{text.createEventTitle}</h4>
+              <p className="mt-1 break-words text-sm text-stone-600">{text.createEventDescription}</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
+                {text.eventTitleField}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("title", event.target.value)}
+                  value={eventDraft.title}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.start}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("startsAt", event.target.value)}
+                  type="datetime-local"
+                  value={eventDraft.startsAt}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.end}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("endsAt", event.target.value)}
+                  type="datetime-local"
+                  value={eventDraft.endsAt}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.project}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("projectId", event.target.value)}
+                  value={eventDraft.projectId}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.owner}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("ownerUserId", event.target.value)}
+                  value={eventDraft.ownerUserId}
+                >
+                  <option value="">{text.noOwner}</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.contact}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("contactId", event.target.value)}
+                  value={eventDraft.contactId}
+                >
+                  <option value="">{text.noContact}</option>
+                  {contacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.leadContext}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("leadId", event.target.value)}
+                  value={eventDraft.leadId}
+                >
+                  <option value="">{text.noLead}</option>
+                  {leads.map((lead) => (
+                    <option key={lead.id} value={lead.id}>
+                      {lead.intent}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.meetingProvider}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("meetingProvider", event.target.value as MeetingProvider)}
+                  value={eventDraft.meetingProvider}
+                >
+                  {meetingProviderOptions.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.location}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("location", event.target.value as CalendarEvent["location"])}
+                  value={eventDraft.location}
+                >
+                  {(["Teams", "Google Meet", "Vor Ort", "Telefon", "Extern"] as CalendarEvent["location"][]).map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.status}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("status", event.target.value as CalendarEvent["status"])}
+                  value={eventDraft.status}
+                >
+                  {(["geplant", "vorbereiten", "bestätigt", "nachfassen"] as CalendarEvent["status"][]).map((status) => (
+                    <option key={status} value={status}>
+                      {text.statusLabels[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.outcomeGoal}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("outcomeGoal", event.target.value)}
+                  value={eventDraft.outcomeGoal}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
+                {text.notes}
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateEventDraft("notes", event.target.value)}
+                  value={eventDraft.notes}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={eventSaving}
+                onClick={() => void createCalendarEvent()}
+                type="button"
+              >
+                {eventSaving ? text.savingEvent : text.saveEvent}
+              </button>
+              <button
+                className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
+                onClick={() => {
+                  setEventDraft(createDefaultCalendarEventDraft(projects, users, calendarIntegrations.defaultMeetingProvider));
+                  setIsCreateEventOpen(false);
+                }}
+                type="button"
+              >
+                {text.cancel}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {eventCreateNotice ? (
+          <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+            {eventCreateNotice}
+          </p>
+        ) : null}
       </article>
 
       <article className="rounded-lg border border-blue-100 bg-blue-50 p-5">
@@ -3122,8 +3423,8 @@ export function CalendarCommandCenter({
               [text.start, selectedEvent ? formatDateTime(selectedEvent.event.startsAt, locale) : "-"],
               [text.end, selectedEvent ? formatTime(selectedEvent.event.endsAt, locale) : "-"],
               [text.location, selectedEvent?.event.location],
-              ["Kalender", getCalendarProviderLabel(selectedEventProvider, text)],
-              ["Meeting", getMeetingStatusLabel(selectedEvent?.event, text)],
+              [text.calendarLabel, getCalendarProviderLabel(selectedEventProvider, text)],
+              [text.meetingLabel, getMeetingStatusLabel(selectedEvent?.event, text)],
               [text.status, selectedEvent ? text.statusLabels[selectedEvent.event.status] : undefined],
               [text.owner, selectedEvent?.owner?.name],
               [text.contact, selectedEvent?.contact?.name ?? text.noContact],
@@ -3156,6 +3457,13 @@ export function CalendarCommandCenter({
               ))}
             </div>
           </div>
+
+          {selectedEvent?.event.notes ? (
+            <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm font-semibold text-slate-950">{text.notes}</p>
+              <p className="mt-2 break-words text-sm text-stone-700">{selectedEvent.event.notes}</p>
+            </div>
+          ) : null}
 
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3">

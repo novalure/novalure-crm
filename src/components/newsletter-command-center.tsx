@@ -117,6 +117,7 @@ type LiveNewsletterActionState = {
 };
 
 type LiveNewsletterResponse = {
+  deliveryMode?: "external" | "test";
   ok?: boolean;
   provider?: {
     configured?: boolean;
@@ -773,12 +774,12 @@ const liveNewsletterMessage =
 
       setLiveNewsletterAction({
         detail:
-          data.provider?.configured && sentCount > 0
+          data.deliveryMode === "external" && data.provider?.configured && sentCount > 0
             ? text.liveSendSuccess.replace("{{count}}", formatNumber(sentCount, language))
-            : text.liveSendQueuedMock.replace(
-                "{{count}}",
-                formatNumber(data.sends?.length ?? campaignRecipientEmails.length, language),
-              ),
+            : `${text.liveSendTestMode} ${text.liveSendQueuedMock.replace(
+              "{{count}}",
+              formatNumber(data.sends?.length ?? campaignRecipientEmails.length, language),
+            )}`,
         status: "success",
       });
     } catch (error) {

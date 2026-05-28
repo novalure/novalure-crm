@@ -20,26 +20,45 @@ type HomeProps = {
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Novalure CRM | Real Estate Lead Operations",
-  description:
-    "The protected CRM workspace behind Novalure's real estate lead system, with private Pipeline Audit request and secondary team login.",
-};
+const metadataDescription =
+  "The protected CRM workspace behind Novalure's real estate lead system, with private Pipeline Audit request and secondary team login.";
+
+function resolveHomeLanguage(
+  requestHeaders: Headers,
+  query: Record<string, string | string[] | undefined>,
+) {
+  const country = getRequestCountry(requestHeaders);
+  const language = resolvePublicLanguage({
+    acceptLanguage: requestHeaders.get("accept-language"),
+    country,
+    persistedLanguage: requestHeaders.get(languageRequestHeaderName),
+    requestedLanguage: query.lang,
+  });
+
+  return { country, language };
+}
+
+export async function generateMetadata({ searchParams }: HomeProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const { language } = resolveHomeLanguage(requestHeaders, query);
+
+  return {
+    title:
+      language === "de"
+        ? "Novalure CRM | Immobilien-Lead-Steuerung"
+        : "Novalure CRM | Real Estate Lead Operations",
+    description: metadataDescription,
+  };
+}
 
 export default async function Home({ searchParams }: HomeProps) {
   const requestHeaders = await headers();
   const session = await getSessionFromHeaders(requestHeaders);
+  const query = searchParams ? await searchParams : {};
+  const { country, language } = resolveHomeLanguage(requestHeaders, query);
 
   if (!session) {
-    const query = searchParams ? await searchParams : {};
-    const country = getRequestCountry(requestHeaders);
-    const language = resolvePublicLanguage({
-      acceptLanguage: requestHeaders.get("accept-language"),
-      country,
-      persistedLanguage: requestHeaders.get(languageRequestHeaderName),
-      requestedLanguage: query.lang,
-    });
-
     return (
       <PublicCrmLanding
         auditHref={resolveAuditHref(country, language)}
@@ -62,6 +81,7 @@ export default async function Home({ searchParams }: HomeProps) {
   return (
     <CrmWorkspace
       coreData={coreData}
+      initialLanguage={language}
       sessionProductRole={session.productRole}
       sessionRole={session.role}
       sessionWorkspace={{

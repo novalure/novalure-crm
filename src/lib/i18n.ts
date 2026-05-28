@@ -942,6 +942,7 @@ export const dashboardCopy = {
     navigationPresets: {
       label: "Navigation preset",
       helper: "Focuses navigation only. Server permissions still decide what can be changed.",
+      mobileNavigationLabel: "Area",
       quickActionsLabel: "Quick actions",
       profiles: {
         novalureInternal: {
@@ -1306,7 +1307,7 @@ export const dashboardCopy = {
         missingTables: "Missing tables",
         adminAreasTitle: "Admin structure",
         adminAreasDescription: "Manage the areas that define daily CRM work and keep setup away from normal task views.",
-        adminAreas: ["Workspace", "Projects", "Users", "Roles & rights", "Calendar", "Teams", "Newsletter / Resend", "Bot channels", "Data hygiene", "Language", "Integrations", "Security"],
+        adminAreas: ["Workspace", "Projects", "Users", "Roles & rights", "Calendar", "Teams", "Newsletter & sending", "Bot channels", "Data hygiene", "Language", "Integrations", "Security"],
         rolesTitle: "Roles and permissions",
         rolesDescription: "Every role shows its expected access and which actions need additional control.",
         access: "Access",
@@ -1666,6 +1667,7 @@ export const dashboardCopy = {
       label: "Navigationsprofil",
       helper:
         "Fokussiert nur die Navigation. Serverrechte entscheiden weiterhin, was geändert werden darf.",
+      mobileNavigationLabel: "Bereich",
       quickActionsLabel: "Schnellaktionen",
       profiles: {
         novalureInternal: {
@@ -1981,7 +1983,7 @@ export const dashboardCopy = {
         empty: "Keine Einheiten in diesem Filter.",
       },
       analytics: {
-        title: "Analytics",
+        title: "Auswertungen",
         description: "Managementsicht für Leadquellen, Conversion, Pipelinewert, Termine, Aufgaben und Speed-to-Lead.",
         leads: "Leads",
         conversion: "Conversion",
@@ -2030,7 +2032,7 @@ export const dashboardCopy = {
         missingTables: "Fehlende Tabellen",
         adminAreasTitle: "Admin-Struktur",
         adminAreasDescription: "Verwalte die Bereiche, die tägliche CRM-Arbeit ermöglichen, ohne Setup vor normale Arbeitsansichten zu stellen.",
-        adminAreas: ["Workspace", "Projekte", "Nutzer", "Rollen & Rechte", "Kalender", "Teams", "Newsletter / Resend", "Bot-Kanäle", "Datenhygiene", "Sprache", "Integrationen", "Sicherheit"],
+        adminAreas: ["Workspace", "Projekte", "Nutzer", "Rollen & Rechte", "Kalender", "Teams", "Newsletter & Versand", "Bot-Kanäle", "Datenhygiene", "Sprache", "Integrationen", "Sicherheit"],
         rolesTitle: "Rollen und Rechte",
         rolesDescription: "Jede Rolle zeigt, welche Bereiche relevant sind und welche Aktionen zusätzliche Kontrolle brauchen.",
         access: "Zugriff",
@@ -2040,7 +2042,7 @@ export const dashboardCopy = {
         technicalDetails: "Technische Details",
         roleMatrix: [
           { role: "Admin", access: "Alle Bereiche", canCreate: "ja", canEdit: "ja", protectedAction: "Rollen, Integrationen, Bot-Aktivierung" },
-          { role: "Geschäftsführung", access: "Forecast, Analytics, Risiken", canCreate: "begrenzt", canEdit: "begrenzt", protectedAction: "Exporte und Einstellungen" },
+          { role: "Geschäftsführung", access: "Forecast, Auswertungen, Risiken", canCreate: "begrenzt", canEdit: "begrenzt", protectedAction: "Exporte und Einstellungen" },
           { role: "Vertriebsleiter", access: "Pipeline, Zuständige, Aufgaben", canCreate: "ja", canEdit: "ja", protectedAction: "Löschen und Versand" },
           { role: "Makler / Sales", access: "Leads, Kontakte, Aufgaben, Deals", canCreate: "ja", canEdit: "eigene Datensätze", protectedAction: "Newsletter und Bot-Aktivierung" },
           { role: "Projektmanager", access: "Projekte, Objekte, Termine", canCreate: "ja", canEdit: "Projekt-Datensätze", protectedAction: "Workspace-Einstellungen" },
@@ -2159,7 +2161,7 @@ export const dashboardCopy = {
           { description: "HubSpot-Export oder spätere Live-Anbindung vor dem Import validieren.", id: "hubspot", label: "HubSpot" },
           { description: "CSV-Dateien erst prüfen, Felder zuordnen und Duplikate erkennen.", id: "csv", label: "CSV-Datei" },
           { description: "Kontakte, Organisationen und Zustimmungen auf Vollständigkeit prüfen.", id: "contacts", label: "Kontakte" },
-          { description: "Kalender, Teams-Links und Google-Meet-Links vor dem Sync kontrollieren.", id: "meetings", label: "Meetings" },
+          { description: "Kalender, Teams-Links und Online-Terminlinks vor dem Sync kontrollieren.", id: "meetings", label: "Termine" },
         ],
         checks: {
           contacts: (count: number) => `${count} Kontakte können zugeordnet werden.`,
@@ -3562,7 +3564,7 @@ export const crmAnalysisBotCopy = {
         {
           title: "Consent-basierter Growth Stack",
           description:
-            "Funnels, Formulare, Newsletter-Segmente, Consent-Einträge und Resend-Vorbereitung sind vorhanden, brauchen aber tiefere Laufzeitregeln für Produktion.",
+            "Funnels, Formulare, Newsletter-Segmente, Consent-Einträge und Versanddienst-Vorbereitung sind vorhanden, brauchen aber tiefere Laufzeitregeln für Produktion.",
         },
       ],
     },
@@ -3637,7 +3639,7 @@ export const crmAnalysisBotCopy = {
         botGovernance: "Bots, Wissensbasis und KI-Governance",
         calendarTeams: "Kalender, Microsoft 365 und Teams",
         newsletterConsent: "Newsletter, Consent und Suppression",
-        analyticsAttribution: "Analytics und Attribution",
+        analyticsAttribution: "Auswertungen und Attribution",
         developerInventory: "Bauträger-Bestand, Einheiten und Reservierungen",
         novalureCustomerAccess: "Novalure Vertrieb, Kunden-Workspaces und Kundenzugänge",
       },
@@ -3650,7 +3652,7 @@ export const crmAnalysisBotCopy = {
         botGovernance: "10% Gewichtung für Strict Knowledge, freigegebene Quellen, Evaluation, Red-Team-Tests und Handoff.",
         calendarTeams: "8% Gewichtung für Microsoft-Kalenderbuchung, Verfügbarkeit, Teams-Links und Benachrichtigungen.",
         newsletterConsent: "8% Gewichtung für Segmente, Kampagnen, Opt-in, Abmeldung, Suppression und Runtime-Gating.",
-        analyticsAttribution: "8% Gewichtung für Events, Quellen-ROI, Funnel-Abbruch, Antwortzeit und Umsatz-Attribution.",
+        analyticsAttribution: "8% Gewichtung für Ereignisse, Quellen-ROI, Funnel-Abbruch, Antwortzeit und Umsatz-Attribution.",
         developerInventory: "8% Gewichtung für Einheiten, Verfügbarkeit, Preise, Reservierungen und Vertragsmeilensteine.",
         novalureCustomerAccess: "5% Gewichtung für Novalure-Vertrieb, Onboarding, Workspace-Gesundheit und kontrollierten Kundenzugang.",
       },
@@ -3697,7 +3699,7 @@ export const crmAnalysisBotCopy = {
         "present.leadScoring": "Lead-Score und Hot-Status existieren.",
         "present.speedToLeadEvents": "Speed-to-Lead-Events und SLA-Prüfungen werden persistiert.",
         "present.ownerEscalation": "Zuständigkeits-Eskalation für überfällige SLAs existiert.",
-        "present.productiveFollowUps": "Follow-up-Aktionen schreiben Consent-, Aufgaben-, Audit- und Analytics-Records.",
+      "present.productiveFollowUps": "Follow-up-Aktionen schreiben Consent-, Aufgaben-, Audit- und Auswertungsdaten.",
         "present.outreachDeliveryRuntime": "Follow-up-Outreach-Deliveries werden nach Kanal und Consent-Ergebnis persistiert.",
         "present.cleanupWorkflow": "Datenqualitäts-Cleanup-Aktionen werden persistiert.",
         "present.bulkFollowUpRuntime": "Sammel-Follow-up-Läufe der Lead Inbox werden persistiert.",
@@ -3742,9 +3744,9 @@ export const crmAnalysisBotCopy = {
       "present.dashboardKpis": "Dashboard-KPIs existieren.",
       "present.funnelKpis": "Funnel-KPIs existieren.",
       "present.newsletterKpis": "Newsletter-KPIs existieren.",
-      "present.analyticsEventModel": "Core Analytics Events werden für CRM-Laufzeitaktionen geschrieben.",
+      "present.analyticsEventModel": "Core-Auswertungsereignisse werden für CRM-Laufzeitaktionen geschrieben.",
       "present.conversionSnapshots": "Conversion- und Umsatz-Snapshots werden persistiert.",
-      "present.pipelineForecastSnapshots": "Pipeline-Forecast- und Lost-Reason-Snapshots speisen Analytics.",
+      "present.pipelineForecastSnapshots": "Pipeline-Forecast- und Lost-Reason-Snapshots speisen Auswertungen.",
       "present.unitsBoard": "Einheitenboard ist verfügbar.",
       "present.projectSalesCockpit": "Projektvertriebs-Cockpit ist verfügbar.",
       "present.unitLedger": "Einheitenbuch-Daten existieren.",
@@ -3758,7 +3760,7 @@ export const crmAnalysisBotCopy = {
         "present.onboardingAction": "Nächste Onboarding-Aktion ist modelliert.",
         "present.customerAccessCockpit": "Kundenzugriff-Cockpit ist verfügbar.",
         "present.workspaceRoleRights": "Workspace- und Projektrechte werden serverseitig erzwungen.",
-        "present.accessAudit": "Kundenzugangs-Audit und Analytics-Kontext werden geschrieben.",
+        "present.accessAudit": "Kundenzugangs-Audit und Auswertungskontext werden geschrieben.",
         "present.onboardingRiskAlerts": "Onboarding-Risikoalarme und Customer-Success-Aufgaben werden automatisiert.",
       },
       maturityMissing: {
@@ -3800,9 +3802,9 @@ export const crmAnalysisBotCopy = {
         "missing.sendLogs": "Send Logs fehlen.",
         "missing.doubleOptInConfirmationFlow": "Double-Opt-in-Bestaetigungsflow braucht mehr Tiefe.",
         "missing.capiWebhookConsentCoverage": "CAPI- und Webhook-Consent-Coverage ist noch unvollständig.",
-        "missing.analyticsEventModel": "Analytics-Eventmodell fehlt.",
+      "missing.analyticsEventModel": "Auswertungs-Eventmodell fehlt.",
         "missing.closedRevenueAttribution": "Closed-Revenue-Attribution ist unvollständig.",
-        "missing.onboardingAnalytics": "Onboarding-Analytics ist unvollständig.",
+      "missing.onboardingAnalytics": "Onboarding-Auswertungen sind unvollständig.",
         "missing.sourceRoi": "Quellen-ROI fehlt.",
         "missing.salesVelocity": "Verkaufsdynamik pro Einheit fehlt.",
         "missing.unitsBoard": "Einheitenboard fehlt.",
@@ -3821,24 +3823,24 @@ export const crmAnalysisBotCopy = {
         "next.closePersistenceLoop": "Verbleibende Entwurfsänderungen an Server Actions und Repository Writes anbinden.",
         "next.speedToLeadEscalation": "Teams-Alarme und Zuständigkeits-Eskalation für überfällige First-Response-SLAs erstellen.",
         "next.leadInboxWritePath": "Inbound-Leads, Duplikatentscheidungen und Kontaktupdates aus jedem Kanal persistieren.",
-        "next.operationalFollowUps": "Follow-up-Buttons mit produktiven Sends, Aufgaben, Consent-Checks, Audit und Analytics verbinden.",
+        "next.operationalFollowUps": "Follow-up-Buttons mit produktiven Sends, Aufgaben, Consent-Checks, Audit und Auswertungen verbinden.",
         "next.leadInboxProductivity": "Bulk-Lead-Aktionen, Duplikat-Merge und schnellere Kontaktbereinigung ergänzen.",
         "next.persistPipelineChanges": "Stage-Wechsel mit Historie, Lost Reasons und Projektrechten persistieren.",
         "next.pipelineManagementReporting": "Forecast, Bulk-Aktionen und Management-Reporting auf der persistierten Pipeline ergänzen.",
         "next.persistSequenceRuns": "Sequence Enrollments, Step Runs, Erinnerungen und Stop-Regeln anlegen.",
         "next.finishFunnelRuntime": "Einen Public Renderer nutzen und Submits in Kontakte, Leads, Aufgaben und Termine schreiben.",
-        "next.funnelOptimizationReporting": "Publish-Token-UI, Consent-Reporting und Conversion Analytics für Live-Funnels verbessern.",
+        "next.funnelOptimizationReporting": "Publish-Token-UI, Consent-Reporting und Conversion-Auswertungen für Live-Funnels verbessern.",
         "next.hardenBotEvaluation": "Evaluation Runs, Red-Team-Prompts, Zitationschecks und sichere Handoff-Metriken ergänzen.",
         "next.botAnswerProtocolMetrics": "Gespeicherte Evaluationen mit echten Antwortprotokollen, Zitationen und Handoff-Qualität vergleichen.",
         "next.microsoftGraphBooking": "Microsoft Graph Booking mit Verfügbarkeit, Teams-Links und Benachrichtigungen fertigstellen.",
         "next.enforceConsentRuntime": "Newsletter, WhatsApp, E-Mail und Tracking nach Consent- und Suppression-Status sperren.",
         "next.consentCoverageReporting": "Consent-Coverage für Sends, Pixel, CAPI und Webhooks nach Kanal und Zweck auswerten.",
-        "next.createAnalyticsEvents": "Analytics Events für Quelle, SLA, Funnel, Buchung, Pipeline und Umsatz schreiben.",
-        "next.completeRevenueAnalytics": "Closed Revenue, Lost Reason, Onboarding und Unit Sales Velocity Analytics vervollständigen.",
+        "next.createAnalyticsEvents": "Auswertungsereignisse für Quelle, SLA, Funnel, Buchung, Pipeline und Umsatz schreiben.",
+        "next.completeRevenueAnalytics": "Closed Revenue, Lost Reason, Onboarding und Unit Sales Velocity-Auswertungen vervollständigen.",
         "next.buildUnitsBoard": "Einheitenboard mit Verfügbarkeit, Reservierungsfristen, Käuferlinks und Vertragsschritten bauen.",
         "next.viewingSlotsAndOfferMilestones": "Besichtigungsslots, Preis-/Blockierungs-Audit und Angebotsmeilensteine im Projektvertrieb ergänzen.",
         "next.customerAccessCockpit": "Kundenzugriff-Cockpit für eingeladene Nutzer, Rechte, Aktivierung und Health bauen.",
-        "next.customerAccessAutomation": "Onboarding-Analytics, Teams-Risikoalarme und Customer-Success-Automation ergänzen.",
+        "next.customerAccessAutomation": "Onboarding-Auswertungen, Teams-Risikoalarme und Customer-Success-Automation ergänzen.",
       },
       maturityActions: {
         persistentUiChanges: "UI-Änderungen persistieren, statt sie im Entwurfs- oder Demo-Zustand zu belassen.",
@@ -3849,7 +3851,7 @@ export const crmAnalysisBotCopy = {
         consentRuntimeGating: "Consent-Gating in Runtime-Aktionen erzwingen.",
         botEvaluationRedTeam: "Bot-Evaluation und Red-Team-Tests ergänzen.",
         teamsNotifications: "Teams-Benachrichtigungen für SLA, Buchungen und Risiken senden.",
-        analyticsEventModel: "Analytics-Eventmodell erstellen.",
+        analyticsEventModel: "Auswertungs-Eventmodell erstellen.",
         customerAccessCockpit: "Kundenzugriff-Cockpit erstellen.",
         workspaceProjectRoles: "Workspace- und Projektrechte härten.",
         wirePersistentWrites: "Persistente Writes für Dashboard, Pipeline, Funnels, Bots, Newsletter und Kontakte anbinden.",
@@ -3862,7 +3864,7 @@ export const crmAnalysisBotCopy = {
         buildAccessAdmin: "Access Admin für Kundennutzer, Rollen und Workspace Health bauen.",
         roleBasedNavigation: "Rollenbasierte Navigation für Novalure und Kundenteams ergänzen.",
         remainingBrowserFallbacks: "Verbleibende Browser-Fallback-Pfade schließen und Fallback-Warnungen sichtbar machen.",
-        productiveFollowUpActions: "Produktive Follow-up-Aktionen mit Consent, Audit und Analytics verbinden.",
+        productiveFollowUpActions: "Produktive Follow-up-Aktionen mit Consent, Audit und Auswertungen verbinden.",
         viewingSlots: "Besichtigungsslots im Projektvertrieb ergänzen.",
         priceBlockingAudit: "Preis- und Blockierungs-Audit für Einheiten ergänzen.",
         closedRevenueAttribution: "Closed-Revenue- und Lost-Reason-Attribution vervollständigen.",
@@ -3903,7 +3905,7 @@ export const crmAnalysisBotCopy = {
         funnelRuntime: "Funnel Runtime",
         novalureCockpit: "Novalure Kunden-Cockpit",
         microsoft365: "Microsoft 365",
-        analytics: "Analytics Eventmodell",
+        analytics: "Auswertungs-Eventmodell",
         roleHygiene: "Rollen-UX und Datenhygiene",
       },
       moduleDescriptions: {
@@ -4014,7 +4016,7 @@ export const crmAnalysisBotCopy = {
           "Einheitenbuch an persistente Projektimporte, Grundrisse, Angebote und Vertragsmeilensteine anbinden.",
       },
       analytics: {
-        title: "Analytics und Attribution",
+        title: "Auswertungen und Attribution",
         evidence:
           "Dashboards und Funnel-KPIs existieren, aber echte Event-Attribution, Quellen-ROI, Antwortzeit-Historie und Verkaufsdynamik pro Einheit sind noch teilweise.",
         nextStep:
@@ -4054,7 +4056,7 @@ export const crmAnalysisBotCopy = {
         title: "Sequenzen im Tagesbetrieb messbar machen",
         why: "Aufgaben und Vorlagen existieren, aber Sequence Runs, Stop-Regeln und Follow-up-Benachrichtigungen ziehen Punkte ab.",
         impact: "Macht wiederholtes Sales-Follow-up weniger manuell.",
-        nextStep: "Sequence Enrollments, Step Runs, Stop-Bedingungen und Reminder-Ergebnisse persistieren.",
+        nextStep: "Sequence Enrollments, Step Runs, Stop-Bedingungen und Erinnerungs-Ergebnisse persistieren.",
       },
       funnelsForms: {
         title: "Funnel-Publishing und Conversion Reporting schaerfen",
@@ -4072,7 +4074,7 @@ export const crmAnalysisBotCopy = {
         title: "Microsoft-365-Buchungstiefe fertigstellen",
         why: "Kalenderdaten sind modelliert, aber Verfügbarkeit, OAuth-Tiefe, Teams-Benachrichtigungen oder Live-Termine kosten Punkte.",
         impact: "Macht Termine für Sales-Teams und Kunden verlässlich.",
-        nextStep: "Microsoft OAuth, Verfügbarkeitschecks, Teams-Links und Reminder-Jobs prüfen.",
+        nextStep: "Microsoft OAuth, Verfügbarkeitschecks, Teams-Links und Erinnerungs-Jobs prüfen.",
       },
       newsletterConsent: {
         title: "Consent-Coverage je Kanal belegen",
@@ -4136,7 +4138,7 @@ export const crmAnalysisBotCopy = {
         audience: "both",
         title: "Echte Send-Provider für Follow-ups anbinden",
         why:
-          "Einzelne und gebündelte Follow-ups schreiben jetzt Consent, Aufgaben, Audit, Analytics und Batch-Records. Der nächste Hebel ist kanalnahe Ausführung über konfigurierte Provider.",
+          "Einzelne und gebündelte Follow-ups schreiben jetzt Consent, Aufgaben, Audit, Auswertungen und Batch-Records. Der nächste Hebel ist kanalnahe Ausführung über konfigurierte Provider.",
         impact: "Mehr Termine aus gleichem Werbebudget.",
         effort: "Mittel",
         nextStep:
@@ -4585,7 +4587,7 @@ export const leadInboxCommandCopy = {
     mustCriteria: "Must-have criteria",
     niceCriteria: "Nice-to-have criteria",
     purchaseTimeline: "Purchase timeline",
-    profilePersisted: "Separate CRM entity saved",
+    profilePersisted: "Saved as separate CRM entity",
     rooms: "Rooms",
     searchProfileEntityTitle: "Buyer search profile entity",
     sellingReason: "Selling reason",
@@ -4686,7 +4688,7 @@ export const leadInboxCommandCopy = {
     mustCriteria: "Muss-Kriterien",
     niceCriteria: "Kann-Kriterien",
     purchaseTimeline: "Kaufzeitraum",
-    profilePersisted: "Separate CRM-Entität gespeichert",
+    profilePersisted: "Als eigene CRM-Entität gespeichert",
     rooms: "Zimmer",
     searchProfileEntityTitle: "Käufer-Suchprofil als eigene Entität",
     sellingReason: "Verkaufsgrund",
@@ -4915,7 +4917,7 @@ export const dealPipelineCommandCopy = {
   de: {
     title: "Dealpipeline",
     description:
-      "Bearbeite Immobilien-Deals nach Phase, Lead-Typ, Besitzer, Risiko und nächster Aktion. Phasenwechsel werden mit Historie, Gründen und Audit-Log persistiert.",
+      "Bearbeite Immobilien-Deals nach Phase, Lead-Typ, Zuständige(r), Risiko und nächster Aktion. Phasenwechsel werden mit Historie, Gründen und Audit-Log persistiert.",
     forecast: "Gewichteter Forecast",
     openPipelineValue: "Offener Pipelinewert",
     openDeals: "Offene Deals",
@@ -5092,6 +5094,20 @@ export const taskCommandCenterCopy = {
     all: "All",
     search: "Search",
     searchPlaceholder: "Search task, contact, project or source",
+    newTask: "New task",
+    createTaskTitle: "Create free task",
+    createTaskDescription:
+      "Create an internal CRM task with optional contact, lead, project and assignee links.",
+    titleField: "Title",
+    descriptionField: "Description",
+    owner: "Assignee",
+    noOwner: "No assignee",
+    saveTask: "Save task",
+    savingTask: "Saving...",
+    cancel: "Cancel",
+    taskCreated: "Task created.",
+    taskCreateFailed: "Task could not be created.",
+    titleRequired: "Enter a task title.",
     dueToday: "Due today",
     overdue: "Overdue",
     highPriority: "High priority",
@@ -5137,6 +5153,20 @@ export const taskCommandCenterCopy = {
     all: "Alle",
     search: "Suche",
     searchPlaceholder: "Aufgabe, Kontakt, Projekt oder Quelle suchen",
+    newTask: "Neue Aufgabe",
+    createTaskTitle: "Freie Aufgabe anlegen",
+    createTaskDescription:
+      "Interne CRM-Aufgabe mit optionalem Kontakt-, Lead-, Projekt- und Zuständigkeitsbezug erstellen.",
+    titleField: "Titel",
+    descriptionField: "Beschreibung",
+    owner: "Zuständig",
+    noOwner: "Nicht zugewiesen",
+    saveTask: "Aufgabe speichern",
+    savingTask: "Speichern...",
+    cancel: "Abbrechen",
+    taskCreated: "Aufgabe angelegt.",
+    taskCreateFailed: "Aufgabe konnte nicht angelegt werden.",
+    titleRequired: "Gib einen Aufgabentitel ein.",
     dueToday: "Heute fällig",
     overdue: "Überfällig",
     highPriority: "Hoch priorisiert",
@@ -5241,6 +5271,23 @@ export const contactCommandCenterCopy = {
       "Almost all fields are optional. Save the contact now and use data quality hints to complete contact route, project, consent or next action later.",
     saveAndTask: "Save and create task",
     saveAndLead: "Save and assign lead",
+    taskFlowTitle: "Create task for saved contact",
+    taskFlowDescription: "The contact is saved. Add the promised follow-up task now.",
+    leadFlowTitle: "Assign lead to saved contact",
+    leadFlowDescription: "The contact is saved. Create the linked lead now.",
+    taskTitle: "Task title",
+    taskDescription: "Task description",
+    taskDue: "Due",
+    taskPriority: "Priority",
+    leadIntent: "Lead intent",
+    leadType: "Lead type",
+    leadStatus: "Lead status",
+    leadNextAction: "Next action",
+    createLinkedTask: "Create task",
+    assignLinkedLead: "Create linked lead",
+    linkedTaskCreated: "Task created for contact.",
+    linkedLeadCreated: "Lead assigned to contact.",
+    followUpCancelled: "Follow-up action cancelled.",
     recommendedForTab: "Recommended fields",
     tabs: {
       overview: "Overview",
@@ -5388,6 +5435,23 @@ export const contactCommandCenterCopy = {
       "Fast alle Felder sind optional. Speichere den Kontakt sofort und ergänze Kontaktweg, Projekt, Consent oder nächste Aktion später über Datenqualitätshinweise.",
     saveAndTask: "Speichern und Aufgabe erstellen",
     saveAndLead: "Speichern und Lead zuordnen",
+    taskFlowTitle: "Aufgabe zum gespeicherten Kontakt erstellen",
+    taskFlowDescription: "Der Kontakt ist gespeichert. Lege jetzt die versprochene Folgeaufgabe an.",
+    leadFlowTitle: "Lead zum gespeicherten Kontakt zuordnen",
+    leadFlowDescription: "Der Kontakt ist gespeichert. Erstelle jetzt den verknüpften Lead.",
+    taskTitle: "Aufgabentitel",
+    taskDescription: "Aufgabenbeschreibung",
+    taskDue: "Fälligkeit",
+    taskPriority: "Priorität",
+    leadIntent: "Lead-Bedarf",
+    leadType: "Lead-Typ",
+    leadStatus: "Lead-Status",
+    leadNextAction: "Nächste Aktion",
+    createLinkedTask: "Aufgabe erstellen",
+    assignLinkedLead: "Verknüpften Lead erstellen",
+    linkedTaskCreated: "Aufgabe zum Kontakt angelegt.",
+    linkedLeadCreated: "Lead dem Kontakt zugeordnet.",
+    followUpCancelled: "Folgeaktion abgebrochen.",
     recommendedForTab: "Empfohlene Felder",
     tabs: {
       overview: "Überblick",
@@ -5489,6 +5553,8 @@ export const funnelCommandCenterCopy = {
     selectedFunnel: "Selected funnel",
     noFunnels: "No funnels for this view.",
     save: "Save changes",
+    saving: "Saving...",
+    saveFailed: "Funnel changes could not be saved.",
     addStep: "Add step",
     duplicate: "Duplicate",
     remove: "Delete",
@@ -5775,6 +5841,8 @@ export const funnelCommandCenterCopy = {
     selectedFunnel: "Ausgewählter Funnel",
     noFunnels: "Keine Funnel für diese Ansicht.",
     save: "Änderungen speichern",
+    saving: "Speichert...",
+    saveFailed: "Funnel-Änderungen konnten nicht gespeichert werden.",
     addStep: "Schritt hinzufügen",
     duplicate: "Duplizieren",
     remove: "Löschen",
@@ -5883,10 +5951,10 @@ export const funnelCommandCenterCopy = {
       newsletterSegment: "Newsletter Segment",
       statusTriggers: "CRM-Status-Trigger",
       statusTriggerStages: ["Neu", "Qualifiziert", "Termin offen", "Besichtigung gebucht"],
-      triggerDescriptions: ["Sofort bestätigen", "Sales informieren", "Reminder senden", "Vorbereitung senden"],
+      triggerDescriptions: ["Sofort bestätigen", "Sales informieren", "Erinnerung senden", "Vorbereitung senden"],
     },
     tracking: {
-      setupTitle: "Pixel, Analytics und Consent",
+      setupTitle: "Pixel, Auswertungen und Consent",
       metaCapi: "Meta Conversion API Token",
       metaCapiPlaceholder: "Server Token für deduplizierte Events",
       matomo: "Matomo Site ID",
@@ -6357,7 +6425,7 @@ export const funnelPreviewCopy = {
 
 export const knowledgeCommandCenterCopy = {
   en: {
-    eyebrow: "Feed agent",
+    eyebrow: "Add knowledge sources",
     title: "Build knowledge base",
     description:
       "Add approved project and workspace knowledge, review it, release it and make it available for controlled bot answers.",
@@ -6419,7 +6487,7 @@ export const knowledgeCommandCenterCopy = {
     },
   },
   de: {
-    eyebrow: "Agent füttern",
+    eyebrow: "Wissensquellen hinzufügen",
     title: "Wissensdatenbank aufbauen",
     description:
       "Füge freigegebenes Projekt- und Workspace-Wissen hinzu, prüfe es, gib es frei und aktiviere es kontrolliert für Bot-Antworten.",
@@ -7290,9 +7358,9 @@ export const botCommandCenterCopy = {
 
 export const newsletterCommandCenterCopy = {
   de: {
-    title: "Newsletter und Resend",
+    title: "Newsletter & Versand",
     description:
-      "Vollständiger Newsletter-Arbeitsbereich mit Segmenten, Editor, Vorlagen, A/B-Test, Automationen, Analytics, Consent, Unterdrückungsliste und Zustellbarkeit.",
+      "Vollständiger Newsletter-Arbeitsbereich mit Segmenten, Editor, Vorlagen, A/B-Test, Automationen, Auswertungen, Consent, Unterdrückungsliste und Zustellbarkeit.",
     campaigns: "Kampagnen",
     builder: "Editor",
     backToNewsletter: "Zurück zu Newslettern",
@@ -7305,7 +7373,7 @@ export const newsletterCommandCenterCopy = {
     sendStatus: "Versandstatus",
     segments: "Segmente",
     automations: "Automationen",
-    analytics: "Analytics",
+    analytics: "Auswertungen",
     deliverability: "Zustellbarkeit",
     search: "Suche",
     searchPlaceholder: "Kampagne, Segment, Betreff oder Ziel suchen",
@@ -7450,6 +7518,8 @@ export const newsletterCommandCenterCopy = {
     liveSendSuccess: "{{count}} Newsletter wurden an den Provider übergeben und im CRM protokolliert.",
     liveSendQueuedMock:
       "{{count}} Newsletter wurden im CRM protokolliert. Für echten externen Versand fehlt noch RESEND_API_KEY.",
+    liveSendTestMode:
+      "Testmodus - es wurde keine externe E-Mail versendet; der Versand wurde nur im CRM protokolliert.",
     liveSendError: "Newsletter konnte nicht gesendet werden.",
     liveSendNoRecipients: "Keine Newsletter-Opt-ins mit E-Mail-Adresse für diese Kampagne gefunden.",
     liveSendRecipients: "{{count}} CRM-Opt-ins für diese Kampagne.",
@@ -7478,7 +7548,7 @@ export const newsletterCommandCenterCopy = {
     },
   },
   en: {
-    title: "Newsletter and Resend",
+    title: "Newsletter & sending",
     description:
       "Complete newsletter workspace with segments, editor, templates, A/B test, automations, analytics, consent, suppression list and deliverability.",
     campaigns: "Campaigns",
@@ -7493,7 +7563,7 @@ export const newsletterCommandCenterCopy = {
     sendStatus: "Send status",
     segments: "Segments",
     automations: "Automations",
-    analytics: "Analytics",
+    analytics: "Auswertungen",
     deliverability: "Deliverability",
     search: "Search",
     searchPlaceholder: "Search campaign, segment, subject or goal",
@@ -7638,6 +7708,8 @@ export const newsletterCommandCenterCopy = {
     liveSendSuccess: "{{count}} newsletters were handed to the provider and logged in CRM.",
     liveSendQueuedMock:
       "{{count}} newsletters were logged in CRM. RESEND_API_KEY is still required for real external sending.",
+    liveSendTestMode:
+      "Test mode - no external email was sent; the send was only logged in CRM.",
     liveSendError: "Newsletter could not be sent.",
     liveSendNoRecipients: "No newsletter opt-ins with an email address found for this campaign.",
     liveSendRecipients: "{{count}} CRM opt-ins for this campaign.",
@@ -7699,7 +7771,7 @@ export const leadSequenceCommandCenterCopy = {
     timeline: "Timeline",
     simulator: "Simulator",
     rules: "Rules",
-    analytics: "Analytics",
+    analytics: "Auswertungen",
     active: "Active",
     paused: "Paused",
     draft: "Draft",
@@ -8698,13 +8770,13 @@ export const publicBookingPageCopy = {
     },
   },
   de: {
-    metadataDescription: "Buchungsseite für Novalure CRM Meetings",
+    metadataDescription: "Buchungsseite für Novalure CRM Termine",
     bookTitle: (title: string) => `${title} buchen`,
     cancelTitle: (title: string) => `${title} absagen`,
     rescheduleTitle: (title: string) => `${title} verschieben`,
-    eyebrow: "Novalure Meeting",
+    eyebrow: "Novalure Termin",
     calendar: "Kalender",
-    meeting: "Meeting",
+    meeting: "Termin",
     duration: "Dauer",
     minutes: "Minuten",
     selectedAppointment: "Ausgewählter Termin",
@@ -8735,15 +8807,15 @@ export const publicBookingPageCopy = {
     afterBooking: "Nach der Buchung",
     noConfirmation: "Keine Bestätigungs-Mail",
     confirmationMail: "Bestätigungs-Mail",
-    reminderActive: (count: string) => `${count} Reminder aktiv`,
-    reminderOptional: "Reminder optional",
+    reminderActive: (count: string) => `${count} Erinnerung(en) aktiv`,
+    reminderOptional: "Erinnerung optional",
     selfServiceOff: "Self-Service aus",
     descriptions: {
       cancel: "Dieser sichere Link ist bereits mit dem ausgewählten Termin verbunden.",
       reschedule:
         "Wählen Sie einen neuen freien Termin. Der bestehende Kalendertermin wird aktualisiert.",
-      booking:
-        "Wählen Sie einen freien Termin. Belegte Zeiten, Puffer, Vorlaufzeit und Buchungszeitraum werden direkt aus den Meeting-Regeln angewendet.",
+        booking:
+        "Wählen Sie einen freien Termin. Belegte Zeiten, Puffer, Vorlaufzeit und Buchungszeitraum werden direkt aus den Terminregeln angewendet.",
     },
     status: {
       invalidLink: "Der sichere Terminlink ist nicht gültig oder abgelaufen.",
@@ -8758,14 +8830,14 @@ export const publicBookingPageCopy = {
         reschedule_deadline_passed: "Dieser Termin kann nicht mehr verschoben werden.",
         cancel_reason_required: "Bitte geben Sie einen Grund für die Absage an.",
         calendar_sync_failed: "Der Kalendertermin konnte gerade nicht automatisch erstellt werden.",
-        meeting_link_missing: "Der Meeting-Link konnte gerade nicht automatisch erstellt werden.",
+        meeting_link_missing: "Der Terminlink konnte gerade nicht automatisch erstellt werden.",
         booking_not_found: "Der sichere Buchungslink ist nicht mehr gültig.",
         fallback: "Die Aktion konnte gerade nicht abgeschlossen werden.",
       },
     },
     meetingLabels: {
       googleMeet: "Google Meet",
-      manualLink: "Eigener Meetinglink",
+      manualLink: "Eigener Terminlink",
       phone: "Telefon",
       microsoftTeams: "Microsoft Teams",
     },
@@ -8778,9 +8850,9 @@ export const publicBookingPageCopy = {
 
 export const calendarCommandCenterCopy = {
   de: {
-    title: "Meetings und Kalender",
+    title: "Termine und Kalender",
     description:
-      "Termine werden mit Projekt, Kontakt, Lead, Aufgabe, Kalenderanbieter und Meetinglink verbunden. So wird der Kalender später nicht nur Anzeige, sondern CRM-Arbeitsfläche.",
+      "Termine werden mit Projekt, Kontakt, Lead, Aufgabe, Kalenderanbieter und Terminlink verbunden. So wird der Kalender später nicht nur Anzeige, sondern CRM-Arbeitsfläche.",
     today: "Heute",
     upcoming: "Nächste Termine",
     prepare: "Vorbereiten",
@@ -8804,6 +8876,22 @@ export const calendarCommandCenterCopy = {
     noEvents: "Keine Termine für diese Ansicht.",
     noContact: "Kein Kontakt verknüpft",
     noLead: "Kein Lead verknüpft",
+    noOwner: "Nicht zugewiesen",
+    newEvent: "Neuen Termin anlegen",
+    createEventTitle: "Internen Termin anlegen",
+    createEventDescription:
+      "Erstellt einen CRM-Termin mit Projekt-, Kontakt-, Lead- und Zuständigkeitsbezug. Danach kann derselbe Termin mit Microsoft 365 oder Google synchronisiert werden.",
+    eventTitleField: "Titel",
+    meetingProvider: "Meetinganbieter",
+    notes: "Notizen",
+    saveEvent: "Termin speichern",
+    savingEvent: "Speichern...",
+    cancel: "Abbrechen",
+    eventCreated: "Termin angelegt.",
+    eventCreateFailed: "Termin konnte nicht angelegt werden.",
+    eventTitleRequired: "Gib einen Termintitel ein.",
+    calendarLabel: "Kalender",
+    meetingLabel: "Meeting",
     teamsReady: "Teams-Link bereit",
     missingTeams: "Teams-Link fehlt",
     graphMapping: "Kalender-Mapping",
@@ -8843,7 +8931,7 @@ export const calendarCommandCenterCopy = {
       },
       {
         description:
-          "Google Kalender anbinden, Verfügbarkeiten lesen und Google-Meet-Links für Buchungen erzeugen.",
+          "Google Kalender anbinden, Verfügbarkeiten lesen und Online-Terminlinks für Buchungen erzeugen.",
         id: "google",
         label: "Google Workspace",
         meetingProvider: "google-meet",
@@ -8854,9 +8942,9 @@ export const calendarCommandCenterCopy = {
     meetingProviderLabels: {
       "microsoft-teams": "Microsoft Teams",
       "google-meet": "Google Meet",
-      "manual-link": "Eigener Meetinglink",
+      "manual-link": "Eigener Terminlink",
       phone: "Telefon",
-      fallback: "Meetinglink",
+      fallback: "Terminlink",
     },
     syncModes: [
       { id: "two_way", label: "Zwei-Wege-Sync" },
@@ -8952,19 +9040,19 @@ export const calendarCommandCenterCopy = {
         label: "Follow-up",
         reminderBody:
           "Hallo {{contact.firstName}},\n\nkurze Erinnerung an unser Follow-up um {{meeting.time}}.\n\nLink: {{meeting.link}}",
-        reminderSubject: "Reminder: Follow-up",
+        reminderSubject: "Erinnerung: Follow-up",
       },
     ],
     defaultMeetingLinkTemplates: {
-      google: "Automatisch Google-Meet-Link erstellen",
+      google: "Online-Terminlink automatisch erstellen",
       microsoft: "Automatisch Teams-Link erstellen",
     },
     defaultReminder: {
       body:
         "Hallo {{contact.firstName}},\n\nunser Termin startet in 2 Stunden.\n\nMeeting-Link: {{meeting.link}}\nFalls nötig, können Sie hier verschieben: {{meeting.rescheduleLink}}",
-      preparationTitle: "Reminder mit Vorbereitung",
+      preparationTitle: "Erinnerung mit Vorbereitung",
       subject: "Ihr Termin startet bald",
-      title: "Reminder mit Meeting-Link",
+      title: "Erinnerung mit Terminlink",
     },
     newReminder: {
       body:
@@ -8996,7 +9084,7 @@ export const calendarCommandCenterCopy = {
       confirmationMetric: "Bestätigung",
       active: "aktiv",
       inactive: "aus",
-      remindersMetric: "Reminder",
+      remindersMetric: "Erinnerungen",
       selfServiceMetric: "Self-Service",
       reschedule: "Verschieben",
       cancel: "Absagen",
@@ -9008,9 +9096,9 @@ export const calendarCommandCenterCopy = {
       emailTitle: "Titel",
       image: "Bild",
       body: "Textkörper",
-      remindersTitle: "Mehrere Reminder frei definieren",
+      remindersTitle: "Mehrere Erinnerungen frei definieren",
       remindersDescription:
-        "Standard sind 24 Stunden und 2 Stunden vorher. Mehr als drei Reminder sind möglich, werden aber bewusst markiert.",
+        "Standard sind 24 Stunden und 2 Stunden vorher. Mehr als drei Erinnerungen sind möglich, werden aber bewusst markiert.",
       addReminder: "Erinnerung hinzufügen",
       reminderWarning:
         "Mehr als drei Erinnerungen können wirken, sollten aber bewusst eingesetzt werden, damit Teilnehmer nicht zu viele Mails erhalten.",
@@ -9022,7 +9110,7 @@ export const calendarCommandCenterCopy = {
       delete: "Löschen",
       rescheduleCancelTitle: "Self-Service direkt in den Mails",
       rescheduleCancelDescription:
-        "Die Buttons werden automatisch in Vorschau, Bestätigung und Reminder sichtbar, wenn sie aktiviert sind.",
+        "Die Buttons werden automatisch in Vorschau, Bestätigung und Erinnerung sichtbar, wenn sie aktiviert sind.",
       allowReschedule: "Teilnehmer darf Termin verschieben",
       allowCancel: "Teilnehmer darf Termin absagen",
       deadlineHours: "Frist in Stunden vorher",
@@ -9032,7 +9120,7 @@ export const calendarCommandCenterCopy = {
       templates: "Vorlagen",
       templatesTitle: "Schneller Start je Terminart",
       templatesDescription:
-        "Vorlagen setzen Bestätigung und ersten Reminder. Danach kann der Kunde alles frei anpassen.",
+        "Vorlagen setzen Bestätigung und erste Erinnerung. Danach kann der Kunde alles frei anpassen.",
       activeTemplate: "Aktive Vorlage",
       preview: "E-Mail-Vorschau",
       openMeeting: "Meeting öffnen",
@@ -9042,22 +9130,22 @@ export const calendarCommandCenterCopy = {
       cancelReasonRequired: "Absagegrund wird abgefragt",
       cancelWithoutReason: "Absage ohne Grund möglich",
       deliveryNote:
-        "Versand: Test-Mail läuft über Resend oder Mock-Queue, echte Reminder-Jobs folgen danach.",
+        "Versand: Test-Mail läuft über Versanddienst oder Mock-Queue, echte Erinnerungs-Jobs folgen danach.",
     },
     setup: {
       eyebrow: "Terminseite erstellen",
       title: "Nachrichten, Erinnerungen und Self-Service bearbeiten",
       description:
-        "Öffnet einen großen Arbeitsmodus wie bei Funnels. Dort definiert der Kunde Bestätigungs-Mail, Reminder-Timeline, Vorlagen sowie Verschieben- und Absage-Buttons.",
+        "Öffnet einen großen Arbeitsmodus wie bei Funnels. Dort definiert der Kunde Bestätigungs-Mail, Erinnerungs-Timeline, Vorlagen sowie Verschieben- und Absage-Buttons.",
       editLarge: "Terminseite groß bearbeiten",
-      editReminders: "Reminder bearbeiten",
+      editReminders: "Erinnerungen bearbeiten",
       savePage: "Terminseite speichern",
     },
       calendarSetup: {
         eyebrow: "Meeting-Setup",
         title: "Kalender verbinden",
         description:
-          "Kunden verbinden Microsoft oder Google per OAuth und wählen danach pro Terminseite, welcher Kalender und Meetinganbieter genutzt wird. Das CRM liest Verfügbarkeiten und erstellt Teams- oder Google-Meet-Links.",
+          "Kunden verbinden Microsoft oder Google per OAuth und wählen danach pro Terminseite, welcher Kalender und Online-Anbieter genutzt wird. Das CRM liest Verfügbarkeiten und erstellt Teams- oder Online-Terminlinks.",
         neutralQuestion: "Welchen Kalender möchten Sie verbinden?",
         neutralDescription:
           "Microsoft 365 und Google Workspace stehen gleichwertig zur Auswahl. Der aktive Anbieter wird erst bevorzugt, nachdem er für diesen Workspace verbunden wurde.",
@@ -9068,7 +9156,7 @@ export const calendarCommandCenterCopy = {
       calendarLinkOrId: "Kalender-Link oder ID",
       googleCalendarPlaceholder: "primary oder Google Calendar ID",
       microsoftCalendarPlaceholder: "Outlook-Kalender-URL oder ID",
-      meetingLinkTemplate: "Meetinglink-Vorlage",
+      meetingLinkTemplate: "Terminlink-Vorlage",
       connect: (provider: string) => `${provider} verbinden`,
       selectForPage: "Für diese Terminseite auswählen",
       disconnect: "Trennen",
@@ -9082,7 +9170,7 @@ export const calendarCommandCenterCopy = {
         "Der Kunde sieht hier, welcher Anbieter verbunden werden muss und welche Daten fehlen.",
     },
     share: {
-      eyebrow: "Meetinglink weitergeben",
+      eyebrow: "Terminlink weitergeben",
       title: "Link, Embed und Buchungs-CTA",
       description:
         "Eine Buchungsseite kann als direkter Link, Website-Embed, Button, QR-Ziel oder Nachricht verteilt werden. Tracking und Anbieter werden direkt mitgegeben.",
@@ -9128,7 +9216,7 @@ export const calendarCommandCenterCopy = {
       eyebrow: "Buchungen & Nachrichten",
       title: "Eingegangene Termin-Anfragen und Versandstatus",
       description:
-        "Diese Ansicht zeigt, welche Kunden über die Buchungsseite angefragt haben und welche Bestätigungen, Reminder oder Nachfass-Mails geplant, gesendet oder fehlgeschlagen sind.",
+        "Diese Ansicht zeigt, welche Kunden über die Buchungsseite angefragt haben und welche Bestätigungen, Erinnerungen oder Nachfass-Mails geplant, gesendet oder fehlgeschlagen sind.",
       refresh: "Aktualisieren",
       refreshing: "Aktualisiert ...",
       total: "Buchungen",
@@ -9165,7 +9253,7 @@ export const calendarCommandCenterCopy = {
     notificationKindLabels: {
       confirmation: "Bestätigung",
       follow_up: "Nachfass-Mail",
-      reminder: "Reminder",
+      reminder: "Erinnerung",
     },
     notificationStatusLabels: {
       sent: "gesendet",
@@ -9209,7 +9297,7 @@ export const calendarCommandCenterCopy = {
       preparingTestMail: (to: string) => `Test-Mail wird für ${to} vorbereitet.`,
       testMailError: "Test-Mail konnte nicht vorbereitet werden.",
       testMailSent: (to: string) => `Test-Mail wurde an ${to} gesendet.`,
-      testMailQueued: "Test-Mail ist vorbereitet. Ohne Resend-Key bleibt sie als queued gespeichert.",
+      testMailQueued: "Test-Mail ist vorbereitet. Ohne Versanddienst-Key bleibt sie als queued gespeichert.",
       testMailApiUnavailable: "Test-Mail API ist gerade nicht erreichbar.",
       providerOAuthOpening: (provider: string) => `${provider} OAuth wird geöffnet.`,
       meetingProviderConnecting: (meetingProvider: string, provider: string) =>
@@ -9226,7 +9314,7 @@ export const calendarCommandCenterCopy = {
       microsoftNotConnected:
         "Microsoft 365 ist noch nicht verbunden. Bitte Microsoft verbinden und danach erneut bestätigen.",
       resendTesting:
-        "Der Mailversand ist noch im Resend-Testmodus. Bitte Absenderdomain verifizieren oder an die Testadresse senden.",
+        "Der Mailversand ist noch im Testmodus des Versanddienstes. Bitte Absenderdomain verifizieren oder an die Testadresse senden.",
     },
     statusLabels: {
       geplant: "geplant",
@@ -9262,6 +9350,22 @@ export const calendarCommandCenterCopy = {
     noEvents: "No appointments for this view.",
     noContact: "No contact linked",
     noLead: "No lead linked",
+    noOwner: "No assignee",
+    newEvent: "Create appointment",
+    createEventTitle: "Create internal appointment",
+    createEventDescription:
+      "Creates a CRM appointment with project, contact, lead and assignee context. The same appointment can then be synced to Microsoft 365 or Google.",
+    eventTitleField: "Title",
+    meetingProvider: "Meeting provider",
+    notes: "Notes",
+    saveEvent: "Save appointment",
+    savingEvent: "Saving...",
+    cancel: "Cancel",
+    eventCreated: "Appointment created.",
+    eventCreateFailed: "Appointment could not be created.",
+    eventTitleRequired: "Enter an appointment title.",
+    calendarLabel: "Calendar",
+    meetingLabel: "Meeting",
     teamsReady: "Teams link ready",
     missingTeams: "Teams link missing",
     graphMapping: "Calendar mapping",
@@ -9745,8 +9849,6 @@ const crmSourceLabels: Record<string, Record<LanguageCode, string>> = {
   Newsletter: { en: "Newsletter", de: "Newsletter" },
   Instagram: { en: "Instagram", de: "Instagram" },
   WhatsApp: { en: "WhatsApp", de: "WhatsApp" },
-  "Microsoft 365": { en: "Microsoft 365", de: "Microsoft 365" },
-  "Google Meet": { en: "Google Meet", de: "Google Meet" },
   willhaben: { en: "willhaben", de: "willhaben" },
   ImmobilienScout: { en: "ImmobilienScout", de: "ImmobilienScout" },
 };
@@ -9802,12 +9904,12 @@ const crmLeadTypeAliases: Record<string, string> = {
 };
 
 const crmSourceAliases: Record<string, string> = {
-  google_meet: "Google Meet",
+  google_meet: "Manual",
   immobilienscout: "ImmobilienScout",
   instagram: "Instagram",
   manual: "Manual",
   manuell: "Manual",
-  microsoft_365: "Microsoft 365",
+  microsoft_365: "Manual",
   newsletter: "Newsletter",
   referral: "Empfehlung",
   empfehlung: "Empfehlung",
@@ -10365,6 +10467,7 @@ export const customerAccessCockpitCopy = {
       viewer: "Viewer",
     },
     actions: {
+      inviteUser: "Invite user",
       refresh: "Refresh",
       runRiskAutomation: "Run risk automation",
       saveAccess: "Save access",
@@ -10418,6 +10521,18 @@ export const customerAccessCockpitCopy = {
       subtitle:
         "Novalure view for trial workspaces, activation, blocked access and the next customer onboarding action.",
       title: "Novalure sales and onboarding cockpit",
+    },
+    invite: {
+      description:
+        "Create a new invited workspace user. The invited person sets their own password through the secure setup link.",
+      email: "Email address",
+      invalidEmail: "Enter a valid email address.",
+      name: "Name",
+      productRole: "Product role",
+      role: "Workspace role",
+      sent: (email: string) => `Invitation saved for ${email}.`,
+      testModeSaved: (email: string) => `Invitation saved for ${email}; email delivery is in test mode and was only logged/queued.`,
+      title: "Invite new user",
     },
     metrics: {
       active: "Active customers",
@@ -10477,6 +10592,7 @@ export const customerAccessCockpitCopy = {
       viewer: "Betrachter",
     },
     actions: {
+      inviteUser: "Nutzer einladen",
       refresh: "Aktualisieren",
       runRiskAutomation: "Risikoautomatik starten",
       saveAccess: "Zugriff speichern",
@@ -10530,6 +10646,18 @@ export const customerAccessCockpitCopy = {
       subtitle:
         "Novalure-Sicht auf Test-Workspaces, Aktivierung, blockierte Zugänge und nächste Kunden-Onboarding-Aktion.",
       title: "Novalure Vertriebs- und Onboarding-Cockpit",
+    },
+    invite: {
+      description:
+        "Legt einen neuen Workspace-Nutzer im Status Eingeladen an. Die eingeladene Person setzt ihr Passwort selbst über den sicheren Einrichtungslink.",
+      email: "E-Mail-Adresse",
+      invalidEmail: "Gib eine gültige E-Mail-Adresse ein.",
+      name: "Name",
+      productRole: "Product Role",
+      role: "Workspace-Rolle",
+      sent: (email: string) => `Einladung für ${email} gespeichert.`,
+      testModeSaved: (email: string) => `Einladung für ${email} gespeichert; der E-Mail-Versand ist im Testmodus und wurde nur protokolliert/queued.`,
+      title: "Neuen Nutzer einladen",
     },
     metrics: {
       active: "Aktive Kunden",

@@ -532,6 +532,7 @@ export function FunnelCommandCenter({
     { label: text.monitorLoaded, detail: text.monitorReady, status: text.internal },
   ]);
   const [notice, setNotice] = useState<string>(text.draftNotice);
+  const [draftSaving, setDraftSaving] = useState(false);
   const sourceFunnels = useMemo(
     () => [
       ...funnels,
@@ -733,47 +734,58 @@ export function FunnelCommandCenter({
   }
 
   async function saveDraft() {
-    if (!selected) return;
+    if (!selected || draftSaving) return;
     const originalId = selected.funnel.id;
-    const response = await fetch("/api/crm/funnels", {
-      body: JSON.stringify({ funnel: selected.funnel, steps: selectedSteps }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    }).catch(() => null);
+    setDraftSaving(true);
 
-    if (response?.ok) {
-      const payload = await response.json() as { funnel?: EditableFunnel; stepIds?: string[] };
-      if (payload.funnel?.id) {
-        const persistedFunnel = { ...selected.funnel, ...payload.funnel };
-        const persistedSteps = selectedSteps.map((step, index) => ({
-          ...step,
-          funnelId: persistedFunnel.id,
-          id: payload.stepIds?.[index] ?? step.id,
-          projectId: persistedFunnel.projectId,
-          workspaceId: persistedFunnel.workspaceId,
-        }));
+    try {
+      const response = await fetch("/api/crm/funnels", {
+        body: JSON.stringify({ funnel: selected.funnel, steps: selectedSteps }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
 
-        setEditedFunnels((current) => {
-          const next = { ...current };
-          delete next[originalId];
-          return { ...next, [persistedFunnel.id]: persistedFunnel };
-        });
-        setEditedSteps((current) => {
-          const next = { ...current };
-          delete next[originalId];
-          return { ...next, [persistedFunnel.id]: persistedSteps };
-        });
-        setLocalFunnelIds((current) => [
-          persistedFunnel.id,
-          ...current.filter((id) => id !== originalId && id !== persistedFunnel.id),
-        ]);
-        setSelectedFunnelId(persistedFunnel.id);
-        setSelectedStepId(persistedSteps[0]?.id ?? "");
+      if (!response.ok) {
+        throw new Error(text.saveFailed);
       }
-    }
 
-    pushMonitor(text.saved, text.savedDetail(selected.funnel.name), "CRM");
-    setNotice(text.savedNotice);
+      const payload = await response.json() as { funnel?: EditableFunnel; stepIds?: string[] };
+      if (!payload.funnel?.id) {
+        throw new Error(text.saveFailed);
+      }
+
+      const persistedFunnel = { ...selected.funnel, ...payload.funnel };
+      const persistedSteps = selectedSteps.map((step, index) => ({
+        ...step,
+        funnelId: persistedFunnel.id,
+        id: payload.stepIds?.[index] ?? step.id,
+        projectId: persistedFunnel.projectId,
+        workspaceId: persistedFunnel.workspaceId,
+      }));
+
+      setEditedFunnels((current) => {
+        const next = { ...current };
+        delete next[originalId];
+        return { ...next, [persistedFunnel.id]: persistedFunnel };
+      });
+      setEditedSteps((current) => {
+        const next = { ...current };
+        delete next[originalId];
+        return { ...next, [persistedFunnel.id]: persistedSteps };
+      });
+      setLocalFunnelIds((current) => [
+        persistedFunnel.id,
+        ...current.filter((id) => id !== originalId && id !== persistedFunnel.id),
+      ]);
+      setSelectedFunnelId(persistedFunnel.id);
+      setSelectedStepId(persistedSteps[0]?.id ?? "");
+      pushMonitor(text.saved, text.savedDetail(persistedFunnel.name), "CRM");
+      setNotice(text.savedNotice);
+    } catch {
+      setNotice(text.saveFailed);
+    } finally {
+      setDraftSaving(false);
+    }
   }
 
   function simulateTracking(event: TrackingEvent) {
@@ -840,11 +852,12 @@ export function FunnelCommandCenter({
                 {text.tabs.steps}
               </button>
               <button
-                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+                disabled={draftSaving}
                 onClick={() => void saveDraft()}
                 type="button"
               >
-                {text.save}
+                {draftSaving ? text.saving : text.save}
               </button>
             </div>
           </div>
@@ -1010,8 +1023,13 @@ export function FunnelCommandCenter({
               <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800" onClick={addStep} type="button">
                 {text.addStep}
               </button>
-              <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={() => void saveDraft()} type="button">
-                {text.save}
+              <button
+                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+                disabled={draftSaving}
+                onClick={() => void saveDraft()}
+                type="button"
+              >
+                {draftSaving ? text.saving : text.save}
               </button>
             </div>
           </div>

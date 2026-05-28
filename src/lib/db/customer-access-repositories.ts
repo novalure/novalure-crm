@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import type { AppSession } from "@/lib/auth/session";
 import type {
   CustomerWorkspaceAccess,
@@ -14,6 +15,7 @@ import {
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, type ProductRole } from "@/lib/product-model";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
@@ -60,6 +62,14 @@ export type CustomerAccessCockpitPayload = {
   projects: Project[];
   source: "database" | "fallback";
   users: WorkspaceUser[];
+};
+
+export type WorkspaceUserInviteResult = {
+  deliveryConfigured: boolean;
+  deliveryProvider: string;
+  deliveryStatus: string;
+  setupUrl: string;
+  user: WorkspaceUser;
 };
 
 type CustomerAccessRow = {
@@ -505,6 +515,218 @@ export async function upsertCustomerProjectGrant(input: {
   ]);
 
   return { data: toProjectGrant(row), ok: true as const };
+}
+
+function canInviteWorkspaceUsers(session: AppSession) {
+  if (session.role === "owner" || session.role === "admin") return true;
+  return (
+    session.productRole === "platform_admin" ||
+    session.productRole === "customer_owner" ||
+    session.productRole === "workspace_admin" ||
+    session.productRole === "novalure_onboarding" ||
+    session.productRole === "novalure_customer_success"
+  );
+}
+
+function normalizeInviteEmail(value: unknown) {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function hashInviteToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function getInviteEmailCopy(language: string, setupUrl: string) {
+  if (language === "de") {
+    return {
+      html: `<p>Sie wurden zu Novalure CRM eingeladen.</p><p>Legen Sie Ihr Passwort über diesen sicheren Link selbst fest:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>Wenn Sie diese Einladung nicht erwartet haben, ignorieren Sie diese Nachricht.</p>`,
+      subject: "Einladung zu Novalure CRM",
+    };
+  }
+
+  return {
+    html: `<p>You have been invited to Novalure CRM.</p><p>Set your own password using this secure link:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>If you did not expect this invitation, ignore this message.</p>`,
+    subject: "Invitation to Novalure CRM",
+  };
+}
+
+export async function inviteWorkspaceUser(input: {
+  email?: unknown;
+  language?: string;
+  name?: unknown;
+  origin: string;
+  productRole?: unknown;
+  requestIp?: string | null;
+  role?: unknown;
+  session: AppSession;
+  userAgent?: string | null;
+}) {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { ok: false as const, reason: "Database persistence is not configured" };
+  }
+
+  if (!canInviteWorkspaceUsers(input.session)) {
+    return { ok: false as const, reason: "Workspace invitation is not allowed for this role" };
+  }
+
+  const email = normalizeInviteEmail(input.email);
+  if (!email) return { ok: false as const, reason: "Valid email is required" };
+
+  const role = normalizeWorkspaceRole(input.role) ?? "assistant";
+  const productRole = isProductRole(input.productRole) ? input.productRole : "viewer";
+
+  if (role === "owner" && input.session.role !== "owner" && input.session.productRole !== "platform_admin") {
+    return { ok: false as const, reason: "Only owners can invite another owner" };
+  }
+
+  const existing = await queryOne<WorkspaceUserRow>(
+    `
+      select id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
+      from workspace_users
+      where workspace_id = $1 and lower(email) = $2
+      limit 1
+    `,
+    [input.session.workspaceId, email],
+  );
+
+  if (existing?.status === "active") {
+    return { ok: false as const, reason: "Workspace user is already active" };
+  }
+
+  const displayName = typeof input.name === "string" && input.name.trim()
+    ? input.name.trim()
+    : email.split("@")[0] || email;
+
+  const row = existing
+    ? await queryOne<WorkspaceUserRow>(
+        `
+          update workspace_users
+          set name = $3,
+              role = $4,
+              product_role = $5,
+              status = 'invited',
+              password_hash = null,
+              updated_at = now()
+          where id = $1 and workspace_id = $2
+          returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
+        `,
+        [existing.id, input.session.workspaceId, displayName, role, productRole],
+      )
+    : await queryOne<WorkspaceUserRow>(
+        `
+          insert into workspace_users (
+            workspace_id,
+            name,
+            email,
+            role,
+            status,
+            product_role,
+            password_hash
+          )
+          values ($1, $2, $3, $4, 'invited', $5, null)
+          returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
+        `,
+        [input.session.workspaceId, displayName, email, role, productRole],
+      );
+
+  if (!row) return { ok: false as const, reason: "Workspace invitation could not be saved" };
+
+  const token = randomBytes(32).toString("base64url");
+  const setupUrl = new URL("/login/reset-password", input.origin);
+  setupUrl.searchParams.set("token", token);
+  setupUrl.searchParams.set("lang", input.language === "de" ? "de" : "en");
+
+  await queryOne<IdRow>(
+    `
+      insert into auth_password_reset_tokens (
+        workspace_id,
+        user_id,
+        token_hash,
+        requested_email,
+        request_ip,
+        user_agent,
+        expires_at
+      )
+      values ($1, $2, $3, $4, $5, $6, now() + ($7::int * interval '1 minute'))
+      returning id
+    `,
+    [
+      input.session.workspaceId,
+      row.id,
+      hashInviteToken(token),
+      email,
+      input.requestIp ?? null,
+      input.userAgent ?? null,
+      10080,
+    ],
+  );
+
+  const provider = getNewsletterProviderStatus();
+  const emailCopy = getInviteEmailCopy(input.language ?? "en", setupUrl.toString());
+  const delivery = await sendNewsletterEmail({
+    html: emailCopy.html,
+    subject: emailCopy.subject,
+    to: email,
+  });
+
+  await queryOne<IdRow>(
+    `
+      update customer_workspace_access
+      set
+        active_users = (select count(*) from workspace_users where workspace_id = $1 and status = 'active'),
+        invited_users = (select count(*) from workspace_users where workspace_id = $1 and status = 'invited'),
+        updated_at = now()
+      where workspace_id = $1
+      returning id
+    `,
+    [input.session.workspaceId],
+  );
+
+  await Promise.all([
+    writeAuditLog({
+      action: "customer_access.workspace_user_invited",
+      after: {
+        deliveryProvider: delivery.provider,
+        deliveryStatus: delivery.status,
+        email,
+        role,
+        productRole,
+        userId: row.id,
+      },
+      before: existing,
+      entityId: row.id,
+      entityType: "workspace_user",
+      session: input.session,
+    }),
+    writeCrmAnalyticsEvent({
+      entityId: row.id,
+      entityType: "workspace_user",
+      eventType: "workspace_user_invited",
+      metadata: {
+        deliveryConfigured: provider.configured,
+        deliveryProvider: delivery.provider,
+        deliveryStatus: delivery.status,
+        productRole,
+        role,
+      },
+      module: "dashboard",
+      source: "customer_access_cockpit",
+      userId: input.session.userId,
+      workspaceId: input.session.workspaceId,
+    }),
+  ]);
+
+  return {
+    data: {
+      deliveryConfigured: provider.configured,
+      deliveryProvider: delivery.provider,
+      deliveryStatus: delivery.status,
+      setupUrl: setupUrl.toString(),
+      user: { ...row, productRole: row.productRole ?? undefined },
+    } satisfies WorkspaceUserInviteResult,
+    ok: true as const,
+  };
 }
 
 export async function updateWorkspaceUserAccess(input: {

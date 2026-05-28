@@ -340,7 +340,7 @@ export const contacts: Contact[] = [
     name: "Thomas Reiter",
     role: "Bauträger",
     project: "Wohnpark Graz",
-    source: "Microsoft 365",
+    source: "Empfehlung",
     intent: "Projektgespräch",
     consent: "Nur CRM",
   },
@@ -796,7 +796,7 @@ export const deals: Deal[] = [
     probability: 58,
     expectedCloseDate: dateOnlyAtOffset(40),
     riskLevel: "niedrig",
-    source: "Microsoft 365",
+    source: "Empfehlung",
     nextAction: "Teams Link prüfen",
   },
   {

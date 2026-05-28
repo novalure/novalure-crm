@@ -1,4 +1,5 @@
 import type { AppSession } from "@/lib/auth/session";
+import { canArchiveCrmObject } from "@/lib/auth/delete-permissions";
 import type {
   CalendarEvent,
   Contact,
@@ -154,6 +155,7 @@ type TaskRow = {
   due: string | Date | null;
   id: string;
   leadId: string | null;
+  metadata: Record<string, unknown> | null;
   ownerUserId: string | null;
   priority: Task["priority"];
   project: string | null;
@@ -264,18 +266,6 @@ function canManageWorkspaceRecords(session: AppSession) {
     "customer_owner",
     "workspace_admin",
     "team_member",
-  ].includes(session.productRole);
-}
-
-function canArchiveWorkspaceRecords(session: AppSession) {
-  if (session.role === "owner" || session.role === "admin") return true;
-
-  return [
-    "platform_admin",
-    "novalure_onboarding",
-    "novalure_customer_success",
-    "customer_owner",
-    "workspace_admin",
   ].includes(session.productRole);
 }
 
@@ -1105,7 +1095,7 @@ export async function changeDealStageRecord(input: {
 
 export async function upsertTaskRecord(input: {
   session: AppSession;
-  task: Partial<Task>;
+  task: Partial<Task> & Record<string, unknown>;
 }): Promise<RepositoryWriteResult<Task>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
@@ -1132,7 +1122,14 @@ export async function upsertTaskRecord(input: {
   const projectId = resolvedProject.projectId;
   const contactId = normalizeWriteProjectId(input.task.contactId) ?? existing?.contactId ?? null;
   const leadId = normalizeWriteProjectId(input.task.leadId) ?? existing?.leadId ?? null;
-  const ownerUserId = existing?.ownerUserId ?? normalizeWriteProjectId(input.session.userId);
+  const resolvedOwner = await resolveWorkspaceUserIdForWrite({
+    existingUserId: existing?.ownerUserId ?? null,
+    fallbackUserId: normalizeWriteProjectId(input.session.userId),
+    requestedUserId: input.task.ownerUserId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedOwner.ok) return { persisted: false, reason: resolvedOwner.reason };
+  const ownerUserId = resolvedOwner.userId;
   const title = cleanString(input.task.title) || existing?.title || "";
 
   if (!title) return { persisted: false, reason: "Task title is required" };
@@ -1146,6 +1143,17 @@ export async function upsertTaskRecord(input: {
   });
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
+  const existingMetadata = asObject(existing?.metadata);
+  const inputMetadata = asObject(input.task.metadata);
+  const description = cleanString(input.task.description) || cleanString(inputMetadata.description);
+  const taskMetadata = {
+    ...existingMetadata,
+    ...inputMetadata,
+    ...(description ? { description } : {}),
+    updatedFrom: "crm_tasks",
+    updatedByUserId: input.session.userId,
+  };
+
   const row = existing
     ? await queryOne<TaskRow>(
         `
@@ -1154,11 +1162,12 @@ export async function upsertTaskRecord(input: {
             project_id = $3::uuid,
             contact_id = $4::uuid,
             lead_id = $5::uuid,
-            title = $6,
-            due_at = $7::timestamptz,
-            priority = $8,
-            status = $9,
-            metadata = metadata || $10::jsonb,
+            owner_user_id = $6::uuid,
+            title = $7,
+            due_at = $8::timestamptz,
+            priority = $9,
+            status = $10,
+            metadata = coalesce(metadata, '{}'::jsonb) || $11::jsonb,
             updated_at = now()
           where id = $1 and workspace_id = $2
           returning
@@ -1172,6 +1181,7 @@ export async function upsertTaskRecord(input: {
             due_at as due,
             priority,
             status,
+            metadata,
             (select name from projects p where p.id = tasks.project_id) as project
         `,
         [
@@ -1180,11 +1190,12 @@ export async function upsertTaskRecord(input: {
           projectId,
           contactId,
           leadId,
+          ownerUserId,
           title,
           cleanDateInput(input.task.due) || cleanDateInput(existing.due) || null,
           input.task.priority ?? existing.priority,
           input.task.status ?? existing.status,
-          JSON.stringify({ updatedFrom: "crm_tasks", updatedByUserId: input.session.userId }),
+          JSON.stringify(taskMetadata),
         ],
       )
     : await queryOne<TaskRow>(
@@ -1213,6 +1224,7 @@ export async function upsertTaskRecord(input: {
             due_at as due,
             priority,
             status,
+            metadata,
             (select name from projects p where p.id = tasks.project_id) as project
         `,
         [
@@ -1225,7 +1237,7 @@ export async function upsertTaskRecord(input: {
           cleanDateInput(input.task.due) || null,
           input.task.priority ?? "Normal",
           input.task.status ?? "open",
-          JSON.stringify({ createdFrom: "crm_tasks", legacyId: input.task.id ?? null }),
+          JSON.stringify({ ...taskMetadata, createdFrom: "crm_tasks", legacyId: input.task.id ?? null }),
         ],
       );
 
@@ -1631,11 +1643,14 @@ export async function upsertCalendarEventRecord(input: {
   });
   if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
   const projectId = resolvedProject.projectId;
-  const ownerUserId =
-    normalizeWriteProjectId(input.event.ownerUserId) ??
-    existing?.ownerUserId ??
-    lead?.assignedToUserId ??
-    normalizeWriteProjectId(input.session.userId);
+  const resolvedOwner = await resolveWorkspaceUserIdForWrite({
+    existingUserId: existing?.ownerUserId ?? lead?.assignedToUserId ?? null,
+    fallbackUserId: normalizeWriteProjectId(input.session.userId),
+    requestedUserId: input.event.ownerUserId,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedOwner.ok) return { persisted: false, reason: resolvedOwner.reason };
+  const ownerUserId = resolvedOwner.userId;
   const title = cleanString(input.event.title) || existing?.title || "";
   if (!title) return { persisted: false, reason: "Calendar event title is required" };
 
@@ -1655,12 +1670,15 @@ export async function upsertCalendarEventRecord(input: {
   });
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
+  const inputMetadata = asObject(input.event.metadata);
+  const notes = cleanString(input.event.notes) || cleanString(inputMetadata.notes);
   const metadata = {
     ...(existing?.metadata ?? {}),
-    ...asObject(input.event.metadata),
+    ...inputMetadata,
     calendarProvider: "manual",
     externalCommunication: false,
     meetingProvider: cleanString(input.event.meetingProvider) || "manual-link",
+    ...(notes ? { notes } : {}),
     source: "crm_internal_calendar_event",
     updatedByUserId: input.session.userId,
   };
@@ -2280,7 +2298,7 @@ export async function archiveContactRecord(input: {
     return { persisted: false, reason: "Contact id is required" };
   }
 
-  if (!canArchiveWorkspaceRecords(input.session)) {
+  if (!canArchiveCrmObject(input.session, "contact")) {
     return { persisted: false, reason: "Contact archive requires workspace admin permission" };
   }
 
@@ -3297,6 +3315,34 @@ async function resolveWorkspaceProjectById(
   return { ok: true, projectId: project.id };
 }
 
+async function resolveWorkspaceUserIdForWrite(input: {
+  existingUserId?: string | null;
+  fallbackUserId?: string | null;
+  requestedUserId: unknown;
+  workspaceId: string;
+}): Promise<{ ok: true; userId: string | null } | { ok: false; reason: string }> {
+  const requestedUserId = cleanString(input.requestedUserId);
+
+  if (!requestedUserId) {
+    return { ok: true, userId: input.existingUserId ?? input.fallbackUserId ?? null };
+  }
+
+  if (!isUuid(requestedUserId)) {
+    return { ok: false, reason: "Valid owner is required" };
+  }
+
+  const owner = await queryOne<IdRow>(
+    "select id from workspace_users where id = $1 and workspace_id = $2 limit 1",
+    [requestedUserId, input.workspaceId],
+  );
+
+  if (!owner) {
+    return { ok: false, reason: "Owner is not available in this workspace" };
+  }
+
+  return { ok: true, userId: owner.id };
+}
+
 async function resolveContactOrganizationId(input: {
   existingOrganizationId: string | null;
   requestedOrganizationId: unknown;
@@ -3643,6 +3689,7 @@ const taskSelectSql = `
     t.lead_id as "leadId",
     t.owner_user_id as "ownerUserId",
     t.title,
+    t.metadata,
     p.name as project,
     t.due_at as due,
     t.priority,
@@ -3762,11 +3809,15 @@ function toLead(row: LeadRow): Lead {
 }
 
 function toTask(row: TaskRow): Task {
+  const metadata = asObject(row.metadata);
+
   return {
     contactId: row.contactId ?? undefined,
+    description: typeof metadata.description === "string" ? metadata.description : undefined,
     due: toIso(row.due),
     id: row.id,
     leadId: row.leadId ?? undefined,
+    ownerUserId: row.ownerUserId ?? undefined,
     priority: row.priority,
     project: row.project ?? "",
     projectId: row.projectId ?? "",
@@ -3836,6 +3887,7 @@ function toCalendarEventRecord(row: CalendarEventWriteRow): CalendarEvent {
     leadId: row.leadId ?? undefined,
     location: normalizeCalendarEventLocation(row.location),
     meetingProvider,
+    notes: typeof metadata.notes === "string" ? metadata.notes : undefined,
     outcomeGoal: row.outcomeGoal,
     ownerUserId: row.ownerUserId ?? undefined,
     preparation: normalizeStringArray(row.preparation),

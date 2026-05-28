@@ -32,18 +32,19 @@ export type ContactRelationshipRole =
   | "Makler"
   | "Bauträger";
 
-export type LeadSource =
-  | "Website Funnel"
-  | "WhatsApp"
-  | "Instagram"
-  | "Newsletter"
-  | "Microsoft 365"
-  | "Google Meet"
-  | "willhaben"
-  | "ImmobilienScout"
-  | "Empfehlung"
-  | "Website"
-  | "Manual";
+export const CRM_LEAD_SOURCES = [
+  "Website Funnel",
+  "Website",
+  "willhaben",
+  "ImmobilienScout",
+  "Empfehlung",
+  "WhatsApp",
+  "Instagram",
+  "Newsletter",
+  "Manual",
+] as const;
+
+export type LeadSource = (typeof CRM_LEAD_SOURCES)[number];
 
 export type LeadType = "Käufer" | "Verkäufer" | "Investor" | "Bauträger" | "Makler";
 
@@ -542,7 +543,9 @@ export type Task = {
   projectId: ID;
   contactId?: ID;
   leadId?: ID;
+  ownerUserId?: ID;
   title: string;
+  description?: string;
   project: string;
   due: string;
   priority: TaskPriority;
@@ -562,6 +565,7 @@ export type CalendarEvent = {
   status: "geplant" | "vorbereiten" | "bestätigt" | "nachfassen";
   preparation: string[];
   outcomeGoal: string;
+  notes?: string;
   ownerUserId?: ID;
   calendarProvider?: "microsoft" | "google" | "manual";
   externalCalendarId?: string;
