@@ -2,12 +2,12 @@ import type { LanguageCode } from "@/lib/i18n";
 
 const germanDefaultCountries = new Set(["AT", "CH", "DE"]);
 
-function firstQueryValue(value: string | string[] | undefined) {
+function firstQueryValue(value: string | string[] | null | undefined) {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
 }
 
-function normalizeLanguage(value: string | string[] | undefined): LanguageCode | null {
+function normalizeLanguage(value: string | string[] | null | undefined): LanguageCode | null {
   const normalized = firstQueryValue(value).trim().toLowerCase();
   if (normalized === "de" || normalized === "en") return normalized;
   return null;
@@ -23,10 +23,14 @@ function acceptsGermanForDach(acceptLanguage: string | null | undefined) {
 export function resolvePublicLanguage(input: {
   acceptLanguage?: string | null;
   country?: string | null;
+  persistedLanguage?: string | string[] | null;
   requestedLanguage?: string | string[] | undefined;
 }): LanguageCode {
   const requested = normalizeLanguage(input.requestedLanguage);
   if (requested) return requested;
+
+  const persisted = normalizeLanguage(input.persistedLanguage);
+  if (persisted) return persisted;
 
   const country = input.country?.trim().toUpperCase();
   if (country) return germanDefaultCountries.has(country) ? "de" : "en";

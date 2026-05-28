@@ -2,11 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CookieConsentButton } from "@/components/cookie-consent-button";
-import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import {
   getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
-  getLoginPageCopy,
   getPublicPageCopy,
   type LanguageCode,
 } from "@/lib/i18n";
@@ -14,7 +12,6 @@ import { companyLegalDetails, publicLegalLinks } from "@/lib/legal";
 import { withPublicLanguage } from "@/lib/public-language";
 
 type LandingCopy = ReturnType<typeof getCrmLandingPageCopy>;
-type LoginCopy = ReturnType<typeof getLoginPageCopy>;
 type LegalCopy = ReturnType<typeof getLoginLegalFooterCopy>;
 type PublicCopy = ReturnType<typeof getPublicPageCopy>;
 type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
@@ -28,35 +25,17 @@ const landingAssetPaths = {
   lockedCrmPreview: "/landing-assets/locked-crm-preview.mp4",
 } as const;
 
-export type PublicCrmLandingLoginForm = {
-  configured: boolean;
-  email: string;
-  errorText: string;
-  language: LanguageCode;
-  returnTo: string;
-  statusText: string;
-};
-
 type PublicCrmLandingProps = {
   auditHref: string;
   basePath: "/" | "/login";
   copy: LandingCopy;
   language: LanguageCode;
   legalCopy: LegalCopy;
-  loginCopy?: LoginCopy;
-  loginForm?: PublicCrmLandingLoginForm;
   pageCopy: PublicCopy;
-  showLoginForm?: boolean;
 };
 
 function getNovalureHref(language: LanguageCode) {
   return language === "de" ? "https://www.novalure.eu/de" : "https://www.novalure.eu/en";
-}
-
-function getForgotPasswordHref(language: LanguageCode, email: string) {
-  const params = new URLSearchParams({ lang: language });
-  if (email) params.set("email", email);
-  return `/login/forgot-password?${params.toString()}`;
 }
 
 function ActionLink({
@@ -252,115 +231,16 @@ function AuditReviewLoopVisual({ visual }: { visual: VisualCopy }) {
   );
 }
 
-function LoginAccessPanel({
-  form,
-  login,
-  panel,
-}: {
-  form: PublicCrmLandingLoginForm;
-  login: LoginCopy;
-  panel: LandingCopy["loginPanel"];
-}) {
-  return (
-    <section
-      aria-labelledby="workspace-login-heading"
-      className="border-t border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14"
-      id="workspace-login"
-    >
-      <div className="mx-auto grid w-full max-w-6xl gap-8 md:grid-cols-[0.9fr_1.1fr] md:items-start">
-        <div>
-          <p className="text-sm font-semibold uppercase text-[#277258]">{panel.eyebrow}</p>
-          <h2 className="mt-3 text-3xl font-semibold leading-tight text-[#111614] md:text-4xl" id="workspace-login-heading">
-            {panel.title}
-          </h2>
-          <p className="mt-4 text-base leading-7 text-[#50645b]">{panel.description}</p>
-        </div>
-
-        <div className="rounded-lg border border-[#d8ddd7] bg-white p-5 shadow-sm md:p-6">
-          {!form.configured ? (
-            <p className="rounded-md border border-[#d7b56d] bg-[#fff7df] px-3 py-2 text-sm font-semibold leading-6 text-[#6d4d04]">
-              {login.notConfigured}
-            </p>
-          ) : null}
-
-          {form.errorText ? (
-            <p className="rounded-md border border-[#e2a7a7] bg-[#fff1f1] px-3 py-2 text-sm font-semibold leading-6 text-[#7d2020]">
-              {form.errorText}
-            </p>
-          ) : null}
-
-          {form.statusText ? (
-            <p className="rounded-md border border-[#9ed7bf] bg-[#edfff6] px-3 py-2 text-sm font-semibold leading-6 text-[#0f5132]">
-              {form.statusText}
-            </p>
-          ) : null}
-
-          <form action="/api/auth/login" className="mt-5 grid gap-4" method="post">
-            <input name="returnTo" type="hidden" value={form.returnTo} />
-            <label className="grid gap-2 text-sm font-semibold text-[#26342f]">
-              {login.emailLabel}
-              <input
-                autoComplete="email"
-                className="min-h-11 rounded-md border border-[#cdd4ce] bg-white px-3 py-2 text-sm font-normal text-[#111614] outline-none focus:border-[#111614] focus:ring-2 focus:ring-[#b8d8c8]"
-                defaultValue={form.email}
-                name="email"
-                placeholder={login.placeholderEmail}
-                required
-                type="email"
-              />
-            </label>
-            <div className="grid gap-2">
-              <label className="text-sm font-semibold text-[#26342f]" htmlFor="login-password">
-                {login.passcodeLabel}
-              </label>
-              <PasswordVisibilityInput
-                autoComplete="current-password"
-                className="min-h-11 w-full rounded-md border border-[#cdd4ce] bg-white px-3 py-2 text-sm font-normal text-[#111614] outline-none focus:border-[#111614] focus:ring-2 focus:ring-[#b8d8c8]"
-                hideLabel={login.passcodeHideLabel}
-                id="login-password"
-                name="password"
-                required
-                showLabel={login.passcodeShowLabel}
-              />
-              <p className="text-sm font-normal leading-6 text-[#50645b]">
-                {login.passcodeHelp}
-              </p>
-            </div>
-            <div className="flex justify-end">
-              <Link
-                className="text-sm font-semibold text-[#111614] underline-offset-4 hover:underline"
-                href={getForgotPasswordHref(form.language, form.email)}
-              >
-                {login.passwordReset.forgotLink}
-              </Link>
-            </div>
-            <button
-              className="min-h-11 rounded-md border border-[#111614] bg-[#111614] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#26342f] disabled:cursor-not-allowed disabled:border-[#9ca7a0] disabled:bg-[#9ca7a0]"
-              disabled={!form.configured}
-              type="submit"
-            >
-              {login.submit}
-            </button>
-          </form>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function PublicCrmLanding({
   auditHref,
   basePath,
   copy,
   language,
   legalCopy,
-  loginCopy,
-  loginForm,
   pageCopy,
-  showLoginForm = false,
 }: PublicCrmLandingProps) {
   const novalureHref = getNovalureHref(language);
-  const loginHref = showLoginForm ? "#workspace-login" : withPublicLanguage("/login", language);
+  const loginHref = withPublicLanguage("/login", language);
   const secondaryHeroHref = loginHref;
   const cookieHref = withPublicLanguage("/cookies", language);
 
@@ -454,10 +334,6 @@ export function PublicCrmLanding({
           <HeroOperatingLayer visual={copy.visuals.heroOperatingLayer} />
         </div>
       </section>
-
-      {showLoginForm && loginCopy && loginForm ? (
-        <LoginAccessPanel form={loginForm} login={loginCopy} panel={copy.loginPanel} />
-      ) : null}
 
       <section className="border-b border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14" id="company-system">
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
