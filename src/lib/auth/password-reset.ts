@@ -249,11 +249,11 @@ export async function confirmPasswordReset(input: {
             and token.expires_at > now()
             and wu.id = token.user_id
             and wu.workspace_id = token.workspace_id
-            and wu.status = 'active'
+            and wu.status in ('active', 'invited')
           returning token.user_id as "userId", token.workspace_id as "workspaceId"
         )
         update workspace_users wu
-        set password_hash = $2, updated_at = now()
+        set password_hash = $2, status = 'active', updated_at = now()
         from consumed_token token
         where wu.id = token."userId"
           and wu.workspace_id = token."workspaceId"

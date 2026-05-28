@@ -1,20 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type {
-  BrokerMandate,
-  BuyerSearchProfile,
-  ConsentRecord,
-  Contact,
-  Conversation,
-  FinancingStatus,
-  Lead,
-  LeadSource,
-  LeadStatus,
-  LeadType,
-  PropertyType,
-  Project,
-  WorkspaceUser,
+import {
+  CRM_LEAD_SOURCES,
+  type BrokerMandate,
+  type BuyerSearchProfile,
+  type ConsentRecord,
+  type Contact,
+  type Conversation,
+  type FinancingStatus,
+  type Lead,
+  type LeadSource,
+  type LeadStatus,
+  type LeadType,
+  type PropertyType,
+  type Project,
+  type WorkspaceUser,
 } from "@/lib/crm-types";
 import {
   getCrmLeadTypeLabel,
@@ -67,8 +68,6 @@ const sourceStyles: Record<LeadSource, string> = {
   Instagram: "bg-violet-50 text-violet-800",
   "Website Funnel": "bg-blue-50 text-blue-800",
   Newsletter: "bg-amber-50 text-amber-800",
-  "Microsoft 365": "bg-sky-50 text-sky-800",
-  "Google Meet": "bg-cyan-50 text-cyan-800",
   willhaben: "bg-red-50 text-red-800",
   ImmobilienScout: "bg-cyan-50 text-cyan-800",
   Empfehlung: "bg-emerald-50 text-emerald-800",
@@ -76,19 +75,7 @@ const sourceStyles: Record<LeadSource, string> = {
   Manual: "bg-stone-100 text-stone-700",
 };
 
-const sourceOptions: LeadSource[] = [
-  "Website Funnel",
-  "Website",
-  "willhaben",
-  "ImmobilienScout",
-  "Empfehlung",
-  "WhatsApp",
-  "Instagram",
-  "Newsletter",
-  "Microsoft 365",
-  "Google Meet",
-  "Manual",
-];
+const sourceOptions: LeadSource[] = [...CRM_LEAD_SOURCES];
 
 const typeOptions: LeadType[] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
 const propertyTypeOptions: PropertyType[] = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"];
@@ -219,6 +206,9 @@ export function LeadInbox({
   const [createdTaskLeadIds, setCreatedTaskLeadIds] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [leadSaving, setLeadSaving] = useState(false);
+  const [formSuccess, setFormSuccess] = useState("");
+  const [fieldSaving, setFieldSaving] = useState(false);
+  const [fieldFeedback, setFieldFeedback] = useState<{ message: string; tone: "error" | "success" } | null>(null);
 
   const effectiveLeads = useMemo(
     () => [
@@ -405,7 +395,7 @@ export function LeadInbox({
   };
 
   const saveFieldDraft = async () => {
-    if (!selectedLead) {
+    if (!selectedLead || fieldSaving) {
       return;
     }
 
@@ -416,13 +406,19 @@ export function LeadInbox({
     } satisfies Partial<LocalLead>;
 
     try {
+      setFieldSaving(true);
+      setFieldFeedback(null);
       await persistLead({ ...selectedLead, ...patch });
       updateLead(selectedLead.id, patch);
       addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
       await refreshPersistedLeads(selectedLead.id);
       setNotice(text.changed);
+      setFieldFeedback({ message: text.changed, tone: "success" });
     } catch {
       setNotice(text.saveError);
+      setFieldFeedback({ message: text.saveError, tone: "error" });
+    } finally {
+      setFieldSaving(false);
     }
   };
 
@@ -590,6 +586,7 @@ export function LeadInbox({
     if (leadSaving) return;
 
     setFormError("");
+    setFormSuccess("");
 
     if (!leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
       setFormError(text.required);
@@ -666,6 +663,7 @@ export function LeadInbox({
       setLeadDraft(getInitialDraft(leads, contacts, projects));
       addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
       setNotice(text.newLeadSaved);
+      setFormSuccess(text.newLeadSaved);
       await refreshPersistedLeads(savedLead.id);
       if (createTaskAfterSave) {
         await fetch("/api/crm/recommendation-runtime", {
@@ -691,6 +689,7 @@ export function LeadInbox({
       }
     } catch {
       setFormError(text.saveError);
+      setFormSuccess("");
     } finally {
       setLeadSaving(false);
     }
@@ -761,7 +760,11 @@ export function LeadInbox({
               </button>
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={() => setShowCreateForm((current) => !current)}
+                onClick={() => {
+                  setFormError("");
+                  setFormSuccess("");
+                  setShowCreateForm((current) => !current);
+                }}
                 type="button"
               >
                 {showCreateForm ? text.closeForm : text.createLead}
@@ -1064,6 +1067,7 @@ export function LeadInbox({
                 </details>
               ) : null}
               {formError ? <p className="mt-3 text-sm font-semibold text-red-700">{formError}</p> : null}
+              {formSuccess ? <p className="mt-3 text-sm font-semibold text-emerald-700">{formSuccess}</p> : null}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
                   className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
@@ -1073,7 +1077,7 @@ export function LeadInbox({
                   }}
                   type="button"
                 >
-                  {text.saveLead}
+                  {leadSaving ? text.saving : text.saveLead}
                 </button>
                 <button
                   className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
@@ -1083,13 +1087,14 @@ export function LeadInbox({
                   }}
                   type="button"
                 >
-                  {text.saveAndCreateTask}
+                  {leadSaving ? text.saving : text.saveAndCreateTask}
                 </button>
                 <button
                   className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                   onClick={() => {
                     setShowCreateForm(false);
                     setFormError("");
+                    setFormSuccess("");
                     setLeadDraft(getInitialDraft(leads, contacts, projects));
                   }}
                   type="button"
@@ -1119,7 +1124,10 @@ export function LeadInbox({
                             : "border-stone-200 bg-stone-50 text-slate-950 hover:border-emerald-200 hover:bg-emerald-50"
                     }`}
                     key={item.lead.id}
-                    onClick={() => setSelectedLeadId(item.lead.id)}
+                    onClick={() => {
+                      setSelectedLeadId(item.lead.id);
+                      setFieldFeedback(null);
+                    }}
                     type="button"
                   >
                     <span className="flex min-w-0 items-start justify-between gap-3">
@@ -1218,7 +1226,7 @@ export function LeadInbox({
                   <p className="text-sm font-semibold text-slate-950">
                     {selected.brokerMandate ? text.mandateEntityTitle : text.searchProfileEntityTitle}
                   </p>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                  <p className="mt-1 text-sm font-semibold text-emerald-800">
                     {text.profilePersisted}
                   </p>
                   {selected.brokerMandate ? (
@@ -1306,14 +1314,24 @@ export function LeadInbox({
                     />
                   </label>
                   <button
-                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+                    disabled={fieldSaving}
                     onClick={() => {
                       void saveFieldDraft();
                     }}
                     type="button"
                   >
-                    {text.saveChanges}
+                    {fieldSaving ? text.saving : text.saveChanges}
                   </button>
+                  {fieldFeedback ? (
+                    <p
+                      className={`text-sm font-semibold ${
+                        fieldFeedback.tone === "success" ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {fieldFeedback.message}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

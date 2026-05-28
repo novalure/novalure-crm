@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Contact, Lead, Project, Task } from "@/lib/crm-types";
+import type { Contact, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
 import {
   getCrmSourceLabel,
   getCrmTaskDueLabel,
@@ -15,12 +15,26 @@ type TaskCommandCenterProps = {
   contacts: Contact[];
   language: LanguageCode;
   leads: Lead[];
+  onTasksChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
   tasks: Task[];
+  users: WorkspaceUser[];
 };
 
 type TaskView = "focus" | "today" | "overdue" | "high" | "unlinked" | "followUp" | "all";
+
+type NewTaskDraft = {
+  contactId: string;
+  description: string;
+  due: string;
+  leadId: string;
+  ownerUserId: string;
+  priority: Task["priority"];
+  projectId: string;
+  status: Task["status"];
+  title: string;
+};
 
 const priorityStyles = {
   Hoch: "border-red-200 bg-red-50 text-red-900",
@@ -89,25 +103,58 @@ function getPriorityRank(priority: Task["priority"]) {
   return 2;
 }
 
+function toDateTimeLocalInput(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function createDefaultTaskDraft(projects: Project[], users: WorkspaceUser[]): NewTaskDraft {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+
+  return {
+    contactId: "",
+    description: "",
+    due: toDateTimeLocalInput(tomorrow),
+    leadId: "",
+    ownerUserId: users[0]?.id ?? "",
+    priority: "Normal",
+    projectId: projects[0]?.id ?? "",
+    status: "open",
+    title: "",
+  };
+}
+
 export function TaskCommandCenter({
   contacts,
   language,
   leads,
+  onTasksChanged,
   projectLabel,
   projects,
   tasks,
+  users,
 }: TaskCommandCenterProps) {
   const text = getTaskCommandCenterCopy(language);
   const [activeView, setActiveView] = useState<TaskView>("focus");
   const [searchTerm, setSearchTerm] = useState("");
+  const [taskOverlays, setTaskOverlays] = useState<Task[]>([]);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
   const [followUpSaving, setFollowUpSaving] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() => createDefaultTaskDraft(projects, users));
   const [notice, setNotice] = useState("");
+  const effectiveTasks = useMemo(() => {
+    const overlayIds = new Set(taskOverlays.map((task) => task.id));
+    return [...taskOverlays, ...tasks.filter((task) => !overlayIds.has(task.id))];
+  }, [taskOverlays, tasks]);
 
   const decoratedTasks = useMemo(
     () =>
-      tasks.map((task) => {
+      effectiveTasks.map((task) => {
         const contact = task.contactId
           ? contacts.find((item) => item.id === task.contactId)
           : undefined;
@@ -127,7 +174,7 @@ export function TaskCommandCenter({
             (lead ? Math.max(0, 100 - lead.score) : 30),
         };
       }),
-    [completedTaskIds, contacts, leads, projects, tasks],
+    [completedTaskIds, contacts, effectiveTasks, leads, projects],
   );
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
@@ -167,6 +214,9 @@ export function TaskCommandCenter({
   const selectedTask = decoratedTasks.find((item) => item.task.id === selectedTaskId) ??
     filteredTasks[0] ??
     decoratedTasks[0];
+  const selectedOwner = selectedTask?.task.ownerUserId
+    ? users.find((user) => user.id === selectedTask.task.ownerUserId)
+    : undefined;
   const views: Array<{ id: TaskView; label: string; count: number }> = [
     { id: "focus", label: text.focus, count: openTasks.length },
     { id: "today", label: text.today, count: dueTodayTasks.length },
@@ -176,6 +226,55 @@ export function TaskCommandCenter({
     { id: "followUp", label: text.followUp, count: followUpTasks.length },
     { id: "all", label: text.all, count: decoratedTasks.length },
   ];
+
+  const updateTaskDraft = (field: keyof NewTaskDraft, value: string) => {
+    setTaskDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const createTask = async () => {
+    if (!taskDraft.title.trim()) {
+      setNotice(text.titleRequired);
+      return;
+    }
+
+    setTaskSaving(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/crm/tasks", {
+        body: JSON.stringify({
+          task: {
+            contactId: taskDraft.contactId || undefined,
+            description: taskDraft.description.trim() || undefined,
+            due: taskDraft.due ? new Date(taskDraft.due).toISOString() : "",
+            leadId: taskDraft.leadId || undefined,
+            ownerUserId: taskDraft.ownerUserId || undefined,
+            priority: taskDraft.priority,
+            projectId: taskDraft.projectId || undefined,
+            status: taskDraft.status,
+            title: taskDraft.title.trim(),
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; task?: Task };
+
+      if (!response.ok || !payload.task) {
+        throw new Error(payload.error ?? text.taskCreateFailed);
+      }
+
+      setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
+      setSelectedTaskId(payload.task.id);
+      setTaskDraft(createDefaultTaskDraft(projects, users));
+      setIsCreateOpen(false);
+      setNotice(text.taskCreated);
+      void onTasksChanged?.();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : text.taskCreateFailed);
+    } finally {
+      setTaskSaving(false);
+    }
+  };
 
   const toggleTask = (taskId: string) => {
     const currentTask = decoratedTasks.find((item) => item.task.id === taskId);
@@ -192,7 +291,17 @@ export function TaskCommandCenter({
         body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus } }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
-      }).catch(() => undefined);
+      })
+        .then(async (response) => {
+          const payload = (await response.json().catch(() => ({}))) as { task?: Task };
+          if (response.ok && payload.task) {
+            setTaskOverlays((current) => [
+              payload.task!,
+              ...current.filter((task) => task.id !== payload.task!.id),
+            ]);
+          }
+        })
+        .catch(() => undefined);
     }
   };
 
@@ -260,6 +369,157 @@ export function TaskCommandCenter({
             ))}
           </div>
         </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            onClick={() => setIsCreateOpen((current) => !current)}
+            type="button"
+          >
+            {isCreateOpen ? text.cancel : text.newTask}
+          </button>
+        </div>
+        {isCreateOpen ? (
+          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+            <div className="min-w-0">
+              <h4 className="text-lg font-semibold">{text.createTaskTitle}</h4>
+              <p className="mt-1 break-words text-sm text-stone-600">{text.createTaskDescription}</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
+                {text.titleField}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("title", event.target.value)}
+                  value={taskDraft.title}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
+                {text.descriptionField}
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("description", event.target.value)}
+                  value={taskDraft.description}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.due}
+                <input
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("due", event.target.value)}
+                  type="datetime-local"
+                  value={taskDraft.due}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.priority}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("priority", event.target.value as Task["priority"])}
+                  value={taskDraft.priority}
+                >
+                  {(["Hoch", "Mittel", "Normal"] as Task["priority"][]).map((priority) => (
+                    <option key={priority} value={priority}>
+                      {getCrmTaskPriorityLabel(priority, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.status}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("status", event.target.value as Task["status"])}
+                  value={taskDraft.status}
+                >
+                  {(["open", "done"] as Task["status"][]).map((status) => (
+                    <option key={status} value={status}>
+                      {getCrmTaskStatusLabel(status, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.project}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("projectId", event.target.value)}
+                  value={taskDraft.projectId}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.linkedContact}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("contactId", event.target.value)}
+                  value={taskDraft.contactId}
+                >
+                  <option value="">{text.noContact}</option>
+                  {contacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.linkedLead}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("leadId", event.target.value)}
+                  value={taskDraft.leadId}
+                >
+                  <option value="">{text.noLead}</option>
+                  {leads.map((lead) => (
+                    <option key={lead.id} value={lead.id}>
+                      {lead.intent}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                {text.owner}
+                <select
+                  className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) => updateTaskDraft("ownerUserId", event.target.value)}
+                  value={taskDraft.ownerUserId}
+                >
+                  <option value="">{text.noOwner}</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={taskSaving}
+                onClick={() => void createTask()}
+                type="button"
+              >
+                {taskSaving ? text.savingTask : text.saveTask}
+              </button>
+              <button
+                className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
+                onClick={() => {
+                  setTaskDraft(createDefaultTaskDraft(projects, users));
+                  setIsCreateOpen(false);
+                }}
+                type="button"
+              >
+                {text.cancel}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </article>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -387,7 +647,9 @@ export function TaskCommandCenter({
               [text.project, selectedTask?.project?.name ?? selectedTask?.task.project],
               [text.linkedContact, selectedTask?.contact?.name ?? text.noContact],
               [text.linkedLead, selectedTask?.lead?.intent ?? text.noLead],
+              [text.descriptionField, selectedTask?.task.description],
               [text.source, selectedTask?.contact?.source ? getCrmSourceLabel(selectedTask.contact.source, language) : undefined],
+              [text.owner, selectedOwner ? selectedOwner.name || selectedOwner.email : text.noOwner],
               [text.due, selectedTask?.task.due ? getCrmTaskDueLabel(selectedTask.task.due, language) : undefined],
               [text.priority, selectedTask?.task.priority ? getCrmTaskPriorityLabel(selectedTask.task.priority, language) : undefined],
               [text.status, selectedTask ? getCrmTaskStatusLabel(selectedTask.isCompleted ? "done" : "open", language) : undefined],

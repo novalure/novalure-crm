@@ -94,6 +94,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     source: "database",
+    deliveryMode: provider.external ? "external" : "test",
     provider,
     providerConnection,
     counts: {
@@ -287,6 +288,7 @@ export async function POST(request: Request) {
 
   return Response.json(
     {
+      deliveryMode: provider.external ? "external" : "test",
       ok: !hasFailedSend,
       provider,
       providerConnection,

@@ -33,6 +33,7 @@ import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
 import { ContactCommandCenter } from "@/components/contact-command-center";
 import { CustomerAccessCockpit } from "@/components/customer-access-cockpit";
+import { DailyQueueBoard } from "@/components/daily-queue-board";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { DataHygieneBoard } from "@/components/data-hygiene-board";
 import { DealPipelineWorkspace } from "@/components/deal-pipeline-workspace";
@@ -43,6 +44,7 @@ import { LeadInbox } from "@/components/lead-inbox";
 import { LeadSequenceCommandCenter } from "@/components/lead-sequence-command-center";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
 import { NewsletterCommandCenter } from "@/components/newsletter-command-center";
+import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
@@ -99,6 +101,8 @@ type DashboardSection =
   | "objectsMandates"
   | "settings"
   | "units"
+  | "reservations"
+  | "dailyQueue"
   | "customerAccess"
   | "managedService"
   | "onboarding"
@@ -361,7 +365,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   sales: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: ["dailyQueue", "leadInbox", "contacts", "communication", "pipelines", "tasks", "calendar"],
-    startSection: "tasks",
+    startSection: "dailyQueue",
     startEntry: "dailyQueue",
     quickActions: ["leadInbox", "pipeline", "tasks", "meetings"],
   },
@@ -461,7 +465,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   customerSuccess: { id: "customerSuccess", section: "customerSuccess" },
   customerSwitch: { id: "customerSwitch", section: "managedService" },
   dashboard: { id: "dashboard", section: "dashboard" },
-  dailyQueue: { id: "dailyQueue", section: "tasks" },
+  dailyQueue: { id: "dailyQueue", section: "dailyQueue" },
   dataHygiene: { id: "dataHygiene", section: "dataHygiene" },
   demosTrials: { id: "demosTrials", section: "onboarding" },
   developerLeads: { id: "developerLeads", section: "leadInbox" },
@@ -479,7 +483,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   projectOverview: { id: "projectOverview", section: "projects" },
   projectPipeline: { id: "projectPipeline", section: "pipelines" },
   projects: { id: "projects", section: "projects" },
-  reservations: { id: "reservations", section: "units" },
+  reservations: { id: "reservations", section: "reservations" },
   sellerLeads: { id: "sellerLeads", leadTypes: ["Verkäufer"], section: "leadInbox" },
   settings: { id: "settings", section: "settings" },
   slaCockpit: { id: "slaCockpit", section: "leadInbox" },
@@ -635,6 +639,7 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
         </svg>
       );
     case "units":
+    case "reservations":
       return (
         <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
           <path d="M5 20V5h14v15M8 9h2M14 9h2M8 13h2M14 13h2M4 20h16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -688,6 +693,7 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
           <path d="m7 6 1.2 1.2L10.5 5M7 12l1.2 1.2 2.3-2.2M7 18l1.2 1.2 2.3-2.2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       );
+    case "dailyQueue":
     case "tasks":
       return (
         <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
@@ -785,6 +791,7 @@ function NovalureGlyph() {
 
 type CrmWorkspaceProps = {
   coreData: CoreCrmDataResult;
+  initialLanguage?: LanguageCode;
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
   sessionWorkspace: {
@@ -864,7 +871,8 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     dashboard: "dashboard",
     datenhygiene: "dataHygiene",
     "daten-hygiene": "dataHygiene",
-    "daily-queue": "tasks",
+    "daily-queue": "dailyQueue",
+    dailyqueue: "dailyQueue",
     einstellungen: "settings",
     funnels: "funnels",
     form: "forms",
@@ -895,6 +903,8 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     pipelines: "pipelines",
     projects: "projects",
     projekte: "projects",
+    reservations: "reservations",
+    reservierungen: "reservations",
     "seller-leads": "leadInbox",
     einheiten: "units",
     settings: "settings",
@@ -941,6 +951,7 @@ function getSectionHash(section: DashboardSection) {
   if (section === "customerSuccess") return "customer-success";
   if (section === "dataHygiene") return "data-hygiene";
   if (section === "objectsMandates") return "objects-mandates";
+  if (section === "dailyQueue") return "daily-queue";
   return section === "calendar" ? "meetings" : section;
 }
 
@@ -954,6 +965,7 @@ function getNavigationHash(section: DashboardSection, entryId?: NavigationEntryI
     projectAnalytics: "analytics",
     projectOverview: "projects",
     projects: "projects",
+    reservations: "reservations",
     sellerLeads: "seller-leads",
     settings: "settings",
     workspaces: "workspaces",
@@ -2554,6 +2566,7 @@ function InternalWorkspaceView({
 
 export function CrmWorkspace({
   coreData,
+  initialLanguage = defaultLanguage,
   sessionProductRole,
   sessionRole,
   sessionWorkspace,
@@ -2608,7 +2621,7 @@ export function CrmWorkspace({
   const [projectNotice, setProjectNotice] = useState("");
   const [projectNoticeTone, setProjectNoticeTone] = useState<"error" | "success">("success");
   const [isProjectSaving, setIsProjectSaving] = useState(false);
-  const [language, setLanguage] = useState<LanguageCode>(defaultLanguage);
+  const [language, setLanguage] = useState<LanguageCode>(initialLanguage);
   const [languageHydrated, setLanguageHydrated] = useState(false);
   const copy = getDashboardCopy(language);
   const importSourceOptions = copy.dialogs.import.sources;
@@ -2806,7 +2819,8 @@ export function CrmWorkspace({
   const visibleActiveNavigationEntry = activeNavigationAllowed
     ? activeNavigationEntry
     : navigationEntries[normalizedActivePreset.startEntry];
-  const visibleActiveSection = activeNavigationAllowed
+  const visibleActiveSection = activeNavigationAllowed &&
+    activeSection === visibleActiveNavigationEntry.section
     ? activeSection
     : visibleActiveNavigationEntry.section;
   const focusedNavigationItems = profileNavigationItems;
@@ -3112,11 +3126,12 @@ export function CrmWorkspace({
       const nextEntryId =
         storedPreset.navigationEntries.find((entryId) => navigationEntries[entryId].section === nextSection)
         ?? storedPreset.startEntry;
+      const resolvedSection = navigationEntries[nextEntryId].section;
 
       setActivePresetId(storedPresetId);
       setActiveNavigationEntryId(nextEntryId);
-      setActiveSection(nextSection);
-      setSidebarCollapsed(nextSection === "pipelines");
+      setActiveSection(resolvedSection);
+      setSidebarCollapsed(resolvedSection === "pipelines");
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -3128,9 +3143,10 @@ export function CrmWorkspace({
       const nextEntryId =
         normalizedActivePreset.navigationEntries.find((entryId) => navigationEntries[entryId].section === nextSection)
         ?? normalizedActivePreset.startEntry;
+      const resolvedSection = navigationEntries[nextEntryId].section;
       setActiveNavigationEntryId(nextEntryId);
-      setActiveSection(nextSection);
-      setSidebarCollapsed(nextSection === "pipelines");
+      setActiveSection(resolvedSection);
+      setSidebarCollapsed(resolvedSection === "pipelines");
     };
 
     window.addEventListener("hashchange", syncSectionFromHash);
@@ -3250,11 +3266,13 @@ export function CrmWorkspace({
       "customerAccess",
       "customerSuccess",
       "dataHygiene",
+      "dailyQueue",
       "managedService",
       "objectsMandates",
       "onboarding",
       "pipelines",
       "projects",
+      "reservations",
       "settings",
       "tasks",
       "sequences",
@@ -3283,15 +3301,12 @@ export function CrmWorkspace({
     const nextPreset = navigationPresets[nextPresetId];
 
     setActivePresetId(nextPresetId);
-    setActiveNavigationEntryId(nextPreset.startEntry);
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(navigationPresetStorageKey, nextPresetId);
     }
 
-    if (!nextPreset.navigationEntries.some((entryId) => navigationEntries[entryId].section === activeSection)) {
-      handleSectionChange(nextPreset.startSection);
-    }
+    handleSectionChange(nextPreset.startSection, nextPreset.startEntry);
   }
 
   function handleQuickAction(actionId: QuickActionId) {
@@ -3312,7 +3327,7 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f2ec] text-slate-950">
+    <main className="min-h-screen bg-[#f4f2ec] text-slate-950" lang={language}>
       <div className="mx-auto flex min-h-screen w-full max-w-[1500px]">
         <aside
           className={`hidden shrink-0 overflow-hidden border-r border-stone-200 bg-white py-6 transition-all duration-200 xl:block ${
@@ -3617,6 +3632,20 @@ export function CrmWorkspace({
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
+                  {copy.navigationPresets.mobileNavigationLabel}
+                  <select
+                    className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                    onChange={(event) => handleNavigationChange(event.target.value as NavigationEntryId)}
+                    value={visibleActiveNavigationEntry.id}
+                  >
+                    {focusedNavigationItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
                   {copy.navigationPresets.label}
                   <select
@@ -3957,6 +3986,36 @@ export function CrmWorkspace({
               />
             ) : null}
 
+            {visibleActiveSection === "reservations" ? (
+              <ReservationBoard
+                contacts={contacts}
+                deals={deals}
+                language={language}
+                onOpenUnits={() => handleNavigationChange("units")}
+                projectLabel={projectScopeLabel}
+                projects={allProjects}
+                reservations={propertyReservationRecords.filter(
+                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                )}
+                units={propertyUnitRecords.filter(
+                  (unit) => !activeProject || unit.projectId === activeProject.id,
+                )}
+              />
+            ) : null}
+
+            {visibleActiveSection === "dailyQueue" ? (
+              <DailyQueueBoard
+                contacts={visibleContacts}
+                events={visibleCalendarEvents}
+                language={language}
+                leads={visibleLeads}
+                onOpenSection={handleSectionChange}
+                projectLabel={projectScopeLabel}
+                projects={allProjects}
+                tasks={visibleTasks}
+              />
+            ) : null}
+
             {["tasks", "contacts"].includes(visibleActiveSection) ? (
             <section className="grid gap-4">
               {visibleActiveSection === "tasks" ? (
@@ -3964,9 +4023,13 @@ export function CrmWorkspace({
                   contacts={visibleContacts}
                   language={language}
                   leads={visibleLeads}
+                  onTasksChanged={async () => {
+                    await refreshCoreData();
+                  }}
                   projectLabel={projectScopeLabel}
                   projects={allProjects}
                   tasks={visibleTasks}
+                  users={users}
                 />
               ) : null}
 
@@ -4061,6 +4124,9 @@ export function CrmWorkspace({
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
                 tasks={visibleTasks}
+                onEventsChanged={async () => {
+                  await refreshCoreData();
+                }}
                 users={users}
               />
             ) : null}

@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type {
-  ConsentRecord,
-  Contact,
-  ContactRelationship,
-  ContactTimelineItem,
-  Lead,
-  Organization,
-  Project,
-  Task,
-  WorkspaceUser,
+import {
+  CRM_LEAD_SOURCES,
+  type ConsentRecord,
+  type Contact,
+  type ContactRelationship,
+  type ContactTimelineItem,
+  type Lead,
+  type LeadStatus,
+  type LeadType,
+  type Organization,
+  type Project,
+  type Task,
+  type WorkspaceUser,
 } from "@/lib/crm-types";
 import {
   getContactCommandCenterCopy,
@@ -70,24 +73,65 @@ type ContactKind = "person" | "company" | "companyContact";
 const LEGACY_CONTACT_STORAGE_KEY = "novalure-contact-records-v1";
 
 const defaultRoleOptions: Contact["role"][] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
-const defaultSourceOptions: Contact["source"][] = [
-  "Manual",
-  "Website Funnel",
-  "Website",
-  "WhatsApp",
-  "Instagram",
-  "Newsletter",
-  "Microsoft 365",
-  "Google Meet",
-  "willhaben",
-  "ImmobilienScout",
-  "Empfehlung",
-];
+const defaultSourceOptions: Contact["source"][] = [...CRM_LEAD_SOURCES];
+const crmLeadSourceSet = new Set<string>(CRM_LEAD_SOURCES);
+
+function isCrmLeadSource(value: string): value is Contact["source"] {
+  return crmLeadSourceSet.has(value);
+}
 
 type ContactFeedback = {
   message: string;
   tone: "error" | "success";
 };
+
+type ContactPostCreateAction = "lead" | "task" | null;
+
+type ContactTaskDraft = {
+  description: string;
+  due: string;
+  priority: Task["priority"];
+  title: string;
+};
+
+type ContactLeadDraft = {
+  intent: string;
+  nextAction: string;
+  score: string;
+  status: LeadStatus;
+  type: LeadType;
+};
+
+const leadTypeOptions: LeadType[] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
+const leadStatusOptions: LeadStatus[] = ["Neu", "Qualifizieren", "Termin offen", "Übergabe", "Archiviert"];
+
+function toDateTimeLocalInput(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function createContactTaskDraft(contact: Contact): ContactTaskDraft {
+  const due = new Date();
+  due.setDate(due.getDate() + 1);
+  due.setHours(9, 0, 0, 0);
+
+  return {
+    description: contact.intent,
+    due: toDateTimeLocalInput(due),
+    priority: "Normal",
+    title: `${contact.name}: Follow-up`,
+  };
+}
+
+function createContactLeadDraft(contact: Contact): ContactLeadDraft {
+  return {
+    intent: contact.intent || contact.name,
+    nextAction: "Kontakt qualifizieren",
+    score: "50",
+    status: "Neu",
+    type: leadTypeOptions.includes(contact.role) ? contact.role : "Käufer",
+  };
+}
 
 function createContactDraft(input: {
   contacts: Contact[];
@@ -176,6 +220,11 @@ export function ContactCommandCenter({
   const [newContact, setNewContact] = useState<Contact>(() =>
     createContactDraft({ contacts, organizations, projects }),
   );
+  const [postCreateAction, setPostCreateAction] = useState<ContactPostCreateAction>(null);
+  const [postCreateContact, setPostCreateContact] = useState<Contact | null>(null);
+  const [postCreateTaskDraft, setPostCreateTaskDraft] = useState<ContactTaskDraft | null>(null);
+  const [postCreateLeadDraft, setPostCreateLeadDraft] = useState<ContactLeadDraft | null>(null);
+  const [postCreateSaving, setPostCreateSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -410,7 +459,10 @@ export function ContactCommandCenter({
   ];
   const roleOptions = Array.from(new Set([...defaultRoleOptions, ...contactRecords.map((contact) => contact.role)]));
   const sourceOptions = Array.from(
-    new Set([...defaultSourceOptions, ...contactRecords.map((contact) => contact.source)]),
+    new Set([
+      ...defaultSourceOptions,
+      ...contactRecords.map((contact) => contact.source).filter(isCrmLeadSource),
+    ]),
   );
   const showFeedback = (tone: ContactFeedback["tone"], message: string) => {
     setFeedback({ message, tone });
@@ -464,7 +516,7 @@ export function ContactCommandCenter({
       return { error: copy.networkError };
     }
   };
-  const createContact = async () => {
+  const createContact = async (nextAction: ContactPostCreateAction = null) => {
     if (!newContact.name.trim() && !newContact.email?.trim() && !newContact.phone?.trim()) {
       showFeedback("error", copy.validationRequired);
       return;
@@ -499,8 +551,103 @@ export function ContactCommandCenter({
     setNewContact(createContactDraft({ contacts: [persistedContact, ...contacts], organizations, projects }));
     setIsCreateOpen(false);
     setActiveView("all");
-    showFeedback("success", copy.contactAdded);
+    if (nextAction === "task") {
+      setPostCreateAction("task");
+      setPostCreateContact(persistedContact);
+      setPostCreateTaskDraft(createContactTaskDraft(persistedContact));
+      setPostCreateLeadDraft(null);
+      showFeedback("success", copy.taskFlowDescription);
+    } else if (nextAction === "lead") {
+      setPostCreateAction("lead");
+      setPostCreateContact(persistedContact);
+      setPostCreateLeadDraft(createContactLeadDraft(persistedContact));
+      setPostCreateTaskDraft(null);
+      showFeedback("success", copy.leadFlowDescription);
+    } else {
+      setPostCreateAction(null);
+      setPostCreateContact(null);
+      setPostCreateTaskDraft(null);
+      setPostCreateLeadDraft(null);
+      showFeedback("success", copy.contactAdded);
+    }
     void onContactsChanged?.();
+  };
+  const savePostCreateTask = async () => {
+    if (!postCreateContact || !postCreateTaskDraft?.title.trim()) {
+      showFeedback("error", copy.validationRequired);
+      return;
+    }
+
+    setPostCreateSaving(true);
+    try {
+      const response = await fetch("/api/crm/tasks", {
+        body: JSON.stringify({
+          task: {
+            contactId: postCreateContact.id,
+            description: postCreateTaskDraft.description.trim() || undefined,
+            due: postCreateTaskDraft.due ? new Date(postCreateTaskDraft.due).toISOString() : "",
+            priority: postCreateTaskDraft.priority,
+            projectId: postCreateContact.projectId,
+            status: "open",
+            title: postCreateTaskDraft.title.trim(),
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; task?: Task };
+      if (!response.ok || !payload.task) throw new Error(payload.error ?? copy.saveFailed);
+
+      setPostCreateAction(null);
+      setPostCreateContact(null);
+      setPostCreateTaskDraft(null);
+      showFeedback("success", copy.linkedTaskCreated);
+      void onContactsChanged?.();
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : copy.saveFailed);
+    } finally {
+      setPostCreateSaving(false);
+    }
+  };
+  const savePostCreateLead = async () => {
+    if (!postCreateContact || !postCreateLeadDraft?.intent.trim()) {
+      showFeedback("error", copy.validationRequired);
+      return;
+    }
+
+    setPostCreateSaving(true);
+    try {
+      const response = await fetch("/api/crm/leads", {
+        body: JSON.stringify({
+          lead: {
+            contactId: postCreateContact.id,
+            hotStatus: Number(postCreateLeadDraft.score) >= 80,
+            intent: postCreateLeadDraft.intent.trim(),
+            nextAction: postCreateLeadDraft.nextAction.trim(),
+            projectId: postCreateContact.projectId,
+            receivedAt: new Date().toISOString(),
+            score: Number(postCreateLeadDraft.score) || 0,
+            source: postCreateContact.source,
+            status: postCreateLeadDraft.status,
+            type: postCreateLeadDraft.type,
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; lead?: Lead };
+      if (!response.ok || !payload.lead) throw new Error(payload.error ?? copy.saveFailed);
+
+      setPostCreateAction(null);
+      setPostCreateContact(null);
+      setPostCreateLeadDraft(null);
+      showFeedback("success", copy.linkedLeadCreated);
+      void onContactsChanged?.();
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : copy.saveFailed);
+    } finally {
+      setPostCreateSaving(false);
+    }
   };
   const saveSelectedContact = async () => {
     if (!selectedContact) return;
@@ -759,16 +906,200 @@ export function ContactCommandCenter({
               {copy.quickCreateHelp}
             </p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              {[copy.saveContact, copy.saveAndTask, copy.saveAndLead].map((label) => (
+              {[
+                { action: null, label: copy.saveContact },
+                { action: "task" as const, label: copy.saveAndTask },
+                { action: "lead" as const, label: copy.saveAndLead },
+              ].map((button) => (
                 <button
                   className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                  key={label}
-                  onClick={() => void createContact()}
+                  key={button.label}
+                  onClick={() => void createContact(button.action)}
                   type="button"
                 >
-                  {label}
+                  {button.label}
                 </button>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {postCreateAction === "task" && postCreateContact && postCreateTaskDraft ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+            <h4 className="text-lg font-semibold">{copy.taskFlowTitle}</h4>
+            <p className="mt-1 break-words text-sm text-emerald-900">{copy.taskFlowDescription}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] md:col-span-2">
+                {copy.taskTitle}
+                <input
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateTaskDraft((current) => current ? { ...current, title: event.target.value } : current)
+                  }
+                  value={postCreateTaskDraft.title}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] md:col-span-2">
+                {copy.taskDescription}
+                <textarea
+                  className="mt-2 min-h-20 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateTaskDraft((current) => current ? { ...current, description: event.target.value } : current)
+                  }
+                  value={postCreateTaskDraft.description}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.taskDue}
+                <input
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateTaskDraft((current) => current ? { ...current, due: event.target.value } : current)
+                  }
+                  type="datetime-local"
+                  value={postCreateTaskDraft.due}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.taskPriority}
+                <select
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateTaskDraft((current) =>
+                      current ? { ...current, priority: event.target.value as Task["priority"] } : current,
+                    )
+                  }
+                  value={postCreateTaskDraft.priority}
+                >
+                  {(["Hoch", "Mittel", "Normal"] as Task["priority"][]).map((priority) => (
+                    <option key={priority} value={priority}>
+                      {getCrmTaskPriorityLabel(priority, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={postCreateSaving}
+                onClick={() => void savePostCreateTask()}
+                type="button"
+              >
+                {copy.createLinkedTask}
+              </button>
+              <button
+                className="rounded-md border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100"
+                onClick={() => {
+                  setPostCreateAction(null);
+                  setPostCreateContact(null);
+                  setPostCreateTaskDraft(null);
+                  showFeedback("success", copy.followUpCancelled);
+                }}
+                type="button"
+              >
+                {copy.cancelArchive}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {postCreateAction === "lead" && postCreateContact && postCreateLeadDraft ? (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+            <h4 className="text-lg font-semibold">{copy.leadFlowTitle}</h4>
+            <p className="mt-1 break-words text-sm text-emerald-900">{copy.leadFlowDescription}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] md:col-span-2">
+                {copy.leadIntent}
+                <input
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateLeadDraft((current) => current ? { ...current, intent: event.target.value } : current)
+                  }
+                  value={postCreateLeadDraft.intent}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.leadType}
+                <select
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateLeadDraft((current) =>
+                      current ? { ...current, type: event.target.value as LeadType } : current,
+                    )
+                  }
+                  value={postCreateLeadDraft.type}
+                >
+                  {leadTypeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {getCrmLeadTypeLabel(type, language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.leadStatus}
+                <select
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateLeadDraft((current) =>
+                      current ? { ...current, status: event.target.value as LeadStatus } : current,
+                    )
+                  }
+                  value={postCreateLeadDraft.status}
+                >
+                  {leadStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.leadScore}
+                <input
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  max={100}
+                  min={0}
+                  onChange={(event) =>
+                    setPostCreateLeadDraft((current) => current ? { ...current, score: event.target.value } : current)
+                  }
+                  type="number"
+                  value={postCreateLeadDraft.score}
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em]">
+                {copy.leadNextAction}
+                <input
+                  className="mt-2 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  onChange={(event) =>
+                    setPostCreateLeadDraft((current) => current ? { ...current, nextAction: event.target.value } : current)
+                  }
+                  value={postCreateLeadDraft.nextAction}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={postCreateSaving}
+                onClick={() => void savePostCreateLead()}
+                type="button"
+              >
+                {copy.assignLinkedLead}
+              </button>
+              <button
+                className="rounded-md border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-100"
+                onClick={() => {
+                  setPostCreateAction(null);
+                  setPostCreateContact(null);
+                  setPostCreateLeadDraft(null);
+                  showFeedback("success", copy.followUpCancelled);
+                }}
+                type="button"
+              >
+                {copy.cancelArchive}
+              </button>
             </div>
           </div>
         ) : null}

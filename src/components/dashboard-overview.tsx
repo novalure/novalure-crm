@@ -2,18 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GridLayout, useContainerWidth, type LayoutItem } from "react-grid-layout";
-import type {
-  CalendarEvent,
-  Contact,
-  Deal,
-  Funnel,
-  Lead,
-  PipelineStage,
-  Project,
-  Region,
-  SellerListing,
-  Task,
-  WorkspaceUser,
+import {
+  CRM_LEAD_SOURCES,
+  type CalendarEvent,
+  type Contact,
+  type Deal,
+  type Funnel,
+  type Lead,
+  type PipelineStage,
+  type Project,
+  type Region,
+  type SellerListing,
+  type Task,
+  type WorkspaceUser,
 } from "@/lib/crm-types";
 import {
   getCrmLeadTypeKey,
@@ -46,19 +47,7 @@ const VIEWING_DEAL_STAGES = new Set<string>([
 const leadTypeOptions = ["Käufer", "Verkäufer", "Investor"] as const;
 const periodOptions = ["Heute", "Woche", "Monat", "Quartal", "YTD", "Custom"] as const;
 const regionOptions: Array<Region | "Alle"> = ["Alle", "Tirol", "Steiermark"];
-const sourceOptions = [
-  "Website Funnel",
-  "Website",
-  "willhaben",
-  "ImmobilienScout",
-  "Empfehlung",
-  "WhatsApp",
-  "Instagram",
-  "Newsletter",
-  "Microsoft 365",
-  "Google Meet",
-  "Manual",
-] as const;
+const sourceOptions = CRM_LEAD_SOURCES;
 
 const PDF_EXPORT_BACKGROUND = "#f4f2ec";
 const PDF_EXPORT_MARGIN_MM = 8;

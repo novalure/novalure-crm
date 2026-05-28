@@ -56,6 +56,13 @@ type UserDraft = {
   userId: string;
 };
 
+type InviteDraft = {
+  email: string;
+  name: string;
+  productRole: ProductRole;
+  role: WorkspaceRole;
+};
+
 type SaveState = "idle" | "loading" | "saved" | "error";
 
 const accessLevels: CustomerAccessLevel[] = ["viewer", "editor", "admin"];
@@ -155,6 +162,15 @@ function getUserDefaults(users: WorkspaceUser[]): UserDraft {
   };
 }
 
+function getInviteDefaults(): InviteDraft {
+  return {
+    email: "",
+    name: "",
+    productRole: "viewer",
+    role: "assistant",
+  };
+}
+
 function getGrantLabel(copy: ReturnType<typeof getCustomerAccessCockpitCopy>, grant: CustomerAccessProjectGrant) {
   return `${grant.customerName} / ${grant.projectName} / ${grant.userName} / ${copy.accessLevels[grant.accessLevel]}`;
 }
@@ -191,6 +207,8 @@ export function CustomerAccessCockpit({
   );
   const [grantDraft, setGrantDraft] = useState<GrantDraft>(() => getGrantDefaults(initialPayload, activeProjectId));
   const [userDraft, setUserDraft] = useState<UserDraft>(() => getUserDefaults(users));
+  const [inviteDraft, setInviteDraft] = useState<InviteDraft>(() => getInviteDefaults());
+  const [inviteNotice, setInviteNotice] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const applyPayload = useCallback((nextPayload: CustomerAccessCockpitPayload) => {
@@ -307,10 +325,25 @@ export function CustomerAccessCockpit({
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
       });
-      const result = (await response.json()) as { payload?: CustomerAccessCockpitPayload };
+      const result = (await response.json()) as {
+        data?: {
+          deliveryConfigured?: boolean;
+          user?: { email?: string };
+        };
+        payload?: CustomerAccessCockpitPayload;
+      };
 
       if (!response.ok || !result.payload) throw new Error("save_failed");
       applyPayload(result.payload);
+      if (input.operation === "invite_user") {
+        const email = result.data?.user?.email ?? String(input.email ?? "");
+        setInviteNotice(
+          result.data?.deliveryConfigured === false
+            ? copy.invite.testModeSaved(email)
+            : copy.invite.sent(email),
+        );
+        setInviteDraft(getInviteDefaults());
+      }
       setSaveState("saved");
     } catch {
       setSaveState("error");
@@ -347,6 +380,24 @@ export function CustomerAccessCockpit({
         ...patch,
       },
     }));
+  }
+
+  async function inviteUser() {
+    const email = inviteDraft.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInviteNotice(copy.invite.invalidEmail);
+      setSaveState("error");
+      return;
+    }
+
+    setInviteNotice("");
+    await persist({
+      email,
+      name: inviteDraft.name,
+      operation: "invite_user",
+      productRole: inviteDraft.productRole,
+      role: inviteDraft.role,
+    });
   }
 
   const saveNotice =
@@ -748,6 +799,71 @@ export function CustomerAccessCockpit({
                   <p className="mt-1 text-stone-600">{copy.userStatus[grant.status]} / {formatDate(grant.updatedAt, language)}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-950">{copy.invite.title}</h3>
+            <p className="mt-1 text-sm text-stone-600">{copy.invite.description}</p>
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                {copy.invite.email}
+                <input
+                  className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                  onChange={(event) => setInviteDraft((current) => ({ ...current, email: event.target.value }))}
+                  type="email"
+                  value={inviteDraft.email}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                {copy.invite.name}
+                <input
+                  className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                  onChange={(event) => setInviteDraft((current) => ({ ...current, name: event.target.value }))}
+                  value={inviteDraft.name}
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                  {copy.invite.role}
+                  <select
+                    className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                    onChange={(event) => setInviteDraft((current) => ({ ...current, role: event.target.value as WorkspaceRole }))}
+                    value={inviteDraft.role}
+                  >
+                    {workspaceRoles.map((role) => (
+                      <option key={role} value={role}>{copy.roles[role]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                  {copy.invite.productRole}
+                  <select
+                    className="rounded-md border border-stone-300 px-3 py-2 text-sm font-normal"
+                    onChange={(event) =>
+                      setInviteDraft((current) => ({ ...current, productRole: event.target.value as ProductRole }))
+                    }
+                    value={inviteDraft.productRole}
+                  >
+                    {productRoles.map((role) => (
+                      <option key={role} value={role}>{copy.productRoles[role]}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button
+                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                disabled={saveState === "loading"}
+                onClick={() => void inviteUser()}
+                type="button"
+              >
+                {copy.actions.inviteUser}
+              </button>
+              {inviteNotice ? (
+                <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-950">
+                  {inviteNotice}
+                </p>
+              ) : null}
             </div>
           </section>
 

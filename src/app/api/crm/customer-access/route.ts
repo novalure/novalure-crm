@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireProductCapability } from "@/lib/auth/session";
 import {
+  inviteWorkspaceUser,
   listCustomerAccessCockpit,
   updateCustomerAccessRecord,
   updateWorkspaceUserAccess,
   upsertCustomerProjectGrant,
 } from "@/lib/db/customer-access-repositories";
+import { resolveRequestLanguage } from "@/lib/i18n";
 
 async function readJson(request: Request) {
   try {
@@ -45,6 +47,7 @@ export async function PATCH(request: Request) {
 
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "access";
+  const language = resolveRequestLanguage(request);
   const result =
     operation === "project_grant"
       ? await upsertCustomerProjectGrant({
@@ -68,6 +71,18 @@ export async function PATCH(request: Request) {
             status: input.status,
             userId: String(input.userId ?? ""),
           })
+        : operation === "invite_user"
+          ? await inviteWorkspaceUser({
+              email: input.email,
+              language,
+              name: input.name,
+              origin: request.url,
+              productRole: input.productRole,
+              requestIp: request.headers.get("x-forwarded-for"),
+              role: input.role,
+              session: auth.session,
+              userAgent: request.headers.get("user-agent"),
+            })
         : await updateCustomerAccessRecord({
             accessId: String(input.accessId ?? input.id ?? ""),
             activeUsers: input.activeUsers,
