@@ -738,17 +738,41 @@ export function DashboardOverview({
   const hasMeasuredGrid = mounted && viewportWidth !== null;
   const stackedWidgets = !hasMeasuredGrid || gridWidth < 760;
   const renderWidgetArticle = (widget: WidgetId, draggable = false) => (
-    <article className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm" key={widget}>
+    <article className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm" key={widget}>
       <div className={`${draggable ? "widget-drag-handle cursor-move" : ""} border-b border-stone-100 px-4 py-3`}>
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="break-words text-sm font-semibold leading-5 text-slate-950">{copy.widgets[widget].title}</p>
-            <p className="mt-1 line-clamp-2 break-words text-xs leading-4 text-stone-500">{copy.widgets[widget].description}</p>
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+          <div className="min-w-32 flex-1">
+            <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].title}</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-4 text-stone-500" style={{ overflowWrap: "normal", wordBreak: "normal" }}>{copy.widgets[widget].description}</p>
           </div>
-          <div className="grid shrink-0 grid-cols-3 gap-1">
-            <button className="grid h-7 w-7 place-items-center rounded-md border border-stone-200 text-xs font-semibold" onClick={() => setCollapsedWidgets((current) => current.includes(widget) ? current.filter((item) => item !== widget) : [...current, widget])} title={collapsedWidgets.includes(widget) ? copy.grid.expand : copy.grid.collapse} type="button">{collapsedWidgets.includes(widget) ? "+" : "-"}</button>
-            <button className="min-h-7 rounded-md border border-stone-200 px-2 text-xs font-semibold" onClick={() => setSettingsWidget(settingsWidget === widget ? null : widget)} title={copy.grid.settingsTitle} type="button">{copy.grid.settingsButton}</button>
-            <button className="grid h-7 w-7 place-items-center rounded-md border border-red-200 text-xs font-semibold text-red-700" onClick={() => removeWidget(widget)} title={copy.grid.remove} type="button">x</button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              aria-label={collapsedWidgets.includes(widget) ? copy.grid.expand : copy.grid.collapse}
+              className="grid h-7 w-7 place-items-center rounded-md border border-stone-200 text-xs font-semibold"
+              onClick={() => setCollapsedWidgets((current) => current.includes(widget) ? current.filter((item) => item !== widget) : [...current, widget])}
+              title={collapsedWidgets.includes(widget) ? copy.grid.expand : copy.grid.collapse}
+              type="button"
+            >
+              {collapsedWidgets.includes(widget) ? "+" : "-"}
+            </button>
+            <button
+              aria-label={copy.grid.settingsTitle}
+              className="grid h-7 w-7 place-items-center rounded-md border border-stone-200 text-slate-700"
+              onClick={() => setSettingsWidget(settingsWidget === widget ? null : widget)}
+              title={copy.grid.settingsTitle}
+              type="button"
+            >
+              <SettingsGlyph />
+            </button>
+            <button
+              aria-label={copy.grid.remove}
+              className="grid h-7 w-7 place-items-center rounded-md border border-red-200 text-xs font-semibold text-red-700"
+              onClick={() => removeWidget(widget)}
+              title={copy.grid.remove}
+              type="button"
+            >
+              x
+            </button>
           </div>
         </div>
       </div>
@@ -819,6 +843,24 @@ export function DashboardOverview({
         )}
       </div>
     </section>
+  );
+}
+
+function SettingsGlyph() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h9M17 17h3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M15 7a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM7 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM13 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
   );
 }
 
