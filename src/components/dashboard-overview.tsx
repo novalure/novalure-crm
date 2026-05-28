@@ -209,6 +209,8 @@ const defaultWidgets: WidgetId[] = [
   "sourceBar",
 ];
 
+const defaultWidgetSet = new Set<WidgetId>(defaultWidgets);
+
 const defaultLayout: LayoutItem[] = [
   { i: "activeLeads", x: 0, y: 0, w: 3, h: 4, minW: 3, minH: 4 },
   { i: "pipelineValue", x: 3, y: 0, w: 3, h: 4, minW: 3, minH: 4 },
@@ -291,6 +293,15 @@ function normalizeLayout(widgets: WidgetId[], sourceLayout: LayoutItem[] = []) {
       y: Math.max(existing.y ?? 0, 0),
     };
   }).sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+function orderWidgetsForTopInsertion(widgets: WidgetId[]) {
+  const uniqueWidgets = widgets.filter((widget, index) => widgets.indexOf(widget) === index);
+  const topKpis = uniqueWidgets.filter((widget) => widgetCatalog[widget].kind === "KPI");
+  const addedWidgets = uniqueWidgets.filter((widget) => widgetCatalog[widget].kind !== "KPI" && !defaultWidgetSet.has(widget));
+  const defaultLowerWidgets = uniqueWidgets.filter((widget) => widgetCatalog[widget].kind !== "KPI" && defaultWidgetSet.has(widget));
+
+  return [...topKpis, ...addedWidgets, ...defaultLowerWidgets];
 }
 
 function buildLayout(widgets: WidgetId[]) {
@@ -629,9 +640,9 @@ export function DashboardOverview({
 
   const addWidget = (widget: WidgetId) => {
     if (widgets.includes(widget)) return;
-    const nextWidgets = [...widgets, widget];
+    const nextWidgets = orderWidgetsForTopInsertion([...widgets, widget]);
     setWidgets(nextWidgets);
-    setLayout((current) => normalizeLayout(nextWidgets, current));
+    setLayout(packLayout(nextWidgets));
   };
 
   const removeWidget = (widget: WidgetId) => {
