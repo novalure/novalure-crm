@@ -4,6 +4,7 @@ import {
   createSessionCookie,
   getSessionCookieOptions,
 } from "@/lib/auth/session";
+import { isLanguageCode, type LanguageCode } from "@/lib/language-runtime";
 
 function getFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -16,8 +17,17 @@ function getSafeReturnTo(value: string) {
   return value;
 }
 
-function getLoginRedirect(request: Request, input: { email?: string; error?: string; returnTo?: string }) {
+function getLanguageValue(value: string): LanguageCode | "" {
+  const normalized = value.trim().toLowerCase();
+  return isLanguageCode(normalized) ? normalized : "";
+}
+
+function getLoginRedirect(
+  request: Request,
+  input: { email?: string; error?: string; language?: LanguageCode | ""; returnTo?: string },
+) {
   const url = new URL("/login", request.url);
+  if (input.language) url.searchParams.set("lang", input.language);
   if (input.error) url.searchParams.set("error", input.error);
   if (input.email) url.searchParams.set("email", input.email);
   if (input.returnTo) url.searchParams.set("returnTo", getSafeReturnTo(input.returnTo));
@@ -28,6 +38,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const email = getFormValue(formData, "email");
   const password = getFormValue(formData, "password") || getFormValue(formData, "passcode");
+  const language = getLanguageValue(getFormValue(formData, "language") || getFormValue(formData, "lang"));
   const returnTo = getSafeReturnTo(getFormValue(formData, "returnTo"));
   const result = await authenticateLogin({ email, password });
 
@@ -36,6 +47,7 @@ export async function POST(request: Request) {
       getLoginRedirect(request, {
         email,
         error: result.error ?? "invalid_credentials",
+        language,
         returnTo,
       }),
       303,

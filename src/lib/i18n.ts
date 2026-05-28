@@ -113,7 +113,9 @@ export const loginPageCopy = {
   en: {
     brand: "Novalure CRM",
     title: "Sign in",
-    description: "Access CRM, meeting bookings, calendar sync and internal workspaces.",
+    description: "Protected Novalure workspace - access only for approved teams.",
+    overviewLink: "Back to overview",
+    auditLink: "Request Pipeline Audit",
     emailLabel: "Email",
     passcodeLabel: "Access code",
     passcodeHelp: "Use the access code for your approved workspace.",
@@ -170,14 +172,15 @@ export const loginPageCopy = {
   de: {
     brand: "Novalure CRM",
     title: "Anmelden",
-    description:
-      "Zugriff auf CRM, Meeting-Buchungen, Kalender-Sync und interne Arbeitsbereiche.",
+    description: "Geschützter Novalure-Arbeitsbereich - Zugang nur für freigegebene Teams.",
+    overviewLink: "Zur Übersicht",
+    auditLink: "Pipeline Audit anfragen",
     emailLabel: "E-Mail",
     passcodeLabel: "Zugangscode",
     passcodeHelp: "Nutze den Zugangscode deines freigegebenen Workspace.",
     passcodeHideLabel: "Zugangscode ausblenden",
     passcodeShowLabel: "Zugangscode anzeigen",
-    submit: "Einloggen",
+    submit: "Anmelden",
     placeholderEmail: "franz@novalure.eu",
     notConfigured: "Login ist noch nicht vollständig konfiguriert.",
     errors: {
@@ -190,7 +193,7 @@ export const loginPageCopy = {
       backToLogin: "Zurück zum Login",
       confirmPasswordLabel: "Neues Passwort bestätigen",
       emailLabel: "E-Mail",
-      forgotLink: "Zugangsdaten vergessen?",
+      forgotLink: "Passwort vergessen?",
       loginSuccess: "Dein Passwort wurde aktualisiert. Melde dich mit dem neuen Passwort an.",
       passwordHelp: "Verwende mindestens 12 Zeichen.",
       requestDescription:

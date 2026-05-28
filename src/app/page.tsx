@@ -5,7 +5,12 @@ import { CrmWorkspace } from "@/components/crm-workspace";
 import { getSessionFromHeaders } from "@/lib/auth/session";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
 import { ensureWorkspaceProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
-import { getCrmLandingPageCopy, getLoginLegalFooterCopy, getPublicPageCopy } from "@/lib/i18n";
+import {
+  getCrmLandingPageCopy,
+  getLoginLegalFooterCopy,
+  getPublicPageCopy,
+  languageRequestHeaderName,
+} from "@/lib/i18n";
 import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
 import { resolvePublicLanguage } from "@/lib/public-language";
 
@@ -31,6 +36,7 @@ export default async function Home({ searchParams }: HomeProps) {
     const language = resolvePublicLanguage({
       acceptLanguage: requestHeaders.get("accept-language"),
       country,
+      persistedLanguage: requestHeaders.get(languageRequestHeaderName),
       requestedLanguage: query.lang,
     });
 
