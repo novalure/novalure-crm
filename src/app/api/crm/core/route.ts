@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     // Core data should still load and surface module status if pipeline setup cannot be repaired.
   }
 
-  const data = await getCoreCrmData(auth.session.workspaceId);
+  const data = await getCoreCrmData(auth.session.workspaceId, { session: auth.session });
 
   return NextResponse.json({
     activeWorkspaceId: auth.session.workspaceId,

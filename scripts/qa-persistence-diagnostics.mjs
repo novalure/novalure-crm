@@ -6,6 +6,9 @@ import { neon } from "@neondatabase/serverless";
 const CODEX_PREFIX = "CODEXTEST_";
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 const envFiles = [".env.local", ".env.production.local"];
+const novalureGrowthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
+const novalureGrowthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
+const novalureGrowthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Demo-Formular"];
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -76,6 +79,10 @@ function addCreated(type, id, location, label) {
   createdRecords.push({ type, id, location, label });
 }
 
+function sameArray(actual, expected) {
+  return actual.length === expected.length && actual.every((item, index) => item === expected[index]);
+}
+
 function splitSetCookie(header) {
   if (!header) return [];
   return header.split(/,(?=[^;,]+=)/g);
@@ -85,9 +92,10 @@ function storeCookies(headers) {
   const values =
     typeof headers.getSetCookie === "function"
       ? headers.getSetCookie()
-      : splitSetCookie(headers.get("set-cookie"));
+      : [];
+  const cookieValues = values.length ? values : splitSetCookie(headers.get("set-cookie"));
 
-  for (const value of values) {
+  for (const value of cookieValues) {
     const [cookie] = value.split(";");
     const separator = cookie.indexOf("=");
     if (separator === -1) continue;
@@ -854,6 +862,109 @@ async function runCalendarEventTests(context) {
 async function runKnownGapTests() {
 }
 
+async function runGrowthWorkspaceSeedChecks() {
+  try {
+    const workspaceRows = await dbQuery(
+      "select id, name, slug from workspaces where id = $1 limit 1",
+      [novalureGrowthWorkspaceId],
+    );
+    const workspace = workspaceRows[0];
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "Workspace seed",
+      expected: "Workspace existiert mit stabilem Slug",
+      actual: workspace ? `${workspace.name} / ${workspace.slug ?? ""}` : "nicht gefunden",
+      dbReadConfirmed: workspace?.id === novalureGrowthWorkspaceId ? "ja" : "nein",
+      ok: workspace?.name === "Novalure Growth" && workspace?.slug === "novalure-growth",
+      cause: workspace ? "" : "Novalure Growth Workspace fehlt",
+    });
+
+    const stageRows = await dbQuery(
+      `
+        select s.name
+        from crm_pipeline_stages s
+        join crm_pipelines p on p.id = s.pipeline_id
+        where p.workspace_id = $1
+          and p.key = 'novalure_growth_pipeline'
+        order by s.position asc
+      `,
+      [novalureGrowthWorkspaceId],
+    );
+    const stages = stageRows.map((row) => row.name);
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "Pipeline seed",
+      expected: novalureGrowthStages.join(", "),
+      actual: stages.join(", "),
+      dbReadConfirmed: stages.length ? "ja" : "nein",
+      ok: sameArray(stages, novalureGrowthStages),
+      cause: sameArray(stages, novalureGrowthStages) ? "" : "Pipeline-Stufen weichen von der Growth-Vorgabe ab",
+    });
+
+    const sourceRows = await dbQuery(
+      `
+        select source_value
+        from workspace_lead_sources
+        where workspace_id = $1
+        order by position asc
+      `,
+      [novalureGrowthWorkspaceId],
+    );
+    const sources = sourceRows.map((row) => row.source_value);
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "Lead sources seed",
+      expected: novalureGrowthSources.join(", "),
+      actual: sources.join(", "),
+      dbReadConfirmed: sources.length ? "ja" : "nein",
+      ok: sameArray(sources, novalureGrowthSources),
+      cause: sameArray(sources, novalureGrowthSources) ? "" : "Leadquellen weichen von der Growth-Vorgabe ab",
+    });
+
+    const botRows = await dbQuery(
+      "select name, status from bots where workspace_id = $1 order by name asc",
+      [novalureGrowthWorkspaceId],
+    );
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "Bot seed",
+      expected: "5 Bots, Status inactive",
+      actual: `${botRows.length} Bot(s), Status ${[...new Set(botRows.map((row) => row.status))].join(", ")}`,
+      dbReadConfirmed: botRows.length ? "ja" : "nein",
+      ok: botRows.length === 5 && botRows.every((row) => row.status === "inactive"),
+      cause: botRows.length === 5 && botRows.every((row) => row.status === "inactive")
+        ? ""
+        : "Growth-Bots fehlen oder sind nicht inactive",
+    });
+
+    const moduleRows = await dbQuery(
+      "select module_key, enabled from workspace_module_settings where workspace_id = $1",
+      [novalureGrowthWorkspaceId],
+    );
+    const modules = new Map(moduleRows.map((row) => [row.module_key, row.enabled]));
+    const disabledOk = ["objectsMandates", "units", "reservations", "projectOverview"].every((key) => modules.get(key) === false);
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "enabledModules seed",
+      expected: "Immobilienmodule false, CRM-Module true",
+      actual: ["objectsMandates", "units", "reservations", "projectOverview"].map((key) => `${key}=${modules.get(key)}`).join(", "),
+      dbReadConfirmed: moduleRows.length ? "ja" : "nein",
+      ok: disabledOk,
+      cause: disabledOk ? "" : "Mindestens ein Growth-ausgeblendetes Immobilienmodul ist aktiv oder fehlt",
+    });
+  } catch (error) {
+    addMatrix({
+      entity: "Novalure Growth",
+      operation: "Seed verification",
+      expected: "Growth Workspace Seed ist per DB lesbar",
+      actual: "Fehler",
+      dbReadConfirmed: "nein",
+      ok: false,
+      cause: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function printSchemaCheck() {
   if (!databaseUrl) {
     throw new Error("No database URL found. DATABASE_URL or POSTGRES_URL is required for DB verification.");
@@ -1055,6 +1166,7 @@ async function main() {
   await runNoteTests(context);
   await runCalendarEventTests(context);
   await runKnownGapTests();
+  await runGrowthWorkspaceSeedChecks();
 
   console.log("\nTEST_MATRIX");
   printMarkdownTable(matrix);

@@ -6,6 +6,8 @@ export const databaseEnv = {
 export const crmTables = [
   "workspaces",
   "workspace_users",
+  "workspace_lead_sources",
+  "workspace_module_settings",
   "auth_password_reset_tokens",
   "dashboard_views",
   "projects",

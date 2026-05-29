@@ -31,8 +31,11 @@ import {
 } from "@/lib/i18n";
 
 type ContactCommandCenterProps = {
+  canAssignOwner?: boolean;
+  canWriteContacts?: boolean;
   consents: ConsentRecord[];
   contacts: Contact[];
+  currentUserId?: string;
   language: LanguageCode;
   leads: Lead[];
   onContactsChanged?: () => Promise<void> | void;
@@ -67,7 +70,8 @@ type ContactEditableField =
   | "consent"
   | "email"
   | "phone"
-  | "organizationId";
+  | "organizationId"
+  | "ownerUserId";
 type ContactKind = "person" | "company" | "companyContact";
 
 const LEGACY_CONTACT_STORAGE_KEY = "novalure-contact-records-v1";
@@ -135,6 +139,7 @@ function createContactLeadDraft(contact: Contact): ContactLeadDraft {
 
 function createContactDraft(input: {
   contacts: Contact[];
+  currentUserId?: string;
   organizations: Organization[];
   projects: Project[];
 }): Contact {
@@ -147,6 +152,7 @@ function createContactDraft(input: {
     intent: "",
     name: "",
     organizationId: undefined,
+    ownerUserId: input.currentUserId || input.contacts[0]?.ownerUserId,
     phone: "",
     project: project?.name ?? "",
     projectId: project?.id ?? "",
@@ -177,8 +183,11 @@ const qualityStyles = {
 } as const;
 
 export function ContactCommandCenter({
+  canAssignOwner = false,
+  canWriteContacts = true,
   consents,
   contacts,
+  currentUserId,
   language,
   leads,
   onContactsChanged,
@@ -218,7 +227,7 @@ export function ContactCommandCenter({
   const [activeDetailTab, setActiveDetailTab] = useState<ContactDetailTab>("overview");
   const [newContactKind, setNewContactKind] = useState<ContactKind>("person");
   const [newContact, setNewContact] = useState<Contact>(() =>
-    createContactDraft({ contacts, organizations, projects }),
+    createContactDraft({ contacts, currentUserId, organizations, projects }),
   );
   const [postCreateAction, setPostCreateAction] = useState<ContactPostCreateAction>(null);
   const [postCreateContact, setPostCreateContact] = useState<Contact | null>(null);
@@ -237,8 +246,11 @@ export function ContactCommandCenter({
   const effectiveSelectedContactId = contactRecords.some((contact) => contact.id === selectedContactId)
     ? selectedContactId
     : contactRecords[0]?.id ?? "";
+  const hasSelectedContact = contactRecords.length > 0;
   const selectedContact =
-    contactRecords.find((contact) => contact.id === effectiveSelectedContactId) ?? contactRecords[0];
+    contactRecords.find((contact) => contact.id === effectiveSelectedContactId) ??
+    contactRecords[0] ??
+    createContactDraft({ contacts: contactRecords, currentUserId, organizations, projects });
   const selectedOrganization = selectedContact?.organizationId
     ? organizations.find((organization) => organization.id === selectedContact.organizationId)
     : undefined;
@@ -262,8 +274,10 @@ export function ContactCommandCenter({
         .filter((item) => item.contactId === selectedContact.id)
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
     : [];
-  const contactOwner = selectedOrganization?.ownerUserId
-    ? users.find((user) => user.id === selectedOrganization.ownerUserId)
+  const contactOwner = selectedContact?.ownerUserId
+    ? users.find((user) => user.id === selectedContact.ownerUserId)
+    : selectedOrganization?.ownerUserId
+      ? users.find((user) => user.id === selectedOrganization.ownerUserId)
     : undefined;
   const primaryRelationships = relationships.filter((relationship) => relationship.isPrimary);
   const duplicateSignals = useMemo(
@@ -529,6 +543,7 @@ export function ContactCommandCenter({
       workspaceId: newContact.workspaceId || contacts[0]?.workspaceId || project?.workspaceId || "",
       projectId: project?.id ?? contacts[0]?.projectId ?? "",
       organizationId: newContact.organizationId,
+      ownerUserId: canAssignOwner ? newContact.ownerUserId : undefined,
       name: newContact.name.trim() || newContact.email || newContact.phone || copy.newContactFallback,
       project: project?.name ?? newContact.project,
       intent: newContact.intent || copy.manualIntent,
@@ -548,7 +563,7 @@ export function ContactCommandCenter({
 
     setServerContactOverlays((current) => [persistedContact, ...current.filter((contact) => contact.id !== persistedContact.id)]);
     setSelectedContactId(persistedContact.id);
-    setNewContact(createContactDraft({ contacts: [persistedContact, ...contacts], organizations, projects }));
+    setNewContact(createContactDraft({ contacts: [persistedContact, ...contacts], currentUserId, organizations, projects }));
     setIsCreateOpen(false);
     setActiveView("all");
     if (nextAction === "task") {
@@ -650,6 +665,7 @@ export function ContactCommandCenter({
     }
   };
   const saveSelectedContact = async () => {
+    if (!canWriteContacts) return;
     if (!selectedContact) return;
     if (!selectedContact.name.trim() && !selectedContact.email?.trim() && !selectedContact.phone?.trim()) {
       showFeedback("error", copy.validationRequired);
@@ -673,6 +689,7 @@ export function ContactCommandCenter({
     void refreshAfterContactChange(persistedContact.id);
   };
   const archiveSelectedContact = async () => {
+    if (!canAssignOwner) return;
     if (!selectedContact) return;
 
     try {
@@ -698,7 +715,7 @@ export function ContactCommandCenter({
     }
   };
 
-  if (!selectedContact) {
+  if (!hasSelectedContact && !canWriteContacts) {
     return (
       <section className="rounded-lg border border-dashed border-stone-300 bg-white p-6 text-sm text-stone-600">
         {copy.noContact}
@@ -718,17 +735,23 @@ export function ContactCommandCenter({
             <p className="mt-2 max-w-4xl break-words text-sm text-stone-600">
               {copy.description}
             </p>
-            <button
-              className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={() => {
-                setIsCreateOpen(true);
-                setArchiveConfirmContactId("");
-                clearFeedback();
-              }}
-              type="button"
-            >
-              {copy.addContact}
-            </button>
+            {canWriteContacts ? (
+              <button
+                className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => {
+                  setIsCreateOpen(true);
+                  setArchiveConfirmContactId("");
+                  clearFeedback();
+                }}
+                type="button"
+              >
+                {copy.addContact}
+              </button>
+            ) : (
+              <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-medium text-stone-600">
+                {copy.readOnlyContacts}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
@@ -762,7 +785,7 @@ export function ContactCommandCenter({
             {feedback.message}
           </div>
         ) : null}
-        {isCreateOpen ? (
+        {isCreateOpen && canWriteContacts ? (
           <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h4 className="text-lg font-semibold">
@@ -939,6 +962,23 @@ export function ContactCommandCenter({
                   value={postCreateTaskDraft.title}
                 />
               </label>
+              {canAssignOwner ? (
+                <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                  {copy.owner}
+                  <select
+                    className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                    onChange={(event) => updateNewContact("ownerUserId", event.target.value)}
+                    value={newContact.ownerUserId ?? ""}
+                  >
+                    <option value="">{copy.unassigned}</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="text-xs font-semibold uppercase tracking-[0.12em] md:col-span-2">
                 {copy.taskDescription}
                 <textarea
@@ -1280,41 +1320,47 @@ export function ContactCommandCenter({
                   <h5 className="text-sm font-semibold">
                     {copy.editContact}
                   </h5>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    {archiveConfirmContactId === selectedContact.id ? (
-                      <>
+                  {canWriteContacts ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      {canAssignOwner && archiveConfirmContactId === selectedContact.id ? (
+                        <>
+                          <button
+                            className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100"
+                            onClick={() => setArchiveConfirmContactId("")}
+                            type="button"
+                          >
+                            {copy.cancelArchive}
+                          </button>
+                          <button
+                            className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
+                            onClick={() => void archiveSelectedContact()}
+                            type="button"
+                          >
+                            {copy.confirmArchive}
+                          </button>
+                        </>
+                      ) : canAssignOwner ? (
                         <button
-                          className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100"
-                          onClick={() => setArchiveConfirmContactId("")}
+                          className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-50"
+                          onClick={() => setArchiveConfirmContactId(selectedContact.id)}
                           type="button"
                         >
-                          {copy.cancelArchive}
+                          {copy.archiveContact}
                         </button>
-                        <button
-                          className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
-                          onClick={() => void archiveSelectedContact()}
-                          type="button"
-                        >
-                          {copy.confirmArchive}
-                        </button>
-                      </>
-                    ) : (
+                      ) : null}
                       <button
-                        className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-50"
-                        onClick={() => setArchiveConfirmContactId(selectedContact.id)}
+                        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                        onClick={() => void saveSelectedContact()}
                         type="button"
                       >
-                        {copy.archiveContact}
+                        {copy.saveChanges}
                       </button>
-                    )}
-                    <button
-                      className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                      onClick={() => void saveSelectedContact()}
-                      type="button"
-                    >
-                      {copy.saveChanges}
-                    </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600">
+                      {copy.readOnlyContacts}
+                    </p>
+                  )}
                 </div>
                 {archiveConfirmContactId === selectedContact.id ? (
                   <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -1390,6 +1436,23 @@ export function ContactCommandCenter({
                       ))}
                     </select>
                   </label>
+                  {canAssignOwner ? (
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                      {copy.owner}
+                      <select
+                        className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                        onChange={(event) => updateSelectedContact("ownerUserId", event.target.value)}
+                        value={selectedContact.ownerUserId ?? ""}
+                      >
+                        <option value="">{copy.unassigned}</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {copy.need}
                     <input

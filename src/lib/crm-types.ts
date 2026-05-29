@@ -38,9 +38,14 @@ export const CRM_LEAD_SOURCES = [
   "willhaben",
   "ImmobilienScout",
   "Empfehlung",
+  "LinkedIn",
+  "Partner",
+  "Event",
   "WhatsApp",
   "Instagram",
   "Newsletter",
+  "Outbound",
+  "Demo-Formular",
   "Manual",
 ] as const;
 
@@ -50,6 +55,7 @@ export type LeadType = "Käufer" | "Verkäufer" | "Investor" | "Bauträger" | "M
 
 export type LeadStatus =
   | "Neu"
+  | "Qualifiziert"
   | "Qualifizieren"
   | "Termin offen"
   | "Übergabe"
@@ -77,8 +83,12 @@ export type DealStage =
   | "Vertragsprüfung"
   | "Vertragspruefung"
   | "Anfrage"
+  | "Qualifiziert"
+  | "Demo gebucht"
+  | "Demo gehalten"
   | "Audit geplant"
   | "Angebot"
+  | "Pilot"
   | "Onboarding"
   | "Aktiv"
   | "Pausiert / Verloren"
@@ -161,6 +171,7 @@ export type Contact = {
   workspaceId: ID;
   projectId: ID;
   organizationId?: ID;
+  ownerUserId?: ID;
   name: string;
   role: LeadType;
   project: string;
@@ -552,6 +563,39 @@ export type Task = {
   status: "open" | "done";
 };
 
+export type DailyQueueSectionId =
+  | "hotLeads"
+  | "demoFollowUps"
+  | "overdueOffers"
+  | "todayAppointments"
+  | "pilotAttention";
+
+export type DailyQueueActionSection = "leadInbox" | "tasks" | "calendar" | "pipelines";
+
+export type DailyQueueCard = {
+  actionLabel: string;
+  actionSection: DailyQueueActionSection;
+  daysInStage: number;
+  id: ID;
+  nextAction: string;
+  owner: string;
+  source: LeadSource | string;
+  stage: string;
+  title: string;
+};
+
+export type DailyQueueSection = {
+  cards: DailyQueueCard[];
+  emptyText: { de: string; en: string };
+  id: DailyQueueSectionId;
+  title: { de: string; en: string };
+};
+
+export type DailyQueueData = {
+  generatedAt: string;
+  sections: DailyQueueSection[];
+};
+
 export type CalendarEvent = {
   id: ID;
   workspaceId: ID;
@@ -850,7 +894,7 @@ export type Automation = {
   detail: string;
 };
 
-export type CrmBotStatus = "draft" | "test" | "active" | "paused" | "error";
+export type CrmBotStatus = "inactive" | "draft" | "test" | "active" | "paused" | "error";
 
 export type CrmBotRole =
   | "support_agent"

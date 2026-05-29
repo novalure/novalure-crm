@@ -521,6 +521,7 @@ function canInviteWorkspaceUsers(session: AppSession) {
   if (session.role === "owner" || session.role === "admin") return true;
   return (
     session.productRole === "platform_admin" ||
+    session.productRole === "novalureAdmin" ||
     session.productRole === "customer_owner" ||
     session.productRole === "workspace_admin" ||
     session.productRole === "novalure_onboarding" ||

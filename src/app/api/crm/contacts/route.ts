@@ -49,7 +49,7 @@ function getContactIdFromRequest(request: Request, body?: Record<string, unknown
 }
 
 export async function POST(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);

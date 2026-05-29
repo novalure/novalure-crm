@@ -47,6 +47,7 @@ import { NewsletterCommandCenter } from "@/components/newsletter-command-center"
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
+import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type {
   CalendarEvent,
@@ -68,9 +69,11 @@ import type {
 } from "@/lib/crm-types";
 import {
   createWorkspaceProductContext,
+  isWorkspaceModuleEnabled,
   hasProductCapability,
   type CalendarProviderChoice,
   type ProductRole,
+  type WorkspaceModuleKey,
   type WorkspaceCustomerType,
   type WorkspaceOperatingModel,
   type WorkspaceProductContext,
@@ -147,6 +150,7 @@ type ManagedWorkspaceOption = {
   name: string;
   operatingModel?: WorkspaceOperatingModel | null;
   productRole?: ProductRole | null;
+  setupState?: Record<string, unknown> | null;
   teamStructure?: WorkspaceTeamStructure | null;
 };
 
@@ -162,7 +166,10 @@ type NavigationPresetId =
   | "assistant"
   | "management"
   | "newUser"
-  | "admin";
+  | "admin"
+  | "novalureGrowth"
+  | "novalureServiceOps"
+  | "novalureAdmin";
 
 type NavigationEntryId =
   | "analysis"
@@ -181,10 +188,12 @@ type NavigationEntryId =
   | "customerReport"
   | "customerSuccess"
   | "customerSwitch"
+  | "customerWorkspaces"
   | "dashboard"
   | "dailyQueue"
   | "dataHygiene"
   | "demosTrials"
+  | "deals"
   | "developerLeads"
   | "forms"
   | "followUpQueue"
@@ -202,10 +211,16 @@ type NavigationEntryId =
   | "projects"
   | "reservations"
   | "sellerLeads"
+  | "serviceCockpit"
   | "settings"
   | "slaCockpit"
+  | "systemReleases"
   | "tasks"
+  | "ticketsSupport"
   | "units"
+  | "usersRoles"
+  | "governanceCompliance"
+  | "botGovernance"
   | "workspaces";
 
 type QuickActionId =
@@ -248,6 +263,9 @@ const navigationPresetOrder: NavigationPresetId[] = [
   "admin",
   "managedService",
   "hybridRealEstate",
+  "novalureGrowth",
+  "novalureServiceOps",
+  "novalureAdmin",
 ];
 
 const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
@@ -258,6 +276,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "workspaces",
       "projects",
       "leadInbox",
+      "contacts",
       "pipelines",
       "tasks",
       "calendar",
@@ -302,6 +321,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     navigationEntries: [
       "projectOverview",
       "developerLeads",
+      "contacts",
       "units",
       "reservations",
       "projectPipeline",
@@ -322,6 +342,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "managedService",
       "slaCockpit",
       "leadInbox",
+      "contacts",
       "communication",
       "tasks",
       "followUpQueue",
@@ -423,6 +444,58 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     startEntry: "settings",
     quickActions: ["dataHygiene", "leadInbox", "newsletter", "bots", "newProject"],
   },
+  novalureGrowth: {
+    mobilePanels: ["hotLeads", "meetings", "tasks"],
+    navigationEntries: [
+      "dailyQueue",
+      "leadInbox",
+      "contacts",
+      "pipelines",
+      "deals",
+      "appointments",
+      "tasks",
+      "communication",
+      "funnels",
+      "newsletter",
+      "bots",
+      "knowledge",
+      "analytics",
+    ],
+    startSection: "dailyQueue",
+    startEntry: "dailyQueue",
+    quickActions: ["leadInbox", "pipeline", "tasks", "meetings", "funnels"],
+  },
+  novalureServiceOps: {
+    mobilePanels: ["overdueSla", "meetings", "tasks"],
+    navigationEntries: [
+      "serviceCockpit",
+      "customerWorkspaces",
+      "onboarding",
+      "ticketsSupport",
+      "knowledge",
+      "appointments",
+      "tasks",
+    ],
+    startSection: "customerSuccess",
+    startEntry: "serviceCockpit",
+    quickActions: ["customerAccess", "tasks", "meetings", "dataHygiene"],
+  },
+  novalureAdmin: {
+    mobilePanels: ["overdueSla", "meetings", "tasks"],
+    navigationEntries: [
+      "workspaces",
+      "usersRoles",
+      "dataHygiene",
+      "auditLog",
+      "governanceCompliance",
+      "botGovernance",
+      "systemReleases",
+      "settings",
+    ],
+    startSection: "settings",
+    startEntry: "workspaces",
+    quickActions: ["customerAccess", "dataHygiene", "bots", "analysis", "newProject"],
+  },
 };
 
 const quickActionSections: Partial<Record<QuickActionId, DashboardSection>> = {
@@ -464,10 +537,12 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   customerReport: { id: "customerReport", section: "managedService" },
   customerSuccess: { id: "customerSuccess", section: "customerSuccess" },
   customerSwitch: { id: "customerSwitch", section: "managedService" },
+  customerWorkspaces: { id: "customerWorkspaces", section: "customerAccess" },
   dashboard: { id: "dashboard", section: "dashboard" },
   dailyQueue: { id: "dailyQueue", section: "dailyQueue" },
   dataHygiene: { id: "dataHygiene", section: "dataHygiene" },
   demosTrials: { id: "demosTrials", section: "onboarding" },
+  deals: { id: "deals", section: "pipelines" },
   developerLeads: { id: "developerLeads", section: "leadInbox" },
   forms: { id: "forms", section: "forms" },
   followUpQueue: { id: "followUpQueue", section: "tasks" },
@@ -485,14 +560,45 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   projects: { id: "projects", section: "projects" },
   reservations: { id: "reservations", section: "reservations" },
   sellerLeads: { id: "sellerLeads", leadTypes: ["Verkäufer"], section: "leadInbox" },
+  serviceCockpit: { id: "serviceCockpit", section: "customerSuccess" },
   settings: { id: "settings", section: "settings" },
   slaCockpit: { id: "slaCockpit", section: "leadInbox" },
+  systemReleases: { id: "systemReleases", section: "settings" },
   tasks: { id: "tasks", section: "tasks" },
+  ticketsSupport: { id: "ticketsSupport", section: "customerSuccess" },
   units: { id: "units", section: "units" },
+  usersRoles: { id: "usersRoles", section: "customerAccess" },
+  governanceCompliance: { id: "governanceCompliance", section: "settings" },
+  botGovernance: { id: "botGovernance", section: "bots" },
   workspaces: { id: "workspaces", section: "managedService" },
 };
 
+const moduleBySection: Partial<Record<DashboardSection, WorkspaceModuleKey>> = {
+  analytics: "analytics",
+  bots: "bots",
+  calendar: "calendar",
+  communication: "communication",
+  contacts: "contacts",
+  dailyQueue: "dashboard",
+  dashboard: "dashboard",
+  forms: "funnels",
+  funnels: "funnels",
+  knowledge: "knowledge",
+  leadInbox: "leadInbox",
+  newsletter: "newsletter",
+  objectsMandates: "objectsMandates",
+  pipelines: "pipeline",
+  projects: "projectOverview",
+  reservations: "reservations",
+  settings: "settings",
+  tasks: "tasks",
+  units: "units",
+};
+
 function getDefaultNavigationPresetId(context: WorkspaceProductContext): NavigationPresetId {
+  if (context.productRole === "novalureGrowth") return "novalureGrowth";
+  if (context.productRole === "novalureServiceOps") return "novalureServiceOps";
+  if (context.productRole === "novalureAdmin") return "novalureAdmin";
   if (context.operatingModel === "novalure_internal") return "novalureInternal";
   if (context.operatingModel === "managed_by_novalure") return "managedService";
   if (context.customerType === "property_developer") return "propertyDeveloper";
@@ -503,6 +609,8 @@ function getDefaultNavigationPresetId(context: WorkspaceProductContext): Navigat
 }
 
 function getAllowedNavigationPresetIds(context: WorkspaceProductContext): NavigationPresetId[] {
+  if (context.productRole === "novalureGrowth") return ["novalureGrowth"];
+  if (context.productRole === "novalureServiceOps") return ["novalureServiceOps"];
   if (hasProductCapability(context.productRole, "novalure:internal")) {
     return navigationPresetOrder;
   }
@@ -794,6 +902,7 @@ type CrmWorkspaceProps = {
   initialLanguage?: LanguageCode;
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
+  sessionUserId: string;
   sessionWorkspace: {
     activeCalendarProvider?: CalendarProviderChoice;
     customerType?: WorkspaceCustomerType;
@@ -1807,25 +1916,31 @@ function RolePriorityPanel({
     unlinkedTasks: openTasks.filter((task) => !task.contactId || !task.projectId).length,
   };
   const prioritizedMetricKeys: Array<keyof typeof metricValues> =
-    presetId === "management"
-      ? ["pipeline", "riskDeals", "hotLeads", "appointments"]
-      : presetId === "salesLead"
-        ? ["noOwner", "riskDeals", "openTasks", "pipeline"]
-      : presetId === "marketing"
-        ? ["hotLeads", "appointments", "pipeline", "openTasks"]
-      : presetId === "assistant"
-        ? ["unlinkedTasks", "noOwner", "openTasks", "appointments"]
-        : presetId === "admin"
-          ? ["noOwner", "unlinkedTasks", "openTasks", "riskDeals"]
-        : presetId === "newUser"
-          ? ["hotLeads", "openTasks", "appointments", "pipeline"]
-        : presetId === "sales" || presetId === "realEstateBroker"
-          ? ["hotLeads", "openTasks", "appointments", "pipeline"]
-          : presetId === "propertyDeveloper"
-            ? ["hotLeads", "appointments", "pipeline", "riskDeals"]
-            : presetId === "novalureInternal" || presetId === "managedService"
-              ? ["noOwner", "openTasks", "riskDeals", "appointments"]
-              : ["hotLeads", "openTasks", "pipeline", "appointments"];
+    presetId === "novalureGrowth"
+      ? ["hotLeads", "appointments", "openTasks", "pipeline"]
+      : presetId === "novalureServiceOps"
+        ? ["riskDeals", "appointments", "openTasks", "noOwner"]
+        : presetId === "novalureAdmin"
+          ? ["noOwner", "unlinkedTasks", "riskDeals", "openTasks"]
+          : presetId === "management"
+            ? ["pipeline", "riskDeals", "hotLeads", "appointments"]
+            : presetId === "salesLead"
+              ? ["noOwner", "riskDeals", "openTasks", "pipeline"]
+              : presetId === "marketing"
+                ? ["hotLeads", "appointments", "pipeline", "openTasks"]
+                : presetId === "assistant"
+                  ? ["unlinkedTasks", "noOwner", "openTasks", "appointments"]
+                  : presetId === "admin"
+                    ? ["noOwner", "unlinkedTasks", "openTasks", "riskDeals"]
+                    : presetId === "newUser"
+                      ? ["hotLeads", "openTasks", "appointments", "pipeline"]
+                      : presetId === "sales" || presetId === "realEstateBroker"
+                        ? ["hotLeads", "openTasks", "appointments", "pipeline"]
+                        : presetId === "propertyDeveloper"
+                          ? ["hotLeads", "appointments", "pipeline", "riskDeals"]
+                          : presetId === "novalureInternal" || presetId === "managedService"
+                            ? ["noOwner", "openTasks", "riskDeals", "appointments"]
+                            : ["hotLeads", "openTasks", "pipeline", "appointments"];
 
   return (
     <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
@@ -2569,6 +2684,7 @@ export function CrmWorkspace({
   initialLanguage = defaultLanguage,
   sessionProductRole,
   sessionRole,
+  sessionUserId,
   sessionWorkspace,
 }: CrmWorkspaceProps) {
   const initialProductContext = createWorkspaceProductContext({
@@ -2577,6 +2693,7 @@ export function CrmWorkspace({
     operatingModel: sessionWorkspace.operatingModel ?? workspace.operatingModel,
     productRole: sessionProductRole,
     projects: coreData.projects,
+    setupState: sessionWorkspace.setupState ?? workspace.setupState,
     teamStructure: sessionWorkspace.teamStructure ?? workspace.teamStructure,
     technicalRole: sessionRole,
     workspaceId: sessionWorkspace.id,
@@ -2610,6 +2727,7 @@ export function CrmWorkspace({
     name: sessionWorkspace.name,
     operatingModel: sessionWorkspace.operatingModel ?? workspace.operatingModel ?? "self_service_customer",
     productRole: sessionProductRole,
+    setupState: sessionWorkspace.setupState ?? workspace.setupState ?? {},
     teamStructure: sessionWorkspace.teamStructure ?? workspace.teamStructure ?? "small_team",
   }));
   const [availableWorkspaces, setAvailableWorkspaces] = useState<ManagedWorkspaceOption[]>([]);
@@ -2650,6 +2768,13 @@ export function CrmWorkspace({
   const canUseWorkspaceSwitch =
     hasProductCapability(sessionProductRole, "managed-service:operate") &&
     hasProductCapability(sessionProductRole, "novalure:internal");
+  const contactAccessActor = {
+    productRole: sessionProductRole,
+    role: sessionRole,
+    userId: sessionUserId,
+  };
+  const canCreateOrEditContacts = canWriteContacts(contactAccessActor);
+  const canManageContactOwners = canAssignContactOwner(contactAccessActor);
 
   const refreshCoreData = useCallback(async (workspaceId = activeWorkspace.id) => {
     setCoreDataStatus("loading");
@@ -2692,6 +2817,7 @@ export function CrmWorkspace({
       name: activeWorkspace.name,
       operatingModel: activeWorkspace.operatingModel,
       productRole: activeWorkspace.productRole,
+      setupState: activeWorkspace.setupState,
       teamStructure: activeWorkspace.teamStructure,
     };
     let cancelled = false;
@@ -2729,6 +2855,7 @@ export function CrmWorkspace({
     activeWorkspace.name,
     activeWorkspace.operatingModel,
     activeWorkspace.productRole,
+    activeWorkspace.setupState,
     activeWorkspace.teamStructure,
     canUseWorkspaceSwitch,
   ]);
@@ -2790,6 +2917,7 @@ export function CrmWorkspace({
     operatingModel: workspaceSetup.operatingModel ?? activeWorkspace.operatingModel,
     productRole: sessionProductRole,
     projects: allProjects,
+    setupState: activeWorkspace.setupState ?? sessionWorkspace.setupState ?? workspace.setupState,
     teamStructure: workspaceSetup.teamStructure ?? activeWorkspace.teamStructure,
     technicalRole: sessionRole,
     workspaceId: activeWorkspace.id,
@@ -2807,13 +2935,17 @@ export function CrmWorkspace({
     ? copy.shell.expandNavigation
     : copy.shell.collapseNavigation;
   const navigationLabels = copy.navigation as Record<string, string>;
-  const profileNavigationItems = normalizedActivePreset.navigationEntries.map((entryId) => ({
+  const enabledNavigationEntryIds = normalizedActivePreset.navigationEntries.filter((entryId) => {
+    const moduleKey = moduleBySection[navigationEntries[entryId].section];
+    return !moduleKey || isWorkspaceModuleEnabled(workspaceContext.enabledModules, moduleKey);
+  });
+  const profileNavigationItems = enabledNavigationEntryIds.map((entryId) => ({
     ...navigationEntries[entryId],
     label: navigationLabels[entryId] ?? navigationLabels[navigationEntries[entryId].section],
   }));
   const activeNavigationEntry =
     navigationEntries[activeNavigationEntryId] ?? navigationEntries[normalizedActivePreset.startEntry];
-  const activeNavigationAllowed = normalizedActivePreset.navigationEntries.includes(
+  const activeNavigationAllowed = enabledNavigationEntryIds.includes(
     activeNavigationEntry.id,
   );
   const visibleActiveNavigationEntry = activeNavigationAllowed
@@ -3921,6 +4053,7 @@ export function CrmWorkspace({
               automations={visibleAutomations}
               bots={visibleCrmBots}
               callInsights={visibleBotCallInsights}
+              canManageBotSetup={hasProductCapability(workspaceContext.productRole, "bots:publish")}
               conversations={visibleCrmBotConversations}
               knowledgeItems={visibleKnowledgeBase}
               language={language}
@@ -4006,6 +4139,7 @@ export function CrmWorkspace({
             {visibleActiveSection === "dailyQueue" ? (
               <DailyQueueBoard
                 contacts={visibleContacts}
+                dailyQueue={liveCoreData.dailyQueue}
                 events={visibleCalendarEvents}
                 language={language}
                 leads={visibleLeads}
@@ -4035,8 +4169,11 @@ export function CrmWorkspace({
 
               {visibleActiveSection === "contacts" ? (
                 <ContactCommandCenter
+                  canAssignOwner={canManageContactOwners}
+                  canWriteContacts={canCreateOrEditContacts}
                   consents={visibleConsents}
                   contacts={visibleContacts}
+                  currentUserId={sessionUserId}
                   language={language}
                   leads={visibleLeads}
                   onContactsChanged={async () => {
@@ -4046,7 +4183,9 @@ export function CrmWorkspace({
                   projects={allProjects}
                   relationships={visibleContactRelationships}
                   showTechnicalFields={
-                    (normalizedActivePresetId === "admin" || normalizedActivePresetId === "novalureInternal") &&
+                    (normalizedActivePresetId === "admin" ||
+                      normalizedActivePresetId === "novalureInternal" ||
+                      normalizedActivePresetId === "novalureAdmin") &&
                     (hasProductCapability(workspaceContext.productRole, "workspace:admin") ||
                       hasProductCapability(workspaceContext.productRole, "novalure:internal"))
                   }
