@@ -476,6 +476,7 @@ export async function persistWebsiteFormSubmission(input: {
     intent,
     leadType,
     name,
+    ownerUserId: assignedOwnerId,
     phone,
     projectId: lookup.projectId,
     source,
@@ -826,6 +827,7 @@ async function upsertContact(input: {
   intent: string;
   leadType: string;
   name: string;
+  ownerUserId: string | null;
   phone: string;
   projectId: string | null;
   source: string;
@@ -854,15 +856,16 @@ async function upsertContact(input: {
       `
         update contacts
         set
-          project_id = coalesce($3, project_id),
-          name = coalesce(nullif($4, ''), name),
-          role = $5,
-          source = $6,
-          intent = $7,
-          consent_label = $8,
-          email = coalesce(nullif($9, ''), email),
-          phone = coalesce(nullif($10, ''), phone),
-          metadata = metadata || $11::jsonb,
+          owner_user_id = coalesce(owner_user_id, $3::uuid),
+          project_id = coalesce($4, project_id),
+          name = coalesce(nullif($5, ''), name),
+          role = $6,
+          source = $7,
+          intent = $8,
+          consent_label = $9,
+          email = coalesce(nullif($10, ''), email),
+          phone = coalesce(nullif($11, ''), phone),
+          metadata = metadata || $12::jsonb,
           updated_at = now()
         where workspace_id = $1 and id = $2
         returning id
@@ -870,6 +873,7 @@ async function upsertContact(input: {
       [
         input.workspaceId,
         existing.id,
+        input.ownerUserId,
         input.projectId,
         input.name,
         input.leadType,
@@ -888,14 +892,15 @@ async function upsertContact(input: {
   const contact = await queryOne<IdRow>(
     `
       insert into contacts (
-        workspace_id, project_id, name, role, source, intent, consent_label, email, phone, metadata
+        workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
       )
-      values ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), nullif($9, ''), $10::jsonb)
+      values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
       returning id
     `,
     [
       input.workspaceId,
       input.projectId,
+      input.ownerUserId,
       input.name,
       input.leadType,
       input.source,

@@ -66,6 +66,23 @@ async function queryOne(query, params = []) {
   return rows[0] ?? null;
 }
 
+function splitSql(sqlText) {
+  return sqlText
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+}
+
+async function applyMigration(path) {
+  const statements = splitSql(fs.readFileSync(path, "utf8"));
+  for (const statement of statements) {
+    await sql.query(statement);
+  }
+}
+
+await applyMigration("migrations/029_contact_owner_scope.sql");
+await applyMigration("migrations/030_novalure_growth_workspace.sql");
+
 const workspaces = {
   internal: {
     id: stableUuid("workspace:internal"),

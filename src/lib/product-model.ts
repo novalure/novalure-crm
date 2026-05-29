@@ -24,6 +24,9 @@ export type CalendarProviderChoice = "microsoft" | "google" | "none";
 
 export type ProductRole =
   | "platform_admin"
+  | "novalureGrowth"
+  | "novalureServiceOps"
+  | "novalureAdmin"
   | "novalure_sales"
   | "novalure_onboarding"
   | "novalure_customer_success"
@@ -45,6 +48,7 @@ export type ProductCapability =
   | "customer-access:manage"
   | "customer-access:read"
   | "funnels:publish"
+  | "growth-workspace:operate"
   | "knowledge:write"
   | "managed-service:operate"
   | "newsletter:send"
@@ -60,13 +64,102 @@ export type WorkspaceProductContext = {
   activeCalendarProvider: CalendarProviderChoice;
   connectedCalendarProviders: CalendarProviderChoice[];
   customerType: WorkspaceCustomerType;
+  enabledModules: WorkspaceEnabledModules;
+  isNovalureGrowthWorkspace: boolean;
   operatingModel: WorkspaceOperatingModel;
   productRole: ProductRole;
+  setupState?: Record<string, unknown> | null;
   teamStructure: WorkspaceTeamStructure;
   workspaceId: string;
   workspaceName: string;
   workspacePlan: string;
 };
+
+export const NOVALURE_GROWTH_WORKSPACE_ID = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
+export const NOVALURE_GROWTH_WORKSPACE_NAME = "Novalure Growth";
+export const NOVALURE_GROWTH_WORKSPACE_SLUG = "novalure-growth";
+
+export const NOVALURE_GROWTH_PIPELINE_STAGES = [
+  { key: "new", name: "Neu", probability: 5 },
+  { key: "qualified", name: "Qualifiziert", probability: 20 },
+  { key: "demo_booked", name: "Demo gebucht", probability: 35 },
+  { key: "demo_held", name: "Demo gehalten", probability: 50 },
+  { key: "offer", name: "Angebot", probability: 65 },
+  { key: "pilot", name: "Pilot", probability: 80 },
+  { key: "won", name: "Gewonnen", probability: 100, category: "won" },
+  { key: "lost", name: "Verloren", probability: 0, category: "lost" },
+] as const;
+
+export const NOVALURE_GROWTH_LEAD_SOURCES = [
+  "Website",
+  "Empfehlung",
+  "LinkedIn",
+  "Partner",
+  "Event",
+  "Newsletter",
+  "Outbound",
+  "Demo-Formular",
+] as const;
+
+export type NovalureGrowthLeadSource = (typeof NOVALURE_GROWTH_LEAD_SOURCES)[number];
+
+export type WorkspaceModuleKey =
+  | "dashboard"
+  | "leadInbox"
+  | "contacts"
+  | "pipeline"
+  | "deals"
+  | "tasks"
+  | "calendar"
+  | "communication"
+  | "funnels"
+  | "newsletter"
+  | "bots"
+  | "knowledge"
+  | "analytics"
+  | "settings"
+  | "objectsMandates"
+  | "units"
+  | "reservations"
+  | "projectOverview";
+
+export type WorkspaceEnabledModules = Record<WorkspaceModuleKey, boolean>;
+
+export const workspaceModuleKeys: WorkspaceModuleKey[] = [
+  "dashboard",
+  "leadInbox",
+  "contacts",
+  "pipeline",
+  "deals",
+  "tasks",
+  "calendar",
+  "communication",
+  "funnels",
+  "newsletter",
+  "bots",
+  "knowledge",
+  "analytics",
+  "settings",
+  "objectsMandates",
+  "units",
+  "reservations",
+  "projectOverview",
+];
+
+export const defaultWorkspaceEnabledModules: WorkspaceEnabledModules = workspaceModuleKeys.reduce(
+  (modules, key) => {
+    modules[key] = true;
+    return modules;
+  },
+  {} as WorkspaceEnabledModules,
+);
+
+export const novalureGrowthDisabledModules: WorkspaceModuleKey[] = [
+  "objectsMandates",
+  "units",
+  "reservations",
+  "projectOverview",
+];
 
 export const workspaceOperatingModels: WorkspaceOperatingModel[] = [
   "self_service_customer",
@@ -109,6 +202,40 @@ const productRoleCapabilities: Record<ProductRole, ProductCapability[]> = {
     "novalure:internal",
     "pipeline:write",
     "reservations:write",
+    "settings:manage",
+    "workspace:admin",
+    "workspace:operate",
+    "workspace:read",
+  ],
+  novalureGrowth: [
+    "analytics:read",
+    "calendar:manage",
+    "funnels:publish",
+    "growth-workspace:operate",
+    "knowledge:write",
+    "newsletter:send",
+    "pipeline:write",
+    "workspace:operate",
+    "workspace:read",
+  ],
+  novalureServiceOps: [
+    "analytics:read",
+    "calendar:manage",
+    "customer-access:read",
+    "knowledge:write",
+    "managed-service:operate",
+    "novalure:internal",
+    "workspace:operate",
+    "workspace:read",
+  ],
+  novalureAdmin: [
+    "analytics:read",
+    "bots:publish",
+    "customer-access:manage",
+    "customer-access:read",
+    "knowledge:write",
+    "managed-service:operate",
+    "novalure:internal",
     "settings:manage",
     "workspace:admin",
     "workspace:operate",
@@ -274,8 +401,9 @@ export function isNovalureProductRole(role: ProductRole) {
 }
 
 export function mapProductRoleToTechnicalRole(role: ProductRole): TechnicalAppRole {
-  if (role === "platform_admin" || role === "customer_owner") return "owner";
+  if (role === "platform_admin" || role === "novalureAdmin" || role === "customer_owner") return "owner";
   if (
+    role === "novalureServiceOps" ||
     role === "novalure_onboarding" ||
     role === "novalure_customer_success" ||
     role === "workspace_admin"
@@ -283,6 +411,7 @@ export function mapProductRoleToTechnicalRole(role: ProductRole): TechnicalAppRo
     return "admin";
   }
   if (
+    role === "novalureGrowth" ||
     role === "novalure_sales" ||
     role === "novalure_operator" ||
     role === "broker_agent" ||
@@ -295,12 +424,67 @@ export function mapProductRoleToTechnicalRole(role: ProductRole): TechnicalAppRo
   return "assistant";
 }
 
+export function isNovalureGrowthLeadSource(value: unknown): value is NovalureGrowthLeadSource {
+  return typeof value === "string" && NOVALURE_GROWTH_LEAD_SOURCES.includes(value as NovalureGrowthLeadSource);
+}
+
+export function isNovalureGrowthWorkspace(input: {
+  setupState?: Record<string, unknown> | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+}) {
+  const setupState = input.setupState ?? {};
+  const workspaceKey = typeof setupState.workspaceKey === "string" ? setupState.workspaceKey : "";
+  const slug = typeof setupState.slug === "string" ? setupState.slug : "";
+  return (
+    input.workspaceId === NOVALURE_GROWTH_WORKSPACE_ID ||
+    input.workspaceName === NOVALURE_GROWTH_WORKSPACE_NAME ||
+    workspaceKey === NOVALURE_GROWTH_WORKSPACE_SLUG ||
+    slug === NOVALURE_GROWTH_WORKSPACE_SLUG
+  );
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+export function getWorkspaceEnabledModules(input: {
+  setupState?: Record<string, unknown> | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+} = {}): WorkspaceEnabledModules {
+  const configured = getRecord(input.setupState?.enabledModules);
+  const modules = { ...defaultWorkspaceEnabledModules };
+
+  if (isNovalureGrowthWorkspace(input)) {
+    for (const key of novalureGrowthDisabledModules) {
+      modules[key] = false;
+    }
+  }
+
+  for (const key of workspaceModuleKeys) {
+    if (typeof configured[key] === "boolean") {
+      modules[key] = configured[key] as boolean;
+    }
+  }
+
+  return modules;
+}
+
+export function isWorkspaceModuleEnabled(
+  modules: WorkspaceEnabledModules,
+  key: WorkspaceModuleKey,
+) {
+  return modules[key] !== false;
+}
+
 export function resolveProductRole(input: {
   productRole?: ProductRole | null;
   technicalRole: TechnicalAppRole;
   workspaceName?: string | null;
 }) {
   if (input.productRole) return input.productRole;
+  if (input.workspaceName === NOVALURE_GROWTH_WORKSPACE_NAME) return "novalureGrowth";
 
   const internalWorkspace = isNovalureWorkspaceName(input.workspaceName);
   if (internalWorkspace) {
@@ -358,6 +542,7 @@ export function createWorkspaceProductContext(input: {
   operatingModel?: WorkspaceOperatingModel | null;
   productRole?: ProductRole | null;
   projects?: Pick<Project, "name" | "type">[];
+  setupState?: Record<string, unknown> | null;
   teamStructure?: WorkspaceTeamStructure | null;
   technicalRole: TechnicalAppRole;
   workspaceId: string;
@@ -379,13 +564,25 @@ export function createWorkspaceProductContext(input: {
     productRole,
     workspaceName: input.workspaceName,
   });
+  const enabledModules = getWorkspaceEnabledModules({
+    setupState: input.setupState,
+    workspaceId: input.workspaceId,
+    workspaceName: input.workspaceName,
+  });
 
   return {
     activeCalendarProvider: input.activeCalendarProvider ?? "none",
     connectedCalendarProviders: input.connectedCalendarProviders ?? [],
     customerType,
+    enabledModules,
+    isNovalureGrowthWorkspace: isNovalureGrowthWorkspace({
+      setupState: input.setupState,
+      workspaceId: input.workspaceId,
+      workspaceName: input.workspaceName,
+    }),
     operatingModel,
     productRole,
+    setupState: input.setupState,
     teamStructure: input.teamStructure ?? inferTeamStructure(customerType, operatingModel),
     workspaceId: input.workspaceId,
     workspaceName: input.workspaceName,

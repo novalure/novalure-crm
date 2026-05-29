@@ -340,15 +340,16 @@ export async function persistFunnelSubmission(input: {
     ? await queryOne<IdRow>(
         `
           insert into contacts (
-            workspace_id, project_id, name, role, source, intent, consent_label, email, phone, metadata
+            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+          values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
           on conflict do nothing
           returning id
         `,
         [
           input.session.workspaceId,
           funnel.projectId,
+          funnel.ownerUserId,
           contactName,
           leadType,
           input.blueprint.entryChannel,
@@ -367,14 +368,15 @@ export async function persistFunnelSubmission(input: {
       await queryOne<IdRow>(
         `
           insert into contacts (
-            workspace_id, project_id, name, role, source, intent, consent_label, email, phone, metadata
+            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+          values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
           returning id
         `,
         [
           input.session.workspaceId,
           funnel.projectId,
+          funnel.ownerUserId,
           contactName,
           leadType,
           input.blueprint.entryChannel,
@@ -1393,6 +1395,7 @@ export async function upsertBotCrmEntities(input: {
   const hotStatus = score >= 70;
   const intent = input.prompt.slice(0, 260);
   const nextAction = cleanString(input.nextAction) || (hotStatus ? "Lead prüfen und Termin vorbereiten" : "Antwort prüfen und Lead qualifizieren");
+  const ownerUserId = isUuid(input.session.userId) ? input.session.userId : null;
   const metadata = {
     bot: {
       channel: source,
@@ -1424,15 +1427,16 @@ export async function upsertBotCrmEntities(input: {
     ? await queryOne<IdRow>(
         `
           update contacts
-          set project_id = coalesce($3::uuid, project_id),
-              name = coalesce(nullif($4, ''), name),
-              role = $5,
-              source = $6,
-              intent = $7,
-              consent_label = $8,
-              email = coalesce(nullif($9, ''), email),
-              phone = coalesce(nullif($10, ''), phone),
-              metadata = metadata || $11::jsonb,
+          set owner_user_id = coalesce(owner_user_id, $3::uuid),
+              project_id = coalesce($4::uuid, project_id),
+              name = coalesce(nullif($5, ''), name),
+              role = $6,
+              source = $7,
+              intent = $8,
+              consent_label = $9,
+              email = coalesce(nullif($10, ''), email),
+              phone = coalesce(nullif($11, ''), phone),
+              metadata = metadata || $12::jsonb,
               updated_at = now()
           where workspace_id = $1 and id = $2
           returning id
@@ -1440,6 +1444,7 @@ export async function upsertBotCrmEntities(input: {
         [
           input.session.workspaceId,
           existingContact.id,
+          ownerUserId,
           isUuid(input.projectId) ? input.projectId : null,
           name,
           leadType,
@@ -1454,14 +1459,15 @@ export async function upsertBotCrmEntities(input: {
     : await queryOne<IdRow>(
         `
           insert into contacts (
-            workspace_id, project_id, name, role, source, intent, consent_label, email, phone, metadata
+            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
           )
-          values ($1, $2::uuid, $3, $4, $5, $6, $7, nullif($8, ''), nullif($9, ''), $10::jsonb)
+          values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
           returning id
         `,
         [
           input.session.workspaceId,
           isUuid(input.projectId) ? input.projectId : null,
+          ownerUserId,
           name,
           leadType,
           source,

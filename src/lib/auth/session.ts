@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import { workspace as mockWorkspace, users as mockUsers } from "@/lib/crm-data";
-import { can, getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
+import { getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
 import { verifyPassword } from "@/lib/auth/passwords";
 import {
   getProductRoleCapabilities,
@@ -71,6 +71,17 @@ export const sessionCookieName = "novalure_session";
 
 const sessionMaxAgeSeconds = 60 * 60 * 8;
 
+function getSessionPermissions(role: AppRole, productRole: ProductRole) {
+  const permissions = new Set(getRolePermissions(role));
+
+  if (productRole === "novalureGrowth") {
+    permissions.add("knowledge:write");
+    permissions.add("newsletter:send");
+  }
+
+  return [...permissions];
+}
+
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   return getSessionFromHeaders(request.headers);
 }
@@ -115,7 +126,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
       email,
       name,
       role,
-      permissions: getRolePermissions(role),
+      permissions: getSessionPermissions(role, productRole),
       productPermissions: getProductRoleCapabilities(productRole),
       productRole,
       source: "headers",
@@ -176,7 +187,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
           email: existingUser.email,
           name: existingUser.name,
           role: existingUser.role,
-          permissions: getRolePermissions(existingUser.role),
+          permissions: getSessionPermissions(existingUser.role, productRole),
           productPermissions: getProductRoleCapabilities(productRole),
           productRole,
           source: "database",
@@ -221,7 +232,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
           email,
           name,
           role,
-          permissions: getRolePermissions(role),
+          permissions: getSessionPermissions(role, productRole),
           productPermissions: getProductRoleCapabilities(productRole),
           productRole,
           source: "demo",
@@ -257,7 +268,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
     email,
     name,
     role,
-    permissions: getRolePermissions(role),
+    permissions: getSessionPermissions(role, productRole),
     productPermissions: getProductRoleCapabilities(productRole),
     productRole,
     source: "demo",
@@ -323,7 +334,7 @@ export async function requirePermission(request: Request, permission: AppPermiss
     };
   }
 
-  if (!can(session.role, permission)) {
+  if (!session.permissions.includes(permission)) {
     return {
       ok: false as const,
       response: Response.json({ error: "Forbidden" }, { status: 403 }),
@@ -376,6 +387,71 @@ export function canSwitchWorkspace(session: AppSession) {
     hasProductCapability(session.productRole, "managed-service:operate") &&
     hasProductCapability(session.productRole, "novalure:internal")
   );
+}
+
+function isNovalureGrowthWorkspaceRow(workspace: Pick<WorkspaceRow, "name" | "setupState">) {
+  const setupState = workspace.setupState ?? {};
+  const workspaceKey = typeof setupState.workspaceKey === "string" ? setupState.workspaceKey : "";
+  return workspace.name === "Novalure Growth" || workspaceKey === "novalure-growth";
+}
+
+async function findActiveMembershipForSession(session: AppSession, workspaceId: string) {
+  if (!isUuidLike(workspaceId)) return null;
+
+  return queryOne<{ id: string; productRole: ProductRole | null }>(
+    `
+      select id, product_role as "productRole"
+      from workspace_users
+      where workspace_id = $1
+        and status = 'active'
+        and (
+          lower(email) = lower($2)
+          or ($3::uuid is not null and id = $3::uuid)
+        )
+      order by
+        case when id = $3::uuid then 0 else 1 end,
+        created_at asc
+      limit 1
+    `,
+    [workspaceId, session.email, isUuidLike(session.userId) ? session.userId : null],
+  );
+}
+
+async function auditCrossWorkspaceView(input: {
+  fromWorkspaceId: string;
+  session: AppSession;
+  targetWorkspace: WorkspaceRow;
+}) {
+  if (!hasDatabaseUrl() || !isUuidLike(input.targetWorkspace.id)) return;
+
+  try {
+    await queryOne<{ id: string }>(
+      `
+        insert into audit_logs (
+          workspace_id,
+          actor_user_id,
+          action,
+          entity_type,
+          entity_id,
+          before,
+          after
+        )
+        values ($1, $2::uuid, 'workspace.cross_workspace_view', 'workspace', $1, null, $3::jsonb)
+        returning id
+      `,
+      [
+        input.targetWorkspace.id,
+        isUuidLike(input.session.userId) ? input.session.userId : null,
+        JSON.stringify({
+          actorProductRole: input.session.productRole,
+          fromWorkspaceId: input.fromWorkspaceId,
+          targetWorkspaceName: input.targetWorkspace.name,
+        }),
+      ],
+    );
+  } catch {
+    // Audit failures must not expose a broader workspace scope than the permission check already allowed.
+  }
 }
 
 export async function resolveWorkspaceScopedSession(
@@ -437,6 +513,35 @@ export async function resolveWorkspaceScopedSession(
       ok: false as const,
       response: Response.json({ error: "Workspace not found" }, { status: 404 }),
     };
+  }
+
+  const membership = await findActiveMembershipForSession(auth.session, workspace.id);
+  const isGrowthWorkspace = isNovalureGrowthWorkspaceRow(workspace);
+  const isSpecializedInternalRole =
+    auth.session.productRole === "novalureGrowth" ||
+    auth.session.productRole === "novalureServiceOps" ||
+    auth.session.productRole === "novalureAdmin";
+
+  if (auth.session.productRole === "novalureServiceOps" && !membership) {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Service Ops workspace access requires explicit membership" }, { status: 403 }),
+    };
+  }
+
+  if (isGrowthWorkspace && !isSpecializedInternalRole && !membership) {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Novalure Growth workspace requires explicit internal membership" }, { status: 403 }),
+    };
+  }
+
+  if (auth.session.productRole === "novalureServiceOps" && requestedWorkspaceId !== auth.session.workspaceId) {
+    await auditCrossWorkspaceView({
+      fromWorkspaceId: auth.session.workspaceId,
+      session: auth.session,
+      targetWorkspace: workspace,
+    });
   }
 
   return {
@@ -663,7 +768,7 @@ async function getSessionFromCookieHeader(cookieHeader: string | null | undefine
     email: user.email,
     name: user.name,
     role: user.role,
-    permissions: getRolePermissions(user.role),
+    permissions: getSessionPermissions(user.role, productRole),
     productPermissions: getProductRoleCapabilities(productRole),
     productRole,
     source: "cookie" as const,
@@ -726,7 +831,7 @@ export async function authenticateLogin(input: { email: string; password: string
       email: user.email,
       name: user.name,
       role: user.role,
-      permissions: getRolePermissions(user.role),
+      permissions: getSessionPermissions(user.role, productRole),
       productPermissions: getProductRoleCapabilities(productRole),
       productRole,
       source: "database" as const,

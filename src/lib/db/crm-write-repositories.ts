@@ -16,6 +16,11 @@ import type {
   Project,
   Task,
 } from "@/lib/crm-types";
+import {
+  canAssignContactOwner,
+  canViewAllWorkspaceContacts,
+  canWriteContacts,
+} from "@/lib/contact-access";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { syncBrokerEntityForLead } from "@/lib/db/broker-entity-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
@@ -26,6 +31,8 @@ import { ensureProjectDefaultPipelines } from "@/lib/db/pipeline-default-reposit
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import {
+  isNovalureGrowthLeadSource,
+  isNovalureGrowthWorkspace,
   isCalendarProviderChoice,
   isWorkspaceCustomerType,
   isWorkspaceOperatingModel,
@@ -115,6 +122,7 @@ type ContactRow = {
   intent: string;
   name: string;
   organizationId: string | null;
+  ownerUserId: string | null;
   phone: string | null;
   project: string | null;
   projectId: string | null;
@@ -260,6 +268,8 @@ function canManageWorkspaceRecords(session: AppSession) {
 
   return [
     "platform_admin",
+    "novalureGrowth",
+    "novalureAdmin",
     "novalure_onboarding",
     "novalure_customer_success",
     "novalure_operator",
@@ -331,8 +341,33 @@ async function assertRecordWriteAccess(input: {
   return { ok: false, reason: `${input.entityLabel} write permission is not allowed for this role` };
 }
 
+async function assertContactWriteAccess(input: {
+  existingOwnerUserId?: string | null;
+  ownerUserId?: string | null;
+  projectId?: string | null;
+  session: AppSession;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (canViewAllWorkspaceContacts(input.session)) {
+    return { ok: true };
+  }
+
+  const effectiveOwnerUserId = input.existingOwnerUserId ?? input.ownerUserId ?? null;
+  if (effectiveOwnerUserId === input.session.userId) {
+    return { ok: true };
+  }
+
+  if (isProjectScopedSalesSession(input.session)) {
+    return await hasProjectEditPermission({ projectId: input.projectId, session: input.session })
+      ? { ok: true }
+      : { ok: false, reason: "Contact requires project edit permission" };
+  }
+
+  return { ok: false, reason: "Contact can only be changed by the assigned owner" };
+}
+
 const dealStages: DealStage[] = [
   "Neu",
+  "Qualifiziert",
   "Qualifizieren",
   "Termin vereinbaren",
   "Termin gebucht",
@@ -347,8 +382,11 @@ const dealStages: DealStage[] = [
   "Vertragsprüfung",
   "Vertragspruefung",
   "Anfrage",
+  "Demo gebucht",
+  "Demo gehalten",
   "Audit geplant",
   "Angebot",
+  "Pilot",
   "Onboarding",
   "Aktiv",
   "Pausiert / Verloren",
@@ -1853,7 +1891,19 @@ export async function upsertLeadRecord(input: {
   const nextContactAt = cleanDateInput(input.lead.nextContactAt) || toNullableIso(existing?.nextContactAt ?? null);
   const intent = cleanString(input.lead.intent) || existing?.intent || "Neuer Lead";
   const nextAction = cleanString(input.lead.nextAction) || existing?.nextAction || "Kontakt aufnehmen";
-  const source = (cleanString(input.lead.source) || existing?.source || contact?.source || "Manual") as Lead["source"];
+  const explicitSource = cleanString(input.lead.source);
+  const isGrowthWorkspace = isNovalureGrowthWorkspace({
+    setupState: input.session.workspaceSetupState,
+    workspaceId: input.session.workspaceId,
+    workspaceName: input.session.workspaceName,
+  });
+  if (isGrowthWorkspace && !existing && !explicitSource) {
+    return { persisted: false, reason: "Lead source is required in the Novalure Growth workspace" };
+  }
+  if (isGrowthWorkspace && explicitSource && !isNovalureGrowthLeadSource(explicitSource)) {
+    return { persisted: false, reason: "Invalid Novalure Growth lead source" };
+  }
+  const source = (explicitSource || existing?.source || contact?.source || "Manual") as Lead["source"];
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
   const status = (cleanString(input.lead.status) || existing?.status || "Neu") as Lead["status"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
@@ -2109,6 +2159,10 @@ export async function upsertContactRecord(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  if (!canWriteContacts(input.session)) {
+    return { persisted: false, reason: "Contact write permission is not allowed for this role" };
+  }
+
   const validationError =
     validateEmailInput(input.contact.email) ??
     validateTextLength(input.contact.name, "Contact name", maxShortTextLength) ??
@@ -2124,6 +2178,9 @@ export async function upsertContactRecord(input: {
         [input.contact.id, input.session.workspaceId],
       )
     : null;
+  if (isUuid(input.contact.id) && !existing) {
+    return { persisted: false, reason: "Contact not found" };
+  }
   const normalizedEmail = cleanString(input.contact.email);
   if (normalizedEmail) {
     const duplicate = await queryOne<IdRow>(
@@ -2158,6 +2215,27 @@ export async function upsertContactRecord(input: {
   if (!resolvedOrganization.ok) return { persisted: false, reason: resolvedOrganization.reason };
 
   const projectId = resolvedProject.projectId;
+  const requestedOwnerUserId = normalizeWriteProjectId(input.contact.ownerUserId);
+  if (requestedOwnerUserId && !canAssignContactOwner(input.session) && requestedOwnerUserId !== input.session.userId) {
+    return { persisted: false, reason: "Contact owner can only be assigned by workspace contact managers" };
+  }
+
+  const resolvedOwner = await resolveWorkspaceUserIdForWrite({
+    existingUserId: existing?.ownerUserId ?? null,
+    fallbackUserId: normalizeWriteProjectId(input.session.userId),
+    requestedUserId: canAssignContactOwner(input.session) ? input.contact.ownerUserId : null,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedOwner.ok) return { persisted: false, reason: resolvedOwner.reason };
+  const ownerUserId = resolvedOwner.userId;
+  const writeAccess = await assertContactWriteAccess({
+    existingOwnerUserId: existing?.ownerUserId,
+    ownerUserId,
+    projectId,
+    session: input.session,
+  });
+  if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
+
   const name = cleanString(input.contact.name) || existing?.name || cleanString(input.contact.email) || cleanString(input.contact.phone);
 
   if (!name) return { persisted: false, reason: "Contact name, email or phone is required" };
@@ -2169,14 +2247,15 @@ export async function upsertContactRecord(input: {
           set
             project_id = $3::uuid,
             organization_id = $4::uuid,
-            name = $5,
-            role = $6,
-            source = $7,
-            intent = $8,
-            consent_label = $9,
-            email = nullif($10, ''),
-            phone = nullif($11, ''),
-            metadata = metadata || $12::jsonb,
+            owner_user_id = $5::uuid,
+            name = $6,
+            role = $7,
+            source = $8,
+            intent = $9,
+            consent_label = $10,
+            email = nullif($11, ''),
+            phone = nullif($12, ''),
+            metadata = metadata || $13::jsonb,
             updated_at = now()
           where c.id = $1 and c.workspace_id = $2
           returning
@@ -2184,6 +2263,7 @@ export async function upsertContactRecord(input: {
             c.workspace_id as "workspaceId",
             c.project_id as "projectId",
             c.organization_id as "organizationId",
+            c.owner_user_id as "ownerUserId",
             c.name,
             c.role,
             c.source,
@@ -2198,6 +2278,7 @@ export async function upsertContactRecord(input: {
           input.session.workspaceId,
           projectId,
           resolvedOrganization.organizationId,
+          ownerUserId,
           name,
           input.contact.role ?? existing.role,
           input.contact.source ?? existing.source,
@@ -2214,6 +2295,7 @@ export async function upsertContactRecord(input: {
             workspace_id,
             project_id,
             organization_id,
+            owner_user_id,
             name,
             role,
             source,
@@ -2223,12 +2305,13 @@ export async function upsertContactRecord(input: {
             phone,
             metadata
           )
-          values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
+          values ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, nullif($10, ''), nullif($11, ''), $12::jsonb)
           returning
             id,
             workspace_id as "workspaceId",
             project_id as "projectId",
             organization_id as "organizationId",
+            owner_user_id as "ownerUserId",
             name,
             role,
             source,
@@ -2242,6 +2325,7 @@ export async function upsertContactRecord(input: {
           input.session.workspaceId,
           projectId,
           resolvedOrganization.organizationId,
+          ownerUserId,
           name,
           input.contact.role ?? "Käufer",
           input.contact.source ?? "Manual",
@@ -2249,7 +2333,7 @@ export async function upsertContactRecord(input: {
           cleanString(input.contact.consent) || "Nur CRM",
           cleanString(input.contact.email),
           cleanString(input.contact.phone),
-          JSON.stringify({ createdFrom: "crm_contacts", legacyId: input.contact.id ?? null }),
+          JSON.stringify({ createdByUserId: input.session.userId, createdFrom: "crm_contacts", legacyId: input.contact.id ?? null }),
         ],
       );
 
@@ -3588,6 +3672,7 @@ const contactSelectSql = `
     c.workspace_id as "workspaceId",
     c.project_id as "projectId",
     c.organization_id as "organizationId",
+    c.owner_user_id as "ownerUserId",
     c.name,
     c.role,
     c.source,
@@ -3770,6 +3855,7 @@ function toContact(row: ContactRow): Contact {
     intent: row.intent,
     name: row.name,
     organizationId: row.organizationId ?? undefined,
+    ownerUserId: row.ownerUserId ?? undefined,
     phone: row.phone ?? undefined,
     project: row.project ?? "",
     projectId: row.projectId ?? "",

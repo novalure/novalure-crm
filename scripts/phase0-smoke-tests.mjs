@@ -28,11 +28,15 @@ test("core CRM database contract covers tenant-scoped production entities", () =
     "migrations/020_production_readiness_repair.sql",
     "migrations/027_broker_pipeline_preflights.sql",
     "migrations/028_contact_archiving.sql",
+    "migrations/029_contact_owner_scope.sql",
+    "migrations/030_novalure_growth_workspace.sql",
   ].map(readText).join("\n");
 
   for (const table of [
     "workspaces",
     "workspace_users",
+    "workspace_lead_sources",
+    "workspace_module_settings",
     "projects",
     "contacts",
     "leads",
@@ -51,6 +55,8 @@ test("core CRM database contract covers tenant-scoped production entities", () =
 
   for (const table of [
     "projects",
+    "workspace_lead_sources",
+    "workspace_module_settings",
     "contacts",
     "leads",
     "deals",

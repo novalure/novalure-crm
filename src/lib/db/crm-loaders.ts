@@ -1,4 +1,7 @@
 import type {
+  AppSession,
+} from "@/lib/auth/session";
+import type {
   CalendarEvent,
   Contact,
   BrokerMandate,
@@ -6,6 +9,7 @@ import type {
   CrmPipeline,
   CrmPipelineStage,
   CrmBot,
+  DailyQueueData,
   Deal,
   EditorPreflightRun,
   Funnel,
@@ -20,6 +24,10 @@ import type {
   Project,
   Task,
 } from "@/lib/crm-types";
+import {
+  getContactVisibilityScope,
+  type ContactVisibilityScope,
+} from "@/lib/contact-access";
 import {
   calendarEvents as mockCalendarEvents,
   contacts as mockContacts,
@@ -73,6 +81,7 @@ export type CoreCrmModuleSource = "database" | "mock" | "fallback";
 export type CoreCrmModuleSources = Record<CoreCrmDataKey, CoreCrmModuleSource>;
 
 export type CoreCrmDataResult = CoreCrmData & {
+  dailyQueue: DailyQueueData;
   source: "database" | "mock" | "fallback";
   error?: string;
   missingTables?: string[];
@@ -117,6 +126,7 @@ type ContactRow = {
   workspaceId: string;
   projectId: string | null;
   organizationId: string | null;
+  ownerUserId: string | null;
   name: string;
   role: Contact["role"];
   project: string | null;
@@ -467,6 +477,13 @@ export function getMockCoreCrmData(): CoreCrmDataResult {
     crmPipelines: [],
     editorPreflightRuns: [],
     crmBots: mockCrmBots,
+    dailyQueue: buildDailyQueueData({
+      calendarEvents: mockCalendarEvents,
+      contacts: mockContacts,
+      deals: mockDeals,
+      leads: mockLeads,
+      tasks: mockTasks,
+    }),
     leads: mockLeads,
     deals: mockDeals,
     funnelSteps: mockFunnelSteps,
@@ -482,16 +499,23 @@ export function getMockCoreCrmData(): CoreCrmDataResult {
   };
 }
 
-export async function getCoreCrmData(workspaceId?: string): Promise<CoreCrmDataResult> {
+export async function getCoreCrmData(
+  workspaceId?: string,
+  options: { session?: AppSession } = {},
+): Promise<CoreCrmDataResult> {
   if (!hasDatabaseUrl()) {
     return getMockCoreCrmData();
   }
+
+  const contactScope = options.session
+    ? getContactVisibilityScope(options.session)
+    : ({ kind: "workspace" } satisfies ContactVisibilityScope);
 
   const moduleResults = await Promise.all([
     loadModule("brokerMandates", () => loadBrokerMandates(workspaceId), []),
     loadModule("buyerSearchProfiles", () => loadBuyerSearchProfiles(workspaceId), []),
     loadModule("calendarEvents", () => loadCalendarEvents(workspaceId), mockCalendarEvents),
-    loadModule("contacts", () => loadContacts(workspaceId), mockContacts),
+    loadModule("contacts", () => loadContacts(workspaceId, contactScope), mockContacts),
     loadModule("crmPipelineStages", () => loadCrmPipelineStages(workspaceId), []),
     loadModule("crmPipelines", () => loadCrmPipelines(workspaceId), []),
     loadModule("editorPreflightRuns", () => loadEditorPreflightRuns(workspaceId), []),
@@ -540,6 +564,13 @@ export async function getCoreCrmData(workspaceId?: string): Promise<CoreCrmDataR
 
   return {
     ...data,
+    dailyQueue: buildDailyQueueData({
+      calendarEvents: data.calendarEvents,
+      contacts: data.contacts,
+      deals: data.deals,
+      leads: data.leads,
+      tasks: data.tasks,
+    }),
     error: hasAnyError ? Object.values(moduleErrors).join("; ") : undefined,
     missingTables: Array.from(missingTables).sort(),
     moduleErrors,
@@ -622,6 +653,197 @@ function attachReservationIds(units: PropertyUnit[], reservations: PropertyReser
     ...unit,
     reservationId: unit.reservationId ?? activeReservationByUnit.get(unit.id),
   }));
+}
+
+function parseDate(value: string | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysSince(value: string | undefined, now = new Date()) {
+  const date = parseDate(value);
+  if (!date) return 0;
+  return Math.max(0, Math.floor((startOfDay(now).getTime() - startOfDay(date).getTime()) / 86_400_000));
+}
+
+function businessDaysSince(value: string | undefined, now = new Date()) {
+  const date = parseDate(value);
+  if (!date) return 0;
+  let cursor = startOfDay(date);
+  const end = startOfDay(now);
+  let count = 0;
+  while (cursor < end) {
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) count += 1;
+  }
+  return count;
+}
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function isToday(value: string | undefined, now = new Date()) {
+  const date = parseDate(value);
+  return Boolean(
+    date &&
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate(),
+  );
+}
+
+function hasNextAction(value: string | undefined) {
+  return Boolean(value?.trim());
+}
+
+function contactName(contacts: Contact[], contactId: string | undefined, fallback: string) {
+  return contacts.find((contact) => contact.id === contactId)?.name ?? fallback;
+}
+
+function hasOpenTask(tasks: Task[], deal: Deal) {
+  return tasks.some((task) =>
+    task.status === "open" &&
+    (task.leadId === deal.leadId || task.contactId === deal.contactId || task.projectId === deal.projectId)
+  );
+}
+
+function buildDailyQueueData(input: {
+  calendarEvents: CalendarEvent[];
+  contacts: Contact[];
+  deals: Deal[];
+  leads: Lead[];
+  tasks: Task[];
+}): DailyQueueData {
+  const now = new Date();
+  const hotLeads = input.leads
+    .filter((lead) =>
+      (lead.status === "Qualifiziert" || lead.status === "Qualifizieren" || lead.hotStatus || lead.score >= 80) &&
+      daysSince(lead.receivedAt, now) <= 14 &&
+      !lead.nextContactAt
+    )
+    .slice(0, 12)
+    .map((lead) => ({
+      actionLabel: "Lead Inbox",
+      actionSection: "leadInbox" as const,
+      daysInStage: daysSince(lead.receivedAt, now),
+      id: `hot-lead-${lead.id}`,
+      nextAction: hasNextAction(lead.nextAction) ? lead.nextAction : "Kontakt aufnehmen",
+      owner: lead.assignedToUserId ?? "Unassigned",
+      source: lead.source,
+      stage: lead.status,
+      title: contactName(input.contacts, lead.contactId, lead.intent),
+    }));
+
+  const demoFollowUps = input.deals
+    .filter((deal) =>
+      deal.stage === "Demo gehalten" &&
+      businessDaysSince(deal.expectedCloseDate || undefined, now) >= 2
+    )
+    .slice(0, 12)
+    .map((deal) => ({
+      actionLabel: "Aufgabe erstellen",
+      actionSection: "tasks" as const,
+      daysInStage: businessDaysSince(deal.expectedCloseDate || undefined, now),
+      id: `demo-follow-up-${deal.id}`,
+      nextAction: hasNextAction(deal.nextAction) ? deal.nextAction : "Demo-Follow-up senden",
+      owner: deal.ownerUserId ?? "Unassigned",
+      source: deal.source,
+      stage: deal.stage,
+      title: deal.name,
+    }));
+
+  const overdueOffers = input.deals
+    .filter((deal) => {
+      const expectedClose = parseDate(deal.expectedCloseDate);
+      return deal.stage === "Angebot" && (!expectedClose || expectedClose < startOfDay(now));
+    })
+    .slice(0, 12)
+    .map((deal) => ({
+      actionLabel: "Pipeline öffnen",
+      actionSection: "pipelines" as const,
+      daysInStage: daysSince(deal.expectedCloseDate || undefined, now),
+      id: `overdue-offer-${deal.id}`,
+      nextAction: hasNextAction(deal.nextAction) ? deal.nextAction : "Angebot nachfassen",
+      owner: deal.ownerUserId ?? "Unassigned",
+      source: deal.source,
+      stage: deal.stage,
+      title: deal.name,
+    }));
+
+  const todayAppointments = input.calendarEvents
+    .filter((event) => isToday(event.startsAt, now))
+    .slice(0, 12)
+    .map((event) => ({
+      actionLabel: "Termin öffnen",
+      actionSection: "calendar" as const,
+      daysInStage: 0,
+      id: `appointment-${event.id}`,
+      nextAction: event.outcomeGoal || "Termin vorbereiten",
+      owner: event.ownerUserId ?? "Unassigned",
+      source: event.location,
+      stage: event.status,
+      title: event.title,
+    }));
+
+  const pilotAttention = input.deals
+    .filter((deal) => {
+      const closeDate = parseDate(deal.expectedCloseDate);
+      const pilotEndingSoon = closeDate
+        ? closeDate.getTime() <= new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7).getTime()
+        : false;
+      return deal.stage === "Pilot" && (hasOpenTask(input.tasks, deal) || pilotEndingSoon);
+    })
+    .slice(0, 12)
+    .map((deal) => ({
+      actionLabel: "Task prüfen",
+      actionSection: "tasks" as const,
+      daysInStage: daysSince(deal.expectedCloseDate || undefined, now),
+      id: `pilot-${deal.id}`,
+      nextAction: hasNextAction(deal.nextAction) ? deal.nextAction : "Pilot-Check-in planen",
+      owner: deal.ownerUserId ?? "Unassigned",
+      source: deal.source,
+      stage: deal.stage,
+      title: deal.name,
+    }));
+
+  return {
+    generatedAt: now.toISOString(),
+    sections: [
+      {
+        cards: hotLeads,
+        emptyText: { de: "Keine heissen Leads - Lead-Zentrale pruefen.", en: "No hot leads - check Lead Inbox." },
+        id: "hotLeads",
+        title: { de: "Heisse Leads", en: "Hot leads" },
+      },
+      {
+        cards: demoFollowUps,
+        emptyText: { de: "Keine Demo-Follow-ups faellig.", en: "No demo follow-ups due." },
+        id: "demoFollowUps",
+        title: { de: "Demo-Follow-ups", en: "Demo follow-ups" },
+      },
+      {
+        cards: overdueOffers,
+        emptyText: { de: "Keine ueberfaelligen Angebote.", en: "No overdue offers." },
+        id: "overdueOffers",
+        title: { de: "Ueberfaellige Angebote", en: "Overdue offers" },
+      },
+      {
+        cards: todayAppointments,
+        emptyText: { de: "Heute keine Termine.", en: "No appointments today." },
+        id: "todayAppointments",
+        title: { de: "Heutige Termine", en: "Today's appointments" },
+      },
+      {
+        cards: pilotAttention,
+        emptyText: { de: "Keine Pilotkunden mit Handlungsbedarf.", en: "No pilot customers need action." },
+        id: "pilotAttention",
+        title: { de: "Pilotkunden mit Handlungsbedarf", en: "Pilot customers needing action" },
+      },
+    ],
+  };
 }
 
 export async function loadProjects(workspaceId?: string): Promise<Project[]> {
@@ -1342,7 +1564,27 @@ export async function loadCalendarEvents(workspaceId?: string): Promise<Calendar
   });
 }
 
-export async function loadContacts(workspaceId?: string): Promise<Contact[]> {
+export async function loadContacts(
+  workspaceId?: string,
+  visibilityScope: ContactVisibilityScope = { kind: "workspace" },
+): Promise<Contact[]> {
+  if (visibilityScope.kind === "none" || (visibilityScope.kind === "own" && !workspaceId)) {
+    return [];
+  }
+
+  const filters = ["c.archived_at is null"];
+  const params: string[] = [];
+
+  if (workspaceId) {
+    params.push(workspaceId);
+    filters.push(`c.workspace_id = $${params.length}`);
+  }
+
+  if (visibilityScope.kind === "own") {
+    params.push(visibilityScope.userId);
+    filters.push(`c.owner_user_id = $${params.length}`);
+  }
+
   const rows = await queryRows<ContactRow>(
     `
     select
@@ -1350,6 +1592,7 @@ export async function loadContacts(workspaceId?: string): Promise<Contact[]> {
       c.workspace_id as "workspaceId",
       c.project_id as "projectId",
       c.organization_id as "organizationId",
+      c.owner_user_id as "ownerUserId",
       c.name,
       c.role,
       p.name as project,
@@ -1360,11 +1603,11 @@ export async function loadContacts(workspaceId?: string): Promise<Contact[]> {
       c.phone
     from contacts c
     left join projects p on p.id = c.project_id and p.workspace_id = c.workspace_id
-    ${workspaceId ? "where c.workspace_id = $1 and c.archived_at is null" : "where c.archived_at is null"}
+    where ${filters.join(" and ")}
     order by c.updated_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    params,
   );
 
   return rows.map((row) => ({
@@ -1372,6 +1615,7 @@ export async function loadContacts(workspaceId?: string): Promise<Contact[]> {
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
     organizationId: row.organizationId ?? undefined,
+    ownerUserId: row.ownerUserId ?? undefined,
     name: row.name,
     role: row.role,
     project: row.project ?? "",

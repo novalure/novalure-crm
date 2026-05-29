@@ -17,10 +17,13 @@
     "test:phase7": "node --test scripts/phase7-mobile-smoke-tests.mjs",
     "test:phase8": "node --test scripts/phase8-acceptance-smoke-tests.mjs",
     "test:i18n": "node --test scripts/i18n-localization-smoke-tests.mjs",
+    "test:contact-access": "node --test scripts/contact-access-rbac-smoke-tests.mjs",
+    "qa:contact-access": "node scripts/qa-contact-access.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs",
-    "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs"
+    "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs",
+    "qa:tenant-isolation": "node scripts/qa-tenant-isolation.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

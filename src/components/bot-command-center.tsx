@@ -22,6 +22,7 @@ type BotCommandCenterProps = {
   automations: Automation[];
   bots: CrmBot[];
   callInsights: BotCallInsight[];
+  canManageBotSetup?: boolean;
   conversations: CrmBotConversation[];
   knowledgeItems: KnowledgeItem[];
   language: LanguageCode;
@@ -461,6 +462,7 @@ export function BotCommandCenter({
   automations,
   bots,
   callInsights,
+  canManageBotSetup = true,
   conversations,
   knowledgeItems,
   language,
@@ -1417,14 +1419,16 @@ export function BotCommandCenter({
                           <p className="text-stone-500">{text.strictKnowledge}</p>
                         </div>
                       </div>
-                      <button
-                        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={botSetupSavingId === bot.id}
-                        onClick={() => void saveBotSetup(bot)}
-                        type="button"
-                      >
-                        {botSetupSavingId === bot.id ? text.savingBotSetup : text.saveBotSetup}
-                      </button>
+                      {canManageBotSetup ? (
+                        <button
+                          className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={botSetupSavingId === bot.id}
+                          onClick={() => void saveBotSetup(bot)}
+                          type="button"
+                        >
+                          {botSetupSavingId === bot.id ? text.savingBotSetup : text.saveBotSetup}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </article>
@@ -1904,14 +1908,16 @@ export function BotCommandCenter({
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Pill tone={passed ? "green" : "amber"}>{passed ? text.readyToPublish : text.notReadyToPublish}</Pill>
-                          <button
-                            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={evaluationRunningId === bot.id}
-                            onClick={() => void runBotEvaluation(bot)}
-                            type="button"
-                          >
-                            {evaluationRunningId === bot.id ? text.runningEvaluation : text.runEvaluation}
-                          </button>
+                          {canManageBotSetup ? (
+                            <button
+                              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={evaluationRunningId === bot.id}
+                              onClick={() => void runBotEvaluation(bot)}
+                              type="button"
+                            >
+                              {evaluationRunningId === bot.id ? text.runningEvaluation : text.runEvaluation}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                       {latestRun ? (

@@ -76,7 +76,7 @@ export default async function Home({ searchParams }: HomeProps) {
   } catch {
     // The workspace can render with module-level fallbacks if pipeline bootstrap is temporarily unavailable.
   }
-  const coreData = await getCoreCrmData(session.workspaceId);
+  const coreData = await getCoreCrmData(session.workspaceId, { session });
 
   return (
     <CrmWorkspace
@@ -84,6 +84,7 @@ export default async function Home({ searchParams }: HomeProps) {
       initialLanguage={language}
       sessionProductRole={session.productRole}
       sessionRole={session.role}
+      sessionUserId={session.userId}
       sessionWorkspace={{
         activeCalendarProvider: session.workspaceActiveCalendarProvider ?? undefined,
         customerType: session.workspaceCustomerType ?? undefined,

@@ -57,6 +57,7 @@ type LeadActivity = {
 
 const statusStyles: Record<LeadStatus, string> = {
   Neu: "bg-emerald-100 text-emerald-800",
+  Qualifiziert: "bg-green-100 text-green-800",
   Qualifizieren: "bg-blue-100 text-blue-800",
   "Termin offen": "bg-amber-100 text-amber-800",
   Übergabe: "bg-violet-100 text-violet-800",
@@ -72,6 +73,11 @@ const sourceStyles: Record<LeadSource, string> = {
   ImmobilienScout: "bg-cyan-50 text-cyan-800",
   Empfehlung: "bg-emerald-50 text-emerald-800",
   Website: "bg-blue-50 text-blue-800",
+  LinkedIn: "bg-sky-50 text-sky-800",
+  Partner: "bg-teal-50 text-teal-800",
+  Event: "bg-purple-50 text-purple-800",
+  Outbound: "bg-orange-50 text-orange-800",
+  "Demo-Formular": "bg-indigo-50 text-indigo-800",
   Manual: "bg-stone-100 text-stone-700",
 };
 
@@ -82,6 +88,7 @@ const propertyTypeOptions: PropertyType[] = ["Wohnung", "Haus", "Neubau", "Zinsh
 const financingStatusOptions: FinancingStatus[] = ["offen", "vorqualifiziert", "Eigenmittel", "Finanzierungszusage"];
 const statusOptions: LeadStatus[] = [
   "Neu",
+  "Qualifiziert",
   "Qualifizieren",
   "Termin offen",
   "Übergabe",
@@ -120,6 +127,7 @@ function getPriorityRank(lead: LocalLead) {
   const slaMinutes = minutesUntil(lead.slaDueAt);
   const statusRank: Record<LeadStatus, number> = {
     Neu: 0,
+    Qualifiziert: 15,
     Qualifizieren: 20,
     "Termin offen": 30,
     Übergabe: 60,
