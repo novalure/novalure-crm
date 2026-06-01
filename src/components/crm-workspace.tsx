@@ -47,6 +47,7 @@ import { NewsletterCommandCenter } from "@/components/newsletter-command-center"
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
+import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type {
@@ -3459,8 +3460,8 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f2ec] text-slate-950" lang={language}>
-      <div className="mx-auto flex min-h-screen w-full max-w-[1500px]">
+    <main className="min-h-screen max-w-full overflow-hidden bg-[#f4f2ec] text-slate-950" lang={language}>
+      <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]">
         <aside
           className={`hidden shrink-0 overflow-hidden border-r border-stone-200 bg-white py-6 transition-all duration-200 xl:block ${
             sidebarCollapsed ? "w-16 px-2" : "w-80 px-5"
@@ -3722,6 +3723,12 @@ export function CrmWorkspace({
                     ))}
                   </select>
                 </label>
+                <WorkspaceOnboardingTour
+                  language={language}
+                  productRole={sessionProductRole}
+                  userName={users.find((user) => user.id === sessionUserId)?.name ?? sessionUserId}
+                  workspaceName={workspaceContext.workspaceName}
+                />
                 <button
                   className="min-h-12 min-w-32 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-center text-sm font-semibold leading-5 text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={coreDataStatus === "loading"}
@@ -3764,10 +3771,10 @@ export function CrmWorkspace({
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
-                <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
+                <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
                   {copy.navigationPresets.mobileNavigationLabel}
                   <select
-                    className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                    className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
                     onChange={(event) => handleNavigationChange(event.target.value as NavigationEntryId)}
                     value={visibleActiveNavigationEntry.id}
                   >
@@ -3778,10 +3785,10 @@ export function CrmWorkspace({
                     ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
+                <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
                   {copy.navigationPresets.label}
                   <select
-                    className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+                    className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
                     onChange={(event) =>
                       handlePresetChange(event.target.value as NavigationPresetId)
                     }
@@ -3794,10 +3801,10 @@ export function CrmWorkspace({
                     ))}
                   </select>
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   {normalizedActivePreset.quickActions.map((actionId) => (
                     <button
-                      className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                      className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                       key={actionId}
                       onClick={() => handleQuickAction(actionId)}
                       type="button"

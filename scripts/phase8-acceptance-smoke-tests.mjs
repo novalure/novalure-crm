@@ -46,6 +46,26 @@ test("all phase-level smoke tests are registered for repeatable acceptance", () 
   assert.equal(typeof pkg.scripts["qa:livegang:reset"], "string");
 });
 
+test("fresh-user onboarding tour has a persisted profile confirmation path", () => {
+  const migration = readText("migrations/031_user_onboarding.sql");
+  const databaseRoute = readText("src/app/api/system/database/route.ts");
+  const seed = readText("scripts/qa-livegang-seed.mjs");
+  const apiRoute = readText("src/app/api/auth/onboarding/route.ts");
+  const tour = readText("src/components/workspace-onboarding-tour.tsx");
+  const workspace = readText("src/components/crm-workspace.tsx");
+
+  assert.match(migration, /add column if not exists onboarding_completed_at timestamptz/);
+  assert.match(databaseRoute, /031_user_onboarding\.sql/);
+  assert.match(seed, /applyMigration\("migrations\/031_user_onboarding\.sql"\)/);
+  assert.match(apiRoute, /select onboarding_completed_at as "completedAt"/);
+  assert.match(apiRoute, /set onboarding_completed_at = coalesce\(onboarding_completed_at, now\(\)\)/);
+  assert.match(tour, /fetch\("\/api\/auth\/onboarding"/);
+  assert.match(tour, /Tour wiederholen/);
+  assert.match(tour, /Platzhalter zur Freigabe/);
+  assert.match(workspace, /<WorkspaceOnboardingTour/);
+  assert.match(workspace, /productRole=\{sessionProductRole\}/);
+});
+
 test("production readiness reports exist for all implementation phases", () => {
   for (let index = 0; index <= 8; index += 1) {
     assert.equal(

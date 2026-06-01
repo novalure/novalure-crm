@@ -59,7 +59,7 @@ const englishSections = [
   {
     title: "4. Integrations and third-party services",
     body: [
-      "Novalure CRM may connect with third-party services such as Meta, WhatsApp Business, Instagram, Facebook Messenger, Microsoft 365, Google Calendar, Resend, Vercel, database, storage, email and AI providers. These services are governed by their own terms and policies.",
+      "Novalure CRM may connect with third-party services such as Meta, WhatsApp Business, Instagram, Facebook Messenger, Microsoft 365, Google Calendar, Vercel, database, storage, email delivery and AI providers. These services are governed by their own terms and policies.",
       "Customers are responsible for maintaining their own third-party accounts, permissions, business verification, channel approvals, message templates, rate limits and compliance with platform rules.",
     ],
   },
@@ -117,7 +117,7 @@ const germanSections = [
     title: "1. Über Novalure CRM",
     body: [
       "Diese Nutzungsbedingungen regeln den Zugriff auf und die Nutzung von Novalure CRM, einer webbasierten Immobilien-CRM-, Funnel-, Kommunikations- und KI-Unterstützungsplattform, betrieben von Novalure CLG, Irland.",
-      "Novalure CRM unterstützt Geschäftskunden bei der Verwaltung von Workspaces, Nutzern, Projekten, Kontakten, Leads, Deals, Aufgaben, Kommunikationskanälen, Terminen, Newslettern, Analytics und freigegebenen KI-Bot-Workflows.",
+      "Novalure CRM unterstützt Geschäftskunden bei der Verwaltung von Workspaces, Nutzern, Projekten, Kontakten, Leads, Deals, Aufgaben, Kommunikationskanälen, Terminen, Newslettern, Auswertungen und freigegebenen KI-Bot-Workflows.",
     ],
   },
   {
@@ -140,7 +140,7 @@ const germanSections = [
   {
     title: "4. Integrationen und Drittanbieter",
     body: [
-      "Novalure CRM kann mit Drittanbietern wie Meta, WhatsApp Business, Instagram, Facebook Messenger, Microsoft 365, Google Calendar, Resend, Vercel, Datenbank-, Speicher-, E-Mail- und KI-Anbietern verbunden werden. Diese Dienste unterliegen eigenen Bedingungen und Richtlinien.",
+      "Novalure CRM kann mit Drittanbietern wie Meta, WhatsApp Business, Instagram, Facebook Messenger, Microsoft 365, Google Calendar, Vercel, Datenbank-, Speicher-, E-Mail-Versand- und KI-Anbietern verbunden werden. Diese Dienste unterliegen eigenen Bedingungen und Richtlinien.",
       "Kunden sind für ihre eigenen Drittanbieter-Konten, Berechtigungen, Unternehmensverifizierung, Kanal-Freigaben, Nachrichtenvorlagen, Limits und die Einhaltung der Plattformregeln verantwortlich.",
     ],
   },

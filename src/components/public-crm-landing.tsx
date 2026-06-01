@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CookieConsentButton } from "@/components/cookie-consent-button";
+import { PublicHashRouteLoginRedirect } from "@/components/public-hash-route-login-redirect";
 import {
   getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
@@ -243,9 +244,11 @@ export function PublicCrmLanding({
   const loginHref = withPublicLanguage("/login", language);
   const secondaryHeroHref = loginHref;
   const cookieHref = withPublicLanguage("/cookies", language);
+  const privacyHref = withPublicLanguage("/privacy", language);
 
   return (
     <main className="min-h-dvh bg-[#f8f7f1] text-[#111614]" lang={language}>
+      <PublicHashRouteLoginRedirect language={language} />
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/[0.12] bg-[#050607]/[0.9] text-white backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link className="min-w-0 shrink-0 text-sm font-semibold sm:text-base" href={withPublicLanguage("/", language)}>
@@ -297,7 +300,10 @@ export function PublicCrmLanding({
                 {pageCopy.switchToEnglishShort}
               </Link>
             </nav>
-            <a className="hidden text-sm font-semibold text-[#c9d4ce] hover:text-white sm:inline-flex" href={loginHref}>
+            <a
+              className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border border-white/[0.28] bg-white/[0.08] px-3 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/[0.14] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#050607] sm:text-sm"
+              href={loginHref}
+            >
               {copy.nav.login}
             </a>
             <a
@@ -452,6 +458,26 @@ export function PublicCrmLanding({
               </div>
             ))}
           </div>
+          <div className="md:col-span-2">
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              {copy.trust.details.map((item) => (
+                <article className="rounded-md border border-white/[0.14] bg-white/[0.06] p-4" key={item.label}>
+                  <p className="text-xs font-semibold uppercase text-[#9fd8be]">{item.label}</p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-[#e5ebe7]">{item.body}</p>
+                </article>
+              ))}
+            </div>
+            <div className="mt-4 rounded-md border border-dashed border-white/[0.22] bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase text-[#9fd8be]">{copy.trust.proofPlaceholderTitle}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {copy.trust.proofPlaceholders.map((placeholder) => (
+                  <span className="rounded-md border border-white/[0.14] bg-white/[0.06] px-3 py-2 text-sm font-semibold text-[#e5ebe7]" key={placeholder}>
+                    {placeholder}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -507,7 +533,7 @@ export function PublicCrmLanding({
           </nav>
         </div>
       </footer>
-      <CookieConsentButton cookieHref={cookieHref} copy={copy.cookieConsent} />
+      <CookieConsentButton cookieHref={cookieHref} copy={copy.cookieConsent} privacyHref={privacyHref} />
     </main>
   );
 }

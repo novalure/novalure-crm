@@ -36,6 +36,7 @@ const migrations = [
   "migrations/028_contact_archiving.sql",
   "migrations/029_contact_owner_scope.sql",
   "migrations/030_novalure_growth_workspace.sql",
+  "migrations/031_user_onboarding.sql",
 ];
 
 type TableStatusRow = {

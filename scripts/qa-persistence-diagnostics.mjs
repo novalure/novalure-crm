@@ -30,7 +30,8 @@ function loadEnv(path) {
 for (const file of envFiles) loadEnv(file);
 
 const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const configuredEmail = process.env.NOVALURE_QA_EMAIL || process.env.QA_LOGIN_EMAIL || "franz@novalure.local";
+const explicitQaEmail = process.env.NOVALURE_QA_EMAIL || process.env.QA_LOGIN_EMAIL || "";
+const configuredEmail = explicitQaEmail || "franz@novalure.local";
 const configuredPassword =
   process.env.NOVALURE_QA_PASSWORD ||
   process.env.QA_LOGIN_PASSWORD ||
@@ -143,6 +144,7 @@ async function dbQuery(query, params = []) {
 }
 
 async function findLoginCandidate() {
+  if (explicitQaEmail) return configuredEmail;
   if (!sql) return configuredEmail;
 
   const candidates = [

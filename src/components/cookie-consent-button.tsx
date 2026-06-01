@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-type CookieConsentChoice = "necessary" | "all";
+type CookieConsentChoice = "necessary" | "all" | "custom";
 
 type CookieConsentRecord = {
   analytics: boolean;
@@ -16,15 +16,23 @@ type CookieConsentRecord = {
 
 export type CookieConsentButtonCopy = {
   acceptAll: string;
+  analyticsLabel: string;
+  customize: string;
   description: string;
   detailsLink: string;
+  marketingLabel: string;
   manageButton: string;
   necessaryDescription: string;
   necessaryTitle: string;
   optionalDescription: string;
   optionalTitle: string;
+  preferencesDescription: string;
+  preferencesTitle: string;
+  privacyLink: string;
   rejectOptional: string;
+  saveSelection: string;
   savedAll: string;
+  savedCustom: string;
   savedNecessary: string;
   title: string;
 };
@@ -32,6 +40,7 @@ export type CookieConsentButtonCopy = {
 type CookieConsentButtonProps = {
   cookieHref: string;
   copy: CookieConsentButtonCopy;
+  privacyHref: string;
 };
 
 const cookieName = "novalure_cookie_consent";
@@ -44,12 +53,14 @@ function parseConsent(value: string | null) {
   try {
     const parsed = JSON.parse(value) as Partial<CookieConsentRecord>;
     if (parsed.version !== 1 || parsed.necessary !== true) return null;
-    if (parsed.choice !== "necessary" && parsed.choice !== "all") return null;
+    if (parsed.choice !== "necessary" && parsed.choice !== "all" && parsed.choice !== "custom") return null;
+    const isAll = parsed.choice === "all";
+    const isCustom = parsed.choice === "custom";
 
     return {
-      analytics: parsed.choice === "all" ? parsed.analytics === true : false,
+      analytics: isAll || (isCustom && parsed.analytics === true),
       choice: parsed.choice,
-      marketing: parsed.choice === "all" ? parsed.marketing === true : false,
+      marketing: isAll || (isCustom && parsed.marketing === true),
       necessary: true,
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
       version: 1,
@@ -70,13 +81,17 @@ function readCookieConsent() {
   return parseConsent(value ? decodeURIComponent(value) : null);
 }
 
-function createConsentRecord(choice: CookieConsentChoice) {
-  const optional = choice === "all";
+function createConsentRecord(
+  choice: CookieConsentChoice,
+  preferences: { analytics: boolean; marketing: boolean } = { analytics: false, marketing: false },
+) {
+  const analytics = choice === "all" || (choice === "custom" && preferences.analytics);
+  const marketing = choice === "all" || (choice === "custom" && preferences.marketing);
 
   return {
-    analytics: optional,
+    analytics,
     choice,
-    marketing: optional,
+    marketing,
     necessary: true,
     updatedAt: new Date().toISOString(),
     version: 1,
@@ -92,10 +107,13 @@ function persistConsent(record: CookieConsentRecord) {
   window.dispatchEvent(new CustomEvent("novalure-cookie-consent", { detail: record }));
 }
 
-export function CookieConsentButton({ cookieHref, copy }: CookieConsentButtonProps) {
+export function CookieConsentButton({ cookieHref, copy, privacyHref }: CookieConsentButtonProps) {
   const [consent, setConsent] = useState<CookieConsentRecord | null>(null);
+  const [analyticsSelected, setAnalyticsSelected] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [marketingSelected, setMarketingSelected] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -105,6 +123,8 @@ export function CookieConsentButton({ cookieHref, copy }: CookieConsentButtonPro
 
       const storedConsent = parseConsent(localStorage.getItem(storageKey)) ?? readCookieConsent();
       setConsent(storedConsent);
+      setAnalyticsSelected(storedConsent?.analytics ?? false);
+      setMarketingSelected(storedConsent?.marketing ?? false);
       setIsOpen(!storedConsent);
       setIsMounted(true);
     });
@@ -117,13 +137,28 @@ export function CookieConsentButton({ cookieHref, copy }: CookieConsentButtonPro
   if (!isMounted) return null;
 
   function choose(choice: CookieConsentChoice) {
-    const nextConsent = createConsentRecord(choice);
+    const nextConsent = createConsentRecord(choice, {
+      analytics: analyticsSelected,
+      marketing: marketingSelected,
+    });
     persistConsent(nextConsent);
     setConsent(nextConsent);
     setIsOpen(false);
+    setShowPreferences(false);
   }
 
-  const statusText = consent?.choice === "all" ? copy.savedAll : copy.savedNecessary;
+  function openPreferences() {
+    setAnalyticsSelected(consent?.analytics ?? false);
+    setMarketingSelected(consent?.marketing ?? false);
+    setShowPreferences(true);
+  }
+
+  const statusText =
+    consent?.choice === "all"
+      ? copy.savedAll
+      : consent?.choice === "custom"
+        ? copy.savedCustom
+        : copy.savedNecessary;
 
   return (
     <>
@@ -160,9 +195,50 @@ export function CookieConsentButton({ cookieHref, copy }: CookieConsentButtonPro
                     <p className="mt-1 text-xs leading-5 text-[#50645b]">{copy.optionalDescription}</p>
                   </div>
                 </div>
-                <Link className="mt-3 inline-flex text-sm font-semibold text-[#111614] underline-offset-4 hover:underline" href={cookieHref}>
-                  {copy.detailsLink}
-                </Link>
+                {showPreferences ? (
+                  <fieldset className="mt-4 rounded-md border border-[#d8ddd7] bg-white p-3">
+                    <legend className="text-sm font-semibold text-[#111614]">{copy.preferencesTitle}</legend>
+                    <p className="mt-1 text-xs leading-5 text-[#50645b]">{copy.preferencesDescription}</p>
+                    <div className="mt-3 grid gap-2">
+                      <label className="flex items-start gap-2 text-sm font-semibold text-[#26342f]">
+                        <input
+                          checked
+                          className="mt-1"
+                          disabled
+                          readOnly
+                          type="checkbox"
+                        />
+                        {copy.necessaryTitle}
+                      </label>
+                      <label className="flex items-start gap-2 text-sm font-semibold text-[#26342f]">
+                        <input
+                          checked={analyticsSelected}
+                          className="mt-1"
+                          onChange={(event) => setAnalyticsSelected(event.target.checked)}
+                          type="checkbox"
+                        />
+                        {copy.analyticsLabel}
+                      </label>
+                      <label className="flex items-start gap-2 text-sm font-semibold text-[#26342f]">
+                        <input
+                          checked={marketingSelected}
+                          className="mt-1"
+                          onChange={(event) => setMarketingSelected(event.target.checked)}
+                          type="checkbox"
+                        />
+                        {copy.marketingLabel}
+                      </label>
+                    </div>
+                  </fieldset>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                  <Link className="inline-flex text-sm font-semibold text-[#111614] underline-offset-4 hover:underline" href={cookieHref}>
+                    {copy.detailsLink}
+                  </Link>
+                  <Link className="inline-flex text-sm font-semibold text-[#111614] underline-offset-4 hover:underline" href={privacyHref}>
+                    {copy.privacyLink}
+                  </Link>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
@@ -173,6 +249,23 @@ export function CookieConsentButton({ cookieHref, copy }: CookieConsentButtonPro
                 >
                   {copy.rejectOptional}
                 </button>
+                {showPreferences ? (
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#111614] bg-white px-4 py-3 text-sm font-semibold text-[#111614] transition hover:bg-[#f8f7f1] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
+                    onClick={() => choose("custom")}
+                    type="button"
+                  >
+                    {copy.saveSelection}
+                  </button>
+                ) : (
+                  <button
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold text-[#111614] transition hover:border-[#111614] hover:bg-[#f8f7f1] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
+                    onClick={openPreferences}
+                    type="button"
+                  >
+                    {copy.customize}
+                  </button>
+                )}
                 <button
                   className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#111614] bg-[#111614] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#26342f] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
                   onClick={() => choose("all")}

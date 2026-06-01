@@ -343,8 +343,8 @@ export function TaskCommandCenter({
   };
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
@@ -369,9 +369,9 @@ export function TaskCommandCenter({
             ))}
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex flex-col items-stretch gap-2 sm:items-end">
           <button
-            className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
             onClick={() => setIsCreateOpen((current) => !current)}
             type="button"
           >
@@ -379,12 +379,12 @@ export function TaskCommandCenter({
           </button>
         </div>
         {isCreateOpen ? (
-          <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.createTaskTitle}</h4>
               <p className="mt-1 break-words text-sm text-stone-600">{text.createTaskDescription}</p>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
                 {text.titleField}
                 <input
@@ -500,7 +500,7 @@ export function TaskCommandCenter({
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
-                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={taskSaving}
                 onClick={() => void createTask()}
                 type="button"
@@ -522,8 +522,8 @@ export function TaskCommandCenter({
         ) : null}
       </article>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.recommendedQueue}</h4>
@@ -634,7 +634,7 @@ export function TaskCommandCenter({
           </div>
         </article>
 
-        <aside className="rounded-lg border border-stone-200 bg-white p-5">
+        <aside className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
             {text.nextTask}
           </p>
