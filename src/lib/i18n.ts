@@ -624,6 +624,22 @@ export const crmPublicLandingPageCopy = {
         "No package logic, no checkout and no self-serve CRM signup.",
         "The system is scoped only after the private audit shows where the lead operation breaks.",
       ],
+      details: [
+        {
+          label: "Legal links",
+          body: "Imprint, Privacy Policy, Cookie Notice, Terms and data-deletion information are available from the footer.",
+        },
+        {
+          label: "Hosting and database",
+          body: "The platform uses Vercel, Neon Postgres and selected infrastructure providers. Region, processor terms and transfer safeguards are confirmed in the customer agreement before go-live.",
+        },
+        {
+          label: "Contact",
+          body: "Direct contact: Novalure CLG, hello@novalure.eu, +353 (0)89 269 5248.",
+        },
+      ],
+      proofPlaceholderTitle: "Customer proof placeholders",
+      proofPlaceholders: ["Approved client logo", "Approved customer quote", "Approved case proof"],
     },
     finalCta: {
       eyebrow: "Next step",
@@ -637,6 +653,8 @@ export const crmPublicLandingPageCopy = {
       title: "Cookie settings",
       description:
         "Novalure CRM uses necessary cookies for security, language, login and requested platform functions. Analytics and marketing cookies stay off unless you accept all.",
+      analyticsLabel: "Analytics cookies",
+      marketingLabel: "Marketing cookies",
       necessaryTitle: "Necessary cookies",
       necessaryDescription:
         "Required for page delivery, security, login sessions and remembering your cookie choice.",
@@ -644,10 +662,17 @@ export const crmPublicLandingPageCopy = {
       optionalDescription:
         "Used only after consent to understand demand, campaign performance and CRM-ready lead journeys.",
       rejectOptional: "Only necessary",
+      customize: "Customize",
+      saveSelection: "Save selection",
       acceptAll: "Accept all",
       detailsLink: "Read the Cookie Notice",
+      privacyLink: "Privacy Policy",
+      preferencesTitle: "Select cookie categories",
+      preferencesDescription:
+        "Necessary cookies stay active. Optional categories are only saved when you explicitly select and save them.",
       manageButton: "Cookies",
       savedNecessary: "Only necessary cookies are active.",
+      savedCustom: "Your selected cookie categories are active.",
       savedAll: "All cookie categories are accepted.",
     },
     footerTagline:
@@ -706,20 +731,20 @@ export const crmPublicLandingPageCopy = {
       problem: "Lead-Verlust",
       preview: "System-Einblick",
       audit: "Pipeline Audit",
-      login: "Team-Login",
+      login: "Anmelden",
       auditCta: "Audit anfragen",
     },
     hero: {
-      eyebrow: "Geschützter Novalure Operating Layer",
+      eyebrow: "Geschützte Novalure CRM-Arbeitsebene",
       title: "Damit kein Immobilien-Lead ohne nächste Aktion bleibt.",
       description:
         "Das ist kein öffentlich buchbares CRM-Abo. Es ist der geschützte Arbeitsbereich hinter Novalure, in dem Immobilien-Leads Kontext, Zuständigkeit, nächste Aktion und Pipeline-Sicht bekommen.",
       primaryCta: "Pipeline Audit anfragen",
-      secondaryCta: "Team-Login",
+      secondaryCta: "Zum Login",
       proofPoints: [
         "Pipeline, nicht Impressionen",
         "Kein öffentlicher Demo-Zugang",
-        "From first click to CRM-ready opportunity",
+        "Vom ersten Klick zur vertriebsreifen Chance",
       ],
     },
     loginPanel: {
@@ -730,9 +755,9 @@ export const crmPublicLandingPageCopy = {
     },
     companySystem: {
       eyebrow: "Firma und System",
-      title: "novalure.eu erklärt die Methode. novalure-crm.app zeigt den Layer dahinter.",
+      title: "novalure.eu erklärt die Methode. novalure-crm.app zeigt die Arbeitsebene dahinter.",
       description:
-        "Die Firmenwebsite baut Vertrauen auf und startet das private Audit. Diese Domain zeigt den kontrollierten Arbeitsbereich hinter der Lead Infrastructure, ohne daraus einen öffentlichen Produktkatalog zu machen.",
+        "Die Firmenwebsite baut Vertrauen auf und startet das private Audit. Diese Domain zeigt den kontrollierten Arbeitsbereich hinter dem Lead-System, ohne daraus einen öffentlichen Produktkatalog zu machen.",
       publicLayer: {
         label: "novalure.eu",
         title: "Öffentliche Firmenebene",
@@ -740,7 +765,7 @@ export const crmPublicLandingPageCopy = {
       },
       protectedLayer: {
         label: "novalure-crm.app",
-        title: "Geschützter System-Layer",
+        title: "Geschützte Systemebene",
         body: "Kontrollierter Arbeitsbereich für Lead-Zentrale, Follow-up-Kontext, Pipeline-Sicht und freigegebene operative Ansichten.",
       },
       bridge: ["Audit", "Setup", "Arbeitsbereich"],
@@ -759,10 +784,10 @@ export const crmPublicLandingPageCopy = {
     },
     preview: {
       eyebrow: "Kontrollierter System-Einblick",
-      title: "Genug Sichtbarkeit, um den operativen Layer zu beweisen. Nicht genug, um ihn offenzulegen.",
+      title: "Genug Sichtbarkeit, um die operative Arbeitsebene zu zeigen. Nicht genug, um sie offenzulegen.",
       description:
-        "Die Vorschau bleibt bewusst abstrakt: keine Kundennamen, keine sensiblen Screens und kein vollständiger Workflow. Sichtbar wird die operative Idee hinter Lead-Zentrale, Projektbezug, Verantwortlichkeit, nächster Aktion und Pipeline-Status.",
-      terms: ["Lead-Zentrale", "Nächste Aktion", "Pipeline-Status", "Projektbezug", "Verantwortlichkeit"],
+        "Die Vorschau bleibt bewusst reduziert: keine Kundennamen, keine sensiblen Ansichten und kein vollständiger Ablauf. Sichtbar wird die operative Idee hinter Lead-Zentrale, Projektbezug, Zuständigkeit, nächster Aktion und Pipeline-Stand.",
+      terms: ["Lead-Zentrale", "Nächste Aktion", "Pipeline-Stand", "Projektbezug", "Zuständigkeit"],
       notice: "Novalure CRM ist nicht öffentlich buchbar. Zugang bleibt privat, geprüft und an freigegebene Workspaces gebunden.",
     },
     audiences: {
@@ -804,10 +829,26 @@ export const crmPublicLandingPageCopy = {
       points: [
         "Workspaces und Projekte bleiben getrennt.",
         "Zugriff ist kontrolliert für Teams, Kunden und freigegebene Prüfungen.",
-        "Keine Kundendatensätze, Preise oder sensiblen Screens werden öffentlich gezeigt.",
-        "Keine Paketlogik, kein Checkout und kein Self-Serve-CRM-Zugang.",
-        "Das System wird erst eingegrenzt, wenn das private Audit zeigt, wo die Lead-Operation bricht.",
+        "Keine Kundendatensätze, Preise oder sensiblen Ansichten werden öffentlich gezeigt.",
+        "Keine Paketlogik, kein Checkout und kein Selbstbedienungs-CRM-Zugang.",
+        "Das System wird erst eingegrenzt, wenn das private Audit zeigt, wo die Lead-Bearbeitung hakt.",
       ],
+      details: [
+        {
+          label: "Rechtliche Links",
+          body: "Impressum, Datenschutzerklärung, Cookie-Hinweis, Nutzungsbedingungen und Datenlöschinformationen sind im Footer erreichbar.",
+        },
+        {
+          label: "Hosting und Datenbank",
+          body: "Die Plattform nutzt Vercel, Neon Postgres und ausgewählte Infrastruktur-Anbieter. Region, Auftragsverarbeitung und Übermittlungsschutz werden vor Go-Live im Kundenvertrag bestätigt.",
+        },
+        {
+          label: "Kontakt",
+          body: "Direkter Ansprechpartner: Novalure CLG, hello@novalure.eu, +353 (0)89 269 5248.",
+        },
+      ],
+      proofPlaceholderTitle: "Platzhalter für Kundennachweise",
+      proofPlaceholders: ["Freigegebenes Kundenlogo", "Freigegebene Kundenstimme", "Freigegebener Fallnachweis"],
     },
     finalCta: {
       eyebrow: "Nächster Schritt",
@@ -820,31 +861,40 @@ export const crmPublicLandingPageCopy = {
     cookieConsent: {
       title: "Cookie-Einstellungen",
       description:
-        "Novalure CRM nutzt notwendige Cookies für Sicherheit, Sprache, Login und angeforderte Plattformfunktionen. Analyse- und Marketing-Cookies bleiben aus, bis Sie alle akzeptieren.",
+        "Novalure CRM nutzt essenzielle Cookies für Sicherheit, Sprache, Login und angeforderte Plattformfunktionen. Analyse- und Marketing-Cookies bleiben aus, bis Sie ausdrücklich zustimmen.",
+      analyticsLabel: "Analyse-Cookies",
+      marketingLabel: "Marketing-Cookies",
       necessaryTitle: "Notwendige Cookies",
       necessaryDescription:
         "Erforderlich für Seitenauslieferung, Sicherheit, Login-Sessions und das Speichern Ihrer Cookie-Auswahl.",
       optionalTitle: "Analyse und Marketing",
       optionalDescription:
-        "Nur nach Einwilligung genutzt, um Nachfrage, Kampagnenleistung und CRM-ready Lead-Journeys zu verstehen.",
-      rejectOptional: "Nur notwendige",
+        "Nur nach Einwilligung genutzt, um Nachfrage, Kampagnenleistung und CRM-reife Lead-Strecken zu verstehen.",
+      rejectOptional: "Nur essenzielle",
+      customize: "Auswählen",
+      saveSelection: "Auswahl speichern",
       acceptAll: "Alle akzeptieren",
       detailsLink: "Cookie-Hinweis lesen",
+      privacyLink: "Datenschutzerklärung",
+      preferencesTitle: "Cookie-Kategorien auswählen",
+      preferencesDescription:
+        "Notwendige Cookies bleiben aktiv. Optionale Kategorien werden erst gespeichert, wenn Sie sie aktiv auswählen und bestätigen.",
       manageButton: "Cookies",
       savedNecessary: "Nur notwendige Cookies sind aktiv.",
+      savedCustom: "Ihre ausgewählten Cookie-Kategorien sind aktiv.",
       savedAll: "Alle Cookie-Kategorien sind akzeptiert.",
     },
     footerTagline:
-      "Lead-Infrastruktur für Immobilien-Teams, deren Nachfrage zu qualifizierten Gesprächen und CRM-ready Opportunities werden muss.",
+      "Lead-Infrastruktur für Immobilien-Teams, deren Nachfrage zu qualifizierten Gesprächen und CRM-reifen Verkaufschancen werden muss.",
     visuals: {
       heroOperatingLayer: {
         id: "ANIMATION_HERO_OPERATING_LAYER",
         alt: "Abstrakte Vorschau eines geschützten CRM-Arbeitsbereichs für Immobilien-Leads.",
         assetDescription:
-          "Premium Hero-Animation mit anonymisierten Lead- und Pipeline-Signalen als geschützter System-Layer.",
+          "Hochwertige Einstiegsanimation mit anonymisierten Lead- und Pipeline-Signalen als geschützte Systemebene.",
         geminiPrompt:
-          "Create a premium animated abstract CRM operating layer for a real estate lead system. Dark elegant interface, anonymized blurred lead cards, subtle pipeline signals, project tags, next-action indicators, confidential system feeling. No readable customer data, no prices, no real screenshots, no people, no stock-photo style. Slow calm motion, 6-8 second seamless loop, high-end PropTech, real estate sales operations.",
-        labels: ["Leadquelle", "CRM", "Pipeline", "Next Action"],
+          "Erstelle eine hochwertige animierte, abstrakte CRM-Arbeitsebene für ein Immobilien-Lead-System. Dunkle, elegante Oberfläche, anonymisierte unscharfe Lead-Karten, dezente Pipeline-Signale, Projektmarkierungen, Hinweise auf nächste Aktionen und vertrauliche Systemwirkung. Keine lesbaren Kundendaten, keine Preise, keine echten Bildschirmabbilder, keine Personen, keine Stockfoto-Optik. Ruhige Bewegung, nahtlose Schleife mit 6 bis 8 Sekunden, hochwertiger PropTech-Kontext für Immobilienvertrieb.",
+        labels: ["Leadquelle", "CRM", "Pipeline", "Nächste Aktion"],
       },
       companySystemSplit: {
         id: "ANIMATION_COMPANY_SYSTEM_SPLIT",
@@ -852,8 +902,8 @@ export const crmPublicLandingPageCopy = {
         assetDescription:
           "Animiertes Zwei-Ebenen-Diagramm: öffentliche Novalure-Marke und geschützter CRM-Arbeitsbereich.",
         geminiPrompt:
-          "Create a minimal premium animated diagram showing two connected layers: Novalure.eu as public brand, audit and playbook layer; Novalure CRM as protected operations system. Show a subtle flow from Pipeline Audit to protected CRM workspace. Real estate lead infrastructure, clean lines, elegant black and white palette with subtle accent. No pricing, no detailed UI, no sensitive data.",
-        labels: ["novalure.eu", "Pipeline Audit", "novalure-crm.app"],
+          "Erstelle ein reduziertes, hochwertiges animiertes Diagramm mit zwei verbundenen Ebenen: Novalure.eu als öffentliche Marken-, Audit- und Playbook-Ebene; Novalure CRM als geschütztes Arbeitssystem. Zeige einen dezenten Ablauf vom Pipeline-Audit zum geschützten CRM-Arbeitsbereich. Immobilien-Lead-System, klare Linien, elegante Schwarz-Weiß-Anmutung mit dezentem Akzent. Keine Preise, keine detaillierte Oberfläche, keine sensiblen Daten.",
+        labels: ["novalure.eu", "Pipeline-Audit", "novalure-crm.app"],
       },
       leadLeakage: {
         id: "ANIMATION_LEAD_LEAKAGE",
@@ -861,26 +911,26 @@ export const crmPublicLandingPageCopy = {
         assetDescription:
           "Vorher-Nachher-Animation für Lead-Verlust, Follow-up-Lücken und strukturierte Pipeline-Führung.",
         geminiPrompt:
-          "Create a premium animated before-after visual for real estate lead operations. Left side: incoming leads from ads and funnels without clear follow-up, some fading out. Right side: the same leads become organized CRM cards with owner, status, next action and pipeline movement. No readable personal data, no prices, no detailed product UI. Calm professional motion, not flashy.",
+          "Erstelle eine hochwertige animierte Vorher-Nachher-Visualisierung für Immobilien-Lead-Bearbeitung. Links: eingehende Leads aus Anzeigen und Funnels ohne klares Follow-up, einige verblassen. Rechts: dieselben Leads werden zu geordneten CRM-Karten mit Zuständigkeit, Status, nächster Aktion und Pipeline-Bewegung. Keine lesbaren personenbezogenen Daten, keine Preise, keine detaillierte Produktoberfläche. Ruhige professionelle Bewegung, nicht grell.",
         labels: ["Lose Anfragen", "Keine nächste Aktion", "Zuständig", "Pipeline"],
       },
       lockedCrmPreview: {
         id: "ANIMATION_LOCKED_CRM_PREVIEW",
         alt: "Kontrollierte, anonymisierte Vorschau auf Lead-Zentrale und Pipeline im CRM.",
         assetDescription:
-          "Geschützte CRM-Preview mit anonymisierten Karten und dezent hervorgehobenen Arbeitsfeldern.",
+          "Geschützte CRM-Vorschau mit anonymisierten Karten und dezent hervorgehobenen Arbeitsfeldern.",
         geminiPrompt:
-          "Create an animated locked CRM preview for a real estate lead operations platform. Show anonymized CRM cards with source, project, owner, next action and pipeline status. Highlight these fields one by one with subtle motion. Keep all data generic or blurred. No real screenshots, no sensitive details, no full workflow logic, no prices. Premium confidential software preview.",
+          "Erstelle eine animierte, geschützte CRM-Vorschau für ein Immobilien-Lead-System. Zeige anonymisierte CRM-Karten mit Quelle, Projekt, Zuständigkeit, nächster Aktion und Pipeline-Stand. Hebe diese Felder nacheinander dezent hervor. Alle Daten generisch oder unscharf halten. Keine echten Bildschirmabbilder, keine sensiblen Details, keine vollständige Ablauflogik, keine Preise. Hochwertige vertrauliche Software-Vorschau.",
         labels: ["Quelle", "Status", "Zuständig", "Nächste Aktion", "Pipeline"],
       },
       auditToSystem: {
         id: "ANIMATION_AUDIT_TO_SYSTEM",
-        alt: "Ablauf vom Pipeline Audit zum eingerichteten Lead-Operations-System.",
+        alt: "Ablauf vom Pipeline-Audit zum eingerichteten Lead-Bearbeitungssystem.",
         assetDescription:
-          "Kurze Prozessanimation vom Audit zur CRM-ready Lead Operations.",
+          "Kurze Prozessanimation vom Audit zur CRM-reifen Lead-Bearbeitung.",
         geminiPrompt:
-          "Create a short premium animated process visual for Novalure: Pipeline Audit, bottleneck analysis, system setup, CRM-ready lead operations. Real estate sales context, clean minimal motion, high trust, no prices, no package names, no detailed internal workflows. Elegant and confidential.",
-        labels: ["Pipeline Audit", "Engpassanalyse", "System-Setup", "CRM-ready Lead Operations"],
+          "Erstelle eine kurze hochwertige Prozessanimation für Novalure: Pipeline-Audit, Engpassanalyse, Systemeinrichtung, CRM-reife Lead-Bearbeitung. Immobilienvertriebskontext, klare reduzierte Bewegung, hohe Vertrauenswirkung, keine Preise, keine Paketnamen, keine detaillierten internen Abläufe. Elegant und vertraulich.",
+        labels: ["Pipeline-Audit", "Engpassanalyse", "Systemeinrichtung", "CRM-reife Lead-Bearbeitung"],
       },
     },
   },
@@ -1687,7 +1737,7 @@ export const dashboardCopy = {
       followUpQueue: "Follow-up-Queue",
       managedService: "Servicebetrieb",
       onboarding: "Onboarding",
-      projectAnalytics: "Projektauswertung",
+      projectAnalytics: "Auswertungen",
       projects: "Projekte",
       settings: "Einstellungen",
       slaCockpit: "Service-Fristen",
@@ -1767,7 +1817,7 @@ export const dashboardCopy = {
         },
         novalureGrowth: {
           label: "Novalure Growth",
-          description: "Interner Akquise-Workspace mit Tagesqueue, Leads, Pipeline, Funnels, Newsletter, Bots und Analytics.",
+          description: "Interner Akquise-Workspace mit Tagesqueue, Leads, Pipeline, Funnels, Newsletter, Bots und Auswertungen.",
         },
         novalureServiceOps: {
           label: "Novalure Service Ops",
@@ -2248,7 +2298,7 @@ export const dashboardCopy = {
         projectNamePlaceholder: "z. B. Wohnpark Graz Launch",
         projectType: "Projekttyp",
         pipeline: "Pipeline",
-        owner: "Verantwortlich",
+        owner: "Zuständig",
         funnelTemplate: "Funnel-Vorlage",
         calendar: "Kalender",
         meetingProvider: "Meetinganbieter",
@@ -2794,7 +2844,7 @@ export const crmAnalysisBotCopy = {
         {
           title: "Consent-aware growth stack",
           description:
-            "Funnels, forms, newsletter segments, consent records and Resend preparation are present, but need deeper runtime enforcement before production growth.",
+            "Funnels, forms, newsletter segments, consent records and sending-provider preparation are present, but need deeper runtime enforcement before production growth.",
         },
       ],
     },
@@ -5918,7 +5968,7 @@ export const funnelCommandCenterCopy = {
     newStepNotice: "Neuer Funnel-Schritt wurde im CRM-Builder angelegt.",
     newFunnel: "Neuer Funnel",
     newFunnelDetail: (funnelName: string, projectName: string) => `${funnelName} wurde für ${projectName} angelegt`,
-    newFunnelNotice: "Neuer Funnel erstellt: Projekt, Lead-Ziel, Pipeline und Verantwortlicher können jetzt bearbeitet werden.",
+    newFunnelNotice: "Neuer Funnel erstellt: Projekt, Lead-Ziel, Pipeline und zuständige Person können jetzt bearbeitet werden.",
     stepCopySuffix: "Kopie",
     duplicateNotice: "Schritt wurde dupliziert und bleibt Teil desselben CRM-Funnels.",
     removeNotice: "Schritt wurde aus dem Funnel-Entwurf entfernt.",
@@ -5979,7 +6029,7 @@ export const funnelCommandCenterCopy = {
       audience: "Zielgruppe",
       channel: "Einstiegskanal",
       status: "Status",
-      owner: "Verantwortlich",
+      owner: "Zuständig",
       leadDestination: "Leads laufen nach",
       pipelineStage: "Pipeline-Phase",
       booking: "Terminbuchung",
@@ -6077,7 +6127,7 @@ export const funnelCommandCenterCopy = {
     handover: {
       title: "CRM-Übergabe",
       leadInbox: "Lead Inbox Eintrag erzeugen",
-      task: "Aufgabe für Verantwortlichen erzeugen",
+      task: "Aufgabe für Zuständigen erzeugen",
       appointment: "Hot Leads zum Kalender führen",
       statusTemplate: "Status-Vorlage",
       qualityRule: "Lead-Qualitätsregel",
@@ -6579,7 +6629,7 @@ export const knowledgeCommandCenterCopy = {
     pipelineSteps: ["Hinzufügen", "Prüfen", "Freigeben", "Für Bot aktivieren", "Aktuell halten"],
     pipelineNotes: [
       "Call-Aufzeichnungen werden geprüft, bevor sie Antworten beeinflussen dürfen.",
-      "PDFs, Exposés und Preislisten brauchen einen klaren Freigabe-Verantwortlichen.",
+      "PDFs, Exposés und Preislisten brauchen einen klaren Freigabe-Zuständigen.",
       "URLs und Social Links werden nur aus erlaubten Domains verarbeitet.",
       "Bot-Antworten nutzen nur freigegebene Quellen und sollten den Quellenkontext zeigen.",
     ],
@@ -7541,7 +7591,7 @@ export const newsletterCommandCenterCopy = {
     template: "Vorlage",
     campaignGoal: "Kampagnenziel",
     segment: "Segment",
-    owner: "Verantwortlich",
+    owner: "Zuständig",
     project: "Projekt",
     status: "Status",
     language: "Sprache",
@@ -7583,7 +7633,7 @@ export const newsletterCommandCenterCopy = {
     liveSendRunning: "Versand wird geprüft",
     liveSendSuccess: "{{count}} Newsletter wurden an den Provider übergeben und im CRM protokolliert.",
     liveSendQueuedMock:
-      "{{count}} Newsletter wurden im CRM protokolliert. Für echten externen Versand fehlt noch RESEND_API_KEY.",
+      "{{count}} Newsletter wurden im CRM protokolliert. Für echten externen Versand fehlt noch der Versanddienst-Key.",
     liveSendTestMode:
       "Testmodus - es wurde keine externe E-Mail versendet; der Versand wurde nur im CRM protokolliert.",
     liveSendError: "Newsletter konnte nicht gesendet werden.",
@@ -7773,7 +7823,7 @@ export const newsletterCommandCenterCopy = {
     liveSendRunning: "Checking send",
     liveSendSuccess: "{{count}} newsletters were handed to the provider and logged in CRM.",
     liveSendQueuedMock:
-      "{{count}} newsletters were logged in CRM. RESEND_API_KEY is still required for real external sending.",
+      "{{count}} newsletters were logged in CRM. An email delivery key is still required for real external sending.",
     liveSendTestMode:
       "Test mode - no external email was sent; the send was only logged in CRM.",
     liveSendError: "Newsletter could not be sent.",
@@ -7992,7 +8042,7 @@ export const leadSequenceCommandCenterCopy = {
     timeline: "Timeline",
     simulator: "Simulator",
     rules: "Regeln",
-    analytics: "Analytics",
+    analytics: "Auswertungen",
     active: "Aktiv",
     paused: "Pausiert",
     draft: "Entwurf",
@@ -8007,7 +8057,7 @@ export const leadSequenceCommandCenterCopy = {
     internalSteps: "Interne Schritte",
     stopRules: "Stop-Regeln",
     conditions: "Bedingungen",
-    owner: "Verantwortlich",
+    owner: "Zuständig",
     channel: "Kanal",
     nextTouchpoint: "Nächster Touchpoint",
     selectContact: "Kontakt",
@@ -8931,7 +8981,7 @@ export const calendarCommandCenterCopy = {
     end: "Ende",
     location: "Ort",
     status: "Status",
-    owner: "Verantwortlich",
+    owner: "Zuständig",
     contact: "Kontakt",
     leadContext: "Lead-Kontext",
     project: "Projekt",
@@ -9666,7 +9716,7 @@ export const calendarCommandCenterCopy = {
       cancelReasonRequired: "Cancellation reason will be requested",
       cancelWithoutReason: "Cancellation possible without reason",
       deliveryNote:
-        "Delivery: test email runs through Resend or the mock queue; real reminder jobs follow afterwards.",
+        "Delivery: test email runs through the configured sending provider or the mock queue; real reminder jobs follow afterwards.",
     },
     setup: {
       eyebrow: "Create booking page",
@@ -9833,7 +9883,7 @@ export const calendarCommandCenterCopy = {
       preparingTestMail: (to: string) => `Preparing test email for ${to}.`,
       testMailError: "Test email could not be prepared.",
       testMailSent: (to: string) => `Test email was sent to ${to}.`,
-      testMailQueued: "Test email is prepared. Without a Resend key, it remains saved as queued.",
+      testMailQueued: "Test email is prepared. Without an email delivery key, it remains saved as queued.",
       testMailApiUnavailable: "Test email API is currently unavailable.",
       providerOAuthOpening: (provider: string) => `${provider} OAuth is opening.`,
       meetingProviderConnecting: (meetingProvider: string, provider: string) =>
@@ -9850,7 +9900,7 @@ export const calendarCommandCenterCopy = {
       microsoftNotConnected:
         "Microsoft 365 is not connected yet. Please connect Microsoft and then confirm again.",
       resendTesting:
-        "Email sending is still in Resend test mode. Please verify the sender domain or send to the test address.",
+        "Email sending is still in provider test mode. Please verify the sender domain or send to the test address.",
     },
     statusLabels: {
       geplant: "scheduled",

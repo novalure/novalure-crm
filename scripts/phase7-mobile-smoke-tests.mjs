@@ -24,6 +24,18 @@ test("primary pipeline actions fit narrow screens before switching to desktop wi
   assert.match(component, /className="mt-4 w-full rounded-md bg-slate-950[\s\S]*?sm:w-auto"/);
 });
 
+test("lead inbox and task command centers constrain narrow layouts", () => {
+  const leadInbox = readText("src/components/lead-inbox.tsx");
+  const tasks = readText("src/components/task-command-center.tsx");
+
+  assert.match(leadInbox, /<section className="grid min-w-0 max-w-full gap-4 overflow-hidden">/);
+  assert.match(leadInbox, /<section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-\[minmax\(0,1fr\)_420px\]">/);
+  assert.match(leadInbox, /lg:grid-cols-\[minmax\(0,1fr\)_220px\]/);
+  assert.match(tasks, /<section className="grid min-w-0 max-w-full gap-4 overflow-hidden">/);
+  assert.match(tasks, /<section className="grid min-w-0 max-w-full gap-4 xl:grid-cols-\[minmax\(0,1fr\)_360px\]">/);
+  assert.match(tasks, /className="w-full rounded-md bg-slate-950[\s\S]*?sm:w-auto"/);
+});
+
 test("mobile dashboard exposes the daily lead, task and appointment actions", () => {
   const mobile = readText("src/components/mobile-daily-work.tsx");
   const workspace = readText("src/components/crm-workspace.tsx");
@@ -47,8 +59,11 @@ test("settings command center keeps wide role tables inside local scroll contain
 });
 
 test("global shell prevents accidental body-level horizontal scrolling", () => {
+  const workspace = readText("src/components/crm-workspace.tsx");
   const globals = readText("src/app/globals.css");
 
+  assert.match(workspace, /<main className="min-h-screen max-w-full overflow-hidden bg-\[#f4f2ec\] text-slate-950"/);
+  assert.match(workspace, /<div className="mx-auto flex min-h-screen w-full min-w-0 max-w-\[1500px\]">/);
   assert.match(globals, /body\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*hidden;/);
   assert.match(globals, /html\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*hidden;/);
   assert.match(globals, /overflow-wrap:\s*anywhere/);

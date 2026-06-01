@@ -39,7 +39,7 @@ export default async function RootLayout({
   const language = await getInitialLanguage();
 
   return (
-    <html lang={language} className="h-full">
+    <html lang={language} className="h-full" suppressHydrationWarning>
       <body className="flex min-h-full flex-col antialiased">
         <LanguageHtmlSync />
         {children}

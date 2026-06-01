@@ -217,6 +217,7 @@ export function LeadInbox({
   const [formSuccess, setFormSuccess] = useState("");
   const [fieldSaving, setFieldSaving] = useState(false);
   const [fieldFeedback, setFieldFeedback] = useState<{ message: string; tone: "error" | "success" } | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ message: string; tone: "error" | "success" } | null>(null);
 
   const effectiveLeads = useMemo(
     () => [
@@ -444,8 +445,10 @@ export function LeadInbox({
       addActivity(leadId, text.accepted, text.acceptedDetail, "success");
       await refreshPersistedLeads(leadId);
       setNotice(text.accepted);
+      setActionFeedback({ message: text.accepted, tone: "success" });
     } catch {
       setNotice(text.saveError);
+      setActionFeedback({ message: text.saveError, tone: "error" });
     }
   };
 
@@ -459,9 +462,12 @@ export function LeadInbox({
       updateLead(leadId, patch);
       addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
       await refreshPersistedLeads(leadId);
-      setNotice(nextStatus === "Archiviert" ? text.archivedNow : text.restored);
+      const message = nextStatus === "Archiviert" ? text.archivedNow : text.restored;
+      setNotice(message);
+      setActionFeedback({ message, tone: "success" });
     } catch {
       setNotice(text.saveError);
+      setActionFeedback({ message: text.saveError, tone: "error" });
     }
   };
 
@@ -491,6 +497,7 @@ export function LeadInbox({
 
     if (!response.ok) {
       setNotice(text.saveError);
+      setActionFeedback({ message: text.saveError, tone: "error" });
       return;
     }
 
@@ -499,7 +506,9 @@ export function LeadInbox({
     );
     addActivity(selectedLead.id, text.taskCreated, selectedLead.nextAction, "success");
     const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean } };
-    setNotice(payload.data?.allowed === false ? text.consentBlocked : text.taskCreated);
+    const message = payload.data?.allowed === false ? text.consentBlocked : text.taskCreated;
+    setNotice(message);
+    setActionFeedback({ message, tone: payload.data?.allowed === false ? "error" : "success" });
   };
 
   const prepareBulkFollowUp = async () => {
@@ -704,8 +713,8 @@ export function LeadInbox({
   };
 
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-4 md:p-5">
+    <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+      <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 md:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
@@ -738,8 +747,8 @@ export function LeadInbox({
         ) : null}
       </article>
 
-      <section className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
-        <article className="rounded-lg border border-stone-200 bg-white p-4">
+      <section className="grid min-w-0 max-w-full gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap gap-2">
               {views.map((view) => (
@@ -771,6 +780,7 @@ export function LeadInbox({
                 onClick={() => {
                   setFormError("");
                   setFormSuccess("");
+                  setActionFeedback(null);
                   setShowCreateForm((current) => !current);
                 }}
                 type="button"
@@ -780,7 +790,11 @@ export function LeadInbox({
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+          {!showCreateForm && formSuccess ? (
+            <p className="mt-3 text-sm font-semibold text-emerald-700">{formSuccess}</p>
+          ) : null}
+
+          <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
             <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
               {text.search}
               <input
@@ -807,8 +821,8 @@ export function LeadInbox({
           </div>
 
           {showCreateForm ? (
-            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-              <div className="grid gap-3 lg:grid-cols-4">
+            <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="grid min-w-0 gap-3 lg:grid-cols-4">
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.contact}
                   <select
@@ -875,7 +889,7 @@ export function LeadInbox({
                   </select>
                 </label>
               </div>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-2">
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.intent}
                   <textarea
@@ -1135,6 +1149,7 @@ export function LeadInbox({
                     onClick={() => {
                       setSelectedLeadId(item.lead.id);
                       setFieldFeedback(null);
+                      setActionFeedback(null);
                     }}
                     type="button"
                   >
@@ -1372,6 +1387,15 @@ export function LeadInbox({
                 >
                   {selected.lead.status === "Archiviert" ? text.restore : text.archive}
                 </button>
+                {actionFeedback ? (
+                  <p
+                    className={`text-sm font-semibold sm:col-span-3 2xl:col-span-1 ${
+                      actionFeedback.tone === "success" ? "text-emerald-700" : "text-red-700"
+                    }`}
+                  >
+                    {actionFeedback.message}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-lg border border-stone-200 p-3">

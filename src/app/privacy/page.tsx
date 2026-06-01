@@ -203,7 +203,7 @@ const germanSections = [
     title: "5. Zwecke der Verarbeitung",
     items: [
       "Bereitstellung, Absicherung und Wartung der Novalure CRM Plattform.",
-      "Ermöglichung der Verwaltung von Workspaces, Rollen, Projekten, Kontakten, Deals, Aufgaben, Funnels, Kommunikation und Analytics.",
+      "Ermöglichung der Verwaltung von Workspaces, Rollen, Projekten, Kontakten, Deals, Aufgaben, Funnels, Kommunikation und Auswertungen.",
       "Anbindung kundenseitig freigegebener WhatsApp-Business-, Instagram-, Facebook-Messenger-, Microsoft-365-, Kalender-, E-Mail- und Newsletter-Integrationen.",
       "Empfang, Routing und Beantwortung von Kundenkommunikation über konfigurierte Bots und Kommunikationskanäle.",
       "Speicherung und Aktualisierung von Leads, Kontakten, Deals, Aufgaben, Terminen und Audit-Logs.",
