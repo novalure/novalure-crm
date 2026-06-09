@@ -16,7 +16,7 @@ import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
-import { isProductRole, type ProductRole } from "@/lib/product-model";
+import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -119,6 +119,32 @@ type WorkspaceUserRow = {
   status: WorkspaceUser["status"];
   workspaceId: string;
 };
+
+type RoleGrantValidation =
+  | { ok: true }
+  | { ok: false; reason: string; status: 403 };
+
+const platformAssignableProductRoles = new Set<ProductRole>(["platform_admin"]);
+const novalureInternalAssignableProductRoles = new Set<ProductRole>([
+  "novalureGrowth",
+  "novalureServiceOps",
+  "novalureAdmin",
+  "novalure_sales",
+  "novalure_onboarding",
+  "novalure_customer_success",
+  "novalure_operator",
+]);
+const customerAssignableProductRoles = new Set<ProductRole>([
+  "customer_owner",
+  "workspace_admin",
+  "team_member",
+  "broker_agent",
+  "developer_sales",
+  "project_sales_member",
+  "assistant_backoffice",
+  "external_partner",
+  "viewer",
+]);
 
 type ProjectRow = {
   customerType: Project["customerType"] | null;
@@ -529,6 +555,75 @@ function canInviteWorkspaceUsers(session: AppSession) {
   );
 }
 
+function canAssignCustomerProductRole(session: AppSession, targetProductRole: ProductRole) {
+  if (!customerAssignableProductRoles.has(targetProductRole)) return false;
+
+  if (
+    session.productRole === "platform_admin" ||
+    session.productRole === "novalureAdmin" ||
+    session.productRole === "novalure_onboarding" ||
+    session.productRole === "novalure_customer_success" ||
+    session.productRole === "customer_owner"
+  ) {
+    return true;
+  }
+
+  if (session.productRole === "workspace_admin") {
+    return targetProductRole !== "customer_owner";
+  }
+
+  if (session.role === "owner") return true;
+  if (session.role === "admin") return targetProductRole !== "customer_owner";
+
+  return false;
+}
+
+function validateWorkspaceUserRoleGrant(input: {
+  session: AppSession;
+  targetProductRole: ProductRole;
+  targetRole: WorkspaceRole;
+}): RoleGrantValidation {
+  const expectedRole = mapProductRoleToTechnicalRole(input.targetProductRole);
+
+  if (input.targetRole !== expectedRole) {
+    return {
+      ok: false,
+      reason: "Target role does not match the selected product role",
+      status: 403,
+    };
+  }
+
+  if (platformAssignableProductRoles.has(input.targetProductRole)) {
+    return input.session.productRole === "platform_admin"
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: "Only platform admins can grant the platform admin product role",
+          status: 403,
+        };
+  }
+
+  if (novalureInternalAssignableProductRoles.has(input.targetProductRole)) {
+    return input.session.productRole === "platform_admin" || input.session.productRole === "novalureAdmin"
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: "Only platform or Novalure admins can grant internal product roles",
+          status: 403,
+        };
+  }
+
+  if (canAssignCustomerProductRole(input.session, input.targetProductRole)) {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    reason: "Workspace invitation target role is not allowed for this actor",
+    status: 403,
+  };
+}
+
 function normalizeInviteEmail(value: unknown) {
   const email = typeof value === "string" ? value.trim().toLowerCase() : "";
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
@@ -576,6 +671,12 @@ export async function inviteWorkspaceUser(input: {
 
   const role = normalizeWorkspaceRole(input.role) ?? "assistant";
   const productRole = isProductRole(input.productRole) ? input.productRole : "viewer";
+  const roleGrant = validateWorkspaceUserRoleGrant({
+    session: input.session,
+    targetProductRole: productRole,
+    targetRole: role,
+  });
+  if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
   if (role === "owner" && input.session.role !== "owner" && input.session.productRole !== "platform_admin") {
     return { ok: false as const, reason: "Only owners can invite another owner" };
@@ -755,6 +856,14 @@ export async function updateWorkspaceUserAccess(input: {
   const role = normalizeWorkspaceRole(input.role) ?? existing.role;
   const productRole = isProductRole(input.productRole) ? input.productRole : existing.productRole;
   const status = input.status === "active" || input.status === "invited" ? input.status : existing.status;
+  if (!productRole) return { ok: false as const, reason: "Product role is required" };
+
+  const roleGrant = validateWorkspaceUserRoleGrant({
+    session: input.session,
+    targetProductRole: productRole,
+    targetRole: role,
+  });
+  if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
   if (existing.role === "owner" && role !== "owner") {
     const owners = await queryRows<IdRow>(

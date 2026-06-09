@@ -24,6 +24,13 @@ function getProjectId(request: Request) {
   return projectId && projectId !== "all" ? projectId : null;
 }
 
+function getFailureStatus(result: unknown) {
+  if (!result || typeof result !== "object" || !("status" in result)) return 400;
+  const status = result.status;
+
+  return typeof status === "number" ? status : 400;
+}
+
 export async function GET(request: Request) {
   const auth = await requireProductCapability(request, "customer-access:read");
   if (!auth.ok) return auth.response;
@@ -97,7 +104,7 @@ export async function PATCH(request: Request) {
           });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: 400 });
+    return NextResponse.json({ error: result.reason }, { status: getFailureStatus(result) });
   }
 
   const payload = await listCustomerAccessCockpit({
