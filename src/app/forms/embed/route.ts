@@ -3,7 +3,7 @@ import {
   fallbackFormRuntimeCopy,
 } from "@/components/form-renderer";
 import { renderStaticFormHtml } from "@/components/form-renderer-static";
-import { getPublicWebsiteForm } from "@/lib/db/form-repositories";
+import { getPublicWebsiteFormByKey } from "@/lib/db/form-repositories";
 import {
   resolveRuntimeLayoutVariant,
   type FormVariant,
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const formKey = url.searchParams.get("form") ?? "novalure-form";
   const copy = getFormCommandCenterCopy("de");
-  const persisted = await getPublicWebsiteForm(formKey).catch(() => null);
+  const persisted = await getPublicWebsiteFormByKey(formKey).catch(() => null);
   if (!persisted?.form) {
     const variant = normalizeRequestedVariant(url.searchParams.get("variant"), "embed");
     return createEmbedScript({
@@ -28,14 +28,14 @@ export async function GET(request: Request) {
   const variant = normalizeRequestedVariant(url.searchParams.get("variant"), form.variant);
   const origin = url.origin;
   const publicKey = form.id || formKey;
-  const publicUrl = `${origin}/forms/${encodeURIComponent(publicKey)}`;
+  const publicUrl = `${origin}${persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`}`;
   const runtimeCopy = { ...fallbackFormRuntimeCopy, ...copy.runtime };
   const formHtml = renderStaticFormHtml({
     action: `${origin}/api/forms/submissions`,
     copy: runtimeCopy,
     form: { ...form, variant },
     publicKey,
-    returnTo: `/forms/${encodeURIComponent(publicKey)}`,
+    returnTo: persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`,
     source: "website",
   });
   const html = renderEmbedHtml({

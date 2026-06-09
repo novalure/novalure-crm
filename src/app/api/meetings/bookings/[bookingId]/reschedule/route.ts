@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { reschedulePublicMeetingBooking } from "@/lib/db/meeting-repositories";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
+import { buildPublicMeetingPath } from "@/lib/public-routing";
 
 type RouteContext = {
   params: Promise<{ bookingId: string }>;
@@ -11,8 +12,11 @@ function getFormValue(formData: FormData, key: string) {
   return typeof value === "string" ? value : "";
 }
 
-function getRedirectUrl(request: Request, slug: string, params: Record<string, string>) {
-  const url = new URL(`/book/${slug || "meeting"}`, request.url);
+function getRedirectUrl(request: Request, input: { slug: string; workspacePublicKey?: string | null }, params: Record<string, string>) {
+  const path = input.workspacePublicKey
+    ? buildPublicMeetingPath({ slug: input.slug || "meeting", workspacePublicKey: input.workspacePublicKey })
+    : `/book/${input.slug || "meeting"}`;
+  const url = new URL(path, request.url);
   Object.entries(params).forEach(([key, value]) => {
     if (value) url.searchParams.set(key, value);
   });
@@ -24,6 +28,7 @@ export async function POST(request: Request, context: RouteContext) {
   const formData = await request.formData();
   const token = getFormValue(formData, "token");
   const slug = getFormValue(formData, "slug");
+  const workspacePublicKey = getFormValue(formData, "workspace_public_key");
   const selectedDate = getFormValue(formData, "selectedDate");
   const slot = getFormValue(formData, "slot");
 
@@ -38,7 +43,10 @@ export async function POST(request: Request, context: RouteContext) {
     await processDueMeetingNotifications({ jobIds: [result.notificationJobId] });
   }
 
-  const redirectUrl = getRedirectUrl(request, result.booking?.pageSlug || slug, {
+  const redirectUrl = getRedirectUrl(request, {
+    slug: result.booking?.pageSlug || slug,
+    workspacePublicKey: result.booking?.workspacePublicKey || workspacePublicKey,
+  }, {
     booking: bookingId,
     date: result.ok ? selectedDate : "",
     error: result.ok ? "" : result.error || "reschedule_failed",

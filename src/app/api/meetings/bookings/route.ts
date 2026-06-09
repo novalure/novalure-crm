@@ -5,6 +5,7 @@ import {
   listMeetingBookingOverview,
 } from "@/lib/db/meeting-repositories";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
+import { buildPublicMeetingPath } from "@/lib/public-routing";
 
 function getFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -55,7 +56,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const formData = await request.formData();
   const slug = getFormValue(formData, "slug");
-  const redirectUrl = new URL(`/book/${slug || "pipeline-audit"}`, request.url);
+  const workspacePublicKey = getFormValue(formData, "workspace_public_key");
+  const redirectPath = workspacePublicKey
+    ? buildPublicMeetingPath({ slug: slug || "pipeline-audit", workspacePublicKey })
+    : `/book/${slug || "pipeline-audit"}`;
+  const redirectUrl = new URL(redirectPath, request.url);
 
   const result = await createMeetingBookingWithNotifications({
     calendarProvider: resolveCalendarProvider(formData),
@@ -68,6 +73,7 @@ export async function POST(request: Request) {
     slot: getFormValue(formData, "slot") || "10:00",
     slug,
     source: getFormValue(formData, "utm_source") || "booking_page",
+    workspacePublicKey,
   });
 
   if (!result.persisted) {

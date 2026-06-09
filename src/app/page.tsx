@@ -91,6 +91,7 @@ export default async function Home({ searchParams }: HomeProps) {
         id: session.workspaceId,
         name: session.workspaceName,
         operatingModel: session.workspaceOperatingModel ?? undefined,
+        publicKey: session.workspacePublicKey ?? undefined,
         setupState: session.workspaceSetupState ?? undefined,
         teamStructure: session.workspaceTeamStructure ?? undefined,
       }}

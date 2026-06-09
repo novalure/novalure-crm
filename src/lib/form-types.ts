@@ -141,11 +141,13 @@ export type WebsiteForm = {
   status: FormStatus;
   steps: FormStep[];
   submissions: number;
+  slug: string;
   tags: string;
   template: FormTemplate;
   utmCapture: boolean;
   variant: FormVariant;
   visits: number;
+  workspacePublicKey?: string;
 };
 
 export type FormSubmissionSummary = {

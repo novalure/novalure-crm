@@ -13,8 +13,8 @@ import {
 import { sendBotDocument, type BotDocumentDeliveryResult } from "@/lib/bots/provider-actions";
 import {
   createMeetingBookingWithNotifications,
-  getPublicMeetingAvailability,
-  getPublicMeetingPageSettings,
+  getMeetingPageSettings,
+  getWorkspaceMeetingAvailability,
   listMeetingPageSettings,
   type MeetingPageSettings,
 } from "@/lib/db/meeting-repositories";
@@ -37,6 +37,7 @@ import type { LanguageCode } from "@/lib/i18n";
 import { embedText } from "@/lib/integrations/embeddings";
 import { generateModelReply, getModelProviderStatus } from "@/lib/integrations/model-provider";
 import { getPublicMediaUrl, listWorkspaceMedia, type MediaAsset } from "@/lib/media-store";
+import { buildPublicMeetingPath } from "@/lib/public-routing";
 
 export type BotChatRunResult = {
   approvalId: string | null;
@@ -299,10 +300,13 @@ function getMeetingProviderFromPage(page: MeetingPageSettings | null, calendarPr
   return calendarProvider === "google" ? "google-meet" : "microsoft-teams";
 }
 
-function buildBookingUrl(slug: string, requestUrl?: string) {
+function buildBookingUrl(page: Pick<MeetingPageSettings, "slug" | "workspacePublicKey"> | null, slug: string, requestUrl?: string) {
   const origin = process.env.NEXT_PUBLIC_APP_URL || (requestUrl ? new URL(requestUrl).origin : "https://www.novalure-crm.app");
+  const path = page?.workspacePublicKey
+    ? buildPublicMeetingPath({ slug: page.slug, workspacePublicKey: page.workspacePublicKey })
+    : `/book/${slug}`;
   try {
-    return new URL(`/book/${slug}`, origin).toString();
+    return new URL(path, origin).toString();
   } catch {
     return null;
   }
@@ -358,7 +362,7 @@ async function loadBotMeetingContext(input: {
   session: AppSession;
 }): Promise<BotMeetingContext> {
   const slug = await resolveMeetingSlug({ payload: input.payload, pendingMeeting: input.pendingMeeting, session: input.session });
-  const page = await getPublicMeetingPageSettings(slug).catch(() => null);
+  const page = await getMeetingPageSettings({ session: input.session, slug }).catch(() => null);
   const calendarProvider = asOptionalString(input.payload.calendarProvider) ?? input.pendingMeeting?.calendarProvider ?? getCalendarProviderFromPage(page);
   const meetingProvider =
     asOptionalString(input.payload.meetingProvider) ??
@@ -369,8 +373,9 @@ async function loadBotMeetingContext(input: {
     asOptionalString(input.payload.date) ??
     input.pendingMeeting?.selectedDate ??
     parseDatePreference(input.prompt);
-  const firstAvailability = await getPublicMeetingAvailability({
+  const firstAvailability = await getWorkspaceMeetingAvailability({
     date: requestedDate ?? undefined,
+    session: input.session,
     slug,
   }).catch(() => null);
   const candidateDates = Array.from(
@@ -386,7 +391,7 @@ async function loadBotMeetingContext(input: {
     const availability =
       date === firstAvailability?.date
         ? firstAvailability
-        : await getPublicMeetingAvailability({ date, slug }).catch(() => null);
+        : await getWorkspaceMeetingAvailability({ date, session: input.session, slug }).catch(() => null);
 
     availability?.slots
       .filter((slot) => slot.available)
@@ -409,7 +414,7 @@ async function loadBotMeetingContext(input: {
   });
 
   return {
-    bookingUrl: buildBookingUrl(slug, input.requestUrl),
+    bookingUrl: buildBookingUrl(page, slug, input.requestUrl),
     calendarProvider,
     meetingProvider,
     page,
@@ -911,6 +916,7 @@ export async function runBotChat(input: {
       ? await createMeetingBookingWithNotifications({
           ...meetingPayload,
           requestUrl: input.requestUrl ?? "http://localhost",
+          session,
           source: "bot_autonomy",
         })
       : meetingBookingDecision?.mode === "test"

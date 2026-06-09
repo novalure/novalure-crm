@@ -3,9 +3,10 @@ import { requirePermission } from "@/lib/auth/session";
 import { evaluateBotAction, getBotRuntimeControls } from "@/lib/bots/policy";
 import {
   createMeetingBookingWithNotifications,
-  getPublicMeetingAvailability,
-  getPublicMeetingPageSettings,
+  getMeetingPageSettings,
+  getWorkspaceMeetingAvailability,
   listMeetingPageSettings,
+  type MeetingPageSettings,
 } from "@/lib/db/meeting-repositories";
 import { createApprovalRequest, writeAuditLog } from "@/lib/db/runtime-repositories";
 
@@ -23,21 +24,22 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
 }
 
-function getCalendarProvider(page: Awaited<ReturnType<typeof getPublicMeetingPageSettings>>) {
+function getCalendarProvider(page: MeetingPageSettings | null) {
   const config = asRecord(page?.calendarIntegrations);
   return config.defaultProvider === "google" ? "google" : "microsoft";
 }
 
-function getMeetingProvider(page: Awaited<ReturnType<typeof getPublicMeetingPageSettings>>, calendarProvider: string) {
+function getMeetingProvider(page: MeetingPageSettings | null, calendarProvider: string) {
   const config = asRecord(page?.calendarIntegrations);
   const provider = typeof config.defaultMeetingProvider === "string" ? config.defaultMeetingProvider : "";
   if (["google-meet", "microsoft-teams", "manual-link", "phone"].includes(provider)) return provider;
   return calendarProvider === "google" ? "google-meet" : "microsoft-teams";
 }
 
-async function getMeetingSlots(slug: string, date?: string) {
+async function getMeetingSlots(input: { date?: string; session: Parameters<typeof listMeetingPageSettings>[0]["session"]; slug: string }) {
+  const { date, session, slug } = input;
   if (!slug) return [];
-  const availability = await getPublicMeetingAvailability({ date, slug }).catch(() => null);
+  const availability = await getWorkspaceMeetingAvailability({ date, session, slug }).catch(() => null);
   return (
     availability?.slots
       .filter((slot) => slot.available)
@@ -58,7 +60,7 @@ export async function GET(request: Request) {
   const date = url.searchParams.get("date")?.trim() || undefined;
   const pages = await listMeetingPageSettings({ session: auth.session, limit: 50 });
   const resolvedSlug = slug || pages.pages[0]?.slug || "";
-  const slots = await getMeetingSlots(resolvedSlug, date);
+  const slots = await getMeetingSlots({ date, session: auth.session, slug: resolvedSlug });
 
   return NextResponse.json({
     pages: pages.pages,
@@ -77,7 +79,9 @@ export async function POST(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
-  const page = typeof input.slug === "string" ? await getPublicMeetingPageSettings(input.slug) : null;
+  const page = typeof input.slug === "string"
+    ? await getMeetingPageSettings({ session: auth.session, slug: input.slug })
+    : null;
   const calendarProvider = typeof input.calendarProvider === "string" ? input.calendarProvider : getCalendarProvider(page);
   const payload = {
     calendarProvider,
@@ -140,7 +144,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       decision,
       payload,
-      slots: await getMeetingSlots(payload.slug, payload.selectedDate),
+      slots: await getMeetingSlots({ date: payload.selectedDate, session: auth.session, slug: payload.slug }),
       status: decision.mode === "test" ? "test" : "blocked",
     }, { status: decision.mode === "block" ? 409 : 202 });
   }
@@ -148,6 +152,7 @@ export async function POST(request: Request) {
   const result = await createMeetingBookingWithNotifications({
     ...payload,
     requestUrl: request.url,
+    session: auth.session,
     source: "bot_autonomy",
   });
 
