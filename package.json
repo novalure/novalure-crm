@@ -24,6 +24,7 @@
     "qa:livegang:reset": "node scripts/qa-livegang-reset.mjs",
     "qa:livegang:api": "node scripts/qa-livegang-api.mjs",
     "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs",
+    "qa:productrole-invite": "node scripts/qa-productrole-invite-hardening.mjs",
     "qa:public-slug-routing": "node scripts/qa-public-slug-routing.mjs",
     "qa:tenant-isolation": "node scripts/qa-tenant-isolation.mjs"
   },
