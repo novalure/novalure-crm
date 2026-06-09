@@ -32,6 +32,15 @@ function maskDatabaseUrl(value) {
     .replace(/(project|database|dbname)=([^&\s]+)/gi, "$1=***");
 }
 
+function cleanDatabaseUrl(value) {
+  if (!value) return "";
+
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, "");
+  const prefixedUrl = trimmed.match(/^[A-Z0-9_]+=((?:postgres|postgresql):\/\/.+)$/i);
+
+  return prefixedUrl?.[1] ?? trimmed;
+}
+
 const target = process.env.PUBLIC_SLUG_ROUTING_MIGRATION_TARGET || "test";
 const envFile = target === "prod" ? ".env.production.local" : ".env.local";
 
@@ -41,7 +50,11 @@ if (target !== "test" && target !== "prod") {
 
 loadEnvFile(join(process.cwd(), envFile));
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl =
+  cleanDatabaseUrl(process.env.DATABASE_URL) ||
+  cleanDatabaseUrl(process.env.POSTGRES_URL) ||
+  cleanDatabaseUrl(process.env.POSTGRES_DATABASE_URL) ||
+  cleanDatabaseUrl(process.env.POSTGRES_PRISMA_URL);
 if (!databaseUrl) throw new Error("DATABASE_URL is missing");
 
 const parsed = new URL(databaseUrl);
