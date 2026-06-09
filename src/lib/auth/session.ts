@@ -31,6 +31,7 @@ export type AppSession = {
   workspaceActiveCalendarProvider?: CalendarProviderChoice | null;
   workspaceCustomerType?: WorkspaceCustomerType | null;
   workspaceOperatingModel?: WorkspaceOperatingModel | null;
+  workspacePublicKey?: string | null;
   workspaceSetupState?: Record<string, unknown> | null;
   workspaceTeamStructure?: WorkspaceTeamStructure | null;
 };
@@ -47,6 +48,7 @@ type WorkspaceUserRow = {
   workspaceActiveCalendarProvider?: CalendarProviderChoice | null;
   workspaceCustomerType?: WorkspaceCustomerType | null;
   workspaceOperatingModel?: WorkspaceOperatingModel | null;
+  workspacePublicKey?: string | null;
   workspaceSetupState?: Record<string, unknown> | null;
   workspaceTeamStructure?: WorkspaceTeamStructure | null;
 };
@@ -57,6 +59,7 @@ type WorkspaceRow = {
   activeCalendarProvider?: CalendarProviderChoice | null;
   customerType?: WorkspaceCustomerType | null;
   operatingModel?: WorkspaceOperatingModel | null;
+  publicKey?: string | null;
   setupState?: Record<string, unknown> | null;
   teamStructure?: WorkspaceTeamStructure | null;
 };
@@ -133,6 +136,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
       workspaceActiveCalendarProvider: mockWorkspace.activeCalendarProvider ?? "none",
       workspaceCustomerType: mockWorkspace.customerType ?? null,
       workspaceOperatingModel: mockWorkspace.operatingModel ?? null,
+      workspacePublicKey: null,
       workspaceSetupState: mockWorkspace.setupState ?? null,
       workspaceTeamStructure: mockWorkspace.teamStructure ?? null,
     };
@@ -155,6 +159,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
                   w.customer_type as "workspaceCustomerType",
                   w.team_structure as "workspaceTeamStructure",
                   w.active_calendar_provider as "workspaceActiveCalendarProvider",
+                  w.public_key as "workspacePublicKey",
                   w.setup_state as "workspaceSetupState",
                   wu.role
                 from workspace_users wu
@@ -194,6 +199,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
           workspaceActiveCalendarProvider: existingUser.workspaceActiveCalendarProvider ?? "none",
           workspaceCustomerType: existingUser.workspaceCustomerType ?? null,
           workspaceOperatingModel: existingUser.workspaceOperatingModel ?? null,
+          workspacePublicKey: existingUser.workspacePublicKey ?? null,
           workspaceSetupState: existingUser.workspaceSetupState ?? null,
           workspaceTeamStructure: existingUser.workspaceTeamStructure ?? null,
         };
@@ -208,6 +214,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
             customer_type as "customerType",
             team_structure as "teamStructure",
             active_calendar_provider as "activeCalendarProvider",
+            public_key as "publicKey",
             setup_state as "setupState"
           from workspaces
           where $1::uuid is null or id = $1::uuid
@@ -239,6 +246,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
           workspaceActiveCalendarProvider: workspace.activeCalendarProvider ?? "none",
           workspaceCustomerType: workspace.customerType ?? null,
           workspaceOperatingModel: workspace.operatingModel ?? null,
+          workspacePublicKey: workspace.publicKey ?? null,
           workspaceSetupState: workspace.setupState ?? null,
           workspaceTeamStructure: workspace.teamStructure ?? null,
         };
@@ -275,6 +283,7 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
     workspaceActiveCalendarProvider: mockWorkspace.activeCalendarProvider ?? "none",
     workspaceCustomerType: mockWorkspace.customerType ?? null,
     workspaceOperatingModel: mockWorkspace.operatingModel ?? null,
+    workspacePublicKey: null,
     workspaceSetupState: mockWorkspace.setupState ?? null,
     workspaceTeamStructure: mockWorkspace.teamStructure ?? null,
   };
@@ -299,6 +308,7 @@ export function serializeSession(session: AppSession) {
       activeCalendarProvider: session.workspaceActiveCalendarProvider,
       customerType: session.workspaceCustomerType,
       operatingModel: session.workspaceOperatingModel,
+      publicKey: session.workspacePublicKey,
       setupState: session.workspaceSetupState,
       teamStructure: session.workspaceTeamStructure,
     },
@@ -500,6 +510,7 @@ export async function resolveWorkspaceScopedSession(
         customer_type as "customerType",
         team_structure as "teamStructure",
         active_calendar_provider as "activeCalendarProvider",
+        public_key as "publicKey",
         setup_state as "setupState"
       from workspaces
       where id = $1
@@ -553,6 +564,7 @@ export async function resolveWorkspaceScopedSession(
       workspaceId: workspace.id,
       workspaceName: workspace.name,
       workspaceOperatingModel: workspace.operatingModel ?? null,
+      workspacePublicKey: workspace.publicKey ?? null,
       workspaceSetupState: workspace.setupState ?? null,
       workspaceTeamStructure: workspace.teamStructure ?? null,
     },
@@ -657,6 +669,7 @@ async function findWorkspaceUserForLogin(email: string) {
           w.customer_type as "workspaceCustomerType",
           w.team_structure as "workspaceTeamStructure",
           w.active_calendar_provider as "workspaceActiveCalendarProvider",
+          w.public_key as "workspacePublicKey",
           w.setup_state as "workspaceSetupState",
           wu.role
         from workspace_users wu
@@ -682,6 +695,7 @@ async function findWorkspaceUserForLogin(email: string) {
           null::text as "workspaceCustomerType",
           null::text as "workspaceTeamStructure",
           null::text as "workspaceActiveCalendarProvider",
+          null::text as "workspacePublicKey",
           null::jsonb as "workspaceSetupState",
           wu.role
         from workspace_users wu
@@ -740,6 +754,7 @@ async function getSessionFromCookieHeader(cookieHeader: string | null | undefine
         w.customer_type as "workspaceCustomerType",
         w.team_structure as "workspaceTeamStructure",
         w.active_calendar_provider as "workspaceActiveCalendarProvider",
+        w.public_key as "workspacePublicKey",
         w.setup_state as "workspaceSetupState",
         wu.role
       from workspace_users wu
@@ -775,6 +790,7 @@ async function getSessionFromCookieHeader(cookieHeader: string | null | undefine
     workspaceActiveCalendarProvider: user.workspaceActiveCalendarProvider ?? "none",
     workspaceCustomerType: user.workspaceCustomerType ?? null,
     workspaceOperatingModel: user.workspaceOperatingModel ?? null,
+    workspacePublicKey: user.workspacePublicKey ?? null,
     workspaceSetupState: user.workspaceSetupState ?? null,
     workspaceTeamStructure: user.workspaceTeamStructure ?? null,
   };
@@ -838,6 +854,7 @@ export async function authenticateLogin(input: { email: string; password: string
       workspaceActiveCalendarProvider: user.workspaceActiveCalendarProvider ?? "none",
       workspaceCustomerType: user.workspaceCustomerType ?? null,
       workspaceOperatingModel: user.workspaceOperatingModel ?? null,
+      workspacePublicKey: user.workspacePublicKey ?? null,
       workspaceSetupState: user.workspaceSetupState ?? null,
       workspaceTeamStructure: user.workspaceTeamStructure ?? null,
     } satisfies AppSession,

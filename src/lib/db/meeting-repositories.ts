@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import {
+  buildPublicMeetingPath,
+  type PublicSlugLookup,
+} from "@/lib/public-routing";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { insertCalendarSyncEvent, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -31,6 +35,7 @@ export type MeetingPageSettings = {
   title: string;
   updatedAt?: string | Date | null;
   workspaceId?: string | null;
+  workspacePublicKey?: string | null;
 };
 
 type MeetingPageRow = {
@@ -45,7 +50,13 @@ type MeetingPageRow = {
   automation: unknown;
   updatedAt: string | Date | null;
   workspaceId: string | null;
+  workspacePublicKey: string | null;
 };
+
+type LegacyPublicMeetingRoute =
+  | { status: "ambiguous"; slug: string }
+  | { status: "not_found"; slug: string }
+  | { canonicalPath: string; meetingPageId: string; slug: string; status: "unique"; workspacePublicKey: string };
 
 export type MeetingPagesPayload = {
   error?: string;
@@ -74,6 +85,7 @@ function toMeetingPageSettings(row: MeetingPageRow): MeetingPageSettings {
     title: row.title,
     updatedAt: row.updatedAt,
     workspaceId: row.workspaceId,
+    workspacePublicKey: row.workspacePublicKey,
   };
 }
 
@@ -89,20 +101,22 @@ export async function listMeetingPageSettings(input: {
     const rows = await queryRows<MeetingPageRow>(
       `
         select
-          id,
-          workspace_id as "workspaceId",
-          project_id as "projectId",
-          owner_user_id as "ownerUserId",
-          meeting_type as "meetingType",
-          slug,
-          title,
-          calendar_integrations as "calendarIntegrations",
-          share_config as "shareConfig",
-          automation,
-          updated_at as "updatedAt"
-        from meeting_pages
-        where workspace_id = $1
-        order by updated_at desc
+          mp.id,
+          mp.workspace_id as "workspaceId",
+          mp.project_id as "projectId",
+          mp.owner_user_id as "ownerUserId",
+          mp.meeting_type as "meetingType",
+          mp.slug,
+          mp.title,
+          mp.calendar_integrations as "calendarIntegrations",
+          mp.share_config as "shareConfig",
+          mp.automation,
+          mp.updated_at as "updatedAt",
+          w.public_key as "workspacePublicKey"
+        from meeting_pages mp
+        join workspaces w on w.id = mp.workspace_id
+        where mp.workspace_id = $1
+        order by mp.updated_at desc
         limit $2
       `,
       [input.session.workspaceId, input.limit ?? 25],
@@ -134,19 +148,21 @@ export async function getMeetingPageSettings(input: {
     const row = await queryOne<MeetingPageRow>(
       `
         select
-          id,
-          workspace_id as "workspaceId",
-          project_id as "projectId",
-          owner_user_id as "ownerUserId",
-          meeting_type as "meetingType",
-          slug,
-          title,
-          calendar_integrations as "calendarIntegrations",
-          share_config as "shareConfig",
-          automation,
-          updated_at as "updatedAt"
-        from meeting_pages
-        where workspace_id = $1 and slug = $2
+          mp.id,
+          mp.workspace_id as "workspaceId",
+          mp.project_id as "projectId",
+          mp.owner_user_id as "ownerUserId",
+          mp.meeting_type as "meetingType",
+          mp.slug,
+          mp.title,
+          mp.calendar_integrations as "calendarIntegrations",
+          mp.share_config as "shareConfig",
+          mp.automation,
+          mp.updated_at as "updatedAt",
+          w.public_key as "workspacePublicKey"
+        from meeting_pages mp
+        join workspaces w on w.id = mp.workspace_id
+        where mp.workspace_id = $1 and mp.slug = $2
         limit 1
       `,
       [input.session.workspaceId, slug],
@@ -158,39 +174,79 @@ export async function getMeetingPageSettings(input: {
   }
 }
 
-export async function getPublicMeetingPageSettings(slugValue: string): Promise<MeetingPageSettings | null> {
+export async function getPublicMeetingPageSettings(input: PublicSlugLookup): Promise<MeetingPageSettings | null> {
   if (!hasDatabaseUrl()) return null;
 
-  const slug = normalizeSlug(slugValue);
-  if (!slug) return null;
+  const slug = normalizeSlug(input.slug);
+  const workspacePublicKey = input.workspacePublicKey.trim();
+  if (!slug || !workspacePublicKey) return null;
 
   try {
     const row = await queryOne<MeetingPageRow>(
       `
         select
-          id,
-          workspace_id as "workspaceId",
-          project_id as "projectId",
-          owner_user_id as "ownerUserId",
-          meeting_type as "meetingType",
-          slug,
-          title,
-          calendar_integrations as "calendarIntegrations",
-          share_config as "shareConfig",
-          automation,
-          updated_at as "updatedAt"
-        from meeting_pages
-        where slug = $1 and status = 'active'
-        order by updated_at desc
+          mp.id,
+          mp.workspace_id as "workspaceId",
+          mp.project_id as "projectId",
+          mp.owner_user_id as "ownerUserId",
+          mp.meeting_type as "meetingType",
+          mp.slug,
+          mp.title,
+          mp.calendar_integrations as "calendarIntegrations",
+          mp.share_config as "shareConfig",
+          mp.automation,
+          mp.updated_at as "updatedAt",
+          w.public_key as "workspacePublicKey"
+        from meeting_pages mp
+        join workspaces w on w.id = mp.workspace_id
+        where w.public_key = $1 and mp.slug = $2 and mp.status = 'active'
         limit 1
       `,
-      [slug],
+      [workspacePublicKey, slug],
     );
 
     return row ? toMeetingPageSettings(row) : null;
   } catch {
     return null;
   }
+}
+
+export async function getLegacyPublicMeetingPageRoute(slugValue: string): Promise<LegacyPublicMeetingRoute> {
+  if (!hasDatabaseUrl()) return { status: "not_found", slug: slugValue };
+
+  const slug = normalizeSlug(slugValue);
+  if (!slug) return { status: "not_found", slug };
+
+  const rows = await queryRows<{
+    meetingPageId: string;
+    slug: string;
+    workspacePublicKey: string;
+  }>(
+    `
+      select
+        mp.id as "meetingPageId",
+        mp.slug,
+        w.public_key as "workspacePublicKey"
+      from meeting_pages mp
+      join workspaces w on w.id = mp.workspace_id
+      where mp.slug = $1 and mp.status = 'active'
+      order by mp.updated_at desc
+      limit 2
+    `,
+    [slug],
+  );
+
+  if (!rows.length) return { status: "not_found", slug };
+  if (rows.length > 1) return { status: "ambiguous", slug };
+
+  const [row] = rows;
+  return {
+    canonicalPath: buildPublicMeetingPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug }),
+    meetingPageId: row.meetingPageId,
+    slug: row.slug,
+    status: "unique",
+    workspacePublicKey: row.workspacePublicKey,
+  };
 }
 
 export async function upsertMeetingPageSettings(input: {
@@ -246,7 +302,8 @@ export async function upsertMeetingPageSettings(input: {
           calendar_integrations as "calendarIntegrations",
           share_config as "shareConfig",
           automation,
-          updated_at as "updatedAt"
+          updated_at as "updatedAt",
+          (select public_key from workspaces where id = meeting_pages.workspace_id) as "workspacePublicKey"
       `,
       [
         input.session.workspaceId,
@@ -348,9 +405,11 @@ export type MeetingBookingInput = {
   meetingProvider: string;
   requestUrl: string;
   selectedDate: string;
+  session?: AppSession;
   slot: string;
   slug: string;
   source?: string;
+  workspacePublicKey?: string;
 };
 
 export type MeetingNotificationJob = {
@@ -445,6 +504,7 @@ export type PublicMeetingBookingActionState = {
   startsAt: string | Date;
   status: string;
   title: string;
+  workspacePublicKey?: string | null;
 };
 
 type MeetingBookingOverviewMetricRow = {
@@ -476,6 +536,7 @@ type MeetingBookingConfirmationRow = {
   status: string;
   title: string;
   workspaceId: string;
+  workspacePublicKey: string | null;
 };
 
 type MeetingNotificationJobRow = {
@@ -510,6 +571,7 @@ type PublicMeetingBookingRow = {
   status: string;
   title: string;
   workspaceId: string;
+  workspacePublicKey: string | null;
 };
 
 function asAutomation(value: unknown): MeetingAutomationConfig {
@@ -700,6 +762,7 @@ function expectsOnlineMeetingLink(meetingProvider: string) {
 function createPublicBookingSession(input: {
   ownerUserId?: string | null;
   workspaceId: string;
+  workspacePublicKey?: string | null;
 }): AppSession {
   return {
     authenticated: true,
@@ -713,6 +776,7 @@ function createPublicBookingSession(input: {
     userId: input.ownerUserId && isUuid(input.ownerUserId) ? input.ownerUserId : "",
     workspaceId: input.workspaceId,
     workspaceName: "Novalure",
+    workspacePublicKey: input.workspacePublicKey ?? null,
   };
 }
 
@@ -727,7 +791,7 @@ function getTokenValues(input: {
   selectedDate: Date;
   slot: string;
 }) {
-  const bookingUrl = `${input.origin}/book/${input.page.slug}`;
+  const bookingUrl = `${input.origin}${getMeetingPublicPath(input.page)}`;
   const actionQuery = `booking=${encodeURIComponent(input.bookingId)}&token=${encodeURIComponent(
     input.publicToken || "",
   )}`;
@@ -779,7 +843,11 @@ function getFinalConfirmationTokens(input: {
   origin: string;
 }) {
   const bookingSlug = input.booking.pageSlug || input.booking.slug;
-  const bookingUrl = `${input.origin}/book/${bookingSlug}`;
+  const bookingUrl = `${input.origin}${
+    input.booking.workspacePublicKey
+      ? buildPublicMeetingPath({ slug: bookingSlug, workspacePublicKey: input.booking.workspacePublicKey })
+      : `/book/${bookingSlug}`
+  }`;
   const metadata = getBookingMetadata(input.booking.metadata);
   const actionQuery = `booking=${encodeURIComponent(input.booking.id)}&token=${encodeURIComponent(
     typeof metadata.publicToken === "string" ? metadata.publicToken : "",
@@ -912,13 +980,19 @@ function getCalendarProviderFromPage(page: MeetingPageSettings) {
   return "none";
 }
 
-export async function getPublicMeetingAvailability(input: {
-  date?: string;
-  slug: string;
-}): Promise<PublicMeetingAvailability | null> {
-  const page = await getPublicMeetingPageSettings(input.slug);
+function getMeetingPublicPath(page: Pick<MeetingPageSettings, "slug" | "workspacePublicKey">) {
+  return page.workspacePublicKey
+    ? buildPublicMeetingPath({ slug: page.slug, workspacePublicKey: page.workspacePublicKey })
+    : `/book/${page.slug}`;
+}
+
+async function getMeetingAvailabilityForPage(
+  page: MeetingPageSettings | null,
+  date?: string,
+): Promise<PublicMeetingAvailability | null> {
   if (!page?.id || !page.workspaceId) return null;
 
+  const inputDate = date;
   const rules = getAvailabilityRules(page);
   const todayKey = getDateKey(new Date(), rules.timeZone);
   const firstDay = new Date(`${todayKey}T12:00:00Z`);
@@ -941,7 +1015,7 @@ export async function getPublicMeetingAvailability(input: {
     };
   });
   const selectedDate =
-    candidateDays.find((day) => day.date === input.date)?.date ||
+    candidateDays.find((day) => day.date === inputDate)?.date ||
     candidateDays.find((day) => day.available)?.date ||
     candidateDays[0]?.date ||
     todayKey;
@@ -1022,6 +1096,54 @@ export async function getPublicMeetingAvailability(input: {
   };
 }
 
+export async function getPublicMeetingAvailability(input: PublicSlugLookup & {
+  date?: string;
+}): Promise<PublicMeetingAvailability | null> {
+  return getMeetingAvailabilityForPage(await getPublicMeetingPageSettings(input), input.date);
+}
+
+export async function getWorkspaceMeetingAvailability(input: {
+  date?: string;
+  session: AppSession;
+  slug: string;
+}): Promise<PublicMeetingAvailability | null> {
+  const page = await getMeetingPageSettings({ session: input.session, slug: input.slug });
+  return getMeetingAvailabilityForPage(page, input.date);
+}
+
+async function resolveMeetingPageForBooking(
+  input: MeetingBookingInput,
+): Promise<{ page: MeetingPageSettings | null; reason?: string }> {
+  if (input.workspacePublicKey?.trim()) {
+    return {
+      page: await getPublicMeetingPageSettings({
+        slug: input.slug,
+        workspacePublicKey: input.workspacePublicKey.trim(),
+      }),
+    };
+  }
+
+  if (input.session) {
+    return {
+      page: await getMeetingPageSettings({
+        session: input.session,
+        slug: input.slug,
+      }),
+    };
+  }
+
+  const legacy = await getLegacyPublicMeetingPageRoute(input.slug);
+  if (legacy.status === "ambiguous") return { page: null, reason: "meeting_page_ambiguous" };
+  if (legacy.status === "not_found") return { page: null, reason: "meeting_page_not_found" };
+
+  return {
+    page: await getPublicMeetingPageSettings({
+      slug: legacy.slug,
+      workspacePublicKey: legacy.workspacePublicKey,
+    }),
+  };
+}
+
 export async function createMeetingBookingWithNotifications(
   input: MeetingBookingInput,
 ): Promise<CreateMeetingBookingResult> {
@@ -1029,17 +1151,15 @@ export async function createMeetingBookingWithNotifications(
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const page = await getPublicMeetingPageSettings(input.slug);
+  const resolvedPage = await resolveMeetingPageForBooking(input);
+  const page = resolvedPage.page;
   if (!page?.id || !page.workspaceId || !isUuid(page.workspaceId)) {
-    return { persisted: false, reason: "Meeting page is not available" };
+    return { persisted: false, reason: resolvedPage.reason || "Meeting page is not available" };
   }
 
   const contactName = input.contactName.trim();
   const contactEmail = input.contactEmail.trim().toLowerCase();
-  const availability = await getPublicMeetingAvailability({
-    date: input.selectedDate,
-    slug: input.slug,
-  });
+  const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
   const startsAt = parseBookingStart(
     input.selectedDate,
     input.slot,
@@ -1124,6 +1244,7 @@ export async function createMeetingBookingWithNotifications(
   const publicSession = createPublicBookingSession({
     ownerUserId: page.ownerUserId,
     workspaceId: page.workspaceId,
+    workspacePublicKey: page.workspacePublicKey,
   });
   const confirmation = await confirmMeetingBooking({
     bookingId: bookingRow.id,
@@ -1369,6 +1490,7 @@ function toPublicMeetingBookingActionState(
     startsAt: booking.startsAt,
     status: booking.status,
     title: booking.pageTitle || booking.title,
+    workspacePublicKey: booking.workspacePublicKey,
   };
 }
 
@@ -1398,9 +1520,11 @@ async function getPublicMeetingBookingByToken(input: {
         mp.slug as "pageSlug",
         mp.title as "pageTitle",
         mp.automation,
-        mp.calendar_integrations as "calendarIntegrations"
+        mp.calendar_integrations as "calendarIntegrations",
+        w.public_key as "workspacePublicKey"
       from meeting_bookings b
       left join meeting_pages mp on mp.id = b.meeting_page_id
+      left join workspaces w on w.id = b.workspace_id
       where b.id = $1
       limit 1
     `,
@@ -1629,6 +1753,7 @@ export async function cancelPublicMeetingBooking(input: {
       slug: booking.pageSlug || booking.slug,
       title: booking.pageTitle || booking.title,
       workspaceId: booking.workspaceId,
+      workspacePublicKey: booking.workspacePublicKey,
     };
     const tokens = getTokenValues({
       bookingId: booking.id,
@@ -1685,10 +1810,17 @@ export async function reschedulePublicMeetingBooking(input: {
     return { error: "reschedule_deadline_passed", ok: false };
   }
 
-  const availability = await getPublicMeetingAvailability({
-    date: input.selectedDate,
+  const page: MeetingPageSettings = {
+    automation: booking.automation,
+    calendarIntegrations: booking.calendarIntegrations,
+    id: booking.meetingPageId ?? undefined,
+    shareConfig: {},
     slug: booking.pageSlug,
-  });
+    title: booking.pageTitle || booking.title,
+    workspaceId: booking.workspaceId,
+    workspacePublicKey: booking.workspacePublicKey,
+  };
+  const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
   const selectedSlot = availability?.slots.find((slot) => slot.time === input.slot);
   const startsAt = parseBookingStart(
     input.selectedDate,
@@ -1700,15 +1832,6 @@ export async function reschedulePublicMeetingBooking(input: {
   }
   const endsAt = addMinutes(startsAt, availability.rules.durationMinutes);
   const origin = getRequestOrigin(input.requestUrl);
-  const page: MeetingPageSettings = {
-    automation: booking.automation,
-    calendarIntegrations: booking.calendarIntegrations,
-    id: booking.meetingPageId ?? undefined,
-    shareConfig: {},
-    slug: booking.pageSlug,
-    title: booking.pageTitle || booking.title,
-    workspaceId: booking.workspaceId,
-  };
   const tokens = getTokenValues({
     bookingId: booking.id,
     contactEmail: booking.contactEmail,
@@ -1966,6 +2089,7 @@ export async function confirmMeetingBooking(input: {
         mp.automation,
         mp.project_id as "projectId",
         mp.owner_user_id as "ownerUserId",
+        w.public_key as "workspacePublicKey",
         (
           select c.id
           from contacts c
@@ -1977,6 +2101,7 @@ export async function confirmMeetingBooking(input: {
         ) as "contactId"
       from meeting_bookings b
       left join meeting_pages mp on mp.id = b.meeting_page_id
+      left join workspaces w on w.id = b.workspace_id
       where b.id = $1 and b.workspace_id = $2
       limit 1
     `,

@@ -33,6 +33,7 @@ type FormCommandCenterProps = {
   projects: Project[];
   tasks: Task[];
   users: WorkspaceUser[];
+  workspacePublicKey?: string;
 };
 
 type FormTab = "overview" | "builder" | "crm" | "embed" | "automation" | "submissions";
@@ -196,6 +197,7 @@ function ensureFormStructure(form: WebsiteForm, copy: FormCommandCenterCopy): We
       }),
     ),
     progressMode: form.progressMode ?? "none",
+    slug: form.slug || slugify(form.name),
     steps,
   };
 }
@@ -455,6 +457,7 @@ function createInitialForms(
       status: "eingebaut",
       steps: consultation.steps,
       submissions: 42,
+      slug: "wohnpark-graz-beratung",
       tags: "wohnpark, website, beratung",
       template: consultation.template,
       utmCapture: true,
@@ -480,6 +483,7 @@ function createInitialForms(
       status: "aktiv",
       steps: newsletter.steps,
       submissions: 118,
+      slug: "newsletter-opt-in-website",
       tags: "newsletter, optin",
       template: newsletter.template,
       utmCapture: true,
@@ -505,6 +509,7 @@ function createInitialForms(
       status: "entwurf",
       steps: support.steps,
       submissions: 0,
+      slug: "support-ticket-formular",
       tags: "support, ticket",
       template: support.template,
       utmCapture: false,
@@ -579,6 +584,7 @@ export function FormCommandCenter({
   projects,
   tasks,
   users,
+  workspacePublicKey,
 }: FormCommandCenterProps) {
   const copy = getFormCommandCenterCopy(language);
   const variantLabels = copy.variants;
@@ -613,7 +619,17 @@ export function FormCommandCenter({
   const isFormEditorMode = activeTab === "builder";
   const backToFormsLabel = copy.backToForms;
   const formEditorLabel = copy.formEditor;
-  const publicPath = selectedForm ? `/forms/${slugify(selectedForm.name)}` : "";
+  const selectedWorkspacePublicKey = selectedForm?.workspacePublicKey || workspacePublicKey || "";
+  const selectedFormSlug = selectedForm ? selectedForm.slug || slugify(selectedForm.name) : "";
+  const publicPath = selectedForm
+    ? selectedWorkspacePublicKey
+      ? `/forms/${encodeURIComponent(selectedWorkspacePublicKey)}/${encodeURIComponent(selectedFormSlug)}`
+      : `/forms/${encodeURIComponent(selectedFormSlug)}`
+    : "";
+  const publicFormKey =
+    selectedForm && selectedWorkspacePublicKey
+      ? `${selectedWorkspacePublicKey}/${selectedFormSlug}`
+      : selectedForm?.id || "";
   const publicUrl =
     selectedForm && typeof window === "undefined"
       ? publicPath
@@ -1047,7 +1063,7 @@ export function FormCommandCenter({
                     mode="editor"
                     onFieldSelect={setSelectedFieldId}
                     previewOnly
-                    publicKey={selectedForm.id}
+                    publicKey={publicFormKey}
                     returnTo={publicPath}
                     selectedFieldId={selectedField?.id}
                     source="editor"
@@ -1486,7 +1502,7 @@ export function FormCommandCenter({
                     form={selectedForm}
                     mode="editor"
                     previewOnly
-                    publicKey={selectedForm.id}
+                    publicKey={publicFormKey}
                     returnTo={publicPath}
                     source="overview"
                   />

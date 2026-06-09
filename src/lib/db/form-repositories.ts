@@ -5,6 +5,11 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import {
+  buildPublicFormPath,
+  parsePublicSlugLookup,
+  type PublicSlugLookup,
+} from "@/lib/public-routing";
 import type {
   FormField,
   FormFieldType,
@@ -43,6 +48,7 @@ type FormRow = {
   submissions: number | string;
   conversionRate: number | string;
   lastSubmission: string | Date | null;
+  workspacePublicKey?: string | null;
 };
 
 type PublicFormRow = FormRow & {
@@ -72,7 +78,13 @@ type FormLookup = {
   funnelId: string | null;
   funnelAudience: string | null;
   form: WebsiteForm;
+  publicPath: string | null;
 };
+
+type LegacyPublicFormRoute =
+  | { status: "ambiguous"; slug: string }
+  | { status: "not_found"; slug: string }
+  | { canonicalPath: string; formId: string; slug: string; status: "unique"; workspacePublicKey: string };
 
 type FormDataLike = {
   get(name: string): FormDataEntryValue | null;
@@ -108,31 +120,33 @@ export async function listWebsiteForms(input: { session: AppSession; limit?: num
     const forms = await queryRows<FormRow>(
       `
         select
-          id,
-          workspace_id as "workspaceId",
-          project_id as "projectId",
-          owner_user_id as "ownerUserId",
-          funnel_id as "funnelId",
-          name,
-          slug,
-          status,
-          variant,
-          template,
-          crm_target as "crmTarget",
-          pipeline_stage as "pipelineStage",
-          owner_mode as "ownerMode",
-          campaign,
-          tags,
-          fields,
-          actions,
-          settings,
-          visits_count as visits,
-          submissions_count as submissions,
-          conversion_rate as "conversionRate",
-          last_submission_at as "lastSubmission"
-        from forms
-        where workspace_id = $1
-        order by updated_at desc, created_at desc
+          f.id,
+          f.workspace_id as "workspaceId",
+          f.project_id as "projectId",
+          f.owner_user_id as "ownerUserId",
+          f.funnel_id as "funnelId",
+          f.name,
+          f.slug,
+          f.status,
+          f.variant,
+          f.template,
+          f.crm_target as "crmTarget",
+          f.pipeline_stage as "pipelineStage",
+          f.owner_mode as "ownerMode",
+          f.campaign,
+          f.tags,
+          f.fields,
+          f.actions,
+          f.settings,
+          f.visits_count as visits,
+          f.submissions_count as submissions,
+          f.conversion_rate as "conversionRate",
+          f.last_submission_at as "lastSubmission",
+          w.public_key as "workspacePublicKey"
+        from forms f
+        left join workspaces w on w.id = f.workspace_id
+        where f.workspace_id = $1
+        order by f.updated_at desc, f.created_at desc
         limit $2
       `,
       [input.session.workspaceId, input.limit ?? 100],
@@ -195,7 +209,7 @@ export async function upsertWebsiteForm(input: {
   const ownerUserId = form.ownerMode === "user" && isUuid(form.ownerUserId)
     ? form.ownerUserId
     : funnel?.ownerUserId ?? (isUuid(input.session.userId) ? input.session.userId : null);
-  const slug = slugify(form.name) || `formular-${Date.now()}`;
+  const slug = slugify(form.slug || form.name) || `formular-${Date.now()}`;
   const tags = parseTags(form.tags);
   const settings = {
     doubleOptIn: form.doubleOptIn,
@@ -251,7 +265,8 @@ export async function upsertWebsiteForm(input: {
             visits_count as visits,
             submissions_count as submissions,
             conversion_rate as "conversionRate",
-            last_submission_at as "lastSubmission"
+            last_submission_at as "lastSubmission",
+            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey"
         `,
         [
           input.session.workspaceId,
@@ -326,7 +341,8 @@ export async function upsertWebsiteForm(input: {
             visits_count as visits,
             submissions_count as submissions,
             conversion_rate as "conversionRate",
-            last_submission_at as "lastSubmission"
+            last_submission_at as "lastSubmission",
+            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey"
         `,
         [
           input.session.workspaceId,
@@ -368,8 +384,18 @@ export async function upsertWebsiteForm(input: {
   return { form: toWebsiteForm(row), persisted: true };
 }
 
-export async function getPublicWebsiteForm(formKey: string): Promise<FormLookup | null> {
+export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: string }): Promise<FormLookup | null> {
   if (!hasDatabaseUrl()) return null;
+
+  const formId = "formId" in input && isUuid(input.formId) ? input.formId : null;
+  const route = "workspacePublicKey" in input
+    ? {
+        slug: slugify(input.slug),
+        workspacePublicKey: input.workspacePublicKey.trim(),
+      }
+    : null;
+
+  if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
   const row = await queryOne<PublicFormRow>(
     `
@@ -397,24 +423,32 @@ export async function getPublicWebsiteForm(formKey: string): Promise<FormLookup 
         f.conversion_rate as "conversionRate",
         f.last_submission_at as "lastSubmission",
         w.name as "workspaceName",
+        w.public_key as "workspacePublicKey",
         fn.audience as "funnelAudience"
       from forms f
-      left join workspaces w on w.id = f.workspace_id
+      join workspaces w on w.id = f.workspace_id
       left join funnels fn on fn.id = f.funnel_id
       where f.status in ('aktiv', 'eingebaut')
         and (
           ($1::uuid is not null and f.id = $1::uuid)
-          or f.slug = $2
-          or f.settings->>'legacyId' = $2
+          or (
+            $1::uuid is null
+            and w.public_key = $2
+            and f.slug = $3
+          )
         )
       order by case when f.status = 'eingebaut' then 0 when f.status = 'aktiv' then 1 else 2 end,
         f.updated_at desc
       limit 1
     `,
-    [isUuid(formKey) ? formKey : null, formKey],
+    [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""],
   );
 
   if (!row) return null;
+
+  const publicPath = row.workspacePublicKey
+    ? buildPublicFormPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug })
+    : null;
 
   return {
     id: row.id,
@@ -425,6 +459,64 @@ export async function getPublicWebsiteForm(formKey: string): Promise<FormLookup 
     funnelId: row.funnelId,
     funnelAudience: row.funnelAudience,
     form: toWebsiteForm(row),
+    publicPath,
+  };
+}
+
+export async function getPublicWebsiteFormByKey(formKey: string): Promise<FormLookup | null> {
+  const route = parsePublicSlugLookup(formKey);
+  if (route) return getPublicWebsiteForm(route);
+  if (isUuid(formKey)) return getPublicWebsiteForm({ formId: formKey });
+
+  const legacy = await getLegacyPublicWebsiteFormRoute(formKey);
+  if (legacy.status !== "unique") return null;
+
+  return getPublicWebsiteForm({
+    slug: legacy.slug,
+    workspacePublicKey: legacy.workspacePublicKey,
+  });
+}
+
+export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promise<LegacyPublicFormRoute> {
+  if (!hasDatabaseUrl()) return { status: "not_found", slug: slugValue };
+
+  const slug = slugify(slugValue);
+  if (!slug) return { status: "not_found", slug };
+
+  const rows = await queryRows<{
+    formId: string;
+    slug: string;
+    workspacePublicKey: string;
+  }>(
+    `
+      select
+        f.id as "formId",
+        f.slug,
+        w.public_key as "workspacePublicKey"
+      from forms f
+      join workspaces w on w.id = f.workspace_id
+      where f.status in ('aktiv', 'eingebaut')
+        and (
+          f.slug = $1
+          or f.settings->>'legacyId' = $1
+        )
+      order by case when f.status = 'eingebaut' then 0 when f.status = 'aktiv' then 1 else 2 end,
+        f.updated_at desc
+      limit 2
+    `,
+    [slug],
+  );
+
+  if (!rows.length) return { status: "not_found", slug };
+  if (rows.length > 1) return { status: "ambiguous", slug };
+
+  const [row] = rows;
+  return {
+    canonicalPath: buildPublicFormPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug }),
+    formId: row.formId,
+    slug: row.slug,
+    status: "unique",
+    workspacePublicKey: row.workspacePublicKey,
   };
 }
 
@@ -437,7 +529,7 @@ export async function persistWebsiteFormSubmission(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const lookup = await getPublicWebsiteForm(input.formKey);
+  const lookup = await getPublicWebsiteFormByKey(input.formKey);
   if (!lookup) {
     return { persisted: false, reason: "Form not found" };
   }
@@ -983,11 +1075,13 @@ function toWebsiteForm(row: FormRow): WebsiteForm {
     status: normalizeStatus(row.status),
     steps,
     submissions: Number(row.submissions ?? 0),
+    slug: row.slug,
     tags: Array.isArray(row.tags) ? row.tags.join(", ") : "",
     template: normalizeTemplate(row.template),
     utmCapture: settings.utmCapture !== false,
     variant: normalizeVariant(row.variant),
     visits: Number(row.visits ?? 0),
+    workspacePublicKey: row.workspacePublicKey ?? undefined,
   };
 }
 
@@ -1016,6 +1110,7 @@ function normalizeWebsiteForm(form: WebsiteForm): WebsiteForm {
       ? normalizeFields(form.fields, fallbackStepId)
       : defaultFields.map((field) => ({ ...field, stepId: field.type === "hidden" ? "" : fallbackStepId })),
     progressMode: normalizeProgressMode(form.progressMode),
+    slug: form.slug || slugify(form.name),
     status: normalizeStatus(form.status),
     steps,
     template: normalizeTemplate(form.template),

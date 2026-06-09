@@ -22,6 +22,7 @@ type CalendarCommandCenterProps = {
   projects: Project[];
   tasks: Task[];
   users: WorkspaceUser[];
+  workspacePublicKey?: string;
 };
 
 type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>;
@@ -656,6 +657,7 @@ export function CalendarCommandCenter({
   projects,
   tasks,
   users,
+  workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
   const locale = getLocale(language);
@@ -1126,7 +1128,13 @@ export function CalendarCommandCenter({
     calendarIntegrations.defaultProvider,
   );
   const bookingSlug = shareConfig.slug.trim() || slugify(projectLabel) || "meeting";
-  const bookingUrl = `${publicBookingOrigin}/book/${bookingSlug}`;
+  const bookingPath = workspacePublicKey
+    ? `/book/${encodeURIComponent(workspacePublicKey)}/${encodeURIComponent(bookingSlug)}`
+    : `/book/${encodeURIComponent(bookingSlug)}`;
+  const shortBookingPath = workspacePublicKey
+    ? `/m/${encodeURIComponent(workspacePublicKey)}/${encodeURIComponent(bookingSlug)}`
+    : `/m/${encodeURIComponent(bookingSlug)}`;
+  const bookingUrl = `${publicBookingOrigin}${bookingPath}`;
   const trackingQuery = new URLSearchParams({
     calendar: calendarIntegrations.defaultProvider,
     meeting: calendarIntegrations.defaultMeetingProvider,
@@ -1136,7 +1144,7 @@ export function CalendarCommandCenter({
     utm_source: shareConfig.utmSource.trim() || "crm",
   });
   const trackedBookingUrl = `${bookingUrl}?${trackingQuery.toString()}`;
-  const shortBookingUrl = `${publicBookingOrigin}/m/${bookingSlug}?${trackingQuery.toString()}`;
+  const shortBookingUrl = `${publicBookingOrigin}${shortBookingPath}?${trackingQuery.toString()}`;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
     shortBookingUrl,
   )}`;

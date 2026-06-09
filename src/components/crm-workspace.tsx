@@ -910,6 +910,7 @@ type CrmWorkspaceProps = {
     id: string;
     name: string;
     operatingModel?: WorkspaceOperatingModel;
+    publicKey?: string;
     setupState?: Record<string, unknown>;
     teamStructure?: WorkspaceTeamStructure;
   };
@@ -4270,6 +4271,7 @@ export function CrmWorkspace({
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
                 tasks={visibleTasks}
+                workspacePublicKey={sessionWorkspace.publicKey}
                 onEventsChanged={async () => {
                   await refreshCoreData();
                 }}
@@ -4335,6 +4337,7 @@ export function CrmWorkspace({
                 projects={allProjects}
                 tasks={visibleTasks}
                 users={users}
+                workspacePublicKey={sessionWorkspace.publicKey}
               />
             ) : null}
 
