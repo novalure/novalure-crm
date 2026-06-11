@@ -342,7 +342,9 @@ export function WorkspaceOnboardingTour({
   async function openTarget(step: OnboardingStep) {
     await persist("start", step);
     if (typeof window !== "undefined") {
-      window.location.hash = step.targetHash;
+      const nextUrl = `${window.location.pathname}${window.location.search}#${step.targetHash}`;
+      window.history.pushState(null, "", nextUrl);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
     }
     setIsOpen(false);
   }

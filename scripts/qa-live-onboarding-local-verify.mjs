@@ -350,23 +350,6 @@ function parseCookiePair(cookieHeader) {
   };
 }
 
-async function loginInBrowser(client, baseUrl, email, password) {
-  await client.send("Page.navigate", { url: `${baseUrl}/login?lang=de` });
-  await waitFor(client, () => document.readyState !== "loading" && document.querySelectorAll("input").length >= 2, "login page");
-  await evaluate(client, pageScript(({ email, password }) => {
-    const setValue = (input, value) => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    };
-    setValue(document.querySelector('input[type="email"]'), email);
-    setValue(document.querySelector('input[type="password"]'), password);
-    document.querySelector("form")?.requestSubmit();
-  }, { email, password }));
-  await waitFor(client, () => /Setup-Checkliste|Setup checklist|Willkommen im Novalure CRM/.test(document.body?.innerText ?? ""), "onboarding checklist");
-}
-
 async function captureRole(baseUrl, email, password, fileName, mobile = false) {
   const executable = findBrowserExecutable();
   if (!executable) throw new Error("Chrome or Edge executable not found");
