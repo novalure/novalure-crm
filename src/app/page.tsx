@@ -11,6 +11,7 @@ import {
   getPublicPageCopy,
   languageRequestHeaderName,
 } from "@/lib/i18n";
+import { publicSiteOrigin } from "@/lib/legal";
 import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
 import { resolvePublicLanguage } from "@/lib/public-language";
 
@@ -20,8 +21,24 @@ type HomeProps = {
 
 export const dynamic = "force-dynamic";
 
-const metadataDescription =
-  "The protected CRM workspace behind Novalure's real estate lead system, with private Pipeline Audit request and secondary team login.";
+const homeMetadata = {
+  en: {
+    title: "Novalure CRM | Private Lead Workspace for Real Estate Teams",
+    description:
+      "Novalure CRM brings real estate enquiries, ownership and next actions into a protected workspace for property developers, brokerage teams and project sales teams.",
+    openGraphTitle: "Every real estate enquiry gets a next action.",
+    openGraphDescription:
+      "Private lead workspace for property developers, brokerage teams and project sales teams.",
+  },
+  de: {
+    title: "Novalure CRM | Privater Lead-Workspace für Immobilien-Teams",
+    description:
+      "Novalure CRM bündelt Immobilienanfragen, Zuständigkeiten und nächste Aktionen in einem geschützten Workspace für Maklerteams, Bauträger und Projektvertriebe.",
+    openGraphTitle: "Jede Immobilienanfrage bekommt den nächsten Schritt.",
+    openGraphDescription:
+      "Privater Lead-Workspace für Maklerteams, Bauträger und Projektvertriebe.",
+  },
+} as const;
 
 function resolveHomeLanguage(
   requestHeaders: Headers,
@@ -42,13 +59,28 @@ export async function generateMetadata({ searchParams }: HomeProps): Promise<Met
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
   const { language } = resolveHomeLanguage(requestHeaders, query);
+  const copy = homeMetadata[language];
+  const canonicalUrl = new URL("/", publicSiteOrigin);
+  canonicalUrl.searchParams.set("lang", language);
 
   return {
-    title:
-      language === "de"
-        ? "Novalure CRM | Immobilien-Lead-Steuerung"
-        : "Novalure CRM | Real Estate Lead Operations",
-    description: metadataDescription,
+    title: copy.title,
+    description: copy.description,
+    alternates: {
+      canonical: canonicalUrl.toString(),
+      languages: {
+        de: `${publicSiteOrigin}/?lang=de`,
+        en: `${publicSiteOrigin}/?lang=en`,
+      },
+    },
+    openGraph: {
+      title: copy.openGraphTitle,
+      description: copy.openGraphDescription,
+      locale: language === "de" ? "de_AT" : "en_GB",
+      siteName: "Novalure CRM",
+      type: "website",
+      url: canonicalUrl.toString(),
+    },
   };
 }
 

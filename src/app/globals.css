@@ -178,6 +178,35 @@ textarea::placeholder {
   color: rgba(69, 98, 127, 0.76);
 }
 
+.login-auth-input {
+  background: #ffffff !important;
+  border-color: #d0d5dd !important;
+  color: #0b0b0f !important;
+}
+
+.login-auth-input::placeholder {
+  color: #98a2b3 !important;
+}
+
+.login-auth-input:focus {
+  border-color: #93c5fd !important;
+  box-shadow: 0 0 0 4px rgba(217, 236, 255, 0.9) !important;
+}
+
+.login-auth-input:-webkit-autofill,
+.login-auth-input:-webkit-autofill:hover,
+.login-auth-input:-webkit-autofill:focus {
+  border-color: #d0d5dd !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #0b0b0f !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.login-auth-submit:hover {
+  background: #1f2937 !important;
+  border-color: #1f2937 !important;
+}
+
 .password-visibility-input::-ms-clear,
 .password-visibility-input::-ms-reveal {
   display: none;

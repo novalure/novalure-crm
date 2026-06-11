@@ -52,18 +52,31 @@ test("fresh-user onboarding tour has a persisted profile confirmation path", () 
   const seed = readText("scripts/qa-livegang-seed.mjs");
   const apiRoute = readText("src/app/api/auth/onboarding/route.ts");
   const tour = readText("src/components/workspace-onboarding-tour.tsx");
+  const checklist = readText("src/lib/onboarding-checklist.ts");
   const workspace = readText("src/components/crm-workspace.tsx");
 
   assert.match(migration, /add column if not exists onboarding_completed_at timestamptz/);
+  assert.match(migration, /add column if not exists onboarding_current_step text/);
+  assert.match(migration, /add column if not exists onboarding_completed_steps text\[\] not null default '\{\}'/);
+  assert.match(migration, /add column if not exists onboarding_skipped_steps text\[\] not null default '\{\}'/);
   assert.match(databaseRoute, /031_user_onboarding\.sql/);
   assert.match(seed, /applyMigration\("migrations\/031_user_onboarding\.sql"\)/);
-  assert.match(apiRoute, /select onboarding_completed_at as "completedAt"/);
-  assert.match(apiRoute, /set onboarding_completed_at = coalesce\(onboarding_completed_at, now\(\)\)/);
+  assert.match(apiRoute, /select[\s\S]*onboarding_completed_at as "completedAt"/);
+  assert.match(apiRoute, /onboarding_completed_at = case when \$8::boolean then coalesce\(onboarding_completed_at, now\(\)\)/);
+  assert.match(apiRoute, /onboarding_step_forbidden/);
+  assert.match(checklist, /team_invite/);
+  assert.match(checklist, /roles_rights/);
+  assert.match(checklist, /read_only_orientation/);
   assert.match(tour, /fetch\("\/api\/auth\/onboarding"/);
   assert.match(tour, /Tour wiederholen/);
-  assert.match(tour, /Platzhalter zur Freigabe/);
+  assert.match(tour, /Diese Einführung erscheint einmal pro Nutzerprofil/);
+  assert.match(tour, /Setup-Checkliste/);
+  assert.match(tour, /Als erledigt markieren/);
+  assert.doesNotMatch(tour, /Platzhalter zur Freigabe/);
+  assert.doesNotMatch(tour, /Approval placeholder/);
   assert.match(workspace, /<WorkspaceOnboardingTour/);
   assert.match(workspace, /productRole=\{sessionProductRole\}/);
+  assert.match(workspace, /technicalRole=\{sessionRole\}/);
 });
 
 test("production readiness reports exist for all implementation phases", () => {

@@ -82,7 +82,7 @@ const englishSections = [
   {
     title: "7. Confirmation",
     body: [
-      "Where appropriate, we will confirm completion of deletion or explain why certain data cannot be deleted immediately. If a Meta app deletion callback is implemented later, this page will be updated with the relevant automated process.",
+      "Where appropriate, we will confirm completion of deletion or explain why certain data cannot be deleted immediately. Requests can be sent through the email process described above.",
     ],
   },
 ];
@@ -137,7 +137,7 @@ const germanSections = [
   {
     title: "7. Bestätigung",
     body: [
-      "Soweit angemessen, bestätigen wir den Abschluss der Löschung oder erklären, warum bestimmte Daten nicht sofort gelöscht werden können. Falls später ein automatischer Meta Data Deletion Callback implementiert wird, wird diese Seite entsprechend aktualisiert.",
+      "Soweit angemessen, bestätigen wir den Abschluss der Löschung oder erklären, warum bestimmte Daten nicht sofort gelöscht werden können. Anfragen können über den oben beschriebenen E-Mail-Prozess gesendet werden.",
     ],
   },
 ];

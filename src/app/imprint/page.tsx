@@ -72,9 +72,9 @@ const englishSections = [
     ],
   },
   {
-    title: "5. Legal review notice",
+    title: "5. Scope of information",
     body: [
-      "This imprint should be reviewed by qualified legal counsel before publication. Company registration number, VAT number and any additional mandatory disclosure details should be added if legally required.",
+      "This page provides company and contact information for the public Novalure CRM website. Additional contractual details may be set out in customer agreements where relevant.",
     ],
   },
 ];
@@ -113,9 +113,9 @@ const germanSections = [
     ],
   },
   {
-    title: "5. Rechtlicher Prüfhinweis",
+    title: "5. Umfang der Angaben",
     body: [
-      "Dieses Impressum sollte vor der Veröffentlichung durch qualifizierte Rechtsberatung geprüft werden. Registrierungsnummer, Umsatzsteuer-Identifikationsnummer und weitere verpflichtende Angaben sollten ergänzt werden, sofern dies rechtlich erforderlich ist.",
+      "Diese Seite enthält Unternehmens- und Kontaktangaben für die öffentliche Novalure CRM Website. Weitere vertragliche Angaben können, soweit relevant, in Kundenvereinbarungen geregelt sein.",
     ],
   },
 ];

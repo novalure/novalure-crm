@@ -30,7 +30,7 @@ export function LegalPage({
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-950 md:px-10" lang={language}>
       <div className="mx-auto max-w-5xl">
-        <Link className="text-sm font-semibold text-blue-700" href={withPublicLanguage("/login", language)}>
+        <Link className="text-sm font-semibold text-blue-700" href={withPublicLanguage("/", language)}>
           Novalure CRM
         </Link>
         <header className="mt-8 border-b border-slate-200 pb-8">
@@ -46,9 +46,6 @@ export function LegalPage({
           <p className="mt-5 text-sm text-slate-600">
             {copy.lastUpdated}: {updated}
           </p>
-          <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
-            {copy.developmentNotice}
-          </div>
           <nav
             aria-label={copy.languageAriaLabel}
             className="mt-5 flex flex-wrap items-center gap-2 text-sm font-semibold"
@@ -78,7 +75,7 @@ export function LegalPage({
             </Link>
           </nav>
           <nav
-            aria-label="Legal pages"
+            aria-label={copy.legalNavigationLabel}
             className="mt-6 flex flex-wrap gap-3 text-sm font-semibold"
           >
             {publicLegalLinks.map((link) => (

@@ -40,6 +40,7 @@ export type CookieConsentButtonCopy = {
 type CookieConsentButtonProps = {
   cookieHref: string;
   copy: CookieConsentButtonCopy;
+  placement?: "default" | "login";
   privacyHref: string;
 };
 
@@ -107,7 +108,7 @@ function persistConsent(record: CookieConsentRecord) {
   window.dispatchEvent(new CustomEvent("novalure-cookie-consent", { detail: record }));
 }
 
-export function CookieConsentButton({ cookieHref, copy, privacyHref }: CookieConsentButtonProps) {
+export function CookieConsentButton({ cookieHref, copy, placement = "default", privacyHref }: CookieConsentButtonProps) {
   const [consent, setConsent] = useState<CookieConsentRecord | null>(null);
   const [analyticsSelected, setAnalyticsSelected] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -159,6 +160,7 @@ export function CookieConsentButton({ cookieHref, copy, privacyHref }: CookieCon
       : consent?.choice === "custom"
         ? copy.savedCustom
         : copy.savedNecessary;
+  const loginPlacement = placement === "login";
 
   return (
     <>
@@ -174,18 +176,28 @@ export function CookieConsentButton({ cookieHref, copy, privacyHref }: CookieCon
       ) : null}
 
       {isOpen ? (
-        <div className="fixed inset-x-0 bottom-0 z-[80] px-4 pb-4 sm:pb-6">
+        <div
+          className={
+            loginPlacement
+              ? "fixed inset-x-0 bottom-0 z-[80] px-4 pb-4 sm:inset-x-auto sm:left-4 sm:w-[min(30rem,calc(100vw-2rem))] sm:pb-6"
+              : "fixed inset-x-0 bottom-0 z-[80] px-4 pb-4 sm:pb-6"
+          }
+        >
           <section
             aria-label={copy.title}
-            className="mx-auto max-w-4xl rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
+            className={
+              loginPlacement
+                ? "mx-auto w-full rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
+                : "mx-auto max-w-4xl rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
+            }
             role="dialog"
           >
-            <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className={loginPlacement ? "grid gap-4" : "grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"}>
               <div>
                 <p className="text-sm font-semibold uppercase text-[#277258]">{copy.title}</p>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[#50645b]">{copy.description}</p>
                 {consent ? <p className="mt-2 text-xs font-semibold text-[#277258]">{statusText}</p> : null}
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <div className={loginPlacement ? "mt-4 grid gap-2" : "mt-4 grid gap-2 sm:grid-cols-2"}>
                   <div className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-3">
                     <p className="text-sm font-semibold">{copy.necessaryTitle}</p>
                     <p className="mt-1 text-xs leading-5 text-[#50645b]">{copy.necessaryDescription}</p>
@@ -241,7 +253,7 @@ export function CookieConsentButton({ cookieHref, copy, privacyHref }: CookieCon
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+              <div className={loginPlacement ? "flex flex-col gap-2 sm:flex-row sm:flex-wrap" : "flex flex-col gap-2 sm:flex-row lg:flex-col"}>
                 <button
                   className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold text-[#111614] transition hover:border-[#111614] hover:bg-[#f8f7f1] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
                   onClick={() => choose("necessary")}

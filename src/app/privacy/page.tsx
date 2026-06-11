@@ -42,7 +42,7 @@ const englishSections = [
     title: "1. Who we are",
     body: [
       "Novalure CRM is operated by Novalure CLG, Ireland. This Privacy Policy explains how Novalure CLG processes personal data in connection with the Novalure CRM website, application, customer relationship management platform, AI communication tools and integrations with Meta technologies such as WhatsApp Business, Instagram and Facebook Messenger.",
-      "For privacy questions, data subject requests or deletion requests, contact us at hello@novalure.eu with the subject line Privacy Request. If a dedicated Data Protection Officer is appointed later, their contact details will be added to this notice.",
+      "For privacy questions, data subject requests or deletion requests, contact us at hello@novalure.eu with the subject line Privacy Request.",
     ],
   },
   {
@@ -168,7 +168,7 @@ const germanSections = [
     title: "1. Wer wir sind",
     body: [
       "Novalure CRM wird von Novalure CLG, Irland, betrieben. Diese Datenschutzerklärung beschreibt, wie Novalure CLG personenbezogene Daten im Zusammenhang mit der Novalure CRM Website, der Anwendung, der CRM-Plattform, KI-Kommunikationsfunktionen und Integrationen mit Meta-Technologien wie WhatsApp Business, Instagram und Facebook Messenger verarbeitet.",
-      "Für Datenschutzfragen, Betroffenenanfragen oder Löschanfragen kontaktieren Sie uns bitte unter hello@novalure.eu mit dem Betreff Datenschutzanfrage. Falls später ein Datenschutzbeauftragter benannt wird, werden dessen Kontaktdaten in diese Erklärung aufgenommen.",
+      "Für Datenschutzfragen, Betroffenenanfragen oder Löschanfragen kontaktieren Sie uns bitte unter hello@novalure.eu mit dem Betreff Datenschutzanfrage.",
     ],
   },
   {

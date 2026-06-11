@@ -46,7 +46,7 @@ function ActionLink({
 }: {
   children: ReactNode;
   href: string;
-  variant?: "primary" | "secondary" | "subtle";
+  variant?: "primary" | "secondary" | "subtle" | "dark";
 }) {
   const classes = {
     primary:
@@ -55,6 +55,8 @@ function ActionLink({
       "border-white/30 bg-white/[0.06] text-white hover:border-white/70 hover:bg-white/[0.12] focus:ring-white",
     subtle:
       "border-[#cdd4ce] bg-transparent text-[#111614] hover:border-[#111614] hover:bg-[#f8f7f1] focus:ring-[#111614]",
+    dark:
+      "border-[#0B0B0F] bg-[#0B0B0F] text-white hover:border-[#26342f] hover:bg-[#26342f] focus:ring-[#0B0B0F]",
   } as const;
 
   return (
@@ -232,6 +234,74 @@ function AuditReviewLoopVisual({ visual }: { visual: VisualCopy }) {
   );
 }
 
+function TrustBar({ items }: { items: readonly string[] }) {
+  return (
+    <section className="border-b border-[#d8ddd7] bg-[#eef7ff] px-4 py-4">
+      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-semibold text-[#26342f]">
+        {items.map((item, index) => (
+          <span className="inline-flex items-center gap-5" key={item}>
+            <span>{item}</span>
+            {index < items.length - 1 ? <span aria-hidden="true" className="hidden text-[#9ca7a0] sm:inline">·</span> : null}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CrmPreviewCard({ preview }: { preview: LandingCopy["preview"] }) {
+  return (
+    <div className="rounded-lg border border-white/[0.14] bg-white/[0.06] p-4 text-white shadow-2xl sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.12] pb-4">
+        <p className="text-xs font-semibold uppercase text-[#9fd8be]">{preview.example.label}</p>
+        <span className="rounded-full border border-[#9fd8be]/40 bg-[#9fd8be]/10 px-3 py-1 text-xs font-semibold text-[#d8f2e4]">
+          {preview.visibleFields[1]}
+        </span>
+      </div>
+      <div className="mt-5">
+        <h3 className="text-xl font-semibold leading-7">{preview.example.leadTitle}</h3>
+        <dl className="mt-5 grid gap-3">
+          {preview.example.rows.map(([label, value]) => (
+            <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 rounded-md border border-white/[0.12] bg-black/[0.18] px-3 py-2" key={label}>
+              <dt className="text-xs font-semibold uppercase text-[#9ca7a0]">{label}</dt>
+              <dd className="text-sm font-semibold text-[#f5f7f5]">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-4 text-sm leading-6 text-[#c9d4ce]">{preview.example.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function FieldList({ items, title }: { items: readonly string[]; title: string }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-white">{title}</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.map((term) => (
+          <span className="rounded-md border border-white/[0.16] bg-white/[0.06] px-3 py-2 text-sm font-semibold text-[#e5ebe7]" key={term}>
+            {term}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckList({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="grid gap-3">
+      {items.map((item) => (
+        <li className="flex gap-3 text-sm font-semibold leading-6 text-[#26342f]" key={item}>
+          <span aria-hidden="true" className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#277258]" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function PublicCrmLanding({
   auditHref,
   basePath,
@@ -242,7 +312,7 @@ export function PublicCrmLanding({
 }: PublicCrmLandingProps) {
   const novalureHref = getNovalureHref(language);
   const loginHref = withPublicLanguage("/login", language);
-  const secondaryHeroHref = loginHref;
+  const secondaryHeroHref = "#preview";
   const cookieHref = withPublicLanguage("/cookies", language);
   const privacyHref = withPublicLanguage("/privacy", language);
 
@@ -329,19 +399,113 @@ export function PublicCrmLanding({
                 {copy.hero.secondaryCta}
               </ActionLink>
             </div>
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {copy.hero.proofPoints.map((point) => (
-                <div className="rounded-md border border-white/[0.14] bg-white/[0.06] px-4 py-3 text-sm font-semibold leading-6 text-[#e5ebe7]" key={point}>
-                  {point}
-                </div>
-              ))}
-            </div>
+            <p className="mt-6 max-w-2xl text-sm font-semibold leading-6 text-[#9fd8be]">{copy.hero.accessLine}</p>
           </div>
           <HeroOperatingLayer visual={copy.visuals.heroOperatingLayer} />
         </div>
       </section>
 
-      <section className="border-b border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14" id="company-system">
+      <TrustBar items={copy.hero.proofPoints} />
+
+      <section className="bg-white px-4 py-14" id="problem">
+        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="order-2 lg:order-1">
+            <LeadLeakageVisual visual={copy.visuals.leadLeakage} />
+          </div>
+          <div className="order-1 lg:order-2">
+            <SectionIntro
+              description={copy.problem.description}
+              eyebrow={copy.problem.eyebrow}
+              title={copy.problem.title}
+            />
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {copy.problem.cards.map((point) => (
+                <article className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-4" key={point.title}>
+                  <h3 className="text-base font-semibold leading-6 text-[#111614]">{point.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#50645b]">{point.body}</p>
+                </article>
+              ))}
+            </div>
+            <p className="mt-5 rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold leading-6 text-[#26342f]">
+              {copy.problem.scenario}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/[0.12] bg-[#050607] px-4 py-14 text-white" id="preview">
+        <div className="mx-auto w-full max-w-7xl">
+          <SectionIntro
+            description={copy.preview.description}
+            eyebrow={copy.preview.eyebrow}
+            inverted
+            title={copy.preview.title}
+          />
+          <div className="mt-8 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-start">
+            <CrmPreviewCard preview={copy.preview} />
+            <div className="grid gap-6">
+              <FieldList items={copy.preview.visibleFields} title={copy.preview.visibleTitle} />
+              <FieldList items={copy.preview.protectedFields} title={copy.preview.protectedTitle} />
+              <p className="rounded-md border border-[#9fd8be]/30 bg-[#9fd8be]/10 p-4 text-sm font-semibold leading-6 text-[#d8f2e4]">
+                {copy.preview.notice}
+              </p>
+            </div>
+          </div>
+          <div className="mt-8">
+            <LockedCrmPreviewVisual visual={copy.visuals.lockedCrmPreview} />
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#f8f7f1] px-4 py-14">
+        <div className="mx-auto w-full max-w-7xl">
+          <SectionIntro eyebrow={copy.audiences.eyebrow} title={copy.audiences.title} />
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {copy.audiences.items.map((item) => (
+              <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={item.title}>
+                <h3 className="text-xl font-semibold leading-7 text-[#111614]">{item.title}</h3>
+                <p className="mt-4 text-sm leading-6 text-[#50645b]">{item.body}</p>
+                <p className="mt-4 text-sm font-semibold leading-6 text-[#277258]">{item.result}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-4 py-14" id="audit">
+        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[1fr_0.95fr] lg:items-center">
+          <div>
+            <SectionIntro
+              description={copy.audit.description}
+              eyebrow={copy.audit.eyebrow}
+              title={copy.audit.title}
+            />
+            <div className="mt-8 grid gap-5 md:grid-cols-2">
+              <div className="rounded-lg border border-[#d8ddd7] bg-[#f8f7f1] p-5">
+                <h3 className="text-base font-semibold text-[#111614]">{copy.audit.checksTitle}</h3>
+                <div className="mt-4 grid gap-2">
+                  {copy.audit.checks.map((check) => (
+                    <div className="rounded-md border border-[#d8ddd7] bg-white px-3 py-2 text-sm font-semibold text-[#26342f]" key={check}>
+                      {check}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-[#d8ddd7] bg-white p-5">
+                <h3 className="text-base font-semibold text-[#111614]">{copy.audit.outcomesTitle}</h3>
+                <div className="mt-4">
+                  <CheckList items={copy.audit.outcomes} />
+                </div>
+              </div>
+            </div>
+            <p className="mt-5 text-sm font-semibold leading-6 text-[#50645b]">{copy.audit.boundary}</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#277258]">{copy.audit.postClick}</p>
+          </div>
+          <AuditReviewLoopVisual visual={copy.visuals.auditToSystem} />
+        </div>
+      </section>
+
+      <section className="border-y border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14" id="company-system">
         <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
             <SectionIntro
@@ -365,86 +529,11 @@ export function PublicCrmLanding({
                 </span>
               ))}
             </div>
+            <p className="mt-5 rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold leading-6 text-[#26342f]">
+              {copy.companySystem.trustNote}
+            </p>
           </div>
           <CompanySystemVisual visual={copy.visuals.companySystemSplit} />
-        </div>
-      </section>
-
-      <section className="bg-white px-4 py-14" id="problem">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <div className="order-2 lg:order-1">
-            <LeadLeakageVisual visual={copy.visuals.leadLeakage} />
-          </div>
-          <div className="order-1 lg:order-2">
-            <SectionIntro
-              description={copy.problem.description}
-              eyebrow={copy.problem.eyebrow}
-              title={copy.problem.title}
-            />
-            <div className="mt-8 grid gap-3">
-              {copy.problem.points.map((point) => (
-                <div className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-4 text-sm font-semibold leading-6 text-[#26342f]" key={point}>
-                  {point}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-white/[0.12] bg-[#050607] px-4 py-14 text-white" id="preview">
-        <div className="mx-auto w-full max-w-7xl">
-          <SectionIntro
-            description={copy.preview.description}
-            eyebrow={copy.preview.eyebrow}
-            inverted
-            title={copy.preview.title}
-          />
-          <div className="mt-8">
-            <LockedCrmPreviewVisual visual={copy.visuals.lockedCrmPreview} />
-          </div>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {copy.preview.terms.map((term) => (
-              <span className="rounded-md border border-white/[0.16] bg-white/[0.06] px-3 py-2 text-sm font-semibold text-[#e5ebe7]" key={term}>
-                {term}
-              </span>
-            ))}
-          </div>
-          <p className="mt-5 max-w-3xl text-sm font-semibold leading-6 text-[#9fd8be]">{copy.preview.notice}</p>
-        </div>
-      </section>
-
-      <section className="bg-[#f8f7f1] px-4 py-14">
-        <div className="mx-auto w-full max-w-7xl">
-          <SectionIntro eyebrow={copy.audiences.eyebrow} title={copy.audiences.title} />
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {copy.audiences.items.map((item) => (
-              <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={item.title}>
-                <h3 className="text-xl font-semibold leading-7 text-[#111614]">{item.title}</h3>
-                <p className="mt-4 text-sm leading-6 text-[#50645b]">{item.body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white px-4 py-14" id="audit">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[1fr_0.95fr] lg:items-center">
-          <div>
-            <SectionIntro
-              description={copy.audit.description}
-              eyebrow={copy.audit.eyebrow}
-              title={copy.audit.title}
-            />
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              {copy.audit.checks.map((check) => (
-                <div className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] px-4 py-3 text-sm font-semibold text-[#26342f]" key={check}>
-                  {check}
-                </div>
-              ))}
-            </div>
-          </div>
-          <AuditReviewLoopVisual visual={copy.visuals.auditToSystem} />
         </div>
       </section>
 
@@ -467,16 +556,44 @@ export function PublicCrmLanding({
                 </article>
               ))}
             </div>
-            <div className="mt-4 rounded-md border border-dashed border-white/[0.22] bg-white/[0.04] p-4">
-              <p className="text-xs font-semibold uppercase text-[#9fd8be]">{copy.trust.proofPlaceholderTitle}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {copy.trust.proofPlaceholders.map((placeholder) => (
-                  <span className="rounded-md border border-white/[0.14] bg-white/[0.06] px-3 py-2 text-sm font-semibold text-[#e5ebe7]" key={placeholder}>
-                    {placeholder}
-                  </span>
-                ))}
-              </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-4 py-14">
+        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
+          <SectionIntro
+            description={copy.trust.proof.intro}
+            eyebrow={copy.trust.eyebrow}
+            title={copy.trust.proof.title}
+          />
+          <div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {copy.trust.proof.cards.map((item) => (
+                <article className="rounded-lg border border-[#d8ddd7] bg-[#f8f7f1] p-5" key={item.title}>
+                  <h3 className="text-lg font-semibold leading-7 text-[#111614]">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-[#50645b]">{item.body}</p>
+                </article>
+              ))}
             </div>
+            <div className="mt-5 rounded-lg border border-[#d8ddd7] bg-[#eef7ff] p-5">
+              <p className="text-sm font-semibold uppercase text-[#277258]">{copy.trust.proof.exampleTitle}</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-[#26342f]">{copy.trust.proof.exampleBody}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#f8f7f1] px-4 py-14">
+        <div className="mx-auto w-full max-w-7xl">
+          <SectionIntro eyebrow={copy.faq.eyebrow} title={copy.faq.title} />
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {copy.faq.items.map((item) => (
+              <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={item.question}>
+                <h3 className="text-lg font-semibold leading-7 text-[#111614]">{item.question}</h3>
+                <p className="mt-3 text-sm leading-6 text-[#50645b]">{item.answer}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
@@ -489,8 +606,13 @@ export function PublicCrmLanding({
               eyebrow={copy.finalCta.eyebrow}
               title={copy.finalCta.title}
             />
+            <div className="mt-6">
+              <CheckList items={copy.finalCta.bullets} />
+            </div>
+            <p className="mt-5 text-sm font-semibold leading-6 text-[#50645b]">{copy.finalCta.microcopy}</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#277258]">{copy.finalCta.postClick}</p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <ActionLink href={auditHref} variant="subtle">
+              <ActionLink href={auditHref} variant="dark">
                 {copy.finalCta.primaryCta}
               </ActionLink>
               <ActionLink href={novalureHref} variant="subtle">
@@ -509,10 +631,7 @@ export function PublicCrmLanding({
         <div className="mx-auto grid w-full max-w-7xl gap-6 md:grid-cols-[1fr_auto]">
           <div>
             <p className="font-semibold text-[#111614]">{copy.footerTagline}</p>
-            <p className="mt-3">
-              {companyLegalDetails.companyName} - {legalCopy.companyNumber}{" "}
-              {companyLegalDetails.companyNumber} - {companyLegalDetails.registeredPlace}
-            </p>
+            <p className="mt-3">{legalCopy.companyLine}</p>
             <p className="mt-1">
               {legalCopy.contactPrefix}{" "}
               <a className="font-semibold text-[#111614] underline-offset-4 hover:underline" href={`mailto:${companyLegalDetails.email}`}>

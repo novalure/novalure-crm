@@ -3727,6 +3727,7 @@ export function CrmWorkspace({
                 <WorkspaceOnboardingTour
                   language={language}
                   productRole={sessionProductRole}
+                  technicalRole={sessionRole}
                   userName={users.find((user) => user.id === sessionUserId)?.name ?? sessionUserId}
                   workspaceName={workspaceContext.workspaceName}
                 />

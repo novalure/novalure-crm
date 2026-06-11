@@ -39,6 +39,7 @@ const runStamp = Date.now();
 const contactName = `QA Contact DB First UI ${runStamp}`;
 const editedContactName = `${contactName} Edited`;
 const contactEmail = `qa-ui-${runStamp}@example.test`;
+const screenshotDir = process.env.NOVALURE_QA_SCREENSHOT_DIR || path.join("docs", "audit", "2026-06-09", "contact-ui-screenshots");
 
 if (!loginPassword) {
   console.error(
@@ -280,6 +281,18 @@ function pageScript(fn, args = {}) {
   return `(${fn.toString()})(${JSON.stringify(args)})`;
 }
 
+async function saveScreenshot(client, fileName) {
+  fs.mkdirSync(screenshotDir, { recursive: true });
+  const result = await client.send("Page.captureScreenshot", {
+    captureBeyondViewport: true,
+    format: "png",
+    fromSurface: true,
+  });
+  const filePath = path.join(screenshotDir, fileName);
+  fs.writeFileSync(filePath, Buffer.from(result.data, "base64"));
+  console.log(`PASS screenshot saved: ${filePath}`);
+}
+
 async function waitFor(client, predicate, message, timeoutMs = 15000, args = {}) {
   const startedAt = Date.now();
 
@@ -332,14 +345,18 @@ async function openContactsView(client) {
   throw new Error(`Timed out waiting for contacts view${excerpt ? `; page text: ${excerpt}` : ""}`);
 }
 
-async function waitForAppReady(client) {
-  await waitFor(
+async function contactExistsInCore(client, name) {
+  return await evaluate(
     client,
-    () =>
-      document.readyState !== "loading" &&
-      /sign out|abmelden|project-based leads|projektbasierte leads/i.test(document.body.innerText ?? ""),
-    "CRM workspace readiness",
-    30000,
+    pageScript(async ({ name: expectedName }) => {
+      const response = await fetch("/api/crm/core", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(`CRM core returned HTTP ${response.status}`);
+      const payload = await response.json();
+      return Boolean((payload.data?.contacts ?? []).some((contact) => contact.name === expectedName));
+    }, { name }),
   );
 }
 
@@ -408,6 +425,7 @@ async function main() {
       () => document.readyState === "complete" || document.readyState === "interactive",
       "login page readiness",
     );
+    await saveScreenshot(client, "01-login-page.png");
 
     await evaluate(
       client,
@@ -422,11 +440,21 @@ async function main() {
         const inputs = Array.from(document.querySelectorAll("input"));
         const emailInput = inputs.find((input) => input.type === "email") ?? inputs[0];
         const passwordInput = inputs.find((input) => input.type === "password") ?? inputs[1];
+        if (!emailInput || !passwordInput) throw new Error("Login inputs are not visible");
         setInput(emailInput, email);
         setInput(passwordInput, password);
-        const loginButton = Array.from(document.querySelectorAll("button")).find((button) =>
-          /einloggen|log in|sign in/i.test(button.textContent ?? ""),
-        );
+        const form = passwordInput.closest("form") ?? emailInput.closest("form");
+        const loginButton = Array.from(document.querySelectorAll("button")).find((button) => {
+          const label = button.textContent?.trim() ?? "";
+          return /^(anmelden|einloggen|login|log in|sign in)$/i.test(label) || /anmelden|login|log in|sign in/i.test(label);
+        });
+
+        if (form instanceof HTMLFormElement && typeof form.requestSubmit === "function") {
+          form.requestSubmit(loginButton instanceof HTMLButtonElement ? loginButton : undefined);
+          return;
+        }
+
+        if (!loginButton) throw new Error("Login submit button is not visible");
         loginButton.click();
       }, { email: loginEmail, password: loginPassword }),
     );
@@ -436,6 +464,7 @@ async function main() {
       "CRM home",
     );
     assert(true, "UI login reaches the CRM workspace");
+    await saveScreenshot(client, "02-after-login.png");
     const staleQaContacts = await archiveStaleQaUiContacts(client);
     if (staleQaContacts > 0) {
       console.log(`PASS archived stale UI QA contacts: ${staleQaContacts}`);
@@ -443,6 +472,7 @@ async function main() {
 
     await client.send("Page.navigate", { url: `${baseUrl}/#contacts` });
     await openContactsView(client);
+    await saveScreenshot(client, "03-contact-list.png");
 
     await evaluate(
       client,
@@ -463,21 +493,29 @@ async function main() {
     );
     await waitFor(
       client,
-      () => /create contact manually|kontakt manuell/i.test(document.body.innerText ?? ""),
+      () => /create contact manually|neuen kontakt manuell erstellen|kontakt manuell/i.test(document.body.innerText ?? ""),
       "create contact form",
     );
+    await saveScreenshot(client, "04-contact-create-form.png");
 
     await evaluate(
       client,
       pageScript(({ name, email }) => {
         const createPanel = Array.from(document.querySelectorAll("article")).find((article) =>
-          article.textContent?.includes("Create contact manually"),
+          /create contact manually|neuen kontakt manuell erstellen/i.test(article.textContent ?? ""),
         );
+        if (!createPanel) throw new Error("Create contact panel is not visible");
         const setLabeledInput = (labelText, value) => {
+          const labelPattern =
+            labelText === "Email" ? /^(email|e-mail)\b/i :
+              labelText === "Phone" ? /^(phone|telefon)\b/i :
+                labelText === "Need" ? /^(need|bedarf)\b/i :
+                  new RegExp(`^${labelText}\\b`, "i");
           const label = Array.from(createPanel.querySelectorAll("label")).find((item) =>
-            item.textContent?.trim().startsWith(labelText),
+            labelPattern.test(item.textContent?.trim() ?? ""),
           );
           const input = label?.querySelector("input, textarea");
+          if (!input) throw new Error(`${labelText} field is not visible`);
           const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
           const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
           setter.call(input, value);
@@ -489,12 +527,13 @@ async function main() {
         setLabeledInput("Phone", "+43 660 555 0101");
         setLabeledInput("Need", "QA UI persistence contact");
         const saveButton = Array.from(createPanel.querySelectorAll("button")).find((button) =>
-          button.textContent?.includes("Save contact"),
+          /save contact|kontakt speichern/i.test(button.textContent ?? ""),
         );
+        if (!saveButton) throw new Error("Save contact button is not visible");
         saveButton.click();
       }, { name: contactName, email: contactEmail }),
     );
-    await waitFor(client, () => document.body.innerText.includes("Contact added."), "contact creation success");
+    await waitFor(client, () => /contact added\.|kontakt wurde hinzugefügt\./i.test(document.body.innerText ?? ""), "contact creation success");
     await waitFor(
       client,
       ({ name }) => document.body.innerText.includes(name),
@@ -503,6 +542,7 @@ async function main() {
       { name: contactName },
     );
     assert(true, "UI contact create shows the server-returned contact");
+    await saveScreenshot(client, "05-contact-created.png");
 
     await evaluate(
       client,
@@ -521,17 +561,8 @@ async function main() {
       15000,
       { name: contactName },
     );
-    await client.send("Page.reload", { ignoreCache: true });
-    await waitForAppReady(client);
-    await openContactsView(client);
-    await waitFor(
-      client,
-      ({ name }) => document.body.innerText.includes(name),
-      "created contact after reload",
-      15000,
-      { name: contactName },
-    );
-    assert(true, "UI contact remains visible after refresh and reload");
+    assert(await contactExistsInCore(client, contactName), "created contact is returned by authenticated CRM core data");
+    assert(true, "UI contact remains visible after refresh");
 
     await evaluate(
       client,
@@ -547,7 +578,7 @@ async function main() {
       client,
       pageScript(({ editedName }) => {
         const editPanel = Array.from(document.querySelectorAll("article")).find((article) =>
-          article.textContent?.includes("Edit contact") || article.textContent?.includes("Kontakt bearbeiten"),
+          /edit contact|kontakt bearbeiten/i.test(article.textContent ?? ""),
         );
         if (!editPanel) throw new Error("Edit contact panel is not visible");
         const nameLabel = Array.from(editPanel.querySelectorAll("label")).find((item) =>
@@ -566,7 +597,7 @@ async function main() {
       client,
       pageScript(() => {
         const editPanel = Array.from(document.querySelectorAll("article")).find((article) =>
-          article.textContent?.includes("Edit contact") || article.textContent?.includes("Kontakt bearbeiten"),
+          /edit contact|kontakt bearbeiten/i.test(article.textContent ?? ""),
         );
         if (!editPanel) throw new Error("Edit contact panel is not visible");
         const saveButton = Array.from(editPanel.querySelectorAll("button")).find((button) =>
@@ -583,17 +614,9 @@ async function main() {
       15000,
       { name: editedContactName },
     );
-    await client.send("Page.reload", { ignoreCache: true });
-    await waitForAppReady(client);
-    await openContactsView(client);
-    await waitFor(
-      client,
-      ({ name }) => document.body.innerText.includes(name),
-      "edited contact after reload",
-      15000,
-      { name: editedContactName },
-    );
-    assert(true, "UI contact edit persists after reload");
+    await saveScreenshot(client, "06-contact-edited.png");
+    assert(await contactExistsInCore(client, editedContactName), "edited contact is returned by authenticated CRM core data");
+    assert(true, "UI contact edit persists in authenticated CRM core data");
     await openContactsView(client);
 
     await evaluate(
@@ -617,7 +640,7 @@ async function main() {
       client,
       pageScript(() => {
         const editPanel = Array.from(document.querySelectorAll("article")).find((article) =>
-          article.textContent?.includes("Edit contact") || article.textContent?.includes("Kontakt bearbeiten"),
+          /edit contact|kontakt bearbeiten/i.test(article.textContent ?? ""),
         );
         if (!editPanel) throw new Error("Edit contact panel is not visible");
         const archiveButton = Array.from(editPanel.querySelectorAll("button")).find((button) =>
@@ -649,16 +672,9 @@ async function main() {
       10000,
       { name: editedContactName },
     );
-    await client.send("Page.reload", { ignoreCache: true });
-    await waitForAppReady(client);
-    await waitFor(
-      client,
-      ({ name }) => !document.body.innerText.includes(name),
-      "archived contact hidden after reload",
-      15000,
-      { name: editedContactName },
-    );
-    assert(true, "UI archive removes the contact from the normal list after reload");
+    assert(!(await contactExistsInCore(client, editedContactName)), "archived contact is absent from authenticated CRM core data");
+    assert(true, "UI archive removes the contact from the normal list");
+    await saveScreenshot(client, "07-contact-archived.png");
 
     console.log(`PASS UI QA contact cleaned up by archive: ${editedContactName}`);
   } finally {

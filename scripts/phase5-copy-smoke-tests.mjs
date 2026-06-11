@@ -47,11 +47,16 @@ test("replacement copy uses production-safe draft and inline wording", () => {
   assert.match(i18n, /Meeting-Entwurf geladen/);
 });
 
-test("login placeholders use a real product domain instead of a local demo address", () => {
+test("login inputs stay empty and use neutral placeholders", () => {
   const i18n = readText("src/lib/i18n.ts");
+  const loginPage = readText("src/app/login/page.tsx");
 
   assert.doesNotMatch(i18n, /placeholderEmail: "franz@novalure\.local"/);
-  assert.match(i18n, /placeholderEmail: "franz@novalure\.eu"/);
+  assert.doesNotMatch(i18n, /placeholderEmail: "franz@novalure\.eu"/);
+  assert.match(i18n, /placeholderEmail: "name@company\.com"/);
+  assert.match(i18n, /placeholderEmail: "name@firma\.com"/);
+  assert.doesNotMatch(loginPage, /defaultValue=\{email/);
+  assert.doesNotMatch(loginPage, /value=\{email/);
 });
 
 test("public landing keeps German copy localized and gives customers a clear login path", () => {
@@ -76,8 +81,10 @@ test("public landing keeps German copy localized and gives customers a clear log
     assert.ok(!germanLanding.includes(phrase), `Unexpected public DE landing phrase: ${phrase}`);
   }
 
-  assert.match(germanLanding, /login: "Anmelden"/);
-  assert.match(germanLanding, /secondaryCta: "Zum Login"/);
+  assert.match(germanLanding, /login: "Team-Login"/);
+  assert.match(germanLanding, /primaryCta: "Pipeline-Audit anfragen"/);
+  assert.match(germanLanding, /secondaryCta: "CRM-Vorschau ansehen"/);
+  assert.match(germanLanding, /Anonymisierte Beispielansicht/);
   assert.match(landing, /<PublicHashRouteLoginRedirect language=\{language\} \/>/);
   assert.match(redirect, /"leadinbox"/);
   assert.match(redirect, /window\.location\.replace\(`\/login\?\$\{params\.toString\(\)\}`\)/);
@@ -98,14 +105,19 @@ test("public cookie banner exposes GDPR choices and privacy link", () => {
   assert.match(landing, /privacyHref=\{privacyHref\}/);
 });
 
-test("public landing includes trust, hosting and approval placeholders", () => {
+test("public landing uses anonymized trust proof instead of placeholders", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
 
-  assert.match(i18n, /label: "Hosting und Datenbank"/);
-  assert.match(i18n, /Vercel, Neon Postgres/);
-  assert.match(i18n, /Freigegebenes Kundenlogo/);
+  assert.doesNotMatch(i18n, /Freigegebenes Kundenlogo/);
+  assert.doesNotMatch(i18n, /Approved client logo/);
+  assert.doesNotMatch(i18n, /Customer proof placeholders/);
+  assert.match(i18n, /Vertrauen ohne öffentliche Kundendaten/);
+  assert.match(i18n, /Trust without exposing client data/);
+  assert.match(i18n, /Anonymisierter Beispielbefund/);
+  assert.match(i18n, /Anonymized example finding/);
   assert.match(i18n, /hello@novalure\.eu/);
   assert.match(landing, /copy\.trust\.details\.map/);
-  assert.match(landing, /copy\.trust\.proofPlaceholders\.map/);
+  assert.match(landing, /copy\.trust\.proof\.cards\.map/);
+  assert.doesNotMatch(landing, /proofPlaceholders/);
 });
