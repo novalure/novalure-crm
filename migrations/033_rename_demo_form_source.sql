@@ -1,7 +1,7 @@
 update workspaces
 set
-  settings = jsonb_set(
-    settings,
+  setup_state = jsonb_set(
+    setup_state,
     '{leadSources}',
     (
       select jsonb_agg(
@@ -10,12 +10,12 @@ set
           else source_value
         end
       )
-      from jsonb_array_elements(settings->'leadSources') as source_items(source_value)
+      from jsonb_array_elements(setup_state->'leadSources') as source_items(source_value)
     ),
     true
   ),
   updated_at = now()
-where settings->'leadSources' @> '["Demo-Formular"]'::jsonb;
+where setup_state->'leadSources' @> '["Demo-Formular"]'::jsonb;
 
 update workspace_lead_sources
 set
