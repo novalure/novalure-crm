@@ -98,7 +98,7 @@ export const NOVALURE_GROWTH_LEAD_SOURCES = [
   "Event",
   "Newsletter",
   "Outbound",
-  "Demo-Formular",
+  "Formular",
 ] as const;
 
 export type NovalureGrowthLeadSource = (typeof NOVALURE_GROWTH_LEAD_SOURCES)[number];

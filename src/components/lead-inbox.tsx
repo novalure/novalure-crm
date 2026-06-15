@@ -77,7 +77,7 @@ const sourceStyles: Record<LeadSource, string> = {
   Partner: "bg-teal-50 text-teal-800",
   Event: "bg-purple-50 text-purple-800",
   Outbound: "bg-orange-50 text-orange-800",
-  "Demo-Formular": "bg-indigo-50 text-indigo-800",
+  Formular: "bg-indigo-50 text-indigo-800",
   Manual: "bg-stone-100 text-stone-700",
 };
 

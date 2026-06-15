@@ -112,7 +112,7 @@ values (
       'reservations', false,
       'projectOverview', false
     ),
-    'leadSources', jsonb_build_array('Website', 'Empfehlung', 'LinkedIn', 'Partner', 'Event', 'Newsletter', 'Outbound', 'Demo-Formular'),
+    'leadSources', jsonb_build_array('Website', 'Empfehlung', 'LinkedIn', 'Partner', 'Event', 'Newsletter', 'Outbound', 'Formular'),
     'createdByMigration', '030_novalure_growth_workspace'
   )
 )
@@ -251,7 +251,7 @@ values
   ('2fd456d4-04c0-4034-b76b-77051d24b405', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'event', 'Event', 'Event', 'Event', 4, true, jsonb_build_object('analyticsKey', 'event')),
   ('2fd456d4-04c0-4034-b76b-77051d24b406', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'newsletter', 'Newsletter', 'Newsletter', 'Newsletter', 5, true, jsonb_build_object('analyticsKey', 'newsletter')),
   ('2fd456d4-04c0-4034-b76b-77051d24b407', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'outbound', 'Outbound', 'Outbound', 'Outbound', 6, true, jsonb_build_object('analyticsKey', 'outbound')),
-  ('2fd456d4-04c0-4034-b76b-77051d24b408', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'demo_form', 'Demo-Formular', 'Demo-Formular', 'Demo form', 7, true, jsonb_build_object('analyticsKey', 'demo_form'))
+  ('2fd456d4-04c0-4034-b76b-77051d24b408', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'form', 'Formular', 'Formular', 'Form', 7, true, jsonb_build_object('analyticsKey', 'form'))
 on conflict (id) do update
 set
   key = excluded.key,
@@ -459,7 +459,7 @@ insert into funnels (
   tracking
 )
 values
-  ('67d1ab8a-2b52-467d-bd55-4cdd41c73401', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2', 'Demo-Anfrage Website', 'Demo-Anfrage qualifizieren und Termin buchen', 'Website-Besucher', 'Website', 'entwurf', jsonb_build_object('seedKey', 'website_demo', 'disabled', true, 'requiresConsent', true), jsonb_build_object('leadSource', 'Demo-Formular', 'analytics', 'channel_to_won_conversion')),
+  ('67d1ab8a-2b52-467d-bd55-4cdd41c73401', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2', 'Demo-Anfrage Website', 'Demo-Anfrage qualifizieren und Termin buchen', 'Website-Besucher', 'Website', 'entwurf', jsonb_build_object('seedKey', 'website_demo', 'disabled', true, 'requiresConsent', true), jsonb_build_object('leadSource', 'Formular', 'analytics', 'channel_to_won_conversion')),
   ('67d1ab8a-2b52-467d-bd55-4cdd41c73402', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2', 'LinkedIn Outbound', 'Outbound-Kontakte strukturiert in Demo-Pipeline ueberfuehren', 'LinkedIn-Kontakte', 'LinkedIn', 'entwurf', jsonb_build_object('seedKey', 'linkedin_outbound', 'disabled', true, 'requiresConsent', true), jsonb_build_object('leadSource', 'LinkedIn', 'analytics', 'channel_to_won_conversion')),
   ('67d1ab8a-2b52-467d-bd55-4cdd41c73403', '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101', 'f7d83c6b-d08d-4d73-b822-1f1c0b4733d2', 'Empfehlungsprogramm', 'Empfehlungen erfassen, qualifizieren und nachverfolgen', 'Partner und Bestandskontakte', 'Empfehlung', 'entwurf', jsonb_build_object('seedKey', 'referral_program', 'disabled', true, 'requiresConsent', true), jsonb_build_object('leadSource', 'Empfehlung', 'analytics', 'channel_to_won_conversion'))
 on conflict (id) do update

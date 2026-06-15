@@ -38,6 +38,7 @@ const migrations = [
   "migrations/030_novalure_growth_workspace.sql",
   "migrations/031_user_onboarding.sql",
   "migrations/032_public_slug_routing.sql",
+  "migrations/033_rename_demo_form_source.sql",
 ];
 
 type TableStatusRow = {

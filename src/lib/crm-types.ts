@@ -44,7 +44,7 @@ export const CRM_LEAD_SOURCES = [
   "Instagram",
   "Newsletter",
   "Outbound",
-  "Demo-Formular",
+  "Formular",
   "Manual",
 ] as const;
 

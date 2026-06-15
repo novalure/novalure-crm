@@ -83,6 +83,7 @@ async function applyMigration(path) {
 await applyMigration("migrations/029_contact_owner_scope.sql");
 await applyMigration("migrations/030_novalure_growth_workspace.sql");
 await applyMigration("migrations/031_user_onboarding.sql");
+await applyMigration("migrations/033_rename_demo_form_source.sql");
 
 const workspaces = {
   internal: {

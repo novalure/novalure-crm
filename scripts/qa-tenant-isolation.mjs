@@ -5,7 +5,7 @@ import { neon } from "@neondatabase/serverless";
 
 const growthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const growthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
-const growthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Demo-Formular"];
+const growthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Formular"];
 const disabledModules = ["objectsMandates", "units", "reservations", "projectOverview"];
 const enabledModules = [
   "dashboard",
