@@ -24,6 +24,7 @@ import {
   getCrmOrganizationTypeLabel,
   getCrmRelationshipInfluenceLabel,
   getCrmRelationshipRoleLabel,
+  getCrmSourceKey,
   getCrmSourceLabel,
   getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
@@ -82,6 +83,11 @@ const crmLeadSourceSet = new Set<string>(CRM_LEAD_SOURCES);
 
 function isCrmLeadSource(value: string): value is Contact["source"] {
   return crmLeadSourceSet.has(value);
+}
+
+function getContactSourceOptionValue(source: string): Contact["source"] {
+  const sourceKey = getCrmSourceKey(source);
+  return isCrmLeadSource(sourceKey) ? sourceKey : "Manual";
 }
 
 type ContactFeedback = {
@@ -1412,7 +1418,7 @@ export function ContactCommandCenter({
                     <select
                       className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                       onChange={(event) => updateSelectedContact("source", event.target.value)}
-                      value={selectedContact.source}
+                      value={getContactSourceOptionValue(selectedContact.source)}
                     >
                       {sourceOptions.map((source) => (
                         <option key={source} value={source}>

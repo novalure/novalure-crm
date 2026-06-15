@@ -10180,6 +10180,7 @@ const crmSourceLabels: Record<string, Record<LanguageCode, string>> = {
   Manual: { en: "Manual", de: "Manuell" },
   Website: { en: "Website", de: "Website" },
   "Website Funnel": { en: "Website funnel", de: "Website-Funnel" },
+  Inbound: { en: "Inbound", de: "Inbound" },
   Newsletter: { en: "Newsletter", de: "Newsletter" },
   Instagram: { en: "Instagram", de: "Instagram" },
   LinkedIn: { en: "LinkedIn", de: "LinkedIn" },
@@ -10188,8 +10189,6 @@ const crmSourceLabels: Record<string, Record<LanguageCode, string>> = {
   Outbound: { en: "Outbound", de: "Outbound" },
   "Demo-Formular": { en: "Demo form", de: "Demo-Formular" },
   WhatsApp: { en: "WhatsApp", de: "WhatsApp" },
-  willhaben: { en: "willhaben", de: "willhaben" },
-  ImmobilienScout: { en: "ImmobilienScout", de: "ImmobilienScout" },
 };
 
 const crmPropertyTypeLabels: Record<string, Record<LanguageCode, string>> = {
@@ -10244,8 +10243,9 @@ const crmLeadTypeAliases: Record<string, string> = {
 
 const crmSourceAliases: Record<string, string> = {
   google_meet: "Manual",
-  immobilienscout: "ImmobilienScout",
+  immobilienscout: "Inbound",
   instagram: "Instagram",
+  inbound: "Inbound",
   linkedin: "LinkedIn",
   manual: "Manual",
   manuell: "Manual",
@@ -10262,7 +10262,7 @@ const crmSourceAliases: Record<string, string> = {
   website: "Website",
   website_funnel: "Website Funnel",
   whatsapp: "WhatsApp",
-  willhaben: "willhaben",
+  willhaben: "Inbound",
 };
 
 const crmPropertyTypeAliases: Record<string, string> = {

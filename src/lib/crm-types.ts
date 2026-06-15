@@ -35,8 +35,7 @@ export type ContactRelationshipRole =
 export const CRM_LEAD_SOURCES = [
   "Website Funnel",
   "Website",
-  "willhaben",
-  "ImmobilienScout",
+  "Inbound",
   "Empfehlung",
   "LinkedIn",
   "Partner",

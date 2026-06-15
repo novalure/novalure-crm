@@ -87,6 +87,7 @@ import {
   getCrmConsentStatusLabel,
   getCrmEnumLabel,
   getCrmLeadTypeKey,
+  getCrmSourceKey,
   getCrmSourceLabel,
   getCrmStatusLabel,
   getLocale,
@@ -1405,7 +1406,8 @@ function AnalyticsCommandCenter({
   const overdueTasks = tasks.filter((task) => task.status === "open" && task.due && task.due < today).length;
   const bySource = Array.from(
     leads.reduce<Map<string, number>>((summary, lead) => {
-      summary.set(lead.source, (summary.get(lead.source) ?? 0) + 1);
+      const sourceKey = getCrmSourceKey(lead.source);
+      summary.set(sourceKey, (summary.get(sourceKey) ?? 0) + 1);
       return summary;
     }, new Map()),
   ).sort((a, b) => b[1] - a[1]);

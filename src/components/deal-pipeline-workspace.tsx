@@ -24,6 +24,7 @@ import type {
 } from "@/lib/crm-types";
 import {
   getCrmRiskLabel,
+  getCrmSourceKey,
   getCrmSourceLabel,
   getCrmTaskDueLabel,
   getDealPipelineCommandCopy,
@@ -708,7 +709,7 @@ export function DealPipelineWorkspace({
     [dealViews, users],
   );
   const sourceOptions = useMemo(
-    () => Array.from(new Set(workingDeals.map((deal) => deal.source))) as LeadSource[],
+    () => Array.from(new Set(workingDeals.map((deal) => getCrmSourceKey(deal.source)))) as LeadSource[],
     [workingDeals],
   );
 
@@ -719,7 +720,8 @@ export function DealPipelineWorkspace({
       const matchesProject = projectFilter === "all" || item.deal.projectId === projectFilter;
       const matchesLeadType = leadTypeFilter === "all" || item.leadType === leadTypeFilter;
       const matchesStage = stageFilter === "all" || item.deal.stage === stageFilter;
-      const matchesSource = sourceFilter === "all" || item.deal.source === sourceFilter;
+      const normalizedSource = getCrmSourceKey(item.deal.source);
+      const matchesSource = sourceFilter === "all" || normalizedSource === sourceFilter;
       const matchesRisk = riskFilter === "all" || item.deal.riskLevel === riskFilter;
       const matchesOwner = ownerFilter === "all" || item.deal.ownerUserId === ownerFilter;
       const matchesPriority = priorityFilter === "all" || item.nextTask?.priority === priorityFilter;
@@ -730,6 +732,8 @@ export function DealPipelineWorkspace({
         item.deal.name,
         item.deal.nextAction,
         item.deal.source,
+        normalizedSource,
+        getCrmSourceLabel(item.deal.source, language),
         item.contact?.name,
         item.contact?.intent,
         item.lead?.intent,
@@ -759,6 +763,7 @@ export function DealPipelineWorkspace({
     });
   }, [
     dealViews,
+    language,
     leadTypeFilter,
     onlyOverdue,
     ownerFilter,

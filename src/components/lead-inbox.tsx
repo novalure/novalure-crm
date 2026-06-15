@@ -22,6 +22,7 @@ import {
   getCrmEnumLabel,
   getCrmFinancingStatusLabel,
   getCrmPropertyTypeLabel,
+  getCrmSourceKey,
   getCrmSourceLabel,
   getCrmStatusLabel,
   getDashboardCopy,
@@ -69,8 +70,7 @@ const sourceStyles: Record<LeadSource, string> = {
   Instagram: "bg-violet-50 text-violet-800",
   "Website Funnel": "bg-blue-50 text-blue-800",
   Newsletter: "bg-amber-50 text-amber-800",
-  willhaben: "bg-red-50 text-red-800",
-  ImmobilienScout: "bg-cyan-50 text-cyan-800",
+  Inbound: "bg-cyan-50 text-cyan-800",
   Empfehlung: "bg-emerald-50 text-emerald-800",
   Website: "bg-blue-50 text-blue-800",
   LinkedIn: "bg-sky-50 text-sky-800",
@@ -82,6 +82,11 @@ const sourceStyles: Record<LeadSource, string> = {
 };
 
 const sourceOptions: LeadSource[] = [...CRM_LEAD_SOURCES];
+
+function getLeadSourceStyle(source: string) {
+  const sourceKey = getCrmSourceKey(source) as LeadSource;
+  return sourceStyles[sourceKey] ?? sourceStyles.Manual;
+}
 
 const typeOptions: LeadType[] = ["Käufer", "Verkäufer", "Investor", "Bauträger", "Makler"];
 const propertyTypeOptions: PropertyType[] = ["Wohnung", "Haus", "Neubau", "Zinshaus", "Gewerbe", "Grundstück", "Portfolio"];
@@ -295,6 +300,8 @@ export function LeadInbox({
           item.contact?.phone,
           item.project?.name,
           item.lead.source,
+          getCrmSourceKey(item.lead.source),
+          getCrmSourceLabel(item.lead.source, language),
           item.lead.type,
           item.lead.status,
           item.lead.intent,
@@ -319,7 +326,7 @@ export function LeadInbox({
         }
         return getPriorityRank(a.lead) - getPriorityRank(b.lead);
       });
-  }, [activeView, decoratedLeads, searchTerm, sortBy]);
+  }, [activeView, decoratedLeads, language, searchTerm, sortBy]);
 
   const selected = decoratedLeads.find((item) => item.lead.id === selectedLead?.id);
   const openLeadCount = decoratedLeads.filter((item) => item.lead.status !== "Archiviert").length;
@@ -1171,7 +1178,7 @@ export function LeadInbox({
                       <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : statusStyles[item.lead.status]}`}>
                         {getCrmStatusLabel(item.lead.status, language)}
                       </span>
-                      <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : sourceStyles[item.lead.source]}`}>
+                      <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : getLeadSourceStyle(item.lead.source)}`}>
                         {getCrmSourceLabel(item.lead.source, language)}
                       </span>
                       <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : isUrgent ? "bg-amber-100 text-amber-900" : "bg-white text-stone-700"}`}>
