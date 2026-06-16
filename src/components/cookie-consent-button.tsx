@@ -179,7 +179,7 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
         <div
           className={
             loginPlacement
-              ? "fixed inset-x-0 bottom-0 z-[80] px-4 pb-4 sm:inset-x-auto sm:left-4 sm:w-[min(30rem,calc(100vw-2rem))] sm:pb-6"
+              ? "fixed inset-x-0 bottom-0 z-[80] px-3 pb-3 sm:inset-x-auto sm:left-4 sm:w-[min(30rem,calc(100vw-2rem))] sm:px-4 sm:pb-6"
               : "fixed inset-x-0 bottom-0 z-[80] px-4 pb-4 sm:pb-6"
           }
         >
@@ -187,7 +187,7 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
             aria-label={copy.title}
             className={
               loginPlacement
-                ? "mx-auto w-full rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
+                ? "mx-auto max-h-[48svh] w-full overflow-y-auto rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:max-h-[calc(100svh-2rem)] sm:p-5"
                 : "mx-auto max-w-4xl rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
             }
             role="dialog"
@@ -197,7 +197,7 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
                 <p className="text-sm font-semibold uppercase text-[#277258]">{copy.title}</p>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[#50645b]">{copy.description}</p>
                 {consent ? <p className="mt-2 text-xs font-semibold text-[#277258]">{statusText}</p> : null}
-                <div className={loginPlacement ? "mt-4 grid gap-2" : "mt-4 grid gap-2 sm:grid-cols-2"}>
+                <div className={loginPlacement ? "mt-4 hidden gap-2 sm:grid sm:grid-cols-2" : "mt-4 grid gap-2 sm:grid-cols-2"}>
                   <div className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-3">
                     <p className="text-sm font-semibold">{copy.necessaryTitle}</p>
                     <p className="mt-1 text-xs leading-5 text-[#50645b]">{copy.necessaryDescription}</p>

@@ -601,7 +601,7 @@ async function main() {
         );
         if (!editPanel) throw new Error("Edit contact panel is not visible");
         const saveButton = Array.from(editPanel.querySelectorAll("button")).find((button) =>
-          /save changes|änderungen speichern|aenderungen speichern/i.test(button.textContent ?? ""),
+          /save changes|änderungen speichern|\u0061enderungen speichern/i.test(button.textContent ?? ""),
         );
         if (!saveButton) throw new Error("Save changes button is not visible");
         saveButton.click();

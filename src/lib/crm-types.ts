@@ -141,7 +141,74 @@ export type WorkspaceUser = {
   email: string;
   role: WorkspaceRole;
   productRole?: ProductRole;
-  status: "active" | "invited";
+  status: "active" | "invited" | "suspended";
+};
+
+export type CompanyProfileScope = "workspace_owner" | "platform_operator" | "crm_account";
+export type CompanyProfileStatus = "draft" | "needs_review" | "approved" | "locked";
+export type CompanyProfileCountry = "AT" | "DE" | "IE" | string;
+export type CompanyProfileUsageKey =
+  | "botDisclosures"
+  | "customerApprovals"
+  | "emails"
+  | "exposes"
+  | "forms"
+  | "imprint"
+  | "invoices"
+  | "legalFooter"
+  | "openImmo"
+  | "portalExport"
+  | "privacy";
+
+export type CompanyProfile = {
+  approvedAt?: string;
+  approvedByUserId?: ID;
+  billingAddress: string;
+  brand: Record<string, unknown>;
+  businessAddress: string;
+  countryCode: CompanyProfileCountry;
+  createdAt: string;
+  displayName: string;
+  dpoContact: string;
+  id: ID;
+  jurisdiction: string;
+  legalForm: string;
+  legalName: string;
+  licenses: Record<string, unknown>;
+  organizationId?: ID;
+  privacyContact: string;
+  profileScope: CompanyProfileScope;
+  publicEmail: string;
+  publicPhone: string;
+  registerCourt: string;
+  registeredOfficeAddress: string;
+  registrationAuthority: string;
+  registrationNumber: string;
+  representatives: unknown[];
+  status: CompanyProfileStatus;
+  taxNumber: string;
+  updatedAt: string;
+  usageSettings: Partial<Record<CompanyProfileUsageKey, boolean>>;
+  vatId: string;
+  website: string;
+  workspaceId?: ID;
+};
+
+export type CompanyProfilePreflightIssue = {
+  field: string;
+  message: string;
+  severity: "blocker" | "warning";
+  usage?: CompanyProfileUsageKey;
+};
+
+export type CompanyProfileVersion = {
+  action: string;
+  actorUserId?: ID;
+  changedFields: string[];
+  companyProfileId: ID;
+  createdAt: string;
+  id: ID;
+  workspaceId?: ID;
 };
 
 export type Project = {
@@ -419,6 +486,157 @@ export type SellerListing = {
   expectedGrossYield?: number;
   mandateEndsAt?: string;
   createdAt: string;
+  canonicalPayload?: Record<string, unknown>;
+  city?: string;
+  documentStatus?: "draft" | "needs_review" | "approved" | "sent" | "archived" | string;
+  energyClass?: string;
+  energyValidUntil?: string;
+  availableFrom?: string;
+  availableFromText?: string;
+  availabilityNote?: string;
+  channelPriceVisibility?: Record<string, PropertyPriceVisibility>;
+  contactEmail?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactUserId?: ID;
+  costsSummary?: Record<string, unknown>;
+  documentSummary?: Record<string, unknown>;
+  externalPortalId?: string;
+  federalState?: string;
+  gdprStatus?: string;
+  internalNotes?: string;
+  internalReference?: string;
+  mandateId?: ID;
+  marketingType?: "sale" | "rent" | "sale_or_rent" | string;
+  mediaSummary?: Record<string, unknown>;
+  monthlyCostsGross?: number;
+  objectNumber?: string;
+  openimmoObjectId?: string;
+  ownerContactId?: ID;
+  ownerUserId?: ID;
+  portalMappingStatus?: string;
+  postalCode?: string;
+  priceVisibility?: PropertyPriceVisibility;
+  propertyStatus?: "draft" | "ready" | "published" | "paused" | "error" | "needs_review" | string;
+  publicPrice?: number;
+  purchaseAncillaryCosts?: number;
+  rentNet?: number;
+  rentPrice?: number;
+  street?: string;
+  subObjectType?: string;
+  subObjectTypeCustom?: string;
+  textSummary?: Record<string, unknown>;
+  unitId?: ID;
+  usageType?: string;
+};
+
+export type PropertyPriceVisibility = "publish_price" | "price_on_request" | "hide_price";
+
+export type PropertyContentVisibility = "public" | "private" | "internal" | "channel";
+
+export type PropertyChannelStatus = "draft" | "ready" | "published" | "paused" | "error" | "needs_review";
+
+export type PropertyDocumentStatus = "draft" | "needs_review" | "approved" | "sent" | "archived";
+
+export type PropertyInquiryStatus = "new" | "routed" | "waitlist" | "follow_up" | "duplicate" | "archived";
+
+export type PropertyExportJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export type PropertyTextBlock = {
+  id: ID;
+  workspaceId: ID;
+  projectId?: ID;
+  propertyId?: ID;
+  unitId?: ID;
+  textKey: string;
+  channel: string;
+  title: string;
+  content: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  visibility: PropertyContentVisibility | string;
+  status: "draft" | "needs_review" | "approved" | "published" | string;
+  position: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PropertyCostItem = {
+  id: ID;
+  workspaceId: ID;
+  projectId?: ID;
+  propertyId?: ID;
+  unitId?: ID;
+  costKey: string;
+  groupKey: string;
+  label: string;
+  monthlyNetCents: number;
+  monthlyVatCents: number;
+  monthlyGrossCents: number;
+  oneTimeNetCents: number;
+  oneTimeVatCents: number;
+  oneTimeGrossCents: number;
+  vatPercent?: number;
+  optional: boolean;
+  commissionRelevant: boolean;
+  exposeVisible: boolean;
+  internalNote?: string;
+  position: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PropertyMediaItem = {
+  id: ID;
+  workspaceId: ID;
+  projectId?: ID;
+  propertyId?: ID;
+  unitId?: ID;
+  mediaAssetId?: ID;
+  mediaType: "image" | "floorplan" | "video" | "virtual_tour" | string;
+  title: string;
+  altText?: string;
+  category: string;
+  visibility: PropertyContentVisibility | string;
+  isCover: boolean;
+  position: number;
+  status: "draft" | "needs_review" | "approved" | "published" | string;
+  url?: string;
+  publicUrl?: string | null;
+  mimeType?: string;
+  assetName?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PropertyDocumentItem = {
+  id: ID;
+  workspaceId: ID;
+  projectId?: ID;
+  propertyId?: ID;
+  unitId?: ID;
+  mediaAssetId?: ID;
+  title: string;
+  category: string;
+  status: PropertyDocumentStatus | string;
+  visibility: PropertyContentVisibility | string;
+  requiredForPublication: boolean;
+  documentDate?: string;
+  versionLabel?: string;
+  content?: Record<string, unknown>;
+  url?: string;
+  publicUrl?: string | null;
+  mimeType?: string;
+  assetName?: string;
+  approvedByUserId?: ID;
+  approvedAt?: string;
+  sentAt?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PropertyUnitStatus = "available" | "reserved" | "sold" | "blocked";

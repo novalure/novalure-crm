@@ -6,8 +6,8 @@ import { neon } from "@neondatabase/serverless";
 const growthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const growthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
 const growthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Formular"];
-const disabledModules = ["objectsMandates", "units", "reservations", "projectOverview"];
 const enabledModules = [
+  "properties",
   "dashboard",
   "leadInbox",
   "contacts",
@@ -22,6 +22,10 @@ const enabledModules = [
   "knowledge",
   "analytics",
   "settings",
+  "objectsMandates",
+  "units",
+  "reservations",
+  "projectOverview",
 ];
 const newRoles = ["novalureGrowth", "novalureServiceOps", "novalureAdmin"];
 const envFiles = [".env.local", ".env.production.local"];
@@ -255,13 +259,6 @@ async function runDbChecks() {
   );
   const moduleMap = new Map(moduleRows.map((row) => [row.module_key, row.enabled]));
   addMatrix({
-    check: "growth disabled real-estate modules",
-    expected: disabledModules.map((key) => `${key}=false`).join(", "),
-    actual: disabledModules.map((key) => `${key}=${moduleMap.get(key)}`).join(", "),
-    ok: disabledModules.every((key) => moduleMap.get(key) === false),
-    cause: "At least one real-estate-only module is still enabled for Growth",
-  });
-  addMatrix({
     check: "growth standard CRM modules",
     expected: enabledModules.map((key) => `${key}=true`).join(", "),
     actual: enabledModules.map((key) => `${key}=${moduleMap.get(key)}`).join(", "),
@@ -311,7 +308,7 @@ async function runDbChecks() {
 }
 
 function printMarkdownTable(rows) {
-  const headers = ["Check", "Erwartet", "Tatsaechlich", "Status", "Ursache"];
+  const headers = ["Check", "Erwartet", "Tatsächlich", "Status", "Ursache"];
   console.log(headers.join(" | "));
   console.log(headers.map(() => "---").join(" | "));
   for (const row of rows) {

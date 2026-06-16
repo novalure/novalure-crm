@@ -131,7 +131,7 @@ async function testDateHandling(timestamp, projectId) {
         name: `QA Date Contact ${timestamp}`,
         phone: `+43 660 ${String(timestamp).slice(-6)}`,
         projectId,
-        role: "Kaeufer",
+        role: "Käufer",
         source: "QA",
       },
     },

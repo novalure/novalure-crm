@@ -855,7 +855,9 @@ export async function updateWorkspaceUserAccess(input: {
 
   const role = normalizeWorkspaceRole(input.role) ?? existing.role;
   const productRole = isProductRole(input.productRole) ? input.productRole : existing.productRole;
-  const status = input.status === "active" || input.status === "invited" ? input.status : existing.status;
+  const status = input.status === "active" || input.status === "invited" || input.status === "suspended"
+    ? input.status
+    : existing.status;
   if (!productRole) return { ok: false as const, reason: "Product role is required" };
 
   const roleGrant = validateWorkspaceUserRoleGrant({
@@ -865,7 +867,7 @@ export async function updateWorkspaceUserAccess(input: {
   });
   if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
-  if (existing.role === "owner" && role !== "owner") {
+  if (existing.role === "owner" && existing.status === "active" && (role !== "owner" || status !== "active")) {
     const owners = await queryRows<IdRow>(
       "select id from workspace_users where workspace_id = $1 and role = 'owner' and status = 'active' limit 2",
       [input.session.workspaceId],

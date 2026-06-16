@@ -7,6 +7,7 @@ import {
   updateWorkspaceUserAccess,
   upsertCustomerProjectGrant,
 } from "@/lib/db/customer-access-repositories";
+import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { resolveRequestLanguage } from "@/lib/i18n";
 
 async function readJson(request: Request) {
@@ -83,7 +84,7 @@ export async function PATCH(request: Request) {
               email: input.email,
               language,
               name: input.name,
-              origin: request.url,
+              origin: getTrustedAppOrigin(),
               productRole: input.productRole,
               requestIp: request.headers.get("x-forwarded-for"),
               role: input.role,

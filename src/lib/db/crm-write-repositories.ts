@@ -3250,8 +3250,8 @@ function createModeSetupDefaults(
 
   return {
     automations: ["seller_follow_up", "buyer_follow_up", "mandate_expiry"],
-    pipelines: ["Verkaeufer-Pipeline", "Kaeufer-Pipeline", "Mandatsworkflow"],
-    templates: ["Eigentuemer Follow-up", "Kaeufer Suchprofil", "Mandatscheck"],
+    pipelines: ["Verkäufer-Pipeline", "Käufer-Pipeline", "Mandatsworkflow"],
+    templates: ["Eigentümer Follow-up", "Käufer Suchprofil", "Mandatscheck"],
   };
 }
 

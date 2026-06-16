@@ -12,3 +12,6 @@
 node_modules/
 *.tsbuildinfo
 *.log
+*.docx
+docs/audit/
+docs/changes/

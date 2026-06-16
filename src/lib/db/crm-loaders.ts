@@ -18,10 +18,16 @@ import type {
   NewsletterCampaign,
   NewsletterSegment,
   PropertyBuilding,
+  PropertyCostItem,
+  PropertyDocumentItem,
+  PropertyMediaItem,
+  PropertyPriceVisibility,
   ProjectPipelinePermission,
   PropertyReservation,
+  PropertyTextBlock,
   PropertyUnit,
   Project,
+  SellerListing,
   Task,
 } from "@/lib/crm-types";
 import {
@@ -42,6 +48,7 @@ import {
   propertyReservations as mockPropertyReservations,
   propertyUnits as mockPropertyUnits,
   projects as mockProjects,
+  sellerListings as mockSellerListings,
   tasks as mockTasks,
 } from "@/lib/crm-data";
 import { hasDatabaseUrl, queryRows } from "@/lib/db/client";
@@ -65,9 +72,14 @@ type CoreCrmData = {
   newsletterSegments: NewsletterSegment[];
   projectPipelinePermissions: ProjectPipelinePermission[];
   propertyBuildings: PropertyBuilding[];
+  propertyCostItems: PropertyCostItem[];
+  propertyDocuments: PropertyDocumentItem[];
+  propertyMedia: PropertyMediaItem[];
   propertyReservations: PropertyReservation[];
+  propertyTextBlocks: PropertyTextBlock[];
   propertyUnits: PropertyUnit[];
   projects: Project[];
+  sellerListings: SellerListing[];
   tasks: Task[];
 };
 
@@ -106,9 +118,14 @@ const coreCrmDataKeys = [
   "newsletterSegments",
   "projectPipelinePermissions",
   "propertyBuildings",
+  "propertyCostItems",
+  "propertyDocuments",
+  "propertyMedia",
   "propertyReservations",
+  "propertyTextBlocks",
   "propertyUnits",
   "projects",
+  "sellerListings",
   "tasks",
 ] as const satisfies CoreCrmDataKey[];
 
@@ -383,6 +400,166 @@ type PropertyReservationRow = {
   workspaceId: string;
 };
 
+type SellerListingRow = {
+  address: string;
+  areaSqm: number | string;
+  availableFrom: string | Date | null;
+  availableFromText: string | null;
+  availabilityNote: string | null;
+  canonicalPayload: Record<string, unknown> | null;
+  city: string | null;
+  channelPriceVisibility: Record<string, unknown> | null;
+  contactEmail: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactUserId: string | null;
+  costsSummary: Record<string, unknown> | null;
+  createdAt: string | Date;
+  documentStatus: string | null;
+  documentSummary: Record<string, unknown> | null;
+  energyClass: string | null;
+  energyValidUntil: string | Date | null;
+  expectedGrossYield: number | string | null;
+  externalPortalId: string | null;
+  federalState: string | null;
+  gdprStatus: string | null;
+  id: string;
+  internalReference: string | null;
+  internalNotes: string | null;
+  mandateId: string | null;
+  mandateEndsAt: string | Date | null;
+  marketValueCents: number | string;
+  marketingType: string | null;
+  mediaSummary: Record<string, unknown> | null;
+  monthlyCostsGrossCents: number | string | null;
+  objectType: SellerListing["objectType"];
+  objectNumber: string | null;
+  openimmoObjectId: string | null;
+  ownerContactId: string | null;
+  ownerUserId: string | null;
+  portalMappingStatus: string | null;
+  postalCode: string | null;
+  priceVisibility: string | null;
+  projectId: string | null;
+  propertyStatus: string | null;
+  publicPriceCents: number | string | null;
+  purchaseAncillaryCostsCents: number | string | null;
+  region: SellerListing["region"];
+  rentNetCents: number | string | null;
+  rentPriceCents: number | string | null;
+  rooms: number | string | null;
+  sellerLeadId: string | null;
+  street: string | null;
+  subObjectType: string | null;
+  subObjectTypeCustom: string | null;
+  targetPriceCents: number | string;
+  textSummary: Record<string, unknown> | null;
+  title: string;
+  unitId: string | null;
+  usageType: string | null;
+  workspaceId: string;
+  yearBuilt: number | string | null;
+};
+
+type PropertyTextBlockRow = {
+  channel: string;
+  content: string;
+  createdAt: string | Date;
+  id: string;
+  metadata: Record<string, unknown> | null;
+  position: number | string;
+  projectId: string | null;
+  propertyId: string | null;
+  seoDescription: string | null;
+  seoTitle: string | null;
+  status: string;
+  textKey: string;
+  title: string;
+  unitId: string | null;
+  updatedAt: string | Date;
+  visibility: string;
+  workspaceId: string;
+};
+
+type PropertyCostItemRow = {
+  commissionRelevant: boolean;
+  costKey: string;
+  createdAt: string | Date;
+  exposeVisible: boolean;
+  groupKey: string;
+  id: string;
+  internalNote: string | null;
+  label: string;
+  metadata: Record<string, unknown> | null;
+  monthlyGrossCents: number | string;
+  monthlyNetCents: number | string;
+  monthlyVatCents: number | string;
+  oneTimeGrossCents: number | string;
+  oneTimeNetCents: number | string;
+  oneTimeVatCents: number | string;
+  optional: boolean;
+  position: number | string;
+  projectId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  updatedAt: string | Date;
+  vatPercent: number | string | null;
+  workspaceId: string;
+};
+
+type PropertyMediaRow = {
+  altText: string | null;
+  assetName: string | null;
+  category: string;
+  createdAt: string | Date;
+  id: string;
+  isCover: boolean;
+  isPublic: boolean | null;
+  mediaAssetId: string | null;
+  mediaType: string;
+  metadata: Record<string, unknown> | null;
+  mimeType: string | null;
+  position: number | string;
+  projectId: string | null;
+  propertyId: string | null;
+  publicToken: string | null;
+  status: string;
+  title: string;
+  unitId: string | null;
+  updatedAt: string | Date;
+  url: string | null;
+  visibility: string;
+  workspaceId: string;
+};
+
+type PropertyDocumentRow = {
+  approvedAt: string | Date | null;
+  approvedByUserId: string | null;
+  assetName: string | null;
+  category: string;
+  content: Record<string, unknown> | null;
+  createdAt: string | Date;
+  documentDate: string | Date | null;
+  id: string;
+  isPublic: boolean | null;
+  mediaAssetId: string | null;
+  metadata: Record<string, unknown> | null;
+  mimeType: string | null;
+  projectId: string | null;
+  propertyId: string | null;
+  publicToken: string | null;
+  requiredForPublication: boolean;
+  sentAt: string | Date | null;
+  status: string;
+  title: string;
+  unitId: string | null;
+  updatedAt: string | Date;
+  url: string | null;
+  versionLabel: string | null;
+  visibility: string;
+  workspaceId: string;
+};
+
 type FunnelRow = {
   audience: Funnel["audience"];
   conversionRate: number | string;
@@ -492,9 +669,14 @@ export function getMockCoreCrmData(): CoreCrmDataResult {
     newsletterSegments: mockNewsletterSegments,
     projectPipelinePermissions: [],
     propertyBuildings: mockPropertyBuildings,
+    propertyCostItems: [],
+    propertyDocuments: [],
+    propertyMedia: [],
     propertyReservations: mockPropertyReservations,
+    propertyTextBlocks: [],
     propertyUnits: mockPropertyUnits,
     projects: mockProjects,
+    sellerListings: mockSellerListings,
     tasks: mockTasks,
   };
 }
@@ -530,8 +712,13 @@ export async function getCoreCrmData(
     loadModule("projectPipelinePermissions", () => loadProjectPipelinePermissions(workspaceId), []),
     loadModule("crmBots", () => loadCrmBots(workspaceId), mockCrmBots),
     loadModule("propertyBuildings", () => loadPropertyBuildings(workspaceId), mockPropertyBuildings),
+    loadModule("propertyCostItems", () => loadPropertyCostItems(workspaceId), []),
+    loadModule("propertyDocuments", () => loadPropertyDocuments(workspaceId), []),
+    loadModule("propertyMedia", () => loadPropertyMedia(workspaceId), []),
     loadModule("propertyUnits", () => loadPropertyUnits(workspaceId), mockPropertyUnits),
     loadModule("propertyReservations", () => loadPropertyReservations(workspaceId), mockPropertyReservations),
+    loadModule("propertyTextBlocks", () => loadPropertyTextBlocks(workspaceId), []),
+    loadModule("sellerListings", () => loadSellerListings(workspaceId), mockSellerListings),
   ]);
 
   const data = {} as CoreCrmData;
@@ -1163,6 +1350,380 @@ export async function loadEditorPreflightRuns(workspaceId?: string): Promise<Edi
     projectId: row.projectId ?? undefined,
     status: row.status,
     warnings: row.warnings ?? [],
+    workspaceId: row.workspaceId,
+  }));
+}
+
+export async function loadSellerListings(workspaceId?: string): Promise<SellerListing[]> {
+  const rows = await queryRows<SellerListingRow>(
+    `
+    select
+      id,
+      workspace_id as "workspaceId",
+      project_id as "projectId",
+      seller_lead_id as "sellerLeadId",
+      title,
+      address,
+      region,
+      object_type as "objectType",
+      area_sqm as "areaSqm",
+      rooms,
+      year_built as "yearBuilt",
+      market_value_cents as "marketValueCents",
+      target_price_cents as "targetPriceCents",
+      expected_gross_yield as "expectedGrossYield",
+      mandate_ends_at as "mandateEndsAt",
+      created_at as "createdAt",
+      object_number as "objectNumber",
+      internal_reference as "internalReference",
+      external_portal_id as "externalPortalId",
+      openimmo_object_id as "openimmoObjectId",
+      unit_id as "unitId",
+      mandate_id as "mandateId",
+      owner_contact_id as "ownerContactId",
+      owner_user_id as "ownerUserId",
+      contact_user_id as "contactUserId",
+      contact_name as "contactName",
+      contact_phone as "contactPhone",
+      contact_email as "contactEmail",
+      marketing_type as "marketingType",
+      usage_type as "usageType",
+      sub_object_type as "subObjectType",
+      sub_object_type_custom as "subObjectTypeCustom",
+      available_from as "availableFrom",
+      available_from_text as "availableFromText",
+      availability_note as "availabilityNote",
+      price_visibility as "priceVisibility",
+      channel_price_visibility as "channelPriceVisibility",
+      public_price_cents as "publicPriceCents",
+      rent_price_cents as "rentPriceCents",
+      rent_net_cents as "rentNetCents",
+      monthly_costs_gross_cents as "monthlyCostsGrossCents",
+      purchase_ancillary_costs_cents as "purchaseAncillaryCostsCents",
+      costs_summary as "costsSummary",
+      gdpr_status as "gdprStatus",
+      portal_mapping_status as "portalMappingStatus",
+      media_summary as "mediaSummary",
+      document_summary as "documentSummary",
+      text_summary as "textSummary",
+      postal_code as "postalCode",
+      city,
+      federal_state as "federalState",
+      street,
+      property_status as "propertyStatus",
+      document_status as "documentStatus",
+      energy_certificate_valid_until as "energyValidUntil",
+      hwb_class as "energyClass",
+      internal_notes as "internalNotes",
+      canonical_payload as "canonicalPayload"
+    from seller_listings
+    ${workspaceId ? "where workspace_id = $1" : ""}
+    order by created_at desc
+    limit 500
+  `,
+    workspaceId ? [workspaceId] : [],
+  );
+
+  return rows.map((row) => ({
+    address: row.address,
+    areaSqm: Number(row.areaSqm ?? 0),
+    canonicalPayload: row.canonicalPayload ?? undefined,
+    city: row.city ?? undefined,
+    createdAt: toIso(row.createdAt),
+    documentStatus: row.documentStatus ?? undefined,
+    energyClass: row.energyClass ?? undefined,
+    energyValidUntil: toOptionalIso(row.energyValidUntil),
+    availableFrom: toOptionalIso(row.availableFrom),
+    availableFromText: row.availableFromText ?? undefined,
+    availabilityNote: row.availabilityNote ?? undefined,
+    channelPriceVisibility: normalizePriceVisibilityMap(row.channelPriceVisibility),
+    contactEmail: row.contactEmail ?? undefined,
+    contactName: row.contactName ?? undefined,
+    contactPhone: row.contactPhone ?? undefined,
+    contactUserId: row.contactUserId ?? undefined,
+    costsSummary: row.costsSummary ?? undefined,
+    documentSummary: row.documentSummary ?? undefined,
+    expectedGrossYield: toOptionalNumber(row.expectedGrossYield),
+    externalPortalId: row.externalPortalId ?? undefined,
+    federalState: row.federalState ?? undefined,
+    gdprStatus: row.gdprStatus ?? undefined,
+    id: row.id,
+    internalReference: row.internalReference ?? undefined,
+    internalNotes: row.internalNotes ?? undefined,
+    mandateId: row.mandateId ?? undefined,
+    mandateEndsAt: toOptionalIso(row.mandateEndsAt),
+    marketingType: row.marketingType ?? undefined,
+    marketValue: centsToNumber(row.marketValueCents) ?? 0,
+    mediaSummary: row.mediaSummary ?? undefined,
+    monthlyCostsGross: centsToNumber(row.monthlyCostsGrossCents),
+    objectType: row.objectType,
+    objectNumber: row.objectNumber ?? undefined,
+    openimmoObjectId: row.openimmoObjectId ?? undefined,
+    ownerContactId: row.ownerContactId ?? undefined,
+    ownerUserId: row.ownerUserId ?? undefined,
+    portalMappingStatus: row.portalMappingStatus ?? undefined,
+    postalCode: row.postalCode ?? undefined,
+    priceVisibility: normalizePriceVisibility(row.priceVisibility),
+    projectId: row.projectId ?? "",
+    propertyStatus: row.propertyStatus ?? undefined,
+    publicPrice: centsToNumber(row.publicPriceCents),
+    purchaseAncillaryCosts: centsToNumber(row.purchaseAncillaryCostsCents),
+    region: row.region,
+    rentNet: centsToNumber(row.rentNetCents),
+    rentPrice: centsToNumber(row.rentPriceCents),
+    rooms: toOptionalNumber(row.rooms),
+    sellerLeadId: row.sellerLeadId ?? "",
+    street: row.street ?? undefined,
+    subObjectType: row.subObjectType ?? undefined,
+    subObjectTypeCustom: row.subObjectTypeCustom ?? undefined,
+    targetPrice: centsToNumber(row.targetPriceCents) ?? 0,
+    textSummary: row.textSummary ?? undefined,
+    title: row.title,
+    unitId: row.unitId ?? undefined,
+    usageType: row.usageType ?? undefined,
+    workspaceId: row.workspaceId,
+    yearBuilt: toOptionalNumber(row.yearBuilt) ?? 0,
+  }));
+}
+
+export async function loadPropertyTextBlocks(workspaceId?: string): Promise<PropertyTextBlock[]> {
+  const rows = await queryRows<PropertyTextBlockRow>(
+    `
+    select
+      id,
+      workspace_id as "workspaceId",
+      project_id as "projectId",
+      property_id as "propertyId",
+      unit_id as "unitId",
+      text_key as "textKey",
+      channel,
+      title,
+      content,
+      seo_title as "seoTitle",
+      seo_description as "seoDescription",
+      visibility,
+      status,
+      position,
+      metadata,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from property_text_blocks
+    ${workspaceId ? "where workspace_id = $1" : ""}
+    order by property_id nulls last, unit_id nulls last, channel asc, position asc, text_key asc
+    limit 1500
+  `,
+    workspaceId ? [workspaceId] : [],
+  );
+
+  return rows.map((row) => ({
+    channel: row.channel,
+    content: row.content,
+    createdAt: toIso(row.createdAt),
+    id: row.id,
+    metadata: row.metadata ?? undefined,
+    position: Number(row.position ?? 0),
+    projectId: row.projectId ?? undefined,
+    propertyId: row.propertyId ?? undefined,
+    seoDescription: row.seoDescription ?? undefined,
+    seoTitle: row.seoTitle ?? undefined,
+    status: row.status,
+    textKey: row.textKey,
+    title: row.title,
+    unitId: row.unitId ?? undefined,
+    updatedAt: toIso(row.updatedAt),
+    visibility: row.visibility,
+    workspaceId: row.workspaceId,
+  }));
+}
+
+export async function loadPropertyCostItems(workspaceId?: string): Promise<PropertyCostItem[]> {
+  const rows = await queryRows<PropertyCostItemRow>(
+    `
+    select
+      id,
+      workspace_id as "workspaceId",
+      project_id as "projectId",
+      property_id as "propertyId",
+      unit_id as "unitId",
+      cost_key as "costKey",
+      group_key as "groupKey",
+      label,
+      monthly_net_cents as "monthlyNetCents",
+      monthly_vat_cents as "monthlyVatCents",
+      monthly_gross_cents as "monthlyGrossCents",
+      one_time_net_cents as "oneTimeNetCents",
+      one_time_vat_cents as "oneTimeVatCents",
+      one_time_gross_cents as "oneTimeGrossCents",
+      vat_percent as "vatPercent",
+      optional,
+      commission_relevant as "commissionRelevant",
+      expose_visible as "exposeVisible",
+      internal_note as "internalNote",
+      position,
+      metadata,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from property_cost_items
+    ${workspaceId ? "where workspace_id = $1" : ""}
+    order by property_id nulls last, unit_id nulls last, group_key asc, position asc, label asc
+    limit 1500
+  `,
+    workspaceId ? [workspaceId] : [],
+  );
+
+  return rows.map((row) => ({
+    commissionRelevant: row.commissionRelevant,
+    costKey: row.costKey,
+    createdAt: toIso(row.createdAt),
+    exposeVisible: row.exposeVisible,
+    groupKey: row.groupKey,
+    id: row.id,
+    internalNote: row.internalNote ?? undefined,
+    label: row.label,
+    metadata: row.metadata ?? undefined,
+    monthlyGrossCents: Number(row.monthlyGrossCents ?? 0),
+    monthlyNetCents: Number(row.monthlyNetCents ?? 0),
+    monthlyVatCents: Number(row.monthlyVatCents ?? 0),
+    oneTimeGrossCents: Number(row.oneTimeGrossCents ?? 0),
+    oneTimeNetCents: Number(row.oneTimeNetCents ?? 0),
+    oneTimeVatCents: Number(row.oneTimeVatCents ?? 0),
+    optional: row.optional,
+    position: Number(row.position ?? 0),
+    projectId: row.projectId ?? undefined,
+    propertyId: row.propertyId ?? undefined,
+    unitId: row.unitId ?? undefined,
+    updatedAt: toIso(row.updatedAt),
+    vatPercent: toOptionalNumber(row.vatPercent),
+    workspaceId: row.workspaceId,
+  }));
+}
+
+export async function loadPropertyMedia(workspaceId?: string): Promise<PropertyMediaItem[]> {
+  const rows = await queryRows<PropertyMediaRow>(
+    `
+    select
+      pm.id,
+      pm.workspace_id as "workspaceId",
+      pm.project_id as "projectId",
+      pm.property_id as "propertyId",
+      pm.unit_id as "unitId",
+      pm.media_asset_id as "mediaAssetId",
+      pm.media_type as "mediaType",
+      pm.title,
+      pm.alt_text as "altText",
+      pm.category,
+      pm.visibility,
+      pm.is_cover as "isCover",
+      pm.position,
+      pm.status,
+      pm.metadata,
+      pm.created_at as "createdAt",
+      pm.updated_at as "updatedAt",
+      ma.name as "assetName",
+      ma.mime_type as "mimeType",
+      ma.url,
+      ma.is_public as "isPublic",
+      ma.public_token as "publicToken"
+    from property_media pm
+    left join media_assets ma
+      on ma.id = pm.media_asset_id
+     and ma.workspace_id = pm.workspace_id::text
+    ${workspaceId ? "where pm.workspace_id = $1" : ""}
+    order by pm.property_id nulls last, pm.unit_id nulls last, pm.position asc, pm.created_at desc
+    limit 1500
+  `,
+    workspaceId ? [workspaceId] : [],
+  );
+
+  return rows.map((row) => ({
+    altText: row.altText ?? undefined,
+    assetName: row.assetName ?? undefined,
+    category: row.category,
+    createdAt: toIso(row.createdAt),
+    id: row.id,
+    isCover: row.isCover,
+    mediaAssetId: row.mediaAssetId ?? undefined,
+    mediaType: row.mediaType,
+    metadata: row.metadata ?? undefined,
+    mimeType: row.mimeType ?? undefined,
+    position: Number(row.position ?? 0),
+    projectId: row.projectId ?? undefined,
+    propertyId: row.propertyId ?? undefined,
+    publicUrl: getMediaPublicPath(row.isPublic, row.publicToken),
+    status: row.status,
+    title: row.title || row.assetName || "Medium",
+    unitId: row.unitId ?? undefined,
+    updatedAt: toIso(row.updatedAt),
+    url: row.url ?? undefined,
+    visibility: row.visibility,
+    workspaceId: row.workspaceId,
+  }));
+}
+
+export async function loadPropertyDocuments(workspaceId?: string): Promise<PropertyDocumentItem[]> {
+  const rows = await queryRows<PropertyDocumentRow>(
+    `
+    select
+      pd.id,
+      pd.workspace_id as "workspaceId",
+      pd.project_id as "projectId",
+      pd.property_id as "propertyId",
+      pd.unit_id as "unitId",
+      pd.media_asset_id as "mediaAssetId",
+      pd.title,
+      pd.category,
+      pd.status,
+      pd.visibility,
+      pd.required_for_publication as "requiredForPublication",
+      pd.document_date as "documentDate",
+      pd.version_label as "versionLabel",
+      pd.content,
+      pd.approved_by_user_id as "approvedByUserId",
+      pd.approved_at as "approvedAt",
+      pd.sent_at as "sentAt",
+      pd.metadata,
+      pd.created_at as "createdAt",
+      pd.updated_at as "updatedAt",
+      ma.name as "assetName",
+      ma.mime_type as "mimeType",
+      ma.url,
+      ma.is_public as "isPublic",
+      ma.public_token as "publicToken"
+    from property_documents pd
+    left join media_assets ma
+      on ma.id = pd.media_asset_id
+     and ma.workspace_id = pd.workspace_id::text
+    ${workspaceId ? "where pd.workspace_id = $1" : ""}
+    order by pd.property_id nulls last, pd.unit_id nulls last, pd.category asc, pd.updated_at desc
+    limit 1500
+  `,
+    workspaceId ? [workspaceId] : [],
+  );
+
+  return rows.map((row) => ({
+    approvedAt: toOptionalIso(row.approvedAt),
+    approvedByUserId: row.approvedByUserId ?? undefined,
+    assetName: row.assetName ?? undefined,
+    category: row.category,
+    content: row.content ?? undefined,
+    createdAt: toIso(row.createdAt),
+    documentDate: toOptionalIso(row.documentDate),
+    id: row.id,
+    mediaAssetId: row.mediaAssetId ?? undefined,
+    metadata: row.metadata ?? undefined,
+    mimeType: row.mimeType ?? undefined,
+    projectId: row.projectId ?? undefined,
+    propertyId: row.propertyId ?? undefined,
+    publicUrl: getMediaPublicPath(row.isPublic, row.publicToken),
+    requiredForPublication: row.requiredForPublication,
+    sentAt: toOptionalIso(row.sentAt),
+    status: row.status,
+    title: row.title || row.assetName || "Dokument",
+    unitId: row.unitId ?? undefined,
+    updatedAt: toIso(row.updatedAt),
+    url: row.url ?? undefined,
+    versionLabel: row.versionLabel ?? undefined,
+    visibility: row.visibility,
     workspaceId: row.workspaceId,
   }));
 }
@@ -1851,6 +2412,21 @@ function normalizePropertyReservationStatus(value: string): PropertyReservation[
   return "hold";
 }
 
+function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {
+  if (value === "price_on_request") return "price_on_request";
+  if (value === "hide_price") return "hide_price";
+  return "publish_price";
+}
+
+function normalizePriceVisibilityMap(value: Record<string, unknown> | null | undefined) {
+  const entries = Object.entries(asRecord(value)).map(([key, item]) => [key, normalizePriceVisibility(item)] as const);
+  return Object.fromEntries(entries);
+}
+
+function getMediaPublicPath(isPublic: boolean | null, publicToken: string | null) {
+  return isPublic && publicToken ? `/api/media/public/${publicToken}` : null;
+}
+
 function normalizeContractMilestone(value: string): PropertyReservation["contractMilestone"] {
   if (value === "offer_sent") return "offer_sent";
   if (value === "financing_check") return "financing_check";
@@ -1881,7 +2457,7 @@ function normalizeCalendarLocation(value: string): CalendarEvent["location"] {
 
 function normalizeCalendarStatus(value: string): CalendarEvent["status"] {
   if (value === "vorbereiten") return "vorbereiten";
-  if (value === "bestätigt" || value === "bestaetigt") return "bestätigt";
+  if (value === "bestätigt" || value === "besta\u0065tigt") return "bestätigt";
   if (value === "nachfassen") return "nachfassen";
   return "geplant";
 }

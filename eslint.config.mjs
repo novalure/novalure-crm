@@ -10,8 +10,11 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".vercel/**",
     ".next/**",
+    ".codex-worktrees/**",
     "out/**",
     "build/**",
+    "docs/**",
+    "*.docx",
     "next-env.d.ts",
     ".novalure-*.cjs",
   ]),

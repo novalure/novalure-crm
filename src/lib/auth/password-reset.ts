@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { executeQuery, hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import { getLoginPageCopy, type LanguageCode } from "@/lib/i18n";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
+import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { getPasswordValidationError, hashPassword } from "@/lib/auth/passwords";
 
 type ResetUserRow = {
@@ -82,7 +83,7 @@ function escapeHtml(value: string) {
 }
 
 function buildResetUrl(request: Request, token: string, language: LanguageCode) {
-  const resetUrl = new URL("/login/reset-password", request.url);
+  const resetUrl = new URL("/login/reset-password", getTrustedAppOrigin());
   resetUrl.searchParams.set("token", token);
   resetUrl.searchParams.set("lang", language);
   return resetUrl.toString();
@@ -273,6 +274,26 @@ export async function confirmPasswordReset(input: {
           and used_at is null
       `,
       [updatedUser.userId, updatedUser.workspaceId],
+    );
+
+    await executeQuery(
+      `
+        insert into audit_logs (
+          workspace_id,
+          actor_user_id,
+          action,
+          entity_type,
+          entity_id,
+          before,
+          after
+        )
+        values ($1, $2, 'auth.password_setup_completed', 'workspace_user', $2, null, $3::jsonb)
+      `,
+      [
+        updatedUser.workspaceId,
+        updatedUser.userId,
+        JSON.stringify({ email: updatedUser.email }),
+      ],
     );
 
     return { status: "ok", email: updatedUser.email };

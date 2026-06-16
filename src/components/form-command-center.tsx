@@ -347,7 +347,7 @@ function createTemplateParts(
         createField("radio", copy, details.id, {
           crmField: "interest",
           label: "Interesse",
-          options: ["Expose erhalten", "Beratung buchen", "Preisliste anfragen"],
+          options: ["Exposé erhalten", "Beratung buchen", "Preisliste anfragen"],
           required: true,
         }),
         createField("checkbox", copy, details.id, {

@@ -22,7 +22,7 @@ import {
   newsletterSuppressions,
   newsletterTemplates,
   organizations,
-  sellerListings,
+  sellerListings as mockSellerListings,
   pipeline,
   users,
   workspace,
@@ -30,6 +30,7 @@ import {
 import { BotCommandCenter } from "@/components/bot-command-center";
 import { BotLanguageTester } from "@/components/bot-language-tester";
 import { CalendarCommandCenter } from "@/components/calendar-command-center";
+import { CompanyProfileSettings } from "@/components/company-profile-settings";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
 import { ContactCommandCenter } from "@/components/contact-command-center";
 import { CustomerAccessCockpit } from "@/components/customer-access-cockpit";
@@ -44,6 +45,7 @@ import { LeadInbox } from "@/components/lead-inbox";
 import { LeadSequenceCommandCenter } from "@/components/lead-sequence-command-center";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
 import { NewsletterCommandCenter } from "@/components/newsletter-command-center";
+import { PropertyCommandCenter } from "@/components/property-command-center";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
@@ -103,6 +105,7 @@ type DashboardSection =
   | "leadInbox"
   | "pipelines"
   | "projects"
+  | "properties"
   | "objectsMandates"
   | "settings"
   | "units"
@@ -124,6 +127,10 @@ type DashboardSection =
   | "newsletter"
   | "forms"
   | "calendar";
+
+function usesFocusedWorkspaceSidebar(section: DashboardSection) {
+  return section === "pipelines" || section === "properties";
+}
 
 type HeaderActionModal = "import" | "project" | null;
 
@@ -207,6 +214,7 @@ type NavigationEntryId =
   | "objectsMandates"
   | "onboarding"
   | "pipelines"
+  | "properties"
   | "projectAnalytics"
   | "projectOverview"
   | "projectPipeline"
@@ -275,6 +283,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: [
       "dashboard",
+      "properties",
       "workspaces",
       "projects",
       "leadInbox",
@@ -298,6 +307,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: [
       "dashboard",
+      "properties",
       "leadInbox",
       "sellerLeads",
       "buyerLeads",
@@ -321,6 +331,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   propertyDeveloper: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: [
+      "properties",
       "projectOverview",
       "developerLeads",
       "contacts",
@@ -341,6 +352,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "meetings", "tasks"],
     navigationEntries: [
       "customerSwitch",
+      "properties",
       "managedService",
       "slaCockpit",
       "leadInbox",
@@ -363,6 +375,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: [
       "dashboard",
+      "properties",
       "leadInbox",
       "sellerLeads",
       "buyerLeads",
@@ -387,42 +400,42 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   sales: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dailyQueue", "leadInbox", "contacts", "communication", "pipelines", "tasks", "calendar"],
+    navigationEntries: ["dailyQueue", "properties", "leadInbox", "contacts", "communication", "pipelines", "tasks", "calendar"],
     startSection: "dailyQueue",
     startEntry: "dailyQueue",
     quickActions: ["leadInbox", "pipeline", "tasks", "meetings"],
   },
   salesLead: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "pipelines", "leadInbox", "tasks", "contacts", "communication", "analytics"],
+    navigationEntries: ["dashboard", "properties", "pipelines", "leadInbox", "tasks", "contacts", "communication", "analytics"],
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["leadInbox", "pipeline", "tasks", "dataHygiene"],
   },
   marketing: {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "funnels", "newsletter", "leadInbox", "forms", "analytics", "communication"],
+    navigationEntries: ["dashboard", "properties", "funnels", "newsletter", "leadInbox", "contacts", "forms", "analytics", "communication"],
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["funnels", "newsletter", "leadInbox", "analysis"],
   },
   assistant: {
     mobilePanels: ["meetings", "tasks"],
-    navigationEntries: ["tasks", "dataHygiene", "contacts", "calendar", "communication", "forms", "leadInbox"],
+    navigationEntries: ["tasks", "properties", "dataHygiene", "contacts", "calendar", "communication", "forms", "leadInbox"],
     startSection: "tasks",
     startEntry: "tasks",
     quickActions: ["tasks", "meetings", "forms", "leadInbox"],
   },
   management: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "analytics", "pipelines", "tasks", "customerAccess", "dataHygiene"],
+    navigationEntries: ["dashboard", "properties", "analytics", "pipelines", "contacts", "tasks", "customerAccess", "dataHygiene"],
     startSection: "analytics",
     startEntry: "analytics",
     quickActions: ["dashboard", "analysis", "pipeline", "dataHygiene"],
   },
   newUser: {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "leadInbox", "tasks", "calendar", "pipelines"],
+    navigationEntries: ["dashboard", "properties", "leadInbox", "contacts", "tasks", "calendar", "pipelines"],
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["leadInbox", "tasks", "meetings", "pipeline"],
@@ -431,6 +444,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "meetings", "tasks"],
     navigationEntries: [
       "dashboard",
+      "properties",
       "projects",
       "settings",
       "dataHygiene",
@@ -450,6 +464,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
     navigationEntries: [
       "dailyQueue",
+      "properties",
       "leadInbox",
       "contacts",
       "pipelines",
@@ -471,6 +486,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "meetings", "tasks"],
     navigationEntries: [
       "serviceCockpit",
+      "properties",
       "customerWorkspaces",
       "onboarding",
       "ticketsSupport",
@@ -486,6 +502,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     mobilePanels: ["overdueSla", "meetings", "tasks"],
     navigationEntries: [
       "workspaces",
+      "properties",
       "usersRoles",
       "dataHygiene",
       "auditLog",
@@ -556,6 +573,7 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   objectsMandates: { id: "objectsMandates", section: "objectsMandates" },
   onboarding: { id: "onboarding", section: "onboarding" },
   pipelines: { id: "pipelines", section: "pipelines" },
+  properties: { id: "properties", section: "properties" },
   projectAnalytics: { id: "projectAnalytics", section: "analytics" },
   projectOverview: { id: "projectOverview", section: "projects" },
   projectPipeline: { id: "projectPipeline", section: "pipelines" },
@@ -590,6 +608,7 @@ const moduleBySection: Partial<Record<DashboardSection, WorkspaceModuleKey>> = {
   newsletter: "newsletter",
   objectsMandates: "objectsMandates",
   pipelines: "pipeline",
+  properties: "properties",
   projects: "projectOverview",
   reservations: "reservations",
   settings: "settings",
@@ -666,7 +685,7 @@ const normalRoleHiddenRecordPatterns = [
   /\bAUTO-[A-Z0-9-]+/i,
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i,
   /\uFFFD/,
-  /Ã/,
+  /\u00c3/,
 ];
 
 function isVisibleBusinessRecord(values: Array<string | number | null | undefined>) {
@@ -834,6 +853,7 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
           <path d="M8 13h8M8 16h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
         </svg>
       );
+    case "properties":
     case "objectsMandates":
       return (
         <svg aria-hidden="true" className={iconClass} fill="none" viewBox="0 0 24 24">
@@ -1004,6 +1024,11 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
     newsletter: "newsletter",
     mandates: "objectsMandates",
     mandate: "objectsMandates",
+    immobilien: "properties",
+    property: "properties",
+    properties: "properties",
+    "real-estate": "properties",
+    realestate: "properties",
     objects: "objectsMandates",
     "objects-mandates": "objectsMandates",
     onboarding: "onboarding",
@@ -1064,6 +1089,7 @@ function getSectionHash(section: DashboardSection) {
   if (section === "dataHygiene") return "data-hygiene";
   if (section === "objectsMandates") return "objects-mandates";
   if (section === "dailyQueue") return "daily-queue";
+  if (section === "properties") return "properties";
   return section === "calendar" ? "meetings" : section;
 }
 
@@ -1074,6 +1100,7 @@ function getNavigationHash(section: DashboardSection, entryId?: NavigationEntryI
     dailyQueue: "daily-queue",
     developerLeads: "leads",
     objectsMandates: "objects-mandates",
+    properties: "properties",
     projectAnalytics: "analytics",
     projectOverview: "projects",
     projects: "projects",
@@ -1618,6 +1645,7 @@ function SettingsCommandCenter({
         <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{panelCopy.title}</h3>
         <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">{panelCopy.description}</p>
       </article>
+      <CompanyProfileSettings context={context} language={language} />
       <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
         <h4 className="text-lg font-semibold text-slate-950">{panelCopy.adminAreasTitle}</h4>
         <p className="mt-1 max-w-3xl break-words text-sm text-stone-600">{panelCopy.adminAreasDescription}</p>
@@ -2912,8 +2940,13 @@ export function CrmWorkspace({
   const newsletterCampaignRecords = liveCoreData.newsletterCampaigns;
   const crmBotRecords = liveCoreData.crmBots;
   const propertyBuildingRecords = liveCoreData.propertyBuildings;
+  const propertyCostRecords = liveCoreData.propertyCostItems ?? [];
+  const propertyDocumentRecords = liveCoreData.propertyDocuments ?? [];
+  const propertyMediaRecords = liveCoreData.propertyMedia ?? [];
   const propertyUnitRecords = liveCoreData.propertyUnits;
   const propertyReservationRecords = liveCoreData.propertyReservations;
+  const propertyTextRecords = liveCoreData.propertyTextBlocks ?? [];
+  const sellerListingRecords = liveCoreData.sellerListings ?? mockSellerListings;
   const allProjects = projectRecords;
   const workspaceContext = createWorkspaceProductContext({
     activeCalendarProvider: workspaceSetup.activeCalendarProvider ?? activeWorkspace.activeCalendarProvider,
@@ -3267,7 +3300,7 @@ export function CrmWorkspace({
       setActivePresetId(storedPresetId);
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(resolvedSection === "pipelines");
+      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -3282,7 +3315,7 @@ export function CrmWorkspace({
       const resolvedSection = navigationEntries[nextEntryId].section;
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
-      setSidebarCollapsed(resolvedSection === "pipelines");
+      setSidebarCollapsed(usesFocusedWorkspaceSidebar(resolvedSection));
     };
 
     window.addEventListener("hashchange", syncSectionFromHash);
@@ -3389,9 +3422,7 @@ export function CrmWorkspace({
     if (matchingEntry) {
       setActiveNavigationEntryId(matchingEntry);
     }
-    if (nextSection === "pipelines") {
-      setSidebarCollapsed(true);
-    }
+    setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
 
     if ([
       "dashboard",
@@ -3407,6 +3438,7 @@ export function CrmWorkspace({
       "objectsMandates",
       "onboarding",
       "pipelines",
+      "properties",
       "projects",
       "reservations",
       "settings",
@@ -3868,9 +3900,40 @@ export function CrmWorkspace({
                 pipeline={visiblePipeline}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
-                sellerListings={sellerListings.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
                 tasks={visibleTasks}
                 users={users}
+              />
+            ) : null}
+
+            {visibleActiveSection === "properties" ? (
+              <PropertyCommandCenter
+                brokerMandates={brokerMandates.filter((mandate) => !activeProject || mandate.projectId === activeProject.id)}
+                buildings={propertyBuildingRecords.filter((building) => !activeProject || building.projectId === activeProject.id)}
+                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => !activeProject || profile.projectId === activeProject.id)}
+                contacts={visibleContacts}
+                context={workspaceContext}
+                language={language}
+                leads={visibleLeads}
+                onOpenLeadInbox={() => handleSectionChange("leadInbox")}
+                onOpenReservations={() => handleNavigationChange("reservations")}
+                onOpenUnits={() => handleNavigationChange("units")}
+                onPropertyChanged={async () => {
+                  await refreshCoreData();
+                }}
+                projectLabel={projectScopeLabel}
+                projects={allProjects}
+                propertyCostItems={propertyCostRecords.filter((item) => !activeProject || item.projectId === activeProject.id)}
+                propertyDocuments={propertyDocumentRecords.filter((document) => !activeProject || document.projectId === activeProject.id)}
+                propertyMedia={propertyMediaRecords.filter((media) => !activeProject || media.projectId === activeProject.id)}
+                propertyTextBlocks={propertyTextRecords.filter((textBlock) => !activeProject || textBlock.projectId === activeProject.id)}
+                reservations={propertyReservationRecords.filter(
+                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                )}
+                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sessionProductRole={sessionProductRole}
+                sessionRole={sessionRole}
+                units={propertyUnitRecords.filter((unit) => !activeProject || unit.projectId === activeProject.id)}
               />
             ) : null}
 
@@ -3897,7 +3960,7 @@ export function CrmWorkspace({
                 propertyUnits={propertyUnitRecords.filter(
                   (unit) => !activeProject || unit.projectId === activeProject.id,
                 )}
-                sellerListings={sellerListings.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
               />
             ) : null}
 
@@ -4104,7 +4167,7 @@ export function CrmWorkspace({
                 propertyUnits={propertyUnitRecords.filter(
                   (unit) => !activeProject || unit.projectId === activeProject.id,
                 )}
-                sellerListings={sellerListings.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
                 tasks={visibleTasks}
                 users={users}
                 workspaceId={activeWorkspace.id}

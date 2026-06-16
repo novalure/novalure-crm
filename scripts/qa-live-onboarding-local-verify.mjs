@@ -475,7 +475,7 @@ async function captureLoginPage(baseUrl) {
     await client.send("Page.enable");
     await client.send("Runtime.enable");
     await setViewport(client, 1280, 720, false);
-    await waitFor(client, () => /Geschützter Novalure-Workspace|GeschÃ¼tzter Novalure-Workspace/.test(document.body?.innerText ?? ""), "login page");
+    await waitFor(client, () => /Geschützter Novalure-Workspace|Gesch\u00c3\u00bctzter Novalure-Workspace/.test(document.body?.innerText ?? ""), "login page");
     return await saveScreenshot(client, "00-login-de.png");
   } finally {
     try {

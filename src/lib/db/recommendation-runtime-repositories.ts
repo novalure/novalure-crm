@@ -1488,7 +1488,7 @@ export async function runBotAnswerQualityReviews(input: {
     const issue = await upsertBotQualityReviewIssue({
       bot: null,
       check: null,
-      detail: "Kein aktiver Bot ist fuer Answer-Quality-Reviews verfuegbar.",
+      detail: "Kein aktiver Bot ist für Answer-Quality-Reviews verfügbar.",
       evaluation: null,
       issueType: "bot_answer_quality_review",
       nextAction: "Aktiven Bot mit Strict Knowledge, freigegebenen Quellen, Zitationen und Handoff-Regeln pruefen.",
@@ -1509,7 +1509,7 @@ export async function runBotAnswerQualityReviews(input: {
     const run = await recordOperationalRecommendationRun({
       metrics: { activeBots: 0, reviewIssues: issue ? 1 : 0 },
       moduleKey: "bot_governance",
-      nextAction: "Aktiven Bot veroeffentlichen und Answer-Quality-Checks erneut ausfuehren.",
+      nextAction: "Aktiven Bot veröffentlichen und Answer-Quality-Checks erneut ausführen.",
       projectId,
       recommendationKey: "bot_answer_quality_review",
       session: input.session,
@@ -1598,7 +1598,7 @@ export async function runBotAnswerQualityReviews(input: {
     recommendationKey: "bot_answer_quality_review",
     session: input.session,
     status: reviewIssues > 0 ? "partial" : "completed",
-    summary: "Answer-Quality-Checks, Governance-Evaluationen und Review-Routing wurden fuer aktive Bots ausgefuehrt.",
+    summary: "Answer-Quality-Checks, Governance-Evaluationen und Review-Routing wurden für aktive Bots ausgeführt.",
   });
 
   await writeCrmAnalyticsEvent({
@@ -1760,10 +1760,10 @@ function evaluateBotQualityReview(
   const needsHandoffWork = reasons.some((reason) => reason.toLowerCase().includes("handoff"));
   const needsCitationWork = reasons.some((reason) => reason.toLowerCase().includes("zitation") || reason.toLowerCase().includes("quellen"));
   const needsRedTeamWork = redTeamFailures > 0 || hallucinationFailures > 0 || handoffFailures > 0;
-  let nextAction = "Echte Testkonversation ausfuehren, Antwort speichern und Answer-Quality erneut pruefen.";
+  let nextAction = "Echte Testkonversation ausführen, Antwort speichern und Answer-Quality erneut prüfen.";
 
   if (needsRedTeamWork) {
-    nextAction = "Red-Team-Faelle nachhaerten und Bot erst nach fehlerfreiem Evaluationslauf fuer Kundenkanaele freigeben.";
+    nextAction = "Red-Team-Fälle nachhärten und Bot erst nach fehlerfreiem Evaluationslauf für Kundenkanäle freigeben.";
   } else if (needsHandoffWork) {
     nextAction = "Handoff-Regeln mit Ziel-Team testen und jede Uebergabe im Gespraech als Handoff markieren.";
   } else if (needsCitationWork) {
@@ -3048,7 +3048,7 @@ async function runSequenceRuntimeReview(input: { projectId?: string | null; sess
       stepRuns,
       stopRules,
       enrollments > 0 ? "completed" : "needs_data",
-      "Sequence Enrollments, Step Runs und Stop-Regeln wurden fuer den Tagesbetrieb belegt.",
+      "Sequence Enrollments, Step Runs und Stop-Regeln wurden für den Tagesbetrieb belegt.",
       JSON.stringify({ source: "analysis_recommendation_completion" }),
       normalizeUuid(input.session.userId),
     ],
@@ -3277,7 +3277,7 @@ async function createFunnelConversionOperationalReports(input: { projectId?: str
     recommendationKey: "funnel_publishing_conversion_reporting",
     session: input.session,
     status: reports.length > 0 ? "completed" : "needs_data",
-    summary: "Funnel-Conversion-Reports fuer Publish-, Quellen-, UTM- und Step-Auswertung wurden gespeichert.",
+    summary: "Funnel-Conversion-Reports für Publish-, Quellen-, UTM- und Step-Auswertung wurden gespeichert.",
   });
 
   return { reports: reports.length };
@@ -3318,7 +3318,7 @@ async function runMicrosoftBookingHealthCheck(input: { projectId?: string | null
         (select count(*) from meeting_notification_jobs where workspace_id = $1::uuid and status = 'queued'),
         (select count(*) from meeting_notification_jobs where workspace_id = $1::uuid and status = 'failed'),
         (select count(*) from meeting_pages where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid)),
-        'Microsoft OAuth, Verfuegbarkeit, Teams Links und Reminder Jobs nach Workspace pruefen.',
+        'Microsoft OAuth, Verfügbarkeit, Teams Links und Reminder Jobs nach Workspace prüfen.',
         jsonb_build_object('source', 'analysis_recommendation_completion'),
         $3::uuid
       returning id
@@ -3334,7 +3334,7 @@ async function runMicrosoftBookingHealthCheck(input: { projectId?: string | null
     recommendationKey: "microsoft_booking_depth",
     session: input.session,
     status: row ? "completed" : "blocked",
-    summary: "Microsoft-365-Buchungstiefe fuer OAuth, Availability, Teams Links und Reminder Jobs wurde geprueft.",
+    summary: "Microsoft-365-Buchungstiefe für OAuth, Availability, Teams Links und Reminder Jobs wurde geprüft.",
   });
 
   return { healthCheckId: row?.id ?? null };

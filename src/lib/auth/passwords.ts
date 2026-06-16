@@ -5,7 +5,7 @@ const scrypt = promisify(scryptCallback);
 const passwordHashPrefix = "scrypt";
 const passwordKeyLength = 64;
 
-export const minimumPasswordLength = 12;
+export const minimumPasswordLength = 15;
 
 export type PasswordValidationError =
   | "password_mismatch"

@@ -48,7 +48,7 @@ export async function createPropertyBuildingRecord(input: {
     return { persisted: false, reason: "Building input is incomplete" };
   }
 
-  const name = cleanString(input.name) || "Gebaeude";
+  const name = cleanString(input.name) || "Gebäude";
   const row = await queryOne<BuildingRow>(
     `
       insert into property_buildings (

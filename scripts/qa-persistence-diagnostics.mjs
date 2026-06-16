@@ -322,7 +322,7 @@ async function runContactTests(context) {
     entity: "Consent",
     operation: "Create/Update ueber Kontakt",
     expected: "Consent-Status wird als DB-Datensatz geschrieben",
-    actual: `${consentRows.length} consent_records fuer Kontakt`,
+    actual: `${consentRows.length} consent_records für Kontakt`,
     dbReadConfirmed: consentRows.some((row) => row.status === `${CODEX_PREFIX}CONSENT_OPT_OUT`) ? "ja" : "nein",
     ok: consentRows.some((row) => row.status === `${CODEX_PREFIX}CONSENT_OPT_OUT`),
     cause: consentRows.length ? "" : "Kein consent_records-Datensatz nach Kontakt-Speicherung gefunden",
@@ -440,11 +440,11 @@ async function runLeadTests(context) {
   addMatrix({
     entity: "Lead",
     operation: "Fehlerfall",
-    expected: "ungueltiger Schreibvorgang wird klar abgelehnt",
+    expected: "ungültiger Schreibvorgang wird klar abgelehnt",
     actual: `HTTP ${invalid.response.status} ${invalid.json?.error ?? ""}`.trim(),
     dbReadConfirmed: "nein",
     ok: !invalid.response.ok && Boolean(invalid.json?.error),
-    cause: invalid.response.ok ? "Ungueltiger Lead wurde akzeptiert" : invalid.json?.error ?? invalid.text,
+    cause: invalid.response.ok ? "Ungültiger Lead wurde akzeptiert" : invalid.json?.error ?? invalid.text,
   });
 
   context.leadId = leadId;
@@ -478,12 +478,12 @@ function runLeadUiStateGuardTest() {
     expected: "lokaler UI-Status wird erst nach API-Erfolg gesetzt",
     actual: mutationAfterPersist && visibleErrorOnFailure
       ? "persistLead vor updateLead/addActivity, Fehler setzt saveError"
-      : "lokaler Zustand kann vor API-Erfolg geaendert werden",
+      : "lokaler Zustand kann vor API-Erfolg geändert werden",
     dbReadConfirmed: "n/a",
     ok: mutationAfterPersist && visibleErrorOnFailure,
     cause: mutationAfterPersist && visibleErrorOnFailure
       ? ""
-      : "Lead-Inbox kann UI-State vor bestaetigtem Server-Save aendern oder Fehler nicht sichtbar melden",
+      : "Lead-Inbox kann UI-State vor bestätigtem Server-Save ändern oder Fehler nicht sichtbar melden",
   });
 }
 
@@ -944,15 +944,16 @@ async function runGrowthWorkspaceSeedChecks() {
       [novalureGrowthWorkspaceId],
     );
     const modules = new Map(moduleRows.map((row) => [row.module_key, row.enabled]));
-    const disabledOk = ["objectsMandates", "units", "reservations", "projectOverview"].every((key) => modules.get(key) === false);
+    const propertyModules = ["properties", "objectsMandates", "units", "reservations", "projectOverview"];
+    const propertyModulesOk = propertyModules.every((key) => modules.get(key) === true);
     addMatrix({
       entity: "Novalure Growth",
       operation: "enabledModules seed",
-      expected: "Immobilienmodule false, CRM-Module true",
-      actual: ["objectsMandates", "units", "reservations", "projectOverview"].map((key) => `${key}=${modules.get(key)}`).join(", "),
+      expected: "Immobilienmodule true, CRM-Module true",
+      actual: propertyModules.map((key) => `${key}=${modules.get(key)}`).join(", "),
       dbReadConfirmed: moduleRows.length ? "ja" : "nein",
-      ok: disabledOk,
-      cause: disabledOk ? "" : "Mindestens ein Growth-ausgeblendetes Immobilienmodul ist aktiv oder fehlt",
+      ok: propertyModulesOk,
+      cause: propertyModulesOk ? "" : "Mindestens ein Immobilienmodul ist nicht aktiv oder fehlt",
     });
   } catch (error) {
     addMatrix({
@@ -1111,7 +1112,7 @@ async function printCodexTestRecords() {
 }
 
 function printMarkdownTable(rows) {
-  const headers = ["Entitaet", "Operation", "Erwartet", "Tatsaechlich", "DB-Read bestaetigt", "Status", "Fehlermeldung/Ursache"];
+  const headers = ["Entität", "Operation", "Erwartet", "Tatsächlich", "DB-Read bestätigt", "Status", "Fehlermeldung/Ursache"];
   console.log(headers.join(" | "));
   console.log(headers.map(() => "---").join(" | "));
   for (const row of rows) {

@@ -85,7 +85,7 @@ export function runCrmBotTool(toolName: string, input: Record<string, unknown>):
       tool: "search_approved_knowledge",
       query: String(input.query || ""),
       sources: [
-        { title: "Wohnpark Graz Expose", url: "/knowledge/wohnpark-graz", confidence: 0.86 },
+        { title: "Wohnpark Graz Exposé", url: "/knowledge/wohnpark-graz", confidence: 0.86 },
         { title: "Pricing and units", url: "/knowledge/pricing-units", confidence: 0.8 },
       ],
     };

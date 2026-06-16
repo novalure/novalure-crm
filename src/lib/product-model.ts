@@ -104,6 +104,7 @@ export const NOVALURE_GROWTH_LEAD_SOURCES = [
 export type NovalureGrowthLeadSource = (typeof NOVALURE_GROWTH_LEAD_SOURCES)[number];
 
 export type WorkspaceModuleKey =
+  | "properties"
   | "dashboard"
   | "leadInbox"
   | "contacts"
@@ -126,6 +127,7 @@ export type WorkspaceModuleKey =
 export type WorkspaceEnabledModules = Record<WorkspaceModuleKey, boolean>;
 
 export const workspaceModuleKeys: WorkspaceModuleKey[] = [
+  "properties",
   "dashboard",
   "leadInbox",
   "contacts",
@@ -154,7 +156,10 @@ export const defaultWorkspaceEnabledModules: WorkspaceEnabledModules = workspace
   {} as WorkspaceEnabledModules,
 );
 
-export const novalureGrowthDisabledModules: WorkspaceModuleKey[] = [
+export const novalureGrowthDisabledModules: WorkspaceModuleKey[] = [];
+
+export const alwaysVisiblePropertyModuleKeys: WorkspaceModuleKey[] = [
+  "properties",
   "objectsMandates",
   "units",
   "reservations",
@@ -466,6 +471,10 @@ export function getWorkspaceEnabledModules(input: {
     if (typeof configured[key] === "boolean") {
       modules[key] = configured[key] as boolean;
     }
+  }
+
+  for (const key of alwaysVisiblePropertyModuleKeys) {
+    modules[key] = true;
   }
 
   return modules;

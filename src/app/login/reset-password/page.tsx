@@ -119,7 +119,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
                 <input
                   autoComplete="new-password"
                   className="min-h-11 rounded-md border border-[#b8c7d8] bg-white px-3 py-2 text-sm font-normal text-[#071421] outline-none focus:border-[#071421] focus:ring-2 focus:ring-[#b8d8ff]"
-                  minLength={12}
+                  minLength={15}
                   name="password"
                   required
                   type="password"
@@ -130,7 +130,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
                 <input
                   autoComplete="new-password"
                   className="min-h-11 rounded-md border border-[#b8c7d8] bg-white px-3 py-2 text-sm font-normal text-[#071421] outline-none focus:border-[#071421] focus:ring-2 focus:ring-[#b8d8ff]"
-                  minLength={12}
+                  minLength={15}
                   name="confirmPassword"
                   required
                   type="password"

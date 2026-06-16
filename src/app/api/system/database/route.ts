@@ -39,6 +39,9 @@ const migrations = [
   "migrations/031_user_onboarding.sql",
   "migrations/032_public_slug_routing.sql",
   "migrations/033_rename_demo_form_source.sql",
+  "migrations/034_property_department.sql",
+  "migrations/035_property_department_content.sql",
+  "migrations/036_company_profiles.sql",
 ];
 
 type TableStatusRow = {
