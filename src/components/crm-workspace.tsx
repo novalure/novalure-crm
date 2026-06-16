@@ -3304,8 +3304,9 @@ export function CrmWorkspace({
 
     window.localStorage.setItem(languageStorageKeys.system, language);
     document.documentElement.lang = language;
+    document.title = copy.shell.browserTitle;
     window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
-  }, [language, languageHydrated]);
+  }, [copy.shell.browserTitle, language, languageHydrated]);
 
   function handleLanguageChange(nextLanguage: LanguageCode) {
     setLanguage(nextLanguage);

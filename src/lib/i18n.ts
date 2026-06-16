@@ -1158,6 +1158,7 @@ export const dashboardCopy = {
   en: {
     shell: {
       appTitle: "CRM Workspace",
+      browserTitle: "Novalure CRM | Private Lead Workspace for Real Estate Teams",
       expandNavigation: "Expand navigation",
       collapseNavigation: "Collapse navigation",
     },
@@ -1913,6 +1914,7 @@ export const dashboardCopy = {
   de: {
     shell: {
       appTitle: "CRM-Arbeitsbereich",
+      browserTitle: "Novalure CRM | Privater Lead-Workspace für Immobilien-Teams",
       expandNavigation: "Navigation ausklappen",
       collapseNavigation: "Navigation einklappen",
     },
