@@ -68,6 +68,13 @@ option {
   word-break: normal;
 }
 
+.crm-kpi-label {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  letter-spacing: 0.04em;
+}
+
 button,
 input,
 select,

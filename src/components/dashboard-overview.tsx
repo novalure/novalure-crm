@@ -697,7 +697,7 @@ export function DashboardOverview({
   const renderKpi = (label: string, value: string, detail: string, tone = "bg-white") => (
     <div className={"flex h-full min-h-0 flex-col justify-between rounded-lg border border-stone-200 p-4 " + tone}>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
+        <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
         <p className="mt-3 break-words text-3xl font-semibold leading-tight text-slate-950">{value}</p>
       </div>
       <p className="mt-3 break-words text-sm leading-5 text-stone-600">{detail}</p>

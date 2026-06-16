@@ -763,19 +763,19 @@ export function ContactCommandCenter({
             <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
             <div className="rounded-md bg-stone-50 p-3">
               <p className="font-semibold">{contactRecords.length}</p>
-              <p className="text-xs text-stone-500">{copy.people}</p>
+              <p className="crm-kpi-label text-xs text-stone-500">{copy.people}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
               <p className="font-semibold">{organizations.length}</p>
-              <p className="text-xs text-stone-500">{copy.organizations}</p>
+              <p className="crm-kpi-label text-xs text-stone-500">{copy.organizations}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
               <p className="font-semibold">{primaryRelationships.length}</p>
-              <p className="text-xs text-stone-500">{copy.primaryRoles}</p>
+              <p className="crm-kpi-label text-xs text-stone-500">{copy.primaryRoles}</p>
             </div>
             <div className="rounded-md bg-stone-50 p-3">
               <p className="font-semibold">{duplicateSignals.length}</p>
-              <p className="text-xs text-stone-500">{copy.duplicateSignals}</p>
+              <p className="crm-kpi-label text-xs text-stone-500">{copy.duplicateSignals}</p>
             </div>
             </div>
           </div>

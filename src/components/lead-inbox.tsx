@@ -804,7 +804,7 @@ export function LeadInbox({
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 px-3 py-2" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
-                <p className="break-words text-xs text-stone-500">{metric.label}</p>
+                <p className="crm-kpi-label text-xs text-stone-500">{metric.label}</p>
               </div>
             ))}
           </div>
