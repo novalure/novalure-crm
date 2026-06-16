@@ -1889,7 +1889,7 @@ function RolePriorityPanel({
       hotLeads: "Hot leads",
       noOwner: "Without owner",
       openTasks: "Open tasks",
-      pipeline: "Pipeline value",
+      pipeline: "Weighted forecast",
       riskDeals: "Risk deals",
       unlinkedTasks: "Unlinked tasks",
     },

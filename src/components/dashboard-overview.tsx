@@ -528,7 +528,9 @@ export function DashboardOverview({
   const overdueLeads = filteredLeads.filter((lead) => new Date(lead.nextContactAt ?? lead.slaDueAt).getTime() < NOW.getTime());
   const hotLeads = filteredLeads.filter((lead) => lead.score > 80 || lead.hotStatus);
   const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === type).length }));
-  const pipelineCommission = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100) * COMMISSION_RATE, 0);
+  const openPipelineValue = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
+  const weightedPipelineValue = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100), 0);
+  const pipelineCommission = weightedPipelineValue * COMMISSION_RATE;
   const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && isInPeriod(deal.expectedCloseDate, "Monat"));
   const monthClosingCommission = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value) * COMMISSION_RATE, 0);
   const stageVisits = Math.max(1, filteredLeads.length);
@@ -708,7 +710,7 @@ export function DashboardOverview({
       case "activeLeads":
         return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => getCrmLeadTypeLabel(item.type, language) + ": " + item.count).join(" | "), "bg-emerald-50");
       case "pipelineValue":
-        return renderKpi(copy.kpis.pipelineValue, formatEuro(pipelineCommission, locale), copy.kpis.expectedCommission(openDeals.length), "bg-blue-50");
+        return renderKpi(copy.kpis.pipelineValue, formatEuro(pipelineCommission, locale), copy.kpis.expectedCommission(openDeals.length, formatEuro(openPipelineValue, locale), formatEuro(weightedPipelineValue, locale)), "bg-blue-50");
       case "monthlyClosings":
         return renderKpi(copy.kpis.monthlyClosings, formatEuro(monthClosingCommission, locale), copy.kpis.target + ": " + formatEuro(MONTH_TARGET_COMMISSION, locale) + " | " + Math.round((monthClosingCommission / MONTH_TARGET_COMMISSION) * 100) + "%", "bg-violet-50");
       case "overdueFollowupsKpi":

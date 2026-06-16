@@ -1340,7 +1340,7 @@ export const dashboardCopy = {
         openTasks: "Open tasks",
         noOwner: "Without owner",
         appointments: "Appointments",
-        pipeline: "Pipeline value",
+        pipeline: "Weighted forecast",
         riskDeals: "Risk deals",
         unlinkedTasks: "Without contact/project",
       },
@@ -2096,7 +2096,7 @@ export const dashboardCopy = {
         openTasks: "Offene Aufgaben",
         noOwner: "Ohne Zuständigen",
         appointments: "Termine",
-        pipeline: "Pipelinewert",
+        pipeline: "Gewichteter Forecast",
         riskDeals: "Risiko-Deals",
         unlinkedTasks: "Ohne Kontakt/Projekt",
       },
@@ -4647,7 +4647,7 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Active leads total", description: "Buyers, sellers and investors" },
-      pipelineValue: { title: "Pipeline value in EUR", description: "Expected commission from open deals" },
+      pipelineValue: { title: "Expected commission", description: "3% of weighted open-deal forecast" },
       monthlyClosings: { title: "Monthly closings", description: "Commission vs. target" },
       overdueFollowupsKpi: { title: "Overdue follow-ups", description: "SLA and next contact" },
       hotLeadsKpi: { title: "Hot leads", description: "Score above 80 or hot status" },
@@ -4705,8 +4705,9 @@ export const dashboardOverviewCopy = {
     },
     kpis: {
       activeLeads: "Active leads",
-      pipelineValue: "Pipeline value",
-      expectedCommission: (count: number) => `Expected commission from ${count} open deals`,
+      pipelineValue: "Expected commission",
+      expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
+        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast}`,
       monthlyClosings: "Monthly closings",
       target: "Target",
       overdueFollowups: "Overdue follow-ups",
@@ -4777,7 +4778,7 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Aktive Leads gesamt", description: "Käufer, Verkäufer und Investoren" },
-      pipelineValue: { title: "Pipeline-Wert in EUR", description: "Erwartete Provision aus offenen Deals" },
+      pipelineValue: { title: "Erwartete Provision", description: "3% des gewichteten Forecasts offener Deals" },
       monthlyClosings: { title: "Abschlüsse Monat", description: "Provision vs. Zielwert" },
       overdueFollowupsKpi: { title: "Überfällige Follow-ups", description: "SLA und nächster Kontakt" },
       hotLeadsKpi: { title: "Heiße Leads", description: "Score über 80 oder Status heiß" },
@@ -4835,8 +4836,9 @@ export const dashboardOverviewCopy = {
     },
     kpis: {
       activeLeads: "Aktive Leads",
-      pipelineValue: "Pipeline-Wert",
-      expectedCommission: (count: number) => `Erwartete Provision aus ${count} offenen Deals`,
+      pipelineValue: "Erwartete Provision",
+      expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
+        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast}`,
       monthlyClosings: "Abschlüsse Monat",
       target: "Ziel",
       overdueFollowups: "Überfällige Follow-ups",
