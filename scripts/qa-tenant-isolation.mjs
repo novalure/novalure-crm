@@ -88,6 +88,12 @@ function productRoleBlock(source, role) {
   return match?.[1] ?? "";
 }
 
+function parseNavigationPresetOrder(source) {
+  const match = source.match(/const navigationPresetOrder: NavigationPresetId\[\] = \[([\s\S]*?)\];/);
+  if (!match) return [];
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+}
+
 async function dbQuery(query, params = []) {
   if (!sql) throw new Error("No database URL is configured.");
   return await sql.query(query, params);
@@ -100,6 +106,22 @@ function runStaticChecks() {
   const workspaceRoute = readText("src/app/api/workspaces/route.ts");
   const writes = readText("src/lib/db/crm-write-repositories.ts");
   const migration = readText("migrations/030_novalure_growth_workspace.sql");
+  const navigationOrder = parseNavigationPresetOrder(crmWorkspace);
+  const existingNavigationProfiles = [
+    "novalureInternal",
+    "realEstateBroker",
+    "propertyDeveloper",
+    "sales",
+    "salesLead",
+    "management",
+    "marketing",
+    "assistant",
+    "newUser",
+    "admin",
+    "managedService",
+    "hybridRealEstate",
+  ];
+  const appendedInternalProfiles = ["novalureGrowth", "novalureServiceOps", "novalureAdmin"];
 
   for (const role of newRoles) {
     addMatrix({
@@ -114,10 +136,10 @@ function runStaticChecks() {
   addMatrix({
     check: "existing navigation order",
     expected: "new profiles are appended after the existing twelve profile IDs",
-    actual: crmWorkspace.includes('"novalureInternal",') && crmWorkspace.includes('"novalureGrowth",\n  "novalureServiceOps",\n  "novalureAdmin"')
-      ? "appended"
-      : "not confirmed",
-    ok: crmWorkspace.includes('"novalureGrowth",\n  "novalureServiceOps",\n  "novalureAdmin"'),
+    actual: navigationOrder.length ? navigationOrder.join(", ") : "not confirmed",
+    ok:
+      sameArray(navigationOrder.slice(0, existingNavigationProfiles.length), existingNavigationProfiles) &&
+      sameArray(navigationOrder.slice(existingNavigationProfiles.length), appendedInternalProfiles),
     cause: "new profile order is not visible in navigationPresetOrder",
   });
 

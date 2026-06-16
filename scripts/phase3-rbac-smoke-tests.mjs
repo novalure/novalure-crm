@@ -81,7 +81,8 @@ test("core CRM writes enforce owner or project-scoped record access", () => {
   assert.match(contactAccess, /export function getContactVisibilityScope/);
   assert.match(contactAccess, /"customer_owner"/);
   assert.match(contactAccess, /"workspace_admin"/);
-  assert.match(loaders, /loadContacts\(workspaceId, contactScope\)/);
+  assert.match(loaders, /loadContacts\(scopedWorkspaceId, contactScope\)/);
+  assert.match(loaders, /filters\.push\("c\.workspace_id = \$1"\)/);
   assert.match(loaders, /c\.owner_user_id = \$\$\{params\.length\}/);
   assert.match(repo, /owner_user_id as "ownerUserId"/);
 });

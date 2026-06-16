@@ -52,6 +52,8 @@ test("contact data is scoped server-side by session visibility", () => {
   assert.match(coreRoute, /getCoreCrmData\(auth\.session\.workspaceId, \{ session: auth\.session \}\)/);
   assert.match(page, /getCoreCrmData\(session\.workspaceId, \{ session \}\)/);
   assert.match(loaders, /getContactVisibilityScope\(options\.session\)/);
+  assert.match(loaders, /loadContacts\(scopedWorkspaceId, contactScope\)/);
+  assert.match(loaders, /filters\.push\("c\.workspace_id = \$1"\)/);
   assert.match(loaders, /c\.owner_user_id = \$\$\{params\.length\}/);
   assert.match(contactAccess, /return actor\.userId \? \{ kind: "own", userId: actor\.userId \} : \{ kind: "none" \}/);
 });
