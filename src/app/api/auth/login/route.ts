@@ -24,12 +24,11 @@ function getLanguageValue(value: string): LanguageCode | "" {
 
 function getLoginRedirect(
   request: Request,
-  input: { email?: string; error?: string; language?: LanguageCode | ""; returnTo?: string },
+  input: { error?: string; language?: LanguageCode | ""; returnTo?: string },
 ) {
   const url = new URL("/login", request.url);
   if (input.language) url.searchParams.set("lang", input.language);
   if (input.error) url.searchParams.set("error", input.error);
-  if (input.email) url.searchParams.set("email", input.email);
   if (input.returnTo) url.searchParams.set("returnTo", getSafeReturnTo(input.returnTo));
   return url;
 }
@@ -45,7 +44,6 @@ export async function POST(request: Request) {
   if (!result.session) {
     return NextResponse.redirect(
       getLoginRedirect(request, {
-        email,
         error: result.error ?? "invalid_credentials",
         language,
         returnTo,
