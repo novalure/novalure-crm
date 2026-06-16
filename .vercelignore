@@ -3,6 +3,7 @@
 .git/
 .codex-deploy.index
 .codex-git-objects/
+.codex-worktrees/
 .localappdata/
 .xdg-data/
 .next/
