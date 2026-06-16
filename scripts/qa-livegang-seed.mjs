@@ -86,6 +86,7 @@ await applyMigration("migrations/031_user_onboarding.sql");
 await applyMigration("migrations/033_rename_demo_form_source.sql");
 await applyMigration("migrations/034_property_department.sql");
 await applyMigration("migrations/035_property_department_content.sql");
+await applyMigration("migrations/037_novalure_growth_alignment.sql");
 
 const workspaces = {
   internal: {

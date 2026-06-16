@@ -42,6 +42,7 @@ const migrations = [
   "migrations/034_property_department.sql",
   "migrations/035_property_department_content.sql",
   "migrations/036_company_profiles.sql",
+  "migrations/037_novalure_growth_alignment.sql",
 ];
 
 type TableStatusRow = {
