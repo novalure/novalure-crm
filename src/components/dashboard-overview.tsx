@@ -528,7 +528,9 @@ export function DashboardOverview({
   const overdueLeads = filteredLeads.filter((lead) => new Date(lead.nextContactAt ?? lead.slaDueAt).getTime() < NOW.getTime());
   const hotLeads = filteredLeads.filter((lead) => lead.score > 80 || lead.hotStatus);
   const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === type).length }));
-  const pipelineCommission = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100) * COMMISSION_RATE, 0);
+  const openPipelineValue = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
+  const weightedPipelineValue = openDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100), 0);
+  const pipelineCommission = weightedPipelineValue * COMMISSION_RATE;
   const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && isInPeriod(deal.expectedCloseDate, "Monat"));
   const monthClosingCommission = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value) * COMMISSION_RATE, 0);
   const stageVisits = Math.max(1, filteredLeads.length);
@@ -695,7 +697,7 @@ export function DashboardOverview({
   const renderKpi = (label: string, value: string, detail: string, tone = "bg-white") => (
     <div className={"flex h-full min-h-0 flex-col justify-between rounded-lg border border-stone-200 p-4 " + tone}>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
+        <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
         <p className="mt-3 break-words text-3xl font-semibold leading-tight text-slate-950">{value}</p>
       </div>
       <p className="mt-3 break-words text-sm leading-5 text-stone-600">{detail}</p>
@@ -708,7 +710,7 @@ export function DashboardOverview({
       case "activeLeads":
         return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => getCrmLeadTypeLabel(item.type, language) + ": " + item.count).join(" | "), "bg-emerald-50");
       case "pipelineValue":
-        return renderKpi(copy.kpis.pipelineValue, formatEuro(pipelineCommission, locale), copy.kpis.expectedCommission(openDeals.length), "bg-blue-50");
+        return renderKpi(copy.kpis.pipelineValue, formatEuro(pipelineCommission, locale), copy.kpis.expectedCommission(openDeals.length, formatEuro(openPipelineValue, locale), formatEuro(weightedPipelineValue, locale)), "bg-blue-50");
       case "monthlyClosings":
         return renderKpi(copy.kpis.monthlyClosings, formatEuro(monthClosingCommission, locale), copy.kpis.target + ": " + formatEuro(MONTH_TARGET_COMMISSION, locale) + " | " + Math.round((monthClosingCommission / MONTH_TARGET_COMMISSION) * 100) + "%", "bg-violet-50");
       case "overdueFollowupsKpi":
@@ -724,7 +726,13 @@ export function DashboardOverview({
       case "funnel":
         return <FunnelWidget activeType={activeFunnelType} copy={copy.funnel} filteredDeals={filteredDeals} filteredLeads={filteredLeads} language={language} leads={leads} onTypeChange={setActiveFunnelType} />;
       case "sourceBar":
-        return <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{getCrmSourceLabel(row.source, language)}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>;
+        return sourceRows.length > 0 ? (
+          <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{getCrmSourceLabel(row.source, language)}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>
+        ) : (
+          <div className="grid min-h-32 place-items-center rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-medium text-stone-500">
+            {copy.charts.noSourceData}
+          </div>
+        );
       case "requestsLine":
         return <div className="flex h-full items-end gap-2 pt-4">{requestTrend.map((item) => <div className="flex flex-1 flex-col items-center gap-2" key={item.key}><div className="w-full rounded-t-md bg-emerald-700" style={{ height: String(Math.max(12, (item.count / trendMax) * 120)) + "px" }} /><span className="text-xs font-semibold text-stone-500">{item.label}</span></div>)}</div>;
       case "statusDonut":

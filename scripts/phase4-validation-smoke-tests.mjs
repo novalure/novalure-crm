@@ -56,3 +56,17 @@ test("contact destructive flow is soft-delete with visible confirmation and rest
   assert.match(ui, /archiveConfirmContactId/);
   assert.match(ui, /confirmArchive/);
 });
+
+test("lead inbox create form surfaces required-field and save failures", () => {
+  const ui = readText("src/components/lead-inbox.tsx");
+
+  assert.match(ui, /type LeadDraftFieldErrors/);
+  assert.match(ui, /leadDraftErrors\.projectId/);
+  assert.match(ui, /leadDraftErrors\.intent/);
+  assert.match(ui, /leadDraftErrors\.nextAction/);
+  assert.match(ui, /aria-invalid=\{Boolean\(leadDraftErrors\.intent\)\}/);
+  assert.match(ui, /aria-invalid=\{Boolean\(leadDraftErrors\.nextAction\)\}/);
+  assert.match(ui, /focusFirstInvalidLeadField\(nextErrors\)/);
+  assert.match(ui, /leadSavingRef\.current/);
+  assert.match(ui, /showNotice\(text\.saveError, "error"\)/);
+});

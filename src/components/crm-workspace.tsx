@@ -1458,7 +1458,7 @@ function AnalyticsCommandCenter({
           [panelCopy.speedToLead, leads.filter((lead) => lead.slaDueAt && lead.slaDueAt >= today).length],
         ].map(([label, value]) => (
           <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
-            <p className="break-words text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
+            <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
             <p className="mt-2 break-words text-2xl font-semibold text-slate-950">{value}</p>
           </div>
         ))}
@@ -1917,7 +1917,7 @@ function RolePriorityPanel({
       hotLeads: "Hot leads",
       noOwner: "Without owner",
       openTasks: "Open tasks",
-      pipeline: "Pipeline value",
+      pipeline: "Weighted forecast",
       riskDeals: "Risk deals",
       unlinkedTasks: "Unlinked tasks",
     },
@@ -1993,7 +1993,7 @@ function RolePriorityPanel({
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {prioritizedMetricKeys.map((key) => (
             <div className="rounded-md border border-emerald-200 bg-white p-3" key={key}>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{roleCopy.metrics[key]}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{roleCopy.metrics[key]}</p>
               <p className="mt-2 text-xl font-semibold text-slate-950">{metricValues[key]}</p>
             </div>
           ))}
@@ -2393,7 +2393,7 @@ function WorkspaceModeKpis({
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {values.map(([label, value]) => (
         <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+          <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">
             {label}
           </p>
           <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
@@ -2619,7 +2619,7 @@ function InternalWorkspaceView({
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([label, value]) => (
           <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">
               {label}
             </p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
@@ -3337,8 +3337,9 @@ export function CrmWorkspace({
 
     window.localStorage.setItem(languageStorageKeys.system, language);
     document.documentElement.lang = language;
+    document.title = copy.shell.browserTitle;
     window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
-  }, [language, languageHydrated]);
+  }, [copy.shell.browserTitle, language, languageHydrated]);
 
   function handleLanguageChange(nextLanguage: LanguageCode) {
     setLanguage(nextLanguage);

@@ -23,6 +23,9 @@ import type {
   WorkspaceUser,
 } from "@/lib/crm-types";
 import {
+  getCrmDealStageLabel,
+  getCrmEnumLabel,
+  getCrmLeadTypeLabel,
   getCrmRiskLabel,
   getCrmSourceKey,
   getCrmSourceLabel,
@@ -286,6 +289,37 @@ function formatEuro(value: number, locale: string) {
   }).format(value);
 }
 
+function formatBudgetText(value: string, locale: string, language: LanguageCode) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.toLowerCase();
+  const moneyMatches = Array.from(trimmed.matchAll(/\d[\d.\s]*(?:,\d+)?/g));
+  const amounts = moneyMatches.map((match) => parseEuroValue(match[0]));
+
+  if (amounts.length >= 2 && normalized.includes("bis")) {
+    return `${formatEuro(amounts[0], locale)} ${language === "de" ? "bis" : "to"} ${formatEuro(amounts[1], locale)}`;
+  }
+
+  if (amounts.length >= 1) {
+    if (normalized.includes("bis")) {
+      return language === "de" ? `bis ${formatEuro(amounts[0], locale)}` : `up to ${formatEuro(amounts[0], locale)}`;
+    }
+
+    if (normalized.includes("ab")) {
+      return language === "de" ? `ab ${formatEuro(amounts[0], locale)}` : `from ${formatEuro(amounts[0], locale)}`;
+    }
+
+    if (/\beuro\b|eur|€/i.test(trimmed)) {
+      return formatEuro(amounts[0], locale);
+    }
+  }
+
+  return trimmed;
+}
+
 function formatDate(value: string | undefined, locale: string) {
   if (!value) {
     return "-";
@@ -420,13 +454,13 @@ function getRelevantEvent(deal: Deal, calendarEvents: CalendarEvent[], contact?:
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0];
 }
 
-function getLeadBudget(lead: Lead | undefined, locale: string) {
+function getLeadBudget(lead: Lead | undefined, locale: string, language: LanguageCode) {
   if (!lead) {
     return "";
   }
 
   if (lead.budget) {
-    return lead.budget;
+    return formatBudgetText(lead.budget, locale, language);
   }
 
   if (lead.buyerProfile) {
@@ -488,6 +522,9 @@ export function DealPipelineWorkspace({
     return typeof value === "string" ? value : fallback;
   };
   const locale = getLocale(language);
+  const stageLabel = (stage: string) => getCrmDealStageLabel(stage, language);
+  const leadTypeLabel = (leadType: string) => getCrmLeadTypeLabel(leadType, language);
+  const enumLabel = (value: string) => getCrmEnumLabel(value, language);
   const initialContact = contacts[0];
   const [dealPatches, setDealPatches] = useState<Record<string, DealPatch>>({});
   const [persistedDealOverrides, setPersistedDealOverrides] = useState<Record<string, Deal>>({});
@@ -1030,7 +1067,7 @@ export function DealPipelineWorkspace({
       ],
     }));
     setSelectedDealId(deal.id);
-    setSavedMessage(text.stageMoved(deal.name, nextStage));
+    setSavedMessage(text.stageMoved(deal.name, stageLabel(nextStage)));
     setStageReview(null);
     setDropStage("");
     setDraggedDealId("");
@@ -1069,7 +1106,7 @@ export function DealPipelineWorkspace({
       }));
     }
 
-    setSavedMessage(text.stageMoved(persistedDeal.name, persistedDeal.stage));
+    setSavedMessage(text.stageMoved(persistedDeal.name, stageLabel(persistedDeal.stage)));
     setManualDeals((current) =>
       current.map((item) => (item.id === deal.id ? persistedDeal : item)),
     );
@@ -1236,7 +1273,7 @@ export function DealPipelineWorkspace({
     ? [
         ["deal_name", selectedDeal.name],
         ["amount", selectedDeal.value],
-        ["pipeline_stage", selectedDeal.stage],
+        ["pipeline_stage", stageLabel(selectedDeal.stage)],
         ["project_pipeline", selectedDealView.project?.defaultPipelineId],
         ["expected_close_date", selectedDeal.expectedCloseDate],
         ["owner_email", selectedDealView.owner?.email],
@@ -1248,7 +1285,7 @@ export function DealPipelineWorkspace({
   const renderDealCard = (item: DealView, compact = false) => {
     const isSelected = selectedDeal?.id === item.deal.id;
     const firstWarning = item.warnings[0];
-    const budgetLabel = getLeadBudget(item.lead, locale) || formatEuro(parseEuroValue(item.deal.value), locale);
+    const budgetLabel = getLeadBudget(item.lead, locale, language) || formatEuro(parseEuroValue(item.deal.value), locale);
 
     return (
       <article
@@ -1281,7 +1318,7 @@ export function DealPipelineWorkspace({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5 text-xs font-semibold">
-          <span className="rounded-md bg-stone-100 px-2 py-1 text-stone-700">{item.leadType}</span>
+          <span className="rounded-md bg-stone-100 px-2 py-1 text-stone-700">{leadTypeLabel(item.leadType)}</span>
           <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-800">{budgetLabel}</span>
         </div>
 
@@ -1294,7 +1331,7 @@ export function DealPipelineWorkspace({
               <span className="break-words rounded-md bg-blue-50 px-2 py-1.5 font-semibold text-blue-800">
                 {item.nextTask
                   ? `${item.nextTask.title} · ${getCrmTaskDueLabel(item.nextTask.due, language)}`
-                  : item.deal.nextAction || text.defaultNextAction}
+                  : item.deal.nextAction ? enumLabel(item.deal.nextAction) : text.defaultNextAction}
               </span>
               <span className="break-words rounded-md bg-stone-50 px-2 py-1.5 font-semibold text-stone-700">
                 {item.relevantEvent ? formatDateTime(item.relevantEvent.startsAt, locale) : text.noAppointment}
@@ -1419,7 +1456,7 @@ export function DealPipelineWorkspace({
                 >
                   {workStageTitles.map((stage) => (
                     <option key={stage} value={stage}>
-                      {stage}
+                      {stageLabel(stage)}
                     </option>
                   ))}
                 </select>
@@ -1491,7 +1528,7 @@ export function DealPipelineWorkspace({
             <select className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950" onChange={(event) => setLeadTypeFilter(event.target.value as LeadTypeFilter)} value={leadTypeFilter}>
               <option value="all">{text.all}</option>
               {leadTypeOptions.map((leadType) => (
-                <option key={leadType} value={leadType}>{leadType}</option>
+                <option key={leadType} value={leadType}>{leadTypeLabel(leadType)}</option>
               ))}
             </select>
           </label>
@@ -1500,7 +1537,7 @@ export function DealPipelineWorkspace({
             <select className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950" onChange={(event) => setStageFilter(event.target.value as StageFilter)} value={stageFilter}>
               <option value="all">{text.all}</option>
               {orderedStageTitles.map((stage) => (
-                <option key={stage} value={stage}>{stage}</option>
+                <option key={stage} value={stage}>{stageLabel(stage)}</option>
               ))}
             </select>
           </label>
@@ -1595,7 +1632,7 @@ export function DealPipelineWorkspace({
                     >
                       <div className="mb-3 flex items-start justify-between gap-2">
                         <div>
-                          <h5 className="text-sm font-semibold text-slate-950">{stage}</h5>
+                          <h5 className="text-sm font-semibold text-slate-950">{stageLabel(stage)}</h5>
                           <p className="mt-1 text-xs text-stone-500">
                             {stageDeals.length} · {formatEuro(stageValue, locale)}
                           </p>
@@ -1661,9 +1698,9 @@ export function DealPipelineWorkspace({
                     >
                       <div className="mb-3 flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h4 className="break-words text-sm font-semibold">{stage}</h4>
+                          <h4 className="break-words text-sm font-semibold">{stageLabel(stage)}</h4>
                           <p className="mt-1 break-words text-xs text-stone-500">
-                            {nextStage ? text.nextStageHint(nextStage) : text.stageHealth}
+                            {nextStage ? text.nextStageHint(stageLabel(nextStage)) : text.stageHealth}
                           </p>
                           {stageMeta ? (
                             <p className="mt-1 break-words text-xs font-semibold text-stone-500">
@@ -1724,11 +1761,11 @@ export function DealPipelineWorkspace({
             <>
               <div className="mt-4 grid gap-3 text-sm">
                 {[
-                  [text.stage, selectedDeal.stage],
+                  [text.stage, stageLabel(selectedDeal.stage)],
                   [text.project, selectedDealView.project?.name ?? projectLabel],
                   [text.contact, selectedDealView.contact?.name],
                   [text.organization, selectedDealView.organization?.name],
-                  [text.leadType, selectedDealView.leadType],
+                  [text.leadType, leadTypeLabel(selectedDealView.leadType)],
                   [text.objectContext, getObjectLabel(selectedDealView)],
                   [text.owner, selectedDealView.owner?.name],
                   [text.source, getCrmSourceLabel(selectedDeal.source, language)],
@@ -1752,7 +1789,7 @@ export function DealPipelineWorkspace({
                     value={selectedDeal.stage}
                   >
                     {orderedStageTitles.map((stage) => (
-                      <option key={stage} value={stage}>{stage}</option>
+                      <option key={stage} value={stage}>{stageLabel(stage)}</option>
                     ))}
                   </select>
                 </label>
@@ -1928,7 +1965,7 @@ export function DealPipelineWorkspace({
                   {selectedHistory.length > 0 ? selectedHistory.map((entry) => (
                     <div className="rounded-md border border-stone-200 p-3 text-sm" key={entry.id}>
                       <p className="break-words font-semibold text-slate-950">
-                        {entry.fromStage} → {entry.toStage}
+                        {stageLabel(entry.fromStage)} → {stageLabel(entry.toStage)}
                       </p>
                       <p className="mt-1 break-words text-xs text-stone-500">
                         {formatDate(entry.changedAt, locale)} · {entry.actor}
@@ -2015,7 +2052,7 @@ export function DealPipelineWorkspace({
               return (
                 <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={stage}>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="break-words font-semibold text-slate-100">{stage}</span>
+                    <span className="break-words font-semibold text-slate-100">{stageLabel(stage)}</span>
                     <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-slate-200">
                       {stageDeals.length}
                     </span>
@@ -2081,12 +2118,12 @@ export function DealPipelineWorkspace({
       {stageReview && stageReviewDeal ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6">
           <section aria-modal="true" className="w-full max-w-xl rounded-lg border border-stone-200 bg-white p-5 shadow-2xl" role="dialog">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{stageReview.targetStage}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{stageLabel(stageReview.targetStage)}</p>
             <h3 className="mt-1 text-xl font-semibold text-slate-950">{text.reviewTitle}</h3>
             <p className="mt-2 text-sm text-stone-600">{text.reviewDescription}</p>
             <div className="mt-4 rounded-md bg-stone-50 p-3">
               <p className="text-sm font-semibold text-slate-950">{stageReviewDeal.name}</p>
-              <p className="mt-1 text-xs text-stone-500">{stageReviewDeal.stage} → {stageReview.targetStage}</p>
+              <p className="mt-1 text-xs text-stone-500">{stageLabel(stageReviewDeal.stage)} → {stageLabel(stageReview.targetStage)}</p>
             </div>
             {stageReview.warnings.length > 0 ? (
               <div className="mt-4">

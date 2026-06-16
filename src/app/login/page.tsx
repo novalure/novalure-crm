@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { CookieConsentButton } from "@/components/cookie-consent-button";
 import { LoginEmailAutofocus } from "@/components/login-email-autofocus";
+import { LoginUrlHygiene } from "@/components/login-url-hygiene";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import { getSessionFromHeaders, isLoginConfigured } from "@/lib/auth/session";
 import {
@@ -60,9 +61,8 @@ function getStatusText(status: string, text: ReturnType<typeof getLoginPageCopy>
   return "";
 }
 
-function getForgotPasswordHref(language: LanguageCode, email: string) {
+function getForgotPasswordHref(language: LanguageCode) {
   const params = new URLSearchParams({ lang: language });
-  if (email) params.set("email", email);
   return `/login/forgot-password?${params.toString()}`;
 }
 
@@ -72,7 +72,7 @@ function getLoginLanguageHref(
 ) {
   const params = new URLSearchParams({ lang: language });
 
-  for (const key of ["email", "error", "reset", "returnTo"]) {
+  for (const key of ["error", "reset", "returnTo"]) {
     const value = getQueryValue(query[key]);
     if (value) params.set(key, value);
   }
@@ -161,7 +161,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const landingCopy = getCrmLandingPageCopy(language);
   const legalCopy = getLoginLegalFooterCopy(language);
   const configured = isLoginConfigured();
-  const emailForResetLink = getQueryValue(query.email);
   const errorText = getErrorText(getQueryValue(query.error), loginCopy);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
@@ -273,6 +272,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
               <form action="/api/auth/login" className="mt-5 grid gap-5" method="post">
                 <LoginEmailAutofocus />
+                <LoginUrlHygiene clearError={Boolean(errorText)} />
                 <input name="returnTo" type="hidden" value={returnTo} />
                 <input name="language" type="hidden" value={language} />
                 <div className="grid gap-2">
@@ -318,7 +318,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 <div className="flex justify-end">
                   <Link
                     className="text-sm font-semibold text-[#0B0B0F] underline-offset-4 transition hover:text-[#344054] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#93c5fd]"
-                    href={getForgotPasswordHref(language, emailForResetLink)}
+                    href={getForgotPasswordHref(language)}
                   >
                     {loginCopy.passwordReset.forgotLink}
                   </Link>

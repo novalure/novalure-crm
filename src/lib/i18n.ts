@@ -1158,6 +1158,7 @@ export const dashboardCopy = {
   en: {
     shell: {
       appTitle: "CRM Workspace",
+      browserTitle: "Novalure CRM | Private Lead Workspace for Real Estate Teams",
       expandNavigation: "Expand navigation",
       collapseNavigation: "Collapse navigation",
     },
@@ -1341,7 +1342,7 @@ export const dashboardCopy = {
         openTasks: "Open tasks",
         noOwner: "Without owner",
         appointments: "Appointments",
-        pipeline: "Pipeline value",
+        pipeline: "Weighted forecast",
         riskDeals: "Risk deals",
         unlinkedTasks: "Without contact/project",
       },
@@ -1914,6 +1915,7 @@ export const dashboardCopy = {
   de: {
     shell: {
       appTitle: "CRM-Arbeitsbereich",
+      browserTitle: "Novalure CRM | Privater Lead-Workspace für Immobilien-Teams",
       expandNavigation: "Navigation ausklappen",
       collapseNavigation: "Navigation einklappen",
     },
@@ -2098,7 +2100,7 @@ export const dashboardCopy = {
         openTasks: "Offene Aufgaben",
         noOwner: "Ohne Zuständigen",
         appointments: "Termine",
-        pipeline: "Pipelinewert",
+        pipeline: "Gewichteter Forecast",
         riskDeals: "Risiko-Deals",
         unlinkedTasks: "Ohne Kontakt/Projekt",
       },
@@ -4649,7 +4651,7 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Active leads total", description: "Buyers, sellers and investors" },
-      pipelineValue: { title: "Pipeline value in EUR", description: "Expected commission from open deals" },
+      pipelineValue: { title: "Expected commission", description: "3% of weighted open-deal forecast" },
       monthlyClosings: { title: "Monthly closings", description: "Commission vs. target" },
       overdueFollowupsKpi: { title: "Overdue follow-ups", description: "SLA and next contact" },
       hotLeadsKpi: { title: "Hot leads", description: "Score above 80 or hot status" },
@@ -4701,14 +4703,18 @@ export const dashboardOverviewCopy = {
       settingsTitle: "Widget settings",
       remove: "Remove widget",
     },
+    charts: {
+      noSourceData: "No lead source data in this view.",
+    },
     prompts: {
       viewName: "Name for this view",
       newView: "New view",
     },
     kpis: {
       activeLeads: "Active leads",
-      pipelineValue: "Pipeline value",
-      expectedCommission: (count: number) => `Expected commission from ${count} open deals`,
+      pipelineValue: "Expected commission",
+      expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
+        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast}`,
       monthlyClosings: "Monthly closings",
       target: "Target",
       overdueFollowups: "Overdue follow-ups",
@@ -4779,7 +4785,7 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Aktive Leads gesamt", description: "Käufer, Verkäufer und Investoren" },
-      pipelineValue: { title: "Pipeline-Wert in EUR", description: "Erwartete Provision aus offenen Deals" },
+      pipelineValue: { title: "Erwartete Provision", description: "3% des gewichteten Forecasts offener Deals" },
       monthlyClosings: { title: "Abschlüsse Monat", description: "Provision vs. Zielwert" },
       overdueFollowupsKpi: { title: "Überfällige Follow-ups", description: "SLA und nächster Kontakt" },
       hotLeadsKpi: { title: "Heiße Leads", description: "Score über 80 oder Status heiß" },
@@ -4831,14 +4837,18 @@ export const dashboardOverviewCopy = {
       settingsTitle: "Baustein-Einstellungen",
       remove: "Baustein entfernen",
     },
+    charts: {
+      noSourceData: "Keine Leadquellen-Daten in dieser Ansicht.",
+    },
     prompts: {
       viewName: "Name für diese Ansicht",
       newView: "Neue Ansicht",
     },
     kpis: {
       activeLeads: "Aktive Leads",
-      pipelineValue: "Pipeline-Wert",
-      expectedCommission: (count: number) => `Erwartete Provision aus ${count} offenen Deals`,
+      pipelineValue: "Erwartete Provision",
+      expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
+        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast}`,
       monthlyClosings: "Abschlüsse Monat",
       target: "Ziel",
       overdueFollowups: "Überfällige Follow-ups",
@@ -10479,9 +10489,16 @@ const crmStatusAliases: Record<string, string> = {
 };
 
 const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
+  "Abschlussprüfung": { en: "Closing review", de: "Abschlussprüfung" },
+  Abschlusspruefung: { en: "Closing review", de: "Abschlussprüfung" },
   active: { en: "Active", de: "Aktiv" },
   approved: { en: "Approved", de: "Freigegeben" },
+  "Anfrage": { en: "Inquiry", de: "Anfrage" },
+  "Angebot / Mandat": { en: "Offer / mandate", de: "Angebot / Mandat" },
   available: { en: "Available", de: "Verfügbar" },
+  "Beratung / Besichtigung": { en: "Consultation / viewing", de: "Beratung / Besichtigung" },
+  "Besichtigung / Bewertung": { en: "Viewing / valuation", de: "Besichtigung / Bewertung" },
+  "Besichtigung/Beratung": { en: "Viewing / consultation", de: "Besichtigung/Beratung" },
   blocked: { en: "Blocked", de: "Blockiert" },
   cancelled: { en: "Cancelled", de: "Abgebrochen" },
   complete: { en: "Complete", de: "Vollständig" },
@@ -10491,6 +10508,7 @@ const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
   database: { en: "Database", de: "Datenbank" },
   "Demo gebucht": { en: "Demo booked", de: "Demo gebucht" },
   "Demo gehalten": { en: "Demo held", de: "Demo gehalten" },
+  Disqualifiziert: { en: "Disqualified", de: "Disqualifiziert" },
   demo: { en: "Demo fallback", de: "Demo-Fallback" },
   denied: { en: "Denied", de: "Abgelehnt" },
   draft: { en: "Draft", de: "Entwurf" },
@@ -10507,10 +10525,23 @@ const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
   not_connected: { en: "Not connected", de: "Nicht verbunden" },
   open: { en: "Open", de: "Offen" },
   Angebot: { en: "Offer", de: "Angebot" },
+  "Angebot/Reservierung": { en: "Offer / reservation", de: "Angebot/Reservierung" },
   paused: { en: "Paused", de: "Pausiert" },
   Pilot: { en: "Pilot", de: "Pilot" },
   Gewonnen: { en: "Won", de: "Gewonnen" },
+  Neu: { en: "New", de: "Neu" },
+  Onboarding: { en: "Onboarding", de: "Onboarding" },
+  "Pausiert / Verloren": { en: "Paused / lost", de: "Pausiert / Verloren" },
+  Qualifizieren: { en: "Qualifying", de: "Qualifizieren" },
+  Qualifiziert: { en: "Qualified", de: "Qualifiziert" },
+  Reservierung: { en: "Reservation", de: "Reservierung" },
+  "Termin gebucht": { en: "Appointment booked", de: "Termin gebucht" },
+  "Termin offen": { en: "Appointment open", de: "Termin offen" },
+  "Termin vereinbaren": { en: "Schedule appointment", de: "Termin vereinbaren" },
+  "Termin vorschlagen": { en: "Suggest appointment", de: "Termin vorschlagen" },
   Verloren: { en: "Lost", de: "Verloren" },
+  "Vertragsprüfung": { en: "Contract review", de: "Vertragsprüfung" },
+  Vertragspruefung: { en: "Contract review", de: "Vertragsprüfung" },
   pending: { en: "Pending", de: "Offen" },
   queued: { en: "Queued", de: "In Warteschlange" },
   ready: { en: "Ready", de: "Bereit" },
@@ -10527,6 +10558,8 @@ const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
 };
 
 const crmGenericEnumAliases: Record<string, string> = {
+  abschlussprufung: "Abschlussprüfung",
+  abschlusspruefung: "Abschlussprüfung",
   needs_review: "needs_review",
   needs_reviewed: "needs_review",
   needs_reviewing: "needs_review",
@@ -10537,11 +10570,32 @@ const crmGenericEnumAliases: Record<string, string> = {
   demo_gebucht: "Demo gebucht",
   demo_held: "Demo gehalten",
   demo_gehalten: "Demo gehalten",
+  angebot_mandat: "Angebot / Mandat",
+  angebot_reservierung: "Angebot/Reservierung",
+  appointment_booked: "Termin gebucht",
+  appointment_open: "Termin offen",
+  besichtigung_bewertung: "Besichtigung / Bewertung",
+  besichtigung_beratung: "Besichtigung/Beratung",
+  closing_review: "Abschlussprüfung",
   offer: "Angebot",
   angebot: "Angebot",
   pilot: "Pilot",
+  qualifizieren: "Qualifizieren",
+  qualifying: "Qualifizieren",
+  qualified: "Qualifiziert",
+  schedule_appointment: "Termin vereinbaren",
+  suggest_appointment: "Termin vorschlagen",
+  termin_buchen: "Termin vereinbaren",
+  termin_gebucht: "Termin gebucht",
+  termin_offen: "Termin offen",
+  termin_vereinbaren: "Termin vereinbaren",
+  termin_vorschlagen: "Termin vorschlagen",
+  vertragsprufung: "Vertragsprüfung",
+  vertragspruefung: "Vertragsprüfung",
   won: "Gewonnen",
   gewonnen: "Gewonnen",
+  disqualified: "Disqualifiziert",
+  disqualifiziert: "Disqualifiziert",
   lost: "Verloren",
   verloren: "Verloren",
   vector_bereit: "vector_ready",
@@ -11257,6 +11311,10 @@ export function getCrmConsentStatusLabel(status: string, language: LanguageCode)
 
 export function getCrmEnumLabel(value: string, language: LanguageCode) {
   return getLocalizedEnumLabel(crmGenericEnumLabels, crmGenericEnumAliases, value, language);
+}
+
+export function getCrmDealStageLabel(stage: string, language: LanguageCode) {
+  return getCrmEnumLabel(stage, language);
 }
 
 export function getFunnelTemplateUseCaseLabel(value: string, language: LanguageCode) {

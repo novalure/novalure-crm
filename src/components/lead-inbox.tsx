@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CRM_LEAD_SOURCES,
   type BrokerMandate,
@@ -55,6 +55,9 @@ type LeadActivity = {
   detail: string;
   tone: "info" | "success" | "warning";
 };
+type LeadDraftRequiredField = "projectId" | "intent" | "nextAction";
+type LeadDraftFieldErrors = Partial<Record<LeadDraftRequiredField, string>>;
+type NoticeTone = "error" | "info" | "success";
 
 const statusStyles: Record<LeadStatus, string> = {
   Neu: "bg-emerald-100 text-emerald-800",
@@ -207,7 +210,9 @@ export function LeadInbox({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<NoticeTone>("success");
   const [leadDraft, setLeadDraft] = useState(() => getInitialDraft(leads, contacts, projects));
+  const [leadDraftErrors, setLeadDraftErrors] = useState<LeadDraftFieldErrors>({});
   const [fieldDraft, setFieldDraft] = useState({
     leadId: leads[0]?.id ?? "",
     status: leads[0]?.status ?? ("Neu" as LeadStatus),
@@ -223,6 +228,10 @@ export function LeadInbox({
   const [fieldSaving, setFieldSaving] = useState(false);
   const [fieldFeedback, setFieldFeedback] = useState<{ message: string; tone: "error" | "success" } | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ message: string; tone: "error" | "success" } | null>(null);
+  const leadSavingRef = useRef(false);
+  const projectFieldRef = useRef<HTMLSelectElement | null>(null);
+  const intentFieldRef = useRef<HTMLTextAreaElement | null>(null);
+  const nextActionFieldRef = useRef<HTMLTextAreaElement | null>(null);
 
   const effectiveLeads = useMemo(
     () => [
@@ -343,6 +352,52 @@ export function LeadInbox({
     { id: "all", label: text.all, count: decoratedLeads.length },
   ];
 
+  const noticeClassName =
+    noticeTone === "error"
+      ? "border-red-200 bg-red-50 text-red-800"
+      : noticeTone === "info"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-emerald-200 bg-emerald-50 text-emerald-900";
+
+  const showNotice = (message: string, tone: NoticeTone = "success") => {
+    setNoticeTone(tone);
+    setNotice(message);
+  };
+
+  const requiredFieldMessage = (label: string) =>
+    language === "de" ? `${label} ist Pflicht.` : `${label} is required.`;
+
+  const getLeadDraftErrors = () => {
+    const nextErrors: LeadDraftFieldErrors = {};
+
+    if (!leadDraft.projectId) nextErrors.projectId = requiredFieldMessage(text.project);
+    if (!leadDraft.intent.trim()) nextErrors.intent = requiredFieldMessage(text.intent);
+    if (!leadDraft.nextAction.trim()) nextErrors.nextAction = requiredFieldMessage(text.nextAction);
+
+    return nextErrors;
+  };
+
+  const clearLeadDraftError = (field: LeadDraftRequiredField) => {
+    setLeadDraftErrors((current) => {
+      if (!current[field]) return current;
+      const nextErrors = { ...current };
+      delete nextErrors[field];
+      return nextErrors;
+    });
+  };
+
+  const focusFirstInvalidLeadField = (errors: LeadDraftFieldErrors) => {
+    const target = errors.projectId
+      ? projectFieldRef.current
+      : errors.intent
+        ? intentFieldRef.current
+        : errors.nextAction
+          ? nextActionFieldRef.current
+          : null;
+
+    target?.focus();
+  };
+
   const addActivity = (leadId: string, title: string, detail: string, tone: LeadActivity["tone"]) => {
     const now = new Date();
     const activity: LeadActivity = {
@@ -428,10 +483,10 @@ export function LeadInbox({
       updateLead(selectedLead.id, patch);
       addActivity(selectedLead.id, text.changed, activeFieldDraft.nextAction, "info");
       await refreshPersistedLeads(selectedLead.id);
-      setNotice(text.changed);
+      showNotice(text.changed);
       setFieldFeedback({ message: text.changed, tone: "success" });
     } catch {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
       setFieldFeedback({ message: text.saveError, tone: "error" });
     } finally {
       setFieldSaving(false);
@@ -451,10 +506,10 @@ export function LeadInbox({
       updateLead(leadId, patch);
       addActivity(leadId, text.accepted, text.acceptedDetail, "success");
       await refreshPersistedLeads(leadId);
-      setNotice(text.accepted);
+      showNotice(text.accepted);
       setActionFeedback({ message: text.accepted, tone: "success" });
     } catch {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
       setActionFeedback({ message: text.saveError, tone: "error" });
     }
   };
@@ -470,10 +525,10 @@ export function LeadInbox({
       addActivity(leadId, nextStatus === "Archiviert" ? text.archivedNow : text.restored, "", "warning");
       await refreshPersistedLeads(leadId);
       const message = nextStatus === "Archiviert" ? text.archivedNow : text.restored;
-      setNotice(message);
+      showNotice(message);
       setActionFeedback({ message, tone: "success" });
     } catch {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
       setActionFeedback({ message: text.saveError, tone: "error" });
     }
   };
@@ -503,7 +558,7 @@ export function LeadInbox({
     });
 
     if (!response.ok) {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
       setActionFeedback({ message: text.saveError, tone: "error" });
       return;
     }
@@ -514,7 +569,7 @@ export function LeadInbox({
     addActivity(selectedLead.id, text.taskCreated, selectedLead.nextAction, "success");
     const payload = (await response.json().catch(() => ({}))) as { data?: { allowed?: boolean } };
     const message = payload.data?.allowed === false ? text.consentBlocked : text.taskCreated;
-    setNotice(message);
+    showNotice(message, payload.data?.allowed === false ? "error" : "success");
     setActionFeedback({ message, tone: payload.data?.allowed === false ? "error" : "success" });
   };
 
@@ -524,7 +579,7 @@ export function LeadInbox({
       .slice(0, 25);
 
     if (!candidates.length) {
-      setNotice(text.bulkFollowUpEmpty);
+      showNotice(text.bulkFollowUpEmpty, "info");
       return;
     }
 
@@ -561,7 +616,7 @@ export function LeadInbox({
       candidates.slice(0, 5).forEach((item) => {
         addActivity(item.lead.id, text.bulkFollowUp, item.lead.nextAction, "success");
       });
-      setNotice(
+      showNotice(
         text.bulkFollowUpDone(
           payload.data?.succeededCount ?? candidates.length,
           payload.data?.blockedCount ?? 0,
@@ -569,7 +624,7 @@ export function LeadInbox({
         ),
       );
     } catch {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
     } finally {
       setBulkSaving(false);
     }
@@ -600,23 +655,28 @@ export function LeadInbox({
 
       addActivity(selectedLead.id, text.noteSaved, detail, "info");
       setNoteDraft("");
-      setNotice(text.noteSaved);
+      showNotice(text.noteSaved);
     } catch {
-      setNotice(text.saveError);
+      showNotice(text.saveError, "error");
     }
   };
 
   const createLead = async (createTaskAfterSave = false) => {
-    if (leadSaving) return;
+    if (leadSavingRef.current) return;
 
     setFormError("");
     setFormSuccess("");
+    setLeadDraftErrors({});
 
-    if (!leadDraft.projectId || !leadDraft.intent.trim() || !leadDraft.nextAction.trim()) {
+    const nextErrors = getLeadDraftErrors();
+    if (Object.keys(nextErrors).length > 0) {
+      setLeadDraftErrors(nextErrors);
       setFormError(text.required);
+      focusFirstInvalidLeadField(nextErrors);
       return;
     }
 
+    leadSavingRef.current = true;
     setLeadSaving(true);
     const contact = contacts.find((item) => item.id === leadDraft.contactId);
     const now = new Date();
@@ -685,8 +745,9 @@ export function LeadInbox({
       setActiveView("queue");
       setShowCreateForm(false);
       setLeadDraft(getInitialDraft(leads, contacts, projects));
+      setLeadDraftErrors({});
       addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
-      setNotice(text.newLeadSaved);
+      showNotice(text.newLeadSaved);
       setFormSuccess(text.newLeadSaved);
       await refreshPersistedLeads(savedLead.id);
       if (createTaskAfterSave) {
@@ -714,7 +775,9 @@ export function LeadInbox({
     } catch {
       setFormError(text.saveError);
       setFormSuccess("");
+      showNotice(text.saveError, "error");
     } finally {
+      leadSavingRef.current = false;
       setLeadSaving(false);
     }
   };
@@ -741,14 +804,17 @@ export function LeadInbox({
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 px-3 py-2" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
-                <p className="break-words text-xs text-stone-500">{metric.label}</p>
+                <p className="crm-kpi-label text-xs text-stone-500">{metric.label}</p>
               </div>
             ))}
           </div>
         </div>
 
         {notice ? (
-          <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+          <div
+            className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${noticeClassName}`}
+            role={noticeTone === "error" ? "alert" : "status"}
+          >
             {notice}
           </div>
         ) : null}
@@ -787,6 +853,7 @@ export function LeadInbox({
                 onClick={() => {
                   setFormError("");
                   setFormSuccess("");
+                  setLeadDraftErrors({});
                   setActionFeedback(null);
                   setShowCreateForm((current) => !current);
                 }}
@@ -856,8 +923,16 @@ export function LeadInbox({
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.project}
                   <select
-                    className="rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, projectId: event.target.value }))}
+                    aria-describedby={leadDraftErrors.projectId ? "lead-project-error" : undefined}
+                    aria-invalid={Boolean(leadDraftErrors.projectId)}
+                    className={`rounded-md border bg-white px-3 py-2 outline-none ${
+                      leadDraftErrors.projectId ? "border-red-300 focus:border-red-600" : "border-emerald-200 focus:border-emerald-600"
+                    }`}
+                    onChange={(event) => {
+                      clearLeadDraftError("projectId");
+                      setLeadDraft((current) => ({ ...current, projectId: event.target.value }));
+                    }}
+                    ref={projectFieldRef}
                     value={leadDraft.projectId}
                   >
                     {projects.map((project) => (
@@ -866,6 +941,11 @@ export function LeadInbox({
                       </option>
                     ))}
                   </select>
+                  {leadDraftErrors.projectId ? (
+                    <span className="text-xs font-semibold text-red-700" id="lead-project-error" role="alert">
+                      {leadDraftErrors.projectId}
+                    </span>
+                  ) : null}
                 </label>
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.source}
@@ -900,18 +980,44 @@ export function LeadInbox({
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.intent}
                   <textarea
-                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, intent: event.target.value }))}
+                    aria-describedby={leadDraftErrors.intent ? "lead-intent-error" : undefined}
+                    aria-invalid={Boolean(leadDraftErrors.intent)}
+                    className={`min-h-24 rounded-md border bg-white px-3 py-2 outline-none ${
+                      leadDraftErrors.intent ? "border-red-300 focus:border-red-600" : "border-emerald-200 focus:border-emerald-600"
+                    }`}
+                    onChange={(event) => {
+                      clearLeadDraftError("intent");
+                      setLeadDraft((current) => ({ ...current, intent: event.target.value }));
+                    }}
+                    ref={intentFieldRef}
                     value={leadDraft.intent}
                   />
+                  {leadDraftErrors.intent ? (
+                    <span className="text-xs font-semibold text-red-700" id="lead-intent-error" role="alert">
+                      {leadDraftErrors.intent}
+                    </span>
+                  ) : null}
                 </label>
                 <label className="grid gap-1 text-sm font-semibold">
                   {text.nextAction}
                   <textarea
-                    className="min-h-24 rounded-md border border-emerald-200 bg-white px-3 py-2"
-                    onChange={(event) => setLeadDraft((current) => ({ ...current, nextAction: event.target.value }))}
+                    aria-describedby={leadDraftErrors.nextAction ? "lead-next-action-error" : undefined}
+                    aria-invalid={Boolean(leadDraftErrors.nextAction)}
+                    className={`min-h-24 rounded-md border bg-white px-3 py-2 outline-none ${
+                      leadDraftErrors.nextAction ? "border-red-300 focus:border-red-600" : "border-emerald-200 focus:border-emerald-600"
+                    }`}
+                    onChange={(event) => {
+                      clearLeadDraftError("nextAction");
+                      setLeadDraft((current) => ({ ...current, nextAction: event.target.value }));
+                    }}
+                    ref={nextActionFieldRef}
                     value={leadDraft.nextAction}
                   />
+                  {leadDraftErrors.nextAction ? (
+                    <span className="text-xs font-semibold text-red-700" id="lead-next-action-error" role="alert">
+                      {leadDraftErrors.nextAction}
+                    </span>
+                  ) : null}
                 </label>
               </div>
               {leadDraft.type === "Verkäufer" || leadDraft.type === "Käufer" ? (
@@ -1095,8 +1201,8 @@ export function LeadInbox({
                   </div>
                 </details>
               ) : null}
-              {formError ? <p className="mt-3 text-sm font-semibold text-red-700">{formError}</p> : null}
-              {formSuccess ? <p className="mt-3 text-sm font-semibold text-emerald-700">{formSuccess}</p> : null}
+              {formError ? <p className="mt-3 text-sm font-semibold text-red-700" role="alert">{formError}</p> : null}
+              {formSuccess ? <p className="mt-3 text-sm font-semibold text-emerald-700" role="status">{formSuccess}</p> : null}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
                   className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
@@ -1124,6 +1230,7 @@ export function LeadInbox({
                     setShowCreateForm(false);
                     setFormError("");
                     setFormSuccess("");
+                    setLeadDraftErrors({});
                     setLeadDraft(getInitialDraft(leads, contacts, projects));
                   }}
                   type="button"
