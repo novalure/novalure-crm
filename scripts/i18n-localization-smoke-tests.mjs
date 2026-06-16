@@ -150,6 +150,7 @@ const formCommandCenterSource = readProjectFile("src/components/form-command-cen
 const funnelCommandCenterSource = readProjectFile("src/components/funnel-command-center.tsx");
 const workspaceSource = readProjectFile("src/components/crm-workspace.tsx");
 const layoutSource = readProjectFile("src/app/layout.tsx");
+const globalsSource = readProjectFile("src/app/globals.css");
 const htmlSyncSource = readProjectFile("src/components/language-html-sync.tsx");
 const languageRuntimeSource = readProjectFile("src/lib/language-runtime.ts");
 const proxySource = readProjectFile("src/proxy.ts");
@@ -266,4 +267,28 @@ test("system language persists to document html lang", () => {
   assert.match(htmlSyncSource, /document\.cookie = `\$\{languageCookieName\}=\$\{language\}/);
   assert.match(workspaceSource, /window\.localStorage\.setItem\(languageStorageKeys\.system, language\)/);
   assert.match(workspaceSource, /document\.documentElement\.lang = language/);
+});
+
+test("phase 4 dashboard UX fixes stay explicit and localized", () => {
+  assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Private Lead Workspace for Real Estate Teams"/);
+  assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Privater Lead-Workspace für Immobilien-Teams"/);
+  assert.match(i18nSource, /pipeline:\s*"Weighted forecast"/);
+  assert.match(i18nSource, /pipeline:\s*"Gewichteter Forecast"/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Expected commission"/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Erwartete Provision"/);
+  assert.match(i18nSource, /noSourceData:\s*"No lead source data in this view\."/);
+  assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
+  assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(openDeals\.length, formatEuro\(openPipelineValue, locale\), formatEuro\(weightedPipelineValue, locale\)\)/);
+  assert.match(dashboardSource, /copy\.charts\.noSourceData/);
+  assert.match(workspaceSource, /document\.title = copy\.shell\.browserTitle/);
+});
+
+test("phase 4 KPI labels avoid forced mid-word breaks", () => {
+  assert.match(globalsSource, /\.crm-kpi-label\s*\{/);
+  assert.match(globalsSource, /overflow-wrap:\s*normal/);
+  assert.match(globalsSource, /word-break:\s*normal/);
+  assert.match(dashboardSource, /crm-kpi-label/);
+  assert.match(workspaceSource, /crm-kpi-label/);
+  assert.match(leadInboxSource, /crm-kpi-label text-xs text-stone-500">\{metric\.label\}/);
+  assert.match(contactCommandCenterSource, /crm-kpi-label text-xs text-stone-500">\{copy\.organizations\}/);
 });
