@@ -642,51 +642,90 @@ type CrmBotRow = {
   workspaceId: string;
 };
 
-export function getMockCoreCrmData(): CoreCrmDataResult {
+class MissingWorkspaceScopeError extends Error {
+  constructor(loaderName: string) {
+    super(`${loaderName} requires an explicit workspaceId`);
+    this.name = "MissingWorkspaceScopeError";
+  }
+}
+
+function requireWorkspaceId(workspaceId: string | null | undefined, loaderName: string) {
+  const scopedWorkspaceId = workspaceId?.trim();
+  if (!scopedWorkspaceId) {
+    throw new MissingWorkspaceScopeError(loaderName);
+  }
+  return scopedWorkspaceId;
+}
+
+function filterWorkspaceItems<T extends { workspaceId: string }>(items: T[], workspaceId: string) {
+  return items.filter((item) => item.workspaceId === workspaceId);
+}
+
+export function getMockCoreCrmData(workspaceId: string): CoreCrmDataResult {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "getMockCoreCrmData");
+  const calendarEvents = filterWorkspaceItems(mockCalendarEvents, scopedWorkspaceId);
+  const contacts = filterWorkspaceItems(mockContacts, scopedWorkspaceId);
+  const crmBots = filterWorkspaceItems(mockCrmBots, scopedWorkspaceId);
+  const leads = filterWorkspaceItems(mockLeads, scopedWorkspaceId);
+  const deals = filterWorkspaceItems(mockDeals, scopedWorkspaceId);
+  const funnelSteps = filterWorkspaceItems(mockFunnelSteps, scopedWorkspaceId);
+  const funnels = filterWorkspaceItems(mockFunnels, scopedWorkspaceId);
+  const newsletterCampaigns = filterWorkspaceItems(mockNewsletterCampaigns, scopedWorkspaceId);
+  const newsletterSegments = filterWorkspaceItems(mockNewsletterSegments, scopedWorkspaceId);
+  const propertyBuildings = filterWorkspaceItems(mockPropertyBuildings, scopedWorkspaceId);
+  const propertyReservations = filterWorkspaceItems(mockPropertyReservations, scopedWorkspaceId);
+  const propertyUnits = filterWorkspaceItems(mockPropertyUnits, scopedWorkspaceId);
+  const projects = filterWorkspaceItems(mockProjects, scopedWorkspaceId);
+  const sellerListings = filterWorkspaceItems(mockSellerListings, scopedWorkspaceId);
+  const tasks = filterWorkspaceItems(mockTasks, scopedWorkspaceId);
+
   return {
     source: "mock",
     moduleSources: createModuleSources("mock"),
     brokerMandates: [],
     buyerSearchProfiles: [],
-    calendarEvents: mockCalendarEvents,
-    contacts: mockContacts,
+    calendarEvents,
+    contacts,
     crmPipelineStages: [],
     crmPipelines: [],
     editorPreflightRuns: [],
-    crmBots: mockCrmBots,
+    crmBots,
     dailyQueue: buildDailyQueueData({
-      calendarEvents: mockCalendarEvents,
-      contacts: mockContacts,
-      deals: mockDeals,
-      leads: mockLeads,
-      tasks: mockTasks,
+      calendarEvents,
+      contacts,
+      deals,
+      leads,
+      tasks,
     }),
-    leads: mockLeads,
-    deals: mockDeals,
-    funnelSteps: mockFunnelSteps,
-    funnels: mockFunnels,
-    newsletterCampaigns: mockNewsletterCampaigns,
-    newsletterSegments: mockNewsletterSegments,
+    leads,
+    deals,
+    funnelSteps,
+    funnels,
+    newsletterCampaigns,
+    newsletterSegments,
     projectPipelinePermissions: [],
-    propertyBuildings: mockPropertyBuildings,
+    propertyBuildings,
     propertyCostItems: [],
     propertyDocuments: [],
     propertyMedia: [],
-    propertyReservations: mockPropertyReservations,
+    propertyReservations,
     propertyTextBlocks: [],
-    propertyUnits: mockPropertyUnits,
-    projects: mockProjects,
-    sellerListings: mockSellerListings,
-    tasks: mockTasks,
+    propertyUnits,
+    projects,
+    sellerListings,
+    tasks,
   };
 }
 
 export async function getCoreCrmData(
-  workspaceId?: string,
+  workspaceId: string,
   options: { session?: AppSession } = {},
 ): Promise<CoreCrmDataResult> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "getCoreCrmData");
+  const fallbackData = getMockCoreCrmData(scopedWorkspaceId);
+
   if (!hasDatabaseUrl()) {
-    return getMockCoreCrmData();
+    return fallbackData;
   }
 
   const contactScope = options.session
@@ -694,31 +733,39 @@ export async function getCoreCrmData(
     : ({ kind: "workspace" } satisfies ContactVisibilityScope);
 
   const moduleResults = await Promise.all([
-    loadModule("brokerMandates", () => loadBrokerMandates(workspaceId), []),
-    loadModule("buyerSearchProfiles", () => loadBuyerSearchProfiles(workspaceId), []),
-    loadModule("calendarEvents", () => loadCalendarEvents(workspaceId), mockCalendarEvents),
-    loadModule("contacts", () => loadContacts(workspaceId, contactScope), mockContacts),
-    loadModule("crmPipelineStages", () => loadCrmPipelineStages(workspaceId), []),
-    loadModule("crmPipelines", () => loadCrmPipelines(workspaceId), []),
-    loadModule("editorPreflightRuns", () => loadEditorPreflightRuns(workspaceId), []),
-    loadModule("leads", () => loadLeads(workspaceId), mockLeads),
-    loadModule("deals", () => loadDeals(workspaceId), mockDeals),
-    loadModule("tasks", () => loadTasks(workspaceId), mockTasks),
-    loadModule("projects", () => loadProjects(workspaceId), mockProjects),
-    loadModule("funnels", () => loadFunnels(workspaceId), mockFunnels),
-    loadModule("funnelSteps", () => loadFunnelSteps(workspaceId), mockFunnelSteps),
-    loadModule("newsletterSegments", () => loadNewsletterSegments(workspaceId), mockNewsletterSegments),
-    loadModule("newsletterCampaigns", () => loadNewsletterCampaigns(workspaceId), mockNewsletterCampaigns),
-    loadModule("projectPipelinePermissions", () => loadProjectPipelinePermissions(workspaceId), []),
-    loadModule("crmBots", () => loadCrmBots(workspaceId), mockCrmBots),
-    loadModule("propertyBuildings", () => loadPropertyBuildings(workspaceId), mockPropertyBuildings),
-    loadModule("propertyCostItems", () => loadPropertyCostItems(workspaceId), []),
-    loadModule("propertyDocuments", () => loadPropertyDocuments(workspaceId), []),
-    loadModule("propertyMedia", () => loadPropertyMedia(workspaceId), []),
-    loadModule("propertyUnits", () => loadPropertyUnits(workspaceId), mockPropertyUnits),
-    loadModule("propertyReservations", () => loadPropertyReservations(workspaceId), mockPropertyReservations),
-    loadModule("propertyTextBlocks", () => loadPropertyTextBlocks(workspaceId), []),
-    loadModule("sellerListings", () => loadSellerListings(workspaceId), mockSellerListings),
+    loadModule("brokerMandates", () => loadBrokerMandates(scopedWorkspaceId), fallbackData.brokerMandates),
+    loadModule("buyerSearchProfiles", () => loadBuyerSearchProfiles(scopedWorkspaceId), fallbackData.buyerSearchProfiles),
+    loadModule("calendarEvents", () => loadCalendarEvents(scopedWorkspaceId), fallbackData.calendarEvents),
+    loadModule("contacts", () => loadContacts(scopedWorkspaceId, contactScope), fallbackData.contacts),
+    loadModule("crmPipelineStages", () => loadCrmPipelineStages(scopedWorkspaceId), fallbackData.crmPipelineStages),
+    loadModule("crmPipelines", () => loadCrmPipelines(scopedWorkspaceId), fallbackData.crmPipelines),
+    loadModule("editorPreflightRuns", () => loadEditorPreflightRuns(scopedWorkspaceId), fallbackData.editorPreflightRuns),
+    loadModule("leads", () => loadLeads(scopedWorkspaceId), fallbackData.leads),
+    loadModule("deals", () => loadDeals(scopedWorkspaceId), fallbackData.deals),
+    loadModule("tasks", () => loadTasks(scopedWorkspaceId), fallbackData.tasks),
+    loadModule("projects", () => loadProjects(scopedWorkspaceId), fallbackData.projects),
+    loadModule("funnels", () => loadFunnels(scopedWorkspaceId), fallbackData.funnels),
+    loadModule("funnelSteps", () => loadFunnelSteps(scopedWorkspaceId), fallbackData.funnelSteps),
+    loadModule("newsletterSegments", () => loadNewsletterSegments(scopedWorkspaceId), fallbackData.newsletterSegments),
+    loadModule("newsletterCampaigns", () => loadNewsletterCampaigns(scopedWorkspaceId), fallbackData.newsletterCampaigns),
+    loadModule(
+      "projectPipelinePermissions",
+      () => loadProjectPipelinePermissions(scopedWorkspaceId),
+      fallbackData.projectPipelinePermissions,
+    ),
+    loadModule("crmBots", () => loadCrmBots(scopedWorkspaceId), fallbackData.crmBots),
+    loadModule("propertyBuildings", () => loadPropertyBuildings(scopedWorkspaceId), fallbackData.propertyBuildings),
+    loadModule("propertyCostItems", () => loadPropertyCostItems(scopedWorkspaceId), fallbackData.propertyCostItems),
+    loadModule("propertyDocuments", () => loadPropertyDocuments(scopedWorkspaceId), fallbackData.propertyDocuments),
+    loadModule("propertyMedia", () => loadPropertyMedia(scopedWorkspaceId), fallbackData.propertyMedia),
+    loadModule("propertyUnits", () => loadPropertyUnits(scopedWorkspaceId), fallbackData.propertyUnits),
+    loadModule(
+      "propertyReservations",
+      () => loadPropertyReservations(scopedWorkspaceId),
+      fallbackData.propertyReservations,
+    ),
+    loadModule("propertyTextBlocks", () => loadPropertyTextBlocks(scopedWorkspaceId), fallbackData.propertyTextBlocks),
+    loadModule("sellerListings", () => loadSellerListings(scopedWorkspaceId), fallbackData.sellerListings),
   ]);
 
   const data = {} as CoreCrmData;
@@ -809,6 +856,9 @@ async function loadModule<Key extends CoreCrmDataKey>(
       source: "database",
     };
   } catch (error) {
+    if (error instanceof MissingWorkspaceScopeError) {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : "Database module loader failed";
     return {
       data: fallback,
@@ -1033,7 +1083,8 @@ function buildDailyQueueData(input: {
   };
 }
 
-export async function loadProjects(workspaceId?: string): Promise<Project[]> {
+export async function loadProjects(workspaceId: string): Promise<Project[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadProjects");
   const rows = await queryRows<ProjectRow>(
     `
     select
@@ -1051,11 +1102,11 @@ export async function loadProjects(workspaceId?: string): Promise<Project[]> {
     from projects p
     left join leads l on l.project_id = p.id and l.workspace_id = p.workspace_id
     left join deals d on d.project_id = p.id and d.workspace_id = p.workspace_id
-    ${workspaceId ? "where p.workspace_id = $1" : ""}
+    where p.workspace_id = $1
     group by p.id
     order by p.created_at asc
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1073,7 +1124,8 @@ export async function loadProjects(workspaceId?: string): Promise<Project[]> {
   }));
 }
 
-export async function loadBrokerMandates(workspaceId?: string): Promise<BrokerMandate[]> {
+export async function loadBrokerMandates(workspaceId: string): Promise<BrokerMandate[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadBrokerMandates");
   const rows = await queryRows<BrokerMandateRow>(
     `
     select
@@ -1104,11 +1156,11 @@ export async function loadBrokerMandates(workspaceId?: string): Promise<BrokerMa
       metadata,
       updated_at as "updatedAt"
     from broker_mandates
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1141,7 +1193,8 @@ export async function loadBrokerMandates(workspaceId?: string): Promise<BrokerMa
   }));
 }
 
-export async function loadBuyerSearchProfiles(workspaceId?: string): Promise<BuyerSearchProfile[]> {
+export async function loadBuyerSearchProfiles(workspaceId: string): Promise<BuyerSearchProfile[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadBuyerSearchProfiles");
   const rows = await queryRows<BuyerSearchProfileRow>(
     `
     select
@@ -1165,11 +1218,11 @@ export async function loadBuyerSearchProfiles(workspaceId?: string): Promise<Buy
       metadata,
       updated_at as "updatedAt"
     from buyer_search_profiles
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1195,7 +1248,8 @@ export async function loadBuyerSearchProfiles(workspaceId?: string): Promise<Buy
   }));
 }
 
-export async function loadCrmPipelines(workspaceId?: string): Promise<CrmPipeline[]> {
+export async function loadCrmPipelines(workspaceId: string): Promise<CrmPipeline[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadCrmPipelines");
   const rows = await queryRows<CrmPipelineRow>(
     `
     select
@@ -1210,11 +1264,11 @@ export async function loadCrmPipelines(workspaceId?: string): Promise<CrmPipelin
       is_default as "isDefault",
       metadata
     from crm_pipelines
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by is_default desc, created_at asc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1231,7 +1285,8 @@ export async function loadCrmPipelines(workspaceId?: string): Promise<CrmPipelin
   }));
 }
 
-export async function loadCrmPipelineStages(workspaceId?: string): Promise<CrmPipelineStage[]> {
+export async function loadCrmPipelineStages(workspaceId: string): Promise<CrmPipelineStage[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadCrmPipelineStages");
   const rows = await queryRows<CrmPipelineStageRow>(
     `
     select
@@ -1247,11 +1302,11 @@ export async function loadCrmPipelineStages(workspaceId?: string): Promise<CrmPi
       sla_hours as "slaHours",
       metadata
     from crm_pipeline_stages
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by pipeline_id asc, position asc
     limit 1000
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1269,7 +1324,8 @@ export async function loadCrmPipelineStages(workspaceId?: string): Promise<CrmPi
   }));
 }
 
-export async function loadProjectPipelinePermissions(workspaceId?: string): Promise<ProjectPipelinePermission[]> {
+export async function loadProjectPipelinePermissions(workspaceId: string): Promise<ProjectPipelinePermission[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadProjectPipelinePermissions");
   const rows = await queryRows<ProjectPipelinePermissionRow>(
     `
     select
@@ -1291,11 +1347,11 @@ export async function loadProjectPipelinePermissions(workspaceId?: string): Prom
     left join workspace_users wu
       on wu.id = p.user_id
      and wu.workspace_id = p.workspace_id
-    ${workspaceId ? "where p.workspace_id = $1" : ""}
+    where p.workspace_id = $1
     order by p.project_id asc, coalesce(wu.name, wu.email, p.user_id::text) asc
     limit 1000
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1316,7 +1372,8 @@ export async function loadProjectPipelinePermissions(workspaceId?: string): Prom
   }));
 }
 
-export async function loadEditorPreflightRuns(workspaceId?: string): Promise<EditorPreflightRun[]> {
+export async function loadEditorPreflightRuns(workspaceId: string): Promise<EditorPreflightRun[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadEditorPreflightRuns");
   const rows = await queryRows<EditorPreflightRunRow>(
     `
     select
@@ -1332,11 +1389,11 @@ export async function loadEditorPreflightRuns(workspaceId?: string): Promise<Edi
       metadata,
       created_at as "createdAt"
     from editor_preflight_runs
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by created_at desc
     limit 100
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1354,7 +1411,8 @@ export async function loadEditorPreflightRuns(workspaceId?: string): Promise<Edi
   }));
 }
 
-export async function loadSellerListings(workspaceId?: string): Promise<SellerListing[]> {
+export async function loadSellerListings(workspaceId: string): Promise<SellerListing[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadSellerListings");
   const rows = await queryRows<SellerListingRow>(
     `
     select
@@ -1417,11 +1475,11 @@ export async function loadSellerListings(workspaceId?: string): Promise<SellerLi
       internal_notes as "internalNotes",
       canonical_payload as "canonicalPayload"
     from seller_listings
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by created_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1486,7 +1544,8 @@ export async function loadSellerListings(workspaceId?: string): Promise<SellerLi
   }));
 }
 
-export async function loadPropertyTextBlocks(workspaceId?: string): Promise<PropertyTextBlock[]> {
+export async function loadPropertyTextBlocks(workspaceId: string): Promise<PropertyTextBlock[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyTextBlocks");
   const rows = await queryRows<PropertyTextBlockRow>(
     `
     select
@@ -1508,11 +1567,11 @@ export async function loadPropertyTextBlocks(workspaceId?: string): Promise<Prop
       created_at as "createdAt",
       updated_at as "updatedAt"
     from property_text_blocks
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by property_id nulls last, unit_id nulls last, channel asc, position asc, text_key asc
     limit 1500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1536,7 +1595,8 @@ export async function loadPropertyTextBlocks(workspaceId?: string): Promise<Prop
   }));
 }
 
-export async function loadPropertyCostItems(workspaceId?: string): Promise<PropertyCostItem[]> {
+export async function loadPropertyCostItems(workspaceId: string): Promise<PropertyCostItem[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyCostItems");
   const rows = await queryRows<PropertyCostItemRow>(
     `
     select
@@ -1564,11 +1624,11 @@ export async function loadPropertyCostItems(workspaceId?: string): Promise<Prope
       created_at as "createdAt",
       updated_at as "updatedAt"
     from property_cost_items
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by property_id nulls last, unit_id nulls last, group_key asc, position asc, label asc
     limit 1500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1598,7 +1658,8 @@ export async function loadPropertyCostItems(workspaceId?: string): Promise<Prope
   }));
 }
 
-export async function loadPropertyMedia(workspaceId?: string): Promise<PropertyMediaItem[]> {
+export async function loadPropertyMedia(workspaceId: string): Promise<PropertyMediaItem[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyMedia");
   const rows = await queryRows<PropertyMediaRow>(
     `
     select
@@ -1628,11 +1689,11 @@ export async function loadPropertyMedia(workspaceId?: string): Promise<PropertyM
     left join media_assets ma
       on ma.id = pm.media_asset_id
      and ma.workspace_id = pm.workspace_id::text
-    ${workspaceId ? "where pm.workspace_id = $1" : ""}
+    where pm.workspace_id = $1
     order by pm.property_id nulls last, pm.unit_id nulls last, pm.position asc, pm.created_at desc
     limit 1500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1660,7 +1721,8 @@ export async function loadPropertyMedia(workspaceId?: string): Promise<PropertyM
   }));
 }
 
-export async function loadPropertyDocuments(workspaceId?: string): Promise<PropertyDocumentItem[]> {
+export async function loadPropertyDocuments(workspaceId: string): Promise<PropertyDocumentItem[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyDocuments");
   const rows = await queryRows<PropertyDocumentRow>(
     `
     select
@@ -1693,11 +1755,11 @@ export async function loadPropertyDocuments(workspaceId?: string): Promise<Prope
     left join media_assets ma
       on ma.id = pd.media_asset_id
      and ma.workspace_id = pd.workspace_id::text
-    ${workspaceId ? "where pd.workspace_id = $1" : ""}
+    where pd.workspace_id = $1
     order by pd.property_id nulls last, pd.unit_id nulls last, pd.category asc, pd.updated_at desc
     limit 1500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1728,7 +1790,8 @@ export async function loadPropertyDocuments(workspaceId?: string): Promise<Prope
   }));
 }
 
-export async function loadPropertyBuildings(workspaceId?: string): Promise<PropertyBuilding[]> {
+export async function loadPropertyBuildings(workspaceId: string): Promise<PropertyBuilding[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyBuildings");
   const rows = await queryRows<PropertyBuildingRow>(
     `
     select
@@ -1740,11 +1803,11 @@ export async function loadPropertyBuildings(workspaceId?: string): Promise<Prope
       completion_date as "completionDate",
       floors
     from property_buildings
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by name asc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1758,7 +1821,8 @@ export async function loadPropertyBuildings(workspaceId?: string): Promise<Prope
   }));
 }
 
-export async function loadPropertyUnits(workspaceId?: string): Promise<PropertyUnit[]> {
+export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUnit[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyUnits");
   const rows = await queryRows<PropertyUnitRow>(
     `
     select
@@ -1777,11 +1841,11 @@ export async function loadPropertyUnits(workspaceId?: string): Promise<PropertyU
       null::uuid as "reservationId",
       pu.updated_at as "updatedAt"
     from property_units pu
-    ${workspaceId ? "where pu.workspace_id = $1" : ""}
+    where pu.workspace_id = $1
     order by pu.project_id, pu.unit_number asc
     limit 2000
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1802,7 +1866,8 @@ export async function loadPropertyUnits(workspaceId?: string): Promise<PropertyU
   }));
 }
 
-export async function loadPropertyReservations(workspaceId?: string): Promise<PropertyReservation[]> {
+export async function loadPropertyReservations(workspaceId: string): Promise<PropertyReservation[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPropertyReservations");
   const rows = await queryRows<PropertyReservationRow>(
     `
     select
@@ -1818,11 +1883,11 @@ export async function loadPropertyReservations(workspaceId?: string): Promise<Pr
       contract_milestone as "contractMilestone",
       next_action as "nextAction"
     from property_reservations
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by expires_at asc
     limit 2000
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1840,7 +1905,8 @@ export async function loadPropertyReservations(workspaceId?: string): Promise<Pr
   }));
 }
 
-export async function loadFunnels(workspaceId?: string): Promise<Funnel[]> {
+export async function loadFunnels(workspaceId: string): Promise<Funnel[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadFunnels");
   const rows = await queryRows<FunnelRow>(
     `
     select
@@ -1857,11 +1923,11 @@ export async function loadFunnels(workspaceId?: string): Promise<Funnel[]> {
       leads_count as leads,
       conversion_rate as "conversionRate"
     from funnels
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 250
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1880,7 +1946,8 @@ export async function loadFunnels(workspaceId?: string): Promise<Funnel[]> {
   }));
 }
 
-export async function loadFunnelSteps(workspaceId?: string): Promise<FunnelStep[]> {
+export async function loadFunnelSteps(workspaceId: string): Promise<FunnelStep[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadFunnelSteps");
   const rows = await queryRows<FunnelStepRow>(
     `
     select
@@ -1898,11 +1965,11 @@ export async function loadFunnelSteps(workspaceId?: string): Promise<FunnelStep[
       next_optimization as "nextOptimization",
       bot_rule_id as "botRuleId"
     from funnel_steps
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by funnel_id, position asc, created_at asc
     limit 1000
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1922,7 +1989,8 @@ export async function loadFunnelSteps(workspaceId?: string): Promise<FunnelStep[
   }));
 }
 
-export async function loadNewsletterSegments(workspaceId?: string): Promise<NewsletterSegment[]> {
+export async function loadNewsletterSegments(workspaceId: string): Promise<NewsletterSegment[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadNewsletterSegments");
   const rows = await queryRows<NewsletterSegmentRow>(
     `
     select
@@ -1939,11 +2007,11 @@ export async function loadNewsletterSegments(workspaceId?: string): Promise<News
       rules,
       null::text as "resendAudienceId"
     from newsletter_segments
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 250
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -1962,7 +2030,8 @@ export async function loadNewsletterSegments(workspaceId?: string): Promise<News
   }));
 }
 
-export async function loadNewsletterCampaigns(workspaceId?: string): Promise<NewsletterCampaign[]> {
+export async function loadNewsletterCampaigns(workspaceId: string): Promise<NewsletterCampaign[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadNewsletterCampaigns");
   const rows = await queryRows<NewsletterCampaignRow>(
     `
     select
@@ -1980,11 +2049,11 @@ export async function loadNewsletterCampaigns(workspaceId?: string): Promise<New
       metrics,
       content_blocks as "contentBlocks"
     from newsletter_campaigns
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 250
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => {
@@ -2011,7 +2080,8 @@ export async function loadNewsletterCampaigns(workspaceId?: string): Promise<New
   });
 }
 
-export async function loadCrmBots(workspaceId?: string): Promise<CrmBot[]> {
+export async function loadCrmBots(workspaceId: string): Promise<CrmBot[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadCrmBots");
   const rows = await queryRows<CrmBotRow>(
     `
     select
@@ -2033,11 +2103,11 @@ export async function loadCrmBots(workspaceId?: string): Promise<CrmBot[]> {
       created_at as "createdAt",
       updated_at as "updatedAt"
     from bots
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 100
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => {
@@ -2069,7 +2139,8 @@ export async function loadCrmBots(workspaceId?: string): Promise<CrmBot[]> {
   });
 }
 
-export async function loadCalendarEvents(workspaceId?: string): Promise<CalendarEvent[]> {
+export async function loadCalendarEvents(workspaceId: string): Promise<CalendarEvent[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadCalendarEvents");
   const rows = await queryRows<CalendarEventRow>(
     `
     select
@@ -2089,11 +2160,11 @@ export async function loadCalendarEvents(workspaceId?: string): Promise<Calendar
       teams_join_url as "teamsJoinUrl",
       metadata
     from calendar_events
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by starts_at asc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => {
@@ -2126,20 +2197,18 @@ export async function loadCalendarEvents(workspaceId?: string): Promise<Calendar
 }
 
 export async function loadContacts(
-  workspaceId?: string,
+  workspaceId: string,
   visibilityScope: ContactVisibilityScope = { kind: "workspace" },
 ): Promise<Contact[]> {
-  if (visibilityScope.kind === "none" || (visibilityScope.kind === "own" && !workspaceId)) {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadContacts");
+
+  if (visibilityScope.kind === "none") {
     return [];
   }
 
   const filters = ["c.archived_at is null"];
-  const params: string[] = [];
-
-  if (workspaceId) {
-    params.push(workspaceId);
-    filters.push(`c.workspace_id = $${params.length}`);
-  }
+  const params: string[] = [scopedWorkspaceId];
+  filters.push("c.workspace_id = $1");
 
   if (visibilityScope.kind === "own") {
     params.push(visibilityScope.userId);
@@ -2188,7 +2257,8 @@ export async function loadContacts(
   }));
 }
 
-export async function loadLeads(workspaceId?: string): Promise<Lead[]> {
+export async function loadLeads(workspaceId: string): Promise<Lead[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadLeads");
   const rows = await queryRows<LeadRow>(
     `
     select
@@ -2217,11 +2287,11 @@ export async function loadLeads(workspaceId?: string): Promise<Lead[]> {
       seller_profile as "sellerProfile",
       investor_profile as "investorProfile"
     from leads
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by received_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -2252,7 +2322,8 @@ export async function loadLeads(workspaceId?: string): Promise<Lead[]> {
   }));
 }
 
-export async function loadDeals(workspaceId?: string): Promise<Deal[]> {
+export async function loadDeals(workspaceId: string): Promise<Deal[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadDeals");
   const rows = await queryRows<DealRow>(
     `
     select
@@ -2276,11 +2347,11 @@ export async function loadDeals(workspaceId?: string): Promise<Deal[]> {
       source,
       next_action as "nextAction"
     from deals
-    ${workspaceId ? "where workspace_id = $1" : ""}
+    where workspace_id = $1
     order by updated_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({
@@ -2306,7 +2377,8 @@ export async function loadDeals(workspaceId?: string): Promise<Deal[]> {
   }));
 }
 
-export async function loadTasks(workspaceId?: string): Promise<Task[]> {
+export async function loadTasks(workspaceId: string): Promise<Task[]> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadTasks");
   const rows = await queryRows<TaskRow>(
     `
     select
@@ -2324,11 +2396,11 @@ export async function loadTasks(workspaceId?: string): Promise<Task[]> {
       t.status
     from tasks t
     left join projects p on p.id = t.project_id
-    ${workspaceId ? "where t.workspace_id = $1" : ""}
+    where t.workspace_id = $1
     order by t.due_at asc nulls last, t.created_at desc
     limit 500
   `,
-    workspaceId ? [workspaceId] : [],
+    [scopedWorkspaceId],
   );
 
   return rows.map((row) => ({

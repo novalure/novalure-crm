@@ -200,3 +200,35 @@ test("core loader includes seller listings for the central property view", () =>
   assert.match(loader, /loadPropertyDocuments/);
   assert.match(loader, /canonical_payload as "canonicalPayload"/);
 });
+
+test("core CRM and property loaders require explicit workspace scope", () => {
+  const loader = read("src/lib/db/crm-loaders.ts");
+
+  assert.match(loader, /class MissingWorkspaceScopeError extends Error/);
+  assert.match(loader, /function requireWorkspaceId\(workspaceId: string \| null \| undefined, loaderName: string\)/);
+  assert.match(loader, /export async function getCoreCrmData\(\s*workspaceId: string,/s);
+  assert.match(loader, /if \(error instanceof MissingWorkspaceScopeError\) \{\s*throw error;\s*\}/s);
+  assert.match(loader, /loadContacts\(scopedWorkspaceId, contactScope\)/);
+  assert.doesNotMatch(loader, /export async function load[A-Za-z0-9_]+\(\s*workspaceId\?: string/);
+  assert.doesNotMatch(loader, /\$\{workspaceId \? "where/);
+  assert.doesNotMatch(loader, /workspaceId \? \[workspaceId\] : \[\]/);
+
+  for (const name of [
+    "loadProjects",
+    "loadBrokerMandates",
+    "loadBuyerSearchProfiles",
+    "loadSellerListings",
+    "loadPropertyTextBlocks",
+    "loadPropertyCostItems",
+    "loadPropertyMedia",
+    "loadPropertyDocuments",
+    "loadPropertyBuildings",
+    "loadPropertyUnits",
+    "loadPropertyReservations",
+    "loadLeads",
+    "loadDeals",
+    "loadTasks",
+  ]) {
+    assert.match(loader, new RegExp(`requireWorkspaceId\\(workspaceId, "${name}"\\)`), `${name} has a runtime guard`);
+  }
+});
