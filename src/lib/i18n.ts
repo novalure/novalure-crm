@@ -4699,6 +4699,9 @@ export const dashboardOverviewCopy = {
       settingsTitle: "Widget settings",
       remove: "Remove widget",
     },
+    charts: {
+      noSourceData: "No lead source data in this view.",
+    },
     prompts: {
       viewName: "Name for this view",
       newView: "New view",
@@ -4829,6 +4832,9 @@ export const dashboardOverviewCopy = {
       settingsButton: "Einstellungen",
       settingsTitle: "Baustein-Einstellungen",
       remove: "Baustein entfernen",
+    },
+    charts: {
+      noSourceData: "Keine Leadquellen-Daten in dieser Ansicht.",
     },
     prompts: {
       viewName: "Name für diese Ansicht",

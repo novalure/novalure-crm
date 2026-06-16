@@ -726,7 +726,13 @@ export function DashboardOverview({
       case "funnel":
         return <FunnelWidget activeType={activeFunnelType} copy={copy.funnel} filteredDeals={filteredDeals} filteredLeads={filteredLeads} language={language} leads={leads} onTypeChange={setActiveFunnelType} />;
       case "sourceBar":
-        return <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{getCrmSourceLabel(row.source, language)}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>;
+        return sourceRows.length > 0 ? (
+          <div className="grid gap-3">{sourceRows.map((row) => <div className="grid gap-1" key={row.source}><div className="flex justify-between gap-3 text-sm"><span className="font-semibold">{getCrmSourceLabel(row.source, language)}</span><span className="text-stone-500">{row.count} {copy.kpis.leads} | {row.conversion}% {copy.kpis.conversionAbbr}</span></div><div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-blue-700" style={{ width: String(Math.max(10, (row.count / Math.max(1, filteredLeads.length)) * 100)) + "%" }} /></div></div>)}</div>
+        ) : (
+          <div className="grid min-h-32 place-items-center rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-medium text-stone-500">
+            {copy.charts.noSourceData}
+          </div>
+        );
       case "requestsLine":
         return <div className="flex h-full items-end gap-2 pt-4">{requestTrend.map((item) => <div className="flex flex-1 flex-col items-center gap-2" key={item.key}><div className="w-full rounded-t-md bg-emerald-700" style={{ height: String(Math.max(12, (item.count / trendMax) * 120)) + "px" }} /><span className="text-xs font-semibold text-stone-500">{item.label}</span></div>)}</div>;
       case "statusDonut":
