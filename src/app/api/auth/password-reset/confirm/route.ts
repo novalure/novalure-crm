@@ -21,7 +21,6 @@ export async function POST(request: Request) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("lang", language);
     loginUrl.searchParams.set("reset", "password_reset");
-    loginUrl.searchParams.set("email", result.email);
     return NextResponse.redirect(loginUrl, 303);
   }
 

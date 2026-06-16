@@ -59,6 +59,21 @@ test("login inputs stay empty and use neutral placeholders", () => {
   assert.doesNotMatch(loginPage, /value=\{email/);
 });
 
+test("login redirects keep personal data out of query strings", () => {
+  const loginRoute = readText("src/app/api/auth/login/route.ts");
+  const loginPage = readText("src/app/login/page.tsx");
+  const resetConfirmRoute = readText("src/app/api/auth/password-reset/confirm/route.ts");
+  const urlHygiene = readText("src/components/login-url-hygiene.tsx");
+
+  assert.doesNotMatch(loginRoute, /searchParams\.set\("email"/);
+  assert.doesNotMatch(resetConfirmRoute, /searchParams\.set\("email"/);
+  assert.doesNotMatch(loginPage, /getQueryValue\(query\.email/);
+  assert.doesNotMatch(loginPage, /for \(const key of \["email"/);
+  assert.match(loginPage, /<LoginUrlHygiene clearError=\{Boolean\(errorText\)\} \/>/);
+  assert.match(urlHygiene, /url\.searchParams\.delete\("email"\)/);
+  assert.match(urlHygiene, /url\.searchParams\.delete\("error"\)/);
+});
+
 test("public landing keeps German copy localized and gives customers a clear login path", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
