@@ -2866,7 +2866,24 @@ export function CrmWorkspace({
         setAvailableWorkspaces(nextWorkspaces);
         const currentWorkspace = nextWorkspaces.find((item) => item.id === activeWorkspace.id);
         if (currentWorkspace) {
-          setActiveWorkspace((current) => ({ ...current, ...currentWorkspace }));
+          setActiveWorkspace((current) => {
+            const nextWorkspace = { ...current, ...currentWorkspace };
+            const currentSetupState = JSON.stringify(current.setupState ?? null);
+            const nextSetupState = JSON.stringify(nextWorkspace.setupState ?? null);
+            const hasWorkspaceChanged =
+              current.activeCalendarProvider !== nextWorkspace.activeCalendarProvider ||
+              current.activeProjects !== nextWorkspace.activeProjects ||
+              current.activeUsers !== nextWorkspace.activeUsers ||
+              current.customerType !== nextWorkspace.customerType ||
+              current.id !== nextWorkspace.id ||
+              current.name !== nextWorkspace.name ||
+              current.operatingModel !== nextWorkspace.operatingModel ||
+              current.productRole !== nextWorkspace.productRole ||
+              current.teamStructure !== nextWorkspace.teamStructure ||
+              currentSetupState !== nextSetupState;
+
+            return hasWorkspaceChanged ? nextWorkspace : current;
+          });
         }
       })
       .catch(() => {
