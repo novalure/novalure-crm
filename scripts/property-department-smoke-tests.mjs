@@ -31,8 +31,14 @@ test("property department migration creates canonical support tables without rep
 test("system diagnostics and QA seed include the property department migration", () => {
   assert.match(read("src/app/api/system/database/route.ts"), /migrations\/034_property_department\.sql/);
   assert.match(read("src/app/api/system/database/route.ts"), /migrations\/035_property_department_content\.sql/);
+  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/038_property_default_units\.sql/);
+  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/039_property_content_partial_unique_indexes\.sql/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/034_property_department\.sql/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/035_property_department_content\.sql/);
+  assert.match(read("package.json"), /db:migrate:property-default-units/);
+  assert.match(read("package.json"), /db:migrate:property-content-guards/);
+  assert.match(read("package.json"), /qa:phase2-property-kpis/);
+  assert.match(read("package.json"), /qa:phase3-duplicate-guards/);
 });
 
 test("property content migration adds productive text, cost, media, document and price visibility structures", () => {
@@ -47,6 +53,26 @@ test("property content migration adds productive text, cost, media, document and
   assert.match(migration, /alter table property_media[\s\S]*is_cover/i);
   assert.match(migration, /alter table property_documents[\s\S]*visibility/i);
   assert.match(migration, /alter table property_channels[\s\S]*price_visibility_override/i);
+});
+
+test("phase 3 property content migration blocks nullable duplicate rows with partial indexes", () => {
+  const migration = read("migrations/039_property_content_partial_unique_indexes.sql");
+  const qa = read("scripts/qa-phase3-duplicate-guards.mjs");
+
+  for (const indexName of [
+    "property_text_blocks_property_only_uidx",
+    "property_text_blocks_unit_only_uidx",
+    "property_cost_items_property_only_uidx",
+    "property_cost_items_unit_only_uidx",
+  ]) {
+    assert.match(migration, new RegExp(`create unique index if not exists ${indexName}`));
+    assert.match(qa, new RegExp(indexName));
+  }
+
+  assert.match(migration, /where property_id is not null and unit_id is null/);
+  assert.match(migration, /where unit_id is not null and property_id is null/);
+  assert.match(qa, /Existing duplicate rows found/);
+  assert.match(qa, /rollback/);
 });
 
 test("property modules stay visible across workspace/product configurations", () => {
@@ -85,7 +111,7 @@ test("property UI exposes the requested tabs, Aufnahmeblatt groups and disabled 
   const tabs = [
     "Übersicht",
     "Objekt anlegen",
-    "Projekt / Gebäude / Einheiten",
+    "Projekt/Gebäude/Einheiten",
     "Reservierungen",
     "Anfragen",
     "Vermarktung / Kanäle",
@@ -97,6 +123,7 @@ test("property UI exposes the requested tabs, Aufnahmeblatt groups and disabled 
   const groups = ["Lage", "Flächen", "Räume", "Objektklassifizierung", "Grundbuch / Kataster", "Bau / Status", "Energie", "Preise / Kosten", "Investment", "Abgeber", "Ausstattung", "Notizen / Audit"];
 
   for (const tab of tabs) assert.match(domain, new RegExp(tab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(domain, /subLabel: "Struktur"/);
   for (const group of groups) assert.match(domain, new RegExp(group.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(domain, /reason: canReserve \? undefined : "Reservierungsrechte erforderlich\."/);
   assert.match(component, /disabled=\{!action\.enabled\}/);
@@ -199,6 +226,106 @@ test("core loader includes seller listings for the central property view", () =>
   assert.match(loader, /loadPropertyMedia/);
   assert.match(loader, /loadPropertyDocuments/);
   assert.match(loader, /canonical_payload as "canonicalPayload"/);
+});
+
+test("phase 4 links property objects and unit inventory without changing role visibility", () => {
+  const component = read("src/components/property-command-center.tsx");
+  const unitBoard = read("src/components/unit-board.tsx");
+  const workspace = read("src/components/crm-workspace.tsx");
+  const domain = read("src/lib/property-department.ts");
+  const i18n = read("src/lib/i18n.ts");
+
+  assert.match(domain, /type PropertyUnitBoardScope/);
+  assert.match(domain, /unitIds: string\[\]/);
+  assert.match(domain, /unitIds: listingUnits\.map\(\(unit\) => unit\.id\)/);
+  assert.match(domain, /unitIds: projectUnits\.map\(\(unit\) => unit\.id\)/);
+
+  assert.match(component, /createUnitBoardScope/);
+  assert.match(component, /initialSelectedAssetId/);
+  assert.match(component, /Einheiten\/Bestand öffnen/);
+  assert.match(component, /Projekt\/Gebäude\/Einheiten/);
+  assert.match(component, /Projekt in Einheiten\/Bestand öffnen/);
+
+  assert.match(unitBoard, /focusScope\?: PropertyUnitBoardScope/);
+  assert.match(unitBoard, /focusedUnitIds/);
+  assert.match(unitBoard, /text\.focusScopeLabel/);
+  assert.match(unitBoard, /onOpenProperty\(\{ projectId: unit\.projectId, unitId: unit\.id \}\)/);
+  assert.match(unitBoard, /text\.boardSubLabel/);
+
+  assert.match(workspace, /unitBoardFocusScope/);
+  assert.match(workspace, /propertyFocusAssetId/);
+  assert.match(workspace, /handleOpenUnitsFromProperty/);
+  assert.match(workspace, /handleOpenPropertyFromUnit/);
+  assert.match(workspace, /preserveUnitScope: true/);
+  assert.match(workspace, /preservePropertyFocus: true/);
+  assert.match(workspace, /key=\{`\$\{activeProject\?\.id \?\? "all"\}:\$\{unitBoardFocusScope\?\.key \?\? "all"\}`\}/);
+
+  assert.match(i18n, /boardSubLabel: "Vertrieb\/Bestand"/);
+  assert.match(i18n, /title: "Einheiten\/Bestand"/);
+  assert.match(i18n, /clearFocusScope: "Alle Einheiten \/ Bestand anzeigen"/);
+
+  assert.match(workspace, /usesFocusedWorkspaceSidebar\(section: DashboardSection\)/);
+  assert.doesNotMatch(workspace, /section === "units"[\s\S]{0,80}\|\| section === "properties"/);
+});
+
+test("phase 3 complete brokerage preset is additive and covers the full broker workflow", () => {
+  const workspace = read("src/components/crm-workspace.tsx");
+  const i18n = read("src/lib/i18n.ts");
+  const tenantQa = read("scripts/qa-tenant-isolation.mjs");
+  const blockMatch = workspace.match(/completeBrokerage:\s*\{([\s\S]*?)\n  \},\n  propertyDeveloper:/);
+
+  assert.ok(blockMatch, "completeBrokerage preset is defined before propertyDeveloper");
+  const block = blockMatch[1];
+  for (const entry of [
+    "properties",
+    "sellerLeads",
+    "buyerLeads",
+    "projects",
+    "units",
+    "reservations",
+    "pipelines",
+    "tasks",
+    "calendar",
+    "contacts",
+  ]) {
+    assert.match(block, new RegExp(`"${entry}"`), `${entry} is included in completeBrokerage`);
+  }
+  assert.match(workspace, /return "completeBrokerage";/);
+  assert.match(workspace, /return \["completeBrokerage", "realEstateBroker"\]/);
+  assert.match(i18n, /Maklergeschäft komplett/);
+  assert.match(i18n, /Complete brokerage business/);
+  assert.match(tenantQa, /"completeBrokerage"/);
+});
+
+test("phase 2 property KPIs use unit scope, default units and non-multiplying project revenue", () => {
+  const domain = read("src/lib/property-department.ts");
+  const loader = read("src/lib/db/crm-loaders.ts");
+  const migration = read("migrations/038_property_default_units.sql");
+  const repository = read("src/lib/db/property-department-repositories.ts");
+  const qa = read("scripts/qa-phase2-property-kpis.mjs");
+
+  assert.match(domain, /const unitById = new Map\(input\.units\.map/);
+  assert.match(domain, /listing\.unitId[\s\S]*unitById\.get\(listing\.unitId\)/);
+  assert.match(domain, /const unitValue = listingUnits\.reduce/);
+  assert.doesNotMatch(domain, /const internalPrice = listing\.targetPrice \|\| listing\.marketValue/);
+  assert.match(domain, /projectIdsCoveredByListing/);
+
+  assert.match(repository, /async function ensureDefaultUnitForListing/);
+  assert.match(repository, /insert into property_units/);
+  assert.match(repository, /metadata @> '\{"defaultUnit": true\}'::jsonb/);
+  assert.match(repository, /unit_id = \$3::uuid/);
+
+  assert.match(migration, /038_property_default_units/);
+  assert.match(migration, /not exists \([\s\S]*not \(pu\.metadata @> '\{"defaultUnit": true\}'::jsonb\)/);
+  assert.match(migration, /update seller_listings sl[\s\S]*unit_id = m\.unit_id/);
+
+  assert.match(loader, /left join \([\s\S]*from leads[\s\S]*group by workspace_id, project_id[\s\S]*\) l/);
+  assert.match(loader, /left join \([\s\S]*sum\(value_cents\)::bigint as revenue_cents[\s\S]*from deals[\s\S]*\) d/);
+  assert.doesNotMatch(loader, /left join leads l on[\s\S]*left join deals d on[\s\S]*group by p\.id/);
+
+  assert.match(qa, /legacy_multiplied_revenue_cents/);
+  assert.match(qa, /fixed_loader_revenue_cents/);
+  assert.match(qa, /UATTEST_Phase2_Property_KPI/);
 });
 
 test("core CRM and property loaders require explicit workspace scope", () => {

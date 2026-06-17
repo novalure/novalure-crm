@@ -70,6 +70,7 @@ import type {
   WorkspaceUser,
   WorkspaceRole,
 } from "@/lib/crm-types";
+import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
 import {
   createWorkspaceProductContext,
   isWorkspaceModuleEnabled,
@@ -166,6 +167,7 @@ type ManagedWorkspaceOption = {
 type NavigationPresetId =
   | "novalureInternal"
   | "realEstateBroker"
+  | "completeBrokerage"
   | "propertyDeveloper"
   | "managedService"
   | "hybridRealEstate"
@@ -263,6 +265,7 @@ const navigationPresetStorageKey = "novalure-crm-navigation-preset-v1";
 const navigationPresetOrder: NavigationPresetId[] = [
   "novalureInternal",
   "realEstateBroker",
+  "completeBrokerage",
   "propertyDeveloper",
   "sales",
   "salesLead",
@@ -327,6 +330,33 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["leadInbox", "pipeline", "tasks", "meetings", "funnels"],
+  },
+  completeBrokerage: {
+    mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
+    navigationEntries: [
+      "dashboard",
+      "properties",
+      "sellerLeads",
+      "buyerLeads",
+      "projects",
+      "units",
+      "reservations",
+      "pipelines",
+      "tasks",
+      "calendar",
+      "contacts",
+      "communication",
+      "objectsMandates",
+      "funnels",
+      "newsletter",
+      "bots",
+      "knowledge",
+      "analytics",
+      "settings",
+    ],
+    startSection: "dashboard",
+    startEntry: "dashboard",
+    quickActions: ["leadInbox", "units", "pipeline", "tasks", "meetings"],
   },
   propertyDeveloper: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
@@ -626,7 +656,7 @@ function getDefaultNavigationPresetId(context: WorkspaceProductContext): Navigat
   if (context.customerType === "hybrid_real_estate" || context.operatingModel === "hybrid") {
     return "hybridRealEstate";
   }
-  return "realEstateBroker";
+  return "completeBrokerage";
 }
 
 function getAllowedNavigationPresetIds(context: WorkspaceProductContext): NavigationPresetId[] {
@@ -641,17 +671,17 @@ function getAllowedNavigationPresetIds(context: WorkspaceProductContext): Naviga
     return ["sales", "salesLead", "propertyDeveloper", "newUser"];
   }
   if (context.productRole === "broker_agent" || context.productRole === "team_member") {
-    return ["sales", "newUser", "realEstateBroker"];
+    return ["sales", "newUser", "realEstateBroker", "completeBrokerage"];
   }
   if (context.productRole === "customer_owner" || context.productRole === "workspace_admin") {
-    return [getDefaultNavigationPresetId(context), "management", "salesLead", "sales", "marketing", "assistant", "admin", "newUser"];
+    return [getDefaultNavigationPresetId(context), "realEstateBroker", "management", "salesLead", "sales", "marketing", "assistant", "admin", "newUser"];
   }
   if (context.operatingModel === "managed_by_novalure") return ["managedService"];
   if (context.customerType === "property_developer") return ["propertyDeveloper"];
   if (context.customerType === "hybrid_real_estate" || context.operatingModel === "hybrid") {
     return ["hybridRealEstate", "realEstateBroker", "propertyDeveloper"];
   }
-  return ["realEstateBroker"];
+  return ["completeBrokerage", "realEstateBroker"];
 }
 
 const statusStyles: Record<string, string> = {
@@ -1871,6 +1901,10 @@ function WorkspaceContextBar({
 
 type RolePriorityPanelCopy = {
   description: string;
+  metricDetails?: Partial<Record<
+    "hotLeads" | "openTasks" | "noOwner" | "appointments" | "pipeline" | "riskDeals" | "unlinkedTasks",
+    string
+  >>;
   metrics: Record<
     "hotLeads" | "openTasks" | "noOwner" | "appointments" | "pipeline" | "riskDeals" | "unlinkedTasks",
     string
@@ -1912,6 +1946,10 @@ function RolePriorityPanel({
 }) {
   const roleCopy = (copy as typeof copy & { rolePriorities?: RolePriorityPanelCopy }).rolePriorities ?? {
     description: "Role-specific start priorities for daily CRM work.",
+    metricDetails: {
+      hotLeads: "All visible leads, no time filter.",
+      pipeline: "Weighted value of open deals.",
+    },
     metrics: {
       appointments: "Appointments",
       hotLeads: "Hot leads",
@@ -1966,7 +2004,7 @@ function RolePriorityPanel({
                     ? ["noOwner", "unlinkedTasks", "openTasks", "riskDeals"]
                     : presetId === "newUser"
                       ? ["hotLeads", "openTasks", "appointments", "pipeline"]
-                      : presetId === "sales" || presetId === "realEstateBroker"
+                    : presetId === "sales" || presetId === "realEstateBroker" || presetId === "completeBrokerage"
                         ? ["hotLeads", "openTasks", "appointments", "pipeline"]
                         : presetId === "propertyDeveloper"
                           ? ["hotLeads", "appointments", "pipeline", "riskDeals"]
@@ -1995,6 +2033,9 @@ function RolePriorityPanel({
             <div className="rounded-md border border-emerald-200 bg-white p-3" key={key}>
               <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{roleCopy.metrics[key]}</p>
               <p className="mt-2 text-xl font-semibold text-slate-950">{metricValues[key]}</p>
+              {roleCopy.metricDetails?.[key] ? (
+                <p className="mt-1 break-words text-xs leading-4 text-stone-500">{roleCopy.metricDetails[key]}</p>
+              ) : null}
             </div>
           ))}
         </div>
@@ -2796,6 +2837,8 @@ export function CrmWorkspace({
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
+  const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
 
   const canUseWorkspaceSwitch =
     hasProductCapability(sessionProductRole, "managed-service:operate") &&
@@ -2914,6 +2957,8 @@ export function CrmWorkspace({
     const nextActiveWorkspace = nextWorkspace ?? { ...activeWorkspace, id: workspaceId };
     setWorkspaceSwitchState("loading");
     setActiveProjectId("all");
+    setUnitBoardFocusScope(null);
+    setPropertyFocusAssetId(undefined);
     setActiveWorkspace(nextActiveWorkspace);
     setWorkspaceSetup({
       activeCalendarProvider: nextActiveWorkspace.activeCalendarProvider ?? "none",
@@ -3478,9 +3523,51 @@ export function CrmWorkspace({
     window.history.replaceState(null, "", nextUrl);
   }
 
-  function handleNavigationChange(entryId: NavigationEntryId) {
+  function handleNavigationChange(
+    entryId: NavigationEntryId,
+    options?: { preservePropertyFocus?: boolean; preserveUnitScope?: boolean },
+  ) {
+    if (entryId === "units" && !options?.preserveUnitScope) {
+      setUnitBoardFocusScope(null);
+    }
+    if (entryId === "properties" && !options?.preservePropertyFocus) {
+      setPropertyFocusAssetId(undefined);
+    }
     const entry = navigationEntries[entryId];
     handleSectionChange(entry.section, entryId);
+  }
+
+  function handleOpenUnitsFromProperty(scope?: PropertyUnitBoardScope) {
+    setUnitBoardFocusScope(scope ?? null);
+    handleNavigationChange("units", { preserveUnitScope: true });
+  }
+
+  function handleOpenPropertyFromUnit(scope: PropertyUnitObjectScope) {
+    const listing =
+      scope.unitId
+        ? sellerListingRecords.find((item) => item.unitId === scope.unitId)
+        : undefined;
+    const projectListing =
+      !listing && scope.projectId
+        ? sellerListingRecords.find((item) => item.projectId === scope.projectId && !item.unitId)
+        : undefined;
+    const assetId =
+      listing
+        ? `listing:${listing.id}`
+        : projectListing
+          ? `listing:${projectListing.id}`
+          : scope.projectId
+            ? `project:${scope.projectId}`
+            : undefined;
+
+    if (assetId) setPropertyFocusAssetId(assetId);
+    handleNavigationChange("properties", { preservePropertyFocus: true });
+  }
+
+  function handleProjectScopeChange(projectId: string) {
+    setActiveProjectId(projectId);
+    setUnitBoardFocusScope(null);
+    setPropertyFocusAssetId(undefined);
   }
 
   function handlePresetChange(nextPresetId: NavigationPresetId) {
@@ -3637,7 +3724,7 @@ export function CrmWorkspace({
                         ? "border-slate-950 bg-slate-950 text-white"
                         : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
                     }`}
-                    onClick={() => setActiveProjectId("all")}
+                    onClick={() => handleProjectScopeChange("all")}
                     type="button"
                   >
                     <span className="flex min-w-0 items-center justify-between gap-2">
@@ -3670,7 +3757,7 @@ export function CrmWorkspace({
                           : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
                       }`}
                       key={project.name}
-                      onClick={() => setActiveProjectId(project.id)}
+                      onClick={() => handleProjectScopeChange(project.id)}
                       type="button"
                     >
                       <span className="flex min-w-0 items-start justify-between gap-2">
@@ -3931,11 +4018,13 @@ export function CrmWorkspace({
                 buyerSearchProfiles={buyerSearchProfiles.filter((profile) => !activeProject || profile.projectId === activeProject.id)}
                 contacts={visibleContacts}
                 context={workspaceContext}
+                initialSelectedAssetId={propertyFocusAssetId}
                 language={language}
                 leads={visibleLeads}
                 onOpenLeadInbox={() => handleSectionChange("leadInbox")}
                 onOpenReservations={() => handleNavigationChange("reservations")}
-                onOpenUnits={() => handleNavigationChange("units")}
+                onOpenUnits={handleOpenUnitsFromProperty}
+                onClearPropertyFocus={() => setPropertyFocusAssetId(undefined)}
                 onPropertyChanged={async () => {
                   await refreshCoreData();
                 }}
@@ -4197,10 +4286,13 @@ export function CrmWorkspace({
                 buildings={propertyBuildingRecords}
                 contacts={contacts}
                 deals={deals}
+                focusScope={unitBoardFocusScope}
                 initialProjectId={activeProject?.id ?? "all"}
-                key={activeProject?.id ?? "all"}
+                key={`${activeProject?.id ?? "all"}:${unitBoardFocusScope?.key ?? "all"}`}
                 language={language}
                 leads={visibleLeads}
+                onClearFocusScope={() => setUnitBoardFocusScope(null)}
+                onOpenProperty={handleOpenPropertyFromUnit}
                 onReservationChanged={async () => {
                   await refreshCoreData();
                 }}

@@ -1231,6 +1231,10 @@ export const dashboardCopy = {
           label: "Real estate broker",
           description: "Seller leads, buyer leads, mandates, follow-ups and appointments.",
         },
+        completeBrokerage: {
+          label: "Complete brokerage business",
+          description: "Properties, buyer and seller leads, projects, inventory, reservations, pipeline, tasks, meetings and contacts.",
+        },
         propertyDeveloper: {
           label: "Property developer",
           description: "Projects, units, reservations, project pipeline and consultations.",
@@ -1338,13 +1342,17 @@ export const dashboardCopy = {
       description: "Role-specific start priorities for daily CRM work.",
       nextStepsLabel: "Next steps",
       metrics: {
-        hotLeads: "Hot leads",
+        hotLeads: "Hot leads (no time filter)",
         openTasks: "Open tasks",
         noOwner: "Without owner",
         appointments: "Appointments",
-        pipeline: "Weighted forecast",
+        pipeline: "Weighted forecast (open deals)",
         riskDeals: "Risk deals",
         unlinkedTasks: "Without contact/project",
+      },
+      metricDetails: {
+        hotLeads: "All visible leads with score above 80 or hot status.",
+        pipeline: "Open deal value weighted by probability.",
       },
       profiles: {
         default: {
@@ -1361,6 +1369,11 @@ export const dashboardCopy = {
           title: "Broker daily start",
           description: "Seller and buyer leads are ordered by urgency, project context and next action.",
           nextSteps: ["Check Lead Inbox", "Separate seller and buyer intent", "Update follow-up", "Move deal"],
+        },
+        completeBrokerage: {
+          title: "Complete brokerage business",
+          description: "Full broker workspace with properties, buyer and seller leads, projects, inventory, reservations, pipeline, tasks, meetings and contacts.",
+          nextSteps: ["Check seller leads", "Review buyer leads", "Open inventory", "Update pipeline"],
         },
         salesLead: {
           title: "Sales lead cockpit",
@@ -1989,6 +2002,10 @@ export const dashboardCopy = {
           label: "Immobilienmakler",
           description: "Verkäufer-Leads, Käufer-Leads, Mandate, Follow-ups und Termine.",
         },
+        completeBrokerage: {
+          label: "Maklergeschäft komplett",
+          description: "Immobilien, Käufer- und Verkäufer-Leads, Projekte, Einheiten/Bestand, Reservierungen, Pipeline, Aufgaben, Termine und Kontakte.",
+        },
         propertyDeveloper: {
           label: "Bauträger",
           description: "Projekte, Einheiten, Reservierungen, Projektpipeline und Beratungen.",
@@ -2096,13 +2113,17 @@ export const dashboardCopy = {
       description: "Rollenspezifische Startprioritäten für die tägliche CRM-Arbeit.",
       nextStepsLabel: "Nächste Schritte",
       metrics: {
-        hotLeads: "Heiße Leads",
+        hotLeads: "Heiße Leads (ohne Zeitfilter)",
         openTasks: "Offene Aufgaben",
         noOwner: "Ohne Zuständigen",
         appointments: "Termine",
-        pipeline: "Gewichteter Forecast",
+        pipeline: "Gewichteter Forecast (offene Deals)",
         riskDeals: "Risiko-Deals",
         unlinkedTasks: "Ohne Kontakt/Projekt",
+      },
+      metricDetails: {
+        hotLeads: "Alle sichtbaren Leads mit Score über 80 oder Status heiß.",
+        pipeline: "Offene Deal-Werte gewichtet nach Wahrscheinlichkeit.",
       },
       profiles: {
         default: {
@@ -2119,6 +2140,11 @@ export const dashboardCopy = {
           title: "Tagesstart für Makler",
           description: "Verkäufer- und Käufer-Leads sind nach Dringlichkeit, Projektkontext und nächster Aktion sortiert.",
           nextSteps: ["Lead-Zentrale prüfen", "Verkäufer/Käufer trennen", "Follow-up aktualisieren", "Deal verschieben"],
+        },
+        completeBrokerage: {
+          title: "Maklergeschäft komplett",
+          description: "Vollständiger Makler-Workspace mit Immobilien, Käufer- und Verkäufer-Leads, Projekten, Einheiten/Bestand, Reservierungen, Pipeline, Aufgaben, Terminen und Kontakten.",
+          nextSteps: ["Verkäufer-Leads prüfen", "Käufer-Leads ansehen", "Einheiten/Bestand öffnen", "Pipeline aktualisieren"],
         },
         salesLead: {
           title: "Vertriebs-Cockpit",
@@ -2674,10 +2700,15 @@ export const dashboardCopy = {
 
 export const unitBoardCopy = {
   en: {
-    title: "Developer units board",
+    title: "Units / inventory",
+    boardSubLabel: "Sales / inventory",
     description:
       "Operational unit ledger for availability, pricing, buyer links, deal state and reservation deadlines.",
     resetFilters: "Reset filters",
+    focusScopeLabel: "Focused object",
+    focusScopeDescription: (label: string) => `Showing units for ${label}.`,
+    clearFocusScope: "Show all units / inventory",
+    openProperty: "Open object",
     totalUnits: "Units",
     availableUnits: "Available",
     reservedUnits: "Reserved",
@@ -2810,10 +2841,15 @@ export const unitBoardCopy = {
     },
   },
   de: {
-    title: "Bauträger-Einheitenboard",
+    title: "Einheiten/Bestand",
+    boardSubLabel: "Vertrieb/Bestand",
     description:
       "Operatives Einheitenbuch für Verfügbarkeit, Preise, Käuferlinks, Deal-Status und Reservierungsfristen.",
     resetFilters: "Filter zurücksetzen",
+    focusScopeLabel: "Fokusobjekt",
+    focusScopeDescription: (label: string) => `Einheiten für ${label}.`,
+    clearFocusScope: "Alle Einheiten / Bestand anzeigen",
+    openProperty: "Objekt öffnen",
     totalUnits: "Einheiten",
     availableUnits: "Frei",
     reservedUnits: "Reserviert",
@@ -4650,7 +4686,7 @@ export const dashboardOverviewCopy = {
       investor: "Investor acquisition",
     },
     widgets: {
-      activeLeads: { title: "Active leads total", description: "Buyers, sellers and investors" },
+      activeLeads: { title: "Active leads in dashboard filter", description: "Default view uses the current month" },
       pipelineValue: { title: "Expected commission", description: "3% of weighted open-deal forecast" },
       monthlyClosings: { title: "Monthly closings", description: "Commission vs. target" },
       overdueFollowupsKpi: { title: "Overdue follow-ups", description: "SLA and next contact" },
@@ -4711,16 +4747,16 @@ export const dashboardOverviewCopy = {
       newView: "New view",
     },
     kpis: {
-      activeLeads: "Active leads",
+      activeLeads: "Active leads (dashboard filter)",
       pipelineValue: "Expected commission",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast}`,
+        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast} | commission rate 3%`,
       monthlyClosings: "Monthly closings",
       target: "Target",
       overdueFollowups: "Overdue follow-ups",
       noCriticalFollowups: "No critical follow-ups",
       hotLeads: "Hot leads",
-      hotLeadRule: "Lead score > 80 or hot status",
+      hotLeadRule: "Lead score > 80 or hot status in the current dashboard filter",
       conversionRate: "Conversion rate",
       conversionDetail: (leads: number, viewings: number, closings: number) =>
         `Inquiry ${leads} -> viewing ${viewings} -> closing ${closings}`,
@@ -4784,7 +4820,7 @@ export const dashboardOverviewCopy = {
       investor: "Investor-Akquise",
     },
     widgets: {
-      activeLeads: { title: "Aktive Leads gesamt", description: "Käufer, Verkäufer und Investoren" },
+      activeLeads: { title: "Aktive Leads im Dashboard-Filter", description: "Standardansicht nutzt den aktuellen Monat" },
       pipelineValue: { title: "Erwartete Provision", description: "3% des gewichteten Forecasts offener Deals" },
       monthlyClosings: { title: "Abschlüsse Monat", description: "Provision vs. Zielwert" },
       overdueFollowupsKpi: { title: "Überfällige Follow-ups", description: "SLA und nächster Kontakt" },
@@ -4845,16 +4881,16 @@ export const dashboardOverviewCopy = {
       newView: "Neue Ansicht",
     },
     kpis: {
-      activeLeads: "Aktive Leads",
+      activeLeads: "Aktive Leads (Dashboard-Filter)",
       pipelineValue: "Erwartete Provision",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast}`,
+        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast} | Provisionssatz 3%`,
       monthlyClosings: "Abschlüsse Monat",
       target: "Ziel",
       overdueFollowups: "Überfällige Follow-ups",
       noCriticalFollowups: "Keine kritischen Follow-ups",
       hotLeads: "Heiße Leads",
-      hotLeadRule: "Lead-Score > 80 oder Status heiß",
+      hotLeadRule: "Lead-Score > 80 oder Status heiß im aktuellen Dashboard-Filter",
       conversionRate: "Conversion-Rate",
       conversionDetail: (leads: number, viewings: number, closings: number) =>
         `Anfrage ${leads} -> Besichtigung ${viewings} -> Abschluss ${closings}`,

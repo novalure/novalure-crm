@@ -76,6 +76,7 @@ type SellerListingRow = {
 
 type IdRow = { id: string };
 type ListingProjectRow = { projectId: string | null };
+type CountRow = { count: number | string };
 
 const allowedRegions = new Set([
   "Wien",
@@ -413,7 +414,8 @@ export async function createSellerListingRecord(input: {
 
   if (!row) return { persisted: false, reason: "Property could not be saved" };
 
-  const listing = toSellerListing(row);
+  const listingRow = await ensureDefaultUnitForListing(row, input.session);
+  const listing = toSellerListing(listingRow);
   await savePropertyFragments({
     property: input.property,
     projectId: listing.projectId,
@@ -578,7 +580,8 @@ export async function updateSellerListingRecord(input: {
 
   if (!row) return { persisted: false, reason: "Property not found" };
 
-  const listing = toSellerListing(row);
+  const listingRow = await ensureDefaultUnitForListing(row, input.session);
+  const listing = toSellerListing(listingRow);
   await savePropertyFragments({
     property: input.property,
     projectId: listing.projectId,
@@ -1409,6 +1412,133 @@ async function writePropertyActivityEvent(input: {
       JSON.stringify({ source: "property_department" }),
     ],
   );
+}
+
+function listingDefaultUnitNumber(listingId: string) {
+  return `DEFAULT-${listingId.replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+}
+
+function listingDefaultUnitPriceCents(row: SellerListingRow) {
+  for (const value of [row.targetPriceCents, row.marketValueCents, row.publicPriceCents, row.rentPriceCents]) {
+    const parsed = Number(value ?? 0);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.round(parsed);
+  }
+  return 0;
+}
+
+async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSession): Promise<SellerListingRow> {
+  if (!row.projectId || !isUuid(row.projectId) || !isUuid(session.workspaceId)) return row;
+
+  const unitMetadata = {
+    defaultUnit: true,
+    hidden: true,
+    sellerListingId: row.id,
+    source: "seller_listing",
+    updatedByUserId: session.userId,
+  };
+  const unitPayload: unknown[] = [
+    session.workspaceId,
+    row.projectId,
+    row.unitId,
+    listingDefaultUnitNumber(row.id),
+    toNumber(row.rooms, 0),
+    toNumber(row.areaSqm, 0),
+    listingDefaultUnitPriceCents(row),
+    JSON.stringify(unitMetadata),
+  ];
+
+  if (row.unitId) {
+    await queryOne<IdRow>(
+      `
+        update property_units
+        set
+          unit_number = coalesce(nullif($4, ''), unit_number),
+          rooms = $5,
+          area_sqm = $6,
+          price_cents = $7,
+          metadata = metadata || $8::jsonb,
+          updated_at = now()
+        where workspace_id = $1
+          and project_id = $2::uuid
+          and id = $3::uuid
+          and metadata @> '{"defaultUnit": true}'::jsonb
+        returning id
+      `,
+      unitPayload,
+    );
+    return row;
+  }
+
+  const explicitUnitCount = await queryOne<CountRow>(
+    `
+      select count(*)::int as count
+      from property_units
+      where workspace_id = $1
+        and project_id = $2::uuid
+        and not (metadata @> '{"defaultUnit": true}'::jsonb)
+    `,
+    [session.workspaceId, row.projectId],
+  );
+  if (Number(explicitUnitCount?.count ?? 0) > 0) return row;
+
+  const unit = await queryOne<IdRow>(
+    `
+      insert into property_units (
+        workspace_id,
+        project_id,
+        unit_number,
+        floor,
+        rooms,
+        area_sqm,
+        price_cents,
+        status,
+        metadata
+      )
+      values ($1, $2::uuid, $4, 0, $5, $6, $7, 'available', $8::jsonb)
+      on conflict (project_id, unit_number)
+      do update set
+        rooms = excluded.rooms,
+        area_sqm = excluded.area_sqm,
+        price_cents = excluded.price_cents,
+        metadata = property_units.metadata || excluded.metadata,
+        updated_at = now()
+      returning id
+    `,
+    unitPayload,
+  );
+  if (!unit?.id) return row;
+
+  const refreshed = await queryOne<SellerListingRow>(
+    `
+      update seller_listings
+      set
+        unit_id = $3::uuid,
+        canonical_payload = canonical_payload || jsonb_build_object(
+          'defaultUnitId',
+          $3::text,
+          'defaultUnitSource',
+          'seller_listing'
+        ),
+        updated_at = now()
+      where workspace_id = $1
+        and id = $2::uuid
+        and unit_id is null
+      returning ${sellerListingReturningSql}
+    `,
+    [session.workspaceId, row.id, unit.id],
+  );
+
+  await writePropertyActivityEvent({
+    detail: "Automatische Default-Unit fuer Listing-only-Objekt erstellt",
+    eventType: "property.default_unit.created",
+    projectId: row.projectId,
+    propertyId: row.id,
+    session,
+    title: "Default-Unit erstellt",
+    unitId: unit.id,
+  });
+
+  return refreshed ?? { ...row, unitId: unit.id };
 }
 
 function toSellerListing(row: SellerListingRow): SellerListing {

@@ -272,10 +272,16 @@ test("system language persists to document html lang", () => {
 test("phase 4 dashboard UX fixes stay explicit and localized", () => {
   assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Private Lead Workspace for Real Estate Teams"/);
   assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Privater Lead-Workspace für Immobilien-Teams"/);
-  assert.match(i18nSource, /pipeline:\s*"Weighted forecast"/);
-  assert.match(i18nSource, /pipeline:\s*"Gewichteter Forecast"/);
+  assert.match(i18nSource, /pipeline:\s*"Weighted forecast \(open deals\)"/);
+  assert.match(i18nSource, /pipeline:\s*"Gewichteter Forecast \(offene Deals\)"/);
+  assert.match(i18nSource, /hotLeads:\s*"Hot leads \(no time filter\)"/);
+  assert.match(i18nSource, /hotLeads:\s*"Heiße Leads \(ohne Zeitfilter\)"/);
+  assert.match(i18nSource, /activeLeads:\s*"Active leads \(dashboard filter\)"/);
+  assert.match(i18nSource, /activeLeads:\s*"Aktive Leads \(Dashboard-Filter\)"/);
   assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Expected commission"/);
   assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Erwartete Provision"/);
+  assert.match(i18nSource, /commission rate 3%/);
+  assert.match(i18nSource, /Provisionssatz 3%/);
   assert.match(i18nSource, /noSourceData:\s*"No lead source data in this view\."/);
   assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
   assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(openDeals\.length, formatEuro\(openPipelineValue, locale\), formatEuro\(weightedPipelineValue, locale\)\)/);

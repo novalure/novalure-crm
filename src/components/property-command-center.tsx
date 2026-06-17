@@ -36,8 +36,10 @@ import {
   routePropertyInquiry,
   runPropertyChannelPreflight,
   type PropertyActionState,
+  type PropertyAssetSummary,
   type PropertyAssetStatus,
   type PropertyDepartmentTabId,
+  type PropertyUnitBoardScope,
 } from "@/lib/property-department";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
 import { formatCurrency, formatNumber, getLocale, type LanguageCode } from "@/lib/i18n";
@@ -50,9 +52,11 @@ type PropertyCommandCenterProps = {
   context: WorkspaceProductContext;
   language: LanguageCode;
   leads: Lead[];
+  initialSelectedAssetId?: string;
   onOpenLeadInbox: () => void;
   onOpenReservations: () => void;
-  onOpenUnits: () => void;
+  onOpenUnits: (scope?: PropertyUnitBoardScope) => void;
+  onClearPropertyFocus?: () => void;
   onPropertyChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
@@ -281,17 +285,32 @@ function listingIdFromAssetId(assetId: string | undefined) {
   return assetId?.startsWith("listing:") ? assetId.slice("listing:".length) : undefined;
 }
 
+function createUnitBoardScope(asset: PropertyAssetSummary | undefined): PropertyUnitBoardScope | undefined {
+  if (!asset || (!asset.projectId && asset.unitIds.length === 0)) return undefined;
+
+  const unitKey = asset.unitIds.length ? asset.unitIds.join("|") : asset.projectId ?? asset.id;
+  return {
+    key: `${asset.id}:${unitKey}`,
+    label: asset.title,
+    originAssetId: asset.id,
+    projectId: asset.projectId,
+    unitIds: asset.unitIds.length ? asset.unitIds : undefined,
+  };
+}
+
 export function PropertyCommandCenter({
   brokerMandates,
   buyerSearchProfiles,
   buildings,
   contacts,
   context,
+  initialSelectedAssetId,
   language,
   leads,
   onOpenLeadInbox,
   onOpenReservations,
   onOpenUnits,
+  onClearPropertyFocus,
   onPropertyChanged,
   projectLabel,
   projects,
@@ -377,7 +396,11 @@ export function PropertyCommandCenter({
       [asset.title, asset.location, asset.objectType, asset.projectName].some((value) => value.toLowerCase().includes(needle));
     return matchesStatus && matchesQuery;
   });
-  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? filteredAssets[0] ?? assets[0];
+  const focusedAssetId = initialSelectedAssetId && assets.some((asset) => asset.id === initialSelectedAssetId)
+    ? initialSelectedAssetId
+    : undefined;
+  const selectedAsset = assets.find((asset) => asset.id === (focusedAssetId ?? selectedAssetId)) ?? filteredAssets[0] ?? assets[0];
+  const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
   const selectedCostItems = selectedListingId ? propertyCostItems.filter((item) => item.propertyId === selectedListingId) : [];
   const selectedDocuments = selectedListingId ? propertyDocuments.filter((document) => document.propertyId === selectedListingId) : [];
@@ -610,7 +633,7 @@ export function PropertyCommandCenter({
           <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:w-[520px]">
             <ActionButton action={actions.createProperty} onClick={() => setActiveTab("create")} />
             <ActionButton action={actions.assignInquiry} onClick={() => setActiveTab("inquiries")} />
-            <ActionButton action={actions.reserveUnit} onClick={onOpenUnits} />
+            <ActionButton action={actions.reserveUnit} onClick={() => onOpenUnits()} />
             <ActionButton action={actions.exportChannel} onClick={() => setActiveTab("channels")} />
           </div>
         </div>
@@ -635,7 +658,14 @@ export function PropertyCommandCenter({
               onClick={() => setActiveTab(tab.id)}
               type="button"
             >
-              {tab.label}
+              <span className="flex flex-col leading-tight">
+                <span>{tab.label}</span>
+                {tab.subLabel ? (
+                  <span className={`text-[11px] font-semibold ${activeTab === tab.id ? "text-white/75" : "text-stone-500"}`}>
+                    {tab.subLabel}
+                  </span>
+                ) : null}
+              </span>
             </button>
           ))}
         </div>
@@ -679,7 +709,10 @@ export function PropertyCommandCenter({
                     <tr
                       className="cursor-pointer border-t border-stone-200 align-top hover:bg-stone-50"
                       key={asset.id}
-                      onClick={() => setSelectedAssetId(asset.id)}
+                      onClick={() => {
+                        onClearPropertyFocus?.();
+                        setSelectedAssetId(asset.id);
+                      }}
                     >
                       <td className="py-3 pr-4">
                         <p className="break-words font-semibold text-slate-950">{asset.title}</p>
@@ -725,6 +758,16 @@ export function PropertyCommandCenter({
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2">
+                  <button
+                    className="min-h-11 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!selectedUnitBoardScope}
+                    onClick={() => {
+                      if (selectedUnitBoardScope) onOpenUnits(selectedUnitBoardScope);
+                    }}
+                    type="button"
+                  >
+                    Einheiten/Bestand öffnen
+                  </button>
                   <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
                   <ActionButton action={actions.changePrice} />
                   <ActionButton action={actions.approveDocument} onClick={() => setActiveTab("documents")} />
@@ -1028,8 +1071,11 @@ export function PropertyCommandCenter({
       {activeTab === "projectUnits" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">Projekt / Gebäude / Einheiten</h4>
-            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenUnits} type="button">Einheitenboard öffnen</button>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Struktur</p>
+              <h4 className="mt-1 text-lg font-semibold text-slate-950">Projekt/Gebäude/Einheiten</h4>
+            </div>
+            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={() => onOpenUnits()} type="button">Einheiten/Bestand öffnen</button>
           </div>
           <div className="mt-4 grid gap-3">
             {projects.map((project) => {
@@ -1048,6 +1094,19 @@ export function PropertyCommandCenter({
                       <span className="rounded-md bg-white px-2 py-1">{projectUnits.filter((unit) => unit.status === "available").length} frei</span>
                     </div>
                   </div>
+                  <button
+                    className="mt-3 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                    onClick={() => onOpenUnits({
+                      key: `project:${project.id}:${projectUnits.map((unit) => unit.id).join("|") || "empty"}`,
+                      label: project.name,
+                      originAssetId: `project:${project.id}`,
+                      projectId: project.id,
+                      unitIds: projectUnits.length ? projectUnits.map((unit) => unit.id) : undefined,
+                    })}
+                    type="button"
+                  >
+                    Projekt in Einheiten/Bestand öffnen
+                  </button>
                 </div>
               );
             })}

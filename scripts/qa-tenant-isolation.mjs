@@ -110,6 +110,7 @@ function runStaticChecks() {
   const existingNavigationProfiles = [
     "novalureInternal",
     "realEstateBroker",
+    "completeBrokerage",
     "propertyDeveloper",
     "sales",
     "salesLead",
@@ -135,7 +136,7 @@ function runStaticChecks() {
 
   addMatrix({
     check: "existing navigation order",
-    expected: "new profiles are appended after the existing twelve profile IDs",
+    expected: "completeBrokerage follows realEstateBroker; Novalure internal profiles stay appended",
     actual: navigationOrder.length ? navigationOrder.join(", ") : "not confirmed",
     ok:
       sameArray(navigationOrder.slice(0, existingNavigationProfiles.length), existingNavigationProfiles) &&
