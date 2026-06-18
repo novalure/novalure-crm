@@ -6,6 +6,7 @@ import { analyzeSpeedToLead } from "@/lib/crm-analysis";
 import {
   formatDateTime,
   formatNumber,
+  getCrmSystemTextLabel,
   getCrmTaskDueLabel,
   getMobileDailyWorkCopy,
   type LanguageCode,
@@ -151,12 +152,12 @@ export function MobileDailyWork({
           contact,
           lead,
           ownerName: owner?.name ?? text.labels.noOwner,
-          projectName: getProjectName(projects, lead.projectId, lead.intent),
+          projectName: getProjectName(projects, lead.projectId, getCrmSystemTextLabel(lead.intent, language)),
         };
       })
       .sort((left, right) => right.lead.score - left.lead.score)
       .slice(0, 3);
-  }, [contacts, leads, projects, text.labels.noOwner, users]);
+  }, [contacts, language, leads, projects, text.labels.noOwner, users]);
 
   const overdueLeadItems = useMemo<MobileLeadItem[]>(() => {
     if (nowMs === null) return [];
@@ -176,13 +177,13 @@ export function MobileDailyWork({
           contact,
           lead,
           ownerName: alert.ownerName || text.labels.noOwner,
-          projectName: getProjectName(projects, lead.projectId, lead.intent),
+          projectName: getProjectName(projects, lead.projectId, getCrmSystemTextLabel(lead.intent, language)),
         });
 
         return items;
       }, [])
       .slice(0, 3);
-  }, [contacts, leads, nowMs, projects, text.labels.noOwner, users]);
+  }, [contacts, language, leads, nowMs, projects, text.labels.noOwner, users]);
 
   const todayEventItems = useMemo<MobileEventItem[]>(() => {
     return events
@@ -390,7 +391,7 @@ export function MobileDailyWork({
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-slate-950">{name}</p>
                       <p className="mt-1 break-words text-xs text-stone-600">
-                        {projectName} · {lead.intent}
+                        {projectName} · {getCrmSystemTextLabel(lead.intent, language)}
                       </p>
                     </div>
                     <span className="shrink-0 rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-800">
@@ -483,7 +484,7 @@ export function MobileDailyWork({
         <div className="mt-3 space-y-3">
           {openTaskItems.length > 0 ? (
             openTaskItems.map(({ contact, lead, projectName, task }) => {
-              const name = contact?.name ?? lead?.intent ?? task.title;
+              const name = contact?.name ?? (lead ? getCrmSystemTextLabel(lead.intent, language) : task.title);
               const route = contactRoute(contact);
 
               return (

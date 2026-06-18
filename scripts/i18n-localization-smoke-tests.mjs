@@ -144,16 +144,31 @@ const leadInboxSource = readProjectFile("src/components/lead-inbox.tsx");
 const botSource = readProjectFile("src/components/bot-command-center.tsx");
 const calendarCommandCenterSource = readProjectFile("src/components/calendar-command-center.tsx");
 const contactCommandCenterSource = readProjectFile("src/components/contact-command-center.tsx");
+const dailyQueueBoardSource = readProjectFile("src/components/daily-queue-board.tsx");
 const dashboardSource = readProjectFile("src/components/dashboard-overview.tsx");
 const dealPipelineSource = readProjectFile("src/components/deal-pipeline-workspace.tsx");
 const formCommandCenterSource = readProjectFile("src/components/form-command-center.tsx");
 const funnelCommandCenterSource = readProjectFile("src/components/funnel-command-center.tsx");
+const leadSequenceCommandCenterSource = readProjectFile("src/components/lead-sequence-command-center.tsx");
+const mobileDailyWorkSource = readProjectFile("src/components/mobile-daily-work.tsx");
+const propertyCommandCenterSource = readProjectFile("src/components/property-command-center.tsx");
+const taskCommandCenterSource = readProjectFile("src/components/task-command-center.tsx");
+const unitBoardSource = readProjectFile("src/components/unit-board.tsx");
 const workspaceSource = readProjectFile("src/components/crm-workspace.tsx");
+const reservationBoardSource = readProjectFile("src/components/reservation-board.tsx");
 const layoutSource = readProjectFile("src/app/layout.tsx");
 const globalsSource = readProjectFile("src/app/globals.css");
 const htmlSyncSource = readProjectFile("src/components/language-html-sync.tsx");
 const languageRuntimeSource = readProjectFile("src/lib/language-runtime.ts");
 const proxySource = readProjectFile("src/proxy.ts");
+const bookingPageSource = readProjectFile("src/app/book/[slug]/page.tsx");
+const chatRuntimeSource = readProjectFile("src/lib/bots/chat-runtime.ts");
+const crmLoadersSource = readProjectFile("src/lib/db/crm-loaders.ts");
+const modelProviderSource = readProjectFile("src/lib/integrations/model-provider.ts");
+const pipelineDefaultsSource = readProjectFile("src/lib/db/pipeline-default-repositories.ts");
+const propertyDepartmentSource = readProjectFile("src/lib/property-department.ts");
+const propertyDepartmentRepositoriesSource = readProjectFile("src/lib/db/property-department-repositories.ts");
+const recommendationRuntimeSource = readProjectFile("src/lib/db/recommendation-runtime-repositories.ts");
 
 test("localized i18n exports keep matching de/en key structure", () => {
   for (const localizedExport of localizedExports(i18nSource)) {
@@ -241,7 +256,7 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(dealPipelineSource, /stageLabel\(stage\)/);
   assert.match(dealPipelineSource, /text\.nextStageHint\(stageLabel\(nextStage\)\)/);
   assert.match(dealPipelineSource, /leadTypeLabel\(item\.leadType\)/);
-  assert.match(dealPipelineSource, /enumLabel\(item\.deal\.nextAction\)/);
+  assert.match(dealPipelineSource, /getCrmSystemTextLabel\(item\.deal\.nextAction, language\)/);
   assert.match(formCommandCenterSource, /copy\.builder\.statusOptions\[form\.status\]/);
   assert.match(formCommandCenterSource, /copy\.fieldTypes\[field\.type\]/);
   assert.match(funnelCommandCenterSource, /text\.messages\.statusTriggerStages/);
@@ -250,6 +265,45 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(workspaceSource, /getCrmEnumLabel\(dataSource, language\)/);
   assert.match(workspaceSource, /getCrmLeadTypeKey\(lead\.type\)/);
   assert.match(workspaceSource, /getCrmSourceLabel\(source, language\)/);
+});
+
+test("system generated CRM default texts localize at display boundaries only", () => {
+  assert.match(i18nSource, /const crmSystemTextLabels: Record<string, Record<LanguageCode, string>>/);
+  assert.match(i18nSource, /export function getCrmSystemTextLabel/);
+  assert.match(i18nSource, /"Verkaufsabsicht in 3 Monaten":\s*\{\s*en:\s*"Selling intent within 3 months"/);
+  assert.match(i18nSource, /"Rückruf heute":\s*\{\s*en:\s*"Callback today"/);
+  assert.match(i18nSource, /"Termin vorschlagen":\s*\{\s*en:\s*"Suggest appointment"/);
+  assert.match(i18nSource, /return crmSystemTextLabels\[trimmedValue\]\?\.\[language\] \?\? value/);
+
+  assert.match(leadInboxSource, /leadIntentLabel = getCrmSystemTextLabel\(lead\.intent, language\)/);
+  assert.match(leadInboxSource, /leadNextActionLabel = getCrmSystemTextLabel\(lead\.nextAction, language\)/);
+  assert.match(leadInboxSource, /item\.leadIntentLabel/);
+  assert.match(leadInboxSource, /item\.leadNextActionLabel/);
+  assert.match(leadInboxSource, /value=\{activeFieldDraft\.nextAction\}/);
+  assert.match(leadInboxSource, /taskTitle:\s*item\.lead\.nextAction \|\| item\.lead\.intent/);
+
+  for (const [name, source, patterns] of [
+    ["daily queue", dailyQueueBoardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
+    ["dashboard", dashboardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
+    ["workspace", workspaceSource, [/getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
+    ["funnel", funnelCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
+    ["contact", contactCommandCenterSource, [/getCrmSystemTextLabel\(selectedLead\.nextAction, language\)/]],
+    ["property", propertyCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction \|\| lead\.intent, language\)/]],
+    ["mobile daily", mobileDailyWorkSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/]],
+    ["task center", taskCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/]],
+    ["calendar", calendarCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/]],
+    ["lead sequence", leadSequenceCommandCenterSource, [/getCrmSystemTextLabel\(selectedLead\.nextAction, language\)/]],
+    ["unit board", unitBoardSource, [/getCrmSystemTextLabel\(match\.lead\.intent, language\)/]],
+    ["deal pipeline", dealPipelineSource, [/getCrmSystemTextLabel\(item\.deal\.nextAction, language\)/]],
+  ]) {
+    for (const pattern of patterns) {
+      assert.match(source, pattern, `${name} should localize known system CRM text at display time`);
+    }
+  }
+
+  assert.match(i18nSource, /microsoft:\s*"Create Teams link automatically"/);
+  assert.match(i18nSource, /google:\s*"Create Google Meet link automatically"/);
+  assert.match(i18nSource, /microsoft:\s*"Automatisch Teams-Link erstellen"/);
 });
 
 test("system language persists to document html lang", () => {
@@ -269,18 +323,112 @@ test("system language persists to document html lang", () => {
   assert.match(workspaceSource, /document\.documentElement\.lang = language/);
 });
 
-test("phase 4 dashboard UX fixes stay explicit and localized", () => {
+test("phase 2 dashboard KPI labels stay explicit and localized", () => {
   assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Private Lead Workspace for Real Estate Teams"/);
   assert.match(i18nSource, /browserTitle:\s*"Novalure CRM \| Privater Lead-Workspace für Immobilien-Teams"/);
-  assert.match(i18nSource, /pipeline:\s*"Weighted forecast"/);
-  assert.match(i18nSource, /pipeline:\s*"Gewichteter Forecast"/);
-  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Expected commission"/);
-  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Erwartete Provision"/);
+  assert.match(i18nSource, /pipeline:\s*"Weighted forecast - open deals"/);
+  assert.match(i18nSource, /pipeline:\s*"Gewichteter Forecast - offene Deals"/);
+  assert.match(i18nSource, /hotLeads:\s*"Hot leads \(all\)"/);
+  assert.match(i18nSource, /hotLeads:\s*"Heiße Leads gesamt"/);
+  assert.match(i18nSource, /activeLeads:\s*"Active leads \(this month\)"/);
+  assert.match(i18nSource, /activeLeads:\s*"Aktive Leads \(dieser Monat\)"/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Expected commission \(3%\)"/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Erwartete Provision \(3%\)"/);
+  assert.match(i18nSource, /commission 3%/);
+  assert.match(i18nSource, /Provision 3%/);
+  assert.doesNotMatch(i18nSource, /Hot leads \(no time filter\)|Heiße Leads \(ohne Zeitfilter\)|Active leads \(dashboard filter\)|Aktive Leads \(Dashboard-Filter\)|Weighted forecast \(open deals\)|Gewichteter Forecast \(offene Deals\)|commission rate 3%|Provisionssatz 3%/);
+  assert.match(workspaceSource, /hotLeads:\s*"Hot leads \(all\)"/);
+  assert.match(workspaceSource, /pipeline:\s*"Weighted forecast - open deals"/);
+  assert.doesNotMatch(workspaceSource, /All visible leads, no time filter\.|Weighted value of open deals\./);
   assert.match(i18nSource, /noSourceData:\s*"No lead source data in this view\."/);
   assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
   assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(openDeals\.length, formatEuro\(openPipelineValue, locale\), formatEuro\(weightedPipelineValue, locale\)\)/);
   assert.match(dashboardSource, /copy\.charts\.noSourceData/);
   assert.match(workspaceSource, /document\.title = copy\.shell\.browserTitle/);
+});
+
+test("phase 2 German copy uses correct umlauts and formal login wording", () => {
+  assert.match(i18nSource, /passcodeHelp:\s*"Verwenden Sie den Zugangscode Ihres freigegebenen Workspace\."/);
+  assert.match(i18nSource, /passwordHelp:\s*"Verwenden Sie mindestens 15 Zeichen\."/);
+  assert.match(i18nSource, /loginSuccess:\s*"Ihr Passwort wurde aktualisiert\. Melden Sie sich mit dem neuen Passwort an\."/);
+  assert.match(i18nSource, /rate_limited:\s*"Zu viele Reset-Anfragen\. Bitte warten Sie einige Minuten und versuchen Sie es erneut\."/);
+  assert.match(i18nSource, /meetingOutbox:\s*"Terminvorschläge"/);
+  assert.match(i18nSource, /noMeetingActions:\s*"Keine wartenden Terminvorschläge\."/);
+  assert.match(dailyQueueBoardSource, /Fällige Rückrufe/);
+  assert.match(dailyQueueBoardSource, /heißen Leads, fälligen Rückrufen/);
+  assert.match(dailyQueueBoardSource, /Überfällige Aufgaben/);
+  assert.match(crmLoadersSource, /Keine heißen Leads - Lead-Zentrale prüfen\./);
+  assert.match(crmLoadersSource, /Keine überfälligen Angebote\./);
+  assert.match(chatRuntimeSource, /Terminvorschläge nach Regeln vorbereitet/);
+  assert.match(bookingPageSource, /vollständigen Buchungslink/);
+  assert.match(modelProviderSource, /Für Details oder unklare Punkte bereite ich die Übergabe an das Team vor\./);
+  assert.match(pipelineDefaultsSource, /Verkäufer-Pipeline/);
+  assert.match(propertyDepartmentSource, /Kostenübersicht/);
+  assert.match(propertyDepartmentSource, /Rücklage/);
+  assert.match(propertyDepartmentSource, /Vergebührung/);
+  assert.match(propertyDepartmentRepositoriesSource, /Default-Unit für Listing-only-Objekt/);
+  assert.match(recommendationRuntimeSource, /Baukörper A/);
+  assert.match(recommendationRuntimeSource, /Optionsfrist prüfen/);
+  assert.match(recommendationRuntimeSource, /regelmäßig wiederholen/);
+  assert.match(recommendationRuntimeSource, /Score-Lücken prüfen/);
+  assert.match(reservationBoardSource, /Läuft bald ab/);
+  assert.match(reservationBoardSource, /Heute fällig/);
+
+  const forbiddenVisibleAscii = [
+    "Terminvorschlaege",
+    "vollstaendigen Buchungslink",
+    "Verwende mindestens 15 Zeichen",
+    "Bitte warte einige Minuten",
+    "deines freigegebenen Workspace",
+    "dein neues Passwort",
+    "deinen Novalure CRM-Zugang",
+    "heisse",
+    "heissen",
+    "faellige",
+    "ueberfaellige",
+    "Ueberfaellige",
+    "Prioritaet",
+    "Baukoerper",
+    "Kostenuebersicht",
+    "Ruecklage",
+    "Vergebuehrung",
+    "Vermarktung pruefen",
+    "Verkaeufer-Pipeline",
+    "Default-Unit fuer",
+    "Frist ueberzogen",
+    "Laeuft bald ab",
+    "Heute faellig",
+    "regelmaessig",
+    "Regelmaessige",
+    "Faelle",
+    "Uebergabe",
+    "Gespraech",
+    "ergaenzen",
+    "ergaenzt",
+    "befuellen",
+    "Ausfuehrung",
+    "Sequenzlaeufe",
+    "Score-Luecken",
+  ];
+  const checkedSources = [
+    ["booking page", bookingPageSource],
+    ["chat runtime", chatRuntimeSource],
+    ["CRM loaders", crmLoadersSource],
+    ["daily queue", dailyQueueBoardSource],
+    ["i18n", i18nSource],
+    ["model provider", modelProviderSource],
+    ["pipeline defaults", pipelineDefaultsSource],
+    ["property department", propertyDepartmentSource],
+    ["property department repositories", propertyDepartmentRepositoriesSource],
+    ["recommendation runtime", recommendationRuntimeSource],
+    ["reservation board", reservationBoardSource],
+  ];
+
+  for (const [sourceName, source] of checkedSources) {
+    for (const forbidden of forbiddenVisibleAscii) {
+      assert.equal(source.includes(forbidden), false, `${sourceName} still contains old German copy: ${forbidden}`);
+    }
+  }
 });
 
 test("phase 4 KPI labels avoid forced mid-word breaks", () => {
@@ -291,4 +439,13 @@ test("phase 4 KPI labels avoid forced mid-word breaks", () => {
   assert.match(workspaceSource, /crm-kpi-label/);
   assert.match(leadInboxSource, /crm-kpi-label text-xs text-stone-500">\{metric\.label\}/);
   assert.match(contactCommandCenterSource, /crm-kpi-label text-xs text-stone-500">\{copy\.organizations\}/);
+  assert.match(propertyCommandCenterSource, /w-full min-w-\[1080px\] table-fixed/);
+  assert.match(propertyCommandCenterSource, /<colgroup>/);
+  assert.match(propertyCommandCenterSource, /flex min-w-\[220px\] flex-wrap gap-1\.5/);
+  assert.match(propertyCommandCenterSource, /lg:grid-cols-3 2xl:grid-cols-6/);
+  assert.match(unitBoardSource, /lg:grid-cols-3 2xl:grid-cols-7/);
+  assert.match(unitBoardSource, /lg:grid-cols-3 2xl:grid-cols-6/);
+  assert.match(unitBoardSource, /crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500/);
+  assert.match(calendarCommandCenterSource, /grid min-w-0 grid-cols-2 gap-2 text-sm sm:min-w-\[520px\] md:grid-cols-4 xl:min-w-\[620px\]/);
+  assert.match(calendarCommandCenterSource, /crm-kpi-label text-xs leading-4 text-stone-500/);
 });

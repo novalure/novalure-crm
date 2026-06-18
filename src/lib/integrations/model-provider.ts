@@ -69,7 +69,7 @@ function fallbackReply(input: {
       .join("\n");
     const text =
       input.language === "de"
-        ? `Auf Basis der freigegebenen Wissensquelle kann ich Folgendes nennen:\n${excerpts}\n\nFuer Details oder unklare Punkte bereite ich die Uebergabe an das Team vor.`
+        ? `Auf Basis der freigegebenen Wissensquelle kann ich Folgendes nennen:\n${excerpts}\n\nFür Details oder unklare Punkte bereite ich die Übergabe an das Team vor.`
         : `Based on the approved knowledge source, I can share this:\n${excerpts}\n\nFor details or unclear points, I will prepare a handoff to the team.`;
 
     return {
@@ -90,7 +90,7 @@ function fallbackReply(input: {
   return {
     text:
       input.language === "de"
-        ? `Dazu habe ich aktuell keine freigegebene Wissensquelle (${sourceLine}). Ich speichere die Anfrage im CRM und bereite die Uebergabe an das Team vor.`
+        ? `Dazu habe ich aktuell keine freigegebene Wissensquelle (${sourceLine}). Ich speichere die Anfrage im CRM und bereite die Übergabe an das Team vor.`
         : `I do not currently have an approved knowledge source (${sourceLine}). I will save the enquiry in CRM and prepare a handoff to the team.`,
     provider: "deterministic-fallback",
     model: "offline-crm-handoff-reply",

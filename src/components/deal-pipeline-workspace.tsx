@@ -24,11 +24,11 @@ import type {
 } from "@/lib/crm-types";
 import {
   getCrmDealStageLabel,
-  getCrmEnumLabel,
   getCrmLeadTypeLabel,
   getCrmRiskLabel,
   getCrmSourceKey,
   getCrmSourceLabel,
+  getCrmSystemTextLabel,
   getCrmTaskDueLabel,
   getDealPipelineCommandCopy,
   getLocale,
@@ -524,7 +524,6 @@ export function DealPipelineWorkspace({
   const locale = getLocale(language);
   const stageLabel = (stage: string) => getCrmDealStageLabel(stage, language);
   const leadTypeLabel = (leadType: string) => getCrmLeadTypeLabel(leadType, language);
-  const enumLabel = (value: string) => getCrmEnumLabel(value, language);
   const initialContact = contacts[0];
   const [dealPatches, setDealPatches] = useState<Record<string, DealPatch>>({});
   const [persistedDealOverrides, setPersistedDealOverrides] = useState<Record<string, Deal>>({});
@@ -1331,7 +1330,7 @@ export function DealPipelineWorkspace({
               <span className="break-words rounded-md bg-blue-50 px-2 py-1.5 font-semibold text-blue-800">
                 {item.nextTask
                   ? `${item.nextTask.title} · ${getCrmTaskDueLabel(item.nextTask.due, language)}`
-                  : item.deal.nextAction ? enumLabel(item.deal.nextAction) : text.defaultNextAction}
+                  : item.deal.nextAction ? getCrmSystemTextLabel(item.deal.nextAction, language) : text.defaultNextAction}
               </span>
               <span className="break-words rounded-md bg-stone-50 px-2 py-1.5 font-semibold text-stone-700">
                 {item.relevantEvent ? formatDateTime(item.relevantEvent.startsAt, locale) : text.noAppointment}

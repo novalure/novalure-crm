@@ -6,6 +6,7 @@ import type { CalendarEvent, Contact, Lead, Project, Task, WorkspaceUser } from 
 import {
   getCalendarCommandCenterCopy,
   getCrmEnumLabel,
+  getCrmSystemTextLabel,
   getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
   getLocale,
@@ -2278,7 +2279,7 @@ export function CalendarCommandCenter({
               {text.description}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-2 gap-2 text-sm sm:min-w-[520px] md:grid-cols-4 xl:min-w-[620px]">
             {[
               { label: text.todayCount, value: todayEvents.length },
               { label: text.prepCount, value: prepareEvents.length },
@@ -2287,7 +2288,7 @@ export function CalendarCommandCenter({
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 p-3" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
-                <p className="break-words text-xs text-stone-500">{metric.label}</p>
+                <p className="crm-kpi-label text-xs leading-4 text-stone-500">{metric.label}</p>
               </div>
             ))}
           </div>
@@ -2388,7 +2389,7 @@ export function CalendarCommandCenter({
                   <option value="">{text.noLead}</option>
                   {leads.map((lead) => (
                     <option key={lead.id} value={lead.id}>
-                      {lead.intent}
+                      {getCrmSystemTextLabel(lead.intent, language)}
                     </option>
                   ))}
                 </select>

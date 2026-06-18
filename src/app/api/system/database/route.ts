@@ -43,6 +43,8 @@ const migrations = [
   "migrations/035_property_department_content.sql",
   "migrations/036_company_profiles.sql",
   "migrations/037_novalure_growth_alignment.sql",
+  "migrations/038_property_default_units.sql",
+  "migrations/039_property_content_partial_unique_indexes.sql",
 ];
 
 type TableStatusRow = {

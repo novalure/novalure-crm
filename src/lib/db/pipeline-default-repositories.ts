@@ -295,7 +295,7 @@ export function getDefaultPipelineTemplates(
     {
       isDefault: true,
       key: "broker_seller_pipeline",
-      name: "Verkaeufer-Pipeline",
+      name: "Verkäufer-Pipeline",
       purpose: "broker_seller",
       stages: [
         { key: "new", name: "Neu", probability: 5, slaHours: 2 },

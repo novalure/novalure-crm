@@ -12,6 +12,7 @@ import {
   getCrmLeadTypeLabel,
   getCrmSourceLabel,
   getCrmStatusLabel,
+  getCrmSystemTextLabel,
   getFunnelBookingProviderLabel,
   getFunnelCommandCenterCopy,
   getFunnelDestinationLabel,
@@ -1488,7 +1489,7 @@ export function FunnelCommandCenter({
                 <div className="mt-3 grid min-w-0 gap-2">
                   {relatedLeads.map((lead) => (
                     <div className="grid min-w-0 gap-2 rounded-md bg-stone-50 p-3 text-sm xl:grid-cols-[minmax(0,1fr)_96px_minmax(160px,auto)]" key={lead.id}>
-                      <span className="min-w-0 break-words font-semibold">{lead.intent}</span><span className="shrink-0">Score {lead.score}</span><span className="min-w-0 break-words">{lead.nextAction}</span>
+                      <span className="min-w-0 break-words font-semibold">{getCrmSystemTextLabel(lead.intent, language)}</span><span className="shrink-0">Score {lead.score}</span><span className="min-w-0 break-words">{getCrmSystemTextLabel(lead.nextAction, language)}</span>
                     </div>
                   ))}
                 </div>

@@ -1051,21 +1051,21 @@ function buildDailyQueueData(input: {
     sections: [
       {
         cards: hotLeads,
-        emptyText: { de: "Keine heissen Leads - Lead-Zentrale pruefen.", en: "No hot leads - check Lead Inbox." },
+        emptyText: { de: "Keine heißen Leads - Lead-Zentrale prüfen.", en: "No hot leads - check Lead Inbox." },
         id: "hotLeads",
-        title: { de: "Heisse Leads", en: "Hot leads" },
+        title: { de: "Heiße Leads", en: "Hot leads" },
       },
       {
         cards: demoFollowUps,
-        emptyText: { de: "Keine Demo-Follow-ups faellig.", en: "No demo follow-ups due." },
+        emptyText: { de: "Keine Demo-Follow-ups fällig.", en: "No demo follow-ups due." },
         id: "demoFollowUps",
         title: { de: "Demo-Follow-ups", en: "Demo follow-ups" },
       },
       {
         cards: overdueOffers,
-        emptyText: { de: "Keine ueberfaelligen Angebote.", en: "No overdue offers." },
+        emptyText: { de: "Keine überfälligen Angebote.", en: "No overdue offers." },
         id: "overdueOffers",
-        title: { de: "Ueberfaellige Angebote", en: "Overdue offers" },
+        title: { de: "Überfällige Angebote", en: "Overdue offers" },
       },
       {
         cards: todayAppointments,
@@ -1097,13 +1097,29 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
       p.default_operating_model as "defaultOperatingModel",
       p.default_pipeline_id as "defaultPipelineId",
       p.setup_defaults as "setupDefaults",
-      count(distinct l.id)::int as leads,
-      coalesce(sum(case when d.stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert') then d.value_cents else 0 end), 0) as "revenueCents"
+      coalesce(l.leads, 0)::int as leads,
+      coalesce(d.revenue_cents, 0)::bigint as "revenueCents"
     from projects p
-    left join leads l on l.project_id = p.id and l.workspace_id = p.workspace_id
-    left join deals d on d.project_id = p.id and d.workspace_id = p.workspace_id
+    left join (
+      select
+        workspace_id,
+        project_id,
+        count(*)::int as leads
+      from leads
+      where workspace_id = $1
+      group by workspace_id, project_id
+    ) l on l.project_id = p.id and l.workspace_id = p.workspace_id
+    left join (
+      select
+        workspace_id,
+        project_id,
+        sum(value_cents)::bigint as revenue_cents
+      from deals
+      where workspace_id = $1
+        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+      group by workspace_id, project_id
+    ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
     where p.workspace_id = $1
-    group by p.id
     order by p.created_at asc
   `,
     [scopedWorkspaceId],

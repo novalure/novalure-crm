@@ -29,10 +29,10 @@ export type PropertyDepartmentTabId =
   | "quality"
   | "activity";
 
-export const PROPERTY_DEPARTMENT_TABS: Array<{ id: PropertyDepartmentTabId; label: string }> = [
+export const PROPERTY_DEPARTMENT_TABS: Array<{ id: PropertyDepartmentTabId; label: string; subLabel?: string }> = [
   { id: "overview", label: "Übersicht" },
   { id: "create", label: "Objekt anlegen" },
-  { id: "projectUnits", label: "Projekt / Gebäude / Einheiten" },
+  { id: "projectUnits", label: "Projekt/Gebäude/Einheiten", subLabel: "Struktur" },
   { id: "reservations", label: "Reservierungen" },
   { id: "inquiries", label: "Anfragen" },
   { id: "channels", label: "Vermarktung / Kanäle" },
@@ -214,7 +214,7 @@ export const PROPERTY_DOCUMENT_SECTIONS = [
   "Objektbeschreibung",
   "Lagebeschreibung",
   "Ausstattungsbeschreibung",
-  "Kostenuebersicht",
+  "Kostenübersicht",
   "Energiedaten",
   "Medien",
   "Grundrisse",
@@ -241,14 +241,14 @@ export const PROPERTY_COST_GROUPS = [
 export const PROPERTY_COST_TEMPLATES = [
   { groupKey: "monthly", key: "operating_costs", label: "Betriebskosten", monthly: true },
   { groupKey: "monthly", key: "heating_costs", label: "Heizkosten", monthly: true },
-  { groupKey: "monthly", key: "repair_reserve", label: "Ruecklage", monthly: true },
+  { groupKey: "monthly", key: "repair_reserve", label: "Rücklage", monthly: true },
   { groupKey: "monthly", key: "other_monthly", label: "Sonstige monatliche Kosten", monthly: true },
   { groupKey: "purchase", key: "transfer_tax", label: "Grunderwerbsteuer", monthly: false },
   { groupKey: "purchase", key: "land_register_fee", label: "Grundbucheintragung", monthly: false },
   { groupKey: "purchase", key: "contract_setup", label: "Vertragserrichtung", monthly: false },
   { groupKey: "purchase", key: "broker_commission_purchase", label: "Provision Kauf", monthly: false },
   { groupKey: "rent", key: "deposit", label: "Kaution", monthly: false },
-  { groupKey: "rent", key: "stamp_duty", label: "Vergebuehrung", monthly: false },
+  { groupKey: "rent", key: "stamp_duty", label: "Vergebührung", monthly: false },
   { groupKey: "rent", key: "broker_commission_rent", label: "Provision Miete", monthly: false },
 ] as const;
 
@@ -353,11 +353,25 @@ export type PropertyAssetSummary = {
   subObjectType?: string;
   title: string;
   textBlockCount: number;
+  unitIds: string[];
   usageType?: string;
   unitCount: number;
   updatedAt?: string;
   workspaceId: string;
   yearBuilt?: number;
+};
+
+export type PropertyUnitBoardScope = {
+  key: string;
+  label: string;
+  originAssetId?: string;
+  projectId?: string;
+  unitIds?: string[];
+};
+
+export type PropertyUnitObjectScope = {
+  projectId?: string;
+  unitId?: string;
 };
 
 export type PropertyInquiryRouteInput = {
@@ -504,6 +518,7 @@ export function buildPropertyAssets(input: {
   units: PropertyUnit[];
 }): PropertyAssetSummary[] {
   const projectById = new Map(input.projects.map((project) => [project.id, project]));
+  const unitById = new Map(input.units.map((unit) => [unit.id, unit]));
   const unitsByProject = groupBy(input.units, (unit) => unit.projectId);
   const buildingsByProject = groupBy(input.buildings, (building) => building.projectId);
   const reservationsByProject = groupBy(input.reservations, (reservation) => reservation.projectId);
@@ -514,8 +529,16 @@ export function buildPropertyAssets(input: {
   const assets: PropertyAssetSummary[] = [];
 
   for (const listing of input.sellerListings) {
-    const projectUnits = listing.projectId ? unitsByProject.get(listing.projectId) ?? [] : [];
+    const listingUnits = listing.unitId
+      ? [unitById.get(listing.unitId)].filter((unit): unit is PropertyUnit => Boolean(unit))
+      : listing.projectId
+        ? unitsByProject.get(listing.projectId) ?? []
+        : [];
+    const listingUnitIds = new Set(listingUnits.map((unit) => unit.id));
     const projectReservations = listing.projectId ? reservationsByProject.get(listing.projectId) ?? [] : [];
+    const listingReservations = listing.unitId
+      ? projectReservations.filter((reservation) => listingUnitIds.has(reservation.unitId))
+      : projectReservations;
     const listingCostItems = costItemsByProperty.get(listing.id) ?? [];
     const listingDocuments = documentsByProperty.get(listing.id) ?? [];
     const listingMedia = mediaByProperty.get(listing.id) ?? [];
@@ -526,15 +549,16 @@ export function buildPropertyAssets(input: {
     const energyDocumentCount = listingDocuments.filter((item) => item.category === "energy_certificate").length;
     const floorplanDocumentCount = listingDocuments.filter((item) => item.category === "floorplan").length;
     const priceVisibility = listing.priceVisibility ?? "publish_price";
-    const internalPrice = listing.targetPrice || listing.marketValue || listing.publicPrice || listing.rentPrice;
+    const unitValue = listingUnits.reduce((sum, unit) => sum + unit.priceCents / 100, 0);
+    const unitArea = listingUnits.reduce((sum, unit) => sum + unit.areaSqm, 0);
     assets.push({
-      activeReservations: countActiveReservations(projectReservations),
+      activeReservations: countActiveReservations(listingReservations),
       address: listing.address,
-      areaSqm: listing.areaSqm,
+      areaSqm: unitArea || listing.areaSqm,
       approvedDocumentCount: approvedDocuments.length,
       availableFrom: listing.availableFrom,
       availableFromText: listing.availableFromText,
-      availableUnits: projectUnits.filter((unit) => unit.status === "available").length,
+      availableUnits: listingUnits.filter((unit) => unit.status === "available").length,
       buildingCount: listing.projectId ? buildingsByProject.get(listing.projectId)?.length ?? 0 : 0,
       channelPriceVisibility: listing.channelPriceVisibility,
       contactLabel: listing.contactName || listing.contactEmail || listing.contactPhone || listing.ownerContactId || listing.sellerLeadId,
@@ -556,7 +580,7 @@ export function buildPropertyAssets(input: {
       mandateId: listing.mandateId,
       monthlyCostsGross: listing.monthlyCostsGross,
       portalMappingStatus: listing.portalMappingStatus,
-      price: internalPrice,
+      price: unitValue,
       priceVisibility,
       projectId: listing.projectId,
       projectName: projectById.get(listing.projectId)?.name ?? "Ohne Projekt",
@@ -565,35 +589,45 @@ export function buildPropertyAssets(input: {
       publicPrice: listing.publicPrice,
       purchaseAncillaryCosts: listing.purchaseAncillaryCosts,
       region: listing.region,
-      reservedUnits: projectUnits.filter((unit) => unit.status === "reserved").length,
+      reservedUnits: listingUnits.filter((unit) => unit.status === "reserved").length,
       rooms: listing.rooms,
       sellerLeadId: listing.sellerLeadId,
       sellerListingId: listing.id,
-      soldUnits: projectUnits.filter((unit) => unit.status === "sold").length,
+      soldUnits: listingUnits.filter((unit) => unit.status === "sold").length,
       status: resolveAssetStatus({
         hasAddress: Boolean(listing.address),
         hasEnergy: Boolean(listing.energyValidUntil || listing.energyClass || energyDocumentCount),
         hasMedia: imageItems.length > 0,
-        hasPrice: Boolean(internalPrice),
-        hasReservation: countActiveReservations(projectReservations) > 0,
-        soldUnits: projectUnits.filter((unit) => unit.status === "sold").length,
-        unitCount: projectUnits.length,
+        hasPrice: unitValue > 0,
+        hasReservation: countActiveReservations(listingReservations) > 0,
+        soldUnits: listingUnits.filter((unit) => unit.status === "sold").length,
+        unitCount: listingUnits.length,
       }),
       subObjectType: listing.subObjectType || listing.subObjectTypeCustom,
       textBlockCount: listingTextBlocks.filter((item) => item.content.trim()).length,
       title: listing.title,
+      unitIds: listingUnits.map((unit) => unit.id),
       usageType: listing.usageType,
-      unitCount: projectUnits.length,
+      unitCount: listingUnits.length,
       updatedAt: listing.createdAt,
       workspaceId: listing.workspaceId,
       yearBuilt: listing.yearBuilt,
     });
   }
 
-  const projectIdsWithListing = new Set(input.sellerListings.map((listing) => listing.projectId).filter(Boolean));
+  const projectIdsCoveredByListing = new Set(
+    input.sellerListings
+      .filter((listing) => {
+        if (!listing.projectId) return false;
+        const projectUnits = unitsByProject.get(listing.projectId) ?? [];
+        return !listing.unitId || (projectUnits.length === 1 && projectUnits[0]?.id === listing.unitId);
+      })
+      .map((listing) => listing.projectId)
+      .filter(Boolean),
+  );
   for (const project of input.projects) {
     const projectUnits = unitsByProject.get(project.id) ?? [];
-    if (projectIdsWithListing.has(project.id) && projectUnits.length === 0) continue;
+    if (projectIdsCoveredByListing.has(project.id)) continue;
     const projectReservations = reservationsByProject.get(project.id) ?? [];
     const projectBuildings = buildingsByProject.get(project.id) ?? [];
     const value = projectUnits.reduce((sum, unit) => sum + unit.priceCents / 100, 0);
@@ -635,6 +669,7 @@ export function buildPropertyAssets(input: {
       }),
       textBlockCount: 0,
       title: project.name,
+      unitIds: projectUnits.map((unit) => unit.id),
       unitCount: projectUnits.length,
       workspaceId: project.workspaceId,
     });
@@ -676,6 +711,7 @@ export function buildPropertyAssets(input: {
       status: mandate.marketingStatus?.toLowerCase().includes("ready") ? "ready" : "needs_review",
       textBlockCount: 0,
       title: mandate.title,
+      unitIds: [],
       unitCount: 0,
       updatedAt: mandate.updatedAt,
       workspaceId: mandate.workspaceId,
@@ -838,7 +874,7 @@ export function buildPropertyDataQualityIssues(input: {
       issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Portal-Mapping offen" });
     }
     if (asset.status === "needs_review") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Vermarktung pruefen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Vermarktung prüfen" });
     }
   }
 

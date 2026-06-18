@@ -13,18 +13,23 @@ import type {
 import {
   formatCurrency,
   formatNumber,
+  getCrmSystemTextLabel,
   getLocale,
   getUnitBoardCopy,
   type LanguageCode,
 } from "@/lib/i18n";
+import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
 
 type UnitBoardProps = {
   buildings: PropertyBuilding[];
   contacts: Contact[];
   deals: Deal[];
+  focusScope?: PropertyUnitBoardScope | null;
   initialProjectId?: string;
   language: LanguageCode;
   leads: Lead[];
+  onClearFocusScope?: () => void;
+  onOpenProperty?: (scope: PropertyUnitObjectScope) => void;
   onReservationChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
@@ -262,9 +267,12 @@ export function UnitBoard({
   buildings,
   contacts,
   deals,
+  focusScope,
   initialProjectId = "all",
   language,
   leads,
+  onClearFocusScope,
+  onOpenProperty,
   onReservationChanged,
   projectLabel,
   projects,
@@ -272,8 +280,9 @@ export function UnitBoard({
   units,
 }: UnitBoardProps) {
   const text = getUnitBoardCopy(language);
+  const initialBoardProjectId = focusScope?.projectId ?? initialProjectId ?? "all";
   const [statusFilter, setStatusFilter] = useState<UnitStatusFilter>("all");
-  const [projectFilter, setProjectFilter] = useState(initialProjectId || "all");
+  const [projectFilter, setProjectFilter] = useState(initialBoardProjectId || "all");
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -292,7 +301,7 @@ export function UnitBoard({
     floors: "",
     name: "",
     price: "",
-    projectId: initialProjectId !== "all" ? initialProjectId : projects[0]?.id ?? "",
+    projectId: initialBoardProjectId !== "all" ? initialBoardProjectId : projects[0]?.id ?? "",
     rooms: "",
     unitNumber: "",
   }));
@@ -314,6 +323,7 @@ export function UnitBoard({
     () => Array.from(new Set(units.map((unit) => unit.rooms))).sort((left, right) => left - right),
     [units],
   );
+  const focusedUnitIds = useMemo(() => new Set(focusScope?.unitIds ?? []), [focusScope?.unitIds]);
   const minPriceCents = parsePrice(minPrice);
   const maxPriceCents = parsePrice(maxPrice);
 
@@ -330,6 +340,7 @@ export function UnitBoard({
 
           return { building, buyer, buyerMatches, deal, project, reservation, unit };
         })
+        .filter(({ unit }) => focusedUnitIds.size === 0 || focusedUnitIds.has(unit.id))
         .filter(({ unit }) => projectFilter === "all" || unit.projectId === projectFilter)
         .filter(({ unit }) => buildingFilter === "all" || unit.buildingId === buildingFilter)
         .filter(({ unit }) => statusFilter === "all" || unit.status === statusFilter)
@@ -348,6 +359,7 @@ export function UnitBoard({
       buildings,
       contacts,
       deals,
+      focusedUnitIds,
       leads,
       maxPriceCents,
       minPriceCents,
@@ -432,7 +444,7 @@ export function UnitBoard({
 
   function resetFilters() {
     setStatusFilter("all");
-    setProjectFilter(initialProjectId || "all");
+    setProjectFilter(initialBoardProjectId || "all");
     setBuildingFilter("all");
     setMinPrice("");
     setMaxPrice("");
@@ -691,6 +703,7 @@ export function UnitBoard({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-emerald-700">{projectLabel}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.boardSubLabel}</p>
             <h3 className="mt-1 text-2xl font-semibold text-slate-950">{text.title}</h3>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{text.description}</p>
           </div>
@@ -719,15 +732,49 @@ export function UnitBoard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
           {metrics.map((metric) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={metric.label}>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{metric.label}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{metric.label}</p>
               <p className="mt-2 text-xl font-semibold text-slate-950">{metric.value}</p>
             </div>
           ))}
         </div>
       </div>
+
+      {focusScope ? (
+        <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800">{text.focusScopeLabel}</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-950">{text.focusScopeDescription(focusScope.label)}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {onOpenProperty ? (
+                <button
+                  className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                  onClick={() => onOpenProperty({
+                    projectId: focusScope.projectId,
+                    unitId: focusScope.unitIds?.[0],
+                  })}
+                  type="button"
+                >
+                  {text.openProperty}
+                </button>
+              ) : null}
+              {onClearFocusScope ? (
+                <button
+                  className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                  onClick={onClearFocusScope}
+                  type="button"
+                >
+                  {text.clearFocusScope}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </article>
+      ) : null}
 
       {inventoryNotice ? (
         <Pill
@@ -902,10 +949,10 @@ export function UnitBoard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {managementMetrics.map((metric) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={metric.label}>
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{metric.label}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{metric.label}</p>
               <p className="mt-2 text-lg font-semibold text-slate-950">{metric.value}</p>
             </div>
           ))}
@@ -1276,6 +1323,15 @@ export function UnitBoard({
                       <p className="font-semibold text-slate-950">{unit.unitNumber}</p>
                       <p className="mt-1 text-xs text-stone-500">{building?.name ?? text.noBuilding}</p>
                       <p className="mt-1 text-xs text-stone-500">{project?.name ?? text.noProject}</p>
+                      {onOpenProperty ? (
+                        <button
+                          className="mt-2 text-xs font-semibold text-emerald-800 hover:text-emerald-950"
+                          onClick={() => onOpenProperty({ projectId: unit.projectId, unitId: unit.id })}
+                          type="button"
+                        >
+                          {text.openProperty}
+                        </button>
+                      ) : null}
                     </td>
                     <td className="px-4 py-4">
                       <Pill className={statusStyles[unit.status]}>{text.unitStatusLabels[unit.status]}</Pill>
@@ -1338,7 +1394,7 @@ export function UnitBoard({
                                 </span>
                               </div>
                               <p className="mt-1 break-words text-[11px] text-emerald-900">
-                                {match.reasons.length ? match.reasons.join(" / ") : match.lead.intent}
+                                {match.reasons.length ? match.reasons.join(" / ") : getCrmSystemTextLabel(match.lead.intent, language)}
                               </p>
                             </div>
                           ))}

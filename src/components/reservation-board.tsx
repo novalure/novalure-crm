@@ -46,10 +46,10 @@ const text = {
     },
     urgency: {
       closed: "Abgeschlossen",
-      critical: "Laeuft bald ab",
+      critical: "Läuft bald ab",
       normal: "Im Zeitplan",
-      overdue: "Frist ueberzogen",
-      today: "Heute faellig",
+      overdue: "Frist überzogen",
+      today: "Heute fällig",
       warning: "Frist beobachten",
     },
   },

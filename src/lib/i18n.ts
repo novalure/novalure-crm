@@ -186,7 +186,7 @@ export const loginPageCopy = {
     auditLink: "Pipeline-Audit anfragen",
     emailLabel: "E-Mail",
     passcodeLabel: "Zugangscode",
-    passcodeHelp: "Nutze den Zugangscode deines freigegebenen Workspace.",
+    passcodeHelp: "Verwenden Sie den Zugangscode Ihres freigegebenen Workspace.",
     accessHelp: {
       prefix: "Noch keinen Zugang?",
       auditLabel: "Pipeline-Audit anfragen",
@@ -208,25 +208,25 @@ export const loginPageCopy = {
       confirmPasswordLabel: "Neues Passwort bestätigen",
       emailLabel: "E-Mail",
       forgotLink: "Zugangscode vergessen?",
-      loginSuccess: "Dein Passwort wurde aktualisiert. Melde dich mit dem neuen Passwort an.",
-      passwordHelp: "Verwende mindestens 15 Zeichen.",
+      loginSuccess: "Ihr Passwort wurde aktualisiert. Melden Sie sich mit dem neuen Passwort an.",
+      passwordHelp: "Verwenden Sie mindestens 15 Zeichen.",
       requestDescription:
-        "Gib deine CRM-E-Mail-Adresse ein. Falls ein aktives Konto existiert, senden wir einen sicheren Reset-Link.",
+        "Geben Sie Ihre CRM-E-Mail-Adresse ein. Falls ein aktives Konto existiert, senden wir einen sicheren Reset-Link.",
       requestHelp: "Der Reset-Link ist 60 Minuten gültig und kann nur einmal verwendet werden.",
       requestSubmit: "Reset-Link senden",
       requestSuccess:
         "Falls ein Konto mit dieser E-Mail existiert, wurde ein Link zum Zurücksetzen gesendet.",
       requestTitle: "Passwort zurücksetzen",
-      resetDescription: "Lege ein neues Passwort für deinen Novalure CRM-Zugang fest.",
+      resetDescription: "Legen Sie ein neues Passwort für Ihren Novalure CRM-Zugang fest.",
       resetSubmit: "Neues Passwort speichern",
       resetTitle: "Neues Passwort erstellen",
       newPasswordLabel: "Neues Passwort",
       errors: {
         invalid_token: "Der Reset-Link ist ungültig oder abgelaufen.",
         password_mismatch: "Die Passwörter stimmen nicht überein.",
-        password_required: "Gib dein neues Passwort ein und bestätige es.",
+        password_required: "Geben Sie Ihr neues Passwort ein und bestätigen Sie es.",
         password_too_short: "Das Passwort muss mindestens 15 Zeichen enthalten.",
-        rate_limited: "Zu viele Reset-Anfragen. Bitte warte einige Minuten und versuche es erneut.",
+        rate_limited: "Zu viele Reset-Anfragen. Bitte warten Sie einige Minuten und versuchen Sie es erneut.",
         reset_unavailable: "Passwort-Zurücksetzen ist gerade nicht verfügbar.",
       },
       email: {
@@ -235,9 +235,9 @@ export const loginPageCopy = {
           `Dieser Link ist ${minutes} Minuten gültig und kann nur einmal verwendet werden.`,
         greeting: (name: string) => `Hallo ${name},`,
         heading: "Passwort zurücksetzen",
-        ignore: "Falls du das nicht angefordert hast, kannst du diese E-Mail ignorieren.",
+        ignore: "Falls Sie das nicht angefordert haben, können Sie diese E-Mail ignorieren.",
         intro: (workspaceName: string) =>
-          `Wir haben eine Anfrage zum Zurücksetzen des Passworts für deinen Novalure CRM-Arbeitsbereich ${workspaceName} erhalten.`,
+          `Wir haben eine Anfrage zum Zurücksetzen des Passworts für Ihren Novalure CRM-Arbeitsbereich ${workspaceName} erhalten.`,
         subject: "Novalure CRM Passwort zurücksetzen",
       },
     },
@@ -1222,6 +1222,10 @@ export const dashboardCopy = {
       helper: "Focuses navigation only. Server permissions still decide what can be changed.",
       mobileNavigationLabel: "Area",
       quickActionsLabel: "Quick actions",
+      groups: {
+        standard: "Standard profiles",
+        forTeams: "For teams",
+      },
       profiles: {
         novalureInternal: {
           label: "Novalure internal",
@@ -1230,6 +1234,10 @@ export const dashboardCopy = {
         realEstateBroker: {
           label: "Real estate broker",
           description: "Seller leads, buyer leads, mandates, follow-ups and appointments.",
+        },
+        completeBrokerage: {
+          label: "Complete brokerage business",
+          description: "Properties, buyer and seller leads, projects, inventory, reservations, pipeline, tasks, meetings and contacts.",
         },
         propertyDeveloper: {
           label: "Property developer",
@@ -1338,13 +1346,17 @@ export const dashboardCopy = {
       description: "Role-specific start priorities for daily CRM work.",
       nextStepsLabel: "Next steps",
       metrics: {
-        hotLeads: "Hot leads",
+        hotLeads: "Hot leads (all)",
         openTasks: "Open tasks",
         noOwner: "Without owner",
         appointments: "Appointments",
-        pipeline: "Weighted forecast",
+        pipeline: "Weighted forecast - open deals",
         riskDeals: "Risk deals",
         unlinkedTasks: "Without contact/project",
+      },
+      metricDetails: {
+        hotLeads: "All visible leads with score above 80 or hot status.",
+        pipeline: "Open deal value weighted by probability.",
       },
       profiles: {
         default: {
@@ -1361,6 +1373,11 @@ export const dashboardCopy = {
           title: "Broker daily start",
           description: "Seller and buyer leads are ordered by urgency, project context and next action.",
           nextSteps: ["Check Lead Inbox", "Separate seller and buyer intent", "Update follow-up", "Move deal"],
+        },
+        completeBrokerage: {
+          title: "Complete brokerage business",
+          description: "Full broker workspace with properties, buyer and seller leads, projects, inventory, reservations, pipeline, tasks, meetings and contacts.",
+          nextSteps: ["Check seller leads", "Review buyer leads", "Open inventory", "Update pipeline"],
         },
         salesLead: {
           title: "Sales lead cockpit",
@@ -1980,6 +1997,10 @@ export const dashboardCopy = {
         "Fokussiert nur die Navigation. Serverrechte entscheiden weiterhin, was geändert werden darf.",
       mobileNavigationLabel: "Bereich",
       quickActionsLabel: "Schnellaktionen",
+      groups: {
+        standard: "Standardprofile",
+        forTeams: "Für Teams",
+      },
       profiles: {
         novalureInternal: {
           label: "Novalure intern",
@@ -1988,6 +2009,10 @@ export const dashboardCopy = {
         realEstateBroker: {
           label: "Immobilienmakler",
           description: "Verkäufer-Leads, Käufer-Leads, Mandate, Follow-ups und Termine.",
+        },
+        completeBrokerage: {
+          label: "Maklergeschäft komplett",
+          description: "Immobilien, Käufer- und Verkäufer-Leads, Projekte, Einheiten/Bestand, Reservierungen, Pipeline, Aufgaben, Termine und Kontakte.",
         },
         propertyDeveloper: {
           label: "Bauträger",
@@ -2096,13 +2121,17 @@ export const dashboardCopy = {
       description: "Rollenspezifische Startprioritäten für die tägliche CRM-Arbeit.",
       nextStepsLabel: "Nächste Schritte",
       metrics: {
-        hotLeads: "Heiße Leads",
+        hotLeads: "Heiße Leads gesamt",
         openTasks: "Offene Aufgaben",
         noOwner: "Ohne Zuständigen",
         appointments: "Termine",
-        pipeline: "Gewichteter Forecast",
+        pipeline: "Gewichteter Forecast - offene Deals",
         riskDeals: "Risiko-Deals",
         unlinkedTasks: "Ohne Kontakt/Projekt",
+      },
+      metricDetails: {
+        hotLeads: "Alle sichtbaren Leads mit Score über 80 oder Status heiß.",
+        pipeline: "Offene Deal-Werte gewichtet nach Wahrscheinlichkeit.",
       },
       profiles: {
         default: {
@@ -2119,6 +2148,11 @@ export const dashboardCopy = {
           title: "Tagesstart für Makler",
           description: "Verkäufer- und Käufer-Leads sind nach Dringlichkeit, Projektkontext und nächster Aktion sortiert.",
           nextSteps: ["Lead-Zentrale prüfen", "Verkäufer/Käufer trennen", "Follow-up aktualisieren", "Deal verschieben"],
+        },
+        completeBrokerage: {
+          title: "Maklergeschäft komplett",
+          description: "Vollständiger Makler-Workspace mit Immobilien, Käufer- und Verkäufer-Leads, Projekten, Einheiten/Bestand, Reservierungen, Pipeline, Aufgaben, Terminen und Kontakten.",
+          nextSteps: ["Verkäufer-Leads prüfen", "Käufer-Leads ansehen", "Einheiten/Bestand öffnen", "Pipeline aktualisieren"],
         },
         salesLead: {
           title: "Vertriebs-Cockpit",
@@ -2674,10 +2708,15 @@ export const dashboardCopy = {
 
 export const unitBoardCopy = {
   en: {
-    title: "Developer units board",
+    title: "Units / inventory",
+    boardSubLabel: "Sales / inventory",
     description:
       "Operational unit ledger for availability, pricing, buyer links, deal state and reservation deadlines.",
     resetFilters: "Reset filters",
+    focusScopeLabel: "Focused object",
+    focusScopeDescription: (label: string) => `Showing units for ${label}.`,
+    clearFocusScope: "Show all units / inventory",
+    openProperty: "Open object",
     totalUnits: "Units",
     availableUnits: "Available",
     reservedUnits: "Reserved",
@@ -2810,10 +2849,15 @@ export const unitBoardCopy = {
     },
   },
   de: {
-    title: "Bauträger-Einheitenboard",
+    title: "Einheiten/Bestand",
+    boardSubLabel: "Vertrieb/Bestand",
     description:
       "Operatives Einheitenbuch für Verfügbarkeit, Preise, Käuferlinks, Deal-Status und Reservierungsfristen.",
     resetFilters: "Filter zurücksetzen",
+    focusScopeLabel: "Fokusobjekt",
+    focusScopeDescription: (label: string) => `Einheiten für ${label}.`,
+    clearFocusScope: "Alle Einheiten / Bestand anzeigen",
+    openProperty: "Objekt öffnen",
     totalUnits: "Einheiten",
     availableUnits: "Frei",
     reservedUnits: "Reserviert",
@@ -4650,8 +4694,8 @@ export const dashboardOverviewCopy = {
       investor: "Investor acquisition",
     },
     widgets: {
-      activeLeads: { title: "Active leads total", description: "Buyers, sellers and investors" },
-      pipelineValue: { title: "Expected commission", description: "3% of weighted open-deal forecast" },
+      activeLeads: { title: "Active leads (this month)", description: "Current dashboard period" },
+      pipelineValue: { title: "Expected commission (3%)", description: "3% of weighted open-deal forecast" },
       monthlyClosings: { title: "Monthly closings", description: "Commission vs. target" },
       overdueFollowupsKpi: { title: "Overdue follow-ups", description: "SLA and next contact" },
       hotLeadsKpi: { title: "Hot leads", description: "Score above 80 or hot status" },
@@ -4711,16 +4755,16 @@ export const dashboardOverviewCopy = {
       newView: "New view",
     },
     kpis: {
-      activeLeads: "Active leads",
-      pipelineValue: "Expected commission",
+      activeLeads: "Active leads (this month)",
+      pipelineValue: "Expected commission (3%)",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast}`,
+        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast} | commission 3%`,
       monthlyClosings: "Monthly closings",
       target: "Target",
       overdueFollowups: "Overdue follow-ups",
       noCriticalFollowups: "No critical follow-ups",
       hotLeads: "Hot leads",
-      hotLeadRule: "Lead score > 80 or hot status",
+      hotLeadRule: "Lead score > 80 or hot status in the current dashboard filter",
       conversionRate: "Conversion rate",
       conversionDetail: (leads: number, viewings: number, closings: number) =>
         `Inquiry ${leads} -> viewing ${viewings} -> closing ${closings}`,
@@ -4784,8 +4828,8 @@ export const dashboardOverviewCopy = {
       investor: "Investor-Akquise",
     },
     widgets: {
-      activeLeads: { title: "Aktive Leads gesamt", description: "Käufer, Verkäufer und Investoren" },
-      pipelineValue: { title: "Erwartete Provision", description: "3% des gewichteten Forecasts offener Deals" },
+      activeLeads: { title: "Aktive Leads (dieser Monat)", description: "Aktueller Dashboard-Zeitraum" },
+      pipelineValue: { title: "Erwartete Provision (3%)", description: "3% des gewichteten Forecasts offener Deals" },
       monthlyClosings: { title: "Abschlüsse Monat", description: "Provision vs. Zielwert" },
       overdueFollowupsKpi: { title: "Überfällige Follow-ups", description: "SLA und nächster Kontakt" },
       hotLeadsKpi: { title: "Heiße Leads", description: "Score über 80 oder Status heiß" },
@@ -4845,16 +4889,16 @@ export const dashboardOverviewCopy = {
       newView: "Neue Ansicht",
     },
     kpis: {
-      activeLeads: "Aktive Leads",
-      pipelineValue: "Erwartete Provision",
+      activeLeads: "Aktive Leads (dieser Monat)",
+      pipelineValue: "Erwartete Provision (3%)",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast}`,
+        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast} | Provision 3%`,
       monthlyClosings: "Abschlüsse Monat",
       target: "Ziel",
       overdueFollowups: "Überfällige Follow-ups",
       noCriticalFollowups: "Keine kritischen Follow-ups",
       hotLeads: "Heiße Leads",
-      hotLeadRule: "Lead-Score > 80 oder Status heiß",
+      hotLeadRule: "Lead-Score > 80 oder Status heiß im aktuellen Dashboard-Filter",
       conversionRate: "Conversion-Rate",
       conversionDetail: (leads: number, viewings: number, closings: number) =>
         `Anfrage ${leads} -> Besichtigung ${viewings} -> Abschluss ${closings}`,
@@ -7380,9 +7424,9 @@ export const botCommandCenterCopy = {
     documentFileTooLarge: "Diese Datei ist zu groß. Maximum: {{size}}.",
     documentUploadFailed: "Dokument-Upload fehlgeschlagen.",
     markDocumentSent: "Jetzt senden",
-    meetingOutbox: "Terminvorschlaege",
+    meetingOutbox: "Terminvorschläge",
     noDocumentActions: "Keine wartenden Dokumentversande.",
-    noMeetingActions: "Keine wartenden Terminvorschlaege.",
+    noMeetingActions: "Keine wartenden Terminvorschläge.",
     openActions: "offen",
     botActionStatusLabels: {
       ready_to_send: "Bereit zum Senden",
@@ -10557,6 +10601,51 @@ const crmGenericEnumLabels: Record<string, Record<LanguageCode, string>> = {
   vector_ready: { en: "Vector ready", de: "Vektor bereit" },
 };
 
+const crmSystemTextLabels: Record<string, Record<LanguageCode, string>> = {
+  "Angebot in Prüfung": { en: "Offer under review", de: "Angebot in Prüfung" },
+  "Besichtigung": { en: "Viewing", de: "Besichtigung" },
+  "Besichtigung abschließen und Reservierungsentscheidung einholen.": {
+    en: "Complete the viewing and obtain the reservation decision.",
+    de: "Besichtigung abschließen und Reservierungsentscheidung einholen.",
+  },
+  "Besichtigungsunterlagen vorbereiten": { en: "Prepare viewing documents", de: "Besichtigungsunterlagen vorbereiten" },
+  "Budget ab 450.000 Euro": { en: "Budget from 450,000 euros", de: "Budget ab 450.000 Euro" },
+  "Einheit B12 reservierbar": { en: "Unit B12 available for reservation", de: "Einheit B12 reservierbar" },
+  "Entscheider anrufen": { en: "Call decision-maker", de: "Entscheider anrufen" },
+  "Exposé senden": { en: "Send exposé", de: "Exposé senden" },
+  "Finanzierung vorgeprüft": { en: "Financing pre-checked", de: "Finanzierung vorgeprüft" },
+  "Finanzierung vorgeprüft, 3 Zimmer in Graz": {
+    en: "Financing pre-checked, 3 rooms in Graz",
+    de: "Finanzierung vorgeprüft, 3 Zimmer in Graz",
+  },
+  "Finanzierungsnachweis und Optionsfrist bestätigen.": {
+    en: "Confirm proof of financing and option deadline.",
+    de: "Finanzierungsnachweis und Optionsfrist bestätigen.",
+  },
+  "Kapitalanlage": { en: "Investment", de: "Kapitalanlage" },
+  "Kapitalanlage mit Vermietungspotenzial": {
+    en: "Investment property with rental potential",
+    de: "Kapitalanlage mit Vermietungspotenzial",
+  },
+  "Projektgespräch": { en: "Project meeting", de: "Projektgespräch" },
+  "Projektgespräch morgen": { en: "Project meeting tomorrow", de: "Projektgespräch morgen" },
+  "Projektvertrieb": { en: "Project sales", de: "Projektvertrieb" },
+  "Reservierungsnah, sucht familienfreundliche Wohnung": {
+    en: "Close to reservation, looking for a family-friendly apartment",
+    de: "Reservierungsnah, sucht familienfreundliche Wohnung",
+  },
+  "Rückruf heute": { en: "Callback today", de: "Rückruf heute" },
+  "Sucht Zinshaus mit stabiler Vermietung": {
+    en: "Looking for an apartment building with stable rental income",
+    de: "Sucht Zinshaus mit stabiler Vermietung",
+  },
+  "Teams Link prüfen": { en: "Check Teams link", de: "Teams Link prüfen" },
+  "Termin vorschlagen": { en: "Suggest appointment", de: "Termin vorschlagen" },
+  "Unterlagen vorbereiten": { en: "Prepare documents", de: "Unterlagen vorbereiten" },
+  "Verkauf": { en: "Sale", de: "Verkauf" },
+  "Verkaufsabsicht in 3 Monaten": { en: "Selling intent within 3 months", de: "Verkaufsabsicht in 3 Monaten" },
+};
+
 const crmGenericEnumAliases: Record<string, string> = {
   abschlussprufung: "Abschlussprüfung",
   abschlusspruefung: "Abschlussprüfung",
@@ -11311,6 +11400,11 @@ export function getCrmConsentStatusLabel(status: string, language: LanguageCode)
 
 export function getCrmEnumLabel(value: string, language: LanguageCode) {
   return getLocalizedEnumLabel(crmGenericEnumLabels, crmGenericEnumAliases, value, language);
+}
+
+export function getCrmSystemTextLabel(value: string, language: LanguageCode) {
+  const trimmedValue = value.trim();
+  return crmSystemTextLabels[trimmedValue]?.[language] ?? value;
 }
 
 export function getCrmDealStageLabel(stage: string, language: LanguageCode) {

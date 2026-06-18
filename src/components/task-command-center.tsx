@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Contact, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
 import {
   getCrmSourceLabel,
+  getCrmSystemTextLabel,
   getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
   getCrmTaskStatusLabel,
@@ -166,6 +167,7 @@ export function TaskCommandCenter({
           task,
           contact,
           lead,
+          leadIntentLabel: lead ? getCrmSystemTextLabel(lead.intent, language) : undefined,
           project,
           isCompleted,
           rank:
@@ -174,7 +176,7 @@ export function TaskCommandCenter({
             (lead ? Math.max(0, 100 - lead.score) : 30),
         };
       }),
-    [completedTaskIds, contacts, effectiveTasks, leads, projects],
+    [completedTaskIds, contacts, effectiveTasks, language, leads, projects],
   );
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
@@ -202,6 +204,7 @@ export function TaskCommandCenter({
         item.contact?.name,
         item.contact?.source,
         item.lead?.intent,
+        item.leadIntentLabel,
         item.project?.type,
       ]
         .filter(Boolean)
@@ -477,7 +480,7 @@ export function TaskCommandCenter({
                   <option value="">{text.noLead}</option>
                   {leads.map((lead) => (
                     <option key={lead.id} value={lead.id}>
-                      {lead.intent}
+                      {getCrmSystemTextLabel(lead.intent, language)}
                     </option>
                   ))}
                 </select>
@@ -646,7 +649,7 @@ export function TaskCommandCenter({
             {[
               [text.project, selectedTask?.project?.name ?? selectedTask?.task.project],
               [text.linkedContact, selectedTask?.contact?.name ?? text.noContact],
-              [text.linkedLead, selectedTask?.lead?.intent ?? text.noLead],
+              [text.linkedLead, selectedTask?.leadIntentLabel ?? text.noLead],
               [text.descriptionField, selectedTask?.task.description],
               [text.source, selectedTask?.contact?.source ? getCrmSourceLabel(selectedTask.contact.source, language) : undefined],
               [text.owner, selectedOwner ? selectedOwner.name || selectedOwner.email : text.noOwner],

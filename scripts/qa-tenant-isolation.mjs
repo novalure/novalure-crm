@@ -107,10 +107,12 @@ function runStaticChecks() {
   const writes = readText("src/lib/db/crm-write-repositories.ts");
   const migration = readText("migrations/030_novalure_growth_workspace.sql");
   const navigationOrder = parseNavigationPresetOrder(crmWorkspace);
-  const existingNavigationProfiles = [
-    "novalureInternal",
+  const expectedNavigationProfiles = [
+    "completeBrokerage",
     "realEstateBroker",
     "propertyDeveloper",
+    "hybridRealEstate",
+    "managedService",
     "sales",
     "salesLead",
     "management",
@@ -118,10 +120,11 @@ function runStaticChecks() {
     "assistant",
     "newUser",
     "admin",
-    "managedService",
-    "hybridRealEstate",
+    "novalureInternal",
+    "novalureGrowth",
+    "novalureServiceOps",
+    "novalureAdmin",
   ];
-  const appendedInternalProfiles = ["novalureGrowth", "novalureServiceOps", "novalureAdmin"];
 
   for (const role of newRoles) {
     addMatrix({
@@ -135,11 +138,9 @@ function runStaticChecks() {
 
   addMatrix({
     check: "existing navigation order",
-    expected: "new profiles are appended after the existing twelve profile IDs",
+    expected: "completeBrokerage first; standard profiles before team and Novalure internal profiles",
     actual: navigationOrder.length ? navigationOrder.join(", ") : "not confirmed",
-    ok:
-      sameArray(navigationOrder.slice(0, existingNavigationProfiles.length), existingNavigationProfiles) &&
-      sameArray(navigationOrder.slice(existingNavigationProfiles.length), appendedInternalProfiles),
+    ok: sameArray(navigationOrder, expectedNavigationProfiles),
     cause: "new profile order is not visible in navigationPresetOrder",
   });
 
