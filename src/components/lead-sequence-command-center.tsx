@@ -20,6 +20,7 @@ import type {
   WorkspaceUser,
 } from "@/lib/crm-types";
 import {
+  getCrmSystemTextLabel,
   getLeadSequenceCommandCenterCopy,
   getLocale,
   type LanguageCode,
@@ -813,7 +814,7 @@ export function LeadSequenceCommandCenter({
                     {selectedLead?.score ?? 0} Score - {selectedLead?.status ?? selectedContact.role}
                   </p>
                   <p className="rounded-md bg-stone-50 p-3">
-                    {getContactOwnerName(selectedLead, users, "Novalure")} - {selectedDeal?.stage ?? selectedLead?.nextAction ?? ""}
+                    {getContactOwnerName(selectedLead, users, "Novalure")} - {selectedDeal?.stage ?? (selectedLead?.nextAction ? getCrmSystemTextLabel(selectedLead.nextAction, language) : "")}
                   </p>
                   <p className="rounded-md bg-stone-50 p-3">
                     {relatedTasks.length} {text.internalSteps} - {getContactFirstName(selectedContact)}

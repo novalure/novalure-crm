@@ -292,9 +292,20 @@ test("phase 3 complete brokerage preset is additive and covers the full broker w
   }
   assert.match(workspace, /return "completeBrokerage";/);
   assert.match(workspace, /return \["completeBrokerage", "realEstateBroker"\]/);
+  assert.match(workspace, /const navigationPresetOrder: NavigationPresetId\[\] = \[\s*"completeBrokerage"/);
+  assert.match(workspace, /teamNavigationPresetIds = new Set<NavigationPresetId>/);
+  assert.match(workspace, /getNavigationPresetOptionGroups/);
+  assert.match(workspace, /<optgroup key=\{group\.id\} label=\{copy\.navigationPresets\.groups\[group\.id\]\}>/);
+  assert.match(workspace, /setActivePresetId\(normalizedActivePresetId\)/);
+  assert.match(workspace, /window\.localStorage\.setItem\(navigationPresetStorageKey, normalizedActivePresetId\)/);
+  assert.match(i18n, /standard: "Standard profiles"/);
+  assert.match(i18n, /forTeams: "For teams"/);
+  assert.match(i18n, /standard: "Standardprofile"/);
+  assert.match(i18n, /forTeams: "Für Teams"/);
   assert.match(i18n, /Maklergeschäft komplett/);
   assert.match(i18n, /Complete brokerage business/);
-  assert.match(tenantQa, /"completeBrokerage"/);
+  assert.match(tenantQa, /completeBrokerage first; standard profiles before team and Novalure internal profiles/);
+  assert.match(tenantQa, /sameArray\(navigationOrder, expectedNavigationProfiles\)/);
 });
 
 test("phase 2 property KPIs use unit scope, default units and non-multiplying project revenue", () => {

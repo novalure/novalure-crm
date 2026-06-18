@@ -93,6 +93,7 @@ import {
   getCrmSourceKey,
   getCrmSourceLabel,
   getCrmStatusLabel,
+  getCrmSystemTextLabel,
   getLocale,
   languageStorageKeys,
   resolveLanguage,
@@ -263,10 +264,25 @@ type NavigationPreset = {
 const navigationPresetStorageKey = "novalure-crm-navigation-preset-v1";
 
 const navigationPresetOrder: NavigationPresetId[] = [
-  "novalureInternal",
-  "realEstateBroker",
   "completeBrokerage",
+  "realEstateBroker",
   "propertyDeveloper",
+  "hybridRealEstate",
+  "managedService",
+  "sales",
+  "salesLead",
+  "management",
+  "marketing",
+  "assistant",
+  "newUser",
+  "admin",
+  "novalureInternal",
+  "novalureGrowth",
+  "novalureServiceOps",
+  "novalureAdmin",
+];
+
+const teamNavigationPresetIds = new Set<NavigationPresetId>([
   "sales",
   "salesLead",
   "management",
@@ -275,11 +291,28 @@ const navigationPresetOrder: NavigationPresetId[] = [
   "newUser",
   "admin",
   "managedService",
-  "hybridRealEstate",
+  "novalureInternal",
   "novalureGrowth",
   "novalureServiceOps",
   "novalureAdmin",
-];
+]);
+
+type NavigationPresetGroupId = "standard" | "forTeams";
+
+function getNavigationPresetOptionGroups(allowedPresetIds: NavigationPresetId[]) {
+  const standardPresetIds = allowedPresetIds.filter((presetId) => !teamNavigationPresetIds.has(presetId));
+  const teamPresetIds = allowedPresetIds.filter((presetId) => teamNavigationPresetIds.has(presetId));
+  const groups: Array<{ id: NavigationPresetGroupId; presetIds: NavigationPresetId[] }> = [];
+
+  if (standardPresetIds.length > 0) {
+    groups.push({ id: "standard", presetIds: standardPresetIds });
+  }
+  if (teamPresetIds.length > 0) {
+    groups.push({ id: "forTeams", presetIds: teamPresetIds });
+  }
+
+  return groups;
+}
 
 const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   novalureInternal: {
@@ -666,12 +699,12 @@ function getAllowedNavigationPresetIds(context: WorkspaceProductContext): Naviga
     return navigationPresetOrder;
   }
 
-  if (context.productRole === "assistant_backoffice") return ["assistant", getDefaultNavigationPresetId(context)];
+  if (context.productRole === "assistant_backoffice") return [getDefaultNavigationPresetId(context), "assistant"];
   if (context.productRole === "developer_sales" || context.productRole === "project_sales_member") {
-    return ["sales", "salesLead", "propertyDeveloper", "newUser"];
+    return ["propertyDeveloper", "sales", "salesLead", "newUser"];
   }
   if (context.productRole === "broker_agent" || context.productRole === "team_member") {
-    return ["sales", "newUser", "realEstateBroker", "completeBrokerage"];
+    return [getDefaultNavigationPresetId(context), "realEstateBroker", "sales", "newUser"];
   }
   if (context.productRole === "customer_owner" || context.productRole === "workspace_admin") {
     return [getDefaultNavigationPresetId(context), "realEstateBroker", "management", "salesLead", "sales", "marketing", "assistant", "admin", "newUser"];
@@ -682,6 +715,16 @@ function getAllowedNavigationPresetIds(context: WorkspaceProductContext): Naviga
     return ["hybridRealEstate", "realEstateBroker", "propertyDeveloper"];
   }
   return ["completeBrokerage", "realEstateBroker"];
+}
+
+function getFallbackNavigationPresetId(
+  context: WorkspaceProductContext,
+  allowedPresetIds: NavigationPresetId[],
+): NavigationPresetId {
+  const defaultPresetId = getDefaultNavigationPresetId(context);
+  return allowedPresetIds.includes(defaultPresetId)
+    ? defaultPresetId
+    : allowedPresetIds[0] ?? "completeBrokerage";
 }
 
 const statusStyles: Record<string, string> = {
@@ -1598,7 +1641,7 @@ function CommunicationCommandCenter({
                           {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(conversation.lastMessageAt))}
                         </span>
                       </td>
-                      <td className="py-3 pr-4 text-stone-700">{lead?.nextAction || panelCopy.noNextAction}</td>
+                      <td className="py-3 pr-4 text-stone-700">{lead?.nextAction ? getCrmSystemTextLabel(lead.nextAction, language) : panelCopy.noNextAction}</td>
                       <td className="py-3 pr-4 text-stone-700">{owner?.name ?? panelCopy.noOwner}</td>
                       <td className="py-3 pr-4">
                         <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">
@@ -1947,15 +1990,15 @@ function RolePriorityPanel({
   const roleCopy = (copy as typeof copy & { rolePriorities?: RolePriorityPanelCopy }).rolePriorities ?? {
     description: "Role-specific start priorities for daily CRM work.",
     metricDetails: {
-      hotLeads: "All visible leads, no time filter.",
-      pipeline: "Weighted value of open deals.",
+      hotLeads: "All visible leads with score above 80 or hot status.",
+      pipeline: "Open deal value weighted by probability.",
     },
     metrics: {
       appointments: "Appointments",
-      hotLeads: "Hot leads",
+      hotLeads: "Hot leads (all)",
       noOwner: "Without owner",
       openTasks: "Open tasks",
-      pipeline: "Weighted forecast",
+      pipeline: "Weighted forecast - open deals",
       riskDeals: "Risk deals",
       unlinkedTasks: "Unlinked tasks",
     },
@@ -2452,6 +2495,7 @@ function InternalWorkspaceView({
   customerAccess,
   deals,
   kind,
+  language,
   leads,
   projectLabel,
   projects,
@@ -2464,6 +2508,7 @@ function InternalWorkspaceView({
   customerAccess: CustomerWorkspaceAccess[];
   deals: Deal[];
   kind: "managedService" | "onboarding" | "customerSuccess";
+  language: LanguageCode;
   leads: Lead[];
   projectLabel: string;
   projects: Project[];
@@ -2570,7 +2615,7 @@ function InternalWorkspaceView({
   const selectedProjectName = managedActiveProject?.name ?? (selectedManagedProjectId === "all" ? labels.allProjects : projectLabel);
   const nextActions = [
     ...overdueTasks.map((task) => task.title),
-    ...newLeads.map((lead) => lead.nextAction),
+    ...newLeads.map((lead) => getCrmSystemTextLabel(lead.nextAction, language)),
     ...scopedCustomers.map((customer) => customer.nextOnboardingAction),
   ].filter(Boolean).slice(0, 5);
 
@@ -3026,8 +3071,9 @@ export function CrmWorkspace({
   const allowedPresetIds = getAllowedNavigationPresetIds(workspaceContext);
   const normalizedActivePresetId = allowedPresetIds.includes(activePresetId)
     ? activePresetId
-    : getDefaultNavigationPresetId(workspaceContext);
+    : getFallbackNavigationPresetId(workspaceContext, allowedPresetIds);
   const normalizedActivePreset = navigationPresets[normalizedActivePresetId];
+  const presetOptionGroups = getNavigationPresetOptionGroups(allowedPresetIds);
   const activeProject = allProjects.find((project) => project.id === activeProjectId);
   const projectScopeLabel = activeProject?.name ?? copy.header.allProjects;
   const sidebarToggleLabel = sidebarCollapsed
@@ -3386,6 +3432,25 @@ export function CrmWorkspace({
   }, [normalizedActivePreset]);
 
   useEffect(() => {
+    if (activePresetId === normalizedActivePresetId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      setActivePresetId(normalizedActivePresetId);
+      window.localStorage.setItem(navigationPresetStorageKey, normalizedActivePresetId);
+
+      if (!normalizedActivePreset.navigationEntries.includes(activeNavigationEntryId)) {
+        const nextEntryId = normalizedActivePreset.startEntry;
+        const nextSection = navigationEntries[nextEntryId].section;
+        setActiveNavigationEntryId(nextEntryId);
+        setActiveSection(nextSection);
+        setSidebarCollapsed(usesFocusedWorkspaceSidebar(nextSection));
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeNavigationEntryId, activePresetId, normalizedActivePreset, normalizedActivePresetId]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setLanguage(readUrlLanguage() ?? readStoredLanguage(languageStorageKeys.system, getBrowserLanguageFallback()));
       setLanguageHydrated(true);
@@ -3647,10 +3712,14 @@ export function CrmWorkspace({
                   }
                   value={normalizedActivePresetId}
                 >
-                  {allowedPresetIds.map((presetId) => (
-                    <option key={presetId} value={presetId}>
-                      {copy.navigationPresets.profiles[presetId].label}
-                    </option>
+                  {presetOptionGroups.map((group) => (
+                    <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
+                      {group.presetIds.map((presetId) => (
+                        <option key={presetId} value={presetId}>
+                          {copy.navigationPresets.profiles[presetId].label}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>
@@ -3935,10 +4004,14 @@ export function CrmWorkspace({
                     }
                     value={normalizedActivePresetId}
                   >
-                    {allowedPresetIds.map((presetId) => (
-                      <option key={presetId} value={presetId}>
-                        {copy.navigationPresets.profiles[presetId].label}
-                      </option>
+                    {presetOptionGroups.map((group) => (
+                      <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
+                        {group.presetIds.map((presetId) => (
+                          <option key={presetId} value={presetId}>
+                            {copy.navigationPresets.profiles[presetId].label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </label>
@@ -4148,6 +4221,7 @@ export function CrmWorkspace({
                 customerAccess={visibleCustomerWorkspaceAccess}
                 deals={visibleDeals}
                 kind="managedService"
+                language={language}
                 leads={visibleLeads}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
@@ -4164,6 +4238,7 @@ export function CrmWorkspace({
                 customerAccess={visibleCustomerWorkspaceAccess}
                 deals={visibleDeals}
                 kind="onboarding"
+                language={language}
                 leads={visibleLeads}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
@@ -4180,6 +4255,7 @@ export function CrmWorkspace({
                 customerAccess={visibleCustomerWorkspaceAccess}
                 deals={visibleDeals}
                 kind="customerSuccess"
+                language={language}
                 leads={visibleLeads}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}

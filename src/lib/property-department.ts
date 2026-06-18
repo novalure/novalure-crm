@@ -214,7 +214,7 @@ export const PROPERTY_DOCUMENT_SECTIONS = [
   "Objektbeschreibung",
   "Lagebeschreibung",
   "Ausstattungsbeschreibung",
-  "Kostenuebersicht",
+  "Kostenübersicht",
   "Energiedaten",
   "Medien",
   "Grundrisse",
@@ -241,14 +241,14 @@ export const PROPERTY_COST_GROUPS = [
 export const PROPERTY_COST_TEMPLATES = [
   { groupKey: "monthly", key: "operating_costs", label: "Betriebskosten", monthly: true },
   { groupKey: "monthly", key: "heating_costs", label: "Heizkosten", monthly: true },
-  { groupKey: "monthly", key: "repair_reserve", label: "Ruecklage", monthly: true },
+  { groupKey: "monthly", key: "repair_reserve", label: "Rücklage", monthly: true },
   { groupKey: "monthly", key: "other_monthly", label: "Sonstige monatliche Kosten", monthly: true },
   { groupKey: "purchase", key: "transfer_tax", label: "Grunderwerbsteuer", monthly: false },
   { groupKey: "purchase", key: "land_register_fee", label: "Grundbucheintragung", monthly: false },
   { groupKey: "purchase", key: "contract_setup", label: "Vertragserrichtung", monthly: false },
   { groupKey: "purchase", key: "broker_commission_purchase", label: "Provision Kauf", monthly: false },
   { groupKey: "rent", key: "deposit", label: "Kaution", monthly: false },
-  { groupKey: "rent", key: "stamp_duty", label: "Vergebuehrung", monthly: false },
+  { groupKey: "rent", key: "stamp_duty", label: "Vergebührung", monthly: false },
   { groupKey: "rent", key: "broker_commission_rent", label: "Provision Miete", monthly: false },
 ] as const;
 
@@ -874,7 +874,7 @@ export function buildPropertyDataQualityIssues(input: {
       issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Portal-Mapping offen" });
     }
     if (asset.status === "needs_review") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Vermarktung pruefen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Vermarktung prüfen" });
     }
   }
 

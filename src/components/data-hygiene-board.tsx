@@ -10,6 +10,7 @@ import {
 import {
   formatDate,
   formatNumber,
+  getCrmSystemTextLabel,
   getDataHygieneBoardCopy,
   type LanguageCode,
 } from "@/lib/i18n";
@@ -582,7 +583,9 @@ export function DataHygieneBoard({
                               <div>
                                 <dt className="font-semibold text-slate-900">{text.fields.nextAction}</dt>
                                 <dd className="break-words">
-                                  {lead?.nextAction || issue.nextAction || text.fields.noNextAction}
+                                  {lead?.nextAction || issue.nextAction
+                                    ? getCrmSystemTextLabel(lead?.nextAction || issue.nextAction || "", language)
+                                    : text.fields.noNextAction}
                                 </dd>
                               </div>
                             </dl>

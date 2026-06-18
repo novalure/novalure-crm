@@ -42,7 +42,7 @@ import {
   type PropertyUnitBoardScope,
 } from "@/lib/property-department";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
-import { formatCurrency, formatNumber, getLocale, type LanguageCode } from "@/lib/i18n";
+import { formatCurrency, formatNumber, getCrmSystemTextLabel, getLocale, type LanguageCode } from "@/lib/i18n";
 
 type PropertyCommandCenterProps = {
   brokerMandates: BrokerMandate[];
@@ -637,10 +637,10 @@ export function PropertyCommandCenter({
             <ActionButton action={actions.exportChannel} onClick={() => setActiveTab("channels")} />
           </div>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {metrics.map(([label, value]) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={label}>
-              <p className="break-words text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{formatNumber(Number(value), language)}</p>
             </div>
           ))}
@@ -693,15 +693,23 @@ export function PropertyCommandCenter({
               </select>
             </div>
             <div className="mt-4 overflow-x-auto">
-              <table className="min-w-[860px] w-full text-left text-sm">
+              <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[30%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[25%]" />
+                  <col className="w-[8%]" />
+                </colgroup>
                 <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>
-                    <th className="py-2 pr-4 font-semibold">Objekt</th>
-                    <th className="py-2 pr-4 font-semibold">Status</th>
-                    <th className="py-2 pr-4 font-semibold">Preis</th>
-                    <th className="py-2 pr-4 font-semibold">Fläche</th>
-                    <th className="py-2 pr-4 font-semibold">Einheiten</th>
-                    <th className="py-2 font-semibold">Anfragen</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Objekt</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Status</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Preis</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Fläche</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Einheiten</th>
+                    <th className="py-2 font-semibold whitespace-nowrap">Anfragen</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -722,7 +730,19 @@ export function PropertyCommandCenter({
                       <td className="py-3 pr-4 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</td>
                       <td className="py-3 pr-4 text-stone-700">{asset.areaSqm ? `${formatNumber(asset.areaSqm, language)} m2` : "-"}</td>
                       <td className="py-3 pr-4 text-stone-700">
-                        {asset.unitCount ? `${asset.availableUnits} frei / ${asset.reservedUnits} reserviert / ${asset.soldUnits} verkauft` : "-"}
+                        {asset.unitCount ? (
+                          <div className="flex min-w-[220px] flex-wrap gap-1.5">
+                            {[
+                              `${asset.availableUnits} frei`,
+                              `${asset.reservedUnits} reserviert`,
+                              `${asset.soldUnits} verkauft`,
+                            ].map((item) => (
+                              <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700" key={item}>
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        ) : "-"}
                       </td>
                       <td className="py-3 text-stone-700">
                         {routeResults.filter((item) => item.route.propertyId === asset.id || item.route.projectId === asset.projectId).length}
@@ -1162,7 +1182,7 @@ export function PropertyCommandCenter({
                 {routeResults.map(({ lead, route }) => (
                   <tr className="border-t border-stone-200 align-top" key={lead.id}>
                     <td className="py-3 pr-4">
-                      <p className="font-semibold text-slate-950">{lead.intent}</p>
+                      <p className="font-semibold text-slate-950">{getCrmSystemTextLabel(lead.intent, language)}</p>
                       <p className="mt-1 text-xs text-stone-500">{contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.contactId}</p>
                     </td>
                     <td className="py-3 pr-4 text-stone-700">{route.sourceChannel}</td>
@@ -1339,7 +1359,7 @@ export function PropertyCommandCenter({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-slate-950">{match.asset.title}</p>
-                    <p className="mt-1 text-sm text-stone-600">{match.contact?.name ?? match.profile?.title ?? match.lead?.intent}</p>
+                    <p className="mt-1 text-sm text-stone-600">{match.contact?.name ?? match.profile?.title ?? (match.lead ? getCrmSystemTextLabel(match.lead.intent, language) : undefined)}</p>
                   </div>
                   <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-emerald-800">{match.score}%</span>
                 </div>
@@ -1381,7 +1401,7 @@ export function PropertyCommandCenter({
               ...leads.slice(0, 8).map((lead) => ({
                 id: `lead:${lead.id}`,
                 label: lead.source,
-                title: lead.nextAction || lead.intent,
+                title: getCrmSystemTextLabel(lead.nextAction || lead.intent, language),
                 time: lead.receivedAt,
               })),
             ].map((event) => (

@@ -51,7 +51,7 @@ export default async function LegacyBookingPage({ params, searchParams }: Legacy
           {legacy.status === "ambiguous" ? "Meeting-Link nicht eindeutig" : "Meeting nicht gefunden"}
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Bitte verwenden Sie den vollstaendigen Buchungslink.
+          Bitte verwenden Sie den vollständigen Buchungslink.
         </p>
       </section>
     </main>

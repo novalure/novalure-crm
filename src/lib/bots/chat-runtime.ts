@@ -1141,7 +1141,7 @@ export async function runBotChat(input: {
   const score = "score" in qualification && typeof qualification.score === "number" ? qualification.score : null;
   const nextAction = requiresHumanHandoff
     ? language === "de"
-      ? "Anfrage an das Team uebergeben: keine freigegebene Wissensquelle gefunden"
+      ? "Anfrage an das Team übergeben: keine freigegebene Wissensquelle gefunden"
       : "Hand the enquiry to the team: no approved knowledge source found"
     : documentDecision
       ? documentDecision.mode === "block"
@@ -1161,7 +1161,7 @@ export async function runBotChat(input: {
           : "Meeting booking handled autonomously"
       : meetingSlots
         ? language === "de"
-          ? "Terminvorschlaege nach Regeln vorbereitet"
+          ? "Terminvorschläge nach Regeln vorbereitet"
           : "Prepare meeting slot suggestions under policy"
         : "stage" in qualification && qualification.stage === "qualified"
           ? language === "de"

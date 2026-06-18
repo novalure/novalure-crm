@@ -1051,21 +1051,21 @@ function buildDailyQueueData(input: {
     sections: [
       {
         cards: hotLeads,
-        emptyText: { de: "Keine heissen Leads - Lead-Zentrale pruefen.", en: "No hot leads - check Lead Inbox." },
+        emptyText: { de: "Keine heißen Leads - Lead-Zentrale prüfen.", en: "No hot leads - check Lead Inbox." },
         id: "hotLeads",
-        title: { de: "Heisse Leads", en: "Hot leads" },
+        title: { de: "Heiße Leads", en: "Hot leads" },
       },
       {
         cards: demoFollowUps,
-        emptyText: { de: "Keine Demo-Follow-ups faellig.", en: "No demo follow-ups due." },
+        emptyText: { de: "Keine Demo-Follow-ups fällig.", en: "No demo follow-ups due." },
         id: "demoFollowUps",
         title: { de: "Demo-Follow-ups", en: "Demo follow-ups" },
       },
       {
         cards: overdueOffers,
-        emptyText: { de: "Keine ueberfaelligen Angebote.", en: "No overdue offers." },
+        emptyText: { de: "Keine überfälligen Angebote.", en: "No overdue offers." },
         id: "overdueOffers",
-        title: { de: "Ueberfaellige Angebote", en: "Overdue offers" },
+        title: { de: "Überfällige Angebote", en: "Overdue offers" },
       },
       {
         cards: todayAppointments,

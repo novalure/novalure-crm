@@ -1529,7 +1529,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
   );
 
   await writePropertyActivityEvent({
-    detail: "Automatische Default-Unit fuer Listing-only-Objekt erstellt",
+    detail: "Automatische Default-Unit für Listing-only-Objekt erstellt",
     eventType: "property.default_unit.created",
     projectId: row.projectId,
     propertyId: row.id,

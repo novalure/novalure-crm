@@ -1491,7 +1491,7 @@ export async function runBotAnswerQualityReviews(input: {
       detail: "Kein aktiver Bot ist für Answer-Quality-Reviews verfügbar.",
       evaluation: null,
       issueType: "bot_answer_quality_review",
-      nextAction: "Aktiven Bot mit Strict Knowledge, freigegebenen Quellen, Zitationen und Handoff-Regeln pruefen.",
+      nextAction: "Aktiven Bot mit Strict Knowledge, freigegebenen Quellen, Zitationen und Handoff-Regeln prüfen.",
       session: input.session,
       severity: "warning",
     });
@@ -1592,8 +1592,8 @@ export async function runBotAnswerQualityReviews(input: {
     moduleKey: "bot_governance",
     nextAction:
       reviewIssues > 0
-        ? "Offene Bot-Review-Aufgaben pruefen und Zitationen, Handoff-Regeln oder Red-Team-Faelle nachziehen."
-        : "Answer-Quality-Checks regelmaessig wiederholen und Grenzwerte beobachten.",
+        ? "Offene Bot-Review-Aufgaben prüfen und Zitationen, Handoff-Regeln oder Red-Team-Fälle nachziehen."
+        : "Answer-Quality-Checks regelmäßig wiederholen und Grenzwerte beobachten.",
     projectId,
     recommendationKey: "bot_answer_quality_review",
     session: input.session,
@@ -1714,7 +1714,7 @@ function evaluateBotQualityReview(
       severity = "risk";
     }
     if (failedHandoffs > 0) {
-      reasons.push(`${failedHandoffs} Handoff-Fall/Faelle ohne belegte Uebergabe`);
+      reasons.push(`${failedHandoffs} Handoff-Fall/Fälle ohne belegte Übergabe`);
       severity = "risk";
     }
     if (riskyAnswerCount > 0 && citationCoverage < 100) {
@@ -1750,9 +1750,9 @@ function evaluateBotQualityReview(
 
   if (reasons.length === 0) {
     return {
-      detail: "Answer-Quality, Zitationen, Handoff und Red-Team-Faelle sind im Zielbereich.",
+      detail: "Answer-Quality, Zitationen, Handoff und Red-Team-Fälle sind im Zielbereich.",
       needsReview: false,
-      nextAction: "Regelmaessige Answer-Quality-Checks fortsetzen.",
+      nextAction: "Regelmäßige Answer-Quality-Checks fortsetzen.",
       severity,
     };
   }
@@ -1765,9 +1765,9 @@ function evaluateBotQualityReview(
   if (needsRedTeamWork) {
     nextAction = "Red-Team-Fälle nachhärten und Bot erst nach fehlerfreiem Evaluationslauf für Kundenkanäle freigeben.";
   } else if (needsHandoffWork) {
-    nextAction = "Handoff-Regeln mit Ziel-Team testen und jede Uebergabe im Gespraech als Handoff markieren.";
+    nextAction = "Handoff-Regeln mit Ziel-Team testen und jede Übergabe im Gespräch als Handoff markieren.";
   } else if (needsCitationWork) {
-    nextAction = "Freigegebene Wissensquellen ergaenzen und sichtbare Zitationen in Bot-Antworten speichern.";
+    nextAction = "Freigegebene Wissensquellen ergänzen und sichtbare Zitationen in Bot-Antworten speichern.";
   }
 
   return {
@@ -2618,8 +2618,8 @@ async function completeInventoryOperationalProof(input: {
         [
           input.session.workspaceId,
           project.id,
-          `${project.name} Baukoerper A`,
-          "Projektadresse wird im Einheitenimport ergaenzt",
+          `${project.name} Baukörper A`,
+          "Projektadresse wird im Einheitenimport ergänzt",
           JSON.stringify({ source: "analysis_recommendation_completion" }),
         ],
       );
@@ -2757,7 +2757,7 @@ async function completeInventoryOperationalProof(input: {
             normalizeUuid(deal?.id),
             status === "sold" ? "converted" : "reserved",
             status === "sold" ? "contract_signed" : "offer_created",
-            status === "sold" ? "Vertrag archivieren und Uebergabe vorbereiten." : "Angebot finalisieren und Optionsfrist pruefen.",
+            status === "sold" ? "Vertrag archivieren und Übergabe vorbereiten." : "Angebot finalisieren und Optionsfrist prüfen.",
             JSON.stringify({ source: "analysis_recommendation_completion" }),
           ],
         );
@@ -2832,7 +2832,7 @@ async function completeInventoryOperationalProof(input: {
   const run = await recordOperationalRecommendationRun({
     metrics: { auditEvents, createdBuildings, createdMilestones, createdReservations, createdSlots, createdUnits },
     moduleKey: "developer_inventory",
-    nextAction: "Projektvertriebs-Cockpit mit echten Importdaten weiter befuellen.",
+    nextAction: "Projektvertriebs-Cockpit mit echten Importdaten weiter befüllen.",
     projectId,
     recommendationKey: "live_units_and_reservations",
     session: input.session,
@@ -2910,7 +2910,7 @@ async function runSequenceRuntimeReview(input: { projectId?: string | null; sess
           task_priority
         )
         values
-          ($1::uuid, $2::uuid, $3::uuid, 1, 'Erstantwort pruefen', 'Sofort', 0, 'task', 'Owner prueft Kontext und ersten Kontakt.', '["deal_won","opt_out","manual_stop"]'::jsonb, 'Hoch'),
+          ($1::uuid, $2::uuid, $3::uuid, 1, 'Erstantwort prüfen', 'Sofort', 0, 'task', 'Owner prüft Kontext und ersten Kontakt.', '["deal_won","opt_out","manual_stop"]'::jsonb, 'Hoch'),
           ($1::uuid, $2::uuid, $3::uuid, 2, 'Termin oder Unterlagen nachfassen', '24 Stunden', 24, 'email', 'Termin- oder Unterlagen-Follow-up vorbereiten.', '["reply_received","opt_out","manual_stop"]'::jsonb, 'Mittel')
       `,
       [input.session.workspaceId, projectId, sequence.id],
@@ -3057,12 +3057,12 @@ async function runSequenceRuntimeReview(input: { projectId?: string | null; sess
   await recordOperationalRecommendationRun({
     metrics: { enrollments, sequenceId: sequence.id, stepRuns, stopRules },
     moduleKey: "tasks_sequences",
-    nextAction: "Reminder-Ausfuehrung und Stop-Regel-Automation regelmaessig auswerten.",
+    nextAction: "Reminder-Ausführung und Stop-Regel-Automation regelmäßig auswerten.",
     projectId,
     recommendationKey: "sequence_runtime",
     session: input.session,
     status: enrollments > 0 ? "completed" : "needs_data",
-    summary: "Sequenzlaeufe, Step Runs und Stop-Regeln sind als Laufzeitnachweis gespeichert.",
+    summary: "Sequenzläufe, Step Runs und Stop-Regeln sind als Laufzeitnachweis gespeichert.",
   });
 
   return { reviewId: review?.id ?? null, enrollments, stepRuns, stopRules };
@@ -3418,8 +3418,8 @@ export async function runAnalysisBotRecommendationCompletion(input: {
     metrics: { errors, resultKeys: Object.keys(results) },
     moduleKey: "analysis_bot",
     nextAction: Object.keys(errors).length
-      ? "Fehlgeschlagene Teilbereiche pruefen und fehlende Daten oder Migrationen nachziehen."
-      : "Analysebot erneut laufen lassen und Score-Luecken pruefen.",
+      ? "Fehlgeschlagene Teilbereiche prüfen und fehlende Daten oder Migrationen nachziehen."
+      : "Analysebot erneut laufen lassen und Score-Lücken prüfen.",
     projectId,
     recommendationKey: "complete_analysis_bot_recommendations",
     session: input.session,

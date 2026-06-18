@@ -26,6 +26,7 @@ import {
   getCrmRelationshipRoleLabel,
   getCrmSourceKey,
   getCrmSourceLabel,
+  getCrmSystemTextLabel,
   getCrmTaskDueLabel,
   getCrmTaskPriorityLabel,
   type LanguageCode,
@@ -416,7 +417,7 @@ export function ContactCommandCenter({
     },
     {
       label: copy.qualityNextAction,
-      detail: selectedLead?.nextAction ?? "",
+      detail: selectedLead?.nextAction ? getCrmSystemTextLabel(selectedLead.nextAction, language) : "",
       status: selectedLead?.nextAction ? "ok" : "warning",
     },
     {
@@ -1488,7 +1489,9 @@ export function ContactCommandCenter({
                 <div className="rounded-md bg-stone-50 p-3 text-sm">
                   <p className="font-semibold text-slate-900">{copy.nextAction}</p>
                   <p className="mt-1 break-words text-stone-600">
-                    {selectedLead?.nextAction ?? selectedContact.intent}
+                    {selectedLead?.nextAction
+                      ? getCrmSystemTextLabel(selectedLead.nextAction, language)
+                      : getCrmSystemTextLabel(selectedContact.intent, language)}
                   </p>
                 </div>
                 <div className="rounded-md bg-stone-50 p-3 text-sm">

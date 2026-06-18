@@ -25,6 +25,7 @@ import {
   getCrmSourceKey,
   getCrmSourceLabel,
   getCrmStatusLabel,
+  getCrmSystemTextLabel,
   getDashboardCopy,
   getLeadInboxCommandCopy,
   getLocale,
@@ -268,6 +269,8 @@ export function LeadInbox({
         const hasConsent = leadConsents.some((consent) => consent.status === "Opt-in" || consent.status === "Nur CRM");
         const hasAction = lead.nextAction.trim().length > 0;
         const hasQualification = lead.score >= 75 && lead.intent.trim().length > 0;
+        const leadIntentLabel = getCrmSystemTextLabel(lead.intent, language);
+        const leadNextActionLabel = getCrmSystemTextLabel(lead.nextAction, language);
 
         return {
           lead,
@@ -283,10 +286,12 @@ export function LeadInbox({
           hasConsent,
           hasAction,
           hasQualification,
+          leadIntentLabel,
+          leadNextActionLabel,
           slaMinutes: minutesUntil(lead.slaDueAt),
         };
       }),
-    [activities, brokerMandates, buyerSearchProfiles, consents, contacts, conversations, effectiveLeads, projects, users],
+    [activities, brokerMandates, buyerSearchProfiles, consents, contacts, conversations, effectiveLeads, language, projects, users],
   );
 
   const filteredLeads = useMemo(() => {
@@ -315,6 +320,8 @@ export function LeadInbox({
           item.lead.status,
           item.lead.intent,
           item.lead.nextAction,
+          item.leadIntentLabel,
+          item.leadNextActionLabel,
           item.owner?.name,
         ]
           .filter(Boolean)
@@ -1293,9 +1300,9 @@ export function LeadInbox({
                       </span>
                     </span>
 
-                    <span className="block break-words text-sm">{item.lead.intent}</span>
+                    <span className="block break-words text-sm">{item.leadIntentLabel}</span>
                     <span className={`block rounded-md px-3 py-2 text-xs ${isSelected ? "bg-white/10 text-slate-100" : "bg-white text-stone-600"}`}>
-                      {copy.nextAction}: {item.lead.nextAction}
+                      {copy.nextAction}: {item.leadNextActionLabel}
                     </span>
                     <span className={`block break-words text-xs ${isSelected ? "text-slate-300" : "text-stone-500"}`}>
                       {copy.owner}: {item.owner?.name ?? copy.unassigned}
@@ -1334,7 +1341,7 @@ export function LeadInbox({
               <div className="rounded-lg bg-stone-50 p-3">
                 <p className="text-sm font-semibold">{copy.aiSummary}</p>
                 <p className="mt-2 break-words text-sm text-stone-600">
-                  {selected.lead.intent}. {copy.aiNextStep}: {selected.lead.nextAction}.
+                  {selected.leadIntentLabel}. {copy.aiNextStep}: {selected.leadNextActionLabel}.
                   {selected.lead.budget ? ` ${copy.budget}: ${selected.lead.budget}.` : ""}
                 </p>
               </div>

@@ -23,6 +23,7 @@ import {
   getCrmSourceLabel,
   getCrmStatusKey,
   getCrmStatusLabel,
+  getCrmSystemTextLabel,
   getDashboardOverviewCopy,
   languageOptionsByCode,
   type LanguageCode,
@@ -423,8 +424,8 @@ function getAging(lead: Lead) {
   return { days, className: "border-red-200 bg-red-50 text-red-900" };
 }
 
-function getLeadName(lead: Lead, contacts: Contact[]) {
-  return contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.intent;
+function getLeadName(lead: Lead, contacts: Contact[], language: LanguageCode) {
+  return contacts.find((contact) => contact.id === lead.contactId)?.name ?? getCrmSystemTextLabel(lead.intent, language);
 }
 
 function getDealLead(deal: Deal, leads: Lead[]) {
@@ -714,7 +715,7 @@ export function DashboardOverview({
       case "monthlyClosings":
         return renderKpi(copy.kpis.monthlyClosings, formatEuro(monthClosingCommission, locale), copy.kpis.target + ": " + formatEuro(MONTH_TARGET_COMMISSION, locale) + " | " + Math.round((monthClosingCommission / MONTH_TARGET_COMMISSION) * 100) + "%", "bg-violet-50");
       case "overdueFollowupsKpi":
-        return renderKpi(copy.kpis.overdueFollowups, String(overdueLeads.length), overdueLeads.slice(0, 2).map((lead) => getLeadName(lead, contacts)).join(" | ") || copy.kpis.noCriticalFollowups, overdueLeads.length ? "bg-red-50" : "bg-emerald-50");
+        return renderKpi(copy.kpis.overdueFollowups, String(overdueLeads.length), overdueLeads.slice(0, 2).map((lead) => getLeadName(lead, contacts, language)).join(" | ") || copy.kpis.noCriticalFollowups, overdueLeads.length ? "bg-red-50" : "bg-emerald-50");
       case "hotLeadsKpi":
         return renderKpi(copy.kpis.hotLeads, String(hotLeads.length), copy.kpis.hotLeadRule, "bg-amber-50");
       case "conversionRate":
@@ -738,17 +739,17 @@ export function DashboardOverview({
       case "statusDonut":
         return <div className="grid gap-3 sm:grid-cols-[150px_1fr]"><div className="grid aspect-square place-items-center rounded-full bg-[conic-gradient(#059669_0_25%,#2563eb_25%_50%,#f59e0b_50%_75%,#7c3aed_75%_90%,#94a3b8_90%_100%)]"><div className="grid h-24 w-24 place-items-center rounded-full bg-white text-lg font-semibold">{filteredLeads.length}</div></div><div className="grid content-center gap-2">{statusRows.map((row) => <div className="flex justify-between text-sm" key={row.status}><span>{getCrmStatusLabel(row.status, language)}</span><span>{Math.round((row.count / totalStatus) * 100)}%</span></div>)}</div></div>;
       case "overdueFollowupsList":
-        return <ListRows rows={overdueLeads.sort((a, b) => getAging(b).days - getAging(a).days).map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: lead.nextAction + " | " + copy.lists.daysWithoutContact(getAging(lead).days), className: getAging(lead).className }))} empty={copy.lists.noOverdueFollowups} />;
+        return <ListRows rows={overdueLeads.sort((a, b) => getAging(b).days - getAging(a).days).map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts, language), meta: getCrmSystemTextLabel(lead.nextAction, language) + " | " + copy.lists.daysWithoutContact(getAging(lead).days), className: getAging(lead).className }))} empty={copy.lists.noOverdueFollowups} />;
       case "todayTasks":
         return <ListRows rows={todayItems.map((item) => ({ id: item.id, title: item.title, meta: item.meta + " | " + item.priority, className: "border-stone-200 bg-stone-50 text-slate-900" }))} empty={copy.lists.nothingDueToday} />;
       case "hotLeadsList":
-        return <ListRows rows={hotLeads.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: copy.lists.score + " " + lead.score + " | " + lead.intent, className: getAging(lead).className }))} empty={copy.lists.noHotLeads} />;
+        return <ListRows rows={hotLeads.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts, language), meta: copy.lists.score + " " + lead.score + " | " + getCrmSystemTextLabel(lead.intent, language), className: getAging(lead).className }))} empty={copy.lists.noHotLeads} />;
       case "newLeadsWeek":
-        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts), meta: getCrmSourceLabel(lead.source, language) + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
+        return <ListRows rows={weekRequests.map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts, language), meta: getCrmSourceLabel(lead.source, language) + " | " + new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(new Date(lead.receivedAt)), className: "border-blue-200 bg-blue-50 text-blue-950" }))} empty={copy.lists.noNewLeadsWeek} />;
       case "expiringMandates":
         return <ListRows rows={mandateRows.map(({ listing, daysLeft }) => ({ id: listing.id, title: listing.title, meta: copy.lists.expiresInDays(daysLeft) + " | " + formatEuro(listing.targetPrice, locale), className: daysLeft <= 30 ? "border-orange-200 bg-orange-50 text-orange-950" : "border-yellow-200 bg-yellow-50 text-yellow-950" }))} empty={copy.lists.noExpiringMandates} />;
       case "matchSuggestions":
-        return <ListRows rows={matchRows.map((match) => ({ id: match.listing.id + "_" + match.lead.id, title: getLeadName(match.lead, contacts) + " -> " + match.listing.title, meta: copy.lists.match + " " + match.score + "% | " + match.listing.region + " | " + compactNumber(match.listing.targetPrice, locale) + " EUR", className: "border-emerald-200 bg-emerald-50 text-emerald-950" }))} empty={copy.lists.noMatchSuggestions} />;
+        return <ListRows rows={matchRows.map((match) => ({ id: match.listing.id + "_" + match.lead.id, title: getLeadName(match.lead, contacts, language) + " -> " + match.listing.title, meta: copy.lists.match + " " + match.score + "% | " + match.listing.region + " | " + compactNumber(match.listing.targetPrice, locale) + " EUR", className: "border-emerald-200 bg-emerald-50 text-emerald-950" }))} empty={copy.lists.noMatchSuggestions} />;
     }
   };
 

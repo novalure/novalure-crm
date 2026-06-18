@@ -13,6 +13,7 @@ import type {
 import {
   formatCurrency,
   formatNumber,
+  getCrmSystemTextLabel,
   getLocale,
   getUnitBoardCopy,
   type LanguageCode,
@@ -731,10 +732,10 @@ export function UnitBoard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
           {metrics.map((metric) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={metric.label}>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{metric.label}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{metric.label}</p>
               <p className="mt-2 text-xl font-semibold text-slate-950">{metric.value}</p>
             </div>
           ))}
@@ -948,10 +949,10 @@ export function UnitBoard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {managementMetrics.map((metric) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={metric.label}>
-              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-stone-500">{metric.label}</p>
+              <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{metric.label}</p>
               <p className="mt-2 text-lg font-semibold text-slate-950">{metric.value}</p>
             </div>
           ))}
@@ -1393,7 +1394,7 @@ export function UnitBoard({
                                 </span>
                               </div>
                               <p className="mt-1 break-words text-[11px] text-emerald-900">
-                                {match.reasons.length ? match.reasons.join(" / ") : match.lead.intent}
+                                {match.reasons.length ? match.reasons.join(" / ") : getCrmSystemTextLabel(match.lead.intent, language)}
                               </p>
                             </div>
                           ))}

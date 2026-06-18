@@ -2,7 +2,14 @@
 
 import { useMemo } from "react";
 import type { CalendarEvent, Contact, DailyQueueActionSection, DailyQueueData, Lead, Project, Task } from "@/lib/crm-types";
-import { formatDateTime, formatNumber, getCrmTaskDueLabel, getCrmTaskPriorityLabel, type LanguageCode } from "@/lib/i18n";
+import {
+  formatDateTime,
+  formatNumber,
+  getCrmSystemTextLabel,
+  getCrmTaskDueLabel,
+  getCrmTaskPriorityLabel,
+  type LanguageCode,
+} from "@/lib/i18n";
 
 type DailyQueueSection = DailyQueueActionSection;
 
@@ -32,16 +39,16 @@ type DailyQueueItem = {
 
 const text = {
   de: {
-    callbacks: "Faellige Rueckrufe",
-    description: "Fokussierte Heute-zuerst-Liste aus heissen Leads, faelligen Rueckrufen, heutigen Terminen und ueberfaelligen Aufgaben.",
-    empty: "Die Tagesqueue ist leer. Es gibt aktuell keine heissen Leads, faelligen Rueckrufe, heutigen Termine oder ueberfaelligen Aufgaben im Projektfilter.",
-    hotLeads: "Heisse Leads",
+    callbacks: "Fällige Rückrufe",
+    description: "Fokussierte Heute-zuerst-Liste aus heißen Leads, fälligen Rückrufen, heutigen Terminen und überfälligen Aufgaben.",
+    empty: "Die Tagesqueue ist leer. Es gibt aktuell keine heißen Leads, fälligen Rückrufe, heutigen Termine oder überfälligen Aufgaben im Projektfilter.",
+    hotLeads: "Heiße Leads",
     meetings: "Heutige Termine",
     openCalendar: "Termine öffnen",
     openLeadInbox: "Lead-Zentrale öffnen",
     openTasks: "Aufgaben öffnen",
-    overdueTasks: "Ueberfaellige Aufgaben",
-    priority: "Prioritaet",
+    overdueTasks: "Überfällige Aufgaben",
+    priority: "Priorität",
     projectFallback: "Projekt",
     sequenceTitle: "Heute zuerst",
     task: "Aufgabe",
@@ -149,16 +156,18 @@ export function DailyQueueBoard({
       .filter((lead) => lead.status !== "Archiviert" && (lead.hotStatus || lead.score >= 80))
       .map<DailyQueueItem>((lead) => {
         const contact = contacts.find((item) => item.id === lead.contactId);
+        const leadIntentLabel = getCrmSystemTextLabel(lead.intent, language);
+        const leadNextActionLabel = getCrmSystemTextLabel(lead.nextAction, language);
         return {
           actionLabel: copy.openLeadInbox,
           actionSection: "leadInbox",
           id: `lead:${lead.id}`,
           kind: "hotLead",
-          meta: compactStrings([lead.intent, lead.nextAction, `Score ${lead.score}`]),
+          meta: compactStrings([leadIntentLabel, leadNextActionLabel, `Score ${lead.score}`]),
           priorityLabel: copy.hotLeads,
-          projectName: getProjectName(projects, lead.projectId, lead.intent),
+          projectName: getProjectName(projects, lead.projectId, leadIntentLabel),
           rank: 10_000 - lead.score * 10,
-          title: contact?.name ?? lead.intent,
+          title: contact?.name ?? leadIntentLabel,
         };
       });
 
