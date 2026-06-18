@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getRequestSession, type AppSession } from "@/lib/auth/session";
+import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
+import { loadPaginatedPropertyAssets } from "@/lib/db/crm-loaders";
 import {
   attachPropertyDocument,
   attachPropertyMedia,
@@ -20,6 +21,8 @@ import {
   type PropertyAssetSummary,
   type PropertyInquiryRouteInput,
 } from "@/lib/property-department";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function readJson(request: Request) {
   try {
@@ -60,6 +63,61 @@ function asObject(value: unknown): Record<string, unknown> {
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
+}
+
+function parseIntegerParam(value: string | null, fallback: number, min: number, max: number) {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+}
+
+function parseProjectId(value: string | null) {
+  if (!value) return null;
+  return uuidPattern.test(value) ? value : undefined;
+}
+
+function parseStatus(value: string | null) {
+  if (!value) return null;
+  const status = value.trim();
+  return /^[a-z_]{1,50}$/i.test(status) ? status : undefined;
+}
+
+export async function GET(request: Request) {
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  if (!auth.ok) return auth.response;
+
+  const url = new URL(request.url);
+  const projectId = parseProjectId(url.searchParams.get("projectId"));
+  if (projectId === undefined) {
+    return NextResponse.json({ error: "Invalid projectId" }, { status: 400 });
+  }
+
+  const status = parseStatus(url.searchParams.get("status"));
+  if (status === undefined) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+
+  const q = url.searchParams.get("q")?.trim().slice(0, 100) || null;
+  const result = await loadPaginatedPropertyAssets(auth.session.workspaceId, {
+    limit: parseIntegerParam(url.searchParams.get("limit"), 50, 1, 200),
+    offset: parseIntegerParam(url.searchParams.get("offset"), 0, 0, 100_000),
+    projectId,
+    q,
+    status,
+  });
+
+  return NextResponse.json({
+    data: { assets: result.assets },
+    filters: {
+      projectId,
+      q,
+      status,
+    },
+    pagination: result.pagination,
+    persisted: true,
+    source: "database",
+  });
 }
 
 export async function POST(request: Request) {
