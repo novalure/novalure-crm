@@ -1494,7 +1494,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
         status,
         metadata
       )
-      values ($1, $2::uuid, $4, 0, $5, $6, $7, 'available', $8::jsonb)
+      values ($1, $2::uuid, $3, 0, $4, $5, $6, 'available', $7::jsonb)
       on conflict (project_id, unit_number)
       do update set
         rooms = excluded.rooms,
@@ -1504,7 +1504,15 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
         updated_at = now()
       returning id
     `,
-    unitPayload,
+    [
+      session.workspaceId,
+      row.projectId,
+      listingDefaultUnitNumber(row.id),
+      toNumber(row.rooms, 0),
+      toNumber(row.areaSqm, 0),
+      listingDefaultUnitPriceCents(row),
+      JSON.stringify(unitMetadata),
+    ],
   );
   if (!unit?.id) return row;
 
