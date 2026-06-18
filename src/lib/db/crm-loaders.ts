@@ -51,7 +51,7 @@ import {
   sellerListings as mockSellerListings,
   tasks as mockTasks,
 } from "@/lib/crm-data";
-import { hasDatabaseUrl, queryRows } from "@/lib/db/client";
+import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { crmTables } from "@/lib/db/schema";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 
@@ -640,6 +640,35 @@ type CrmBotRow = {
   answerLength: CrmBot["answerLength"];
   updatedAt: string | Date;
   workspaceId: string;
+};
+
+export type PropertyUnitPaginationOptions = {
+  limit?: number;
+  offset?: number;
+  projectId?: string | null;
+  q?: string | null;
+  status?: PropertyUnit["status"] | null;
+};
+
+export type PropertyUnitPaginationResult = {
+  units: PropertyUnit[];
+  pagination: {
+    hasMore: boolean;
+    limit: number;
+    nextOffset: number | null;
+    offset: number;
+    total: number;
+  };
+  summary: {
+    availableUnits: number;
+    blockedUnits: number;
+    inventoryValueCents: number;
+    reservedUnits: number;
+    soldUnits: number;
+    soldValueCents: number;
+    totalSalesValueCents: number;
+    totalUnits: number;
+  };
 };
 
 class MissingWorkspaceScopeError extends Error {
@@ -1864,7 +1893,11 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
     [scopedWorkspaceId],
   );
 
-  return rows.map((row) => ({
+  return rows.map(mapPropertyUnitRow);
+}
+
+function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
+  return {
     areaSqm: Number(row.areaSqm ?? 0),
     buildingId: row.buildingId ?? "",
     buyerContactId: row.buyerContactId ?? undefined,
@@ -1879,7 +1912,126 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
     unitNumber: row.unitNumber,
     updatedAt: toIso(row.updatedAt),
     workspaceId: row.workspaceId,
-  }));
+  };
+}
+
+function clampInteger(value: number | undefined, fallback: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(value as number)));
+}
+
+function buildPropertyUnitWhereClause(workspaceId: string, options: PropertyUnitPaginationOptions) {
+  const params: unknown[] = [workspaceId];
+  const clauses = ["pu.workspace_id = $1::uuid"];
+
+  if (options.projectId) {
+    params.push(options.projectId);
+    clauses.push(`pu.project_id = $${params.length}::uuid`);
+  }
+
+  if (options.status) {
+    params.push(options.status);
+    clauses.push(`pu.status = $${params.length}::text`);
+  }
+
+  const query = options.q?.trim();
+  if (query) {
+    params.push(`%${query}%`);
+    clauses.push(`pu.unit_number ilike $${params.length}::text`);
+  }
+
+  return {
+    params,
+    whereClause: clauses.join(" and "),
+  };
+}
+
+export async function loadPaginatedPropertyUnits(
+  workspaceId: string,
+  options: PropertyUnitPaginationOptions = {},
+): Promise<PropertyUnitPaginationResult> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPaginatedPropertyUnits");
+  const limit = clampInteger(options.limit, 50, 1, 200);
+  const offset = clampInteger(options.offset, 0, 0, 100_000);
+  const filter = buildPropertyUnitWhereClause(scopedWorkspaceId, options);
+
+  const summary = await queryOne<{
+    availableUnits: number | string;
+    blockedUnits: number | string;
+    inventoryValueCents: number | string;
+    reservedUnits: number | string;
+    soldUnits: number | string;
+    soldValueCents: number | string;
+    totalSalesValueCents: number | string;
+    totalUnits: number | string;
+  }>(
+    `
+    select
+      count(*)::int as "totalUnits",
+      count(*) filter (where pu.status = 'available')::int as "availableUnits",
+      count(*) filter (where pu.status = 'reserved')::int as "reservedUnits",
+      count(*) filter (where pu.status = 'sold')::int as "soldUnits",
+      count(*) filter (where pu.status = 'blocked')::int as "blockedUnits",
+      coalesce(sum(pu.price_cents), 0)::bigint as "totalSalesValueCents",
+      coalesce(sum(pu.price_cents) filter (where pu.status <> 'sold'), 0)::bigint as "inventoryValueCents",
+      coalesce(sum(pu.price_cents) filter (where pu.status = 'sold'), 0)::bigint as "soldValueCents"
+    from property_units pu
+    where ${filter.whereClause}
+  `,
+    filter.params,
+  );
+
+  const rows = await queryRows<PropertyUnitRow>(
+    `
+    select
+      pu.id,
+      pu.workspace_id as "workspaceId",
+      pu.project_id as "projectId",
+      pu.building_id as "buildingId",
+      pu.unit_number as "unitNumber",
+      pu.floor,
+      pu.rooms,
+      pu.area_sqm as "areaSqm",
+      pu.price_cents as "priceCents",
+      pu.status,
+      pu.buyer_contact_id as "buyerContactId",
+      pu.deal_id as "dealId",
+      null::uuid as "reservationId",
+      pu.updated_at as "updatedAt"
+    from property_units pu
+    where ${filter.whereClause}
+    order by pu.project_id asc, pu.unit_number asc, pu.id asc
+    limit $${filter.params.length + 1}::int
+    offset $${filter.params.length + 2}::int
+  `,
+    [...filter.params, limit, offset],
+  );
+
+  const units = rows.map(mapPropertyUnitRow);
+  const total = Number(summary?.totalUnits ?? 0);
+  const nextOffset = offset + units.length;
+  const hasMore = nextOffset < total;
+
+  return {
+    units,
+    pagination: {
+      hasMore,
+      limit,
+      nextOffset: hasMore ? nextOffset : null,
+      offset,
+      total,
+    },
+    summary: {
+      availableUnits: Number(summary?.availableUnits ?? 0),
+      blockedUnits: Number(summary?.blockedUnits ?? 0),
+      inventoryValueCents: Number(summary?.inventoryValueCents ?? 0),
+      reservedUnits: Number(summary?.reservedUnits ?? 0),
+      soldUnits: Number(summary?.soldUnits ?? 0),
+      soldValueCents: Number(summary?.soldValueCents ?? 0),
+      totalSalesValueCents: Number(summary?.totalSalesValueCents ?? 0),
+      totalUnits: total,
+    },
+  };
 }
 
 export async function loadPropertyReservations(workspaceId: string): Promise<PropertyReservation[]> {
