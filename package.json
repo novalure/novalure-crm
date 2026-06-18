@@ -35,6 +35,7 @@
     "qa:tenant-isolation": "node scripts/qa-tenant-isolation.mjs",
     "qa:e2e-object-flow": "node scripts/e2e-object-creation-tests.mjs --phase4",
     "qa:property-unit-pagination": "node scripts/qa-property-unit-pagination.mjs",
+    "qa:property-pagination": "node scripts/qa-property-pagination.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
     "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs"
   },

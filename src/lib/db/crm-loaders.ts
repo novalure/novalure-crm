@@ -54,6 +54,7 @@ import {
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { crmTables } from "@/lib/db/schema";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
+import { buildPropertyAssets, type PropertyAssetSummary } from "@/lib/property-department";
 
 type CoreCrmData = {
   brokerMandates: BrokerMandate[];
@@ -671,6 +672,25 @@ export type PropertyUnitPaginationResult = {
   };
 };
 
+export type PropertyAssetPaginationOptions = {
+  limit?: number;
+  offset?: number;
+  projectId?: string | null;
+  q?: string | null;
+  status?: string | null;
+};
+
+export type PropertyAssetPaginationResult = {
+  assets: PropertyAssetSummary[];
+  pagination: {
+    hasMore: boolean;
+    limit: number;
+    nextOffset: number | null;
+    offset: number;
+    total: number;
+  };
+};
+
 class MissingWorkspaceScopeError extends Error {
   constructor(loaderName: string) {
     super(`${loaderName} requires an explicit workspaceId`);
@@ -1154,7 +1174,11 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
     [scopedWorkspaceId],
   );
 
-  return rows.map((row) => ({
+  return rows.map(mapProjectRow);
+}
+
+function mapProjectRow(row: ProjectRow): Project {
+  return {
     customerType: row.customerType ?? undefined,
     defaultOperatingModel: row.defaultOperatingModel ?? undefined,
     defaultPipelineId: row.defaultPipelineId ?? "",
@@ -1166,7 +1190,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
     status: row.status,
     type: row.type,
     workspaceId: row.workspaceId,
-  }));
+  };
 }
 
 export async function loadBrokerMandates(workspaceId: string): Promise<BrokerMandate[]> {
@@ -1527,7 +1551,11 @@ export async function loadSellerListings(workspaceId: string): Promise<SellerLis
     [scopedWorkspaceId],
   );
 
-  return rows.map((row) => ({
+  return rows.map(mapSellerListingRow);
+}
+
+function mapSellerListingRow(row: SellerListingRow): SellerListing {
+  return {
     address: row.address,
     areaSqm: Number(row.areaSqm ?? 0),
     canonicalPayload: row.canonicalPayload ?? undefined,
@@ -1586,7 +1614,454 @@ export async function loadSellerListings(workspaceId: string): Promise<SellerLis
     usageType: row.usageType ?? undefined,
     workspaceId: row.workspaceId,
     yearBuilt: toOptionalNumber(row.yearBuilt) ?? 0,
+  };
+}
+
+function buildSellerListingWhereClause(workspaceId: string, options: PropertyAssetPaginationOptions) {
+  const params: unknown[] = [workspaceId];
+  const clauses = ["sl.workspace_id = $1::uuid"];
+
+  if (options.projectId) {
+    params.push(options.projectId);
+    clauses.push(`sl.project_id = $${params.length}::uuid`);
+  }
+
+  const status = options.status?.trim();
+  if (status) {
+    params.push(status);
+    clauses.push(`sl.property_status = $${params.length}::text`);
+  }
+
+  const query = options.q?.trim();
+  if (query) {
+    params.push(`%${query}%`);
+    clauses.push(
+      `(sl.title ilike $${params.length}::text or sl.object_number ilike $${params.length}::text or sl.address ilike $${params.length}::text)`,
+    );
+  }
+
+  return {
+    params,
+    whereClause: clauses.join(" and "),
+  };
+}
+
+function uniqueIds(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+export async function loadPaginatedPropertyAssets(
+  workspaceId: string,
+  options: PropertyAssetPaginationOptions = {},
+): Promise<PropertyAssetPaginationResult> {
+  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadPaginatedPropertyAssets");
+  const limit = clampInteger(options.limit, 50, 1, 200);
+  const offset = clampInteger(options.offset, 0, 0, 100_000);
+  const filter = buildSellerListingWhereClause(scopedWorkspaceId, options);
+
+  const count = await queryOne<{ total: number | string }>(
+    `
+    select count(*)::int as total
+    from seller_listings sl
+    where ${filter.whereClause}
+  `,
+    filter.params,
+  );
+
+  const rows = await queryRows<SellerListingRow>(
+    `
+    select
+      sl.id,
+      sl.workspace_id as "workspaceId",
+      sl.project_id as "projectId",
+      sl.seller_lead_id as "sellerLeadId",
+      sl.title,
+      sl.address,
+      sl.region,
+      sl.object_type as "objectType",
+      sl.area_sqm as "areaSqm",
+      sl.rooms,
+      sl.year_built as "yearBuilt",
+      sl.market_value_cents as "marketValueCents",
+      sl.target_price_cents as "targetPriceCents",
+      sl.expected_gross_yield as "expectedGrossYield",
+      sl.mandate_ends_at as "mandateEndsAt",
+      sl.created_at as "createdAt",
+      sl.object_number as "objectNumber",
+      sl.internal_reference as "internalReference",
+      sl.external_portal_id as "externalPortalId",
+      sl.openimmo_object_id as "openimmoObjectId",
+      sl.unit_id as "unitId",
+      sl.mandate_id as "mandateId",
+      sl.owner_contact_id as "ownerContactId",
+      sl.owner_user_id as "ownerUserId",
+      sl.contact_user_id as "contactUserId",
+      sl.contact_name as "contactName",
+      sl.contact_phone as "contactPhone",
+      sl.contact_email as "contactEmail",
+      sl.marketing_type as "marketingType",
+      sl.usage_type as "usageType",
+      sl.sub_object_type as "subObjectType",
+      sl.sub_object_type_custom as "subObjectTypeCustom",
+      sl.available_from as "availableFrom",
+      sl.available_from_text as "availableFromText",
+      sl.availability_note as "availabilityNote",
+      sl.price_visibility as "priceVisibility",
+      sl.channel_price_visibility as "channelPriceVisibility",
+      sl.public_price_cents as "publicPriceCents",
+      sl.rent_price_cents as "rentPriceCents",
+      sl.rent_net_cents as "rentNetCents",
+      sl.monthly_costs_gross_cents as "monthlyCostsGrossCents",
+      sl.purchase_ancillary_costs_cents as "purchaseAncillaryCostsCents",
+      sl.costs_summary as "costsSummary",
+      sl.gdpr_status as "gdprStatus",
+      sl.portal_mapping_status as "portalMappingStatus",
+      sl.media_summary as "mediaSummary",
+      sl.document_summary as "documentSummary",
+      sl.text_summary as "textSummary",
+      sl.postal_code as "postalCode",
+      sl.city,
+      sl.federal_state as "federalState",
+      sl.street,
+      sl.property_status as "propertyStatus",
+      sl.document_status as "documentStatus",
+      sl.energy_certificate_valid_until as "energyValidUntil",
+      sl.hwb_class as "energyClass",
+      sl.internal_notes as "internalNotes",
+      sl.canonical_payload as "canonicalPayload"
+    from seller_listings sl
+    where ${filter.whereClause}
+    order by sl.created_at desc, sl.id desc
+    limit $${filter.params.length + 1}::int
+    offset $${filter.params.length + 2}::int
+  `,
+    [...filter.params, limit, offset],
+  );
+
+  const sellerListings = rows.map(mapSellerListingRow);
+  const listingIds = uniqueIds(sellerListings.map((listing) => listing.id));
+  const listingIdSet = new Set(listingIds);
+  const listingPosition = new Map(listingIds.map((id, index) => [id, index]));
+  const projectIds = uniqueIds(sellerListings.map((listing) => listing.projectId));
+  const unitIds = uniqueIds(sellerListings.map((listing) => listing.unitId));
+
+  const [
+    projects,
+    units,
+    reservations,
+    buildings,
+    propertyCostItems,
+    propertyDocuments,
+    propertyMedia,
+    propertyTextBlocks,
+  ] = await Promise.all([
+    loadProjectsForPropertyAssets(scopedWorkspaceId, projectIds),
+    loadPropertyUnitsForAssetSummaries(scopedWorkspaceId, projectIds, unitIds),
+    loadPropertyReservationsForAssetSummaries(scopedWorkspaceId, projectIds),
+    loadPropertyBuildingsForAssetSummaries(scopedWorkspaceId, projectIds),
+    loadPropertyCostItemsForAssets(scopedWorkspaceId, listingIds),
+    loadPropertyDocumentsForAssets(scopedWorkspaceId, listingIds),
+    loadPropertyMediaForAssets(scopedWorkspaceId, listingIds),
+    loadPropertyTextBlocksForAssets(scopedWorkspaceId, listingIds),
+  ]);
+
+  const assets = buildPropertyAssets({
+    brokerMandates: [],
+    buildings,
+    propertyCostItems,
+    propertyDocuments,
+    propertyMedia,
+    propertyTextBlocks,
+    projects,
+    reservations,
+    sellerListings,
+    units,
+  })
+    .filter((asset) => asset.sellerListingId && listingIdSet.has(asset.sellerListingId))
+    .sort((left, right) => {
+      const leftPosition = listingPosition.get(left.sellerListingId ?? "") ?? Number.MAX_SAFE_INTEGER;
+      const rightPosition = listingPosition.get(right.sellerListingId ?? "") ?? Number.MAX_SAFE_INTEGER;
+      return leftPosition - rightPosition;
+    });
+
+  const total = Number(count?.total ?? 0);
+  const nextOffset = offset + sellerListings.length;
+  const hasMore = nextOffset < total;
+
+  return {
+    assets,
+    pagination: {
+      hasMore,
+      limit,
+      nextOffset: hasMore ? nextOffset : null,
+      offset,
+      total,
+    },
+  };
+}
+
+async function loadProjectsForPropertyAssets(workspaceId: string, projectIds: string[]): Promise<Project[]> {
+  if (!projectIds.length) return [];
+
+  const rows = await queryRows<ProjectRow>(
+    `
+    select
+      p.id,
+      p.workspace_id as "workspaceId",
+      p.name,
+      p.type,
+      p.status,
+      p.customer_type as "customerType",
+      p.default_operating_model as "defaultOperatingModel",
+      p.default_pipeline_id as "defaultPipelineId",
+      p.setup_defaults as "setupDefaults",
+      coalesce(l.leads, 0)::int as leads,
+      coalesce(d.revenue_cents, 0)::bigint as "revenueCents"
+    from projects p
+    left join (
+      select workspace_id, project_id, count(*)::int as leads
+      from leads
+      where workspace_id = $1::uuid and project_id = any($2::uuid[])
+      group by workspace_id, project_id
+    ) l on l.project_id = p.id and l.workspace_id = p.workspace_id
+    left join (
+      select workspace_id, project_id, sum(value_cents)::bigint as revenue_cents
+      from deals
+      where workspace_id = $1::uuid
+        and project_id = any($2::uuid[])
+        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+      group by workspace_id, project_id
+    ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
+    where p.workspace_id = $1::uuid and p.id = any($2::uuid[])
+    order by p.created_at asc
+  `,
+    [workspaceId, projectIds],
+  );
+
+  return rows.map(mapProjectRow);
+}
+
+async function loadPropertyUnitsForAssetSummaries(
+  workspaceId: string,
+  projectIds: string[],
+  unitIds: string[],
+): Promise<PropertyUnit[]> {
+  if (!projectIds.length && !unitIds.length) return [];
+
+  const rows = await queryRows<PropertyUnitRow>(
+    `
+    select
+      pu.id,
+      pu.workspace_id as "workspaceId",
+      pu.project_id as "projectId",
+      pu.building_id as "buildingId",
+      pu.unit_number as "unitNumber",
+      pu.floor,
+      pu.rooms,
+      pu.area_sqm as "areaSqm",
+      pu.price_cents as "priceCents",
+      pu.status,
+      pu.buyer_contact_id as "buyerContactId",
+      pu.deal_id as "dealId",
+      null::uuid as "reservationId",
+      pu.updated_at as "updatedAt"
+    from property_units pu
+    where pu.workspace_id = $1::uuid
+      and (pu.project_id = any($2::uuid[]) or pu.id = any($3::uuid[]))
+    order by pu.project_id asc, pu.unit_number asc, pu.id asc
+  `,
+    [workspaceId, projectIds, unitIds],
+  );
+
+  return rows.map(mapPropertyUnitRow);
+}
+
+async function loadPropertyReservationsForAssetSummaries(
+  workspaceId: string,
+  projectIds: string[],
+): Promise<PropertyReservation[]> {
+  if (!projectIds.length) return [];
+
+  const rows = await queryRows<PropertyReservationRow>(
+    `
+    select
+      id,
+      workspace_id as "workspaceId",
+      project_id as "projectId",
+      unit_id as "unitId",
+      contact_id as "contactId",
+      deal_id as "dealId",
+      status,
+      expires_at as "expiresAt",
+      deposit_cents as "depositCents",
+      contract_milestone as "contractMilestone",
+      next_action as "nextAction"
+    from property_reservations
+    where workspace_id = $1::uuid and project_id = any($2::uuid[])
+    order by expires_at asc
+  `,
+    [workspaceId, projectIds],
+  );
+
+  return rows.map((row) => ({
+    contactId: row.contactId,
+    contractMilestone: row.contractMilestone as PropertyReservation["contractMilestone"],
+    dealId: row.dealId ?? undefined,
+    depositCents: Number(row.depositCents ?? 0),
+    expiresAt: toIso(row.expiresAt),
+    id: row.id,
+    nextAction: row.nextAction,
+    projectId: row.projectId,
+    status: row.status as PropertyReservation["status"],
+    unitId: row.unitId,
+    workspaceId: row.workspaceId,
   }));
+}
+
+async function loadPropertyBuildingsForAssetSummaries(
+  workspaceId: string,
+  projectIds: string[],
+): Promise<PropertyBuilding[]> {
+  if (!projectIds.length) return [];
+
+  const rows = await queryRows<PropertyBuildingRow>(
+    `
+    select
+      id,
+      workspace_id as "workspaceId",
+      project_id as "projectId",
+      name,
+      address,
+      completion_date as "completionDate",
+      floors
+    from property_buildings
+    where workspace_id = $1::uuid and project_id = any($2::uuid[])
+    order by name asc
+  `,
+    [workspaceId, projectIds],
+  );
+
+  return rows.map((row) => ({
+    address: row.address,
+    completionDate: toDateOnly(row.completionDate),
+    floors: Number(row.floors ?? 0),
+    id: row.id,
+    name: row.name,
+    projectId: row.projectId,
+    workspaceId: row.workspaceId,
+  }));
+}
+
+async function loadPropertyCostItemsForAssets(
+  workspaceId: string,
+  propertyIds: string[],
+): Promise<PropertyCostItem[]> {
+  if (!propertyIds.length) return [];
+
+  const rows = await queryRows<{ id: string; propertyId: string }>(
+    `
+    select id, property_id as "propertyId"
+    from property_cost_items
+    where workspace_id = $1::uuid and property_id = any($2::uuid[])
+  `,
+    [workspaceId, propertyIds],
+  );
+
+  return rows.map((row) => ({ id: row.id, propertyId: row.propertyId }) as PropertyCostItem);
+}
+
+async function loadPropertyDocumentsForAssets(
+  workspaceId: string,
+  propertyIds: string[],
+): Promise<PropertyDocumentItem[]> {
+  if (!propertyIds.length) return [];
+
+  const rows = await queryRows<{
+    category: string;
+    id: string;
+    propertyId: string;
+    status: string;
+    visibility: string;
+  }>(
+    `
+    select id, property_id as "propertyId", category, status, visibility
+    from property_documents
+    where workspace_id = $1::uuid and property_id = any($2::uuid[])
+  `,
+    [workspaceId, propertyIds],
+  );
+
+  return rows.map((row) => ({
+    category: row.category,
+    id: row.id,
+    propertyId: row.propertyId,
+    status: row.status,
+    visibility: row.visibility,
+  }) as PropertyDocumentItem);
+}
+
+async function loadPropertyMediaForAssets(
+  workspaceId: string,
+  propertyIds: string[],
+): Promise<PropertyMediaItem[]> {
+  if (!propertyIds.length) return [];
+
+  const rows = await queryRows<{
+    category: string;
+    id: string;
+    isCover: boolean;
+    mediaType: string;
+    mimeType: string | null;
+    propertyId: string;
+    visibility: string;
+  }>(
+    `
+    select
+      pm.id,
+      pm.property_id as "propertyId",
+      pm.media_type as "mediaType",
+      ma.mime_type as "mimeType",
+      pm.category,
+      pm.visibility,
+      pm.is_cover as "isCover"
+    from property_media pm
+    left join media_assets ma on ma.id = pm.media_asset_id and ma.workspace_id = pm.workspace_id::text
+    where pm.workspace_id = $1::uuid and pm.property_id = any($2::uuid[])
+  `,
+    [workspaceId, propertyIds],
+  );
+
+  return rows.map((row) => ({
+    category: row.category,
+    id: row.id,
+    isCover: row.isCover,
+    mediaType: row.mediaType,
+    mimeType: row.mimeType ?? undefined,
+    propertyId: row.propertyId,
+    visibility: row.visibility,
+  }) as PropertyMediaItem);
+}
+
+async function loadPropertyTextBlocksForAssets(
+  workspaceId: string,
+  propertyIds: string[],
+): Promise<PropertyTextBlock[]> {
+  if (!propertyIds.length) return [];
+
+  const rows = await queryRows<{ content: string; id: string; propertyId: string }>(
+    `
+    select id, property_id as "propertyId", content
+    from property_text_blocks
+    where workspace_id = $1::uuid and property_id = any($2::uuid[])
+  `,
+    [workspaceId, propertyIds],
+  );
+
+  return rows.map((row) => ({
+    content: row.content,
+    id: row.id,
+    propertyId: row.propertyId,
+  }) as PropertyTextBlock);
 }
 
 export async function loadPropertyTextBlocks(workspaceId: string): Promise<PropertyTextBlock[]> {
