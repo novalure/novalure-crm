@@ -342,7 +342,7 @@ test("phase 2 dashboard KPI labels stay explicit and localized", () => {
   assert.doesNotMatch(workspaceSource, /All visible leads, no time filter\.|Weighted value of open deals\./);
   assert.match(i18nSource, /noSourceData:\s*"No lead source data in this view\."/);
   assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
-  assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(openDeals\.length, formatEuro\(openPipelineValue, locale\), formatEuro\(weightedPipelineValue, locale\)\)/);
+  assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(forecastOpenDeals\.length, formatEuro\(forecastOpenPipelineValue, locale\), formatEuro\(forecastWeightedPipelineValue, locale\)\)/);
   assert.match(dashboardSource, /copy\.charts\.noSourceData/);
   assert.match(workspaceSource, /document\.title = copy\.shell\.browserTitle/);
 });
