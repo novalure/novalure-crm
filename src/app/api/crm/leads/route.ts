@@ -28,6 +28,17 @@ function getLeadWriteStatus(reason: string) {
   return 503;
 }
 
+function getLeadIdFromRequest(request: Request) {
+  const url = new URL(request.url);
+  return url.searchParams.get("id") ?? url.searchParams.get("leadId") ?? "";
+}
+
+function withLeadIdFromRequest(request: Request, lead: Record<string, unknown>) {
+  if (typeof lead.id === "string" && lead.id.trim().length > 0) return lead;
+  const id = getLeadIdFromRequest(request);
+  return id ? { ...lead, id } : lead;
+}
+
 export async function POST(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
   if (!auth.ok) return auth.response;
@@ -49,5 +60,25 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  return POST(request);
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
+  if (!auth.ok) return auth.response;
+
+  const body = await readJson(request);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const input = body as Record<string, unknown>;
+  const lead = typeof input.lead === "object" && input.lead ? input.lead as Record<string, unknown> : input;
+  const result = await upsertLeadRecord({
+    lead: withLeadIdFromRequest(request, lead),
+    requireExisting: true,
+    session: auth.session,
+  });
+
+  if (!result.persisted) {
+    return NextResponse.json({ error: result.reason }, { status: getLeadWriteStatus(result.reason) });
+  }
+
+  return NextResponse.json({ lead: result.data, persisted: true });
 }

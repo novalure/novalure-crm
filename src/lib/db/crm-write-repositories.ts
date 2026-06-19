@@ -629,6 +629,7 @@ export async function upsertDashboardView(input: {
 
 export async function upsertDealRecord(input: {
   deal: Partial<Deal>;
+  requireExisting?: boolean;
   reason?: string;
   reasonCategory?: unknown;
   reasonDetail?: string;
@@ -644,6 +645,14 @@ export async function upsertDealRecord(input: {
     validateDealValueInput(input.deal.value);
   if (validationError) return { persisted: false, reason: validationError };
 
+  const hasDealId = typeof input.deal.id === "string" && input.deal.id.trim().length > 0;
+  if (input.requireExisting && !hasDealId) {
+    return { persisted: false, reason: "Deal id is required" };
+  }
+  if (input.requireExisting && hasDealId && !isUuid(input.deal.id)) {
+    return { persisted: false, reason: "Invalid deal id" };
+  }
+
   const existing = isUuid(input.deal.id)
     ? await queryOne<DealRow>(
         `${dealSelectSql}
@@ -652,6 +661,9 @@ export async function upsertDealRecord(input: {
         [input.deal.id, input.session.workspaceId],
       )
     : null;
+  if (input.requireExisting && !existing) {
+    return { persisted: false, reason: "Deal not found" };
+  }
   const contact = await resolveContactForWrite(input.session.workspaceId, input.deal.contactId ?? existing?.contactId);
   const resolvedProject = await resolveWorkspaceProjectIdForWrite({
     existingProjectId: existing?.projectId ?? contact?.projectId ?? null,
@@ -1846,6 +1858,7 @@ export async function upsertCalendarEventRecord(input: {
 
 export async function upsertLeadRecord(input: {
   lead: Partial<Lead>;
+  requireExisting?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Lead>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -1858,6 +1871,14 @@ export async function upsertLeadRecord(input: {
     validateFutureDateInput(input.lead.nextContactAt, "Next contact date");
   if (validationError) return { persisted: false, reason: validationError };
 
+  const hasLeadId = typeof input.lead.id === "string" && input.lead.id.trim().length > 0;
+  if (input.requireExisting && !hasLeadId) {
+    return { persisted: false, reason: "Lead id is required" };
+  }
+  if (input.requireExisting && hasLeadId && !isUuid(input.lead.id)) {
+    return { persisted: false, reason: "Invalid lead id" };
+  }
+
   const existing = isUuid(input.lead.id)
     ? await queryOne<LeadRow>(
         `${leadSelectSql}
@@ -1866,6 +1887,9 @@ export async function upsertLeadRecord(input: {
         [input.lead.id, input.session.workspaceId],
       )
     : null;
+  if (input.requireExisting && !existing) {
+    return { persisted: false, reason: "Lead not found" };
+  }
   const contact = await resolveContactForWrite(input.session.workspaceId, input.lead.contactId ?? existing?.contactId);
   const resolvedProject = await resolveWorkspaceProjectIdForWrite({
     existingProjectId: existing?.projectId ?? contact?.projectId ?? null,
@@ -2153,6 +2177,7 @@ export async function upsertLeadRecord(input: {
 
 export async function upsertContactRecord(input: {
   contact: Partial<Contact>;
+  requireExisting?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Contact>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -2169,6 +2194,14 @@ export async function upsertContactRecord(input: {
     validateTextLength(input.contact.intent, "Contact intent", maxLongTextLength);
   if (validationError) return { persisted: false, reason: validationError };
 
+  const hasContactId = typeof input.contact.id === "string" && input.contact.id.trim().length > 0;
+  if (input.requireExisting && !hasContactId) {
+    return { persisted: false, reason: "Contact id is required" };
+  }
+  if (input.requireExisting && hasContactId && !isUuid(input.contact.id)) {
+    return { persisted: false, reason: "Invalid contact id" };
+  }
+
   const existing = isUuid(input.contact.id)
     ? await queryOne<ContactRow>(
         `${contactSelectSql}
@@ -2178,7 +2211,7 @@ export async function upsertContactRecord(input: {
         [input.contact.id, input.session.workspaceId],
       )
     : null;
-  if (isUuid(input.contact.id) && !existing) {
+  if ((input.requireExisting || isUuid(input.contact.id)) && !existing) {
     return { persisted: false, reason: "Contact not found" };
   }
   const normalizedEmail = cleanString(input.contact.email);

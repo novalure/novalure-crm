@@ -48,6 +48,12 @@ function getContactIdFromRequest(request: Request, body?: Record<string, unknown
   return typeof idFromBody === "string" ? idFromBody : idFromQuery ?? "";
 }
 
+function withContactIdFromRequest(request: Request, contact: Record<string, unknown>) {
+  if (typeof contact.id === "string" && contact.id.trim().length > 0) return contact;
+  const id = getContactIdFromRequest(request);
+  return id ? { ...contact, id } : contact;
+}
+
 export async function POST(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
@@ -92,7 +98,11 @@ export async function PATCH(request: Request) {
   }
 
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
-  const result = await upsertContactRecord({ contact, session: auth.session });
+  const result = await upsertContactRecord({
+    contact: withContactIdFromRequest(request, contact),
+    requireExisting: true,
+    session: auth.session,
+  });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
