@@ -47,6 +47,26 @@ export type ReservationWorkflowResult = {
   teamsNotification?: PreparedTeamsNotification;
 };
 
+export type ExpireOverduePropertyReservationsResult = {
+  checkedAt: string;
+  expiredReservations: Array<{
+    expiresAt: string;
+    id: string;
+    previousStatus: string;
+    status: string;
+    unitId: string;
+    workspaceId: string;
+  }>;
+  releasedUnits: Array<{
+    id: string;
+    previousStatus: string;
+    status: string;
+    unitNumber: string;
+    workspaceId: string;
+  }>;
+  skippedUnits: number;
+};
+
 type UnitRow = {
   id: string;
   workspace_id: string;
@@ -75,6 +95,13 @@ type ReservationRow = {
   deposit_cents: number | string | null;
   contract_milestone: string | null;
   next_action: string | null;
+};
+
+type ExpireOverdueRow = {
+  checkedAt: Date | string | null;
+  expiredReservations: unknown;
+  releasedUnits: unknown;
+  skippedUnits: number | string | null;
 };
 
 type DealSyncRow = {
@@ -233,6 +260,10 @@ function toReservation(row: ReservationRow): PropertyReservation {
   };
 }
 
+function normalizeJsonArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
 function toDeal(row: DealSyncRow) {
   return {
     id: row.id,
@@ -330,6 +361,134 @@ async function loadActiveReservationForUnit(session: AppSession, unitId: string)
     `,
     [unitId, session.workspaceId],
   );
+}
+
+export async function expireOverduePropertyReservations(input: {
+  limit?: number;
+  source?: string;
+  workspaceId?: string | null;
+} = {}): Promise<ExpireOverduePropertyReservationsResult> {
+  if (!canPersist()) {
+    return {
+      checkedAt: new Date().toISOString(),
+      expiredReservations: [],
+      releasedUnits: [],
+      skippedUnits: 0,
+    };
+  }
+
+  const scopedWorkspaceId = input.workspaceId && isUuid(input.workspaceId) ? input.workspaceId : null;
+  const limit = Math.min(1000, Math.max(1, Math.round(input.limit ?? 250)));
+  const metadata = JSON.stringify({
+    reservationAutomation: {
+      source: input.source ?? "property_reservations_expiry",
+      syncedAt: new Date().toISOString(),
+    },
+  });
+
+  const row = await queryOne<ExpireOverdueRow>(
+    `
+      with due as (
+        select
+          pr.id,
+          pr.workspace_id,
+          pr.unit_id,
+          pr.status,
+          pr.expires_at
+        from property_reservations pr
+        where ($1::uuid is null or pr.workspace_id = $1::uuid)
+          and pr.status in ('hold', 'reserved')
+          and pr.expires_at < now()
+        order by pr.expires_at asc, pr.id asc
+        limit $2
+      ),
+      expired as (
+        update property_reservations pr
+        set
+          status = 'expired',
+          metadata = coalesce(pr.metadata, '{}'::jsonb) || $3::jsonb,
+          updated_at = now()
+        from due
+        where pr.id = due.id
+        returning
+          pr.id,
+          pr.workspace_id,
+          pr.unit_id,
+          due.status as previous_status,
+          pr.status,
+          pr.expires_at
+      ),
+      release_candidates as (
+        select distinct
+          pu.id,
+          pu.workspace_id
+        from property_units pu
+        join expired e on e.unit_id = pu.id and e.workspace_id = pu.workspace_id
+        where not exists (
+          select 1
+          from property_reservations active
+          where active.workspace_id = pu.workspace_id
+            and active.unit_id = pu.id
+            and active.status in ('hold', 'reserved')
+            and active.id not in (select id from due)
+        )
+      ),
+      released as (
+        update property_units pu
+        set
+          status = 'available',
+          buyer_contact_id = null,
+          deal_id = null,
+          metadata = coalesce(pu.metadata, '{}'::jsonb) || $3::jsonb,
+          updated_at = now()
+        from release_candidates candidate
+        where pu.id = candidate.id
+          and pu.workspace_id = candidate.workspace_id
+          and pu.status = 'reserved'
+        returning
+          pu.id,
+          pu.workspace_id,
+          pu.unit_number,
+          'reserved'::text as previous_status,
+          pu.status
+      )
+      select
+        now() as "checkedAt",
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', id,
+            'workspaceId', workspace_id,
+            'unitId', unit_id,
+            'previousStatus', previous_status,
+            'status', status,
+            'expiresAt', expires_at
+          ) order by expires_at asc, id asc)
+          from expired
+        ), '[]'::jsonb) as "expiredReservations",
+        coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'id', id,
+            'workspaceId', workspace_id,
+            'unitNumber', unit_number,
+            'previousStatus', previous_status,
+            'status', status
+          ) order by unit_number asc, id asc)
+          from released
+        ), '[]'::jsonb) as "releasedUnits",
+        greatest(
+          (select count(distinct unit_id)::int from expired) - (select count(*)::int from released),
+          0
+        ) as "skippedUnits"
+    `,
+    [scopedWorkspaceId, limit, metadata],
+  );
+
+  return {
+    checkedAt: toIso(row?.checkedAt),
+    expiredReservations: normalizeJsonArray<ExpireOverduePropertyReservationsResult["expiredReservations"][number]>(row?.expiredReservations),
+    releasedUnits: normalizeJsonArray<ExpireOverduePropertyReservationsResult["releasedUnits"][number]>(row?.releasedUnits),
+    skippedUnits: toNumber(row?.skippedUnits),
+  };
 }
 
 async function validateContact(session: AppSession, projectId: string, contactId: string) {
@@ -719,6 +878,13 @@ export async function mutateUnitReservation({
   const unit = await loadUnit(session, unitId);
   if (!unit) {
     return { persisted: false, reason: "Unit was not found in this workspace." };
+  }
+
+  if (action === "create") {
+    const activeReservation = await loadActiveReservationForUnit(session, unit.id);
+    if (activeReservation) {
+      return { persisted: false, reason: "Unit already has an active reservation." };
+    }
   }
 
   if (existingReservation && existingReservation.project_id !== unit.project_id) {

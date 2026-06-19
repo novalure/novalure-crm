@@ -78,12 +78,20 @@ async function inspectDuplicates(pool) {
       where unit_id is not null and property_id is null
       group by workspace_id, unit_id, cost_key
       having count(*) > 1
+    ),
+    active_reservation_duplicates as (
+      select workspace_id, unit_id, count(*)::int as count
+      from property_reservations
+      where status in ('hold', 'reserved')
+      group by workspace_id, unit_id
+      having count(*) > 1
     )
     select jsonb_build_object(
       'textPropertyDuplicates', coalesce((select jsonb_agg(text_property_duplicates) from text_property_duplicates), '[]'::jsonb),
       'textUnitDuplicates', coalesce((select jsonb_agg(text_unit_duplicates) from text_unit_duplicates), '[]'::jsonb),
       'costPropertyDuplicates', coalesce((select jsonb_agg(cost_property_duplicates) from cost_property_duplicates), '[]'::jsonb),
-      'costUnitDuplicates', coalesce((select jsonb_agg(cost_unit_duplicates) from cost_unit_duplicates), '[]'::jsonb)
+      'costUnitDuplicates', coalesce((select jsonb_agg(cost_unit_duplicates) from cost_unit_duplicates), '[]'::jsonb),
+      'activeReservationDuplicates', coalesce((select jsonb_agg(active_reservation_duplicates) from active_reservation_duplicates), '[]'::jsonb)
     ) as duplicates
   `);
 
@@ -181,6 +189,44 @@ async function exerciseDuplicateGuards(pool) {
         values ($1::uuid, $2::uuid, null, $3::uuid, 'uattest_phase3', 'UATTEST Phase3 Duplicate', '{"source":"phase3"}'::jsonb)
       `,
       values: [workspaceId, projectId, unitId],
+    },
+  ]);
+
+  const reservationTarget = await pool.query(
+    `
+      select pu.id as unit_id, pu.project_id, c.id as contact_id
+      from property_units pu
+      join contacts c on c.workspace_id = pu.workspace_id and c.project_id = pu.project_id
+      where pu.workspace_id = $1::uuid
+        and not exists (
+          select 1
+          from property_reservations pr
+          where pr.workspace_id = pu.workspace_id
+            and pr.unit_id = pu.id
+            and pr.status in ('hold', 'reserved')
+        )
+      order by pu.unit_number asc, pu.id asc
+      limit 1
+    `,
+    [workspaceId],
+  );
+  const target = reservationTarget.rows[0];
+  if (!target) throw new Error("No property unit without active reservation found for reservation duplicate guard test.");
+
+  await expectDuplicateFailure(pool, "property_reservations one active per unit", "property_reservations_one_active_per_unit_idx", [
+    {
+      text: `
+        insert into property_reservations (workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at, metadata)
+        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, null, 'reserved', now() + interval '7 days', '{"source":"phase3_reservation_guard"}'::jsonb)
+      `,
+      values: [workspaceId, target.project_id, target.unit_id, target.contact_id],
+    },
+    {
+      text: `
+        insert into property_reservations (workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at, metadata)
+        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, null, 'hold', now() + interval '7 days', '{"source":"phase3_reservation_guard_duplicate"}'::jsonb)
+      `,
+      values: [workspaceId, target.project_id, target.unit_id, target.contact_id],
     },
   ]);
 }

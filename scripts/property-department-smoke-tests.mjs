@@ -57,6 +57,7 @@ test("property content migration adds productive text, cost, media, document and
 
 test("phase 3 property content migration blocks nullable duplicate rows with partial indexes", () => {
   const migration = read("migrations/039_property_content_partial_unique_indexes.sql");
+  const reservationMigration = read("migrations/040_property_reservation_active_unique_index.sql");
   const qa = read("scripts/qa-phase3-duplicate-guards.mjs");
 
   for (const indexName of [
@@ -71,6 +72,10 @@ test("phase 3 property content migration blocks nullable duplicate rows with par
 
   assert.match(migration, /where property_id is not null and unit_id is null/);
   assert.match(migration, /where unit_id is not null and property_id is null/);
+  assert.match(reservationMigration, /property_reservations_one_active_per_unit_idx/);
+  assert.match(reservationMigration, /where status in \('hold', 'reserved'\)/);
+  assert.match(qa, /activeReservationDuplicates/);
+  assert.match(qa, /property_reservations_one_active_per_unit_idx/);
   assert.match(qa, /Existing duplicate rows found/);
   assert.match(qa, /rollback/);
 });
