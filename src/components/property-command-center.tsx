@@ -22,14 +22,14 @@ import {
   buildPropertyAssets,
   buildPropertyDataQualityIssues,
   buildPropertyMatches,
+  getPropertyDepartmentTabs,
   getPropertyActionStates,
+  getPropertyFieldSections,
   PROPERTY_CHANNEL_TYPES,
   PROPERTY_CHANNEL_PRICE_KEYS,
   PROPERTY_COST_GROUPS,
   PROPERTY_COST_TEMPLATES,
-  PROPERTY_DEPARTMENT_TABS,
   PROPERTY_DOCUMENT_CATEGORIES,
-  PROPERTY_FIELD_SECTIONS,
   PROPERTY_MEDIA_CATEGORIES,
   PROPERTY_PRICE_VISIBILITY_OPTIONS,
   PROPERTY_TEXT_FIELDS,
@@ -42,7 +42,7 @@ import {
   type PropertyUnitBoardScope,
 } from "@/lib/property-department";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
-import { formatCurrency, formatNumber, getCrmSystemTextLabel, getLocale, type LanguageCode } from "@/lib/i18n";
+import { formatCurrency, formatNumber, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
 
 type PropertyCommandCenterProps = {
   brokerMandates: BrokerMandate[];
@@ -129,19 +129,10 @@ const statusStyles: Record<PropertyAssetStatus, string> = {
   sold: "border-slate-300 bg-slate-100 text-slate-800",
 };
 
-const statusLabels: Record<PropertyAssetStatus, string> = {
-  draft: "Entwurf",
-  needs_review: "Prüfen",
-  published: "Veröffentlicht",
-  ready: "Bereit",
-  reserved: "Reserviert",
-  sold: "Verkauft",
-};
-
-function StatusChip({ status }: { status: PropertyAssetStatus }) {
+function StatusChip({ label, status }: { label: string; status: PropertyAssetStatus }) {
   return (
     <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-semibold ${statusStyles[status]}`}>
-      {statusLabels[status]}
+      {label}
     </span>
   );
 }
@@ -324,6 +315,9 @@ export function PropertyCommandCenter({
   sessionRole,
   units,
 }: PropertyCommandCenterProps) {
+  const copy = getPropertyDepartmentCopy(language);
+  const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
+  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language), [language]);
   const assets = useMemo(
     () => buildPropertyAssets({
       brokerMandates,
@@ -340,8 +334,8 @@ export function PropertyCommandCenter({
     [brokerMandates, buildings, projects, propertyCostItems, propertyDocuments, propertyMedia, propertyTextBlocks, reservations, sellerListings, units],
   );
   const actions = useMemo(
-    () => getPropertyActionStates({ productRole: sessionProductRole, technicalRole: sessionRole }),
-    [sessionProductRole, sessionRole],
+    () => getPropertyActionStates({ language, productRole: sessionProductRole, technicalRole: sessionRole }),
+    [language, sessionProductRole, sessionRole],
   );
   const [activeTab, setActiveTab] = useState<PropertyDepartmentTabId>("overview");
   const [statusFilter, setStatusFilter] = useState<PropertyAssetStatus | "all">("all");
@@ -406,9 +400,9 @@ export function PropertyCommandCenter({
   const selectedDocuments = selectedListingId ? propertyDocuments.filter((document) => document.propertyId === selectedListingId) : [];
   const selectedMedia = selectedListingId ? propertyMedia.filter((media) => media.propertyId === selectedListingId) : [];
   const selectedTextBlocks = selectedListingId ? propertyTextBlocks.filter((block) => block.propertyId === selectedListingId) : [];
-  const preflight = selectedAsset ? runPropertyChannelPreflight(selectedAsset, selectedChannel) : null;
-  const qualityIssues = buildPropertyDataQualityIssues({ assets, leads, reservations });
-  const matches = buildPropertyMatches({ assets, buyerSearchProfiles, contacts, leads });
+  const preflight = selectedAsset ? runPropertyChannelPreflight(selectedAsset, selectedChannel, language) : null;
+  const qualityIssues = buildPropertyDataQualityIssues({ assets, language, leads, reservations });
+  const matches = buildPropertyMatches({ assets, buyerSearchProfiles, contacts, language, leads });
   const activeReservations = reservations.filter((reservation) => reservation.status === "hold" || reservation.status === "reserved");
   const routeResults = leads.slice(0, 20).map((lead) => {
     const budget = getBudgetRange(lead);
@@ -428,28 +422,28 @@ export function PropertyCommandCenter({
         sourceChannel: lead.source,
         useCase: lead.buyerProfile?.useCase,
         workspaceId: lead.workspaceId,
-      }, { assets, reservations, units }),
+      }, { assets, reservations, units }, language),
     };
   });
   const metrics = [
-    ["Objekte", assets.length],
-    ["Einheiten", units.length],
-    ["Frei", units.filter((unit) => unit.status === "available").length],
-    ["Reservierungen", activeReservations.length],
-    ["Anfragen", leads.length],
-    ["Datenhinweise", qualityIssues.length],
+    [copy.metrics.objects, assets.length],
+    [copy.metrics.units, units.length],
+    [copy.metrics.available, units.filter((unit) => unit.status === "available").length],
+    [copy.metrics.reservations, activeReservations.length],
+    [copy.metrics.inquiries, leads.length],
+    [copy.metrics.dataIssues, qualityIssues.length],
   ];
   const draftProjectName = projects.find((project) => project.id === draft.projectId)?.name ?? projectLabel;
   const draftPreflightItems = [
-    { label: "Titel", ready: draft.title.trim().length > 0 },
-    { label: "Adresse", ready: draft.address.trim().length > 0 },
-    { label: "Projekt", ready: draft.projectId.trim().length > 0 },
-    { label: "Preislogik", ready: Boolean(draft.priceVisibility) },
-    { label: "DSGVO", ready: draft.gdprStatus === "ready" },
-    { label: "Portal-Mapping", ready: draft.portalMappingStatus !== "needs_review" },
+    { label: copy.preflightItems.title, ready: draft.title.trim().length > 0 },
+    { label: copy.preflightItems.address, ready: draft.address.trim().length > 0 },
+    { label: copy.preflightItems.project, ready: draft.projectId.trim().length > 0 },
+    { label: copy.preflightItems.priceLogic, ready: Boolean(draft.priceVisibility) },
+    { label: copy.preflightItems.gdpr, ready: draft.gdprStatus === "ready" },
+    { label: copy.preflightItems.portalMapping, ready: draft.portalMappingStatus !== "needs_review" },
   ];
   const draftReadyCount = draftPreflightItems.filter((item) => item.ready).length;
-  const nextDraftIssue = draftPreflightItems.find((item) => !item.ready)?.label ?? "Bereit für Freigabe";
+  const nextDraftIssue = draftPreflightItems.find((item) => !item.ready)?.label ?? copy.preflightItems.readyForApproval;
 
   function updateDraft<Key extends keyof PropertyDraft>(key: Key, value: PropertyDraft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -492,9 +486,9 @@ export function PropertyCommandCenter({
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
-    const payload = await response.json().catch(() => ({ error: "Aktion konnte nicht gespeichert werden." }));
+    const payload = await response.json().catch(() => ({ error: copy.notices.actionSaveFailed }));
     if (!response.ok) {
-      throw new Error(typeof payload.error === "string" ? payload.error : "Aktion konnte nicht gespeichert werden.");
+      throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.actionSaveFailed);
     }
     return payload;
   }
@@ -512,10 +506,10 @@ export function PropertyCommandCenter({
         propertyId: selectedAsset.sellerListingId,
         publicPrice: selectedAsset.publicPrice ?? selectedAsset.price,
       });
-      setNotice({ kind: "success", message: "Preis-Sichtbarkeit gespeichert." });
+      setNotice({ kind: "success", message: copy.notices.priceVisibilitySaved });
       await onPropertyChanged?.();
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Preis-Sichtbarkeit konnte nicht gespeichert werden." });
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.priceVisibilitySaveFailed });
     } finally {
       setSaving(false);
     }
@@ -534,9 +528,9 @@ export function PropertyCommandCenter({
       formData.append("alt", file.name.replace(/\.[^.]+$/, ""));
       if (kind === "media") formData.append("public", "true");
       const uploadResponse = await fetch("/api/media", { body: formData, method: "POST" });
-      const uploadPayload = await uploadResponse.json().catch(() => ({ error: "Upload fehlgeschlagen." }));
+      const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
       if (!uploadResponse.ok || !uploadPayload.asset?.id) {
-        throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : "Upload fehlgeschlagen.");
+        throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed);
       }
       await postPropertyOperation(kind === "media" ? {
         media: {
@@ -565,10 +559,10 @@ export function PropertyCommandCenter({
         projectId: selectedAsset.projectId,
         propertyId: selectedAsset.sellerListingId,
       });
-      setNotice({ kind: "success", message: kind === "media" ? "Bild/Medium zugeordnet." : "Dokument zugeordnet." });
+      setNotice({ kind: "success", message: kind === "media" ? copy.notices.mediaAttached : copy.notices.documentAttached });
       await onPropertyChanged?.();
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Upload konnte nicht gespeichert werden." });
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.uploadSaveFailed });
     } finally {
       setUploading(false);
     }
@@ -592,11 +586,11 @@ export function PropertyCommandCenter({
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const payload = await response.json().catch(() => ({ error: "Objekt konnte nicht gespeichert werden." }));
+      const payload = await response.json().catch(() => ({ error: copy.notices.propertySaveFailed }));
       if (!response.ok) {
-        throw new Error(typeof payload.error === "string" ? payload.error : "Objekt konnte nicht gespeichert werden.");
+        throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.propertySaveFailed);
       }
-      setNotice({ kind: "success", message: "Objekt gespeichert." });
+      setNotice({ kind: "success", message: copy.notices.propertySaved });
       setDraft((current) => ({
         ...current,
         address: "",
@@ -613,7 +607,7 @@ export function PropertyCommandCenter({
       }));
       await onPropertyChanged?.();
     } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Objekt konnte nicht gespeichert werden." });
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : copy.notices.propertySaveFailed });
     } finally {
       setSaving(false);
     }
@@ -625,7 +619,7 @@ export function PropertyCommandCenter({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{projectLabel}</p>
-            <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">Immobilien</h3>
+            <h3 className="mt-1 break-words text-2xl font-semibold text-slate-950">{copy.title}</h3>
             <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-stone-600">
               {context.workspaceName}
             </p>
@@ -649,7 +643,7 @@ export function PropertyCommandCenter({
 
       <nav className="max-w-full overflow-x-auto rounded-lg border border-stone-200 bg-white p-2">
         <div className="flex min-w-max gap-2">
-          {PROPERTY_DEPARTMENT_TABS.map((tab) => (
+          {localizedTabs.map((tab) => (
             <button
               className={`rounded-md px-3 py-2 text-sm font-semibold ${
                 activeTab === tab.id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-stone-100"
@@ -678,7 +672,7 @@ export function PropertyCommandCenter({
               <input
                 className="min-w-0 rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-900"
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Objekt, Ort, Projekt suchen"
+                placeholder={copy.filters.searchPlaceholder}
                 value={query}
               />
               <select
@@ -686,8 +680,8 @@ export function PropertyCommandCenter({
                 onChange={(event) => setStatusFilter(event.target.value as PropertyAssetStatus | "all")}
                 value={statusFilter}
               >
-                <option value="all">Alle Status</option>
-                {Object.entries(statusLabels).map(([value, label]) => (
+                <option value="all">{copy.filters.allStatuses}</option>
+                {Object.entries(copy.statusLabels).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
@@ -704,12 +698,12 @@ export function PropertyCommandCenter({
                 </colgroup>
                 <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>
-                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Objekt</th>
-                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Status</th>
-                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Preis</th>
-                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Fläche</th>
-                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">Einheiten</th>
-                    <th className="py-2 font-semibold whitespace-nowrap">Anfragen</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.object}</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.status}</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.price}</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.area}</th>
+                    <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.units}</th>
+                    <th className="py-2 font-semibold whitespace-nowrap">{copy.table.inquiries}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -726,16 +720,16 @@ export function PropertyCommandCenter({
                         <p className="break-words font-semibold text-slate-950">{asset.title}</p>
                         <p className="mt-1 break-words text-xs text-stone-500">{asset.location} · {asset.projectName}</p>
                       </td>
-                      <td className="py-3 pr-4"><StatusChip status={asset.status} /></td>
+                      <td className="py-3 pr-4"><StatusChip label={copy.statusLabels[asset.status]} status={asset.status} /></td>
                       <td className="py-3 pr-4 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</td>
                       <td className="py-3 pr-4 text-stone-700">{asset.areaSqm ? `${formatNumber(asset.areaSqm, language)} m2` : "-"}</td>
                       <td className="py-3 pr-4 text-stone-700">
                         {asset.unitCount ? (
                           <div className="flex min-w-[220px] flex-wrap gap-1.5">
                             {[
-                              `${asset.availableUnits} frei`,
-                              `${asset.reservedUnits} reserviert`,
-                              `${asset.soldUnits} verkauft`,
+                              `${asset.availableUnits} ${copy.unitBadges.available}`,
+                              `${asset.reservedUnits} ${copy.unitBadges.reserved}`,
+                              `${asset.soldUnits} ${copy.unitBadges.sold}`,
                             ].map((item) => (
                               <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700" key={item}>
                                 {item}
@@ -758,22 +752,22 @@ export function PropertyCommandCenter({
             {selectedAsset ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusChip status={selectedAsset.status} />
+                  <StatusChip label={copy.statusLabels[selectedAsset.status]} status={selectedAsset.status} />
                   <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{selectedAsset.objectType}</span>
                 </div>
                 <h4 className="mt-3 break-words text-xl font-semibold text-slate-950">{selectedAsset.title}</h4>
                 <p className="mt-2 break-words text-sm text-stone-600">{selectedAsset.location}</p>
                 <div className="mt-4 grid gap-2 text-sm">
                   <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
-                    <span className="text-stone-500">Projekt</span>
+                    <span className="text-stone-500">{copy.detail.project}</span>
                     <span className="text-right font-semibold text-slate-900">{selectedAsset.projectName}</span>
                   </div>
                   <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
-                    <span className="text-stone-500">Preis</span>
+                    <span className="text-stone-500">{copy.detail.price}</span>
                     <span className="text-right font-semibold text-slate-900">{selectedAsset.price ? formatCurrency(selectedAsset.price, language) : "-"}</span>
                   </div>
                   <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
-                    <span className="text-stone-500">Reservierungen</span>
+                    <span className="text-stone-500">{copy.detail.reservations}</span>
                     <span className="text-right font-semibold text-slate-900">{selectedAsset.activeReservations}</span>
                   </div>
                 </div>
@@ -786,7 +780,7 @@ export function PropertyCommandCenter({
                     }}
                     type="button"
                   >
-                    Einheiten/Bestand öffnen
+                    {copy.detail.openUnits}
                   </button>
                   <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
                   <ActionButton action={actions.changePrice} />
@@ -794,7 +788,7 @@ export function PropertyCommandCenter({
                 </div>
               </>
             ) : (
-              <p className="text-sm text-stone-600">Keine Immobilie im aktuellen Filter.</p>
+              <p className="text-sm text-stone-600">{copy.filters.noProperty}</p>
             )}
           </article>
         </div>
@@ -807,7 +801,7 @@ export function PropertyCommandCenter({
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-emerald-700">{draftProjectName}</p>
                 <h4 className="mt-1 break-words text-xl font-semibold text-slate-950">
-                  {draft.title.trim() || "Neues Objekt"}
+                  {draft.title.trim() || copy.form.newProperty}
                 </h4>
                 <p className="mt-1 text-sm leading-6 text-stone-600">
                   Preflight {draftReadyCount}/{draftPreflightItems.length}: {nextDraftIssue}
@@ -818,7 +812,7 @@ export function PropertyCommandCenter({
                   <span className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>{notice.message}</span>
                 ) : null}
                 <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving} type="submit">
-                  {saving ? "Speichern..." : actions.createProperty.label}
+                  {saving ? copy.form.saving : actions.createProperty.label}
                 </button>
               </div>
             </div>
@@ -828,146 +822,149 @@ export function PropertyCommandCenter({
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="grid min-w-0 gap-5">
               <PropertyFormSection
-                description="Die wichtigsten Angaben stehen zuerst. Detailfelder bleiben weiter unten in aufklappbaren Gruppen verfügbar."
-                title="Überblick"
+                description={copy.form.overviewDescription}
+                title={copy.form.overview}
               >
                 <div className="grid gap-4 lg:grid-cols-2">
                   <label className={`${propertyFieldClass} lg:col-span-2`}>
-                    <span>Titel</span>
+                    <span>{copy.form.title}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("title", event.target.value)} required value={draft.title} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Projekt</span>
+                    <span>{copy.form.project}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("projectId", event.target.value)} value={draft.projectId}>
                       {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                     </select>
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Objektart</span>
+                    <span>{copy.form.objectType}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("objectType", event.target.value)} value={draft.objectType} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Objektnummer</span>
+                    <span>{copy.form.objectNumber}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("objectNumber", event.target.value)} value={draft.objectNumber} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Interne Referenz</span>
+                    <span>{copy.form.internalReference}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("internalReference", event.target.value)} value={draft.internalReference} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Vermarktung</span>
+                    <span>{copy.form.marketing}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("marketingType", event.target.value)} value={draft.marketingType}>
-                      <option value="sale">Kauf</option>
-                      <option value="rent">Miete</option>
-                      <option value="sale_or_rent">Kauf oder Miete</option>
+                      <option value="sale">{copy.selectOptions.marketingType.sale}</option>
+                      <option value="rent">{copy.selectOptions.marketingType.rent}</option>
+                      <option value="sale_or_rent">{copy.selectOptions.marketingType.sale_or_rent}</option>
                     </select>
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Nutzung</span>
+                    <span>{copy.form.usage}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("usageType", event.target.value)} value={draft.usageType}>
-                      <option value="residential">Wohnen</option>
-                      <option value="commercial">Gewerbe</option>
-                      <option value="investment">Investment</option>
-                      <option value="mixed">Gemischt</option>
+                      <option value="residential">{copy.selectOptions.usageType.residential}</option>
+                      <option value="commercial">{copy.selectOptions.usageType.commercial}</option>
+                      <option value="investment">{copy.selectOptions.usageType.investment}</option>
+                      <option value="mixed">{copy.selectOptions.usageType.mixed}</option>
                     </select>
                   </label>
                 </div>
               </PropertyFormSection>
 
-              <PropertyFormSection title="Adresse & Lage">
+              <PropertyFormSection title={copy.form.addressLocation}>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <label className={`${propertyFieldClass} lg:col-span-2`}>
-                    <span>Adresse</span>
+                    <span>{copy.form.address}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("address", event.target.value)} required value={draft.address} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>PLZ / Ort</span>
+                    <span>{copy.form.postalCodeCity}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("postalCode", event.target.value)} value={draft.postalCode} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Bundesland / Region</span>
+                    <span>{copy.form.region}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("region", event.target.value)} value={draft.region} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Unterobjektart</span>
+                    <span>{copy.form.subObjectType}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("subObjectType", event.target.value)} value={draft.subObjectType} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Verfügbarkeit Text</span>
+                    <span>{copy.form.availabilityText}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFromText", event.target.value)} value={draft.availableFromText} />
                   </label>
                 </div>
               </PropertyFormSection>
 
-              <PropertyFormSection title="Flächen & Verfügbarkeit">
+              <PropertyFormSection title={copy.form.areasAvailability}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <label className={propertyFieldClass}>
-                    <span>Wohnfläche</span>
+                    <span>{copy.form.livingArea}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("areaSqm", event.target.value)} type="number" value={draft.areaSqm} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Zimmer</span>
+                    <span>{copy.form.rooms}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rooms", event.target.value)} type="number" value={draft.rooms} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Baujahr</span>
+                    <span>{copy.form.yearBuilt}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("yearBuilt", event.target.value)} type="number" value={draft.yearBuilt} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Verfügbar ab</span>
+                    <span>{copy.form.availableFrom}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("availableFrom", event.target.value)} type="date" value={draft.availableFrom} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Ansprechpartner</span>
+                    <span>{copy.form.contactName}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("contactName", event.target.value)} value={draft.contactName} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Kontakt E-Mail</span>
+                    <span>{copy.form.contactEmail}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("contactEmail", event.target.value)} type="email" value={draft.contactEmail} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Kontakt Telefon</span>
+                    <span>{copy.form.contactPhone}</span>
                     <input className={propertyInputClass} onChange={(event) => updateDraft("contactPhone", event.target.value)} value={draft.contactPhone} />
                   </label>
                 </div>
               </PropertyFormSection>
 
-              <PropertyFormSection title="Preise & Kosten">
+              <PropertyFormSection title={copy.form.pricesCosts}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <label className={propertyFieldClass}>
-                    <span>Kaufpreis</span>
+                    <span>{copy.form.purchasePrice}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("price", event.target.value)} type="number" value={draft.price} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Miete netto</span>
+                    <span>{copy.form.rentNet}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentNet", event.target.value)} type="number" value={draft.rentNet} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Miete brutto</span>
+                    <span>{copy.form.rentGross}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("rentPrice", event.target.value)} type="number" value={draft.rentPrice} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Kaufnebenkosten</span>
+                    <span>{copy.form.purchaseAncillaryCosts}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("purchaseAncillaryCosts", event.target.value)} type="number" value={draft.purchaseAncillaryCosts} />
                   </label>
                 </div>
                 <div className="mt-5 grid gap-4">
                   {PROPERTY_COST_GROUPS.map((group) => (
                     <div className="grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-4" key={group.key}>
-                      <p className="text-sm font-semibold text-slate-950">{group.label}</p>
+                      <p className="text-sm font-semibold text-slate-950">{copy.costGroups[group.key] ?? group.label}</p>
                       <div className="grid gap-3">
-                        {draft.costItems.map((item, index) => item.groupKey === group.key ? (
+                        {draft.costItems.map((item, index) => {
+                          const itemLabel = copy.costTemplates[item.costKey as keyof typeof copy.costTemplates] ?? item.label;
+                          return item.groupKey === group.key ? (
                           <div className="grid gap-3 rounded-md bg-white p-3 md:grid-cols-[minmax(160px,1fr)_repeat(3,minmax(110px,150px))_minmax(90px,auto)]" key={item.costKey}>
-                            <span className="self-center text-sm font-semibold text-slate-900">{item.label}</span>
-                            <input aria-label={`${item.label} netto`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder="Netto" type="number" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
-                            <input aria-label={`${item.label} USt`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder="USt" type="number" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
-                            <input aria-label={`${item.label} brutto`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder="Brutto" type="number" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
+                            <span className="self-center text-sm font-semibold text-slate-900">{itemLabel}</span>
+                            <input aria-label={`${itemLabel} ${copy.form.net}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyNet" : "oneTimeNet", event.target.value)} placeholder={copy.form.net} type="number" value={group.key === "monthly" ? item.monthlyNet : item.oneTimeNet} />
+                            <input aria-label={`${itemLabel} ${copy.form.vat}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyVat" : "oneTimeVat", event.target.value)} placeholder={copy.form.vat} type="number" value={group.key === "monthly" ? item.monthlyVat : item.oneTimeVat} />
+                            <input aria-label={`${itemLabel} ${copy.form.gross}`} className={propertyInputClass} onChange={(event) => updateCostItem(index, group.key === "monthly" ? "monthlyGross" : "oneTimeGross", event.target.value)} placeholder={copy.form.gross} type="number" value={group.key === "monthly" ? item.monthlyGross : item.oneTimeGross} />
                             <label className="flex min-h-12 items-center gap-2 text-sm font-semibold text-stone-700">
                               <input checked={item.exposeVisible} onChange={(event) => updateCostItem(index, "exposeVisible", event.target.checked)} type="checkbox" />
-                              Exposé
+                              {copy.form.exposeVisible}
                             </label>
                           </div>
-                        ) : null)}
+                        ) : null;
+                        })}
                       </div>
                     </div>
                   ))}
@@ -975,13 +972,13 @@ export function PropertyCommandCenter({
               </PropertyFormSection>
 
               <PropertyFormSection
-                description="Lange Marketingtexte brauchen Raum. Exposé und Website stehen daher nicht mehr in einer schmalen rechten Spalte."
-                title="Texte"
+                description={copy.form.textDescription}
+                title={copy.form.texts}
               >
                 <div className="grid gap-4 lg:grid-cols-2">
                   {PROPERTY_TEXT_FIELDS.map((field) => (
                     <label className={`${propertyFieldClass} ${field.key === "expose" ? "lg:col-span-2" : ""}`} key={field.key}>
-                      <span>{field.label}</span>
+                      <span>{copy.textFields[field.key] ?? field.label}</span>
                       <textarea
                         className={`${propertyTextareaClass} ${field.key === "expose" ? "min-h-[240px]" : ""}`}
                         onChange={(event) => updateTextBlock(field.key, event.target.value)}
@@ -993,21 +990,21 @@ export function PropertyCommandCenter({
               </PropertyFormSection>
 
               <PropertyFormSection
-                description="Spezialisierte Angaben bleiben verfügbar, ohne die Hauptanlage zu überladen."
-                title="Recht, Datenschutz & Detailfelder"
+                description={copy.form.legalDetailsDescription}
+                title={copy.form.legalDetails}
               >
                 <div className="grid gap-4">
-                  {PROPERTY_FIELD_SECTIONS.map((section) => (
+                  {localizedFieldSections.map((section) => (
                     <details className="rounded-md border border-stone-200 bg-stone-50 p-4" key={section.id} open={defaultOpenPropertyDetailSections.has(section.id)}>
                       <summary className="cursor-pointer text-base font-semibold text-slate-950">{section.title}</summary>
                       <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                         {section.fields.map((field) => (
-                          <label className={propertyFieldClass} key={field}>
-                            <span>{field}</span>
+                          <label className={propertyFieldClass} key={field.key}>
+                            <span>{field.label}</span>
                             <input
                               className={propertyInputClass}
-                              onChange={(event) => updateField(section.id, field, event.target.value)}
-                              value={draft.fieldValues[fieldKey(section.id, field)] ?? ""}
+                              onChange={(event) => updateField(section.id, field.key, event.target.value)}
+                              value={draft.fieldValues[fieldKey(section.id, field.key)] ?? ""}
                             />
                           </label>
                         ))}
@@ -1020,48 +1017,48 @@ export function PropertyCommandCenter({
 
             <aside className="grid content-start gap-5 xl:sticky xl:top-24">
               <PropertyFormSection
-                description="Dieser Block entscheidet, ob Preise, Datenschutz und Portal-Mapping für die nächste Freigabe reichen."
-                title="Veröffentlichung & Portale"
+                description={copy.form.publicationDescription}
+                title={copy.form.publicationPortals}
               >
                 <div className="grid gap-4">
                   <label className={propertyFieldClass}>
-                    <span>Preis-Sichtbarkeit</span>
+                    <span>{copy.form.priceVisibility}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("priceVisibility", event.target.value as PropertyPriceVisibility)} value={draft.priceVisibility}>
-                      {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{copy.priceVisibility[option.value] ?? option.label}</option>)}
                     </select>
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Öffentlicher Preis</span>
+                    <span>{copy.form.publicPrice}</span>
                     <input className={propertyInputClass} min="0" onChange={(event) => updateDraft("publicPrice", event.target.value)} type="number" value={draft.publicPrice} />
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>DSGVO Status</span>
+                    <span>{copy.form.gdprStatus}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("gdprStatus", event.target.value)} value={draft.gdprStatus}>
-                      <option value="needs_review">Prüfen</option>
-                      <option value="ready">Bereit</option>
-                      <option value="blocked">Blockiert</option>
+                      <option value="needs_review">{copy.selectOptions.gdprStatus.needs_review}</option>
+                      <option value="ready">{copy.selectOptions.gdprStatus.ready}</option>
+                      <option value="blocked">{copy.selectOptions.gdprStatus.blocked}</option>
                     </select>
                   </label>
                   <label className={propertyFieldClass}>
-                    <span>Portal-Mapping</span>
+                    <span>{copy.form.portalMapping}</span>
                     <select className={propertySelectClass} onChange={(event) => updateDraft("portalMappingStatus", event.target.value)} value={draft.portalMappingStatus}>
-                      <option value="needs_review">Offen</option>
-                      <option value="mapped">Gemappt</option>
-                      <option value="ready">Bereit</option>
+                      <option value="needs_review">{copy.selectOptions.portalMappingStatus.needs_review}</option>
+                      <option value="mapped">{copy.selectOptions.portalMappingStatus.mapped}</option>
+                      <option value="ready">{copy.selectOptions.portalMappingStatus.ready}</option>
                     </select>
                   </label>
                 </div>
               </PropertyFormSection>
 
               <section className={propertyPanelClass} aria-labelledby="property-preflight-heading">
-                <h4 className="text-lg font-semibold text-slate-950" id="property-preflight-heading">Preflight</h4>
-                <p className="mt-2 text-sm leading-6 text-stone-600">{draftReadyCount} von {draftPreflightItems.length} Kernprüfungen erfüllt.</p>
+                <h4 className="text-lg font-semibold text-slate-950" id="property-preflight-heading">{copy.form.preflight}</h4>
+                <p className="mt-2 text-sm leading-6 text-stone-600">{copy.form.preflightCount(draftReadyCount, draftPreflightItems.length)}</p>
                 <div className="mt-4 grid gap-2">
                   {draftPreflightItems.map((item) => (
                     <div className="flex items-center justify-between gap-3 rounded-md bg-stone-50 px-3 py-2 text-sm" key={item.label}>
                       <span className="font-semibold text-slate-900">{item.label}</span>
                       <span className={`rounded-md px-2 py-1 text-xs font-semibold ${item.ready ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>
-                        {item.ready ? "Bereit" : "Offen"}
+                        {item.ready ? copy.preflightItems.ready : copy.preflightItems.open}
                       </span>
                     </div>
                   ))}
@@ -1069,18 +1066,18 @@ export function PropertyCommandCenter({
               </section>
 
               <section className={propertyPanelClass} aria-labelledby="property-media-heading">
-                <h4 className="text-lg font-semibold text-slate-950" id="property-media-heading">Medien & Dokumente</h4>
-                <p className="mt-2 text-sm leading-6 text-stone-600">Bilder, Grundrisse, Energieausweis und Freigabedokumente werden im Dokumente-Tab gepflegt.</p>
+                <h4 className="text-lg font-semibold text-slate-950" id="property-media-heading">{copy.form.mediaDocuments}</h4>
+                <p className="mt-2 text-sm leading-6 text-stone-600">{copy.form.mediaDocumentsDescription}</p>
                 <button className="mt-4 min-h-11 w-full rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={() => setActiveTab("documents")} type="button">
-                  Dokumente öffnen
+                  {copy.form.openDocuments}
                 </button>
               </section>
 
               <section className={propertyPanelClass} aria-labelledby="property-history-heading">
-                <h4 className="text-lg font-semibold text-slate-950" id="property-history-heading">Historie / Aktivitäten</h4>
-                <p className="mt-2 text-sm leading-6 text-stone-600">Nach dem Speichern erscheinen Objektänderungen, Anfragen und Reservierungen in Historie und Aktivitäten.</p>
+                <h4 className="text-lg font-semibold text-slate-950" id="property-history-heading">{copy.form.historyActivities}</h4>
+                <p className="mt-2 text-sm leading-6 text-stone-600">{copy.form.historyDescription}</p>
                 <button className="mt-4 min-h-11 w-full rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={() => setActiveTab("activity")} type="button">
-                  Aktivitäten öffnen
+                  {copy.form.openActivities}
                 </button>
               </section>
             </aside>
@@ -1092,10 +1089,10 @@ export function PropertyCommandCenter({
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Struktur</p>
-              <h4 className="mt-1 text-lg font-semibold text-slate-950">Projekt/Gebäude/Einheiten</h4>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">{copy.detail.structure}</p>
+              <h4 className="mt-1 text-lg font-semibold text-slate-950">{copy.tabs.projectUnits.label}</h4>
             </div>
-            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={() => onOpenUnits()} type="button">Einheiten/Bestand öffnen</button>
+            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={() => onOpenUnits()} type="button">{copy.detail.openUnits}</button>
           </div>
           <div className="mt-4 grid gap-3">
             {projects.map((project) => {
@@ -1109,9 +1106,9 @@ export function PropertyCommandCenter({
                       <p className="mt-1 text-sm text-stone-600">{project.type}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                      <span className="rounded-md bg-white px-2 py-1">{projectBuildings.length} Gebäude</span>
-                      <span className="rounded-md bg-white px-2 py-1">{projectUnits.length} Einheiten</span>
-                      <span className="rounded-md bg-white px-2 py-1">{projectUnits.filter((unit) => unit.status === "available").length} frei</span>
+                      <span className="rounded-md bg-white px-2 py-1">{projectBuildings.length} {copy.unitBadges.buildings}</span>
+                      <span className="rounded-md bg-white px-2 py-1">{projectUnits.length} {copy.unitBadges.units}</span>
+                      <span className="rounded-md bg-white px-2 py-1">{projectUnits.filter((unit) => unit.status === "available").length} {copy.unitBadges.available}</span>
                     </div>
                   </div>
                   <button
@@ -1125,7 +1122,7 @@ export function PropertyCommandCenter({
                     })}
                     type="button"
                   >
-                    Projekt in Einheiten/Bestand öffnen
+                    {copy.detail.openProjectUnits}
                   </button>
                 </div>
               );
@@ -1137,8 +1134,8 @@ export function PropertyCommandCenter({
       {activeTab === "reservations" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">Reservierungen</h4>
-            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenReservations} type="button">Reservierungsboard öffnen</button>
+            <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.reservations.label}</h4>
+            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenReservations} type="button">{copy.subviews.openReservationBoard}</button>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {activeReservations.map((reservation) => {
@@ -1149,10 +1146,10 @@ export function PropertyCommandCenter({
                 <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={reservation.id}>
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">{reservation.status}</span>
-                    <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{days === null ? "-" : `${days} Tage`}</span>
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{days === null ? "-" : copy.detail.days(days)}</span>
                   </div>
-                  <p className="mt-3 font-semibold text-slate-950">Einheit {unit?.unitNumber ?? reservation.unitId}</p>
-                  <p className="mt-1 text-sm text-stone-600">{contact?.name ?? "Kein Kontakt"} · {formatCurrency(reservation.depositCents / 100, language)}</p>
+                  <p className="mt-3 font-semibold text-slate-950">{copy.detail.unit} {unit?.unitNumber ?? reservation.unitId}</p>
+                  <p className="mt-1 text-sm text-stone-600">{contact?.name ?? copy.detail.noContact} · {formatCurrency(reservation.depositCents / 100, language)}</p>
                   <p className="mt-2 text-sm text-stone-700">{reservation.nextAction}</p>
                 </div>
               );
@@ -1164,18 +1161,18 @@ export function PropertyCommandCenter({
       {activeTab === "inquiries" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">Anfrage-Routing</h4>
-            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenLeadInbox} type="button">Lead-Zentrale öffnen</button>
+            <h4 className="text-lg font-semibold text-slate-950">{copy.subviews.inquiryRouting}</h4>
+            <button className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50" onClick={onOpenLeadInbox} type="button">{copy.subviews.openLeadCenter}</button>
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-[960px] w-full text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
                 <tr>
-                  <th className="py-2 pr-4 font-semibold">Anfrage</th>
-                  <th className="py-2 pr-4 font-semibold">Quelle</th>
-                  <th className="py-2 pr-4 font-semibold">Zuordnung</th>
-                  <th className="py-2 pr-4 font-semibold">Confidence</th>
-                  <th className="py-2 font-semibold">Hinweis</th>
+                  <th className="py-2 pr-4 font-semibold">{copy.subviews.inquiry}</th>
+                  <th className="py-2 pr-4 font-semibold">{copy.subviews.source}</th>
+                  <th className="py-2 pr-4 font-semibold">{copy.subviews.assignment}</th>
+                  <th className="py-2 pr-4 font-semibold">{copy.subviews.confidence}</th>
+                  <th className="py-2 font-semibold">{copy.subviews.hint}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1186,7 +1183,7 @@ export function PropertyCommandCenter({
                       <p className="mt-1 text-xs text-stone-500">{contacts.find((contact) => contact.id === lead.contactId)?.name ?? lead.contactId}</p>
                     </td>
                     <td className="py-3 pr-4 text-stone-700">{route.sourceChannel}</td>
-                    <td className="py-3 pr-4 text-stone-700">{route.unitId ?? route.propertyId ?? route.projectId ?? "Manuell"}</td>
+                    <td className="py-3 pr-4 text-stone-700">{route.unitId ?? route.propertyId ?? route.projectId ?? copy.detail.manual}</td>
                     <td className="py-3 pr-4 font-semibold text-slate-900">{Math.round(route.confidenceScore * 100)}%</td>
                     <td className="py-3 text-stone-700">{route.warnings[0] ?? route.routingReason}</td>
                   </tr>
@@ -1200,40 +1197,40 @@ export function PropertyCommandCenter({
       {activeTab === "channels" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
-            <h4 className="text-lg font-semibold text-slate-950">Vermarktung / Kanäle</h4>
+            <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.channels.label}</h4>
             <select className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900" onChange={(event) => setSelectedChannel(event.target.value as (typeof PROPERTY_CHANNEL_TYPES)[number])} value={selectedChannel}>
-              {PROPERTY_CHANNEL_TYPES.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+              {PROPERTY_CHANNEL_TYPES.map((channel) => <option key={channel} value={channel}>{copy.channels[channel] ?? channel}</option>)}
             </select>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
               {PROPERTY_CHANNEL_PRICE_KEYS.map((channel) => (
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500" key={channel}>
-                  {channel}
+                  {copy.channels[channel] ?? channel}
                   <select
                     className="rounded-md border border-stone-300 bg-white px-2 py-2 text-xs font-semibold normal-case tracking-normal text-slate-900"
                     onChange={(event) => updateChannelPrice(channel, event.target.value as PropertyPriceVisibility)}
                     value={draft.channelPriceVisibility[channel] ?? "publish_price"}
                   >
-                    {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    {PROPERTY_PRICE_VISIBILITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{copy.priceVisibility[option.value] ?? option.label}</option>)}
                   </select>
                 </label>
               ))}
             </div>
             <div className="grid gap-2">
               <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!selectedAsset?.sellerListingId || saving || !actions.changePrice.enabled} onClick={saveSelectedPriceVisibility} type="button">
-                Preislogik speichern
+                {copy.form.savePriceLogic}
               </button>
               {!actions.changePrice.enabled && actions.changePrice.reason ? <p className="text-xs text-stone-600">{actions.changePrice.reason}</p> : null}
             </div>
           </div>
           {selectedAsset ? (
             <div className="mt-4 grid gap-2 text-xs font-semibold text-stone-600 sm:grid-cols-2 lg:grid-cols-5">
-              <span className="rounded-md bg-stone-50 px-3 py-2">Texte: {selectedTextBlocks.length}</span>
-              <span className="rounded-md bg-stone-50 px-3 py-2">Bilder: {selectedMedia.length}</span>
-              <span className="rounded-md bg-stone-50 px-3 py-2">Dokumente: {selectedDocuments.length}</span>
-              <span className="rounded-md bg-stone-50 px-3 py-2">Kosten: {selectedCostItems.length}</span>
-              <span className="rounded-md bg-stone-50 px-3 py-2">Preis: {selectedAsset.priceVisibility}</span>
+              <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.texts}: {selectedTextBlocks.length}</span>
+              <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.images}: {selectedMedia.length}</span>
+              <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.documents}: {selectedDocuments.length}</span>
+              <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.costs}: {selectedCostItems.length}</span>
+              <span className="rounded-md bg-stone-50 px-3 py-2">{copy.subviews.price}: {copy.priceVisibility[selectedAsset.priceVisibility] ?? selectedAsset.priceVisibility}</span>
             </div>
           ) : null}
           {preflight ? (
@@ -1265,10 +1262,10 @@ export function PropertyCommandCenter({
       {activeTab === "documents" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <h4 className="text-lg font-semibold text-slate-950">Dokumente / Exposé</h4>
+            <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.documents.label}</h4>
             <div className="flex flex-wrap gap-2">
               <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
-                {uploadingMedia ? "Upload..." : "Bild hochladen"}
+                {uploadingMedia ? copy.subviews.uploading : copy.subviews.uploadImage}
                 <input
                   accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                   className="sr-only"
@@ -1282,7 +1279,7 @@ export function PropertyCommandCenter({
                 />
               </label>
               <label className="cursor-pointer rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50">
-                {uploadingDocument ? "Upload..." : "Dokument hochladen"}
+                {uploadingDocument ? copy.subviews.uploading : copy.subviews.uploadDocument}
                 <input
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
@@ -1316,12 +1313,12 @@ export function PropertyCommandCenter({
                     <span className="min-w-0">
                       <strong className="block break-words text-sm text-slate-950">{media.title || media.assetName}</strong>
                       <span className="mt-1 block text-xs font-semibold text-stone-500">{media.category} / {media.visibility}</span>
-                      <span className="mt-1 block text-xs text-stone-600">{media.isCover ? "Titelbild" : "Galerie"} / Position {media.position}</span>
+                      <span className="mt-1 block text-xs text-stone-600">{media.isCover ? copy.subviews.coverImage : copy.subviews.gallery} / {copy.subviews.position} {media.position}</span>
                     </span>
                     <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{media.status}</span>
                   </div>
                 )) : (
-                  <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">Noch keine Bilder am Objekt.</p>
+                  <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">{copy.subviews.noImages}</p>
                 )}
               </div>
             </section>
@@ -1337,12 +1334,12 @@ export function PropertyCommandCenter({
                     <span className="min-w-0">
                       <strong className="block break-words text-sm text-slate-950">{document.title || document.assetName}</strong>
                       <span className="mt-1 block text-xs font-semibold text-stone-500">{document.category} / {document.visibility}</span>
-                      <span className="mt-1 block text-xs text-stone-600">{document.requiredForPublication ? "Pflicht für Publikation" : "Optional"}{document.publicUrl ? " / öffentlich" : ""}</span>
+                      <span className="mt-1 block text-xs text-stone-600">{document.requiredForPublication ? copy.subviews.requiredForPublication : copy.subviews.optional}{document.publicUrl ? ` / ${copy.subviews.public}` : ""}</span>
                     </span>
                     <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{document.status}</span>
                   </div>
                 )) : (
-                  <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">Noch keine Dokumente am Objekt.</p>
+                  <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">{copy.subviews.noDocuments}</p>
                 )}
               </div>
             </section>
@@ -1352,7 +1349,7 @@ export function PropertyCommandCenter({
 
       {activeTab === "matching" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
-          <h4 className="text-lg font-semibold text-slate-950">Käufer- und Investorenmatching</h4>
+          <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.matching.label}</h4>
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {matches.length ? matches.map((match) => (
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={`${match.asset.id}:${match.profile?.id ?? match.lead?.id}`}>
@@ -1366,7 +1363,7 @@ export function PropertyCommandCenter({
                 <p className="mt-2 text-xs font-semibold text-stone-500">{match.reasons.join(" / ")}</p>
               </div>
             )) : (
-              <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">Keine Treffer im aktuellen Filter.</p>
+              <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">{copy.filters.noMatches}</p>
             )}
           </div>
         </article>
@@ -1374,7 +1371,7 @@ export function PropertyCommandCenter({
 
       {activeTab === "quality" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
-          <h4 className="text-lg font-semibold text-slate-950">Datenqualität</h4>
+          <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.quality.label}</h4>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {qualityIssues.map((issue, index) => (
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={`${issue.title}:${index}`}>
@@ -1389,12 +1386,12 @@ export function PropertyCommandCenter({
 
       {activeTab === "activity" ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
-          <h4 className="text-lg font-semibold text-slate-950">Aktivitäten / Historie</h4>
+          <h4 className="text-lg font-semibold text-slate-950">{copy.tabs.activity.label}</h4>
           <div className="mt-4 grid gap-3">
             {[
               ...activeReservations.map((reservation) => ({
                 id: `reservation:${reservation.id}`,
-                label: "Reservierung",
+                label: copy.subviews.reservation,
                 title: reservation.nextAction || reservation.unitId,
                 time: reservation.expiresAt,
               })),

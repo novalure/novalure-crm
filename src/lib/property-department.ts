@@ -15,6 +15,7 @@ import type {
   SellerListing,
   WorkspaceRole,
 } from "@/lib/crm-types";
+import { getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
 import { hasProductCapability, type ProductRole } from "@/lib/product-model";
 
 export type PropertyDepartmentTabId =
@@ -198,6 +199,39 @@ export const PROPERTY_FIELD_SECTIONS = [
     fields: ["Anmerkungen", "Interne Notizen", "Dokumentenstatus", "Bestätigung / Audit"],
   },
 ] as const;
+
+export type LocalizedPropertyFieldSection = {
+  id: (typeof PROPERTY_FIELD_SECTIONS)[number]["id"];
+  title: string;
+  fields: Array<{ key: string; label: string }>;
+};
+
+export function getPropertyDepartmentTabs(language: LanguageCode) {
+  const copy = getPropertyDepartmentCopy(language);
+  return PROPERTY_DEPARTMENT_TABS.map((tab) => {
+    const localizedTab = copy.tabs[tab.id];
+    return {
+      ...tab,
+      label: localizedTab?.label ?? tab.label,
+      subLabel: localizedTab && "subLabel" in localizedTab ? localizedTab.subLabel : tab.subLabel,
+    };
+  });
+}
+
+export function getPropertyFieldSections(language: LanguageCode): LocalizedPropertyFieldSection[] {
+  const copy = getPropertyDepartmentCopy(language);
+  return PROPERTY_FIELD_SECTIONS.map((section) => {
+    const localizedSection = copy.fieldSections[section.id];
+    return {
+      id: section.id,
+      title: localizedSection?.title ?? section.title,
+      fields: section.fields.map((field) => ({
+        key: field,
+        label: localizedSection?.fields[field as keyof typeof localizedSection.fields] ?? field,
+      })),
+    };
+  });
+}
 
 export const PROPERTY_CHANNEL_TYPES = [
   "Eigene Website",
@@ -448,9 +482,11 @@ export type PropertyMatch = {
 };
 
 export function getPropertyActionStates(input: {
+  language?: LanguageCode;
   productRole: ProductRole;
   technicalRole: WorkspaceRole;
 }): Record<PropertyActionKey, PropertyActionState> {
+  const copy = getPropertyDepartmentCopy(input.language ?? "de");
   const canOperate = hasProductCapability(input.productRole, "workspace:operate");
   const canWritePipeline = hasProductCapability(input.productRole, "pipeline:write");
   const canReserve = hasProductCapability(input.productRole, "reservations:write");
@@ -459,48 +495,48 @@ export function getPropertyActionStates(input: {
     input.technicalRole === "admin" ||
     hasProductCapability(input.productRole, "settings:manage") ||
     hasProductCapability(input.productRole, "workspace:admin");
-  const writeReason = "Schreibrechte für CRM/Pipeline erforderlich.";
-  const adminReason = "Admin-, Owner- oder passende Freigaberechte erforderlich.";
+  const writeReason = copy.actions.writeReason;
+  const adminReason = copy.actions.adminReason;
 
   return {
     approveDocument: {
       enabled: canAdmin,
-      label: "Dokument freigeben",
+      label: copy.actions.approveDocument,
       reason: canAdmin ? undefined : adminReason,
     },
     assignInquiry: {
       enabled: true,
-      label: "Anfrage zuordnen",
+      label: copy.actions.assignInquiry,
     },
     changePrice: {
       enabled: canAdmin,
-      label: "Preis ändern",
+      label: copy.actions.changePrice,
       reason: canAdmin ? undefined : adminReason,
     },
     convertReservation: {
       enabled: canReserve && canAdmin,
-      label: "Reservierung konvertieren",
-      reason: canReserve && canAdmin ? undefined : "Reservierungs- und Abschlussrechte erforderlich.",
+      label: copy.actions.convertReservation,
+      reason: canReserve && canAdmin ? undefined : copy.actions.reservationConversionReason,
     },
     createProperty: {
       enabled: canOperate || canWritePipeline,
-      label: "Objekt speichern",
+      label: copy.actions.createProperty,
       reason: canOperate || canWritePipeline ? undefined : writeReason,
     },
     exportChannel: {
       enabled: canPublish && canAdmin,
-      label: "Export starten",
-      reason: canPublish && canAdmin ? undefined : "Publikations- und Freigaberechte erforderlich.",
+      label: copy.actions.exportChannel,
+      reason: canPublish && canAdmin ? undefined : copy.actions.publishingReason,
     },
     publishProperty: {
       enabled: canPublish && canAdmin,
-      label: "Objekt veröffentlichen",
-      reason: canPublish && canAdmin ? undefined : "Publikations- und Freigaberechte erforderlich.",
+      label: copy.actions.publishProperty,
+      reason: canPublish && canAdmin ? undefined : copy.actions.publishingReason,
     },
     reserveUnit: {
       enabled: canReserve,
-      label: "Einheit reservieren",
-      reason: canReserve ? undefined : "Reservierungsrechte erforderlich.",
+      label: copy.actions.reserveUnit,
+      reason: canReserve ? undefined : copy.actions.reservationReason,
     },
   };
 }
@@ -731,16 +767,17 @@ export function routePropertyInquiry(input: PropertyInquiryRouteInput, candidate
   assets: PropertyAssetSummary[];
   reservations: PropertyReservation[];
   units: PropertyUnit[];
-}): PropertyInquiryRouteResult {
+}, language: LanguageCode = "de"): PropertyInquiryRouteResult {
+  const copy = getPropertyDepartmentCopy(language).routeMessages;
   const warnings: string[] = [];
   const directUnit = input.unitId ? candidates.units.find((unit) => unit.id === input.unitId) : undefined;
   if (directUnit) {
-    appendReservationWarning(warnings, directUnit.id, candidates.reservations);
+    appendReservationWarning(warnings, directUnit.id, candidates.reservations, copy.activeReservationWarning);
     return buildRouteResult(input, {
       confidenceScore: 0.97,
       projectId: directUnit.projectId,
       propertyId: input.propertyId,
-      routingReason: "Direkte Einheit erkannt.",
+      routingReason: copy.directUnit,
       unitId: directUnit.id,
       warnings,
     });
@@ -752,7 +789,7 @@ export function routePropertyInquiry(input: PropertyInquiryRouteInput, candidate
       confidenceScore: 0.9,
       projectId: directAsset.projectId,
       propertyId: directAsset.id,
-      routingReason: "Direktes Objekt erkannt.",
+      routingReason: copy.directProperty,
       warnings,
     });
   }
@@ -768,7 +805,7 @@ export function routePropertyInquiry(input: PropertyInquiryRouteInput, candidate
       confidenceScore: Math.min(0.86, 0.45 + best.score / 100),
       projectId: best.asset.projectId ?? input.projectId,
       propertyId: best.asset.id,
-      routingReason: "Matching nach Budget, Lage, Zimmer, Fläche, Nutzung und Lead-Typ.",
+      routingReason: copy.matchedByCriteria,
       warnings,
     });
   }
@@ -776,12 +813,13 @@ export function routePropertyInquiry(input: PropertyInquiryRouteInput, candidate
   return buildRouteResult(input, {
     confidenceScore: input.projectId ? 0.45 : 0.25,
     projectId: input.projectId,
-    routingReason: input.projectId ? "Nur Projekt erkannt; manuelle Zuordnung erforderlich." : "Keine belastbare Objektzuordnung.",
-    warnings: [...warnings, "Manuelle Pruefung erforderlich."],
+    routingReason: input.projectId ? copy.projectOnly : copy.noReliableAssignment,
+    warnings: [...warnings, copy.manualReview],
   });
 }
 
-export function runPropertyChannelPreflight(asset: PropertyAssetSummary, channel: string): PropertyPreflightResult {
+export function runPropertyChannelPreflight(asset: PropertyAssetSummary, channel: string, language: LanguageCode = "de"): PropertyPreflightResult {
+  const copy = getPropertyDepartmentCopy(language).preflightChecks;
   const priceVisibility = resolveChannelPriceVisibility(asset, channel);
   const requiresPublicAssets = channel !== "Off-market";
   const requiresPortalMapping = channel === "OpenImmo Export" || channel === "Immobilienportal";
@@ -790,31 +828,32 @@ export function runPropertyChannelPreflight(asset: PropertyAssetSummary, channel
     !requiresPortalMapping ||
     ["ready", "mapped", "published"].includes(normalizeText(asset.portalMappingStatus));
   const checks: PropertyPreflightCheck[] = [
-    check("object_identity", "Objektnummer / Objektart", Boolean(asset.objectNumber || asset.internalReference) && Boolean(asset.objectType), true),
-    check("address", "Adresse / Lage", Boolean(asset.address || asset.location), true),
-    check("area", "Flächen", Boolean(asset.areaSqm && asset.areaSqm > 0), true),
-    check("internal_price", "Interner Preis", Boolean(asset.price && asset.price > 0), true, "Interner Preis ist gespeichert."),
+    check("object_identity", copy.objectIdentity, Boolean(asset.objectNumber || asset.internalReference) && Boolean(asset.objectType), true, copy),
+    check("address", copy.address, Boolean(asset.address || asset.location), true, copy),
+    check("area", copy.area, Boolean(asset.areaSqm && asset.areaSqm > 0), true, copy),
+    check("internal_price", copy.internalPrice, Boolean(asset.price && asset.price > 0), true, copy, copy.internalPriceOk),
     check(
       "public_price",
-      "Öffentlicher Preis",
+      copy.publicPrice,
       hasPublicPrice,
       priceVisibility === "publish_price",
+      copy,
       priceVisibility === "price_on_request"
-        ? "Preis auf Anfrage ist für diesen Kanal erlaubt."
+        ? copy.priceOnRequestOk
         : priceVisibility === "hide_price"
-          ? "Preis wird öffentlich ausgeblendet, intern bleibt er gespeichert."
+          ? copy.priceHiddenOk
           : undefined,
     ),
-    check("text", "Vermarktungstexte", asset.textBlockCount > 0, requiresPublicAssets),
-    check("costs", "Kostenmatrix", asset.costItemCount > 0 || Boolean(asset.monthlyCostsGross || asset.purchaseAncillaryCosts), true),
-    check("energy", "Energieausweis", asset.energyDocumentCount > 0, channel === "OpenImmo Export" || channel === "Immobilienportal"),
-    check("media", "Titelbild / Bilder", !requiresPublicAssets || asset.coverImageCount > 0 || asset.publicImageCount > 0, requiresPublicAssets),
-    check("documents", "Dokumente", asset.approvedDocumentCount > 0 || asset.publicDocumentCount > 0, requiresPublicAssets),
-    check("floorplan", "Grundriss", asset.floorplanDocumentCount > 0, channel === "OpenImmo Export" || channel === "Immobilienportal"),
-    check("availability", "Verfügbarkeit", Boolean(asset.availableFrom || asset.availableFromText) || asset.unitCount === 0 || asset.availableUnits > 0 || asset.reservedUnits > 0, true),
-    check("contact", "Ansprechpartner", Boolean(asset.contactId || asset.contactLabel || asset.sellerLeadId || asset.projectId), true),
-    check("gdpr", "DSGVO / Widerruf", !["blocked", "missing"].includes(normalizeText(asset.gdprStatus)), true),
-    check("mapping", "Portal-/Kanal-Mapping", mappingReady, requiresPortalMapping),
+    check("text", copy.text, asset.textBlockCount > 0, requiresPublicAssets, copy),
+    check("costs", copy.costs, asset.costItemCount > 0 || Boolean(asset.monthlyCostsGross || asset.purchaseAncillaryCosts), true, copy),
+    check("energy", copy.energy, asset.energyDocumentCount > 0, channel === "OpenImmo Export" || channel === "Immobilienportal", copy),
+    check("media", copy.media, !requiresPublicAssets || asset.coverImageCount > 0 || asset.publicImageCount > 0, requiresPublicAssets, copy),
+    check("documents", copy.documents, asset.approvedDocumentCount > 0 || asset.publicDocumentCount > 0, requiresPublicAssets, copy),
+    check("floorplan", copy.floorplan, asset.floorplanDocumentCount > 0, channel === "OpenImmo Export" || channel === "Immobilienportal", copy),
+    check("availability", copy.availability, Boolean(asset.availableFrom || asset.availableFromText) || asset.unitCount === 0 || asset.availableUnits > 0 || asset.reservedUnits > 0, true, copy),
+    check("contact", copy.contact, Boolean(asset.contactId || asset.contactLabel || asset.sellerLeadId || asset.projectId), true, copy),
+    check("gdpr", copy.gdpr, !["blocked", "missing"].includes(normalizeText(asset.gdprStatus)), true, copy),
+    check("mapping", copy.mapping, mappingReady, requiresPortalMapping, copy),
   ];
   const blockers = checks.filter((item) => item.status === "blocked").map((item) => item.label);
   const warnings = checks.filter((item) => item.status === "warning").map((item) => item.label);
@@ -830,51 +869,53 @@ export function runPropertyChannelPreflight(asset: PropertyAssetSummary, channel
 
 export function buildPropertyDataQualityIssues(input: {
   assets: PropertyAssetSummary[];
+  language?: LanguageCode;
   leads: Lead[];
   reservations: PropertyReservation[];
 }): PropertyDataQualityIssue[] {
+  const copy = getPropertyDepartmentCopy(input.language ?? "de").qualityIssues;
   const issues: PropertyDataQualityIssue[] = [];
   for (const asset of input.assets) {
     if (!asset.address) {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: "Adresse fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: copy.missingAddress });
     }
     if (!asset.price) {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Preis fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingPrice });
     }
     if (asset.priceVisibility === "publish_price" && !asset.publicPrice && !asset.price) {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: "Öffentlicher Preis fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: copy.missingPublicPrice });
     }
     if (!asset.areaSqm) {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Flächen fehlen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingArea });
     }
     if (!asset.objectNumber && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Objektnummer fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingObjectNumber });
     }
     if (!asset.subObjectType && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Unterobjektart fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: copy.missingSubObjectType });
     }
     if (asset.textBlockCount === 0 && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Vermarktungstext fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingMarketingText });
     }
     if (asset.costItemCount === 0 && !asset.monthlyCostsGross && !asset.purchaseAncillaryCosts) {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Kostenmatrix fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingCostMatrix });
     }
     if (asset.imageCount === 0 && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: "Bilder fehlen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "critical", title: copy.missingImages });
     } else if (asset.coverImageCount === 0 && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Titelbild fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingCoverImage });
     }
     if (asset.documentCount === 0 && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Dokumente fehlen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingDocuments });
     }
     if (asset.energyDocumentCount === 0 && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: "Energiedokument fehlt" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "warning", title: copy.missingEnergyDocument });
     }
     if (!["ready", "mapped", "published"].includes(normalizeText(asset.portalMappingStatus)) && asset.kind === "property") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Portal-Mapping offen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: copy.portalMappingOpen });
     }
     if (asset.status === "needs_review") {
-      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: "Vermarktung prüfen" });
+      issues.push({ assetId: asset.id, message: asset.title, severity: "info", title: copy.reviewMarketing });
     }
   }
 
@@ -885,7 +926,7 @@ export function buildPropertyDataQualityIssues(input: {
       issues.push({
         message: reservation.nextAction || reservation.unitId,
         severity: "critical",
-        title: "Reservierungsfrist abgelaufen",
+        title: copy.reservationExpired,
       });
     }
   }
@@ -895,7 +936,7 @@ export function buildPropertyDataQualityIssues(input: {
       issues.push({
         message: lead.intent,
         severity: "warning",
-        title: "Anfrage nicht zugeordnet",
+        title: copy.inquiryUnassigned,
       });
     }
   }
@@ -907,8 +948,10 @@ export function buildPropertyMatches(input: {
   assets: PropertyAssetSummary[];
   buyerSearchProfiles: BuyerSearchProfile[];
   contacts: Contact[];
+  language?: LanguageCode;
   leads: Lead[];
 }): PropertyMatch[] {
+  const copy = getPropertyDepartmentCopy(input.language ?? "de").matchReasons;
   const contactById = new Map(input.contacts.map((contact) => [contact.id, contact]));
   const leadById = new Map(input.leads.map((lead) => [lead.id, lead]));
   const matches: PropertyMatch[] = [];
@@ -919,23 +962,23 @@ export function buildPropertyMatches(input: {
       let score = 0;
       if (profile.projectId && asset.projectId && profile.projectId === asset.projectId) {
         score += 20;
-        reasons.push("Projekt");
+        reasons.push(copy.project);
       }
       if (profile.budgetTo && asset.price && profile.budgetTo >= asset.price && (!profile.budgetFrom || profile.budgetFrom <= asset.price)) {
         score += 35;
-        reasons.push("Budget");
+        reasons.push(copy.budget);
       }
       if (profile.desiredLocation && normalizeText(asset.location).includes(normalizeText(profile.desiredLocation))) {
         score += 20;
-        reasons.push("Lage");
+        reasons.push(copy.location);
       }
       if (profile.rooms && asset.rooms && Math.abs(profile.rooms - asset.rooms) <= 1) {
         score += 15;
-        reasons.push("Zimmer");
+        reasons.push(copy.rooms);
       }
       if (profile.areaSqm && asset.areaSqm && Math.abs(profile.areaSqm - asset.areaSqm) <= Math.max(10, asset.areaSqm * 0.15)) {
         score += 10;
-        reasons.push("Fläche");
+        reasons.push(copy.area);
       }
       if (score >= 35) {
         matches.push({
@@ -969,7 +1012,7 @@ export function buildPropertyMatches(input: {
           asset,
           contact: contactById.get(lead.contactId),
           lead,
-          reasons: ["Lead-Score", "Suchkriterien"],
+          reasons: [copy.leadScore, copy.searchCriteria],
           score: Math.min(100, score),
         });
       }
@@ -1014,12 +1057,12 @@ function buildRouteResult(
   };
 }
 
-function appendReservationWarning(warnings: string[], unitId: string, reservations: PropertyReservation[]) {
+function appendReservationWarning(warnings: string[], unitId: string, reservations: PropertyReservation[], message: string) {
   const hasActiveReservation = reservations.some(
     (reservation) => reservation.unitId === unitId && (reservation.status === "hold" || reservation.status === "reserved"),
   );
   if (hasActiveReservation) {
-    warnings.push("Aktive Reservierung erkannt; keine neue Reservierung erstellen.");
+    warnings.push(message);
   }
 }
 
@@ -1028,12 +1071,13 @@ function check(
   label: string,
   passed: boolean,
   required: boolean,
-  passMessage = "OK",
+  messages: { missingRequired: string; recommended: string; ok: string },
+  passMessage = messages.ok,
 ): PropertyPreflightCheck {
   return {
     id,
     label,
-    message: passed ? passMessage : required ? "Pflichtfeld fehlt oder Mapping offen." : "Empfohlen vor Veröffentlichung.",
+    message: passed ? passMessage : required ? messages.missingRequired : messages.recommended,
     required,
     status: passed ? "pass" : required ? "blocked" : "warning",
   };
