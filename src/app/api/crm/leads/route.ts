@@ -33,6 +33,14 @@ function getLeadIdFromRequest(request: Request) {
   return url.searchParams.get("id") ?? url.searchParams.get("leadId") ?? "";
 }
 
+function getIdempotencyKeyFromRequest(request: Request): { ok: true; value?: string } | { ok: false; reason: string } {
+  const value = request.headers.get("Idempotency-Key")?.trim();
+  if (!value) return { ok: true };
+  if (value.length > 180) return { ok: false, reason: "Idempotency-Key is too long" };
+  if (/[\r\n]/.test(value)) return { ok: false, reason: "Invalid Idempotency-Key" };
+  return { ok: true, value };
+}
+
 function withLeadIdFromRequest(request: Request, lead: Record<string, unknown>) {
   if (typeof lead.id === "string" && lead.id.trim().length > 0) return lead;
   const id = getLeadIdFromRequest(request);
@@ -50,7 +58,12 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const lead = typeof input.lead === "object" && input.lead ? input.lead as Record<string, unknown> : input;
-  const result = await upsertLeadRecord({ lead, session: auth.session });
+  const idempotencyKey = getIdempotencyKeyFromRequest(request);
+  if (!idempotencyKey.ok) {
+    return NextResponse.json({ error: idempotencyKey.reason }, { status: getLeadWriteStatus(idempotencyKey.reason) });
+  }
+
+  const result = await upsertLeadRecord({ idempotencyKey: idempotencyKey.value, lead, session: auth.session });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getLeadWriteStatus(result.reason) });

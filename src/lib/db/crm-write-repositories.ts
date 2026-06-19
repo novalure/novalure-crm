@@ -155,6 +155,7 @@ type LeadRow = {
   source: Lead["source"];
   status: Lead["status"];
   type: Lead["type"];
+  wasInserted?: boolean;
   workspaceId: string;
 };
 
@@ -1857,6 +1858,7 @@ export async function upsertCalendarEventRecord(input: {
 }
 
 export async function upsertLeadRecord(input: {
+  idempotencyKey?: string;
   lead: Partial<Lead>;
   requireExisting?: boolean;
   session: AppSession;
@@ -1868,6 +1870,7 @@ export async function upsertLeadRecord(input: {
   const validationError =
     validateTextLength(input.lead.intent, "Lead intent", maxLongTextLength) ??
     validateTextLength(input.lead.nextAction, "Lead next action", maxLongTextLength) ??
+    validateTextLength(input.idempotencyKey, "Idempotency-Key", maxShortTextLength) ??
     validateFutureDateInput(input.lead.nextContactAt, "Next contact date");
   if (validationError) return { persisted: false, reason: validationError };
 
@@ -1905,6 +1908,7 @@ export async function upsertLeadRecord(input: {
     existing?.assignedToUserId ??
     normalizeWriteProjectId(input.session.userId);
   const score = clampNumber(input.lead.score ?? existing?.score ?? 0, 0, 100);
+  const idempotencyKey = cleanString(input.idempotencyKey) || null;
   const receivedAt = cleanDateInput(input.lead.receivedAt) || toIso(existing?.receivedAt ?? null) || new Date().toISOString();
   const slaDueAt =
     cleanDateInput(input.lead.slaDueAt) ||
@@ -2027,7 +2031,8 @@ export async function upsertLeadRecord(input: {
             buyer_profile,
             seller_profile,
             investor_profile,
-            metadata
+            metadata,
+            idempotency_key
           )
           values (
             $1,
@@ -2053,9 +2058,13 @@ export async function upsertLeadRecord(input: {
             $21::jsonb,
             $22::jsonb,
             $23::jsonb,
-            $24::jsonb
+            $24::jsonb,
+            $25
           )
-          returning ${leadReturningSql}
+          on conflict (workspace_id, idempotency_key) where idempotency_key is not null
+          do update set
+            idempotency_key = leads.idempotency_key
+          returning ${leadReturningSql}, (xmax = 0) as "wasInserted"
         `,
         [
           input.session.workspaceId,
@@ -2082,82 +2091,50 @@ export async function upsertLeadRecord(input: {
           JSON.stringify(input.lead.sellerProfile ?? {}),
           JSON.stringify(input.lead.investorProfile ?? {}),
           JSON.stringify({ createdFrom: "crm_lead_inbox", legacyId: input.lead.id ?? null }),
+          idempotencyKey,
         ],
       );
 
   if (!row) return { persisted: false, reason: "Lead could not be saved" };
 
   const savedLead = toLead(row);
+  const idempotentReplay = !existing && row.wasInserted === false;
+  const leadWasInserted = !existing && !idempotentReplay;
 
-  await Promise.all([
-    writeAuditLog({
-      action: existing ? "lead.updated" : "lead.created",
-      after: savedLead,
-      before: existing ? toLead(existing) : null,
-      entityId: row.id,
-      entityType: "lead",
-      projectId: row.projectId,
-      session: input.session,
-    }),
-    recordAnalyticsEvent({
-      contactId: row.contactId,
-      entityId: row.id,
-      entityType: "lead",
-      eventType: existing ? "lead_updated" : "lead_created",
-      leadId: row.id,
-      metadata: { score: row.score, source: row.source, status: row.status },
-      module: "lead",
-      projectId: row.projectId,
-      session: input.session,
-      source: row.source,
-    }),
-    !existing
-      ? recordSpeedToLeadEvent({
-          channel: row.source,
-          contactId: row.contactId,
-          dueAt: row.slaDueAt,
-          leadId: row.id,
-          metadata: {
-            score: row.score,
-            sourcePayload: "crm_lead_write",
-            status: row.status,
-            trigger: "manual_or_api_lead",
-          },
-          ownerUserId: row.assignedToUserId,
-          projectId: row.projectId,
-          source: row.source,
-          state: "covered",
-          userId: input.session.userId,
-          workspaceId: input.session.workspaceId,
-        })
-      : null,
-    existing && manualFirstResponseAt
-      ? Promise.all([
-          writeCrmAnalyticsEvent({
+  if (!idempotentReplay) {
+    await Promise.all([
+      writeAuditLog({
+        action: existing ? "lead.updated" : "lead.created",
+        after: savedLead,
+        before: existing ? toLead(existing) : null,
+        entityId: row.id,
+        entityType: "lead",
+        projectId: row.projectId,
+        session: input.session,
+      }),
+      recordAnalyticsEvent({
+        contactId: row.contactId,
+        entityId: row.id,
+        entityType: "lead",
+        eventType: existing ? "lead_updated" : "lead_created",
+        leadId: row.id,
+        metadata: { score: row.score, source: row.source, status: row.status },
+        module: "lead",
+        projectId: row.projectId,
+        session: input.session,
+        source: row.source,
+      }),
+      leadWasInserted
+        ? recordSpeedToLeadEvent({
             channel: row.source,
             contactId: row.contactId,
-            entityId: row.id,
-            entityType: "lead",
-            eventType: "first_response",
+            dueAt: row.slaDueAt,
             leadId: row.id,
             metadata: {
-              firstResponseAt: manualFirstResponseAt,
-              sourcePayload: "manual_lead_update",
-            },
-            module: "lead_inbox",
-            projectId: row.projectId,
-            source: row.source,
-            userId: input.session.userId,
-            workspaceId: input.session.workspaceId,
-          }),
-          recordSpeedToLeadEvent({
-            channel: row.source,
-            contactId: row.contactId,
-            firstResponseAt: manualFirstResponseAt,
-            leadId: row.id,
-            metadata: {
-              sourcePayload: "manual_lead_update",
-              trigger: "owner_first_response",
+              score: row.score,
+              sourcePayload: "crm_lead_write",
+              status: row.status,
+              trigger: "manual_or_api_lead",
             },
             ownerUserId: row.assignedToUserId,
             projectId: row.projectId,
@@ -2165,12 +2142,51 @@ export async function upsertLeadRecord(input: {
             state: "covered",
             userId: input.session.userId,
             workspaceId: input.session.workspaceId,
-          }),
-        ])
-      : null,
-  ]);
+          })
+        : null,
+      existing && manualFirstResponseAt
+        ? Promise.all([
+            writeCrmAnalyticsEvent({
+              channel: row.source,
+              contactId: row.contactId,
+              entityId: row.id,
+              entityType: "lead",
+              eventType: "first_response",
+              leadId: row.id,
+              metadata: {
+                firstResponseAt: manualFirstResponseAt,
+                sourcePayload: "manual_lead_update",
+              },
+              module: "lead_inbox",
+              projectId: row.projectId,
+              source: row.source,
+              userId: input.session.userId,
+              workspaceId: input.session.workspaceId,
+            }),
+            recordSpeedToLeadEvent({
+              channel: row.source,
+              contactId: row.contactId,
+              firstResponseAt: manualFirstResponseAt,
+              leadId: row.id,
+              metadata: {
+                sourcePayload: "manual_lead_update",
+                trigger: "owner_first_response",
+              },
+              ownerUserId: row.assignedToUserId,
+              projectId: row.projectId,
+              source: row.source,
+              state: "covered",
+              userId: input.session.userId,
+              workspaceId: input.session.workspaceId,
+            }),
+          ])
+        : null,
+    ]);
+  }
 
-  await syncBrokerEntityForLead({ lead: savedLead, session: input.session });
+  if (!idempotentReplay) {
+    await syncBrokerEntityForLead({ lead: savedLead, session: input.session });
+  }
 
   return { data: savedLead, persisted: true };
 }
