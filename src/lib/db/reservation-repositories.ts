@@ -1,6 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import type { Deal, PropertyReservation, PropertyUnit, Task } from "@/lib/crm-types";
-import { queryOne } from "@/lib/db/client";
+import { queryOne, queryRows } from "@/lib/db/client";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { changeDealStageRecord, upsertTaskRecord } from "@/lib/db/crm-write-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -43,8 +43,16 @@ export type ReservationWorkflowResult = {
   reservation?: PropertyReservation;
   unit?: PropertyUnit;
   deal?: Pick<Deal, "id" | "projectId" | "stage" | "nextAction" | "probability" | "closedAt">;
+  dealStageWarning?: ReservationDealStageWarning;
   task?: Task;
   teamsNotification?: PreparedTeamsNotification;
+};
+
+export type ReservationDealStageWarning = {
+  action: ReservationWorkflowAction;
+  candidates: string[];
+  projectId: string;
+  reason: string;
 };
 
 export type ExpireOverduePropertyReservationsResult = {
@@ -126,12 +134,35 @@ type PipelinePermissionRow = {
   can_reopen_deals: boolean | null;
 };
 
+type PipelineStageResolverRow = {
+  category: string | null;
+  key: string | null;
+  name: Deal["stage"];
+  position: number | string | null;
+  probability: number | string | null;
+  scopePriority: number | string | null;
+};
+
 type DealSyncResult =
   | {
       deal?: Pick<Deal, "id" | "projectId" | "stage" | "nextAction" | "probability" | "closedAt">;
       ok: true;
+      warning?: ReservationDealStageWarning;
     }
   | {
+      ok: false;
+      reason: string;
+    };
+
+type ReservationStageResolution =
+  | {
+      candidates: string[];
+      match: "category" | "name_or_key";
+      ok: true;
+      stage: Deal["stage"];
+    }
+  | {
+      candidates: string[];
       ok: false;
       reason: string;
     };
@@ -535,8 +566,110 @@ async function validateDeal(session: AppSession, projectId: string, dealId: stri
   return Boolean(row);
 }
 
-function targetStageForAction(action: ReservationWorkflowAction): Deal["stage"] {
-  return action === "convert" ? "Gewonnen" : action === "expire" ? "Qualifizieren" : "Angebot/Reservierung";
+const reservationStageCandidates: Record<ReservationWorkflowAction, string[]> = {
+  convert: ["Gewonnen", "won"],
+  create: ["Angebot/Reservierung", "reservation", "Angebot / Mandat", "offer_mandate", "Reservierung", "Angebot", "offer"],
+  expire: ["Qualifizieren", "qualify", "Qualifiziert", "qualified"],
+  extend: ["Angebot/Reservierung", "reservation", "Angebot / Mandat", "offer_mandate", "Reservierung", "Angebot", "offer"],
+};
+
+function normalizeStageLookupValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLocaleLowerCase("de-AT");
+}
+
+async function loadPipelineStagesForProject(session: AppSession, projectId: string) {
+  return queryRows<PipelineStageResolverRow>(
+    `
+      select
+        s.name,
+        s.key,
+        s.category,
+        s.position,
+        s.probability,
+        case when s.project_id = $2::uuid or p.project_id = $2::uuid then 0 else 1 end as "scopePriority"
+      from crm_pipeline_stages s
+      join crm_pipelines p on p.id = s.pipeline_id and p.workspace_id = s.workspace_id
+      join projects pr on pr.id = $2::uuid and pr.workspace_id = s.workspace_id
+      where s.workspace_id = $1::uuid
+        and (
+          s.project_id = $2::uuid
+          or p.project_id = $2::uuid
+          or (
+            p.project_id is null
+            and s.project_id is null
+            and p.is_default = true
+            and (p.customer_type is null or pr.customer_type is null or p.customer_type = pr.customer_type)
+            and (p.operating_model is null or pr.default_operating_model is null or p.operating_model = pr.default_operating_model)
+          )
+        )
+      order by
+        "scopePriority",
+        p.is_default desc,
+        s.position asc,
+        s.created_at asc
+    `,
+    [session.workspaceId, projectId],
+  );
+}
+
+async function resolveReservationDealStage(
+  session: AppSession,
+  projectId: string,
+  action: ReservationWorkflowAction,
+): Promise<ReservationStageResolution> {
+  const stages = await loadPipelineStagesForProject(session, projectId);
+  const hasProjectScopedStages = stages.some((stage) => Number(stage.scopePriority ?? 1) === 0);
+  const effectiveStages = hasProjectScopedStages ? stages.filter((stage) => Number(stage.scopePriority ?? 1) === 0) : stages;
+  const candidates = reservationStageCandidates[action];
+
+  if (action === "convert") {
+    const wonStage = effectiveStages.find((stage) => normalizeStageLookupValue(stage.category) === "won");
+    if (wonStage) {
+      return { candidates, match: "category", ok: true, stage: wonStage.name };
+    }
+  }
+
+  const stageByCandidate = new Map<string, PipelineStageResolverRow>();
+  for (const stage of effectiveStages) {
+    const stageName = normalizeStageLookupValue(stage.name);
+    const stageKey = normalizeStageLookupValue(stage.key);
+    if (stageName && !stageByCandidate.has(stageName)) stageByCandidate.set(stageName, stage);
+    if (stageKey && !stageByCandidate.has(stageKey)) stageByCandidate.set(stageKey, stage);
+  }
+
+  for (const candidate of candidates) {
+    const stage = stageByCandidate.get(normalizeStageLookupValue(candidate));
+    if (stage) {
+      return { candidates, match: "name_or_key", ok: true, stage: stage.name };
+    }
+  }
+
+  return {
+    candidates,
+    ok: false,
+    reason: "Reservation deal stage is not configured for this project pipeline.",
+  };
+}
+
+function buildDealStageWarning(
+  action: ReservationWorkflowAction,
+  projectId: string,
+  resolution: Extract<ReservationStageResolution, { ok: false }>,
+): ReservationDealStageWarning {
+  return {
+    action,
+    candidates: resolution.candidates,
+    projectId,
+    reason: resolution.reason,
+  };
+}
+
+function warnMissingReservationDealStage(warning: ReservationDealStageWarning) {
+  console.warn(
+    `[reservation-stage-resolver] Skipping deal stage change: action=${warning.action}; projectId=${warning.projectId}; candidates=${warning.candidates.join(
+      ", ",
+    )}; reason=${warning.reason}`,
+  );
 }
 
 function isTerminalDealStage(stage: string | null | undefined) {
@@ -573,7 +706,12 @@ async function validateDealStagePermission(
     return { ok: false as const, reason: "Project pipeline permission is required." };
   }
 
-  const targetStage = targetStageForAction(action);
+  const targetStageResolution = await resolveReservationDealStage(session, projectId, action);
+  if (!targetStageResolution.ok) {
+    return { ok: true as const };
+  }
+
+  const targetStage = targetStageResolution.stage;
   const isClosing = isTerminalDealStage(targetStage);
   const isReopening = isTerminalDealStage(deal.stage) && !isTerminalDealStage(targetStage);
   const permission = await queryOne<PipelinePermissionRow>(
@@ -710,16 +848,23 @@ async function syncDeal(
     return { ok: true };
   }
 
-  const stage = targetStageForAction(action);
-  const stageResult = await changeDealStageRecord({
-    dealId,
-    reasonCategory: action === "convert" ? "won" : undefined,
-    session,
-    toStage: stage,
-  });
+  const stageResolution = await resolveReservationDealStage(session, projectId, action);
+  let warning: ReservationDealStageWarning | undefined;
 
-  if (!stageResult.persisted) {
-    return { ok: false, reason: stageResult.reason };
+  if (stageResolution.ok) {
+    const stageResult = await changeDealStageRecord({
+      dealId,
+      reasonCategory: action === "convert" ? "won" : undefined,
+      session,
+      toStage: stageResolution.stage,
+    });
+
+    if (!stageResult.persisted) {
+      return { ok: false, reason: stageResult.reason };
+    }
+  } else {
+    warning = buildDealStageWarning(action, projectId, stageResolution);
+    warnMissingReservationDealStage(warning);
   }
 
   const row = await queryOne<DealSyncRow>(
@@ -741,7 +886,7 @@ async function syncDeal(
     [dealId, session.workspaceId, projectId, nextAction, action],
   );
 
-  return row ? { deal: toDeal(row), ok: true } : { ok: false, reason: "Deal could not be synchronized." };
+  return row ? { deal: toDeal(row), ok: true, warning } : { ok: false, reason: "Deal could not be synchronized." };
 }
 
 async function writeReservationTask(
@@ -1042,6 +1187,7 @@ export async function mutateUnitReservation({
     return { persisted: false, reason: dealSync.reason };
   }
   const syncedDeal = dealSync.deal;
+  const dealStageWarning = dealSync.warning;
   const task = input.createTask ? await writeReservationTask(session, reservation, updatedUnit, action, nextAction) : undefined;
   const teamsNotification = input.notifyTeams ? await queueReservationTeamsNotification(session, reservation, updatedUnit, action) : undefined;
 
@@ -1053,7 +1199,7 @@ export async function mutateUnitReservation({
     projectId: reservation.projectId,
     dealId: reservation.dealId,
     before: existingReservation ? toReservation(existingReservation) : null,
-    after: { reservation, unit: updatedUnit, deal: syncedDeal, taskId: task?.id, teamsNotification },
+    after: { reservation, unit: updatedUnit, deal: syncedDeal, dealStageWarning, taskId: task?.id, teamsNotification },
   });
 
   await writeAuditLog({
@@ -1091,6 +1237,7 @@ export async function mutateUnitReservation({
       action,
       contractMilestone: reservation.contractMilestone,
       depositCents: reservation.depositCents,
+      dealStageWarning: dealStageWarning ?? null,
       nextAction: reservation.nextAction,
       reservationStatus: reservation.status,
       taskId: task?.id ?? null,
@@ -1113,6 +1260,7 @@ export async function mutateUnitReservation({
     reservation,
     unit: updatedUnit,
     deal: syncedDeal,
+    dealStageWarning,
     task,
     teamsNotification,
   };
