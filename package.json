@@ -37,6 +37,7 @@
     "qa:property-unit-pagination": "node scripts/qa-property-unit-pagination.mjs",
     "qa:property-pagination": "node scripts/qa-property-pagination.mjs",
     "qa:reservation-stage-resolver": "node scripts/qa-reservation-stage-resolver.mjs",
+    "qa:deal-idempotency": "node scripts/qa-deal-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
     "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs"
   },

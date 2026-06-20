@@ -72,6 +72,7 @@ type DealRow = {
   source: LeadSource;
   stage: DealStage;
   valueCents: number | string;
+  wasInserted?: boolean;
   workspaceId: string;
 };
 
@@ -630,6 +631,7 @@ export async function upsertDashboardView(input: {
 
 export async function upsertDealRecord(input: {
   deal: Partial<Deal>;
+  idempotencyKey?: string;
   requireExisting?: boolean;
   reason?: string;
   reasonCategory?: unknown;
@@ -643,6 +645,7 @@ export async function upsertDealRecord(input: {
   const validationError =
     validateTextLength(input.deal.name, "Deal name", maxShortTextLength) ??
     validateTextLength(input.deal.nextAction, "Next action", maxLongTextLength) ??
+    validateTextLength(input.idempotencyKey, "Idempotency-Key", maxShortTextLength) ??
     validateDealValueInput(input.deal.value);
   if (validationError) return { persisted: false, reason: validationError };
 
@@ -686,6 +689,7 @@ export async function upsertDealRecord(input: {
   const valueCents = toCents(input.deal.value ?? (existing ? formatEuroFromCents(existing.valueCents) : "0"));
   const probability = clampNumber(input.deal.probability ?? existing?.probability ?? 50, 0, 100);
   const riskLevel = normalizeRiskLevel(input.deal.riskLevel ?? existing?.riskLevel, probability);
+  const idempotencyKey = cleanString(input.idempotencyKey) || null;
   const source = cleanString(input.deal.source) || existing?.source || contact?.source || "Manual";
   const name = cleanString(input.deal.name) || existing?.name || (contact ? `${contact.name} Deal` : "");
 
@@ -794,7 +798,8 @@ export async function upsertDealRecord(input: {
             risk_level,
             source,
             next_action,
-            metadata
+            metadata,
+            idempotency_key
           )
           values (
             $1,
@@ -815,8 +820,12 @@ export async function upsertDealRecord(input: {
             $16,
             $17,
             $18,
-            $19::jsonb
+            $19::jsonb,
+            $20
           )
+          on conflict (workspace_id, idempotency_key) where idempotency_key is not null
+          do update set
+            idempotency_key = deals.idempotency_key
           returning
             id,
             workspace_id as "workspaceId",
@@ -836,7 +845,8 @@ export async function upsertDealRecord(input: {
             closed_at as "closedAt",
             risk_level as "riskLevel",
             source,
-            next_action as "nextAction"
+            next_action as "nextAction",
+            (xmax = 0) as "wasInserted"
         `,
         [
           input.session.workspaceId,
@@ -858,12 +868,16 @@ export async function upsertDealRecord(input: {
           source,
           cleanString(input.deal.nextAction) || "Deal nächsten Schritt planen",
           JSON.stringify({ createdFrom: "crm_pipeline", legacyId: input.deal.id ?? null }),
+          idempotencyKey,
         ],
       );
 
   if (!row) return { persisted: false, reason: "Deal could not be saved" };
 
-  if (stageChanged || !existing) {
+  const savedDeal = toDeal(row);
+  const idempotentReplay = !existing && row.wasInserted === false;
+
+  if (!idempotentReplay && (stageChanged || !existing)) {
     await insertDealStageHistory({
       dealId: row.id,
       fromStage: existing?.stage ?? null,
@@ -876,46 +890,48 @@ export async function upsertDealRecord(input: {
     });
   }
 
-  await Promise.all([
-    writeAuditLog({
-      action: existing ? "deal.updated" : "deal.created",
-      after: toDeal(row),
-      before: existing ? toDeal(existing) : null,
-      dealId: row.id,
-      entityId: row.id,
-      entityType: "deal",
-      projectId: row.projectId,
-      session: input.session,
-    }),
-    recordAnalyticsEvent({
-      dealId: row.id,
-      entityId: row.id,
-      entityType: "deal",
-      eventType: stageChanged ? "deal_stage_changed" : existing ? "deal_updated" : "deal_created",
-      metadata: {
-        fromStage: existing?.stage ?? null,
-        reason: input.reason ?? null,
-        reasonCategory: closeState.data.lostReasonCategory,
-        stage: row.stage,
-      },
-      module: "pipeline",
-      projectId: row.projectId,
-      session: input.session,
-      source: row.source,
-      valueCents,
-    }),
-    stageChanged || !existing
-      ? recordDealOutcomeAnalyticsEvent({
-          deal: row,
+  if (!idempotentReplay) {
+    await Promise.all([
+      writeAuditLog({
+        action: existing ? "deal.updated" : "deal.created",
+        after: savedDeal,
+        before: existing ? toDeal(existing) : null,
+        dealId: row.id,
+        entityId: row.id,
+        entityType: "deal",
+        projectId: row.projectId,
+        session: input.session,
+      }),
+      recordAnalyticsEvent({
+        dealId: row.id,
+        entityId: row.id,
+        entityType: "deal",
+        eventType: stageChanged ? "deal_stage_changed" : existing ? "deal_updated" : "deal_created",
+        metadata: {
           fromStage: existing?.stage ?? null,
-          reason: input.reason,
-          session: input.session,
-          valueCents,
-        })
-      : null,
-  ]);
+          reason: input.reason ?? null,
+          reasonCategory: closeState.data.lostReasonCategory,
+          stage: row.stage,
+        },
+        module: "pipeline",
+        projectId: row.projectId,
+        session: input.session,
+        source: row.source,
+        valueCents,
+      }),
+      stageChanged || !existing
+        ? recordDealOutcomeAnalyticsEvent({
+            deal: row,
+            fromStage: existing?.stage ?? null,
+            reason: input.reason,
+            session: input.session,
+            valueCents,
+          })
+        : null,
+    ]);
+  }
 
-  return { data: toDeal(row), persisted: true };
+  return { data: savedDeal, persisted: true };
 }
 
 export async function listDealStageHistory(input: {

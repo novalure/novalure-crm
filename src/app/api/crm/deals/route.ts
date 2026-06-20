@@ -35,6 +35,14 @@ function getDealIdFromRequest(request: Request) {
   return url.searchParams.get("id") ?? url.searchParams.get("dealId") ?? "";
 }
 
+function getIdempotencyKeyFromRequest(request: Request): { ok: true; value?: string } | { ok: false; reason: string } {
+  const value = request.headers.get("Idempotency-Key")?.trim();
+  if (!value) return { ok: true };
+  if (value.length > 180) return { ok: false, reason: "Idempotency-Key is too long" };
+  if (/[\r\n]/.test(value)) return { ok: false, reason: "Invalid Idempotency-Key" };
+  return { ok: true, value };
+}
+
 function withDealIdFromRequest(request: Request, deal: Record<string, unknown>) {
   if (typeof deal.id === "string" && deal.id.trim().length > 0) return deal;
   const id = getDealIdFromRequest(request);
@@ -52,8 +60,14 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const deal = typeof input.deal === "object" && input.deal ? input.deal as Record<string, unknown> : input;
+  const idempotencyKey = getIdempotencyKeyFromRequest(request);
+  if (!idempotencyKey.ok) {
+    return NextResponse.json({ error: idempotencyKey.reason }, { status: getDealWriteStatus(idempotencyKey.reason) });
+  }
+
   const result = await upsertDealRecord({
     deal,
+    idempotencyKey: idempotencyKey.value,
     reason: typeof input.reason === "string" ? input.reason : undefined,
     reasonCategory: input.reasonCategory,
     reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
