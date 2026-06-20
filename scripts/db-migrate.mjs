@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
@@ -114,8 +115,20 @@ function resolveTarget() {
   return { databaseUrl, name: targetName };
 }
 
+function normalizeSqlContent(content) {
+  return content.replace(/\r\n/g, "\n");
+}
+
 function checksum(content) {
-  return createHash("sha256").update(content).digest("hex");
+  return createHash("sha256").update(normalizeSqlContent(content)).digest("hex");
+}
+
+function assertMigrationFileTracked(gitPath) {
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", gitPath], { stdio: "ignore" });
+  } catch {
+    fail(`Refusing migration file that is not tracked by git: ${gitPath}`);
+  }
 }
 
 function readMigrations() {
@@ -129,6 +142,8 @@ function readMigrations() {
 
       const version = file.replace(/\.sql$/, "");
       const content = readFileSync(join(migrationsDir, file), "utf8");
+      const gitPath = `migrations/${file}`;
+      assertMigrationFileTracked(gitPath);
 
       return {
         content,
@@ -136,7 +151,7 @@ function readMigrations() {
         file,
         name: match[2],
         number: Number(match[1]),
-        path: join("migrations", file),
+        path: gitPath,
         rollback: version.endsWith("_rollback"),
         version,
       };
