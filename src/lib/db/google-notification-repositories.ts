@@ -417,14 +417,14 @@ export async function upsertGoogleNotificationTarget(input: {
         `
           update google_notification_targets
           set
-            label = $4,
-            destination_type = $5,
-            webhook_url = coalesce($6, webhook_url),
-            space_id = $7,
-            calendar_id = $8,
-            enabled = $9,
-            alert_types = $10::text[],
-            metadata = metadata || $11::jsonb,
+            label = $3,
+            destination_type = $4,
+            webhook_url = coalesce($5, webhook_url),
+            space_id = $6,
+            calendar_id = $7,
+            enabled = $8,
+            alert_types = $9::text[],
+            metadata = metadata || $10::jsonb,
             updated_at = now()
           where id = $1::uuid and workspace_id = $2::uuid
           returning
@@ -442,7 +442,6 @@ export async function upsertGoogleNotificationTarget(input: {
         [
           existing.id,
           input.session.workspaceId,
-          projectId,
           label,
           destinationType,
           webhookUrl,

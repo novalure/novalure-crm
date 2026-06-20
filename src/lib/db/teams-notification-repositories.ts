@@ -428,16 +428,16 @@ export async function upsertTeamsNotificationTarget(input: {
         `
           update teams_notification_targets
           set
-            label = $4,
-            destination_type = $5,
-            webhook_url = coalesce($6, webhook_url),
-            team_id = $7,
-            channel_id = $8,
-            chat_id = $9,
-            channel_name = $10,
-            enabled = $11,
-            alert_types = $12::text[],
-            metadata = metadata || $13::jsonb,
+            label = $3,
+            destination_type = $4,
+            webhook_url = coalesce($5, webhook_url),
+            team_id = $6,
+            channel_id = $7,
+            chat_id = $8,
+            channel_name = $9,
+            enabled = $10,
+            alert_types = $11::text[],
+            metadata = metadata || $12::jsonb,
             updated_at = now()
           where id = $1::uuid and workspace_id = $2::uuid
           returning
@@ -457,7 +457,6 @@ export async function upsertTeamsNotificationTarget(input: {
         [
           existing.id,
           input.session.workspaceId,
-          projectId,
           label,
           destinationType,
           webhookUrl,

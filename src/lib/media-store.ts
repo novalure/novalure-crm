@@ -43,7 +43,6 @@ const allowedMediaExtensions = new Set([...allowedImageExtensions, ...allowedDoc
 const mediaRoot = process.env.NOVALURE_MEDIA_ROOT || path.join(process.cwd(), ".data", "media");
 const uploadRoot = path.join(mediaRoot, "uploads");
 const libraryPath = path.join(mediaRoot, "library.json");
-let mediaTableReady = false;
 
 export function isAllowedImage(file: File) {
   const extension = path.extname(file.name).toLowerCase();
@@ -152,7 +151,6 @@ export async function saveWorkspaceFile(input: {
 
 export async function findMediaAsset(assetId: string) {
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     const row = await queryOne<MediaAssetRow>(
       `
         select
@@ -187,7 +185,6 @@ export async function findPublicMediaAsset(publicToken: string) {
   if (!publicToken.trim()) return null;
 
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     const row = await queryOne<MediaAssetRow>(
       `
         select
@@ -221,7 +218,6 @@ export async function findPublicMediaAsset(publicToken: string) {
 
 export async function findWorkspaceMediaAsset(assetId: string, workspaceId: string) {
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     const row = await queryOne<MediaAssetRow>(
       `
         select
@@ -256,7 +252,6 @@ export async function publishWorkspaceMedia(assetId: string, workspaceId: string
   const token = randomUUID();
 
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     const row = await queryOne<MediaAssetRow>(
       `
         update media_assets
@@ -315,7 +310,6 @@ export async function deleteWorkspaceMedia(assetId: string, workspaceId: string)
   if (!asset) return null;
 
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     await executeQuery("delete from media_assets where id = $1 and workspace_id = $2", [assetId, workspaceId]);
   } else {
     const library = await readMediaLibrary();
@@ -396,7 +390,6 @@ type MediaAssetRow = Record<string, unknown> & {
 
 async function readWorkspaceAssets(workspaceId: string) {
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     const rows = await queryRows<MediaAssetRow>(
       `
         select
@@ -431,7 +424,6 @@ async function readWorkspaceAssets(workspaceId: string) {
 
 async function persistMediaAsset(asset: MediaAsset) {
   if (hasDatabaseUrl()) {
-    await ensureMediaAssetsTable();
     await executeQuery(
       `
         insert into media_assets (
@@ -509,34 +501,6 @@ async function deleteStoredFile(asset: MediaAsset) {
 
 function shouldUseVercelBlob() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-}
-
-async function ensureMediaAssetsTable() {
-  if (mediaTableReady) return;
-
-  await executeQuery(`
-    create table if not exists media_assets (
-      id uuid primary key,
-      workspace_id text not null,
-      name text not null,
-      original_name text not null,
-      folder text not null default 'media-uploads',
-      mime_type text not null,
-      size_bytes bigint not null default 0,
-      url text not null,
-      relative_path text not null,
-      storage_provider text not null default 'local' check (storage_provider in ('local', 'vercel-blob')),
-      alt text,
-      created_at timestamptz not null default now(),
-      is_public boolean not null default false,
-      public_token text
-    )
-  `);
-  await executeQuery("alter table media_assets add column if not exists is_public boolean not null default false");
-  await executeQuery("alter table media_assets add column if not exists public_token text");
-  await executeQuery("create index if not exists media_assets_workspace_created_idx on media_assets(workspace_id, created_at desc)");
-  await executeQuery("create unique index if not exists media_assets_public_token_uidx on media_assets(public_token) where public_token is not null");
-  mediaTableReady = true;
 }
 
 function normalizeMediaAsset(asset: MediaAsset | MediaAssetRow): MediaAsset {
