@@ -1,11 +1,14 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import process from "node:process";
 import { neon } from "@neondatabase/serverless";
+import { createJiti } from "jiti";
 
 const CODEX_PREFIX = "CODEXTEST_";
-const defaultQaPassword = "QA-Novalure-Local-2026!";
-const envFiles = [".env.local", ".env.production.local"];
+const envFiles = [".env.local"];
+const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
+const testDbSuffix = "98273025";
 const novalureGrowthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const novalureGrowthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
 const novalureGrowthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Formular"];
@@ -29,15 +32,6 @@ function loadEnv(path) {
 
 for (const file of envFiles) loadEnv(file);
 
-const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const explicitQaEmail = process.env.NOVALURE_QA_EMAIL || process.env.QA_LOGIN_EMAIL || "";
-const configuredEmail = explicitQaEmail || "franz@novalure.local";
-const configuredPassword =
-  process.env.NOVALURE_QA_PASSWORD ||
-  process.env.QA_LOGIN_PASSWORD ||
-  process.env.NOVALURE_LOGIN_PASSCODE ||
-  defaultQaPassword;
-
 function cleanDatabaseUrl(value) {
   if (!value) return "";
   const trimmed = String(value).trim().replace(/^['"]|['"]$/g, "");
@@ -52,10 +46,16 @@ const databaseUrl =
   cleanDatabaseUrl(process.env.POSTGRES_PRISMA_URL);
 
 const sql = databaseUrl ? neon(databaseUrl) : null;
-const cookies = new Map();
 const matrix = [];
 const createdRecords = [];
 const technicalErrors = [];
+const seedIds = {
+  pipelineId: "",
+  projectId: "",
+  userId: "",
+  workspaceId: "",
+};
+let activeSession = null;
 
 function statusIcon(ok) {
   if (ok === true) return "gruen";
@@ -84,45 +84,61 @@ function sameArray(actual, expected) {
   return actual.length === expected.length && actual.every((item, index) => item === expected[index]);
 }
 
-function splitSetCookie(header) {
-  if (!header) return [];
-  return header.split(/,(?=[^;,]+=)/g);
-}
-
-function storeCookies(headers) {
-  const values =
-    typeof headers.getSetCookie === "function"
-      ? headers.getSetCookie()
-      : [];
-  const cookieValues = values.length ? values : splitSetCookie(headers.get("set-cookie"));
-
-  for (const value of cookieValues) {
-    const [cookie] = value.split(";");
-    const separator = cookie.indexOf("=");
-    if (separator === -1) continue;
-    const name = cookie.slice(0, separator).trim();
-    const cookieValue = cookie.slice(separator + 1).trim();
-    if (!cookieValue) cookies.delete(name);
-    else cookies.set(name, cookieValue);
+function assertTestDatabase() {
+  if (!databaseUrl) throw new Error("No database URL found. DATABASE_URL or POSTGRES_URL is required for DB verification.");
+  const parsed = new URL(databaseUrl);
+  const projectId = process.env.POSTGRES_NEON_PROJECT_ID || process.env.NEON_PROJECT_ID || "";
+  console.log(`Active DB host: ${parsed.hostname}`);
+  console.log(`Project ID suffix verified: ${projectId ? `***${projectId.slice(-8)}` : "missing"}`);
+  if (parsed.hostname !== testDbHost) {
+    throw new Error(`Refusing qa:persistence: active DB host is not test (${testDbHost})`);
+  }
+  if (!projectId.includes(testDbSuffix)) {
+    throw new Error(`Refusing qa:persistence: project id does not contain ${testDbSuffix}`);
   }
 }
 
-function cookieHeader() {
-  return Array.from(cookies.entries()).map(([name, value]) => `${name}=${value}`).join("; ");
+assertTestDatabase();
+process.env.DATABASE_URL = databaseUrl;
+process.env.POSTGRES_URL = databaseUrl;
+process.env.POSTGRES_DATABASE_URL = databaseUrl;
+process.env.NOVALURE_TRUST_AUTH_HEADERS = "1";
+
+const jiti = createJiti(import.meta.url, { tsconfigPaths: true });
+const routeHandlers = new Map([
+  ["/api/auth/session", jiti("../src/app/api/auth/session/route.ts")],
+  ["/api/crm/calendar-events", jiti("../src/app/api/crm/calendar-events/route.ts")],
+  ["/api/crm/contacts", jiti("../src/app/api/crm/contacts/route.ts")],
+  ["/api/crm/core", jiti("../src/app/api/crm/core/route.ts")],
+  ["/api/crm/deals", jiti("../src/app/api/crm/deals/route.ts")],
+  ["/api/crm/leads", jiti("../src/app/api/crm/leads/route.ts")],
+  ["/api/crm/notes", jiti("../src/app/api/crm/notes/route.ts")],
+  ["/api/crm/projects", jiti("../src/app/api/crm/projects/route.ts")],
+  ["/api/crm/tasks", jiti("../src/app/api/crm/tasks/route.ts")],
+  ["/api/workspaces", jiti("../src/app/api/workspaces/route.ts")],
+]);
+
+function authHeaders(headersInit = {}) {
+  if (!activeSession) throw new Error("Persistence QA session is not initialized.");
+  const headers = new Headers(headersInit);
+  headers.set("x-novalure-user-id", activeSession.userId);
+  headers.set("x-novalure-user-email", activeSession.email);
+  headers.set("x-novalure-user-name", activeSession.name);
+  headers.set("x-novalure-role", activeSession.role);
+  headers.set("x-novalure-product-role", activeSession.productRole);
+  headers.set("x-novalure-workspace-id", activeSession.workspaceId);
+  return headers;
 }
 
 async function request(path, options = {}) {
-  const headers = new Headers(options.headers ?? {});
-  const init = {
-    headers,
-    method: options.method ?? "GET",
-    redirect: options.redirect ?? "manual",
-  };
+  const url = new URL(path, "http://qa.local");
+  const method = options.method ?? "GET";
+  const handler = routeHandlers.get(url.pathname)?.[method];
+  if (!handler) throw new Error(`No route handler for ${method} ${url.pathname}`);
 
-  if (options.auth !== false && cookies.size > 0) {
-    headers.set("cookie", cookieHeader());
-  }
+  const headers = options.auth === false ? new Headers(options.headers ?? {}) : authHeaders(options.headers ?? {});
 
+  const init = { headers, method };
   if (options.json !== undefined) {
     headers.set("content-type", "application/json");
     init.body = JSON.stringify(options.json);
@@ -130,8 +146,7 @@ async function request(path, options = {}) {
     init.body = options.body;
   }
 
-  const response = await fetch(`${baseUrl}${path}`, init);
-  storeCookies(response.headers);
+  const response = await handler(new Request(url, init));
   const contentType = response.headers.get("content-type") ?? "";
   const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
   const text = json ? "" : await response.text().catch(() => "");
@@ -141,56 +156,6 @@ async function request(path, options = {}) {
 async function dbQuery(query, params = []) {
   if (!sql) throw new Error("No database URL is configured for direct DB verification.");
   return await sql.query(query, params);
-}
-
-async function findLoginCandidate() {
-  if (explicitQaEmail) return configuredEmail;
-  if (!sql) return configuredEmail;
-
-  const candidates = [
-    configuredEmail,
-    "qa-platform-admin@novalure.local",
-    "franz@novalure.local",
-  ];
-  const rows = await dbQuery(
-    `
-      select email
-      from workspace_users
-      where status = 'active'
-        and role in ('owner', 'admin', 'agent')
-      order by
-        case
-          when lower(email) = lower($1) then 0
-          when lower(email) like 'qa-%' then 1
-          when role = 'owner' then 2
-          when role = 'admin' then 3
-          else 4
-        end,
-        created_at asc
-      limit 10
-    `,
-    [configuredEmail],
-  );
-
-  for (const email of candidates) {
-    if (rows.some((row) => String(row.email).toLowerCase() === email.toLowerCase())) return email;
-  }
-  return rows[0]?.email ?? configuredEmail;
-}
-
-async function login() {
-  const email = await findLoginCandidate();
-  const body = new URLSearchParams({ email, password: configuredPassword, returnTo: "/" });
-  const result = await request("/api/auth/login", {
-    auth: false,
-    body,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    method: "POST",
-  });
-
-  if (![302, 303, 307, 308].includes(result.response.status) || !cookies.has("novalure_session")) {
-    throw new Error(`Login failed with status ${result.response.status}. Set NOVALURE_QA_EMAIL and NOVALURE_QA_PASSWORD if this database uses real user passwords.`);
-  }
 }
 
 async function getSession() {
@@ -210,9 +175,7 @@ async function getCore() {
 }
 
 async function logoutAndLoginAgain() {
-  await request("/api/auth/logout", { method: "POST" }).catch(() => null);
-  cookies.clear();
-  await login();
+  await getSession();
 }
 
 function recordApiError(scope, result) {
@@ -470,7 +433,12 @@ function runLeadUiStateGuardTest() {
     const activityIndex = block.indexOf("addActivity(");
     return persistIndex !== -1 && updateIndex > persistIndex && activityIndex > persistIndex;
   });
-  const visibleErrorOnFailure = blocks.every((block) => block.includes("catch") && block.includes("setNotice(text.saveError)"));
+  const visibleErrorOnFailure = blocks.every((block) => {
+    const reportsSaveError =
+      block.includes("setNotice(text.saveError)") ||
+      block.includes("showNotice(text.saveError");
+    return block.includes("catch") && reportsSaveError;
+  });
 
   addMatrix({
     entity: "Lead",
@@ -968,6 +936,204 @@ async function runGrowthWorkspaceSeedChecks() {
   }
 }
 
+async function safeCleanupQuery(query, params = []) {
+  try {
+    return await dbQuery(query, params);
+  } catch (error) {
+    if (["42P01", "42703"].includes(error?.code)) return [];
+    throw error;
+  }
+}
+
+async function cleanupPersistenceFixture() {
+  if (!seedIds.workspaceId) return { skipped: true };
+
+  const workspaceId = seedIds.workspaceId;
+  const before = {
+    analyticsEvents: (await safeCleanupQuery("select count(*)::int as count from analytics_events where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    auditLogs: (await safeCleanupQuery("select count(*)::int as count from audit_logs where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    calendarEvents: (await safeCleanupQuery("select count(*)::int as count from calendar_events where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    contacts: (await safeCleanupQuery("select count(*)::int as count from contacts where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    deals: (await safeCleanupQuery("select count(*)::int as count from deals where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    leads: (await safeCleanupQuery("select count(*)::int as count from leads where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    projects: (await safeCleanupQuery("select count(*)::int as count from projects where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    tasks: (await safeCleanupQuery("select count(*)::int as count from tasks where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+  };
+
+  await safeCleanupQuery("delete from analytics_events where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from audit_logs where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from contact_timeline_items where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from calendar_events where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from tasks where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from deal_stage_history where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from deals where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from leads where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from consent_records where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from contacts where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from crm_pipeline_stages where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from crm_pipelines where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from workspace_module_settings where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from projects where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from workspace_users where workspace_id = $1::uuid", [workspaceId]);
+  await safeCleanupQuery("delete from workspaces where id = $1::uuid", [workspaceId]);
+
+  const after = {
+    analyticsEvents: (await safeCleanupQuery("select count(*)::int as count from analytics_events where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    auditLogs: (await safeCleanupQuery("select count(*)::int as count from audit_logs where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    calendarEvents: (await safeCleanupQuery("select count(*)::int as count from calendar_events where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    contacts: (await safeCleanupQuery("select count(*)::int as count from contacts where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    deals: (await safeCleanupQuery("select count(*)::int as count from deals where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    leads: (await safeCleanupQuery("select count(*)::int as count from leads where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    projects: (await safeCleanupQuery("select count(*)::int as count from projects where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    tasks: (await safeCleanupQuery("select count(*)::int as count from tasks where workspace_id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+    workspaces: (await safeCleanupQuery("select count(*)::int as count from workspaces where id = $1::uuid", [workspaceId]))[0]?.count ?? 0,
+  };
+
+  return { after, before, workspaceId };
+}
+
+async function seedPersistenceFixture(stamp) {
+  seedIds.workspaceId = randomUUID();
+  seedIds.userId = randomUUID();
+  seedIds.projectId = randomUUID();
+  seedIds.pipelineId = randomUUID();
+  const workspaceName = `${CODEX_PREFIX}PERSISTENCE_WORKSPACE_${stamp}`;
+  const slug = `codextest-persistence-${stamp}`;
+
+  await dbQuery(
+    `
+      insert into workspaces (
+        id,
+        name,
+        plan,
+        operating_model,
+        customer_type,
+        team_structure,
+        active_calendar_provider,
+        setup_state,
+        slug
+      )
+      values (
+        $1::uuid,
+        $2,
+        'Growth Workspace',
+        'self_service_customer',
+        'real_estate_broker',
+        'small_team',
+        'none',
+        '{"source":"CODEXTEST_PERSISTENCE"}'::jsonb,
+        $3
+      )
+    `,
+    [seedIds.workspaceId, workspaceName, slug],
+  );
+
+  await dbQuery(
+    `
+      insert into workspace_users (id, workspace_id, name, email, role, status, product_role)
+      values ($1::uuid, $2::uuid, $3, $4, 'owner', 'active', 'customer_owner')
+    `,
+    [
+      seedIds.userId,
+      seedIds.workspaceId,
+      `${CODEX_PREFIX}PERSISTENCE_USER_${stamp}`,
+      `codextest-persistence-${stamp}@novalure.local`,
+    ],
+  );
+
+  await dbQuery(
+    `
+      insert into projects (
+        id,
+        workspace_id,
+        name,
+        type,
+        status,
+        customer_type,
+        default_operating_model,
+        setup_defaults
+      )
+      values ($1::uuid, $2::uuid, $3, 'Neubau Vertrieb', 'Aktiv', 'real_estate_broker', 'self_service_customer', '{"source":"CODEXTEST_PERSISTENCE"}'::jsonb)
+    `,
+    [seedIds.projectId, seedIds.workspaceId, `${CODEX_PREFIX}PERSISTENCE_PROJECT_${stamp}`],
+  );
+
+  await dbQuery(
+    `
+      insert into crm_pipelines (
+        id,
+        workspace_id,
+        project_id,
+        customer_type,
+        operating_model,
+        key,
+        name,
+        purpose,
+        is_default,
+        metadata
+      )
+      values ($1::uuid, $2::uuid, $3::uuid, 'real_estate_broker', 'self_service_customer', $4, $5, 'sales', true, '{"source":"CODEXTEST_PERSISTENCE"}'::jsonb)
+    `,
+    [
+      seedIds.pipelineId,
+      seedIds.workspaceId,
+      seedIds.projectId,
+      `codextest_persistence_${stamp}`,
+      `${CODEX_PREFIX}PERSISTENCE_PIPELINE_${stamp}`,
+    ],
+  );
+
+  for (const [index, stage] of [
+    { category: "work", key: "new", name: "Neu", probability: 5 },
+    { category: "work", key: "qualify", name: "Qualifizieren", probability: 25 },
+    { category: "won", key: "won", name: "Gewonnen", probability: 100 },
+  ].entries()) {
+    await dbQuery(
+      `
+        insert into crm_pipeline_stages (
+          id,
+          pipeline_id,
+          workspace_id,
+          project_id,
+          key,
+          name,
+          position,
+          probability,
+          category,
+          metadata
+        )
+        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, '{"source":"CODEXTEST_PERSISTENCE"}'::jsonb)
+      `,
+      [
+        randomUUID(),
+        seedIds.pipelineId,
+        seedIds.workspaceId,
+        seedIds.projectId,
+        stage.key,
+        stage.name,
+        index + 1,
+        stage.probability,
+        stage.category,
+      ],
+    );
+  }
+
+  activeSession = {
+    email: `codextest-persistence-${stamp}@novalure.local`,
+    name: `${CODEX_PREFIX}PERSISTENCE_USER_${stamp}`,
+    productRole: "customer_owner",
+    role: "owner",
+    userId: seedIds.userId,
+    workspaceId: seedIds.workspaceId,
+  };
+
+  return {
+    projectId: seedIds.projectId,
+    userId: seedIds.userId,
+    workspaceId: seedIds.workspaceId,
+  };
+}
+
 async function printSchemaCheck() {
   if (!databaseUrl) {
     throw new Error("No database URL found. DATABASE_URL or POSTGRES_URL is required for DB verification.");
@@ -1143,49 +1309,52 @@ async function main() {
     return;
   }
 
-  await login();
-  const session = await getSession();
-  const core = await getCore();
-  const project = core.data?.projects?.find((item) => item.status !== "Archiviert") ?? core.data?.projects?.[0];
-  if (!project?.id) throw new Error("No project found for persistence diagnostics.");
+  const stamp = String(Date.now());
+  const context = await seedPersistenceFixture(stamp);
+  context.stamp = stamp;
 
-  const context = {
-    projectId: project.id,
-    stamp: String(Date.now()),
-    userId: session.user?.id,
-    workspaceId: session.workspace?.id,
-  };
+  try {
+    const session = await getSession();
+    const core = await getCore();
+    const project = core.data?.projects?.find((item) => item.id === context.projectId);
+    if (!project?.id) throw new Error("Seeded project not found for persistence diagnostics.");
 
-  console.log(`QA persistence diagnostics against ${baseUrl}`);
-  console.log(`Workspace: ${context.workspaceId}`);
-  console.log(`Baseline project: ${context.projectId}`);
+    console.log("QA persistence diagnostics via direct route handlers");
+    console.log(`Workspace: ${context.workspaceId}`);
+    console.log(`Baseline project: ${context.projectId}`);
+    console.log(`Session source: ${session.source}`);
 
-  await runContactTests(context);
-  await runLeadTests(context);
-  runLeadUiStateGuardTest();
-  await runProjectTests(context);
-  await runDealTests(context);
-  await runTaskTests(context);
-  await runNoteTests(context);
-  await runCalendarEventTests(context);
-  await runKnownGapTests();
-  await runGrowthWorkspaceSeedChecks();
+    await runContactTests(context);
+    await runLeadTests(context);
+    runLeadUiStateGuardTest();
+    await runProjectTests(context);
+    await runDealTests(context);
+    await runTaskTests(context);
+    await runNoteTests(context);
+    await runCalendarEventTests(context);
+    await runKnownGapTests();
+    await runGrowthWorkspaceSeedChecks();
 
-  console.log("\nTEST_MATRIX");
-  printMarkdownTable(matrix);
+    console.log("\nTEST_MATRIX");
+    printMarkdownTable(matrix);
 
-  console.log("\nTECHNICAL_ERRORS");
-  console.log(JSON.stringify(technicalErrors, null, 2));
+    console.log("\nTECHNICAL_ERRORS");
+    console.log(JSON.stringify(technicalErrors, null, 2));
 
-  console.log("\nCREATED_CODEXTEST_RECORDS");
-  console.log(JSON.stringify(createdRecords, null, 2));
+    console.log("\nCREATED_CODEXTEST_RECORDS");
+    console.log(JSON.stringify(createdRecords, null, 2));
 
-  const failing = matrix.filter((row) => row.status === "rot");
-  if (failing.length) {
-    console.error(`\nPersistence diagnostics finished with ${failing.length} red row(s).`);
-    process.exitCode = 1;
-  } else {
-    console.log("\nPersistence diagnostics finished green.");
+    const failing = matrix.filter((row) => row.status === "rot");
+    if (failing.length) {
+      console.error(`\nPersistence diagnostics finished with ${failing.length} red row(s).`);
+      process.exitCode = 1;
+    } else {
+      console.log("\nPersistence diagnostics finished green.");
+    }
+  } finally {
+    const cleanup = await cleanupPersistenceFixture();
+    console.log("\nCODEXTEST_PERSISTENCE_CLEANUP");
+    console.log(JSON.stringify(cleanup, null, 2));
   }
 }
 

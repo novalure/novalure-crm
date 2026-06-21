@@ -260,6 +260,34 @@ async function seed(pool) {
   );
 }
 
+async function cleanup(pool) {
+  await pool.query("delete from workspaces where id = $1::uuid", [workspaceId]);
+  await pool.query("delete from workspaces where id = $1::uuid", [otherWorkspaceId]);
+}
+
+async function countFixtureRests(pool) {
+  const result = await pool.query(
+    `
+      select jsonb_build_object(
+        'workspaces', (select count(*)::int from workspaces where id in ($1::uuid, $2::uuid) or name like 'UATTEST_Phase3_Property_Pagination%'),
+        'workspaceUsers', (select count(*)::int from workspace_users where workspace_id in ($1::uuid, $2::uuid)),
+        'projects', (select count(*)::int from projects where workspace_id in ($1::uuid, $2::uuid)),
+        'contacts', (select count(*)::int from contacts where workspace_id in ($1::uuid, $2::uuid)),
+        'propertyBuildings', (select count(*)::int from property_buildings where workspace_id in ($1::uuid, $2::uuid)),
+        'propertyUnits', (select count(*)::int from property_units where workspace_id in ($1::uuid, $2::uuid)),
+        'propertyReservations', (select count(*)::int from property_reservations where workspace_id in ($1::uuid, $2::uuid)),
+        'sellerListings', (select count(*)::int from seller_listings where workspace_id in ($1::uuid, $2::uuid))
+      ) as counts
+    `,
+    [workspaceId, otherWorkspaceId],
+  );
+  return result.rows[0]?.counts ?? {};
+}
+
+function countTotal(counts) {
+  return Object.values(counts).reduce((sum, value) => sum + Number(value ?? 0), 0);
+}
+
 function buildSessionHeaders(input = {}) {
   const activeWorkspaceId = input.workspaceId ?? workspaceId;
   const activeUserId = input.userId ?? userId;
@@ -511,6 +539,11 @@ async function main() {
       },
     }, null, 2));
   } finally {
+    await cleanup(pool);
+    const remaining = await countFixtureRests(pool);
+    console.log("UATTEST_PROPERTY_PAGINATION cleanup check");
+    console.log(JSON.stringify(remaining, null, 2));
+    assert.equal(countTotal(remaining), 0, `UATTEST_PROPERTY_PAGINATION cleanup left rows: ${JSON.stringify(remaining)}`);
     await pool.end();
   }
 }

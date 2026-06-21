@@ -76,7 +76,9 @@ test("phase 3 property content migration blocks nullable duplicate rows with par
   assert.match(reservationMigration, /where status in \('hold', 'reserved'\)/);
   assert.match(qa, /activeReservationDuplicates/);
   assert.match(qa, /property_reservations_one_active_per_unit_idx/);
-  assert.match(qa, /Existing duplicate rows found/);
+  assert.match(qa, /QADUPGUARD_/);
+  assert.match(qa, /Fixture must start without duplicate rows/);
+  assert.match(qa, /duplicate blocked by unique index/);
   assert.match(qa, /rollback/);
 });
 
@@ -113,28 +115,43 @@ test("every navigation preset exposes Immobilien", () => {
 test("property UI exposes the requested tabs, Aufnahmeblatt groups and disabled action reasons", () => {
   const domain = read("src/lib/property-department.ts");
   const component = read("src/components/property-command-center.tsx");
+  const i18n = read("src/lib/i18n.ts");
   const tabs = [
-    "Übersicht",
-    "Objekt anlegen",
-    "Projekt/Gebäude/Einheiten",
-    "Reservierungen",
-    "Anfragen",
-    "Vermarktung / Kanäle",
-    "Dokumente / Exposé",
-    "Käufer- und Investorenmatching",
-    "Datenqualität",
-    "Aktivitäten / Historie",
+    "overview",
+    "create",
+    "projectUnits",
+    "reservations",
+    "inquiries",
+    "channels",
+    "documents",
+    "matching",
+    "quality",
+    "activity",
   ];
-  const groups = ["Lage", "Flächen", "Räume", "Objektklassifizierung", "Grundbuch / Kataster", "Bau / Status", "Energie", "Preise / Kosten", "Investment", "Abgeber", "Ausstattung", "Notizen / Audit"];
+  const groups = ["location", "areas", "rooms", "classification", "cadastre", "construction", "energy", "costs", "investment", "seller", "equipment", "notes"];
 
-  for (const tab of tabs) assert.match(domain, new RegExp(tab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(domain, /subLabel: "Struktur"/);
-  for (const group of groups) assert.match(domain, new RegExp(group.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(domain, /reason: canReserve \? undefined : "Reservierungsrechte erforderlich\."/);
-  assert.match(component, /disabled=\{!action\.enabled\}/);
-  for (const section of ["Texte", "Preise & Kosten", "Veröffentlichung & Portale", "Bild hochladen", "Dokument hochladen"]) {
-    assert.match(component, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const tab of tabs) {
+    assert.match(domain, new RegExp(`id: "${tab}"`));
+    assert.match(i18n, new RegExp(`${tab}: \\{ label:`));
   }
+  assert.match(domain, /subLabel: "Struktur"/);
+  for (const group of groups) {
+    assert.match(domain, new RegExp(`id: "${group}"`));
+    assert.match(i18n, new RegExp(`${group}: \\{`));
+  }
+  assert.match(domain, /reason: canReserve \? undefined : copy\.actions\.reservationReason/);
+  assert.match(component, /disabled=\{!action\.enabled\}/);
+  for (const copyPath of [
+    "copy.form.texts",
+    "copy.form.pricesCosts",
+    "copy.form.publicationPortals",
+    "copy.subviews.uploadImage",
+    "copy.subviews.uploadDocument",
+  ]) {
+    assert.match(component, new RegExp(copyPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(i18n, /reservationReason: "Reservation permission required\."/);
+  assert.match(i18n, /reservationReason: "Reservierungsrechte erforderlich\."/);
   assert.match(domain, /PROPERTY_TEXT_FIELDS/);
   assert.match(domain, /PROPERTY_COST_TEMPLATES/);
   assert.match(domain, /PROPERTY_PRICE_VISIBILITY_OPTIONS/);
@@ -142,19 +159,22 @@ test("property UI exposes the requested tabs, Aufnahmeblatt groups and disabled 
 
 test("property create view uses focused, grouped form sections instead of a cramped field matrix", () => {
   const component = read("src/components/property-command-center.tsx");
+  const i18n = read("src/lib/i18n.ts");
 
   for (const section of [
-    "Überblick",
-    "Adresse & Lage",
-    "Flächen & Verfügbarkeit",
-    "Preise & Kosten",
-    "Veröffentlichung & Portale",
-    "Medien & Dokumente",
-    "Historie / Aktivitäten",
-    "Preflight",
+    "overview",
+    "addressLocation",
+    "areasAvailability",
+    "pricesCosts",
+    "publicationPortals",
+    "mediaDocuments",
+    "historyActivities",
+    "preflight",
   ]) {
-    assert.match(component, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(component, new RegExp(`copy\\.form\\.${section}\\b`));
   }
+  assert.match(i18n, /overview: "Overview"/);
+  assert.match(i18n, /overview: "Überblick"/);
 
   assert.match(component, /sticky top-3/);
   assert.match(component, /propertyInputClass = "min-h-12/);
@@ -247,9 +267,12 @@ test("phase 4 links property objects and unit inventory without changing role vi
 
   assert.match(component, /createUnitBoardScope/);
   assert.match(component, /initialSelectedAssetId/);
-  assert.match(component, /Einheiten\/Bestand öffnen/);
-  assert.match(component, /Projekt\/Gebäude\/Einheiten/);
-  assert.match(component, /Projekt in Einheiten\/Bestand öffnen/);
+  assert.match(component, /copy\.detail\.openUnits/);
+  assert.match(component, /copy\.tabs\.projectUnits\.label/);
+  assert.match(component, /onOpenUnits\(\{/);
+  assert.match(i18n, /openUnits: "Open units \/ inventory"/);
+  assert.match(i18n, /openUnits: "Einheiten\/Bestand öffnen"/);
+  assert.match(i18n, /openProjectUnits: "Projekt in Einheiten\/Bestand öffnen"/);
 
   assert.match(unitBoard, /focusScope\?: PropertyUnitBoardScope/);
   assert.match(unitBoard, /focusedUnitIds/);
@@ -277,7 +300,7 @@ test("phase 3 complete brokerage preset is additive and covers the full broker w
   const workspace = read("src/components/crm-workspace.tsx");
   const i18n = read("src/lib/i18n.ts");
   const tenantQa = read("scripts/qa-tenant-isolation.mjs");
-  const blockMatch = workspace.match(/completeBrokerage:\s*\{([\s\S]*?)\n  \},\n  propertyDeveloper:/);
+  const blockMatch = workspace.match(/completeBrokerage:\s*\{([\s\S]*?)\r?\n  \},\r?\n  propertyDeveloper:/);
 
   assert.ok(blockMatch, "completeBrokerage preset is defined before propertyDeveloper");
   const block = blockMatch[1];
@@ -341,7 +364,7 @@ test("phase 2 property KPIs use unit scope, default units and non-multiplying pr
 
   assert.match(qa, /legacy_multiplied_revenue_cents/);
   assert.match(qa, /fixed_loader_revenue_cents/);
-  assert.match(qa, /UATTEST_Phase2_Property_KPI/);
+  assert.match(qa, /QAKPI_Phase2_Property_KPI/);
 });
 
 test("core CRM and property loaders require explicit workspace scope", () => {
