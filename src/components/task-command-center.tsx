@@ -19,6 +19,8 @@ type TaskCommandCenterProps = {
   onTasksChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
+  sessionUserId: string;
+  sessionUserName: string;
   tasks: Task[];
   users: WorkspaceUser[];
 };
@@ -47,6 +49,42 @@ const viewStyles = {
   active: "border-slate-950 bg-slate-950 text-white",
   idle: "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50",
 };
+
+type TaskCommandCenterCopy = ReturnType<typeof getTaskCommandCenterCopy>;
+type OwnerDisplay = Pick<WorkspaceUser, "id" | "name" | "email">;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string) {
+  return UUID_PATTERN.test(value);
+}
+
+function resolveOwnerDisplay(
+  ownerUserId: string | undefined,
+  users: WorkspaceUser[],
+  sessionUserId: string,
+  sessionUserName: string,
+): OwnerDisplay | undefined {
+  if (!ownerUserId) return undefined;
+  const owner = users.find((user) => user.id === ownerUserId);
+  if (owner) return owner;
+  if (ownerUserId === sessionUserId) {
+    const fallbackUser = users[0];
+    return {
+      email: fallbackUser?.email ?? "",
+      id: sessionUserId,
+      name: sessionUserName || fallbackUser?.name || fallbackUser?.email || sessionUserId,
+    };
+  }
+  return undefined;
+}
+
+function getTaskWriteErrorMessage(reason: string | undefined, text: TaskCommandCenterCopy) {
+  if (reason === "Valid owner is required" || reason === "Owner is not available in this workspace") {
+    return text.ownerInvalid;
+  }
+  return reason ?? text.taskCreateFailed;
+}
 
 function parseTaskDueDate(due: string, now = new Date()) {
   const normalized = due.trim().toLowerCase();
@@ -109,7 +147,7 @@ function toDateTimeLocalInput(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function createDefaultTaskDraft(projects: Project[], users: WorkspaceUser[]): NewTaskDraft {
+function createDefaultTaskDraft(projects: Project[], sessionUserId: string): NewTaskDraft {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(9, 0, 0, 0);
@@ -119,7 +157,7 @@ function createDefaultTaskDraft(projects: Project[], users: WorkspaceUser[]): Ne
     description: "",
     due: toDateTimeLocalInput(tomorrow),
     leadId: "",
-    ownerUserId: users[0]?.id ?? "",
+    ownerUserId: sessionUserId,
     priority: "Normal",
     projectId: projects[0]?.id ?? "",
     status: "open",
@@ -134,10 +172,13 @@ export function TaskCommandCenter({
   onTasksChanged,
   projectLabel,
   projects,
+  sessionUserId,
+  sessionUserName,
   tasks,
   users,
 }: TaskCommandCenterProps) {
   const text = getTaskCommandCenterCopy(language);
+  const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
   const [activeView, setActiveView] = useState<TaskView>("focus");
   const [searchTerm, setSearchTerm] = useState("");
   const [taskOverlays, setTaskOverlays] = useState<Task[]>([]);
@@ -146,7 +187,7 @@ export function TaskCommandCenter({
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);
-  const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() => createDefaultTaskDraft(projects, users));
+  const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() => createDefaultTaskDraft(projects, sessionUserId));
   const [notice, setNotice] = useState("");
   const effectiveTasks = useMemo(() => {
     const overlayIds = new Set(taskOverlays.map((task) => task.id));
@@ -217,9 +258,11 @@ export function TaskCommandCenter({
   const selectedTask = decoratedTasks.find((item) => item.task.id === selectedTaskId) ??
     filteredTasks[0] ??
     decoratedTasks[0];
-  const selectedOwner = selectedTask?.task.ownerUserId
-    ? users.find((user) => user.id === selectedTask.task.ownerUserId)
-    : undefined;
+  const selectedOwner = resolveOwnerDisplay(selectedTask?.task.ownerUserId, users, sessionUserId, sessionUserName);
+  const assignableUsers = useMemo(
+    () => users.filter((user) => isUuid(user.id) && user.id !== sessionUserId),
+    [sessionUserId, users],
+  );
   const views: Array<{ id: TaskView; label: string; count: number }> = [
     { id: "focus", label: text.focus, count: openTasks.length },
     { id: "today", label: text.today, count: dueTodayTasks.length },
@@ -263,12 +306,12 @@ export function TaskCommandCenter({
       const payload = (await response.json().catch(() => ({}))) as { error?: string; task?: Task };
 
       if (!response.ok || !payload.task) {
-        throw new Error(payload.error ?? text.taskCreateFailed);
+        throw new Error(getTaskWriteErrorMessage(payload.error, text));
       }
 
       setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
       setSelectedTaskId(payload.task.id);
-      setTaskDraft(createDefaultTaskDraft(projects, users));
+      setTaskDraft(createDefaultTaskDraft(projects, sessionUserId));
       setIsCreateOpen(false);
       setNotice(text.taskCreated);
       void onTasksChanged?.();
@@ -493,7 +536,8 @@ export function TaskCommandCenter({
                   value={taskDraft.ownerUserId}
                 >
                   <option value="">{text.noOwner}</option>
-                  {users.map((user) => (
+                  <option value={sessionUserId}>{selfOwnerName}</option>
+                  {assignableUsers.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.name || user.email}
                     </option>
@@ -513,7 +557,7 @@ export function TaskCommandCenter({
               <button
                 className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
                 onClick={() => {
-                  setTaskDraft(createDefaultTaskDraft(projects, users));
+                  setTaskDraft(createDefaultTaskDraft(projects, sessionUserId));
                   setIsCreateOpen(false);
                 }}
                 type="button"

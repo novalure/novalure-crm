@@ -998,6 +998,7 @@ type CrmWorkspaceProps = {
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
   sessionUserId: string;
+  sessionUserName: string;
   sessionWorkspace: {
     activeCalendarProvider?: CalendarProviderChoice;
     customerType?: WorkspaceCustomerType;
@@ -2803,6 +2804,7 @@ export function CrmWorkspace({
   sessionProductRole,
   sessionRole,
   sessionUserId,
+  sessionUserName,
   sessionWorkspace,
 }: CrmWorkspaceProps) {
   const initialProductContext = createWorkspaceProductContext({
@@ -4423,6 +4425,8 @@ export function CrmWorkspace({
                   projectLabel={projectScopeLabel}
                   projects={allProjects}
                   tasks={visibleTasks}
+                  sessionUserId={sessionUserId}
+                  sessionUserName={sessionUserName}
                   users={users}
                 />
               ) : null}
@@ -4523,6 +4527,8 @@ export function CrmWorkspace({
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
                 tasks={visibleTasks}
+                sessionUserId={sessionUserId}
+                sessionUserName={sessionUserName}
                 workspacePublicKey={sessionWorkspace.publicKey}
                 onEventsChanged={async () => {
                   await refreshCoreData();
