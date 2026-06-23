@@ -21,12 +21,48 @@ type CalendarCommandCenterProps = {
   onEventsChanged?: () => Promise<void> | void;
   projectLabel: string;
   projects: Project[];
+  sessionUserId: string;
+  sessionUserName: string;
   tasks: Task[];
   users: WorkspaceUser[];
   workspacePublicKey?: string;
 };
 
 type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>;
+type OwnerDisplay = Pick<WorkspaceUser, "id" | "name" | "email">;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string) {
+  return UUID_PATTERN.test(value);
+}
+
+function resolveOwnerDisplay(
+  ownerUserId: string | undefined,
+  users: WorkspaceUser[],
+  sessionUserId: string,
+  sessionUserName: string,
+): OwnerDisplay | undefined {
+  if (!ownerUserId) return undefined;
+  const owner = users.find((user) => user.id === ownerUserId);
+  if (owner) return owner;
+  if (ownerUserId === sessionUserId) {
+    const fallbackUser = users[0];
+    return {
+      email: fallbackUser?.email ?? "",
+      id: sessionUserId,
+      name: sessionUserName || fallbackUser?.name || fallbackUser?.email || sessionUserId,
+    };
+  }
+  return undefined;
+}
+
+function getCalendarEventWriteErrorMessage(reason: string | undefined, text: CalendarCommandCenterCopy) {
+  if (reason === "Valid owner is required" || reason === "Owner is not available in this workspace") {
+    return text.ownerInvalid;
+  }
+  return reason ?? text.eventCreateFailed;
+}
 
 type CalendarView = "today" | "upcoming" | "prepare" | "teams" | "followUp" | "bookings";
 
@@ -623,7 +659,7 @@ function toDateTimeLocalInput(date: Date) {
 
 function createDefaultCalendarEventDraft(
   projects: Project[],
-  users: WorkspaceUser[],
+  sessionUserId: string,
   meetingProvider: MeetingProvider,
 ): NewCalendarEventDraft {
   const startsAt = new Date();
@@ -640,7 +676,7 @@ function createDefaultCalendarEventDraft(
     meetingProvider,
     notes: "",
     outcomeGoal: "",
-    ownerUserId: users[0]?.id ?? "",
+    ownerUserId: sessionUserId,
     projectId: projects[0]?.id ?? "",
     startsAt: toDateTimeLocalInput(startsAt),
     status: "geplant",
@@ -656,12 +692,19 @@ export function CalendarCommandCenter({
   onEventsChanged,
   projectLabel,
   projects,
+  sessionUserId,
+  sessionUserName,
   tasks,
   users,
   workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
   const locale = getLocale(language);
+  const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
+  const assignableUsers = useMemo(
+    () => users.filter((user) => isUuid(user.id) && user.id !== sessionUserId),
+    [sessionUserId, users],
+  );
   const calendarProviderOptions = text.calendarProviders;
   const meetingProviderOptions = [
     { id: "microsoft-teams" as const, label: text.meetingProviderLabels["microsoft-teams"] },
@@ -710,7 +753,7 @@ export function CalendarCommandCenter({
   const [eventSaving, setEventSaving] = useState(false);
   const [eventCreateNotice, setEventCreateNotice] = useState("");
   const [eventDraft, setEventDraft] = useState<NewCalendarEventDraft>(() =>
-    createDefaultCalendarEventDraft(projects, users, defaultCalendarIntegrations.defaultMeetingProvider),
+    createDefaultCalendarEventDraft(projects, sessionUserId, defaultCalendarIntegrations.defaultMeetingProvider),
   );
   const [liveCalendarAction, setLiveCalendarAction] = useState<LiveCalendarActionState>(
     () => getInitialLiveCalendarAction(text),
@@ -1006,14 +1049,12 @@ export function CalendarCommandCenter({
             : undefined;
           const lead = event.leadId ? leads.find((item) => item.id === event.leadId) : undefined;
           const project = projects.find((item) => item.id === event.projectId);
-          const owner = event.ownerUserId
-            ? users.find((item) => item.id === event.ownerUserId)
-            : undefined;
+          const owner = resolveOwnerDisplay(event.ownerUserId, users, sessionUserId, sessionUserName);
 
           return { event, contact, lead, owner, project };
         })
         .sort((a, b) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime()),
-    [contacts, effectiveEvents, leads, projects, users],
+    [contacts, effectiveEvents, leads, projects, sessionUserId, sessionUserName, users],
   );
 
   const todayEvents = decoratedEvents.filter((item) => isSameDay(item.event.startsAt, today));
@@ -1101,12 +1142,12 @@ export function CalendarCommandCenter({
       const payload = (await response.json().catch(() => ({}))) as { error?: string; event?: CalendarEvent };
 
       if (!response.ok || !payload.event) {
-        throw new Error(payload.error ?? text.eventCreateFailed);
+        throw new Error(getCalendarEventWriteErrorMessage(payload.error, text));
       }
 
       setEventOverlays((current) => [payload.event!, ...current.filter((event) => event.id !== payload.event!.id)]);
       setSelectedEventId(payload.event.id);
-      setEventDraft(createDefaultCalendarEventDraft(projects, users, calendarIntegrations.defaultMeetingProvider));
+      setEventDraft(createDefaultCalendarEventDraft(projects, sessionUserId, calendarIntegrations.defaultMeetingProvider));
       setIsCreateEventOpen(false);
       setEventCreateNotice(text.eventCreated);
       void onEventsChanged?.();
@@ -1171,7 +1212,7 @@ export function CalendarCommandCenter({
   const meetingTokenValues: Record<string, string> = {
     "{{contact.email}}": selectedEvent?.contact?.email ?? "kontakt@unternehmen.com",
     "{{contact.firstName}}": contactFirstName,
-    "{{host.name}}": selectedEvent?.owner?.name ?? users[0]?.name ?? "Novalure",
+    "{{host.name}}": selectedEvent?.owner?.name ?? selfOwnerName ?? "Novalure",
     "{{meeting.cancelLink}}": `${bookingUrl}/cancel`,
     "{{meeting.date}}": selectedEvent ? formatDateTime(selectedEvent.event.startsAt, locale) : "20.05.2026",
     "{{meeting.link}}": trackedBookingUrl,
@@ -2357,7 +2398,8 @@ export function CalendarCommandCenter({
                   value={eventDraft.ownerUserId}
                 >
                   <option value="">{text.noOwner}</option>
-                  {users.map((user) => (
+                  <option value={sessionUserId}>{selfOwnerName}</option>
+                  {assignableUsers.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.name || user.email}
                     </option>
@@ -2465,7 +2507,7 @@ export function CalendarCommandCenter({
               <button
                 className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
                 onClick={() => {
-                  setEventDraft(createDefaultCalendarEventDraft(projects, users, calendarIntegrations.defaultMeetingProvider));
+                  setEventDraft(createDefaultCalendarEventDraft(projects, sessionUserId, calendarIntegrations.defaultMeetingProvider));
                   setIsCreateEventOpen(false);
                 }}
                 type="button"

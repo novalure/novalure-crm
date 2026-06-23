@@ -117,6 +117,7 @@ export default async function Home({ searchParams }: HomeProps) {
       sessionProductRole={session.productRole}
       sessionRole={session.role}
       sessionUserId={session.userId}
+      sessionUserName={session.name}
       sessionWorkspace={{
         activeCalendarProvider: session.workspaceActiveCalendarProvider ?? undefined,
         customerType: session.workspaceCustomerType ?? undefined,
