@@ -19,9 +19,12 @@ async function readJson(request: Request) {
 }
 
 function parseIntegerParam(value: string | null, fallback: number, min: number, max: number) {
+  if (!value?.trim()) return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+  const integer = Math.trunc(parsed);
+  if (integer < min) return fallback;
+  return Math.min(max, integer);
 }
 
 function parseProjectId(value: string | null) {
