@@ -233,6 +233,27 @@ async function main() {
     assert.deepEqual(unitNumbers(page1), ["UAT-001", "UAT-002"]);
     assertNoTenantLeak(page1, workspaceId);
 
+    const defaultLimit = await callUnitsRoute(GET, "");
+    assert.equal(defaultLimit.pagination.total, 5);
+    assert.equal(defaultLimit.pagination.limit, 50);
+    assert.equal(defaultLimit.pagination.offset, 0);
+    assert.equal(defaultLimit.pagination.hasMore, false);
+    assert.equal(defaultLimit.pagination.nextOffset, null);
+    assert.deepEqual(unitNumbers(defaultLimit), ["UAT-001", "UAT-002", "UAT-003", "UAT-004", "UAT-005"]);
+    assertNoTenantLeak(defaultLimit, workspaceId);
+
+    const invalidLimits = [
+      ["limit=0", "zero"],
+      ["limit=not-a-number", "NaN"],
+      ["limit=", "empty"],
+    ];
+    for (const [query, label] of invalidLimits) {
+      const payload = await callUnitsRoute(GET, query);
+      assert.equal(payload.pagination.limit, 50, `${label} limit should fall back to 50`);
+      assert.equal(payload.data.units.length, 5, `${label} limit should return the full fixture page`);
+      assertNoTenantLeak(payload, workspaceId);
+    }
+
     const page2 = await callUnitsRoute(GET, "limit=2&offset=2");
     assert.equal(page2.pagination.total, 5);
     assert.equal(page2.pagination.hasMore, true);
@@ -302,6 +323,10 @@ async function main() {
         pagination: page1.pagination,
         summary: page1.summary,
         unitNumbers: unitNumbers(page1),
+      },
+      defaultLimit: {
+        pagination: defaultLimit.pagination,
+        unitNumbers: unitNumbers(defaultLimit),
       },
       page2: {
         pagination: page2.pagination,
