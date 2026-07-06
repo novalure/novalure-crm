@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   automations,
   botCallInsights,
@@ -2853,6 +2853,7 @@ export function CrmWorkspace({
   const [availableWorkspaces, setAvailableWorkspaces] = useState<ManagedWorkspaceOption[]>([]);
   const [workspaceSwitchState, setWorkspaceSwitchState] = useState<"idle" | "loading" | "error">("idle");
   const [coreDataStatus, setCoreDataStatus] = useState<"idle" | "loading" | "fresh" | "error">("idle");
+  const lastUnitsRefreshKey = useRef("");
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
   const [importNotice, setImportNotice] = useState("");
   const [importSource, setImportSource] = useState<ImportSource>("hubspot");
@@ -3108,6 +3109,16 @@ export function CrmWorkspace({
     navigationLabels[visibleActiveNavigationEntry.id] ??
     navigationLabels[visibleActiveNavigationEntry.section] ??
     activePresetProfile.label;
+  useEffect(() => {
+    if (visibleActiveSection !== "units") {
+      lastUnitsRefreshKey.current = "";
+      return;
+    }
+
+    if (lastUnitsRefreshKey.current === activeWorkspace.id) return;
+    lastUnitsRefreshKey.current = activeWorkspace.id;
+    void refreshCoreData(activeWorkspace.id);
+  }, [activeWorkspace.id, refreshCoreData, visibleActiveSection]);
   const visibleLeads = activeProject
     ? leads.filter((lead) => lead.projectId === activeProject.id)
     : leads;
