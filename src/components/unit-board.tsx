@@ -117,7 +117,10 @@ function Pill({ children, className }: { children: ReactNode; className: string 
 }
 
 function parsePrice(value: string) {
-  const parsed = Number(value);
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
 }
 
