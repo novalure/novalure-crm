@@ -72,7 +72,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
           <nav aria-label={page.languageAriaLabel} className="flex items-center gap-1">
             <Link
               aria-current={language === "de" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 text-xs font-semibold ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
                 language === "de"
                   ? "border-[#071421] bg-white text-[#071421]"
                   : "border-[#d4e1ee] bg-transparent text-[#476178]"
@@ -83,7 +83,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
             </Link>
             <Link
               aria-current={language === "en" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 text-xs font-semibold ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
                 language === "en"
                   ? "border-[#071421] bg-white text-[#071421]"
                   : "border-[#d4e1ee] bg-transparent text-[#476178]"
@@ -105,7 +105,11 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
           <p className="mt-3 text-sm leading-6 text-[#476178]">{reset.resetDescription}</p>
 
           {errorText ? (
-            <p className="mt-5 rounded-md border border-[#e2a7a7] bg-[#fff1f1] px-3 py-2 text-sm font-semibold leading-6 text-[#7d2020]">
+            <p
+              aria-live="polite"
+              className="mt-5 rounded-md border border-[#e2a7a7] bg-[#fff1f1] px-3 py-2 text-sm font-semibold leading-6 text-[#7d2020]"
+              role="alert"
+            >
               {errorText}
             </p>
           ) : null}

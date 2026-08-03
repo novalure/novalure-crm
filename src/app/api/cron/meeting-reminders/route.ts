@@ -14,10 +14,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await processDueMeetingNotifications({ limit: 25 });
+  const startedAt = Date.now();
+  const result = await processDueMeetingNotifications({ deadlineMs: startedAt + 45_000, limit: 20 });
 
   return Response.json({
     ok: true,
     ...result,
+    durationMs: Date.now() - startedAt,
   });
 }

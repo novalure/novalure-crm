@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import {
   getPublicMeetingAvailability,
   getPublicMeetingBookingActionState,
@@ -142,6 +143,7 @@ export async function generatePublicBookingMetadata({
 
   return {
     description: copy.metadataDescription,
+    robots: { follow: false, index: false },
     title: copy.bookTitle(getBookingTitle(slug) || "Meeting"),
   };
 }
@@ -160,6 +162,7 @@ export async function renderPublicBookingPage({
   });
   const copy = getPublicBookingPageCopy(language);
   const savedPage = await getPublicMeetingPageSettings({ slug, workspacePublicKey });
+  if (!savedPage) notFound();
   const savedCalendar = (savedPage?.calendarIntegrations ?? {}) as PublicMeetingCalendarConfig;
   const savedShare = (savedPage?.shareConfig ?? {}) as PublicMeetingShareConfig;
   const savedAutomation = (savedPage?.automation ?? {}) as PublicMeetingAutomation;

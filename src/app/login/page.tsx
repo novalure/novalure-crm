@@ -8,6 +8,7 @@ import { LoginEmailAutofocus } from "@/components/login-email-autofocus";
 import { LoginUrlHygiene } from "@/components/login-url-hygiene";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import { getSessionFromHeaders, isLoginConfigured } from "@/lib/auth/session";
+import { sanitizeLocalRedirect } from "@/lib/auth/redirects";
 import {
   getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
@@ -32,12 +33,6 @@ export const metadata: Metadata = {
 function getQueryValue(value: string | string[] | undefined, fallback = "") {
   if (Array.isArray(value)) return value[0] ?? fallback;
   return value ?? fallback;
-}
-
-function getSafeReturnTo(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/api/") || value.startsWith("/login")) return "/";
-  return value;
 }
 
 function getErrorText(error: string, text: ReturnType<typeof getLoginPageCopy>) {
@@ -150,7 +145,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     persistedLanguage: requestHeaders.get(languageRequestHeaderName),
     requestedLanguage: query.lang,
   });
-  const returnTo = getSafeReturnTo(getQueryValue(query.returnTo, "/"));
+  const returnTo = sanitizeLocalRedirect(getQueryValue(query.returnTo, "/"));
 
   if (session) {
     redirect(returnTo);

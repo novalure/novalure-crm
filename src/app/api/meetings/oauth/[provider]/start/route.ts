@@ -5,6 +5,7 @@ import {
   getOAuthAuthorizationUrl,
   type CalendarOAuthProvider,
 } from "@/lib/integrations/calendar-connections";
+import { sanitizeLocalRedirect } from "@/lib/auth/redirects";
 
 type RouteContext = {
   params: Promise<{ provider: string }>;
@@ -13,12 +14,6 @@ type RouteContext = {
 function getProvider(value: string): CalendarOAuthProvider | null {
   if (value === "google" || value === "microsoft") return value;
   return null;
-}
-
-function safeReturnTo(value: string | null) {
-  if (!value || !value.startsWith("/")) return "/#calendar";
-  if (value.startsWith("//")) return "/#calendar";
-  return value;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -34,7 +29,7 @@ export async function GET(request: Request, context: RouteContext) {
   const url = new URL(request.url);
   const state = createOAuthState({
     provider,
-    returnTo: safeReturnTo(url.searchParams.get("returnTo")),
+    returnTo: sanitizeLocalRedirect(url.searchParams.get("returnTo"), "/#calendar"),
     userId: auth.session.userId,
     workspaceId: auth.session.workspaceId,
   });
@@ -48,7 +43,7 @@ export async function GET(request: Request, context: RouteContext) {
       }),
     );
   } catch (error) {
-    const redirectUrl = new URL(safeReturnTo(url.searchParams.get("returnTo")), request.url);
+    const redirectUrl = new URL(sanitizeLocalRedirect(url.searchParams.get("returnTo"), "/#calendar"), request.url);
     redirectUrl.searchParams.set(
       "calendar_error",
       error instanceof Error ? error.message : "OAuth setup failed",

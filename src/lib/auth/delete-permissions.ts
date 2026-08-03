@@ -27,6 +27,7 @@ const crmAdministratorProductRoles: ProductRole[] = [
   "workspace_admin",
   "novalure_onboarding",
   "novalure_customer_success",
+  "novalureAdmin",
 ];
 
 export const crmDeletePermissionRules: CrmDeletePermissionRule[] = [

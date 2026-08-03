@@ -42,14 +42,18 @@ function textToEmailHtml(input: { body: string; title: string }) {
 }
 
 export async function processDueMeetingNotifications(
-  input: { jobIds?: string[]; limit?: number } = {},
-): Promise<ProcessResult> {
+  input: { deadlineMs?: number; jobIds?: string[]; limit?: number } = {},
+): Promise<ProcessResult & { deadlineReached: boolean }> {
   const jobRefs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueMeetingNotificationJobs(input.limit ?? 25);
-  const result: ProcessResult = { checked: jobRefs.length, failed: 0, sent: 0 };
+  const result: ProcessResult & { deadlineReached: boolean } = { checked: jobRefs.length, deadlineReached: false, failed: 0, sent: 0 };
 
   for (const jobRef of jobRefs) {
+    if (input.deadlineMs && Date.now() >= input.deadlineMs) {
+      result.deadlineReached = true;
+      break;
+    }
     const job = await claimMeetingNotificationJob(jobRef.id);
     if (!job) continue;
 

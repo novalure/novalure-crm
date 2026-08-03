@@ -71,14 +71,13 @@ export async function POST(request: Request) {
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "invite";
   const language = resolveRequestLanguage(request);
-  const requestIp = request.headers.get("x-forwarded-for");
   const userAgent = request.headers.get("user-agent");
 
   const result =
     operation === "resend_invitation"
       ? await resendWorkspaceInvitation({
           language,
-          requestIp,
+          requestIp: null,
           session: auth.session,
           userAgent,
           userId: String(input.userId ?? ""),
@@ -91,7 +90,7 @@ export async function POST(request: Request) {
         : operation === "password_reset"
           ? await triggerWorkspacePasswordReset({
               language,
-              requestIp,
+              requestIp: null,
               session: auth.session,
               userAgent,
               userId: String(input.userId ?? ""),
@@ -101,7 +100,7 @@ export async function POST(request: Request) {
               language,
               name: input.name,
               productRole: input.productRole,
-              requestIp,
+              requestIp: null,
               role: input.role,
               session: auth.session,
               userAgent,

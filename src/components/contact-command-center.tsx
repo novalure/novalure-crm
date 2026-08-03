@@ -50,7 +50,7 @@ type ContactCommandCenterProps = {
   users: WorkspaceUser[];
 };
 
-type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates";
+type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates" | "archived";
 type ContactDetailTab =
   | "overview"
   | "person"
@@ -210,6 +210,10 @@ export function ContactCommandCenter({
   const [serverContactOverlays, setServerContactOverlays] = useState<Contact[]>([]);
   const [contactPatches, setContactPatches] = useState<Record<string, Partial<Contact>>>({});
   const [archivedContactIds, setArchivedContactIds] = useState<Set<string>>(() => new Set());
+  const [archivedContacts, setArchivedContacts] = useState<Contact[]>([]);
+  const [archivedPage, setArchivedPage] = useState(1);
+  const [archivedTotal, setArchivedTotal] = useState(0);
+  const [archiveReloadKey, setArchiveReloadKey] = useState(0);
   const contactRecords = useMemo(() => {
     const activeContacts = contacts.filter((contact) => !archivedContactIds.has(contact.id));
     const activeOverlays = serverContactOverlays.filter((contact) => !archivedContactIds.has(contact.id));
@@ -249,6 +253,24 @@ export function ContactCommandCenter({
       // Ignore browser storage restrictions; contacts are loaded from server props.
     }
   }, []);
+
+  useEffect(() => {
+    if (activeView !== "archived" || !canAssignOwner) return;
+    const controller = new AbortController();
+    void fetch(`/api/crm/contacts?archived=1&page=${archivedPage}&pageSize=25`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as { contacts?: Contact[]; error?: string; total?: number };
+        if (!response.ok) throw new Error(payload.error || "Archive could not be loaded");
+        setArchivedContacts(payload.contacts ?? []);
+        setArchivedTotal(payload.total ?? 0);
+        if (archivedPage > 1 && !(payload.contacts ?? []).length) setArchivedPage((page) => Math.max(1, page - 1));
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setFeedback({ message: error instanceof Error ? error.message : copy.networkError, tone: "error" });
+      });
+    return () => controller.abort();
+  }, [activeView, archiveReloadKey, archivedPage, canAssignOwner, copy.networkError]);
 
   const effectiveSelectedContactId = contactRecords.some((contact) => contact.id === selectedContactId)
     ? selectedContactId
@@ -327,6 +349,7 @@ export function ContactCommandCenter({
         (activeView === "missingData" && !hasContactData) ||
         (activeView === "missingConsent" && !consentContactIds.has(contact.id)) ||
         (activeView === "duplicates" && hasDuplicate);
+      if (activeView === "archived") return false;
       const searchable = [
         contact.name,
         contact.email,
@@ -477,6 +500,7 @@ export function ContactCommandCenter({
       count: contactRecords.filter((contact) => !consentContactIds.has(contact.id)).length,
     },
     { id: "duplicates", label: copy.duplicatesView, count: duplicateSignals.length },
+    { id: "archived", label: language === "de" ? "Archiviert" : "Archived", count: archivedTotal },
   ];
   const roleOptions = Array.from(new Set([...defaultRoleOptions, ...contactRecords.map((contact) => contact.role)]));
   const sourceOptions = Array.from(
@@ -713,12 +737,40 @@ export function ContactCommandCenter({
       setServerContactOverlays((current) => current.filter((contact) => contact.id !== selectedContact.id));
       removeContactPatch(selectedContact.id);
       setArchivedContactIds((current) => new Set([...current, selectedContact.id]));
+      setArchivedContacts((current) => [selectedContact, ...current.filter((contact) => contact.id !== selectedContact.id)]);
+      setArchivedTotal((total) => total + 1);
       setSelectedContactId(contactRecords.find((contact) => contact.id !== selectedContact.id)?.id ?? "");
       setArchiveConfirmContactId("");
       showFeedback("success", copy.contactArchived);
       void onContactsChanged?.();
     } catch {
       showFeedback("error", copy.networkError);
+    }
+  };
+  const restoreArchivedContact = async (contact: Contact) => {
+    try {
+      const response = await fetch("/api/crm/contacts", {
+        body: JSON.stringify({ action: "restore", contactId: contact.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+      const payload = await response.json().catch(() => ({})) as { contact?: Contact; error?: string };
+      if (!response.ok || !payload.contact) throw new Error(payload.error || (language === "de" ? "Wiederherstellung fehlgeschlagen" : "Restore failed"));
+      setArchivedContacts((current) => current.filter((item) => item.id !== contact.id));
+      setArchivedTotal((total) => Math.max(0, total - 1));
+      setArchivedContactIds((current) => {
+        const next = new Set(current);
+        next.delete(contact.id);
+        return next;
+      });
+      setServerContactOverlays((current) => [payload.contact!, ...current.filter((item) => item.id !== contact.id)]);
+      setSelectedContactId(contact.id);
+      setActiveView("all");
+      showFeedback("success", language === "de" ? "Kontakt wiederhergestellt" : "Contact restored");
+      void onContactsChanged?.();
+      setArchiveReloadKey((key) => key + 1);
+    } catch (error) {
+      showFeedback("error", error instanceof Error ? error.message : copy.networkError);
     }
   };
 
@@ -783,11 +835,13 @@ export function ContactCommandCenter({
         </div>
         {feedback ? (
           <div
+            aria-live="polite"
             className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold ${
               feedback.tone === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                 : "border-red-200 bg-red-50 text-red-900"
             }`}
+            role={feedback.tone === "success" ? "status" : "alert"}
           >
             {feedback.message}
           </div>
@@ -1177,7 +1231,7 @@ export function ContactCommandCenter({
             <div className="mt-2 flex flex-wrap gap-2">
               {contactViews.map((view) => (
                 <button
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
+                  className={`min-h-11 rounded-md border px-2 py-1 text-xs font-semibold ${
                     activeView === view.id
                       ? "border-slate-950 bg-slate-950 text-white"
                       : "border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-200 hover:bg-emerald-50"
@@ -1192,7 +1246,25 @@ export function ContactCommandCenter({
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            {filteredContacts.length > 0 ? (
+            {activeView === "archived" ? (
+              archivedContacts.length ? archivedContacts.map((contact) => (
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm" key={contact.id}>
+                  <p className="break-words font-semibold">{contact.name}</p>
+                  <p className="mt-1 break-words text-xs text-stone-500">{contact.email || contact.phone || "–"}</p>
+                  <button
+                    className="mt-3 min-h-11 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white"
+                    onClick={() => void restoreArchivedContact(contact)}
+                    type="button"
+                  >
+                    {language === "de" ? "Wiederherstellen" : "Restore"}
+                  </button>
+                </div>
+              )) : (
+                <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
+                  {language === "de" ? "Keine archivierten Kontakte" : "No archived contacts"}
+                </p>
+              )
+            ) : filteredContacts.length > 0 ? (
               filteredContacts.map((contact) => {
               const organization = contact.organizationId
                 ? organizations.find((item) => item.id === contact.organizationId)
@@ -1266,6 +1338,29 @@ export function ContactCommandCenter({
                 {copy.noFilteredContacts}
               </div>
             )}
+            {activeView === "archived" && archivedTotal > 25 ? (
+              <nav aria-label={language === "de" ? "Archivseiten" : "Archive pages"} className="flex items-center justify-between gap-3 pt-2">
+                <button
+                  className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold disabled:opacity-40"
+                  disabled={archivedPage <= 1}
+                  onClick={() => setArchivedPage((page) => Math.max(1, page - 1))}
+                  type="button"
+                >
+                  {language === "de" ? "Zurück" : "Previous"}
+                </button>
+                <span className="text-xs text-stone-500">
+                  {archivedPage} / {Math.max(1, Math.ceil(archivedTotal / 25))}
+                </span>
+                <button
+                  className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold disabled:opacity-40"
+                  disabled={archivedPage >= Math.ceil(archivedTotal / 25)}
+                  onClick={() => setArchivedPage((page) => page + 1)}
+                  type="button"
+                >
+                  {language === "de" ? "Weiter" : "Next"}
+                </button>
+              </nav>
+            ) : null}
           </div>
         </article>
 
@@ -1728,5 +1823,3 @@ export function ContactCommandCenter({
     </section>
   );
 }
-
-

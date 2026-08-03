@@ -24,6 +24,7 @@ export type AppSession = {
   email: string;
   name: string;
   role: AppRole;
+  sessionVersion?: number;
   permissions: AppPermission[];
   productRole: ProductRole;
   productPermissions: ProductCapability[];
@@ -45,6 +46,7 @@ type WorkspaceUserRow = {
   passwordHash?: string | null;
   productRole?: ProductRole | null;
   role: AppRole;
+  sessionVersion: number;
   workspaceActiveCalendarProvider?: CalendarProviderChoice | null;
   workspaceCustomerType?: WorkspaceCustomerType | null;
   workspaceOperatingModel?: WorkspaceOperatingModel | null;
@@ -66,6 +68,7 @@ type WorkspaceRow = {
 
 type SessionCookiePayload = {
   exp: number;
+  sessionVersion: number;
   userId: string;
   workspaceId: string;
 };
@@ -592,7 +595,7 @@ function isDemoAuthEnabled() {
 }
 
 function shouldTrustAuthHeaders() {
-  return process.env.NOVALURE_TRUST_AUTH_HEADERS === "1";
+  return process.env.NOVALURE_TRUST_AUTH_HEADERS === "1" && !isProductionDeployment();
 }
 
 function isStrictAuthEnabled() {
@@ -672,6 +675,7 @@ async function findWorkspaceUserForLogin(email: string) {
           w.public_key as "workspacePublicKey",
           w.setup_state as "workspaceSetupState",
           wu.role
+          , wu.session_version as "sessionVersion"
         from workspace_users wu
         join workspaces w on w.id = wu.workspace_id
         where wu.status = 'active'
@@ -721,11 +725,12 @@ function verifySessionCookie(value: string | null | undefined): SessionCookiePay
 
   try {
     const parsed = JSON.parse(base64UrlDecode(payload)) as Partial<SessionCookiePayload>;
-    if (!parsed.userId || !parsed.workspaceId || !parsed.exp) return null;
+    if (!parsed.userId || !parsed.workspaceId || !parsed.exp || !Number.isInteger(parsed.sessionVersion)) return null;
     if (!isUuidLike(parsed.userId) || !isUuidLike(parsed.workspaceId)) return null;
     if (parsed.exp < Date.now()) return null;
     return {
       exp: parsed.exp,
+      sessionVersion: parsed.sessionVersion as number,
       userId: parsed.userId,
       workspaceId: parsed.workspaceId,
     };
@@ -756,15 +761,17 @@ async function getSessionFromCookieHeader(cookieHeader: string | null | undefine
         w.active_calendar_provider as "workspaceActiveCalendarProvider",
         w.public_key as "workspacePublicKey",
         w.setup_state as "workspaceSetupState",
-        wu.role
+        wu.role,
+        wu.session_version as "sessionVersion"
       from workspace_users wu
       join workspaces w on w.id = wu.workspace_id
       where wu.status = 'active'
         and wu.id = $1
         and wu.workspace_id = $2
+        and wu.session_version = $3
       limit 1
     `,
-    [payload.userId, payload.workspaceId],
+    [payload.userId, payload.workspaceId, payload.sessionVersion],
   );
 
   if (!user) return null;
@@ -783,6 +790,7 @@ async function getSessionFromCookieHeader(cookieHeader: string | null | undefine
     email: user.email,
     name: user.name,
     role: user.role,
+    sessionVersion: user.sessionVersion,
     permissions: getSessionPermissions(user.role, productRole),
     productPermissions: getProductRoleCapabilities(productRole),
     productRole,
@@ -806,7 +814,7 @@ export async function authenticateLogin(input: { email: string; password: string
   }
 
   const email = input.email.trim().toLowerCase();
-  const password = input.password.trim();
+  const password = input.password;
 
   if (!email || !password) {
     return { error: "invalid_credentials" as const, session: null };
@@ -815,11 +823,15 @@ export async function authenticateLogin(input: { email: string; password: string
   const user = await findWorkspaceUserForLogin(email);
 
   if (!user) {
+    await verifyPassword(
+      password,
+      "scrypt:novalure-login-timing-salt:eTEGMZ-5tBl3CVkC_peJun9veD9KPofRmxpr5-nRa7Ndu9OJDbjDgzBBWBXZPf3qQdxyebhF6t21y_BpUnip8w",
+    );
     return { error: "invalid_credentials" as const, session: null };
   }
 
   const passcodeHash = getLoginPasscodeHash();
-  const passcodePlain = getLoginPasscode();
+  const passcodePlain = isProductionDeployment() ? "" : getLoginPasscode();
   const passcodeMatches = passcodeHash
     ? safeEqual(hashLoginPasscode(password), passcodeHash)
     : Boolean(passcodePlain && safeEqual(password, passcodePlain));
@@ -847,6 +859,7 @@ export async function authenticateLogin(input: { email: string; password: string
       email: user.email,
       name: user.name,
       role: user.role,
+      sessionVersion: user.sessionVersion,
       permissions: getSessionPermissions(user.role, productRole),
       productPermissions: getProductRoleCapabilities(productRole),
       productRole,
@@ -865,6 +878,7 @@ export function createSessionCookie(session: AppSession) {
   const payload = base64UrlEncode(
     JSON.stringify({
       exp: Date.now() + sessionMaxAgeSeconds * 1000,
+      sessionVersion: session.sessionVersion ?? 1,
       userId: session.userId,
       workspaceId: session.workspaceId,
     } satisfies SessionCookiePayload),

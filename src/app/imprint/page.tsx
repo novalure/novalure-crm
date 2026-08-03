@@ -8,15 +8,10 @@ import {
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { companyLegalDetails } from "@/lib/legal";
+import { buildLegalPageMetadata } from "@/lib/legal-metadata";
 import { resolvePublicLanguage } from "@/lib/public-language";
 
-export const metadata: Metadata = {
-  title: "Legal Imprint | Novalure CRM",
-  description:
-    "Company and contact information for Novalure CLG, an Irish company limited by guarantee.",
-};
-
-const updated = "December 2025";
+const updated = { de: "Dezember 2025", en: "December 2025" } as const;
 const pagePath = "/imprint";
 
 type ImprintPageProps = {
@@ -120,6 +115,10 @@ const germanSections = [
   },
 ];
 
+export async function generateMetadata({ searchParams }: ImprintPageProps): Promise<Metadata> {
+  return buildLegalPageMetadata({ copy: pageCopy, path: pagePath, searchParams });
+}
+
 export default async function ImprintPage({ searchParams }: ImprintPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
@@ -136,7 +135,7 @@ export default async function ImprintPage({ searchParams }: ImprintPageProps) {
       path={pagePath}
       title={page.title}
       subtitle={page.subtitle}
-      updated={updated}
+      updated={updated[language]}
     >
       <LanguageBlock eyebrow={language === "de" ? "Deutsch" : "English"} title={page.blockTitle}>
         <LegalSections sections={language === "de" ? germanSections : englishSections} />

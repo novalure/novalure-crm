@@ -13,10 +13,11 @@ import {
   users as mockUsers,
 } from "@/lib/crm-data";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
-import { queryOne, queryRows } from "@/lib/db/client";
+import { queryOne, queryRows, withTransaction } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { authorizeWorkspaceAccessOperation } from "@/lib/auth/access-policy";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -68,7 +69,6 @@ export type WorkspaceUserInviteResult = {
   deliveryConfigured: boolean;
   deliveryProvider: string;
   deliveryStatus: string;
-  setupUrl: string;
   user: WorkspaceUser;
 };
 
@@ -665,6 +665,10 @@ export async function inviteWorkspaceUser(input: {
   if (!canInviteWorkspaceUsers(input.session)) {
     return { ok: false as const, reason: "Workspace invitation is not allowed for this role" };
   }
+  const accessAuthorization = authorizeWorkspaceAccessOperation({ actor: input.session, operation: "invite" });
+  if (!accessAuthorization.ok) {
+    return { ok: false as const, reason: accessAuthorization.reason, status: accessAuthorization.status };
+  }
 
   const email = normalizeInviteEmail(input.email);
   if (!email) return { ok: false as const, reason: "Valid email is required" };
@@ -709,6 +713,7 @@ export async function inviteWorkspaceUser(input: {
               product_role = $5,
               status = 'invited',
               password_hash = null,
+              session_version = session_version + 1,
               updated_at = now()
           where id = $1 and workspace_id = $2
           returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
@@ -824,7 +829,6 @@ export async function inviteWorkspaceUser(input: {
       deliveryConfigured: provider.configured,
       deliveryProvider: delivery.provider,
       deliveryStatus: delivery.status,
-      setupUrl: setupUrl.toString(),
       user: { ...row, productRole: row.productRole ?? undefined },
     } satisfies WorkspaceUserInviteResult,
     ok: true as const,
@@ -853,6 +857,15 @@ export async function updateWorkspaceUserAccess(input: {
   );
   if (!existing) return { ok: false as const, reason: "Workspace user not found" };
 
+  const accessAuthorization = authorizeWorkspaceAccessOperation({
+    actor: input.session,
+    operation: "update",
+    target: existing,
+  });
+  if (!accessAuthorization.ok) {
+    return { ok: false as const, reason: accessAuthorization.reason, status: accessAuthorization.status };
+  }
+
   const role = normalizeWorkspaceRole(input.role) ?? existing.role;
   const productRole = isProductRole(input.productRole) ? input.productRole : existing.productRole;
   const status = input.status === "active" || input.status === "invited" || input.status === "suspended"
@@ -867,32 +880,50 @@ export async function updateWorkspaceUserAccess(input: {
   });
   if (!roleGrant.ok) return { ok: false as const, reason: roleGrant.reason, status: roleGrant.status };
 
-  if (existing.role === "owner" && existing.status === "active" && (role !== "owner" || status !== "active")) {
-    const owners = await queryRows<IdRow>(
-      "select id from workspace_users where workspace_id = $1 and role = 'owner' and status = 'active' limit 2",
-      [input.session.workspaceId],
+  const row = await withTransaction(async (transaction) => {
+    const locked = await transaction.queryOne<WorkspaceUserRow>(
+      `
+        select id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
+        from workspace_users
+        where id = $1 and workspace_id = $2
+        for update
+      `,
+      [input.userId, input.session.workspaceId],
     );
-    if (owners.length < 2) return { ok: false as const, reason: "At least one active owner is required" };
-  }
+    if (!locked) return null;
 
-  if (input.userId === input.session.userId && status !== "active") {
-    return { ok: false as const, reason: "Current user cannot be deactivated" };
-  }
+    if (locked.role === "owner" && locked.status === "active" && (role !== "owner" || status !== "active")) {
+      const owners = await transaction.queryRows<IdRow>(
+        `
+          select id
+          from workspace_users
+          where workspace_id = $1 and role = 'owner' and status = 'active'
+          for update
+        `,
+        [input.session.workspaceId],
+      );
+      if (owners.length < 2) throw new Error("last_active_owner");
+    }
 
-  const row = await queryOne<WorkspaceUserRow>(
-    `
-      update workspace_users
-      set role = $3,
-          status = $4,
-          product_role = $5,
-          updated_at = now()
-      where id = $1 and workspace_id = $2
-      returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
-    `,
-    [input.userId, input.session.workspaceId, role, status, productRole],
-  );
+    return transaction.queryOne<WorkspaceUserRow>(
+      `
+        update workspace_users
+        set role = $3,
+            status = $4,
+            product_role = $5,
+            session_version = session_version + 1,
+            updated_at = now()
+        where id = $1 and workspace_id = $2
+        returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
+      `,
+      [input.userId, input.session.workspaceId, role, status, productRole],
+    );
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "last_active_owner") return null;
+    throw error;
+  });
 
-  if (!row) return { ok: false as const, reason: "Workspace user could not be saved" };
+  if (!row) return { ok: false as const, reason: "At least one active owner is required", status: 409 };
 
   await Promise.all([
     writeAuditLog({

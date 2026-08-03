@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { persistWebsiteFormSubmission } from "@/lib/db/form-repositories";
+import { sanitizeLocalRedirect } from "@/lib/auth/redirects";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -26,9 +27,8 @@ export async function POST(request: Request) {
   }
 
   const configuredRedirect = persistence.persisted ? persistence.redirectUrl : "";
-  const safeReturnTo = configuredRedirect
-    ? getSafeConfiguredReturnPath(configuredRedirect, formSlug)
-    : getSafeRelativeReturnPath(returnTo, formSlug);
+  const fallback = `/forms/${encodeURIComponent(formSlug)}`;
+  const safeReturnTo = sanitizeLocalRedirect(configuredRedirect || returnTo, fallback);
   const redirectUrl = new URL(safeReturnTo, request.url);
 
   redirectUrl.searchParams.set("submitted", persistence.persisted ? "1" : "0");
@@ -48,21 +48,4 @@ function getFailureStatus(reason: string) {
   }
 
   return 400;
-}
-
-function getSafeConfiguredReturnPath(value: string, fallbackSlug: string) {
-  if (value.startsWith("/") && !value.startsWith("//")) return value;
-
-  try {
-    const url = new URL(value);
-    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
-  } catch {
-    // Fall through to the local form fallback.
-  }
-
-  return `/forms/${fallbackSlug}`;
-}
-
-function getSafeRelativeReturnPath(value: string, fallbackSlug: string) {
-  return value.startsWith("/") && !value.startsWith("//") ? value : `/forms/${fallbackSlug}`;
 }

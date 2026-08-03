@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
-import { archiveContactRecord, upsertContactRecord } from "@/lib/db/crm-write-repositories";
+import { archiveContactRecord, listArchivedContactRecords, restoreContactRecord, upsertContactRecord } from "@/lib/db/crm-write-repositories";
 
 async function readJson(request: Request) {
   try {
@@ -12,6 +12,8 @@ async function readJson(request: Request) {
 
 function getWriteErrorStatus(reason: string) {
   const normalizedReason = reason.toLowerCase();
+  if (normalizedReason.includes("active contact with this email")) return 409;
+  if (normalizedReason.includes("already active")) return 409;
 
   if (
     reason.includes("required") ||
@@ -38,6 +40,22 @@ function getWriteErrorStatus(reason: string) {
   }
 
   return 503;
+}
+
+export async function GET(request: Request) {
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  if (!auth.ok) return auth.response;
+  const url = new URL(request.url);
+  if (url.searchParams.get("archived") !== "1") {
+    return NextResponse.json({ error: "Unsupported contact query" }, { status: 400 });
+  }
+  const result = await listArchivedContactRecords({
+    page: Number(url.searchParams.get("page") || 1),
+    pageSize: Number(url.searchParams.get("pageSize") || 25),
+    session: auth.session,
+  });
+  if (!result.persisted) return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
+  return NextResponse.json(result.data);
 }
 
 function getContactIdFromRequest(request: Request, body?: Record<string, unknown> | null) {
@@ -95,6 +113,16 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ archived: true, contactId: result.data.id, persisted: true });
+  }
+  if (input.action === "restore") {
+    const result = await restoreContactRecord({
+      contactId: getContactIdFromRequest(request, input),
+      session: auth.session,
+    });
+    if (!result.persisted) {
+      return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
+    }
+    return NextResponse.json({ contact: result.data, persisted: true, restored: true });
   }
 
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;

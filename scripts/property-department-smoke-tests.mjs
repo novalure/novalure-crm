@@ -29,10 +29,8 @@ test("property department migration creates canonical support tables without rep
 });
 
 test("system diagnostics and QA seed include the property department migration", () => {
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/034_property_department\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/035_property_department_content\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/038_property_default_units\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/039_property_content_partial_unique_indexes\.sql/);
+  assert.match(read("src/app/api/system/database/route.ts"), /getMigrationLedgerStatus/);
+  assert.match(read("src/lib/db/migration-status.ts"), /readdirSync\(directory\)/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/034_property_department\.sql/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/035_property_department_content\.sql/);
   assert.match(read("package.json"), /db:migrate:property-default-units/);

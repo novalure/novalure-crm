@@ -40,10 +40,18 @@ test("specialized Novalure internal product roles are additive and scoped", () =
   assert.doesNotMatch(serviceOpsBlock, /bots:publish|settings:manage|customer-access:manage/);
 
   const adminBlock = productRoleBlock(productModel, "novalureAdmin");
-  assert.match(adminBlock, /settings:manage/);
-  assert.match(adminBlock, /bots:publish/);
-  assert.match(adminBlock, /customer-access:manage/);
-  assert.doesNotMatch(adminBlock, /pipeline:write|newsletter:send|funnels:publish/);
+  for (const capability of [
+    "settings:manage",
+    "bots:publish",
+    "calendar:manage",
+    "customer-access:manage",
+    "funnels:publish",
+    "newsletter:send",
+    "pipeline:write",
+    "reservations:write",
+  ]) {
+    assert.match(adminBlock, new RegExp(capability.replace(":", "\\:")));
+  }
 });
 
 test("workspace-scoped sessions deny tenant switching unless managed-service rights are present", () => {

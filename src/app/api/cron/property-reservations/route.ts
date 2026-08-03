@@ -12,7 +12,7 @@ function isAuthorized(request: Request) {
 function getLimit(request: Request) {
   const value = new URL(request.url).searchParams.get("limit");
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.min(1000, Math.max(1, Math.round(parsed))) : 250;
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(1, Math.round(parsed))) : 50;
 }
 
 export async function GET(request: Request) {
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startedAt = Date.now();
   const result = await expireOverduePropertyReservations({
     limit: getLimit(request),
     source: "cron/property-reservations",
@@ -28,5 +29,6 @@ export async function GET(request: Request) {
   return Response.json({
     ok: true,
     ...result,
+    durationMs: Date.now() - startedAt,
   });
 }

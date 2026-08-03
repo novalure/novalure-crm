@@ -5,16 +5,12 @@ import {
   getSessionCookieOptions,
 } from "@/lib/auth/session";
 import { isLanguageCode, type LanguageCode } from "@/lib/language-runtime";
+import { checkRequestAuthLimits, clearLoginAuthLimits } from "@/lib/auth/rate-limit";
+import { sanitizeLocalRedirect } from "@/lib/auth/redirects";
 
 function getFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
-}
-
-function getSafeReturnTo(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/api/")) return "/";
-  return value;
 }
 
 function getLanguageValue(value: string): LanguageCode | "" {
@@ -29,7 +25,7 @@ function getLoginRedirect(
   const url = new URL("/login", request.url);
   if (input.language) url.searchParams.set("lang", input.language);
   if (input.error) url.searchParams.set("error", input.error);
-  if (input.returnTo) url.searchParams.set("returnTo", getSafeReturnTo(input.returnTo));
+  if (input.returnTo) url.searchParams.set("returnTo", sanitizeLocalRedirect(input.returnTo));
   return url;
 }
 
@@ -38,22 +34,36 @@ export async function POST(request: Request) {
   const email = getFormValue(formData, "email");
   const password = getFormValue(formData, "password") || getFormValue(formData, "passcode");
   const language = getLanguageValue(getFormValue(formData, "language") || getFormValue(formData, "lang"));
-  const returnTo = getSafeReturnTo(getFormValue(formData, "returnTo"));
-  const result = await authenticateLogin({ email, password });
+  const returnTo = sanitizeLocalRedirect(getFormValue(formData, "returnTo"));
+  const rateLimit = await checkRequestAuthLimits({
+    account: email,
+    accountAction: "login_account",
+    ipAction: "login_ip",
+    request,
+  });
+  const result = await authenticateLogin({
+    email: rateLimit.allowed ? email : `blocked-${crypto.randomUUID()}@invalid.local`,
+    password,
+  });
 
-  if (!result.session) {
-    return NextResponse.redirect(
+  if (!rateLimit.allowed || !result.session) {
+    const response = NextResponse.redirect(
       getLoginRedirect(request, {
-        error: result.error ?? "invalid_credentials",
+        error: "invalid_credentials",
         language,
         returnTo,
       }),
       303,
     );
+    response.headers.set("Cache-Control", "no-store");
+    if (!rateLimit.allowed) response.headers.set("Retry-After", String(rateLimit.retryAfter));
+    return response;
   }
 
+  await clearLoginAuthLimits({ account: email, request });
   const cookie = createSessionCookie(result.session);
   const response = NextResponse.redirect(new URL(returnTo, request.url), 303);
   response.cookies.set(cookie.name, cookie.value, getSessionCookieOptions(cookie.maxAge));
+  response.headers.set("Cache-Control", "no-store");
   return response;
 }

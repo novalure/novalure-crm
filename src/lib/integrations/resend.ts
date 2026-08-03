@@ -64,6 +64,7 @@ export async function sendNewsletterEmail(input: {
         html: input.html,
         reply_to: input.replyTo,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const data = (await response.json().catch(() => ({}))) as { id?: string; message?: string };

@@ -11,19 +11,13 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const email = getFormValue(formData, "email");
   const language = resolveLanguage(getFormValue(formData, "lang"));
-  const result = await requestPasswordReset({ email, language, request });
+  await requestPasswordReset({ email, language, request });
   const redirectUrl = new URL("/login/forgot-password", request.url);
 
   redirectUrl.searchParams.set("lang", language);
-  if (email) redirectUrl.searchParams.set("email", email);
+  redirectUrl.searchParams.set("sent", "1");
 
-  if (result.status === "rate_limited") {
-    redirectUrl.searchParams.set("error", "rate_limited");
-  } else if (result.status === "unavailable") {
-    redirectUrl.searchParams.set("error", "reset_unavailable");
-  } else {
-    redirectUrl.searchParams.set("sent", "1");
-  }
-
-  return NextResponse.redirect(redirectUrl, 303);
+  const response = NextResponse.redirect(redirectUrl, 303);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }

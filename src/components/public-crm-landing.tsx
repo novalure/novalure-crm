@@ -346,7 +346,7 @@ export function PublicCrmLanding({
               <Link
                 aria-current={language === "de" ? "page" : undefined}
                 aria-label={pageCopy.switchToGerman}
-                className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
+                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
                   language === "de"
                     ? "border-white bg-white text-[#050607]"
                     : "border-white/[0.2] bg-transparent text-[#c9d4ce]"
@@ -359,7 +359,7 @@ export function PublicCrmLanding({
               <Link
                 aria-current={language === "en" ? "page" : undefined}
                 aria-label={pageCopy.switchToEnglish}
-                className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
+                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
                   language === "en"
                     ? "border-white bg-white text-[#050607]"
                     : "border-white/[0.2] bg-transparent text-[#c9d4ce]"
@@ -371,7 +371,7 @@ export function PublicCrmLanding({
               </Link>
             </nav>
             <a
-              className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border border-white/[0.28] bg-white/[0.08] px-3 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/[0.14] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#050607] sm:text-sm"
+              className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-md border border-white/[0.28] bg-white/[0.08] px-3 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/[0.14] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#050607] sm:text-sm"
               href={loginHref}
             >
               {copy.nav.login}

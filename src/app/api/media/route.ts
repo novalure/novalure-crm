@@ -38,11 +38,19 @@ export async function POST(request: Request) {
       name: stringField(formData.get("name")),
       workspaceId: auth.session.workspaceId,
     });
-    const publishedAsset = isTruthy(formData.get("public"))
+    const publishRequested = isTruthy(formData.get("public"));
+    const publishedAsset = publishRequested
       ? await publishWorkspaceMedia(asset.id, auth.session.workspaceId)
       : null;
     const media = await listWorkspaceMedia(auth.session.workspaceId);
-    return NextResponse.json({ asset: publishedAsset ?? asset, quota: media.quota }, { status: 201 });
+    return NextResponse.json(
+      {
+        asset: publishedAsset ?? asset,
+        pendingScan: publishRequested && !publishedAsset && asset.scanStatus === "pending",
+        quota: media.quota,
+      },
+      { status: publishRequested && !publishedAsset && asset.scanStatus === "pending" ? 202 : 201 },
+    );
   } catch (error) {
     if (error instanceof MediaStoreError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: statusForMediaError(error) });
@@ -60,6 +68,7 @@ function isTruthy(value: FormDataEntryValue | null) {
 }
 
 function statusForMediaError(error: MediaStoreError) {
+  if (error.code === "PRIVATE_STORAGE_NOT_CONFIGURED") return 503;
   if (error.code === "FILE_TOO_LARGE" || error.code === "IMAGE_TOO_LARGE") return 413;
   if (error.code === "WORKSPACE_QUOTA_EXCEEDED") return 409;
   return 415;

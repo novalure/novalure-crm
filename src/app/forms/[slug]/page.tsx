@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { getLegacyPublicWebsiteFormRoute } from "@/lib/db/form-repositories";
 import { appendSearchParams } from "@/lib/public-routing";
-import {
-  renderUnavailableFormPage,
-  titleFromFormSlug,
-} from "@/app/forms/public-form-page";
+import { titleFromFormSlug } from "@/app/forms/public-form-page";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +16,7 @@ export async function generateMetadata({ params }: LegacyFormPageProps): Promise
 
   return {
     description: "Novalure CRM Formular",
+    robots: { follow: false, index: false },
     title: `${titleFromFormSlug(slug) || "Formular"} | Novalure`,
   };
 }
@@ -29,11 +27,11 @@ export default async function LegacyPublicFormPage({
 }: LegacyFormPageProps) {
   const { slug } = await params;
   const query = searchParams ? await searchParams : {};
-  const legacy = await getLegacyPublicWebsiteFormRoute(slug).catch(() => ({ status: "not_found" as const, slug }));
+  const legacy = await getLegacyPublicWebsiteFormRoute(slug);
 
   if (legacy.status === "unique") {
-    redirect(appendSearchParams(legacy.canonicalPath, query));
+    permanentRedirect(appendSearchParams(legacy.canonicalPath, query));
   }
 
-  return renderUnavailableFormPage({ query, slug });
+  notFound();
 }

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       dealId: parseOptionalString(input.dealId),
       depositCents: parseOptionalNumber(input.depositCents),
       expiresAt: parseOptionalString(input.expiresAt),
+      idempotencyKey: request.headers.get("idempotency-key") || parseOptionalString(input.idempotencyKey) || crypto.randomUUID(),
       nextAction: parseOptionalString(input.nextAction),
       notifyTeams: input.notifyTeams === true,
       reservationId: parseOptionalString(input.reservationId),
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   });
 
   if (!result.persisted) {
-    const status = result.reason?.toLowerCase().includes("database_url") ? 503 : 400;
+    const status = result.reason?.toLowerCase().includes("database_url") ? 503 : result.reasonCode === "conflict" ? 409 : 400;
     return NextResponse.json({ error: result.reason }, { status });
   }
 

@@ -40,7 +40,8 @@ test("contact owner migration is additive and indexed", () => {
   assert.match(migration, /lead_owner\.assigned_to_user_id/);
   assert.match(migration, /deal_owner\.owner_user_id/);
   assert.match(migration, /contacts_workspace_owner_active_idx/);
-  assert.match(databaseRoute, /029_contact_owner_scope\.sql/);
+  assert.match(databaseRoute, /getMigrationLedgerStatus/);
+  assert.match(readText("src/lib/db/migration-status.ts"), /readdirSync\(directory\)/);
 });
 
 test("contact data is scoped server-side by session visibility", () => {

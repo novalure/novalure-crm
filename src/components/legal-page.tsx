@@ -53,7 +53,7 @@ export function LegalPage({
             <span className="mr-1 text-slate-600">{copy.languageIntro}</span>
             <Link
               aria-current={language === "de" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 ${
                 language === "de"
                   ? "border-blue-700 bg-white text-blue-700"
                   : "border-slate-200 bg-white text-slate-700"
@@ -64,7 +64,7 @@ export function LegalPage({
             </Link>
             <Link
               aria-current={language === "en" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 ${
                 language === "en"
                   ? "border-blue-700 bg-white text-blue-700"
                   : "border-slate-200 bg-white text-slate-700"
@@ -80,7 +80,7 @@ export function LegalPage({
           >
             {publicLegalLinks.map((link) => (
               <Link
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-blue-700"
+                className="inline-flex min-h-11 items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-blue-700"
                 href={withPublicLanguage(link.href, language)}
                 key={link.key}
               >

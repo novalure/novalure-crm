@@ -4,6 +4,7 @@ import { getLoginPageCopy, type LanguageCode } from "@/lib/i18n";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { getPasswordValidationError, hashPassword } from "@/lib/auth/passwords";
+import { checkRequestAuthLimits } from "@/lib/auth/rate-limit";
 
 type ResetUserRow = {
   email: string;
@@ -35,10 +36,7 @@ type PasswordResetConfirmResult =
   | { status: "unavailable" };
 
 const resetTokenTtlMinutes = 60;
-const rateLimitWindowMs = 15 * 60 * 1000;
-const maxInMemoryRequestsPerWindow = 5;
 const maxDatabaseRequestsPerWindow = 3;
-const resetRequestBuckets = new Map<string, { count: number; resetAt: number }>();
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -46,28 +44,6 @@ function normalizeEmail(value: string) {
 
 function hashToken(value: string) {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function getRequestIp(request: Request) {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    request.headers.get("cf-connecting-ip") ||
-    "unknown"
-  );
-}
-
-function isRateLimited(key: string) {
-  const now = Date.now();
-  const bucket = resetRequestBuckets.get(key);
-
-  if (!bucket || bucket.resetAt <= now) {
-    resetRequestBuckets.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
-    return false;
-  }
-
-  bucket.count += 1;
-  return bucket.count > maxInMemoryRequestsPerWindow;
 }
 
 async function delayNeutralResponse() {
@@ -158,11 +134,15 @@ export async function requestPasswordReset(input: {
   request: Request;
 }): Promise<PasswordResetRequestResult> {
   const email = normalizeEmail(input.email);
-  const requestIp = getRequestIp(input.request);
-  const rateLimitKey = hashToken(`${requestIp}:${email}`);
+  const rateLimit = await checkRequestAuthLimits({
+    account: email,
+    accountAction: "password_reset_account",
+    ipAction: "password_reset_ip",
+    request: input.request,
+  });
 
   if (!email) return { status: "ok" };
-  if (isRateLimited(rateLimitKey)) return { status: "rate_limited" };
+  if (!rateLimit.allowed) return { status: "rate_limited" };
   if (!hasDatabaseUrl()) return { status: "unavailable" };
 
   try {
@@ -198,8 +178,8 @@ export async function requestPasswordReset(input: {
         user.id,
         hashToken(token),
         email,
-        requestIp,
-        input.request.headers.get("user-agent") ?? "",
+        null,
+        null,
         String(resetTokenTtlMinutes),
       ],
     );
@@ -254,7 +234,7 @@ export async function confirmPasswordReset(input: {
           returning token.user_id as "userId", token.workspace_id as "workspaceId"
         )
         update workspace_users wu
-        set password_hash = $2, status = 'active', updated_at = now()
+        set password_hash = $2, status = 'active', session_version = session_version + 1, updated_at = now()
         from consumed_token token
         where wu.id = token."userId"
           and wu.workspace_id = token."workspaceId"

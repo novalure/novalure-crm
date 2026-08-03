@@ -28,15 +28,8 @@ function getRequestCountry(requestHeaders: Headers) {
   );
 }
 
-function getResetErrorText(error: string, reset: ReturnType<typeof getLoginPageCopy>["passwordReset"]) {
-  if (error === "rate_limited") return reset.errors.rate_limited;
-  if (error === "reset_unavailable") return reset.errors.reset_unavailable;
-  return "";
-}
-
-function getForgotLanguageHref(language: "de" | "en", email: string) {
+function getForgotLanguageHref(language: "de" | "en") {
   const params = new URLSearchParams({ lang: language });
-  if (email) params.set("email", email);
   return `/login/forgot-password?${params.toString()}`;
 }
 
@@ -55,8 +48,6 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
   const login = getLoginPageCopy(language);
   const page = getPublicPageCopy(language);
   const reset = login.passwordReset;
-  const email = getQueryValue(query.email);
-  const errorText = getResetErrorText(getQueryValue(query.error), reset);
   const sent = getQueryValue(query.sent) === "1";
 
   return (
@@ -69,23 +60,23 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
           <nav aria-label={page.languageAriaLabel} className="flex items-center gap-1">
             <Link
               aria-current={language === "de" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 text-xs font-semibold ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
                 language === "de"
                   ? "border-[#071421] bg-white text-[#071421]"
                   : "border-[#d4e1ee] bg-transparent text-[#476178]"
               }`}
-              href={getForgotLanguageHref("de", email)}
+              href={getForgotLanguageHref("de")}
             >
               {page.switchToGerman}
             </Link>
             <Link
               aria-current={language === "en" ? "page" : undefined}
-              className={`rounded-md border px-3 py-2 text-xs font-semibold ${
+              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
                 language === "en"
                   ? "border-[#071421] bg-white text-[#071421]"
                   : "border-[#d4e1ee] bg-transparent text-[#476178]"
               }`}
-              href={getForgotLanguageHref("en", email)}
+              href={getForgotLanguageHref("en")}
             >
               {page.switchToEnglish}
             </Link>
@@ -102,14 +93,12 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
           <p className="mt-3 text-sm leading-6 text-[#476178]">{reset.requestDescription}</p>
 
           {sent ? (
-            <p className="mt-5 rounded-md border border-[#9ed7bf] bg-[#edfff6] px-3 py-2 text-sm font-semibold leading-6 text-[#0f5132]">
+            <p
+              aria-live="polite"
+              className="mt-5 rounded-md border border-[#9ed7bf] bg-[#edfff6] px-3 py-2 text-sm font-semibold leading-6 text-[#0f5132]"
+              role="status"
+            >
               {reset.requestSuccess}
-            </p>
-          ) : null}
-
-          {errorText ? (
-            <p className="mt-5 rounded-md border border-[#e2a7a7] bg-[#fff1f1] px-3 py-2 text-sm font-semibold leading-6 text-[#7d2020]">
-              {errorText}
             </p>
           ) : null}
 
@@ -120,7 +109,6 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
               <input
                 autoComplete="email"
                 className="min-h-11 rounded-md border border-[#b8c7d8] bg-white px-3 py-2 text-sm font-normal text-[#071421] outline-none focus:border-[#071421] focus:ring-2 focus:ring-[#b8d8ff]"
-                defaultValue={email}
                 name="email"
                 placeholder={login.placeholderEmail}
                 required

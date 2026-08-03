@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -13,7 +14,7 @@ export type TeamsAlertType =
   | "reservation_workflow";
 
 export type TeamsNotificationSeverity = "info" | "warning" | "critical";
-export type TeamsNotificationStatus = "queued" | "pending_config" | "sending" | "sent" | "failed" | "cancelled";
+export type TeamsNotificationStatus = "queued" | "pending_config" | "sending" | "sent" | "failed" | "dead_letter" | "cancelled";
 export type TeamsDestinationType = "incoming_webhook" | "channel" | "chat";
 
 export type TeamsFact = {
@@ -1370,6 +1371,7 @@ function createSystemSession(workspaceId: string): AppSession {
 }
 
 export async function queueScheduledCriticalTeamsAlerts(input: {
+  deadlineMs?: number;
   limitPerWorkspace?: number;
   workspaceLimit?: number;
 } = {}) {
@@ -1378,7 +1380,7 @@ export async function queueScheduledCriticalTeamsAlerts(input: {
   }
 
   const workspaces = await queryRows<{ id: string }>(
-    "select id from workspaces order by created_at desc limit $1",
+    "select id from workspaces order by md5(id::text || date_trunc('hour', now())::text) limit $1",
     [input.workspaceLimit ?? 50],
   );
   let checked = 0;
@@ -1387,6 +1389,7 @@ export async function queueScheduledCriticalTeamsAlerts(input: {
   let pendingConfig = 0;
 
   for (const workspace of workspaces) {
+    if (input.deadlineMs && Date.now() >= input.deadlineMs) break;
     const session = createSystemSession(workspace.id);
     const [overdue, dueSoon, access] = await Promise.all([
       queueLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
@@ -1438,14 +1441,32 @@ async function claimTeamsNotificationJob(id: string, workspaceId?: string | null
 
   return queryOne<ClaimedJobRow>(
     `
-      with claimed as (
+      with exhausted as (
         update teams_notification_jobs
-        set status = 'sending', attempts = attempts + 1, updated_at = now()
+        set status = 'dead_letter', error = coalesce(error, 'Delivery lease expired after the final attempt'),
+            run_id = null, lease_expires_at = null, updated_at = now()
         where id = $1::uuid
           and ($2::uuid is null or workspace_id = $2::uuid)
-          and status = 'queued'
-          and scheduled_for <= now()
-        returning *
+          and status = 'sending' and lease_expires_at < now() and attempts >= max_attempts
+        returning id
+      ), candidate as (
+        select id
+        from teams_notification_jobs
+        where id = $1::uuid
+          and ($2::uuid is null or workspace_id = $2::uuid)
+          and (
+            (status in ('queued', 'failed') and coalesce(retry_after, scheduled_for) <= now())
+            or (status = 'sending' and lease_expires_at < now())
+          )
+          and attempts < max_attempts
+        for update skip locked
+      ), claimed as (
+        update teams_notification_jobs job
+        set status = 'sending', attempts = attempts + 1, run_id = $3::uuid,
+            lease_expires_at = now() + interval '2 minutes', last_attempt_at = now(), updated_at = now()
+        from candidate
+        where job.id = candidate.id
+        returning job.*
       )
       select
         c.id,
@@ -1470,7 +1491,7 @@ async function claimTeamsNotificationJob(id: string, workspaceId?: string | null
       left join teams_notification_targets t on t.id = c.target_id and t.workspace_id = c.workspace_id and t.enabled = true
       limit 1
     `,
-    [id, isUuid(workspaceId) ? workspaceId : null],
+    [id, isUuid(workspaceId) ? workspaceId : null, randomUUID()],
   );
 }
 
@@ -1479,10 +1500,20 @@ async function listDueTeamsNotificationJobIds(limit = 25, workspaceId?: string |
 
   return queryRows<{ id: string }>(
     `
+      with exhausted as (
+        update teams_notification_jobs
+        set status = 'dead_letter', error = coalesce(error, 'Delivery lease expired after the final attempt'),
+            run_id = null, lease_expires_at = null, updated_at = now()
+        where status = 'sending' and lease_expires_at < now() and attempts >= max_attempts
+        returning id
+      )
       select id
       from teams_notification_jobs
-      where status = 'queued'
-        and scheduled_for <= now()
+      where (
+          (status in ('queued', 'failed') and coalesce(retry_after, scheduled_for) <= now())
+          or (status = 'sending' and lease_expires_at < now())
+        )
+        and attempts < max_attempts
         and ($2::uuid is null or workspace_id = $2::uuid)
       order by scheduled_for asc
       limit $1
@@ -1503,6 +1534,8 @@ async function markTeamsNotificationSent(input: {
         provider_message_id = $2,
         sent_at = now(),
         error = null,
+        run_id = null,
+        lease_expires_at = null,
         updated_at = now()
       where id = $1::uuid
       returning id
@@ -1519,9 +1552,11 @@ async function markTeamsNotificationFailed(input: {
     `
       update teams_notification_jobs
       set
-        status = 'failed',
+        status = case when attempts >= max_attempts then 'dead_letter' else 'failed' end,
         error = $2,
-        retry_after = now() + interval '15 minutes',
+        retry_after = now() + (least(60, greatest(1, attempts) * 15)::text || ' minutes')::interval,
+        run_id = null,
+        lease_expires_at = null,
         updated_at = now()
       where id = $1::uuid
       returning id
@@ -1547,6 +1582,7 @@ async function sendTeamsWebhook(job: ClaimedJobRow) {
     body: JSON.stringify(payload),
     headers: { "Content-Type": "application/json" },
     method: "POST",
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (!response.ok) {
@@ -1564,14 +1600,18 @@ async function sendTeamsWebhook(job: ClaimedJobRow) {
 }
 
 export async function processDueTeamsNotifications(
-  input: { jobIds?: string[]; limit?: number; workspaceId?: string | null } = {},
-): Promise<{ checked: number; failed: number; sent: number }> {
+  input: { deadlineMs?: number; jobIds?: string[]; limit?: number; workspaceId?: string | null } = {},
+): Promise<{ checked: number; deadlineReached: boolean; failed: number; sent: number }> {
   const refs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueTeamsNotificationJobIds(input.limit ?? 25, input.workspaceId);
-  const result = { checked: refs.length, failed: 0, sent: 0 };
+  const result = { checked: refs.length, deadlineReached: false, failed: 0, sent: 0 };
 
   for (const ref of refs) {
+    if (input.deadlineMs && Date.now() >= input.deadlineMs) {
+      result.deadlineReached = true;
+      break;
+    }
     const job = await claimTeamsNotificationJob(ref.id, input.workspaceId);
     if (!job) continue;
 

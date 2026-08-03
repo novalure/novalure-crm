@@ -29,7 +29,8 @@ test("company profile migration creates separated profile scopes, versions and N
 });
 
 test("system database diagnostics and schema include company profile tables", () => {
-  assert.match(readText("src/app/api/system/database/route.ts"), /migrations\/036_company_profiles\.sql/);
+  assert.match(readText("src/app/api/system/database/route.ts"), /getMigrationLedgerStatus/);
+  assert.match(readText("src/lib/db/migration-status.ts"), /readdirSync\(directory\)/);
   const schema = readText("src/lib/db/schema.ts");
   assert.match(schema, /"company_profiles"/);
   assert.match(schema, /"company_profile_versions"/);

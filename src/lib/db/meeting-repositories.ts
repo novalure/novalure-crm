@@ -2352,6 +2352,13 @@ export async function listDueMeetingNotificationJobs(limit = 25): Promise<Meetin
 
   const rows = await queryRows<MeetingNotificationJobRow>(
     `
+      with exhausted as (
+        update meeting_notification_jobs
+        set status = 'dead_letter', error = coalesce(error, 'Delivery lease expired after the final attempt'),
+            run_id = null, lease_expires_at = null, updated_at = now()
+        where status = 'sending' and lease_expires_at < now() and attempts >= max_attempts
+        returning id
+      )
       select
         id,
         booking_id as "bookingId",
@@ -2364,7 +2371,11 @@ export async function listDueMeetingNotificationJobs(limit = 25): Promise<Meetin
         tokens,
         provider
       from meeting_notification_jobs
-      where status = 'queued' and scheduled_for <= now()
+      where (
+          (status in ('queued', 'failed') and coalesce(retry_after, scheduled_for) <= now())
+          or (status = 'sending' and lease_expires_at < now())
+        )
+        and attempts < max_attempts
       order by scheduled_for asc
       limit $1
     `,
@@ -2379,9 +2390,29 @@ export async function claimMeetingNotificationJob(id: string): Promise<MeetingNo
 
   const row = await queryOne<MeetingNotificationJobRow>(
     `
-      update meeting_notification_jobs
-      set status = 'sending', attempts = attempts + 1, updated_at = now()
-      where id = $1 and status = 'queued'
+      with exhausted as (
+        update meeting_notification_jobs
+        set status = 'dead_letter', error = coalesce(error, 'Delivery lease expired after the final attempt'),
+            run_id = null, lease_expires_at = null, updated_at = now()
+        where id = $1
+          and status = 'sending' and lease_expires_at < now() and attempts >= max_attempts
+        returning id
+      ), candidate as (
+        select id
+        from meeting_notification_jobs
+        where id = $1
+          and (
+            (status in ('queued', 'failed') and coalesce(retry_after, scheduled_for) <= now())
+            or (status = 'sending' and lease_expires_at < now())
+          )
+          and attempts < max_attempts
+        for update skip locked
+      )
+      update meeting_notification_jobs job
+      set status = 'sending', attempts = attempts + 1, run_id = $2::uuid,
+          lease_expires_at = now() + interval '2 minutes', last_attempt_at = now(), updated_at = now()
+      from candidate
+      where job.id = candidate.id
       returning
         id,
         booking_id as "bookingId",
@@ -2394,7 +2425,7 @@ export async function claimMeetingNotificationJob(id: string): Promise<MeetingNo
         tokens,
         provider
     `,
-    [id],
+    [id, randomUUID()],
   );
 
   return row ? toMeetingNotificationJob(row) : null;
@@ -2417,6 +2448,8 @@ export async function markMeetingNotificationJobSent(input: {
         sent_at = now(),
         updated_at = now(),
         error = null
+        , run_id = null
+        , lease_expires_at = null
       where id = $1
       returning id
     `,
@@ -2430,7 +2463,12 @@ export async function markMeetingNotificationJobFailed(input: { error: string; i
   await queryOne<IdRow>(
     `
       update meeting_notification_jobs
-      set status = 'failed', error = $2, updated_at = now()
+      set status = case when attempts >= max_attempts then 'dead_letter' else 'failed' end,
+          error = $2,
+          retry_after = now() + (least(60, greatest(1, attempts) * 15)::text || ' minutes')::interval,
+          run_id = null,
+          lease_expires_at = null,
+          updated_at = now()
       where id = $1
       returning id
     `,

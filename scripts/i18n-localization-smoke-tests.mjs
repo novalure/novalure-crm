@@ -360,7 +360,8 @@ test("phase 2 German copy uses correct umlauts and formal login wording", () => 
   assert.match(crmLoadersSource, /Keine heißen Leads - Lead-Zentrale prüfen\./);
   assert.match(crmLoadersSource, /Keine überfälligen Angebote\./);
   assert.match(chatRuntimeSource, /Terminvorschläge nach Regeln vorbereitet/);
-  assert.match(bookingPageSource, /vollständigen Buchungslink/);
+  assert.match(bookingPageSource, /permanentRedirect/);
+  assert.match(bookingPageSource, /notFound\(\)/);
   assert.match(modelProviderSource, /Für Details oder unklare Punkte bereite ich die Übergabe an das Team vor\./);
   assert.match(pipelineDefaultsSource, /Verkäufer-Pipeline/);
   assert.match(propertyDepartmentSource, /Kostenübersicht/);

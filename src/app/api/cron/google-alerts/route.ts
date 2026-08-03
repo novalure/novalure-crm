@@ -17,15 +17,19 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startedAt = Date.now();
+  const deadlineMs = startedAt + 45_000;
   const queued = await queueScheduledCriticalGoogleAlerts({
-    limitPerWorkspace: 25,
-    workspaceLimit: 50,
+    deadlineMs: startedAt + 24_000,
+    limitPerWorkspace: 10,
+    workspaceLimit: 8,
   });
-  const processed = await processDueGoogleNotifications({ limit: 50 });
+  const processed = await processDueGoogleNotifications({ deadlineMs, limit: 20 });
 
   return Response.json({
     ok: true,
     processed,
     queued,
+    durationMs: Date.now() - startedAt,
   });
 }

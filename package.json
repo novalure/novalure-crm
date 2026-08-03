@@ -24,6 +24,7 @@
     "test:i18n": "node --test scripts/i18n-localization-smoke-tests.mjs",
     "test:company-profile-settings": "node --test scripts/company-profile-settings-smoke-tests.mjs",
     "test:contact-access": "node --test scripts/contact-access-rbac-smoke-tests.mjs",
+    "test:qa-remediation": "node --test scripts/qa-remediation-tests.mjs",
     "test:property-department": "node --test scripts/property-department-smoke-tests.mjs",
     "qa:contact-access": "node scripts/qa-contact-access.mjs",
     "qa:livegang:seed": "node scripts/qa-livegang-seed.mjs",
@@ -40,15 +41,16 @@
     "qa:deal-idempotency": "node scripts/qa-deal-idempotency.mjs",
     "qa:lead-idempotency": "node scripts/qa-lead-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
-    "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs"
+    "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs",
+    "qa:media-private-migration": "node scripts/migrate-private-media.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@types/react-grid-layout": "^1.3.6",
-    "@vercel/blob": "^2.3.3",
+    "@vercel/blob": "^2.6.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-grid-layout": "^2.2.3"
@@ -59,8 +61,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "dompurify": "3.4.13",
+    "postcss": "8.5.25",
+    "sharp": "0.35.3",
+    "undici": "6.28.0"
   }
 }

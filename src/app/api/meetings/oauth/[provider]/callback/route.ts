@@ -6,6 +6,7 @@ import {
   upsertCalendarOAuthConnection,
   type CalendarOAuthProvider,
 } from "@/lib/integrations/calendar-connections";
+import { sanitizeLocalRedirect } from "@/lib/auth/redirects";
 
 type RouteContext = {
   params: Promise<{ provider: string }>;
@@ -14,12 +15,6 @@ type RouteContext = {
 function getProvider(value: string): CalendarOAuthProvider | null {
   if (value === "google" || value === "microsoft") return value;
   return null;
-}
-
-function safeReturnTo(value: string | null | undefined) {
-  if (!value || !value.startsWith("/")) return "/#calendar";
-  if (value.startsWith("//")) return "/#calendar";
-  return value;
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -34,7 +29,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const state = parseOAuthState(url.searchParams.get("state"), provider);
-  const redirectUrl = new URL(safeReturnTo(state?.returnTo), request.url);
+  const redirectUrl = new URL(sanitizeLocalRedirect(state?.returnTo, "/#calendar"), request.url);
 
   if (!state) {
     redirectUrl.searchParams.set("calendar_error", "OAuth state is invalid");

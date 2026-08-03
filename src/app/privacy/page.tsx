@@ -8,14 +8,9 @@ import {
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import { buildLegalPageMetadata } from "@/lib/legal-metadata";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | Novalure CRM",
-  description:
-    "Privacy Policy for Novalure CRM under Irish and EU data protection law.",
-};
-
-const updated = "20 May 2026";
+const updated = { de: "20. Mai 2026", en: "20 May 2026" } as const;
 const pagePath = "/privacy";
 
 type PrivacyPageProps = {
@@ -289,6 +284,10 @@ const germanSections = [
   },
 ];
 
+export async function generateMetadata({ searchParams }: PrivacyPageProps): Promise<Metadata> {
+  return buildLegalPageMetadata({ copy: pageCopy, path: pagePath, searchParams });
+}
+
 export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
@@ -305,7 +304,7 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
       path={pagePath}
       title={page.title}
       subtitle={page.subtitle}
-      updated={updated}
+      updated={updated[language]}
     >
       <LanguageBlock eyebrow={language === "de" ? "Deutsch" : "English"} title={page.blockTitle}>
         <LegalSections sections={language === "de" ? germanSections : englishSections} />

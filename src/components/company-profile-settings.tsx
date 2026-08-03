@@ -544,14 +544,14 @@ export function CompanyProfileSettings({
   }
 
   async function refreshAccessFromResponse(response: Response) {
-    const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload & { lastAction?: { setupUrl?: string } }>(response) : null;
+    const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload>(response) : null;
     if (!nextPayload) {
       const failure = await readJsonResponse<{ error?: string }>(response);
       setAccessMessage(failure?.error ?? "access_failed");
       return;
     }
     setAccessPayload(nextPayload);
-    setAccessMessage(nextPayload.lastAction?.setupUrl ? `${text.setupSent} ${nextPayload.lastAction.setupUrl}` : "saved");
+    setAccessMessage("saved");
   }
 
   async function inviteUser() {

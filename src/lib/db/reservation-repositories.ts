@@ -1,6 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import type { Deal, PropertyReservation, PropertyUnit, Task } from "@/lib/crm-types";
-import { queryOne, queryRows } from "@/lib/db/client";
+import { queryOne, queryRows, withTransaction } from "@/lib/db/client";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { changeDealStageRecord, upsertTaskRecord } from "@/lib/db/crm-write-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -20,6 +20,7 @@ export type ReservationWorkflowInput = {
   nextAction?: string | null;
   createTask?: boolean;
   notifyTeams?: boolean;
+  idempotencyKey?: string | null;
 };
 
 export type PreparedTeamsNotification = {
@@ -40,6 +41,8 @@ export type PreparedTeamsNotification = {
 export type ReservationWorkflowResult = {
   persisted: boolean;
   reason?: string;
+  reasonCode?: "conflict";
+  replayed?: boolean;
   reservation?: PropertyReservation;
   unit?: PropertyUnit;
   deal?: Pick<Deal, "id" | "projectId" | "stage" | "nextAction" | "probability" | "closedAt">;
@@ -431,6 +434,7 @@ export async function expireOverduePropertyReservations(input: {
           and pr.status in ('hold', 'reserved')
           and pr.expires_at < now()
         order by pr.expires_at asc, pr.id asc
+        for update of pr skip locked
         limit $2
       ),
       expired as (
@@ -985,7 +989,403 @@ async function queueReservationTeamsNotification(
   };
 }
 
+class ReservationWorkflowFailure extends Error {
+  constructor(message: string, readonly conflict = false) {
+    super(message);
+  }
+}
+
 export async function mutateUnitReservation({
+  session,
+  input,
+}: {
+  session: AppSession;
+  input: ReservationWorkflowInput;
+}): Promise<ReservationWorkflowResult> {
+  if (!canPersist()) return { persisted: false, reason: "DATABASE_URL is not configured." };
+  if (!isUuid(session.workspaceId) || !isUuid(session.userId)) {
+    return { persisted: false, reason: "A valid workspace and user are required." };
+  }
+  if (!input.idempotencyKey || input.idempotencyKey.length > 200) {
+    return { persisted: false, reason: "A valid idempotency key is required." };
+  }
+
+  try {
+    return await withTransaction(async (transaction) => {
+      const request = await transaction.queryOne<{ id: string }>(
+        `
+          insert into reservation_workflow_requests (workspace_id, idempotency_key, action)
+          values ($1::uuid, $2, $3)
+          on conflict (workspace_id, idempotency_key) do nothing
+          returning id
+        `,
+        [session.workspaceId, input.idempotencyKey, input.action],
+      );
+
+      if (!request) {
+        const replay = await transaction.queryOne<{ action: string; reservationId: string | null }>(
+          `select action, reservation_id as "reservationId" from reservation_workflow_requests where workspace_id = $1 and idempotency_key = $2`,
+          [session.workspaceId, input.idempotencyKey],
+        );
+        if (!replay?.reservationId || replay.action !== input.action) {
+          throw new ReservationWorkflowFailure("The idempotency key is already in use.", true);
+        }
+        const reservationRow = await transaction.queryOne<ReservationRow>(
+          `
+            select id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                   deposit_cents, contract_milestone, next_action
+            from property_reservations where id = $1 and workspace_id = $2
+          `,
+          [replay.reservationId, session.workspaceId],
+        );
+        if (!reservationRow) throw new ReservationWorkflowFailure("The completed reservation could not be loaded.", true);
+        const unitRow = await transaction.queryOne<UnitRow>(
+          `
+            select id, workspace_id, project_id, building_id, unit_number, floor, rooms, area_sqm,
+                   price_cents, status, buyer_contact_id, deal_id, updated_at
+            from property_units where id = $1 and workspace_id = $2
+          `,
+          [reservationRow.unit_id, session.workspaceId],
+        );
+        const dealRow = reservationRow.deal_id
+          ? await transaction.queryOne<DealSyncRow>(
+              `select id, project_id, stage, next_action, probability, closed_at from deals where id = $1 and workspace_id = $2`,
+              [reservationRow.deal_id, session.workspaceId],
+            )
+          : null;
+        if (!unitRow) throw new ReservationWorkflowFailure("The completed reservation unit could not be loaded.", true);
+        return {
+          deal: dealRow ? toDeal(dealRow) : undefined,
+          persisted: true,
+          replayed: true,
+          reservation: toReservation(reservationRow),
+          unit: toUnit(unitRow, reservationRow.id),
+        };
+      }
+
+      let existingReservation = input.action === "create"
+        ? null
+        : await transaction.queryOne<ReservationRow>(
+            input.reservationId
+              ? `
+                  select id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                         deposit_cents, contract_milestone, next_action
+                  from property_reservations where id = $1::uuid and workspace_id = $2::uuid for update
+                `
+              : `
+                  select id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                         deposit_cents, contract_milestone, next_action
+                  from property_reservations
+                  where unit_id = $1::uuid and workspace_id = $2::uuid and status in ('hold', 'reserved')
+                  order by created_at desc for update limit 1
+                `,
+            [input.reservationId || input.unitId, session.workspaceId],
+          );
+      const unitId = input.unitId || existingReservation?.unit_id;
+      if (!isUuid(unitId)) throw new ReservationWorkflowFailure("A unit is required.");
+
+      const unit = await transaction.queryOne<UnitRow>(
+        `
+          select id, workspace_id, project_id, building_id, unit_number, floor, rooms, area_sqm,
+                 price_cents, status, buyer_contact_id, deal_id, updated_at
+          from property_units where id = $1::uuid and workspace_id = $2::uuid for update
+        `,
+        [unitId, session.workspaceId],
+      );
+      if (!unit) throw new ReservationWorkflowFailure("Unit was not found in this workspace.");
+
+      if (input.action === "create") {
+        existingReservation = await transaction.queryOne<ReservationRow>(
+          `
+            select id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                   deposit_cents, contract_milestone, next_action
+            from property_reservations
+            where unit_id = $1::uuid and workspace_id = $2::uuid and status in ('hold', 'reserved')
+            for update limit 1
+          `,
+          [unit.id, session.workspaceId],
+        );
+        if (existingReservation) throw new ReservationWorkflowFailure("Unit already has an active reservation.", true);
+        existingReservation = null;
+      } else if (!existingReservation || !ACTIVE_RESERVATION_STATUSES.has(existingReservation.status ?? "")) {
+        throw new ReservationWorkflowFailure("Active reservation was not found.", true);
+      }
+
+      if (existingReservation && existingReservation.project_id !== unit.project_id) {
+        throw new ReservationWorkflowFailure("Reservation and unit belong to different projects.", true);
+      }
+
+      const contactId = input.contactId || existingReservation?.contact_id || unit.buyer_contact_id;
+      if (!isUuid(contactId)) throw new ReservationWorkflowFailure("A contact is required for the reservation.");
+      const contact = await transaction.queryOne<{ id: string }>(
+        `select id from contacts where id = $1 and workspace_id = $2 and project_id = $3 and archived_at is null`,
+        [contactId, session.workspaceId, unit.project_id],
+      );
+      if (!contact) throw new ReservationWorkflowFailure("Contact does not belong to this workspace and project.");
+
+      const dealId = input.dealId || existingReservation?.deal_id || unit.deal_id || null;
+      const lockedDeal = dealId
+        ? await transaction.queryOne<DealPermissionRow & DealSyncRow>(
+            `
+              select id, project_id, owner_user_id, stage, next_action, probability, closed_at
+              from deals where id = $1::uuid and workspace_id = $2::uuid and project_id = $3::uuid for update
+            `,
+            [dealId, session.workspaceId, unit.project_id],
+          )
+        : null;
+      if (dealId && !lockedDeal) throw new ReservationWorkflowFailure("Deal does not belong to this workspace and project.");
+
+      const stageRows = dealId
+        ? await transaction.queryRows<PipelineStageResolverRow>(
+            `
+              select s.name, s.key, s.category, s.position, s.probability,
+                     case when s.project_id = $2::uuid or p.project_id = $2::uuid then 0 else 1 end as "scopePriority"
+              from crm_pipeline_stages s
+              join crm_pipelines p on p.id = s.pipeline_id and p.workspace_id = s.workspace_id
+              join projects pr on pr.id = $2::uuid and pr.workspace_id = s.workspace_id
+              where s.workspace_id = $1::uuid and (
+                s.project_id = $2::uuid or p.project_id = $2::uuid or
+                (p.project_id is null and s.project_id is null and p.is_default = true)
+              )
+              order by "scopePriority", p.is_default desc, s.position asc, s.created_at asc
+            `,
+            [session.workspaceId, unit.project_id],
+          )
+        : [];
+      const scopedStages = stageRows.some((stage) => Number(stage.scopePriority) === 0)
+        ? stageRows.filter((stage) => Number(stage.scopePriority) === 0)
+        : stageRows;
+      const stageCandidates = reservationStageCandidates[input.action];
+      const targetStage = input.action === "convert"
+        ? scopedStages.find((stage) => normalizeStageLookupValue(stage.category) === "won")
+          ?? scopedStages.find((stage) => stageCandidates.some((candidate) => [stage.name, stage.key].some((value) => normalizeStageLookupValue(value) === normalizeStageLookupValue(candidate))))
+        : scopedStages.find((stage) => stageCandidates.some((candidate) => [stage.name, stage.key].some((value) => normalizeStageLookupValue(value) === normalizeStageLookupValue(candidate))));
+
+      if (lockedDeal && session.role !== "owner" && session.role !== "admin") {
+        const permission = await transaction.queryOne<PipelinePermissionRow>(
+          `
+            select can_close_deals, can_edit_deals, can_move_deals, can_reopen_deals
+            from project_pipeline_permissions
+            where workspace_id = $1 and project_id = $2 and user_id = $3
+          `,
+          [session.workspaceId, unit.project_id, session.userId],
+        );
+        const closing = Boolean(targetStage && isTerminalDealStage(targetStage.name));
+        const reopening = Boolean(targetStage && isTerminalDealStage(lockedDeal.stage) && !isTerminalDealStage(targetStage.name));
+        const allowed = permission?.can_edit_deals && (reopening
+          ? permission.can_reopen_deals
+          : closing
+            ? permission.can_close_deals
+            : permission.can_move_deals);
+        if (!allowed && lockedDeal.owner_user_id !== session.userId) {
+          throw new ReservationWorkflowFailure("Project pipeline permission is required.");
+        }
+      }
+
+      const expiresAt = input.action === "expire" || input.action === "convert"
+        ? toIso(existingReservation?.expires_at)
+        : normalizeFutureDate(input.expiresAt);
+      const nextAction = cleanString(input.nextAction) ?? defaultNextAction(input.action, expiresAt);
+      const milestone = normalizeContractMilestone(cleanString(input.contractMilestone) ?? existingReservation?.contract_milestone);
+      const depositCents = Number.isFinite(input.depositCents ?? Number.NaN)
+        ? Math.max(0, Math.round(input.depositCents ?? 0))
+        : toNumber(existingReservation?.deposit_cents);
+      const workflowMetadata = JSON.stringify({ reservationWorkflow: {
+        action: input.action,
+        idempotencyKey: input.idempotencyKey,
+        projectId: unit.project_id,
+        syncedAt: new Date().toISOString(),
+        userId: session.userId,
+        workspaceId: session.workspaceId,
+      } });
+
+      const reservationRow = input.action === "create"
+        ? await transaction.queryOne<ReservationRow>(
+            `
+              insert into property_reservations (
+                workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                deposit_cents, contract_milestone, next_action, metadata, idempotency_key
+              ) values ($1, $2, $3, $4, $5, 'reserved', $6, $7, $8, $9, $10::jsonb, $11)
+              returning id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                        deposit_cents, contract_milestone, next_action
+            `,
+            [session.workspaceId, unit.project_id, unit.id, contactId, dealId, expiresAt, depositCents, milestone, nextAction, workflowMetadata, input.idempotencyKey],
+          )
+        : await transaction.queryOne<ReservationRow>(
+            `
+              update property_reservations set contact_id = $4, deal_id = $5, status = $6, expires_at = $7,
+                deposit_cents = $8, contract_milestone = $9, next_action = $10,
+                metadata = coalesce(metadata, '{}'::jsonb) || $11::jsonb, updated_at = now()
+              where id = $1 and workspace_id = $2 and project_id = $3 and status in ('hold', 'reserved')
+              returning id, workspace_id, project_id, unit_id, contact_id, deal_id, status, expires_at,
+                        deposit_cents, contract_milestone, next_action
+            `,
+            [existingReservation?.id, session.workspaceId, unit.project_id, contactId, dealId,
+              input.action === "expire" ? "expired" : input.action === "convert" ? "converted" : "reserved",
+              expiresAt, depositCents, milestone, nextAction, workflowMetadata],
+          );
+      if (!reservationRow) throw new ReservationWorkflowFailure("Reservation could not be saved.", true);
+
+      const unitStatus = input.action === "expire" ? "available" : input.action === "convert" ? "sold" : "reserved";
+      const unitRow = await transaction.queryOne<UnitRow>(
+        `
+          update property_units set status = $4,
+            buyer_contact_id = case when $4 = 'available' then null else $5::uuid end,
+            deal_id = case when $4 = 'available' then null else $6::uuid end,
+            metadata = coalesce(metadata, '{}'::jsonb) || $7::jsonb, updated_at = now()
+          where id = $1 and workspace_id = $2 and project_id = $3
+          returning id, workspace_id, project_id, building_id, unit_number, floor, rooms, area_sqm,
+                    price_cents, status, buyer_contact_id, deal_id, updated_at
+        `,
+        [unit.id, session.workspaceId, unit.project_id, unitStatus, contactId, dealId, workflowMetadata],
+      );
+      if (!unitRow) throw new ReservationWorkflowFailure("Unit status could not be synchronized.", true);
+
+      let dealRow: DealSyncRow | null = null;
+      if (lockedDeal && dealId) {
+        dealRow = await transaction.queryOne<DealSyncRow>(
+          `
+            update deals set stage = coalesce($4, stage), next_action = $5,
+              probability = case when $6 = 'convert' then 100 when $6 in ('create', 'extend') then greatest(probability, 75) else probability end,
+              closed_at = case when $6 = 'convert' then now() when $4 is not null and $4 not in ('Gewonnen', 'Verloren', 'Disqualifiziert') then null else closed_at end,
+              updated_at = now()
+            where id = $1 and workspace_id = $2 and project_id = $3
+            returning id, project_id, stage, next_action, probability, closed_at
+          `,
+          [dealId, session.workspaceId, unit.project_id, targetStage?.name ?? null, nextAction, input.action],
+        );
+        if (!dealRow) throw new ReservationWorkflowFailure("Deal could not be synchronized.", true);
+        if (targetStage && lockedDeal.stage !== targetStage.name) {
+          await transaction.queryOne<{ id: string }>(
+            `
+              insert into deal_stage_history (workspace_id, project_id, deal_id, from_stage, to_stage, changed_by_user_id, reason, reason_category, metadata)
+              values ($1, $2, $3, $4, $5, $6, 'Reservation workflow', $7, $8::jsonb) returning id
+            `,
+            [session.workspaceId, unit.project_id, dealId, lockedDeal.stage, targetStage.name, session.userId,
+              input.action === "convert" ? "won" : null, workflowMetadata],
+          );
+        }
+      }
+
+      const reservation = toReservation(reservationRow);
+      const updatedUnit = toUnit(unitRow, reservation.id);
+      const dealStageWarning = dealId && !targetStage
+        ? buildDealStageWarning(input.action, unit.project_id, { candidates: stageCandidates, ok: false, reason: "Reservation deal stage is not configured for this project pipeline." })
+        : undefined;
+      const taskRow = input.createTask
+        ? await transaction.queryOne<{
+            contactId: string | null; due: Date | string | null; id: string; ownerUserId: string | null;
+            priority: Task["priority"]; project: string | null; projectId: string | null; status: Task["status"]; title: string; workspaceId: string;
+          }>(
+            `
+              insert into tasks (workspace_id, project_id, contact_id, owner_user_id, title, due_at, priority, status, metadata)
+              values ($1, $2, $3, $4, $5, $6, $7, 'open', $8::jsonb)
+              returning id, workspace_id as "workspaceId", project_id as "projectId", contact_id as "contactId",
+                owner_user_id as "ownerUserId", title, due_at as due, priority, status,
+                (select name from projects where id = tasks.project_id) as project
+            `,
+            [session.workspaceId, unit.project_id, contactId, session.userId,
+              `${input.action === "expire" ? "Reservierung nachfassen" : input.action === "convert" ? "Reservierung konvertieren" : "Reservierungsfrist prüfen"}: Einheit ${unitRow.unit_number} - ${nextAction}`,
+              taskDueDate(expiresAt, input.action),
+              new Date(expiresAt).getTime() - Date.now() <= 3 * 24 * 60 * 60 * 1000 ? "Hoch" : "Normal",
+              workflowMetadata],
+          )
+        : null;
+      const task: Task | undefined = taskRow ? {
+        contactId: taskRow.contactId ?? undefined,
+        due: toIso(taskRow.due),
+        id: taskRow.id,
+        ownerUserId: taskRow.ownerUserId ?? undefined,
+        priority: taskRow.priority,
+        project: taskRow.project ?? "",
+        projectId: taskRow.projectId ?? "",
+        status: taskRow.status,
+        title: taskRow.title,
+        workspaceId: taskRow.workspaceId,
+      } : undefined;
+
+      let teamsNotification: PreparedTeamsNotification | undefined;
+      if (input.notifyTeams) {
+        const prepared = buildTeamsNotification(session, reservation, updatedUnit, input.action);
+        const target = await transaction.queryOne<{ id: string }>(
+          `
+            select id from teams_notification_targets
+            where workspace_id = $1 and enabled = true and 'reservation_workflow' = any(alert_types)
+              and (project_id = $2 or project_id is null)
+            order by (project_id = $2) desc, created_at asc limit 1
+          `,
+          [session.workspaceId, unit.project_id],
+        );
+        const targetMissing = !target;
+        const notificationJob = await transaction.queryOne<{ id: string; status: string }>(
+          `
+            insert into teams_notification_jobs (
+              workspace_id, project_id, target_id, alert_type, severity, status, entity_type, entity_id,
+              contact_id, deal_id, owner_user_id, title, summary, message, facts, payload, error, idempotency_key
+            ) values ($1, $2, $3, 'reservation_workflow', $4, $5, 'property_reservation', $6, $7, $8, $9, $10, $11, $11, $12::jsonb, $13::jsonb, $14, $15)
+            on conflict (workspace_id, idempotency_key) do update set updated_at = now()
+            returning id, status
+          `,
+          [session.workspaceId, unit.project_id, target?.id ?? null, input.action === "expire" ? "critical" : input.action === "convert" ? "info" : "warning",
+            targetMissing ? "pending_config" : "queued", reservation.id, contactId, dealId, session.userId, prepared.title, prepared.body,
+            JSON.stringify([{ name: "Einheit", value: updatedUnit.unitNumber }, { name: "Status", value: reservation.status }]),
+            JSON.stringify({ action: input.action, reservationId: reservation.id, unitId: updatedUnit.id }),
+            targetMissing ? "No Teams notification target configured for this workspace or project" : null,
+            `reservation_workflow:${reservation.id}:${input.action}`],
+        );
+        teamsNotification = { ...prepared, jobId: notificationJob?.id ?? null, queued: notificationJob?.status === "queued", status: notificationJob?.status ?? null };
+      }
+
+      const auditAfter = JSON.stringify({ deal: dealRow ? toDeal(dealRow) : null, dealStageWarning, reservation, taskId: task?.id ?? null, teamsNotification, unit: updatedUnit });
+      await transaction.queryOne<{ id: string }>(
+        `insert into audit_logs (workspace_id, project_id, deal_id, actor_user_id, action, entity_type, entity_id, before, after)
+         values ($1, $2, $3, $4, $5, 'property_reservation', $6, $7::jsonb, $8::jsonb) returning id`,
+        [session.workspaceId, unit.project_id, dealId, session.userId, `reservation.${input.action}`, reservation.id,
+          JSON.stringify(existingReservation ? toReservation(existingReservation) : null), auditAfter],
+      );
+      await transaction.queryOne<{ id: string }>(
+        `insert into audit_logs (workspace_id, project_id, deal_id, actor_user_id, action, entity_type, entity_id, before, after)
+         values ($1, $2, $3, $4, 'reservation.unit_status_synced', 'property_unit', $5, $6::jsonb, $7::jsonb) returning id`,
+        [session.workspaceId, unit.project_id, dealId, session.userId, updatedUnit.id, JSON.stringify(toUnit(unit, existingReservation?.id)), JSON.stringify(updatedUnit)],
+      );
+      await transaction.queryOne<{ id: string }>(
+        `
+          insert into analytics_events (workspace_id, project_id, entity_id, entity_type, user_id, contact_id, deal_id,
+            event_type, module, source, channel, value_cents, metadata)
+          values ($1, $2, $3, 'property_reservation', $4, $5, $6, $7, 'pipeline', 'unit_board', 'unit_board', $8, $9::jsonb)
+          returning id
+        `,
+        [session.workspaceId, unit.project_id, reservation.id, session.userId, contactId, dealId,
+          `reservation_${input.action}`, updatedUnit.priceCents,
+          JSON.stringify({ action: input.action, idempotencyKey: input.idempotencyKey, reservationStatus: reservation.status, taskId: task?.id ?? null, teamsJobId: teamsNotification?.jobId ?? null, unitId: updatedUnit.id, unitStatus: updatedUnit.status })],
+      );
+      await transaction.queryOne<{ id: string }>(
+        `update reservation_workflow_requests set reservation_id = $3, completed_at = now() where workspace_id = $1 and idempotency_key = $2 returning id`,
+        [session.workspaceId, input.idempotencyKey, reservation.id],
+      );
+
+      return {
+        deal: dealRow ? toDeal(dealRow) : undefined,
+        dealStageWarning,
+        persisted: true,
+        reservation,
+        task,
+        teamsNotification,
+        unit: updatedUnit,
+      };
+    });
+  } catch (error) {
+    if (error instanceof ReservationWorkflowFailure) {
+      return { persisted: false, reason: error.message, reasonCode: error.conflict ? "conflict" : undefined };
+    }
+    if (typeof error === "object" && error && "code" in error && error.code === "23505") {
+      return { persisted: false, reason: "Unit already has an active reservation.", reasonCode: "conflict" };
+    }
+    return { persisted: false, reason: error instanceof Error ? error.message : "Reservation transaction failed." };
+  }
+}
+
+export async function mutateUnitReservationLegacy({
   session,
   input,
 }: {

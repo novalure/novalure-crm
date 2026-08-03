@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { FormRuntimeClient } from "@/components/form-runtime-client";
 import { getPublicWebsiteForm } from "@/lib/db/form-repositories";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
@@ -36,11 +37,12 @@ export async function generatePublicFormMetadata({
     requestedLanguage: query.lang,
   });
   const copy = getFormCommandCenterCopy(language);
-  const persisted = await getPublicWebsiteForm({ slug, workspacePublicKey }).catch(() => null);
+  const persisted = await getPublicWebsiteForm({ slug, workspacePublicKey });
   const title = persisted?.form.name || copy.publicPage.unavailableTitle;
 
   return {
     description: copy.publicPage.metadataDescription,
+    robots: { follow: false, index: false },
     title: `${title} | Novalure`,
   };
 }
@@ -61,7 +63,8 @@ export async function renderPublicFormPage({
     requestedLanguage: query.lang,
   });
   const copy = getFormCommandCenterCopy(language);
-  const persisted = await getPublicWebsiteForm({ slug, workspacePublicKey }).catch(() => null);
+  const persisted = await getPublicWebsiteForm({ slug, workspacePublicKey });
+  if (!persisted?.form) notFound();
   const form = persisted?.form ?? null;
   const title = form?.name || titleFromFormSlug(slug) || copy.publicPage.unavailableTitle;
   const returnTo = persisted?.publicPath ?? `/forms/${workspacePublicKey}/${slug}`;

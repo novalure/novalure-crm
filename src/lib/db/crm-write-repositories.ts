@@ -23,7 +23,7 @@ import {
 } from "@/lib/contact-access";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { syncBrokerEntityForLead } from "@/lib/db/broker-entity-repositories";
-import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasDatabaseUrl, queryOne, queryRows, withTransaction } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { queueDealStageChangeGoogleNotification } from "@/lib/db/google-notification-repositories";
@@ -2508,6 +2508,127 @@ export async function archiveContactRecord(input: {
   ]);
 
   return { data: { id: row.id }, persisted: true };
+}
+
+export async function listArchivedContactRecords(input: {
+  page?: number;
+  pageSize?: number;
+  session: AppSession;
+}) {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false as const, reason: "DATABASE_URL is not configured" };
+  }
+  if (!canArchiveCrmObject(input.session, "contact")) {
+    return { persisted: false as const, reason: "Contact archive requires workspace admin permission" };
+  }
+  const page = Math.max(1, Math.round(input.page || 1));
+  const pageSize = Math.max(1, Math.min(100, Math.round(input.pageSize || 25)));
+  const [rows, count] = await Promise.all([
+    queryRows<ContactRow>(
+      `${contactSelectSql}
+       where c.workspace_id = $1 and c.archived_at is not null
+       order by c.archived_at desc, c.id desc
+       limit $2 offset $3`,
+      [input.session.workspaceId, pageSize, (page - 1) * pageSize],
+    ),
+    queryOne<{ count: number | string }>(
+      "select count(*)::int as count from contacts where workspace_id = $1 and archived_at is not null",
+      [input.session.workspaceId],
+    ),
+  ]);
+  return {
+    data: {
+      contacts: rows.map(toContact),
+      page,
+      pageSize,
+      total: Number(count?.count ?? 0),
+    },
+    persisted: true as const,
+  };
+}
+
+export async function restoreContactRecord(input: {
+  contactId: string;
+  session: AppSession;
+}): Promise<RepositoryWriteResult<Contact>> {
+  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+    return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+  if (!isUuid(input.contactId)) return { persisted: false, reason: "Contact id is required" };
+  if (!canArchiveCrmObject(input.session, "contact")) {
+    return { persisted: false, reason: "Contact restore requires workspace admin permission" };
+  }
+
+  try {
+    return await withTransaction(async (transaction) => {
+      const existing = await transaction.queryOne<ContactRow>(
+        `${contactSelectSql}
+         where c.id = $1 and c.workspace_id = $2 and c.archived_at is not null
+         for update of c`,
+        [input.contactId, input.session.workspaceId],
+      );
+      if (!existing) {
+        const active = await transaction.queryOne<{ id: string }>(
+          "select id from contacts where id = $1 and workspace_id = $2 and archived_at is null",
+          [input.contactId, input.session.workspaceId],
+        );
+        return active
+          ? { persisted: false as const, reason: "Contact is already active" }
+          : { persisted: false as const, reason: "Archived contact not found" };
+      }
+
+      if (existing.email) {
+        const duplicate = await transaction.queryOne<{ id: string }>(
+          `
+            select id from contacts
+            where workspace_id = $1 and id <> $2 and archived_at is null and lower(email) = lower($3)
+            for update
+          `,
+          [input.session.workspaceId, existing.id, existing.email],
+        );
+        if (duplicate) return { persisted: false as const, reason: "An active contact with this email already exists" };
+      }
+
+      const restored = await transaction.queryOne<ContactRow>(
+        `
+          update contacts set archived_at = null, archived_by_user_id = null,
+            metadata = (metadata - 'archivedByUserId' - 'archivedFrom') || $3::jsonb, updated_at = now()
+          where id = $1 and workspace_id = $2 and archived_at is not null
+          returning id, workspace_id as "workspaceId", project_id as "projectId",
+            organization_id as "organizationId", owner_user_id as "ownerUserId", name, role, source,
+            intent, consent_label as consent, email, phone,
+            (select name from projects p where p.id = contacts.project_id) as project
+        `,
+        [existing.id, input.session.workspaceId, JSON.stringify({ restoredByUserId: input.session.userId, restoredFrom: "crm_contacts" })],
+      );
+      if (!restored) return { persisted: false as const, reason: "Contact could not be restored" };
+      const contact = toContact(restored);
+      await transaction.queryOne<{ id: string }>(
+        `
+          insert into audit_logs (workspace_id, project_id, actor_user_id, action, entity_type, entity_id, before, after)
+          values ($1, $2, $3, 'contact.restored', 'contact', $4, $5::jsonb, $6::jsonb) returning id
+        `,
+        [input.session.workspaceId, restored.projectId, isUuid(input.session.userId) ? input.session.userId : null,
+          restored.id, JSON.stringify({ archived: true }), JSON.stringify(contact)],
+      );
+      await transaction.queryOne<{ id: string }>(
+        `
+          insert into analytics_events (workspace_id, project_id, contact_id, entity_id, entity_type, user_id,
+            event_type, module, source, metadata)
+          values ($1, $2, $3, $3, 'contact', $4, 'contact_restored', 'contact', $5, $6::jsonb) returning id
+        `,
+        [input.session.workspaceId, restored.projectId, restored.id,
+          isUuid(input.session.userId) ? input.session.userId : null, restored.source,
+          JSON.stringify({ restored: true, source: restored.source })],
+      );
+      return { data: contact, persisted: true as const };
+    });
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && error.code === "23505") {
+      return { persisted: false, reason: "An active contact with this email already exists" };
+    }
+    return { persisted: false, reason: error instanceof Error ? error.message : "Contact restore failed" };
+  }
 }
 
 export async function upsertFunnelDraft(input: {

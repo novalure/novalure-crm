@@ -8,6 +8,7 @@ import { inviteWorkspaceUser, updateWorkspaceUserAccess } from "@/lib/db/custome
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { authorizeWorkspaceAccessOperation } from "@/lib/auth/access-policy";
 
 export const customerAssignableSettingsProductRoles: ProductRole[] = [
   "customer_owner",
@@ -184,6 +185,12 @@ export async function resendWorkspaceInvitation(input: {
   if (!user || user.status !== "invited") {
     return { ok: false as const, reason: "Only invited users can receive another invitation", status: 400 };
   }
+  const authorization = authorizeWorkspaceAccessOperation({
+    actor: input.session,
+    operation: "resend_invitation",
+    target: user,
+  });
+  if (!authorization.ok) return { ok: false as const, reason: authorization.reason, status: authorization.status };
 
   return inviteSettingsWorkspaceUser({
     email: user.email,
@@ -221,6 +228,12 @@ export async function triggerWorkspacePasswordReset(input: {
   if (!user || user.status === "suspended") {
     return { ok: false as const, reason: "Only active or invited users can reset their password", status: 400 };
   }
+  const authorization = authorizeWorkspaceAccessOperation({
+    actor: input.session,
+    operation: "password_reset",
+    target: user,
+  });
+  if (!authorization.ok) return { ok: false as const, reason: authorization.reason, status: authorization.status };
 
   const token = randomBytes(32).toString("base64url");
   const resetUrl = new URL("/login/reset-password", getTrustedAppOrigin());
@@ -286,7 +299,6 @@ export async function triggerWorkspacePasswordReset(input: {
       deliveryConfigured: provider.configured,
       deliveryProvider: delivery.provider,
       deliveryStatus: delivery.status,
-      setupUrl: resetUrl.toString(),
       user: toWorkspaceUser(user),
     },
     ok: true as const,
@@ -332,7 +344,7 @@ export async function changeOwnWorkspacePassword(input: {
   await executeQuery(
     `
       update workspace_users
-      set password_hash = $3, updated_at = now()
+      set password_hash = $3, session_version = session_version + 1, updated_at = now()
       where id = $1
         and workspace_id = $2
     `,

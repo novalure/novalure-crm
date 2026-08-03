@@ -9,14 +9,9 @@ import {
 import type { LanguageCode } from "@/lib/i18n";
 import { companyLegalDetails } from "@/lib/legal";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import { buildLegalPageMetadata } from "@/lib/legal-metadata";
 
-export const metadata: Metadata = {
-  title: "Cookie Notice | Novalure CRM",
-  description:
-    "Cookie and tracking technology notice for Novalure CRM under Irish ePrivacy and EU data protection rules.",
-};
-
-const updated = "20 May 2026";
+const updated = { de: "20. Mai 2026", en: "20 May 2026" } as const;
 const pagePath = "/cookies";
 
 type CookieNoticePageProps = {
@@ -130,6 +125,10 @@ const germanSections = [
   },
 ];
 
+export async function generateMetadata({ searchParams }: CookieNoticePageProps): Promise<Metadata> {
+  return buildLegalPageMetadata({ copy: pageCopy, path: pagePath, searchParams });
+}
+
 export default async function CookieNoticePage({ searchParams }: CookieNoticePageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
@@ -146,7 +145,7 @@ export default async function CookieNoticePage({ searchParams }: CookieNoticePag
       path={pagePath}
       title={page.title}
       subtitle={page.subtitle}
-      updated={updated}
+      updated={updated[language]}
     >
       <LanguageBlock eyebrow={language === "de" ? "Deutsch" : "English"} title={page.blockTitle}>
         <LegalSections sections={language === "de" ? germanSections : englishSections} />

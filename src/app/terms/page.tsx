@@ -3,13 +3,9 @@ import { headers } from "next/headers";
 import { LanguageBlock, LegalPage, LegalSections } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import { buildLegalPageMetadata } from "@/lib/legal-metadata";
 
-export const metadata: Metadata = {
-  title: "Terms of Service | Novalure CRM",
-  description: "Terms of Service for Novalure CRM.",
-};
-
-const updated = "20 May 2026";
+const updated = { de: "20. Mai 2026", en: "20 May 2026" } as const;
 const pagePath = "/terms";
 
 type TermsPageProps = {
@@ -193,6 +189,10 @@ const germanSections = [
   },
 ];
 
+export async function generateMetadata({ searchParams }: TermsPageProps): Promise<Metadata> {
+  return buildLegalPageMetadata({ copy: pageCopy, path: pagePath, searchParams });
+}
+
 export default async function TermsPage({ searchParams }: TermsPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
@@ -209,7 +209,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
       path={pagePath}
       title={page.title}
       subtitle={page.subtitle}
-      updated={updated}
+      updated={updated[language]}
     >
       <LanguageBlock eyebrow={language === "de" ? "Deutsch" : "English"} title={page.blockTitle}>
         <LegalSections sections={language === "de" ? germanSections : englishSections} />

@@ -662,7 +662,7 @@ export function UnitBoard({
           reservationId: workflowDraft.reservationId || selectedView.reservation?.id || null,
           unitId: workflowDraft.unitId,
         }),
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
         method: "POST",
       });
       const data = await response.json().catch(() => ({ error: text.workflowFailed }));
