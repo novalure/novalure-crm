@@ -1,0 +1,276 @@
+.page {
+  --nl-bg: #faf9f7;
+  --nl-surface: #ffffff;
+  --nl-surface-soft: #f3f0ea;
+  --nl-ink: #33302b;
+  --nl-muted: #6f6a63;
+  --nl-tertiary: #8a837a;
+  --nl-blue: #2d68f0;
+  --nl-blue-dark: #1e4fc2;
+  --nl-blue-tint: #e9f0fe;
+  --nl-amber-tint: #fbf1df;
+  --nl-divider: #ede9e2;
+  --nl-border: #e3ded5;
+  --nl-edge: clamp(20px, 5vw, 64px);
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  background: var(--nl-bg);
+  color: var(--nl-ink);
+  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: clip;
+  text-wrap: pretty;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+.page a {
+  color: inherit;
+  overflow-wrap: normal;
+  text-decoration: none;
+}
+
+.page :focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--nl-blue);
+  outline-offset: 3px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--nl-divider);
+  background: rgb(250 249 247 / 92%);
+  backdrop-filter: blur(10px);
+}
+
+.headerInner,
+.main,
+.footerInner {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-inline: var(--nl-edge);
+}
+
+.headerInner {
+  display: flex;
+  min-height: 66px;
+  align-items: center;
+  gap: 26px;
+  padding-block: 10px;
+}
+
+.brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+  margin-right: auto;
+}
+
+.wordmark {
+  color: var(--nl-ink);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.wordmark span,
+.footer strong span {
+  color: var(--nl-blue);
+}
+
+.crmBadge {
+  border-radius: 999px;
+  background: var(--nl-blue-tint);
+  color: var(--nl-blue-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+}
+
+.desktopNav,
+.headerActions,
+.languageSwitch {
+  display: flex;
+  align-items: center;
+}
+
+.desktopNav {
+  gap: 24px;
+  white-space: nowrap;
+}
+
+.desktopNav a {
+  color: var(--nl-ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.headerActions {
+  gap: 15px;
+}
+
+.languageSwitch {
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.languageSwitch span {
+  font-weight: 700;
+}
+
+.languageSwitch a,
+.languageSwitch i {
+  color: var(--nl-muted);
+  font-style: normal;
+  font-weight: 500;
+}
+
+.headerButton {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--nl-blue);
+  color: #fff !important;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 18px;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.headerButton:hover {
+  background: var(--nl-blue-dark);
+  transform: translateY(-1px);
+}
+
+.desktopNav a:hover,
+.languageSwitch a:hover,
+.footer a:hover {
+  color: var(--nl-blue-dark);
+}
+
+.main {
+  flex: 1;
+}
+
+.footer {
+  margin-top: 72px;
+  border-top: 1px solid var(--nl-divider);
+  background: var(--nl-bg);
+  color: var(--nl-tertiary);
+  font-size: 13.5px;
+  line-height: 1.8;
+  padding: 36px 0 46px;
+}
+
+.footerInner {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px 40px;
+}
+
+.footerInner p {
+  margin: 0;
+}
+
+.footer strong {
+  color: var(--nl-ink);
+  font-weight: 700;
+}
+
+.footerInner > div > a {
+  display: inline-block;
+  margin-top: 3px;
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 18px;
+}
+
+@media (max-width: 880px) {
+  .desktopNav {
+    display: none;
+  }
+
+  .footerInner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .footer nav {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .headerInner {
+    gap: 10px;
+  }
+
+  .brand {
+    gap: 7px;
+  }
+
+  .wordmark {
+    font-size: 18px;
+  }
+
+  .crmBadge {
+    display: none;
+  }
+
+  .headerActions {
+    gap: 8px;
+  }
+
+  .languageSwitch {
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .headerButton {
+    min-height: 40px;
+    font-size: 12.5px;
+    padding-inline: 13px;
+  }
+
+  .footer nav {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 18px;
+  }
+}
+
+@media (max-width: 360px) {
+  .headerButton {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page *,
+  .page *::before,
+  .page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

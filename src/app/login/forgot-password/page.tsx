@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import subpageStyles from "@/components/public-subpage.module.css";
+import { PublicSiteShell } from "@/components/public-site-shell";
 import { getSessionFromHeaders } from "@/lib/auth/session";
-import { getLoginPageCopy, getPublicPageCopy } from "@/lib/i18n";
+import { getLoginPageCopy } from "@/lib/i18n";
 import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
 
 type ForgotPasswordPageProps = {
@@ -28,8 +30,9 @@ function getRequestCountry(requestHeaders: Headers) {
   );
 }
 
-function getForgotLanguageHref(language: "de" | "en") {
+function getForgotLanguageHref(language: "de" | "en", sent = false) {
   const params = new URLSearchParams({ lang: language });
+  if (sent) params.set("sent", "1");
   return `/login/forgot-password?${params.toString()}`;
 }
 
@@ -46,69 +49,54 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
     requestedLanguage: query.lang,
   });
   const login = getLoginPageCopy(language);
-  const page = getPublicPageCopy(language);
   const reset = login.passwordReset;
   const sent = getQueryValue(query.sent) === "1";
+  const intro = language === "de"
+    ? {
+        body: "Fordern Sie einen einmaligen Link an. Aus Sicherheitsgründen wird unabhängig vom Kontostatus dieselbe Bestätigung angezeigt.",
+        eyebrow: "Sicherer Kontozugang",
+        title: "Zugang wiederherstellen.",
+      }
+    : {
+        body: "Request a single-use link. For security, the same confirmation is shown regardless of the account status.",
+        eyebrow: "Secure account access",
+        title: "Restore your access.",
+      };
 
   return (
-    <main className="min-h-dvh bg-[#f7fbff] px-4 py-10 text-[#071421]" lang={language}>
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-        <header className="flex items-center justify-between gap-4">
-          <Link className="text-base font-semibold text-[#071421]" href={withPublicLanguage("/login", language)}>
-            {login.brand}
-          </Link>
-          <nav aria-label={page.languageAriaLabel} className="flex items-center gap-1">
-            <Link
-              aria-current={language === "de" ? "page" : undefined}
-              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
-                language === "de"
-                  ? "border-[#071421] bg-white text-[#071421]"
-                  : "border-[#d4e1ee] bg-transparent text-[#476178]"
-              }`}
-              href={getForgotLanguageHref("de")}
-            >
-              {page.switchToGerman}
-            </Link>
-            <Link
-              aria-current={language === "en" ? "page" : undefined}
-              className={`inline-flex min-h-11 items-center rounded-md border px-3 py-2 text-xs font-semibold ${
-                language === "en"
-                  ? "border-[#071421] bg-white text-[#071421]"
-                  : "border-[#d4e1ee] bg-transparent text-[#476178]"
-              }`}
-              href={getForgotLanguageHref("en")}
-            >
-              {page.switchToEnglish}
-            </Link>
-          </nav>
-        </header>
+    <PublicSiteShell
+      currentPath="/login/forgot-password"
+      language={language}
+      languageHrefs={{ de: getForgotLanguageHref("de", sent), en: getForgotLanguageHref("en", sent) }}
+    >
+      <div className={subpageStyles.authLayout}>
+        <section className={subpageStyles.authIntro}>
+          <p className={subpageStyles.eyebrow}>{intro.eyebrow}</p>
+          <h1>{intro.title}</h1>
+          <p>{intro.body}</p>
+        </section>
 
-        <section
-          aria-labelledby="forgot-password-heading"
-          className="rounded-lg border border-[#c8d8e8] bg-white/[0.94] p-5 shadow-lg md:p-6"
-        >
-          <h1 className="text-2xl font-semibold text-[#071421]" id="forgot-password-heading">
-            {reset.requestTitle}
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-[#476178]">{reset.requestDescription}</p>
+        <section aria-labelledby="forgot-password-heading" className={subpageStyles.authCard}>
+          <h2 id="forgot-password-heading">{reset.requestTitle}</h2>
+          <p>{reset.requestDescription}</p>
 
           {sent ? (
             <p
               aria-live="polite"
-              className="mt-5 rounded-md border border-[#9ed7bf] bg-[#edfff6] px-3 py-2 text-sm font-semibold leading-6 text-[#0f5132]"
+              className={subpageStyles.noticeSuccess}
               role="status"
             >
               {reset.requestSuccess}
             </p>
           ) : null}
 
-          <form action="/api/auth/password-reset/request" className="mt-6 grid gap-4" method="post">
+          <form action="/api/auth/password-reset/request" className={subpageStyles.form} method="post">
             <input name="lang" type="hidden" value={language} />
-            <label className="grid gap-2 text-sm font-semibold text-[#24384d]">
+            <label className={subpageStyles.field}>
               {reset.emailLabel}
               <input
                 autoComplete="email"
-                className="min-h-11 rounded-md border border-[#b8c7d8] bg-white px-3 py-2 text-sm font-normal text-[#071421] outline-none focus:border-[#071421] focus:ring-2 focus:ring-[#b8d8ff]"
+                className={subpageStyles.input}
                 name="email"
                 placeholder={login.placeholderEmail}
                 required
@@ -116,22 +104,22 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
               />
             </label>
             <button
-              className="min-h-11 rounded-md border border-[#071421] bg-[#071421] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#173c64]"
+              className={subpageStyles.submitButton}
               type="submit"
             >
               {reset.requestSubmit}
             </button>
           </form>
 
-          <p className="mt-4 text-sm leading-6 text-[#476178]">{reset.requestHelp}</p>
+          <p className={subpageStyles.authHelp}>{reset.requestHelp}</p>
           <Link
-            className="mt-5 inline-flex text-sm font-semibold text-[#071421] underline-offset-4 hover:underline"
+            className={subpageStyles.textLink}
             href={withPublicLanguage("/login", language)}
           >
             {reset.backToLogin}
           </Link>
         </section>
       </div>
-    </main>
+    </PublicSiteShell>
   );
 }

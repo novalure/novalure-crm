@@ -143,3 +143,28 @@ test("public landing uses anonymized CRM proof and real privacy content instead 
   assert.doesNotMatch(landing, /href="#"/);
   assert.doesNotMatch(landing, /proofPlaceholders/);
 });
+
+test("public website subpages share the landing page design system", () => {
+  const shell = readText("src/components/public-site-shell.tsx");
+  const shellStyles = readText("src/components/public-site-shell.module.css");
+  const legalPage = readText("src/components/legal-page.tsx");
+
+  assert.match(shell, /Novalure<span>\.<\/span>/);
+  assert.match(shell, /publicLegalLinks\.map/);
+  assert.match(shellStyles, /--nl-bg: #faf9f7/);
+  assert.match(shellStyles, /--nl-blue: #2d68f0/);
+  assert.match(legalPage, /<PublicSiteShell currentPath=\{path\} language=\{language\}>/);
+
+  for (const route of [
+    "src/app/login/page.tsx",
+    "src/app/login/forgot-password/page.tsx",
+    "src/app/login/reset-password/page.tsx",
+    "src/app/unsubscribe/page.tsx",
+    "src/app/not-found.tsx",
+  ]) {
+    assert.match(readText(route), /<PublicSiteShell/);
+  }
+
+  assert.match(readText("src/app/not-found.tsx"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
+  assert.match(readText("src/app/unsubscribe/page.tsx"), /getUnsubscribeLanguageHref/);
+});

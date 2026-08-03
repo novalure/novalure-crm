@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
+import subpageStyles from "@/components/public-subpage.module.css";
+import { PublicSiteShell } from "@/components/public-site-shell";
+import { languageRequestHeaderName } from "@/lib/i18n";
+import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
 
 export const metadata: Metadata = {
   robots: { follow: false, index: false },
@@ -9,19 +13,30 @@ export const metadata: Metadata = {
 
 export default async function NotFound() {
   const requestHeaders = await headers();
-  const isGerman = requestHeaders.get("accept-language")?.toLowerCase().startsWith("de") ?? false;
+  const language = resolvePublicLanguage({
+    acceptLanguage: requestHeaders.get("accept-language"),
+    country: requestHeaders.get("x-vercel-ip-country"),
+    persistedLanguage: requestHeaders.get(languageRequestHeaderName),
+  });
+  const isGerman = language === "de";
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#f7fbff] px-6 text-[#071421]" lang={isGerman ? "de" : "en"}>
-      <section className="max-w-xl rounded-xl border border-[#c8d8e8] bg-white p-8 text-center shadow-lg">
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#2563eb]">404</p>
-        <h1 className="mt-3 text-3xl font-semibold">{isGerman ? "Seite nicht gefunden" : "Page not found"}</h1>
-        <p className="mt-4 text-[#476178]">
+    <PublicSiteShell
+      currentPath="/"
+      language={language}
+      languageHrefs={{ de: withPublicLanguage("/", "de"), en: withPublicLanguage("/", "en") }}
+    >
+      <section className={subpageStyles.statusWrap}>
+        <div className={subpageStyles.statusCard}>
+        <p className={subpageStyles.eyebrow}>404</p>
+        <h1>{isGerman ? "Seite nicht gefunden" : "Page not found"}</h1>
+        <p>
           {isGerman ? "Die angeforderte Seite existiert nicht oder ist nicht mehr verfügbar." : "The requested page does not exist or is no longer available."}
         </p>
-        <Link className="mt-6 inline-flex rounded-md bg-[#071421] px-4 py-3 font-semibold text-white" href={isGerman ? "/?lang=de" : "/?lang=en"}>
+        <Link className={subpageStyles.secondaryButton} href={withPublicLanguage("/", language)}>
           {isGerman ? "Zur Startseite" : "Back to home"}
         </Link>
+        </div>
       </section>
-    </main>
+    </PublicSiteShell>
   );
 }
