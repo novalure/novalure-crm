@@ -1,8 +1,10 @@
-import Image from "next/image";
+import type { CSSProperties, ReactNode } from "react";
+import localFont from "next/font/local";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { CookieConsentButton } from "@/components/cookie-consent-button";
 import { PublicHashRouteLoginRedirect } from "@/components/public-hash-route-login-redirect";
+import { PublicCrmMobileMenu } from "@/components/public-crm-mobile-menu";
+import styles from "@/components/public-crm-landing.module.css";
 import {
   getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
@@ -10,294 +12,212 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { companyLegalDetails, publicLegalLinks } from "@/lib/legal";
+import { getPublicCrmLandingV2Copy } from "@/lib/public-crm-landing-v2";
 import { withPublicLanguage } from "@/lib/public-language";
 
-type LandingCopy = ReturnType<typeof getCrmLandingPageCopy>;
+type LegacyLandingCopy = ReturnType<typeof getCrmLandingPageCopy>;
 type LegalCopy = ReturnType<typeof getLoginLegalFooterCopy>;
 type PublicCopy = ReturnType<typeof getPublicPageCopy>;
-type VisualCopy = LandingCopy["visuals"][keyof LandingCopy["visuals"]];
 
-const landingAssetPaths = {
-  auditReviewLoop: "/landing-assets/audit-to-system.html",
-  auditToSystem: "/landing-assets/lead-ops-process-visual-2400x1200.mp4",
-  companySystemSplit: "/landing-assets/company-system-split.png",
-  heroOperatingLayer: "/landing-assets/hero-operating-layer.mp4",
-  leadLeakage: "/landing-assets/lead-leakage.mp4",
-  lockedCrmPreview: "/landing-assets/locked-crm-preview.mp4",
-} as const;
+const figtree = localFont({
+  display: "swap",
+  fallback: ["system-ui", "sans-serif"],
+  src: "../app/fonts/figtree-latin.woff2",
+  style: "normal",
+  variable: "--font-figtree",
+  weight: "400 800",
+});
 
 type PublicCrmLandingProps = {
   auditHref: string;
   basePath: "/" | "/login";
-  copy: LandingCopy;
+  copy: LegacyLandingCopy;
   language: LanguageCode;
   legalCopy: LegalCopy;
   pageCopy: PublicCopy;
 };
 
-function getNovalureHref(language: LanguageCode) {
-  return language === "de" ? "https://www.novalure.eu/de" : "https://www.novalure.eu/en";
-}
+type IconName = "calendar" | "chart" | "check" | "clock" | "document" | "key" | "lock" | "shield" | "user";
 
-function ActionLink({
-  children,
-  href,
-  variant = "primary",
-}: {
-  children: ReactNode;
-  href: string;
-  variant?: "primary" | "secondary" | "subtle" | "dark";
-}) {
-  const classes = {
-    primary:
-      "border-[#f3f1e8] bg-[#f3f1e8] text-[#050607] hover:border-white hover:bg-white focus:ring-[#f3f1e8]",
-    secondary:
-      "border-white/30 bg-white/[0.06] text-white hover:border-white/70 hover:bg-white/[0.12] focus:ring-white",
-    subtle:
-      "border-[#cdd4ce] bg-transparent text-[#111614] hover:border-[#111614] hover:bg-[#f8f7f1] focus:ring-[#111614]",
-    dark:
-      "border-[#0B0B0F] bg-[#0B0B0F] text-white hover:border-[#26342f] hover:bg-[#26342f] focus:ring-[#0B0B0F]",
+function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  const common = {
+    "aria-hidden": true,
+    fill: "none",
+    height: size,
+    viewBox: "0 0 24 24",
+    width: size,
   } as const;
 
+  if (name === "check") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.12" />
+        <path d="m8 12.2 2.5 2.5L16.5 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (name === "clock") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.12" />
+        <path d="M12 7v5h4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
+  if (name === "calendar") {
+    return (
+      <svg {...common}>
+        <path d="M4 8h16v11H4z" fill="currentColor" opacity="0.12" />
+        <path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13H4V6a1 1 0 0 1 1-1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+
+  if (name === "chart") {
+    return (
+      <svg {...common}>
+        <path d="M5 19V11h3v8m4 0V5h3v14m4 0v-6h3v6" fill="currentColor" opacity="0.16" />
+        <path d="M3 20h18M6 18v-7h4v7m2 0V4h4v14m2 0v-6h3v6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
+  if (name === "user") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="8" r="4" fill="currentColor" opacity="0.15" />
+        <path d="M5 20c.7-4.1 3.3-6.2 7-6.2s6.3 2.1 7 6.2M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+
+  if (name === "key") {
+    return (
+      <svg {...common}>
+        <circle cx="8" cy="10" r="5" fill="currentColor" opacity="0.14" />
+        <path d="M12 13.5 20 21m-3-3 2-2m-5-1 2-2M8 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+
+  if (name === "shield") {
+    return (
+      <svg {...common}>
+        <path d="M12 3 5 5.5v6.1c0 4.4 2.7 7.3 7 9.4 4.3-2.1 7-5 7-9.4V5.5L12 3Z" fill="currentColor" opacity="0.14" />
+        <path d="M12 3 5 5.5v6.1c0 4.4 2.7 7.3 7 9.4 4.3-2.1 7-5 7-9.4V5.5L12 3Zm-3 9 2 2 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+
+  if (name === "document") {
+    return (
+      <svg {...common}>
+        <path d="M6 3h8l4 4v14H6z" fill="currentColor" opacity="0.12" />
+        <path d="M14 3v5h5M8.5 13h7m-7 4h7M6 3h8l5 5v13H6V3Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+
   return (
-    <a
-      className={`inline-flex min-h-11 items-center justify-center rounded-md border px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent ${classes[variant]}`}
-      href={href}
-    >
-      {children}
-    </a>
+    <svg {...common}>
+      <rect height="11" rx="2" width="14" x="5" y="10" fill="currentColor" opacity="0.13" />
+      <path d="M8 10V8a4 4 0 0 1 8 0v2m-10 0h12a1 1 0 0 1 1 1v10H5V11a1 1 0 0 1 1-1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+    </svg>
   );
 }
 
-function SectionIntro({
-  description,
-  eyebrow,
-  inverted = false,
-  title,
+function Brand({ language }: { language: LanguageCode }) {
+  return (
+    <Link aria-label="Novalure CRM" className={styles.brand} href={withPublicLanguage("/", language)}>
+      <span className={styles.wordmark}>Novalure<span>.</span></span>
+      <span className={styles.crmBadge}>CRM</span>
+    </Link>
+  );
+}
+
+function LanguageSwitch({
+  basePath,
+  language,
+  pageCopy,
 }: {
-  description?: string;
-  eyebrow: string;
-  inverted?: boolean;
-  title: string;
+  basePath: "/" | "/login";
+  language: LanguageCode;
+  pageCopy: PublicCopy;
 }) {
   return (
-    <div className="max-w-3xl">
-      <p className={`text-sm font-semibold uppercase ${inverted ? "text-[#9fd8be]" : "text-[#277258]"}`}>
-        {eyebrow}
-      </p>
-      <h2 className={`mt-3 text-3xl font-semibold leading-tight md:text-4xl ${inverted ? "text-white" : "text-[#111614]"}`}>
-        {title}
-      </h2>
-      {description ? (
-        <p className={`mt-4 text-base leading-7 ${inverted ? "text-[#c9d4ce]" : "text-[#50645b]"}`}>
-          {description}
-        </p>
-      ) : null}
+    <nav aria-label={pageCopy.languageAriaLabel} className={styles.languageSwitch}>
+      {language === "de" ? (
+        <span aria-current="page">DE</span>
+      ) : (
+        <Link aria-label={pageCopy.switchToGerman} href={withPublicLanguage(basePath, "de")}>DE</Link>
+      )}
+      <i aria-hidden="true">/</i>
+      {language === "en" ? (
+        <span aria-current="page">EN</span>
+      ) : (
+        <Link aria-label={pageCopy.switchToEnglish} href={withPublicLanguage(basePath, "en")}>EN</Link>
+      )}
+    </nav>
+  );
+}
+
+function SectionHeading({ children, eyebrow }: { children: ReactNode; eyebrow: string }) {
+  return (
+    <div className={styles.sectionHeading}>
+      <p>{eyebrow}</p>
+      <h2>{children}</h2>
     </div>
   );
 }
 
-function VisualShell({
-  children,
-  className = "",
-  visual,
-}: {
-  children: ReactNode;
-  className?: string;
-  visual: VisualCopy;
-}) {
+function LeadCard({ content }: { content: ReturnType<typeof getPublicCrmLandingV2Copy>["leadCard"] }) {
   return (
-    <div
-      aria-label={visual.alt}
-      className={`relative w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/[0.12] bg-[#090d0c] text-white shadow-lg ${className}`}
-      data-asset-description={visual.assetDescription}
-      data-asset-id={visual.id}
-      data-gemini-prompt={visual.geminiPrompt}
-      role="img"
-    >
-      <p className="sr-only">{visual.assetDescription}</p>
-      {children}
-    </div>
-  );
-}
-
-function VideoAsset({
-  mobileSrc,
-  priority = false,
-  src,
-}: {
-  mobileSrc?: string;
-  priority?: boolean;
-  src: string;
-}) {
-  const type = src.endsWith(".webm") ? "video/webm" : "video/mp4";
-  const mobileType = mobileSrc?.endsWith(".webm") ? "video/webm" : "video/mp4";
-
-  return (
-    <video
-      aria-hidden="true"
-      autoPlay
-      className="crm-asset-media absolute inset-0 h-full w-full object-cover"
-      loop
-      muted
-      playsInline
-      preload={priority ? "metadata" : "none"}
-    >
-      {mobileSrc ? <source media="(max-width: 639px)" src={mobileSrc} type={mobileType} /> : null}
-      <source src={src} type={type} />
-    </video>
-  );
-}
-
-function ReducedMotionFallback({ visual }: { visual: VisualCopy }) {
-  return (
-    <div className="crm-reduced-media-fallback absolute inset-0 flex-col justify-end gap-4 bg-[#050607] p-5 md:p-7">
-      <div className="absolute inset-0 crm-asset-grid opacity-50" />
-      <div className="relative z-10 grid gap-3 sm:grid-cols-2">
-        {visual.labels.slice(0, 4).map((label, index) => (
-          <div className="rounded-md border border-white/[0.12] bg-white/[0.07] p-4" key={label}>
-            <span className="text-xs font-semibold text-[#9fd8be]">0{index + 1}</span>
-            <p className="mt-6 text-sm font-semibold leading-6 text-white">{label}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HeroOperatingLayer({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-[4/5] min-h-0 sm:aspect-[16/10] sm:min-h-[320px] md:min-h-[440px]" visual={visual}>
-      <VideoAsset priority src={landingAssetPaths.heroOperatingLayer} />
-      <div className="absolute inset-0 bg-[#050607]/15" />
-      <ReducedMotionFallback visual={visual} />
-    </VisualShell>
-  );
-}
-
-function CompanySystemVisual({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-[1638/960] min-h-0 sm:min-h-[280px]" visual={visual}>
-      <Image
-        alt=""
-        className="h-full w-full object-cover"
-        height={960}
-        loading="lazy"
-        sizes="(min-width: 1024px) 50vw, 100vw"
-        src={landingAssetPaths.companySystemSplit}
-        width={1638}
-      />
-    </VisualShell>
-  );
-}
-
-function LeadLeakageVisual({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-video min-h-0 sm:min-h-[280px] crm-noncritical-motion" visual={visual}>
-      <VideoAsset src={landingAssetPaths.leadLeakage} />
-      <ReducedMotionFallback visual={visual} />
-    </VisualShell>
-  );
-}
-
-function LockedCrmPreviewVisual({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-video min-h-0 sm:min-h-[300px] crm-noncritical-motion" visual={visual}>
-      <VideoAsset src={landingAssetPaths.lockedCrmPreview} />
-      <ReducedMotionFallback visual={visual} />
-    </VisualShell>
-  );
-}
-
-function AuditToSystemVisual({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-[2/1] min-h-0 sm:min-h-[220px] crm-noncritical-motion" visual={visual}>
-      <VideoAsset src={landingAssetPaths.auditToSystem} />
-      <ReducedMotionFallback visual={visual} />
-    </VisualShell>
-  );
-}
-
-function AuditReviewLoopVisual({ visual }: { visual: VisualCopy }) {
-  return (
-    <VisualShell className="aspect-[4/3] min-h-0 sm:aspect-[2/1] sm:min-h-[220px] crm-noncritical-motion" visual={visual}>
-      <iframe
-        aria-hidden="true"
-        className="h-full w-full border-0"
-        loading="lazy"
-        sandbox=""
-        scrolling="no"
-        src={landingAssetPaths.auditReviewLoop}
-        title={visual.alt}
-      />
-    </VisualShell>
-  );
-}
-
-function TrustBar({ items }: { items: readonly string[] }) {
-  return (
-    <section className="border-b border-[#d8ddd7] bg-[#eef7ff] px-4 py-4">
-      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-semibold text-[#26342f]">
-        {items.map((item, index) => (
-          <span className="inline-flex items-center gap-5" key={item}>
-            <span>{item}</span>
-            {index < items.length - 1 ? <span aria-hidden="true" className="hidden text-[#9ca7a0] sm:inline">·</span> : null}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CrmPreviewCard({ preview }: { preview: LandingCopy["preview"] }) {
-  return (
-    <div className="rounded-lg border border-white/[0.14] bg-white/[0.06] p-4 text-white shadow-2xl sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.12] pb-4">
-        <p className="text-xs font-semibold uppercase text-[#9fd8be]">{preview.example.label}</p>
-        <span className="rounded-full border border-[#9fd8be]/40 bg-[#9fd8be]/10 px-3 py-1 text-xs font-semibold text-[#d8f2e4]">
-          {preview.visibleFields[1]}
-        </span>
-      </div>
-      <div className="mt-5">
-        <h3 className="text-xl font-semibold leading-7">{preview.example.leadTitle}</h3>
-        <dl className="mt-5 grid gap-3">
-          {preview.example.rows.map(([label, value]) => (
-            <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 rounded-md border border-white/[0.12] bg-black/[0.18] px-3 py-2" key={label}>
-              <dt className="text-xs font-semibold uppercase text-[#9ca7a0]">{label}</dt>
-              <dd className="text-sm font-semibold text-[#f5f7f5]">{value}</dd>
+    <figure aria-label={content.note} className={styles.leadCardFigure}>
+      <div className={styles.reminderBadge}><Icon name="clock" size={16} />{content.reminder}</div>
+      <div className={styles.leadCard}>
+        <div className={styles.leadCardTop}>
+          <span>{content.type}</span>
+          <strong>{content.status}</strong>
+        </div>
+        <h2>{content.title}</h2>
+        <p className={styles.leadReceived}>{content.received}</p>
+        <dl className={styles.leadRows}>
+          {content.rows.map(([label, value], index) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd className={index === 3 ? styles.nextAction : undefined}>
+                {index === 3 ? <Icon name="clock" size={14} /> : null}{value}
+              </dd>
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-sm leading-6 text-[#c9d4ce]">{preview.example.note}</p>
+        <div aria-hidden="true" className={styles.progressSegments}>
+          {[0, 1, 2, 3, 4].map((segment) => <span className={segment < 3 ? styles.progressActive : undefined} key={segment} />)}
+        </div>
+        <div className={styles.progressLabels}><span>{content.firstStage}</span><span>{content.progress}</span><span>{content.lastStage}</span></div>
+        <figcaption>{content.note}</figcaption>
       </div>
-    </div>
+    </figure>
   );
 }
 
-function FieldList({ items, title }: { items: readonly string[]; title: string }) {
+function ProblemCard({ body, icon, title }: { body: string; icon: IconName; title: string }) {
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-white">{title}</h3>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {items.map((term) => (
-          <span className="rounded-md border border-white/[0.16] bg-white/[0.06] px-3 py-2 text-sm font-semibold text-[#e5ebe7]" key={term}>
-            {term}
-          </span>
-        ))}
-      </div>
-    </div>
+    <article className={styles.problemCard}>
+      <span className={styles.iconSquare}><Icon name={icon} /></span>
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </article>
   );
 }
 
 function CheckList({ items }: { items: readonly string[] }) {
   return (
-    <ul className="grid gap-3">
-      {items.map((item) => (
-        <li className="flex gap-3 text-sm font-semibold leading-6 text-[#26342f]" key={item}>
-          <span aria-hidden="true" className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#277258]" />
-          <span>{item}</span>
-        </li>
-      ))}
+    <ul className={styles.checkList}>
+      {items.map((item) => <li key={item}><Icon name="check" size={20} /><span>{item}</span></li>)}
     </ul>
   );
 }
@@ -305,354 +225,213 @@ function CheckList({ items }: { items: readonly string[] }) {
 export function PublicCrmLanding({
   auditHref,
   basePath,
-  copy,
+  copy: legacyCopy,
   language,
   legalCopy,
   pageCopy,
 }: PublicCrmLandingProps) {
-  const novalureHref = getNovalureHref(language);
+  const copy = getPublicCrmLandingV2Copy(language);
   const loginHref = withPublicLanguage("/login", language);
-  const secondaryHeroHref = "#preview";
   const cookieHref = withPublicLanguage("/cookies", language);
   const privacyHref = withPublicLanguage("/privacy", language);
+  const navItems = [
+    { href: "#preview", label: copy.nav.preview },
+    { href: "#audit", label: copy.nav.audit },
+    { href: "#faq", label: copy.nav.faq },
+  ] as const;
+  const problemIcons: readonly IconName[] = ["clock", "user", "chart", "calendar"];
+  const privacyIcons: readonly IconName[] = ["key", "shield", "document"];
 
   return (
-    <main className="min-h-dvh bg-[#f8f7f1] text-[#111614]" lang={language}>
+    <div className={`${styles.page} ${figtree.variable}`} lang={language}>
       <PublicHashRouteLoginRedirect language={language} />
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/[0.12] bg-[#050607]/[0.9] text-white backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link className="min-w-0 shrink-0 text-sm font-semibold sm:text-base" href={withPublicLanguage("/", language)}>
-            Novalure CRM
-          </Link>
-          <nav
-            aria-label="Novalure CRM"
-            className="order-3 hidden w-full items-center justify-center gap-5 pt-1 text-sm font-semibold text-[#c9d4ce] md:order-none md:flex md:w-auto md:pt-0"
-          >
-            <a className="hover:text-white" href="#company-system">
-              {copy.nav.companySystem}
-            </a>
-            <a className="hover:text-white" href="#problem">
-              {copy.nav.problem}
-            </a>
-            <a className="hover:text-white" href="#preview">
-              {copy.nav.preview}
-            </a>
-            <a className="hover:text-white" href="#audit">
-              {copy.nav.audit}
-            </a>
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <Brand language={language} />
+          <nav aria-label="Novalure CRM" className={styles.desktopNav}>
+            {navItems.map((item) => <a href={item.href} key={item.href}>{item.label}</a>)}
           </nav>
-          <div className="flex shrink-0 items-center gap-2">
-            <nav aria-label={pageCopy.languageAriaLabel} className="flex items-center gap-1">
-              <Link
-                aria-current={language === "de" ? "page" : undefined}
-                aria-label={pageCopy.switchToGerman}
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
-                  language === "de"
-                    ? "border-white bg-white text-[#050607]"
-                    : "border-white/[0.2] bg-transparent text-[#c9d4ce]"
-                }`}
-                href={withPublicLanguage(basePath, "de")}
-                title={pageCopy.switchToGerman}
-              >
-                {pageCopy.switchToGermanShort}
-              </Link>
-              <Link
-                aria-current={language === "en" ? "page" : undefined}
-                aria-label={pageCopy.switchToEnglish}
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-semibold transition hover:border-white hover:text-white ${
-                  language === "en"
-                    ? "border-white bg-white text-[#050607]"
-                    : "border-white/[0.2] bg-transparent text-[#c9d4ce]"
-                }`}
-                href={withPublicLanguage(basePath, "en")}
-                title={pageCopy.switchToEnglish}
-              >
-                {pageCopy.switchToEnglishShort}
-              </Link>
-            </nav>
-            <a
-              className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-md border border-white/[0.28] bg-white/[0.08] px-3 py-2 text-xs font-semibold text-white transition hover:border-white hover:bg-white/[0.14] focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#050607] sm:text-sm"
-              href={loginHref}
-            >
-              {copy.nav.login}
-            </a>
-            <a
-              className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border border-[#f3f1e8] bg-[#f3f1e8] px-3 py-2 text-xs font-semibold text-[#050607] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#f3f1e8] focus:ring-offset-2 focus:ring-offset-[#050607] sm:text-sm"
-              href={auditHref}
-            >
-              {copy.nav.auditCta}
-            </a>
+          <div className={styles.desktopActions}>
+            <LanguageSwitch basePath={basePath} language={language} pageCopy={pageCopy} />
+            <a className={styles.loginLink} href={loginHref}><Icon name="lock" size={16} />{copy.nav.login}</a>
+            <a className={styles.navCta} href={auditHref}>{copy.nav.auditCta}</a>
+          </div>
+          <div className={styles.mobileActions}>
+            <LanguageSwitch basePath={basePath} language={language} pageCopy={pageCopy} />
+            <PublicCrmMobileMenu
+              auditHref={auditHref}
+              auditLabel={copy.nav.auditCta}
+              closeLabel={copy.nav.menuClose}
+              items={navItems}
+              loginHref={loginHref}
+              loginLabel={copy.nav.login}
+              openLabel={copy.nav.menuOpen}
+            />
           </div>
         </div>
       </header>
 
-      <section className="relative overflow-hidden bg-[#050607] px-4 pb-14 pt-28 text-white md:pb-20 md:pt-32">
-        <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.12]" />
-        <div className="mx-auto grid w-full max-w-7xl gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
-          <div className="relative z-10 max-w-3xl">
-            <p className="text-sm font-semibold uppercase text-[#9fd8be]">{copy.hero.eyebrow}</p>
-            <h1 className="mt-4 text-4xl font-semibold leading-tight md:text-6xl">{copy.hero.title}</h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-[#c9d4ce]">{copy.hero.description}</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <ActionLink href={auditHref}>{copy.hero.primaryCta}</ActionLink>
-              <ActionLink href={secondaryHeroHref} variant="secondary">
-                {copy.hero.secondaryCta}
-              </ActionLink>
+      <main className={styles.content}>
+        <section className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <h1>{copy.hero.title} <span>{copy.hero.titleAccent}</span></h1>
+            <p className={styles.heroDescription}>{copy.hero.description}</p>
+            <div className={styles.heroButtons}>
+              <a className={styles.primaryButton} href={auditHref}>{copy.hero.primaryCta}</a>
+              <a className={styles.secondaryButton} href="#preview">{copy.hero.secondaryCta}</a>
             </div>
-            <p className="mt-6 max-w-2xl text-sm font-semibold leading-6 text-[#9fd8be]">{copy.hero.accessLine}</p>
-          </div>
-          <HeroOperatingLayer visual={copy.visuals.heroOperatingLayer} />
-        </div>
-      </section>
-
-      <TrustBar items={copy.hero.proofPoints} />
-
-      <section className="bg-white px-4 py-14" id="problem">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <div className="order-2 lg:order-1">
-            <LeadLeakageVisual visual={copy.visuals.leadLeakage} />
-          </div>
-          <div className="order-1 lg:order-2">
-            <SectionIntro
-              description={copy.problem.description}
-              eyebrow={copy.problem.eyebrow}
-              title={copy.problem.title}
-            />
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              {copy.problem.cards.map((point) => (
-                <article className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-4" key={point.title}>
-                  <h3 className="text-base font-semibold leading-6 text-[#111614]">{point.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#50645b]">{point.body}</p>
-                </article>
-              ))}
-            </div>
-            <p className="mt-5 rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold leading-6 text-[#26342f]">
-              {copy.problem.scenario}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-white/[0.12] bg-[#050607] px-4 py-14 text-white" id="preview">
-        <div className="mx-auto w-full max-w-7xl">
-          <SectionIntro
-            description={copy.preview.description}
-            eyebrow={copy.preview.eyebrow}
-            inverted
-            title={copy.preview.title}
-          />
-          <div className="mt-8 grid gap-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-start">
-            <CrmPreviewCard preview={copy.preview} />
-            <div className="grid gap-6">
-              <FieldList items={copy.preview.visibleFields} title={copy.preview.visibleTitle} />
-              <FieldList items={copy.preview.protectedFields} title={copy.preview.protectedTitle} />
-              <p className="rounded-md border border-[#9fd8be]/30 bg-[#9fd8be]/10 p-4 text-sm font-semibold leading-6 text-[#d8f2e4]">
-                {copy.preview.notice}
-              </p>
+            <p className={styles.accessLine}><Icon name="lock" size={17} />{copy.hero.accessLine}</p>
+            <div className={styles.regionPills}>
+              {copy.hero.regions.map((region) => <span key={region}>{region}</span>)}
             </div>
           </div>
-          <div className="mt-8">
-            <LockedCrmPreviewVisual visual={copy.visuals.lockedCrmPreview} />
-          </div>
-        </div>
-      </section>
+          <LeadCard content={copy.leadCard} />
+        </section>
 
-      <section className="bg-[#f8f7f1] px-4 py-14">
-        <div className="mx-auto w-full max-w-7xl">
-          <SectionIntro eyebrow={copy.audiences.eyebrow} title={copy.audiences.title} />
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {copy.audiences.items.map((item) => (
-              <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={item.title}>
-                <h3 className="text-xl font-semibold leading-7 text-[#111614]">{item.title}</h3>
-                <p className="mt-4 text-sm leading-6 text-[#50645b]">{item.body}</p>
-                <p className="mt-4 text-sm font-semibold leading-6 text-[#277258]">{item.result}</p>
-              </article>
+        <section className={styles.section} id="problem">
+          <SectionHeading eyebrow={copy.problem.eyebrow}>{copy.problem.title}</SectionHeading>
+          <div className={styles.problemGrid}>
+            {copy.problem.cards.map((card, index) => (
+              <ProblemCard body={card.body} icon={problemIcons[index] ?? "clock"} key={card.title} title={card.title} />
             ))}
           </div>
-        </div>
-      </section>
+          <figure className={styles.funnelFigure}>
+            <figcaption>{copy.problem.funnelCaption}</figcaption>
+            <div className={styles.funnelRows}>
+              {copy.problem.funnel.map((row, index) => (
+                <div className={styles.funnelRow} key={row.label}>
+                  <span>{row.label}</span>
+                  <div aria-hidden="true"><i style={{ "--bar-width": `${row.value}%`, "--bar-opacity": String(1 - index * 0.2) } as CSSProperties} /></div>
+                  <strong>{row.value}&nbsp;%</strong>
+                </div>
+              ))}
+            </div>
+            <p>{copy.problem.funnelNote}</p>
+          </figure>
+        </section>
 
-      <section className="bg-white px-4 py-14" id="audit">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[1fr_0.95fr] lg:items-center">
-          <div>
-            <SectionIntro
-              description={copy.audit.description}
-              eyebrow={copy.audit.eyebrow}
-              title={copy.audit.title}
-            />
-            <div className="mt-8 grid gap-5 md:grid-cols-2">
-              <div className="rounded-lg border border-[#d8ddd7] bg-[#f8f7f1] p-5">
-                <h3 className="text-base font-semibold text-[#111614]">{copy.audit.checksTitle}</h3>
-                <div className="mt-4 grid gap-2">
-                  {copy.audit.checks.map((check) => (
-                    <div className="rounded-md border border-[#d8ddd7] bg-white px-3 py-2 text-sm font-semibold text-[#26342f]" key={check}>
-                      {check}
+        <section className={styles.section} id="preview">
+          <SectionHeading eyebrow={copy.preview.eyebrow}>{copy.preview.title}</SectionHeading>
+          <p className={styles.sectionDescription}>{copy.preview.description}</p>
+          <div className={styles.previewShell}>
+            <div className={styles.previewLayout}>
+              <figure className={styles.pipelineFigure}>
+                <figcaption>{copy.preview.pipelineCaption}</figcaption>
+                <div className={styles.pipelineGrid}>
+                  {copy.preview.columns.map((column) => (
+                    <div className={styles.pipelineColumn} key={column.title}>
+                      <div className={styles.pipelineColumnHeader}><span>{column.title}</span><strong>{column.cards.length}</strong></div>
+                      <div className={styles.pipelineCards}>
+                        {column.cards.map((card) => (
+                          <div className={styles.pipelineCard} key={`${card.source}-${card.title}`}>
+                            <span>{card.source}</span><strong>{card.title}</strong><small>{card.action}</small>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="rounded-lg border border-[#d8ddd7] bg-white p-5">
-                <h3 className="text-base font-semibold text-[#111614]">{copy.audit.outcomesTitle}</h3>
-                <div className="mt-4">
-                  <CheckList items={copy.audit.outcomes} />
+              </figure>
+              <figure className={styles.inboxFigure}>
+                <figcaption>{copy.preview.inboxCaption}</figcaption>
+                <div className={styles.inboxList}>
+                  {copy.preview.inbox.map((item) => (
+                    <div className={styles.inboxRow} key={`${item.time}-${item.title}`}>
+                      <time>{item.time}</time>
+                      <div><strong>{item.title}</strong><span>{item.status}</span></div>
+                      <b>{item.owner}</b>
+                    </div>
+                  ))}
                 </div>
+              </figure>
+            </div>
+            <div className={styles.privacyLists}>
+              <div>
+                <h3><Icon name="check" size={21} />{copy.preview.visibleTitle}</h3>
+                <CheckList items={copy.preview.visible} />
+              </div>
+              <div className={styles.protectedList}>
+                <h3><Icon name="shield" size={21} />{copy.preview.protectedTitle}</h3>
+                <CheckList items={copy.preview.protected} />
               </div>
             </div>
-            <p className="mt-5 text-sm font-semibold leading-6 text-[#50645b]">{copy.audit.boundary}</p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-[#277258]">{copy.audit.postClick}</p>
           </div>
-          <AuditReviewLoopVisual visual={copy.visuals.auditToSystem} />
-        </div>
-      </section>
+        </section>
 
-      <section className="border-y border-[#d8ddd7] bg-[#f8f7f1] px-4 py-14" id="company-system">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-          <div>
-            <SectionIntro
-              description={copy.companySystem.description}
-              eyebrow={copy.companySystem.eyebrow}
-              title={copy.companySystem.title}
-            />
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              {[copy.companySystem.publicLayer, copy.companySystem.protectedLayer].map((layer) => (
-                <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={layer.label}>
-                  <p className="text-sm font-semibold text-[#277258]">{layer.label}</p>
-                  <h3 className="mt-3 text-xl font-semibold leading-7 text-[#111614]">{layer.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#50645b]">{layer.body}</p>
-                </article>
-              ))}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {copy.companySystem.bridge.map((step) => (
-                <span className="rounded-md border border-[#cdd4ce] bg-white px-3 py-2 text-sm font-semibold text-[#26342f]" key={step}>
-                  {step}
-                </span>
-              ))}
-            </div>
-            <p className="mt-5 rounded-md border border-[#cdd4ce] bg-white px-4 py-3 text-sm font-semibold leading-6 text-[#26342f]">
-              {copy.companySystem.trustNote}
-            </p>
-          </div>
-          <CompanySystemVisual visual={copy.visuals.companySystemSplit} />
-        </div>
-      </section>
-
-      <section className="border-y border-[#d8ddd7] bg-[#111614] px-4 py-14 text-white">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 md:grid-cols-[0.82fr_1.18fr] md:items-start">
-          <SectionIntro eyebrow={copy.trust.eyebrow} inverted title={copy.trust.title} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {copy.trust.points.map((point) => (
-              <div className="rounded-md border border-white/[0.14] bg-white/[0.06] p-4 text-sm font-semibold leading-6 text-[#e5ebe7]" key={point}>
-                {point}
-              </div>
-            ))}
-          </div>
-          <div className="md:col-span-2">
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              {copy.trust.details.map((item) => (
-                <article className="rounded-md border border-white/[0.14] bg-white/[0.06] p-4" key={item.label}>
-                  <p className="text-xs font-semibold uppercase text-[#9fd8be]">{item.label}</p>
-                  <p className="mt-3 text-sm font-semibold leading-6 text-[#e5ebe7]">{item.body}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white px-4 py-14">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr]">
-          <SectionIntro
-            description={copy.trust.proof.intro}
-            eyebrow={copy.trust.eyebrow}
-            title={copy.trust.proof.title}
-          />
-          <div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {copy.trust.proof.cards.map((item) => (
-                <article className="rounded-lg border border-[#d8ddd7] bg-[#f8f7f1] p-5" key={item.title}>
-                  <h3 className="text-lg font-semibold leading-7 text-[#111614]">{item.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#50645b]">{item.body}</p>
-                </article>
-              ))}
-            </div>
-            <div className="mt-5 rounded-lg border border-[#d8ddd7] bg-[#eef7ff] p-5">
-              <p className="text-sm font-semibold uppercase text-[#277258]">{copy.trust.proof.exampleTitle}</p>
-              <p className="mt-3 text-sm font-semibold leading-6 text-[#26342f]">{copy.trust.proof.exampleBody}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#f8f7f1] px-4 py-14">
-        <div className="mx-auto w-full max-w-7xl">
-          <SectionIntro eyebrow={copy.faq.eyebrow} title={copy.faq.title} />
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {copy.faq.items.map((item) => (
-              <article className="rounded-lg border border-[#d8ddd7] bg-white p-5" key={item.question}>
-                <h3 className="text-lg font-semibold leading-7 text-[#111614]">{item.question}</h3>
-                <p className="mt-3 text-sm leading-6 text-[#50645b]">{item.answer}</p>
+        <section className={styles.section} id="audiences">
+          <SectionHeading eyebrow={copy.audiences.eyebrow}>{copy.audiences.title}</SectionHeading>
+          <div className={styles.audienceGrid}>
+            {copy.audiences.items.map((item) => (
+              <article className={styles.audienceCard} key={item.title}>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+                <div><span>{copy.audiences.resultLabel}</span><strong>{item.result}</strong></div>
               </article>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="bg-[#f8f7f1] px-4 py-14">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <div>
-            <SectionIntro
-              description={copy.finalCta.description}
-              eyebrow={copy.finalCta.eyebrow}
-              title={copy.finalCta.title}
-            />
-            <div className="mt-6">
-              <CheckList items={copy.finalCta.bullets} />
-            </div>
-            <p className="mt-5 text-sm font-semibold leading-6 text-[#50645b]">{copy.finalCta.microcopy}</p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-[#277258]">{copy.finalCta.postClick}</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <ActionLink href={auditHref} variant="dark">
-                {copy.finalCta.primaryCta}
-              </ActionLink>
-              <ActionLink href={novalureHref} variant="subtle">
-                {copy.finalCta.secondaryCta}
-              </ActionLink>
-            </div>
+        <section className={styles.section} id="audit">
+          <SectionHeading eyebrow={copy.audit.eyebrow}>{copy.audit.title}</SectionHeading>
+          <div className={styles.auditSteps}>
+            {copy.audit.steps.map((step, index) => (
+              <article key={step.title}>
+                <span>{index + 1}</span><h3>{step.title}</h3><p>{step.body}</p>
+              </article>
+            ))}
           </div>
-          <AuditToSystemVisual visual={copy.visuals.auditToSystem} />
-        </div>
-      </section>
+          <div className={styles.auditOutcome}>
+            <h3>{copy.audit.outcomesTitle}</h3>
+            <CheckList items={copy.audit.outcomes} />
+            <a className={styles.primaryButton} href={auditHref}>{copy.audit.cta}</a>
+          </div>
+        </section>
 
-      <footer
-        aria-label={legalCopy.ariaLabel}
-        className="border-t border-[#d8ddd7] bg-white px-4 py-8 text-sm leading-6 text-[#50645b]"
-      >
-        <div className="mx-auto grid w-full max-w-7xl gap-6 md:grid-cols-[1fr_auto]">
-          <div>
-            <p className="font-semibold text-[#111614]">{copy.footerTagline}</p>
-            <p className="mt-3">{legalCopy.companyLine}</p>
-            <p className="mt-1">
-              {legalCopy.contactPrefix}{" "}
-              <a className="font-semibold text-[#111614] underline-offset-4 hover:underline" href={`mailto:${companyLegalDetails.email}`}>
-                {companyLegalDetails.email}
-              </a>
-            </p>
+        <section className={styles.section} id="privacy">
+          <SectionHeading eyebrow={copy.privacy.eyebrow}>{copy.privacy.title}</SectionHeading>
+          <div className={styles.privacyGrid}>
+            {copy.privacy.items.map((item, index) => (
+              <article key={item.title}>
+                <span><Icon name={privacyIcons[index] ?? "shield"} size={23} /></span>
+                <h3>{item.title}</h3><p>{item.body}</p>
+              </article>
+            ))}
           </div>
-          <nav aria-label={legalCopy.ariaLabel} className="flex flex-wrap gap-x-5 gap-y-2 md:justify-end">
+        </section>
+
+        <section className={styles.section} id="faq">
+          <SectionHeading eyebrow={copy.faq.eyebrow}>{copy.faq.title}</SectionHeading>
+          <div className={styles.faqList}>
+            {copy.faq.items.map((item) => (
+              <details className={styles.faqItem} key={item.question}>
+                <summary><span>{item.question}</span><i className={styles.faqIndicator} aria-hidden="true">+</i></summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.finalCta} id="contact">
+          <h2>{copy.finalCta.title}</h2>
+          <p>{copy.finalCta.description}</p>
+          <a className={styles.primaryButton} href={auditHref}>{copy.finalCta.cta}</a>
+        </section>
+      </main>
+
+      <footer aria-label={legalCopy.ariaLabel} className={styles.footer}>
+        <div className={styles.footerInner}>
+          <div>
+            <p><strong>Novalure<span>.</span></strong> · {legalCopy.companyLine}</p>
+            <a href={`mailto:${companyLegalDetails.email}`}>{companyLegalDetails.email}</a>
+          </div>
+          <nav aria-label={legalCopy.ariaLabel}>
             {publicLegalLinks.map((link) => (
-              <Link
-                className="font-semibold text-[#111614] underline-offset-4 hover:underline"
-                href={withPublicLanguage(link.href, language)}
-                key={link.key}
-              >
-                {legalCopy.links[link.key]}
-              </Link>
+              <Link href={withPublicLanguage(link.href, language)} key={link.key}>{legalCopy.links[link.key]}</Link>
             ))}
           </nav>
         </div>
       </footer>
-      <CookieConsentButton cookieHref={cookieHref} copy={copy.cookieConsent} privacyHref={privacyHref} />
-    </main>
+      <CookieConsentButton cookieHref={cookieHref} copy={legacyCopy.cookieConsent} privacyHref={privacyHref} />
+    </div>
   );
 }
