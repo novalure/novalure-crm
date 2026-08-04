@@ -120,9 +120,10 @@ test("public cookie banner exposes GDPR choices and privacy link", () => {
   assert.match(landing, /privacyHref=\{privacyHref\}/);
 });
 
-test("public landing uses anonymized trust proof instead of placeholders", () => {
+test("public landing uses anonymized CRM proof and real privacy content instead of placeholders", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
+  const landingV2Copy = readText("src/lib/public-crm-landing-v2.ts");
 
   assert.doesNotMatch(i18n, /Freigegebenes Kundenlogo/);
   assert.doesNotMatch(i18n, /Approved client logo/);
@@ -132,7 +133,38 @@ test("public landing uses anonymized trust proof instead of placeholders", () =>
   assert.match(i18n, /Anonymisierter Beispielbefund/);
   assert.match(i18n, /Anonymized example finding/);
   assert.match(i18n, /hello@novalure\.eu/);
-  assert.match(landing, /copy\.trust\.details\.map/);
-  assert.match(landing, /copy\.trust\.proof\.cards\.map/);
+  assert.match(landing, /copy\.preview\.columns\.map/);
+  assert.match(landing, /copy\.privacy\.items\.map/);
+  assert.match(landing, /publicLegalLinks\.map/);
+  assert.match(landingV2Copy, /Anonymisierte Beispielansicht · keine echten Kundendaten/);
+  assert.match(landingV2Copy, /Schematische Darstellung – keine echten Kundendaten/);
+  assert.match(landingV2Copy, /Anonymised example view · no real customer data/);
+  assert.match(landingV2Copy, /Schematic illustration – no real customer data/);
+  assert.doesNotMatch(landing, /href="#"/);
   assert.doesNotMatch(landing, /proofPlaceholders/);
+});
+
+test("public website subpages share the landing page design system", () => {
+  const shell = readText("src/components/public-site-shell.tsx");
+  const shellStyles = readText("src/components/public-site-shell.module.css");
+  const legalPage = readText("src/components/legal-page.tsx");
+
+  assert.match(shell, /Novalure<span>\.<\/span>/);
+  assert.match(shell, /publicLegalLinks\.map/);
+  assert.match(shellStyles, /--nl-bg: #faf9f7/);
+  assert.match(shellStyles, /--nl-blue: #2d68f0/);
+  assert.match(legalPage, /<PublicSiteShell currentPath=\{path\} language=\{language\}>/);
+
+  for (const route of [
+    "src/app/login/page.tsx",
+    "src/app/login/forgot-password/page.tsx",
+    "src/app/login/reset-password/page.tsx",
+    "src/app/unsubscribe/page.tsx",
+    "src/app/not-found.tsx",
+  ]) {
+    assert.match(readText(route), /<PublicSiteShell/);
+  }
+
+  assert.match(readText("src/app/not-found.tsx"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
+  assert.match(readText("src/app/unsubscribe/page.tsx"), /getUnsubscribeLanguageHref/);
 });
