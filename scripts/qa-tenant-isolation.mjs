@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import process from "node:process";
 import { neon } from "@neondatabase/serverless";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const growthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const growthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
@@ -50,20 +51,9 @@ function loadEnv(path) {
 
 for (const file of envFiles) loadEnv(file);
 
-function cleanDatabaseUrl(value) {
-  if (!value) return "";
-  const trimmed = String(value).trim().replace(/^['"]|['"]$/g, "");
-  const prefixedUrl = trimmed.match(/^[A-Z0-9_]+=((?:postgres|postgresql):\/\/.+)$/i);
-  return prefixedUrl?.[1] ?? trimmed;
-}
-
-const databaseUrl =
-  cleanDatabaseUrl(process.env.DATABASE_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_DATABASE_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_PRISMA_URL);
-
-const sql = databaseUrl ? neon(databaseUrl) : null;
+const qaTarget = await assertQaTarget();
+const databaseUrl = qaTarget.databaseUrl;
+const sql = neon(databaseUrl);
 
 function readText(path) {
   return fs.readFileSync(path, "utf8");
@@ -348,17 +338,7 @@ function printMarkdownTable(rows) {
 async function main() {
   runStaticChecks();
 
-  if (!databaseUrl) {
-    addMatrix({
-      check: "database-backed tenant matrix",
-      expected: "DATABASE_URL or POSTGRES_URL is configured",
-      actual: "missing database URL",
-      ok: false,
-      cause: "DB-backed tenant-isolation checks could not run",
-    });
-  } else {
-    await runDbChecks();
-  }
+  await runDbChecks();
 
   console.log("TENANT_ISOLATION_MATRIX");
   printMarkdownTable(matrix);

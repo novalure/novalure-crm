@@ -29,10 +29,7 @@ test("property department migration creates canonical support tables without rep
 });
 
 test("system diagnostics and QA seed include the property department migration", () => {
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/034_property_department\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/035_property_department_content\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/038_property_default_units\.sql/);
-  assert.match(read("src/app/api/system/database/route.ts"), /migrations\/039_property_content_partial_unique_indexes\.sql/);
+  assert.match(read("src/app/api/system/database/route.ts"), /from novalure_schema_migrations/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/034_property_department\.sql/);
   assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/035_property_department_content\.sql/);
   assert.match(read("package.json"), /db:migrate:property-default-units/);
@@ -80,6 +77,55 @@ test("phase 3 property content migration blocks nullable duplicate rows with par
   assert.match(qa, /Fixture must start without duplicate rows/);
   assert.match(qa, /duplicate blocked by unique index/);
   assert.match(qa, /rollback/);
+});
+
+test("property inventory writes are target-workspace scoped and database guarded", () => {
+  const migration = read("migrations/049_property_inventory_tenant_guards.sql");
+  const repository = read("src/lib/db/property-inventory-repositories.ts");
+  const unitsRoute = read("src/app/api/crm/units/route.ts");
+  const reservationsRoute = read("src/app/api/crm/reservations/route.ts");
+  const unitsPost = unitsRoute.slice(unitsRoute.indexOf("export async function POST"));
+  const reservationsPost = reservationsRoute.slice(
+    reservationsRoute.indexOf("export async function POST"),
+    reservationsRoute.indexOf("export async function PATCH"),
+  );
+
+  for (const indexName of [
+    "projects_workspace_id_id_uidx",
+    "property_buildings_workspace_project_id_uidx",
+    "property_units_workspace_project_id_uidx",
+    "property_units_workspace_project_unit_uidx",
+  ]) {
+    assert.match(migration, new RegExp(`create unique index if not exists ${indexName}`));
+  }
+  for (const constraintName of [
+    "property_buildings_workspace_project_fk",
+    "property_units_workspace_project_fk",
+    "property_units_workspace_project_building_fk",
+    "property_reservations_workspace_project_fk",
+    "property_reservations_workspace_project_unit_fk",
+  ]) {
+    assert.match(migration, new RegExp(`add constraint ${constraintName}[\\s\\S]*?not valid`));
+  }
+  assert.match(migration, /property_units_workspace_project_building_fk[\s\S]*deferrable initially deferred[\s\S]*not valid/);
+  assert.doesNotMatch(migration, /validate constraint/i);
+
+  const unitWrite = repository.slice(repository.indexOf("export async function createPropertyUnitRecord"));
+  assert.match(repository, /insert into property_buildings[\s\S]*from projects p[\s\S]*p\.workspace_id = \$1::uuid/);
+  assert.match(unitWrite, /from projects p/);
+  assert.match(unitWrite, /left join property_buildings b[\s\S]*b\.workspace_id = p\.workspace_id[\s\S]*b\.project_id = p\.id/);
+  assert.match(unitWrite, /p\.id = \$2::uuid[\s\S]*p\.workspace_id = \$1::uuid/);
+  assert.match(unitWrite, /\$3::uuid is null or b\.id is not null/);
+  assert.match(unitWrite, /on conflict \(workspace_id, project_id, unit_number\)/);
+  assert.match(unitWrite, /where property_units\.workspace_id = excluded\.workspace_id[\s\S]*property_units\.project_id = excluded\.project_id/);
+  assert.doesNotMatch(unitWrite, /on conflict \(project_id, unit_number\)/);
+
+  for (const route of [unitsPost, reservationsPost]) {
+    assert.match(route, /resolveWorkspaceScopedSession\(request, \{[\s\S]*permission: "crm:write",[\s\S]*capability: "reservations:write"/);
+    assert.doesNotMatch(route, /requirePermissionAndProductCapability/);
+    assert.doesNotMatch(route, /input\.workspaceId/);
+  }
+  assert.match(reservationsRoute, /export async function PATCH\(request: Request\) \{\s*return POST\(request\);\s*\}/);
 });
 
 test("property modules stay visible across workspace/product configurations", () => {

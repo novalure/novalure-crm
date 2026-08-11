@@ -4,6 +4,11 @@ import { FormRuntimeClient } from "@/components/form-runtime-client";
 import { getPublicWebsiteForm } from "@/lib/db/form-repositories";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import {
+  buildPublicSubmissionScope,
+  createPublicSubmissionProof,
+  publicSubmissionActions,
+} from "@/lib/security/public-submission-abuse";
 
 export type PublicFormPageInput = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -65,6 +70,16 @@ export async function renderPublicFormPage({
   const form = persisted?.form ?? null;
   const title = form?.name || titleFromFormSlug(slug) || copy.publicPage.unavailableTitle;
   const returnTo = persisted?.publicPath ?? `/forms/${workspacePublicKey}/${slug}`;
+  const submissionProof = persisted
+    ? createPublicSubmissionProof({
+        action: publicSubmissionActions.form,
+        scope: buildPublicSubmissionScope({
+          resourceId: persisted.id,
+          resourceType: "form",
+          workspaceId: persisted.workspaceId,
+        }),
+      })
+    : undefined;
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
@@ -112,6 +127,7 @@ export async function renderPublicFormPage({
               publicKey={`${workspacePublicKey}/${slug}`}
               returnTo={returnTo}
               source={source}
+              submissionProof={submissionProof}
             />
           ) : (
             <UnavailableFormNotice copy={copy} />

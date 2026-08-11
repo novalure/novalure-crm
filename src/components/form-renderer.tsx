@@ -1,5 +1,9 @@
 import type { ChangeEvent, FocusEvent, FormEvent, Ref } from "react";
 import type { FormField, FormStep, WebsiteForm } from "@/lib/form-types";
+import {
+  publicSubmissionControlFields,
+  type PublicSubmissionProof,
+} from "@/lib/public-submission-contract";
 
 export type FormRuntimeCopy = {
   back: string;
@@ -55,6 +59,7 @@ export const embeddedFormStyles = `
 .novalure-button{border:0;border-radius:10px;background:#08233f;color:#fff;font-weight:800;padding:12px 16px;cursor:pointer}
 .novalure-secondary{border:1px solid #b9cbe6;background:#fff;color:#08233f}
 .novalure-hidden{display:none!important}
+.novalure-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
 `;
 
 type FormRendererMode = "editor" | "embed" | "public";
@@ -78,6 +83,7 @@ type FormRendererProps = {
   returnTo: string;
   selectedFieldId?: string;
   source?: string;
+  submissionProof?: PublicSubmissionProof;
   tracking?: {
     pageUrl?: string;
     referrer?: string;
@@ -126,6 +132,7 @@ export function FormRenderer({
   returnTo,
   selectedFieldId,
   source = "website",
+  submissionProof,
   tracking,
   values = {},
   visibleFieldIds,
@@ -156,6 +163,7 @@ export function FormRenderer({
       <input name="funnel_id" readOnly type="hidden" value={form.funnelId} />
       <input name="page_url" readOnly type="hidden" value={tracking?.pageUrl ?? ""} />
       <input name="referrer" readOnly type="hidden" value={tracking?.referrer ?? ""} />
+      {submissionProof ? <PublicSubmissionProofInputs proof={submissionProof} /> : null}
       {hiddenFields.map((field) => (
         <input
           data-field-id={field.id}
@@ -266,6 +274,46 @@ export function FormRenderer({
         </div>
       </div>
     </form>
+  );
+}
+
+function PublicSubmissionProofInputs({ proof }: { proof: PublicSubmissionProof }) {
+  return (
+    <>
+      <input
+        name={publicSubmissionControlFields.idempotencyKey}
+        readOnly
+        type="hidden"
+        value={proof.idempotencyKey}
+      />
+      <input
+        name={publicSubmissionControlFields.issuedAt}
+        readOnly
+        type="hidden"
+        value={proof.issuedAt}
+      />
+      <input
+        name={publicSubmissionControlFields.expiresAt}
+        readOnly
+        type="hidden"
+        value={proof.expiresAt}
+      />
+      <input
+        name={publicSubmissionControlFields.proof}
+        readOnly
+        type="hidden"
+        value={proof.signature}
+      />
+      <label aria-hidden="true" className="novalure-honeypot">
+        Company
+        <input
+          autoComplete="off"
+          name={publicSubmissionControlFields.honeypot}
+          tabIndex={-1}
+          type="text"
+        />
+      </label>
+    </>
   );
 }
 

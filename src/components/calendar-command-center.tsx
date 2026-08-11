@@ -12,8 +12,10 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type CalendarCommandCenterProps = {
+  activeProjectId: string | null;
   contacts: Contact[];
   events: CalendarEvent[];
   language: LanguageCode;
@@ -32,6 +34,11 @@ type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>
 type OwnerDisplay = Pick<WorkspaceUser, "id" | "name" | "email">;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function navigateToOAuthStart(path: string) {
+  // A full document navigation is required because this route returns a provider redirect, not an RSC payload.
+  window.location.assign(path);
+}
 
 function isUuid(value: string) {
   return UUID_PATTERN.test(value);
@@ -661,6 +668,7 @@ function createDefaultCalendarEventDraft(
   projects: Project[],
   sessionUserId: string,
   meetingProvider: MeetingProvider,
+  activeProjectId: string | null,
 ): NewCalendarEventDraft {
   const startsAt = new Date();
   startsAt.setDate(startsAt.getDate() + 1);
@@ -677,7 +685,9 @@ function createDefaultCalendarEventDraft(
     notes: "",
     outcomeGoal: "",
     ownerUserId: sessionUserId,
-    projectId: projects[0]?.id ?? "",
+    projectId: activeProjectId && projects.some((project) => project.id === activeProjectId)
+      ? activeProjectId
+      : "",
     startsAt: toDateTimeLocalInput(startsAt),
     status: "geplant",
     title: "",
@@ -685,6 +695,7 @@ function createDefaultCalendarEventDraft(
 }
 
 export function CalendarCommandCenter({
+  activeProjectId,
   contacts,
   events,
   language,
@@ -753,7 +764,12 @@ export function CalendarCommandCenter({
   const [eventSaving, setEventSaving] = useState(false);
   const [eventCreateNotice, setEventCreateNotice] = useState("");
   const [eventDraft, setEventDraft] = useState<NewCalendarEventDraft>(() =>
-    createDefaultCalendarEventDraft(projects, sessionUserId, defaultCalendarIntegrations.defaultMeetingProvider),
+    createDefaultCalendarEventDraft(
+      projects,
+      sessionUserId,
+      defaultCalendarIntegrations.defaultMeetingProvider,
+      activeProjectId,
+    ),
   );
   const [liveCalendarAction, setLiveCalendarAction] = useState<LiveCalendarActionState>(
     () => getInitialLiveCalendarAction(text),
@@ -780,6 +796,9 @@ export function CalendarCommandCenter({
   const [bookingActionMessage, setBookingActionMessage] = useState("");
   const [notificationFilter, setNotificationFilter] = useState<NotificationFilter>("all");
   const [retryingNotificationId, setRetryingNotificationId] = useState("");
+  const draftProjects = activeProjectId
+    ? projects.filter((project) => project.id === activeProjectId)
+    : projects;
 
 
   async function loadMeetingBookingOverview() {
@@ -806,7 +825,7 @@ export function CalendarCommandCenter({
     setBookingActionMessage("");
 
     try {
-      const response = await fetch(`/api/meetings/bookings/${encodeURIComponent(bookingId)}/confirm`, {
+      const response = await csrfFetch(`/api/meetings/bookings/${encodeURIComponent(bookingId)}/confirm`, {
         method: "POST",
       });
       const payload = (await response.json().catch(() => ({}))) as {
@@ -855,7 +874,7 @@ export function CalendarCommandCenter({
     setBookingActionMessage("");
 
     try {
-      const response = await fetch(
+      const response = await csrfFetch(
         `/api/meetings/notifications/${encodeURIComponent(notificationId)}/retry`,
         { method: "POST" },
       );
@@ -933,7 +952,7 @@ export function CalendarCommandCenter({
           }
         }
 
-        const response = await fetch(
+        const response = await csrfFetch(
           `/api/meetings/settings?slug=${encodeURIComponent(defaultShareConfig.slug)}`,
           { cache: "no-store" },
         );
@@ -1114,11 +1133,15 @@ export function CalendarCommandCenter({
       setEventCreateNotice(text.eventTitleRequired);
       return;
     }
+    if (!draftProjects.some((project) => project.id === eventDraft.projectId)) {
+      setEventCreateNotice(language === "de" ? "Projekt ist erforderlich." : "Project is required.");
+      return;
+    }
 
     setEventSaving(true);
     setEventCreateNotice("");
     try {
-      const response = await fetch("/api/crm/calendar-events", {
+      const response = await csrfFetch("/api/crm/calendar-events", {
         body: JSON.stringify({
           event: {
             contactId: eventDraft.contactId || undefined,
@@ -1147,7 +1170,12 @@ export function CalendarCommandCenter({
 
       setEventOverlays((current) => [payload.event!, ...current.filter((event) => event.id !== payload.event!.id)]);
       setSelectedEventId(payload.event.id);
-      setEventDraft(createDefaultCalendarEventDraft(projects, sessionUserId, calendarIntegrations.defaultMeetingProvider));
+      setEventDraft(createDefaultCalendarEventDraft(
+        projects,
+        sessionUserId,
+        calendarIntegrations.defaultMeetingProvider,
+        activeProjectId,
+      ));
       setIsCreateEventOpen(false);
       setEventCreateNotice(text.eventCreated);
       void onEventsChanged?.();
@@ -1267,7 +1295,7 @@ export function CalendarCommandCenter({
     window.localStorage.setItem(`novalure.meeting.${defaultShareConfig.slug}`, JSON.stringify(page));
 
     try {
-      const response = await fetch("/api/meetings/settings", {
+      const response = await csrfFetch("/api/meetings/settings", {
         body: JSON.stringify({ page }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -1309,7 +1337,7 @@ export function CalendarCommandCenter({
     setMeetingStatusMessage(text.messages.preparingTestMail(to));
 
     try {
-      const response = await fetch("/api/meetings/notifications", {
+      const response = await csrfFetch("/api/meetings/notifications", {
         body: JSON.stringify({
           body: previewDraft.body,
           idempotencyKey: `meeting:${bookingSlug}:${automationStep}:${previewDraft.subject}:${to}`,
@@ -1485,9 +1513,7 @@ export function CalendarCommandCenter({
     });
 
     const returnTo = `${window.location.pathname}${window.location.search || ""}${window.location.hash || "#calendar"}`;
-    window.location.assign(
-      `/api/meetings/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
-    );
+    navigateToOAuthStart(`/api/meetings/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`);
   };
 
   const connectMeetingProvider = (provider: CalendarProvider) => {
@@ -1513,9 +1539,7 @@ export function CalendarCommandCenter({
     });
 
     const returnTo = `${window.location.pathname}${window.location.search || ""}${window.location.hash || "#calendar"}`;
-    window.location.assign(
-      `/api/meetings/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
-    );
+    navigateToOAuthStart(`/api/meetings/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`);
   };
 
   const disconnectCalendarProvider = async (provider: CalendarProvider) => {
@@ -1527,7 +1551,7 @@ export function CalendarCommandCenter({
     });
 
     try {
-      const response = await fetch(`/api/meetings/oauth/${provider}/disconnect`, {
+      const response = await csrfFetch(`/api/meetings/oauth/${provider}/disconnect`, {
         method: "POST",
       });
       const payload = (await response.json().catch(() => null)) as
@@ -1594,7 +1618,7 @@ export function CalendarCommandCenter({
       ].join("");
       const attendees = selectedEvent.contact?.email ? [selectedEvent.contact.email] : [];
 
-      const response = await fetch(
+      const response = await csrfFetch(
         calendarIntegrations.defaultProvider === "google"
           ? "/api/calendar/google"
           : "/api/calendar/microsoft",
@@ -1693,11 +1717,21 @@ export function CalendarCommandCenter({
           </div>
           {meetingStatusMessage ? (
             <p
+              aria-live={
+                meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
+                  ? "assertive"
+                  : "polite"
+              }
               className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold ${
                 meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
                   ? "border-amber-200 bg-amber-50 text-amber-900"
                   : "border-emerald-200 bg-emerald-50 text-emerald-900"
               }`}
+              role={
+                meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
+                  ? "alert"
+                  : "status"
+              }
             >
               {meetingStatusMessage}
             </p>
@@ -1781,7 +1815,10 @@ export function CalendarCommandCenter({
             </div>
           </aside>
 
-          <main className="min-h-0 overflow-y-auto rounded-lg border border-blue-100 bg-white p-5">
+          <section
+            aria-label={automationSteps.find((step) => step.id === automationStep)?.label}
+            className="min-h-0 overflow-y-auto rounded-lg border border-blue-100 bg-white p-5"
+          >
             {automationStep === "overview" ? (
               <div className="grid gap-4">
                 <div>
@@ -2228,7 +2265,7 @@ export function CalendarCommandCenter({
                 </div>
               </div>
             ) : null}
-          </main>
+          </section>
 
           <aside className="grid min-h-0 content-start gap-4 overflow-y-auto rounded-lg border border-blue-100 bg-white p-4">
             <div>
@@ -2337,7 +2374,17 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex justify-end">
           <button
             className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-            onClick={() => setIsCreateEventOpen((current) => !current)}
+            onClick={() => {
+              if (!isCreateEventOpen) {
+                setEventDraft(createDefaultCalendarEventDraft(
+                  projects,
+                  sessionUserId,
+                  calendarIntegrations.defaultMeetingProvider,
+                  activeProjectId,
+                ));
+              }
+              setIsCreateEventOpen((current) => !current);
+            }}
             type="button"
           >
             {isCreateEventOpen ? text.cancel : text.newEvent}
@@ -2381,9 +2428,13 @@ export function CalendarCommandCenter({
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("projectId", event.target.value)}
+                  required
                   value={eventDraft.projectId}
                 >
-                  {projects.map((project) => (
+                  <option value="">
+                    {language === "de" ? "Projekt auswählen" : "Select project"}
+                  </option>
+                  {draftProjects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
                     </option>
@@ -2498,7 +2549,10 @@ export function CalendarCommandCenter({
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
                 className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={eventSaving}
+                disabled={
+                  eventSaving ||
+                  !draftProjects.some((project) => project.id === eventDraft.projectId)
+                }
                 onClick={() => void createCalendarEvent()}
                 type="button"
               >
@@ -2507,7 +2561,12 @@ export function CalendarCommandCenter({
               <button
                 className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
                 onClick={() => {
-                  setEventDraft(createDefaultCalendarEventDraft(projects, sessionUserId, calendarIntegrations.defaultMeetingProvider));
+                  setEventDraft(createDefaultCalendarEventDraft(
+                    projects,
+                    sessionUserId,
+                    calendarIntegrations.defaultMeetingProvider,
+                    activeProjectId,
+                  ));
                   setIsCreateEventOpen(false);
                 }}
                 type="button"
@@ -2518,7 +2577,11 @@ export function CalendarCommandCenter({
           </div>
         ) : null}
         {eventCreateNotice ? (
-          <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+          <p
+            aria-live="polite"
+            className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900"
+            role="status"
+          >
             {eventCreateNotice}
           </p>
         ) : null}
@@ -2589,11 +2652,21 @@ export function CalendarCommandCenter({
         </div>
         {meetingStatusMessage ? (
           <p
+            aria-live={
+              meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
+                ? "assertive"
+                : "polite"
+            }
             className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold ${
               meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
                 ? "border-amber-200 bg-amber-50 text-amber-900"
                 : "border-emerald-200 bg-white text-emerald-900"
             }`}
+            role={
+              meetingSettingsStatus === "error" || meetingNotificationStatus === "error"
+                ? "alert"
+                : "status"
+            }
           >
             {meetingStatusMessage}
           </p>
@@ -2614,10 +2687,14 @@ export function CalendarCommandCenter({
             </p>
           </div>
           <div className="grid w-full min-w-0 gap-3 text-sm md:grid-cols-3 2xl:max-w-2xl">
-            <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            <label
+              className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
+              htmlFor="calendar-default-provider"
+            >
               {text.calendarSetup.calendarForPage}
               <select
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                id="calendar-default-provider"
                 onChange={(event) => {
                   const provider = event.target.value as CalendarProvider;
                   setCalendarIntegrations((current) =>
@@ -2640,10 +2717,14 @@ export function CalendarCommandCenter({
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            <label
+              className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
+              htmlFor="calendar-default-meeting-provider"
+            >
               {text.calendarSetup.meetingProviderForPage}
               <select
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                id="calendar-default-meeting-provider"
                 onChange={(event) =>
                   setCalendarIntegrations((current) => ({
                     ...current,
@@ -2659,10 +2740,14 @@ export function CalendarCommandCenter({
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            <label
+              className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
+              htmlFor="calendar-sync-mode"
+            >
               {text.calendarSetup.syncMode}
               <select
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                id="calendar-sync-mode"
                 onChange={(event) =>
                   setCalendarIntegrations((current) => ({
                     ...current,
@@ -2866,10 +2951,14 @@ export function CalendarCommandCenter({
             </p>
           </div>
           <div className="grid w-full gap-3 text-sm md:grid-cols-2 xl:max-w-2xl">
-            <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+            <label
+              className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
+              htmlFor="calendar-share-meeting-type"
+            >
               {text.share.meetingType}
               <select
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                id="calendar-share-meeting-type"
                 onChange={(event) =>
                   setShareConfig((current) => ({
                     ...current,
@@ -2932,10 +3021,14 @@ export function CalendarCommandCenter({
                   value={shareConfig.height}
                 />
               </label>
-              <label className="grid min-w-0 gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+              <label
+                className="grid min-w-0 gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
+                htmlFor="calendar-share-theme"
+              >
                 {text.share.theme}
                 <select
                   className="min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                  id="calendar-share-theme"
                   onChange={(event) =>
                     setShareConfig((current) => ({
                       ...current,
@@ -2983,9 +3076,12 @@ export function CalendarCommandCenter({
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                <label
+                  className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500"
+                  htmlFor="calendar-share-output"
+                >
                   {text.share.output}
-                </p>
+                </label>
                 <h5 className="mt-1 text-base font-semibold text-slate-950">
                   {selectedShareOption.label}
                 </h5>
@@ -3003,6 +3099,7 @@ export function CalendarCommandCenter({
 
             <textarea
               className="mt-3 min-h-40 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 font-mono text-xs text-slate-950 outline-none focus:border-slate-950"
+              id="calendar-share-output"
               readOnly
               value={shareArtifacts[shareMode]}
             />
@@ -3068,7 +3165,11 @@ export function CalendarCommandCenter({
             ) : null}
 
             {shareNotice ? (
-              <p className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+              <p
+                aria-live="polite"
+                className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900"
+                role="status"
+              >
                 {shareNotice}
               </p>
             ) : null}
@@ -3087,6 +3188,7 @@ export function CalendarCommandCenter({
               {text.liveSyncDescription}
             </p>
             <p
+              aria-live={liveCalendarAction.status === "error" ? "assertive" : "polite"}
               className={`mt-3 break-words rounded-md border px-3 py-2 text-sm font-semibold ${
                 liveCalendarAction.status === "error"
                   ? "border-red-200 bg-red-50 text-red-900"
@@ -3094,6 +3196,7 @@ export function CalendarCommandCenter({
                     ? "border-emerald-200 bg-white text-emerald-900"
                     : "border-emerald-200 bg-white/70 text-emerald-900"
               }`}
+              role={liveCalendarAction.status === "error" ? "alert" : "status"}
             >
               {liveCalendarMessage}
             </p>
@@ -3168,12 +3271,20 @@ export function CalendarCommandCenter({
             </div>
 
             {meetingBookingOverviewStatus === "error" ? (
-              <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+              <p
+                aria-live="assertive"
+                className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+                role="alert"
+              >
                 {text.bookingOverview.loadError}
               </p>
             ) : null}
             {bookingActionMessage ? (
-              <p className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-950">
+              <p
+                aria-live="polite"
+                className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-950"
+                role="status"
+              >
                 {bookingActionMessage}
               </p>
             ) : null}

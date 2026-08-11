@@ -3,21 +3,23 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import subpageStyles from "@/components/public-subpage.module.css";
 import { PublicSiteShell } from "@/components/public-site-shell";
-import { languageRequestHeaderName } from "@/lib/i18n";
-import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
+import { resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { withPublicLanguage } from "@/lib/public-language";
 
-export const metadata: Metadata = {
-  robots: { follow: false, index: false },
-  title: "404 | Novalure CRM",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const language = resolvePublicPageLanguage(await headers(), {});
+  return {
+    description: language === "de"
+      ? "Die angeforderte Novalure CRM Seite wurde nicht gefunden."
+      : "The requested Novalure CRM page was not found.",
+    robots: { follow: false, index: false },
+    title: language === "de" ? "Seite nicht gefunden | Novalure CRM" : "Page not found | Novalure CRM",
+  };
+}
 
 export default async function NotFound() {
   const requestHeaders = await headers();
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    persistedLanguage: requestHeaders.get(languageRequestHeaderName),
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, {});
   const isGerman = language === "de";
   return (
     <PublicSiteShell

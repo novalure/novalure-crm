@@ -2,11 +2,23 @@
   "name": "novalure-crm",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.9.0",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "ci:toolchain": "node scripts/check-toolchain.mjs",
+    "ci:qa-target": "node scripts/qa-target-guard.mjs",
+    "security:production": "npm audit --omit=dev --audit-level=moderate",
+    "test:unit": "node --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs",
+    "test:integration": "node --test scripts/qa-security-and-scope-smoke-tests.mjs",
+    "test:e2e": "node scripts/qa-livegang-api.mjs",
     "db:migrate:public-slug-routing": "node scripts/apply-public-slug-routing-migration.mjs",
     "db:migrate:property-department": "node scripts/apply-property-department-migration.mjs",
     "db:migrate:property-default-units": "node scripts/apply-property-default-units-migration.mjs",
@@ -45,12 +57,12 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@types/react-grid-layout": "^1.3.6",
-    "@vercel/blob": "^2.3.3",
+    "@vercel/blob": "2.8.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.3"
   },
   "devDependencies": {
@@ -59,7 +71,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

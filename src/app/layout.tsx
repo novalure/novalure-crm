@@ -7,6 +7,7 @@ import {
   languageRequestHeaderName,
   resolveLanguage,
 } from "@/lib/language-runtime";
+import { figtree } from "@/app/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#d9ecff",
+  themeColor: "#faf9f7",
 };
 
 async function getInitialLanguage() {
@@ -39,7 +40,7 @@ export default async function RootLayout({
   const language = await getInitialLanguage();
 
   return (
-    <html lang={language} className="h-full" suppressHydrationWarning>
+    <html lang={language} className={`${figtree.variable} h-full`} suppressHydrationWarning>
       <body className="flex min-h-full flex-col antialiased">
         <LanguageHtmlSync />
         {children}

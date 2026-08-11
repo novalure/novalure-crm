@@ -4,12 +4,11 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "@neondatabase/serverless";
+import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const require = createRequire(import.meta.url);
 const { createJiti } = require("jiti");
 
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
 const workspaceId = "e2e00000-0000-4000-8000-000000000001";
 const userId = "e2e00000-0000-4000-8000-000000000002";
 const workspaceName = "UATTEST_E2E_Object_Flow";
@@ -43,26 +42,17 @@ function maskDatabaseUrl(value) {
 }
 
 function createDatabaseGuard(env, databaseUrl) {
-  const parsed = new URL(databaseUrl);
-  const projectId = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
-
   function assertTestDatabase(scope = "database access") {
-    if (parsed.hostname !== testDbHost) {
-      throw new Error(`Refusing ${scope}: active DB host is not test (${testDbHost})`);
-    }
-    if (!projectId.includes(testDbSuffix)) {
-      throw new Error(`Refusing ${scope}: project id does not contain ${testDbSuffix}`);
-    }
+    return assertDatabaseTarget({ databaseUrl, env, purpose: scope, target: "test" });
   }
 
   return {
     assertTestDatabase,
-    projectId,
     report() {
+      const target = assertTestDatabase("phase2 UATTEST_E2E run");
       console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-      console.log(`Active DB host: ${parsed.hostname}`);
-      console.log(`Project ID suffix verified: ${projectId ? "***" + projectId.slice(-8) : "missing"}`);
-      assertTestDatabase("phase2 UATTEST_E2E run");
+      console.log(`Active DB host: ${target.host}`);
+      console.log("Active project identity verified");
     },
   };
 }

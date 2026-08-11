@@ -1,8 +1,27 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import { workspace as mockWorkspace, users as mockUsers } from "@/lib/crm-data";
 import { getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
-import { verifyPassword } from "@/lib/auth/passwords";
+import {
+  authenticateIdentityLogin,
+  cancelIdentityLoginChallenge,
+  continueIdentityLogin,
+  getLoginChallengeCookieOptions,
+  getLoginChallengeView,
+  loginChallengeCookieName,
+  type AuthenticatedMembership,
+} from "@/lib/auth/auth-flow";
+import { isAuthSecurityConfigured } from "@/lib/auth/auth-security";
+import { isPrivilegedMembership } from "@/lib/auth/mfa";
+import {
+  createPersistedSession,
+  readPersistedSession,
+  revokePersistedRequestSession,
+  rotatePersistedRequestSession,
+  sessionCookieName,
+  sessionMaxAgeSeconds,
+  touchPersistedRequestSession,
+} from "@/lib/auth/session-store";
+import { enforceCsrfForSession } from "@/lib/security/csrf";
 import {
   getProductRoleCapabilities,
   hasProductCapability,
@@ -28,6 +47,13 @@ export type AppSession = {
   productRole: ProductRole;
   productPermissions: ProductCapability[];
   source: "cookie" | "headers" | "database" | "demo";
+  authIdentityId?: string;
+  authSessionId?: string;
+  mfaEnabledAt?: string | Date | null;
+  mfaVerifiedAt?: string | Date | null;
+  sessionCreatedAt?: string | Date;
+  sessionExpiresAt?: string | Date;
+  sessionRotationDue?: boolean;
   workspaceActiveCalendarProvider?: CalendarProviderChoice | null;
   workspaceCustomerType?: WorkspaceCustomerType | null;
   workspaceOperatingModel?: WorkspaceOperatingModel | null;
@@ -64,15 +90,20 @@ type WorkspaceRow = {
   teamStructure?: WorkspaceTeamStructure | null;
 };
 
-type SessionCookiePayload = {
-  exp: number;
-  userId: string;
-  workspaceId: string;
+type WorkspaceMembershipRow = {
+  email: string;
+  id: string;
+  name: string;
+  productRole: ProductRole | null;
+  role: AppRole;
 };
 
-export const sessionCookieName = "novalure_session";
-
-const sessionMaxAgeSeconds = 60 * 60 * 8;
+export {
+  getLoginChallengeCookieOptions,
+  getLoginChallengeView,
+  loginChallengeCookieName,
+  sessionCookieName,
+};
 
 function getSessionPermissions(role: AppRole, productRole: ProductRole) {
   const permissions = new Set(getRolePermissions(role));
@@ -83,6 +114,25 @@ function getSessionPermissions(role: AppRole, productRole: ProductRole) {
   }
 
   return [...permissions];
+}
+
+export function resolveWorkspaceMembershipAccess(input: {
+  productRole?: ProductRole | null;
+  role: AppRole;
+  workspaceName?: string | null;
+}) {
+  const productRole = resolveProductRole({
+    productRole: input.productRole ?? null,
+    technicalRole: input.role,
+    workspaceName: input.workspaceName,
+  });
+
+  return {
+    permissions: getSessionPermissions(input.role, productRole),
+    productPermissions: getProductRoleCapabilities(productRole),
+    productRole,
+    role: input.role,
+  };
 }
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
@@ -148,30 +198,37 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
         trustAuthHeaders || demoAuthEnabled
           ? await queryOne<WorkspaceUserRow>(
               `
-                select
-                  wu.id,
-                  wu.workspace_id as "workspaceId",
-                  w.name as "workspaceName",
-                  wu.name,
-                  wu.email,
-                  wu.product_role as "productRole",
-                  w.operating_model as "workspaceOperatingModel",
-                  w.customer_type as "workspaceCustomerType",
-                  w.team_structure as "workspaceTeamStructure",
-                  w.active_calendar_provider as "workspaceActiveCalendarProvider",
-                  w.public_key as "workspacePublicKey",
-                  w.setup_state as "workspaceSetupState",
-                  wu.role
-                from workspace_users wu
-                join workspaces w on w.id = wu.workspace_id
-                where wu.status = 'active'
-                  and (
-                    ($1::uuid is not null and wu.id = $1::uuid)
-                    or ($1::uuid is null and $2::text <> '' and lower(wu.email) = lower($2))
-                  )
-                  and ($3::uuid is null or wu.workspace_id = $3::uuid)
-                order by wu.created_at asc
-                limit 1
+                with candidates as (
+                  select
+                    wu.id,
+                    wu.workspace_id as "workspaceId",
+                    w.name as "workspaceName",
+                    wu.name,
+                    wu.email,
+                    wu.product_role as "productRole",
+                    w.operating_model as "workspaceOperatingModel",
+                    w.customer_type as "workspaceCustomerType",
+                    w.team_structure as "workspaceTeamStructure",
+                    w.active_calendar_provider as "workspaceActiveCalendarProvider",
+                    w.public_key as "workspacePublicKey",
+                    w.setup_state as "workspaceSetupState",
+                    wu.role
+                  from workspace_users wu
+                  join workspaces w on w.id = wu.workspace_id
+                  where wu.status = 'active'
+                    and (
+                      ($1::uuid is not null and wu.id = $1::uuid)
+                      or (
+                        $1::uuid is null
+                        and $3::uuid is not null
+                        and $2::text <> ''
+                        and lower(wu.email) = lower($2)
+                      )
+                    )
+                    and ($3::uuid is null or wu.workspace_id = $3::uuid)
+                )
+                select * from candidates
+                where (select count(*) from candidates) = 1
               `,
               [headerUserUuid, email, headerWorkspaceUuid],
             )
@@ -317,18 +374,12 @@ export function serializeSession(session: AppSession) {
 }
 
 export function getAuthRuntimeStatus() {
-  const passcodeMode = getLoginPasscodeHash()
-    ? "hash"
-    : getLoginPasscode()
-      ? "plaintext_fallback"
-      : "none";
-
   return {
     demoAuth: isDemoAuthEnabled(),
     loginConfigured: isLoginConfigured(),
-    passcodeMode,
-    plaintextPasscodeFallback: passcodeMode === "plaintext_fallback",
-    sessionConfigured: Boolean(getSessionSecret()),
+    passcodeMode: "central_identity",
+    plaintextPasscodeFallback: false,
+    sessionConfigured: isAuthSecurityConfigured(),
     strictAuth: isStrictAuthEnabled(),
     trustedAuthHeaders: shouldTrustAuthHeaders(),
   };
@@ -343,6 +394,9 @@ export async function requirePermission(request: Request, permission: AppPermiss
       response: Response.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
+
+  const csrf = await enforceCsrfForSession(request, session);
+  if (!csrf.ok) return csrf;
 
   if (!session.permissions.includes(permission)) {
     return {
@@ -363,6 +417,9 @@ export async function requireProductCapability(request: Request, capability: Pro
       response: Response.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
+
+  const csrf = await enforceCsrfForSession(request, session);
+  if (!csrf.ok) return csrf;
 
   if (!hasProductCapability(session.productRole, capability)) {
     return {
@@ -399,95 +456,130 @@ export function canSwitchWorkspace(session: AppSession) {
   );
 }
 
-function isNovalureGrowthWorkspaceRow(workspace: Pick<WorkspaceRow, "name" | "setupState">) {
-  const setupState = workspace.setupState ?? {};
-  const workspaceKey = typeof setupState.workspaceKey === "string" ? setupState.workspaceKey : "";
-  return workspace.name === "Novalure Growth" || workspaceKey === "novalure-growth";
-}
-
 async function findActiveMembershipForSession(session: AppSession, workspaceId: string) {
   if (!isUuidLike(workspaceId)) return null;
 
-  return queryOne<{ id: string; productRole: ProductRole | null }>(
+  return queryOne<WorkspaceMembershipRow>(
     `
-      select id, product_role as "productRole"
-      from workspace_users
-      where workspace_id = $1
-        and status = 'active'
-        and (
-          lower(email) = lower($2)
-          or ($3::uuid is not null and id = $3::uuid)
-        )
-      order by
-        case when id = $3::uuid then 0 else 1 end,
-        created_at asc
-      limit 1
+      with candidates as (
+        select
+          wu.id,
+          wu.name,
+          wu.email,
+          wu.role,
+          wu.product_role as "productRole"
+        from workspace_users wu
+        where wu.workspace_id = $1
+          and wu.status = 'active'
+          and (
+            ($2::uuid is not null and wu.auth_identity_id = $2::uuid)
+            or (
+              $2::uuid is null
+              and lower(wu.email) = lower($3)
+            )
+          )
+      )
+      select * from candidates
+      where (select count(*) from candidates) = 1
     `,
-    [workspaceId, session.email, isUuidLike(session.userId) ? session.userId : null],
+    [
+      workspaceId,
+      isUuidLike(session.authIdentityId) ? session.authIdentityId : null,
+      session.email,
+    ],
   );
 }
 
 async function auditCrossWorkspaceView(input: {
   fromWorkspaceId: string;
+  originSession: AppSession;
   session: AppSession;
   targetWorkspace: WorkspaceRow;
 }) {
-  if (!hasDatabaseUrl() || !isUuidLike(input.targetWorkspace.id)) return;
-
-  try {
-    await queryOne<{ id: string }>(
-      `
-        insert into audit_logs (
-          workspace_id,
-          actor_user_id,
-          action,
-          entity_type,
-          entity_id,
-          before,
-          after
-        )
-        values ($1, $2::uuid, 'workspace.cross_workspace_view', 'workspace', $1, null, $3::jsonb)
-        returning id
-      `,
-      [
-        input.targetWorkspace.id,
-        isUuidLike(input.session.userId) ? input.session.userId : null,
-        JSON.stringify({
-          actorProductRole: input.session.productRole,
-          fromWorkspaceId: input.fromWorkspaceId,
-          targetWorkspaceName: input.targetWorkspace.name,
-        }),
-      ],
-    );
-  } catch {
-    // Audit failures must not expose a broader workspace scope than the permission check already allowed.
+  if (!hasDatabaseUrl() || !isUuidLike(input.targetWorkspace.id) || !isUuidLike(input.session.userId)) {
+    throw new Error("Cross-workspace audit requires a persisted target membership");
   }
+
+  const audit = await queryOne<{ id: string }>(
+    `
+      insert into audit_logs (
+        workspace_id,
+        actor_user_id,
+        action,
+        entity_type,
+        entity_id,
+        before,
+        after
+      )
+      values ($1, $2::uuid, 'workspace.cross_workspace_view', 'workspace', $1, null, $3::jsonb)
+      returning id
+    `,
+    [
+      input.targetWorkspace.id,
+      input.session.userId,
+      JSON.stringify({
+        actorProductRole: input.session.productRole,
+        actorRole: input.session.role,
+        fromWorkspaceId: input.fromWorkspaceId,
+        originProductRole: input.originSession.productRole,
+        originUserId: input.originSession.userId,
+        targetWorkspaceName: input.targetWorkspace.name,
+      }),
+    ],
+  );
+
+  if (!audit) {
+    throw new Error("Cross-workspace audit was not persisted");
+  }
+}
+
+type WorkspaceScopeRequirement =
+  | { permission: AppPermission; capability?: ProductCapability }
+  | { permission?: never; capability: ProductCapability };
+
+function authorizeWorkspaceScopedSession(session: AppSession, input: WorkspaceScopeRequirement) {
+  if (input.permission && !session.permissions.includes(input.permission)) {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Forbidden" }, { status: 403 }),
+    };
+  }
+
+  if (input.capability && !hasProductCapability(session.productRole, input.capability)) {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Forbidden" }, { status: 403 }),
+    };
+  }
+
+  return { ok: true as const, session };
 }
 
 export async function resolveWorkspaceScopedSession(
   request: Request,
-  input:
-    | { permission: AppPermission; capability?: ProductCapability }
-    | { permission?: never; capability: ProductCapability },
+  input: WorkspaceScopeRequirement,
 ) {
-  const auth = input.permission
-    ? input.capability
-      ? await requirePermissionAndProductCapability(request, input.permission, input.capability)
-      : await requirePermission(request, input.permission)
-    : await requireProductCapability(request, input.capability);
+  const originSession = await getRequestSession(request);
+  if (!originSession) {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
 
-  if (!auth.ok) return auth;
+  const csrf = await enforceCsrfForSession(request, originSession);
+  if (!csrf.ok) return csrf;
 
   const url = new URL(request.url);
   const requestedWorkspaceId = isUuidLike(url.searchParams.get("workspaceId"))
     ? url.searchParams.get("workspaceId")
     : null;
 
-  if (!requestedWorkspaceId || requestedWorkspaceId === auth.session.workspaceId) {
-    return { ok: true as const, session: auth.session };
+  if (!requestedWorkspaceId || requestedWorkspaceId === originSession.workspaceId) {
+    return authorizeWorkspaceScopedSession(originSession, input);
   }
 
-  if (!canSwitchWorkspace(auth.session)) {
+  if (!canSwitchWorkspace(originSession)) {
     return {
       ok: false as const,
       response: Response.json({ error: "Managed-service workspace switch is forbidden" }, { status: 403 }),
@@ -526,49 +618,64 @@ export async function resolveWorkspaceScopedSession(
     };
   }
 
-  const membership = await findActiveMembershipForSession(auth.session, workspace.id);
-  const isGrowthWorkspace = isNovalureGrowthWorkspaceRow(workspace);
-  const isSpecializedInternalRole =
-    auth.session.productRole === "novalureGrowth" ||
-    auth.session.productRole === "novalureServiceOps" ||
-    auth.session.productRole === "novalureAdmin";
-
-  if (auth.session.productRole === "novalureServiceOps" && !membership) {
+  const membership = await findActiveMembershipForSession(originSession, workspace.id);
+  if (!membership) {
     return {
       ok: false as const,
-      response: Response.json({ error: "Service Ops workspace access requires explicit membership" }, { status: 403 }),
+      response: Response.json({ error: "Target workspace access requires explicit active membership" }, { status: 403 }),
     };
   }
 
-  if (isGrowthWorkspace && !isSpecializedInternalRole && !membership) {
+  const access = resolveWorkspaceMembershipAccess({
+    productRole: isProductRole(membership.productRole) ? membership.productRole : null,
+    role: membership.role,
+    workspaceName: workspace.name,
+  });
+  if (
+    isPrivilegedMembership(access.role, access.productRole) &&
+    !originSession.mfaVerifiedAt
+  ) {
     return {
       ok: false as const,
-      response: Response.json({ error: "Novalure Growth workspace requires explicit internal membership" }, { status: 403 }),
+      response: Response.json({ error: "MFA verification is required for privileged workspace access" }, { status: 403 }),
     };
   }
+  const targetSession: AppSession = {
+    ...originSession,
+    email: membership.email,
+    name: membership.name,
+    permissions: access.permissions,
+    productPermissions: access.productPermissions,
+    productRole: access.productRole,
+    role: access.role,
+    userId: membership.id,
+    workspaceActiveCalendarProvider: workspace.activeCalendarProvider ?? "none",
+    workspaceCustomerType: workspace.customerType ?? null,
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    workspaceOperatingModel: workspace.operatingModel ?? null,
+    workspacePublicKey: workspace.publicKey ?? null,
+    workspaceSetupState: workspace.setupState ?? null,
+    workspaceTeamStructure: workspace.teamStructure ?? null,
+  };
+  const authorization = authorizeWorkspaceScopedSession(targetSession, input);
+  if (!authorization.ok) return authorization;
 
-  if (auth.session.productRole === "novalureServiceOps" && requestedWorkspaceId !== auth.session.workspaceId) {
+  try {
     await auditCrossWorkspaceView({
-      fromWorkspaceId: auth.session.workspaceId,
-      session: auth.session,
+      fromWorkspaceId: originSession.workspaceId,
+      originSession,
+      session: targetSession,
       targetWorkspace: workspace,
     });
+  } catch {
+    return {
+      ok: false as const,
+      response: Response.json({ error: "Workspace switch audit could not be persisted" }, { status: 503 }),
+    };
   }
 
-  return {
-    ok: true as const,
-    session: {
-      ...auth.session,
-      workspaceActiveCalendarProvider: workspace.activeCalendarProvider ?? "none",
-      workspaceCustomerType: workspace.customerType ?? null,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      workspaceOperatingModel: workspace.operatingModel ?? null,
-      workspacePublicKey: workspace.publicKey ?? null,
-      workspaceSetupState: workspace.setupState ?? null,
-      workspaceTeamStructure: workspace.teamStructure ?? null,
-    },
-  };
+  return authorization;
 }
 
 function isUuidLike(value: string | null | undefined) {
@@ -579,12 +686,9 @@ function isUuidLike(value: string | null | undefined) {
 }
 
 function isProductionDeployment() {
-  return process.env.VERCEL_ENV === "production";
-}
-
-function envValue(name: string) {
-  const value = process.env[name]?.trim() ?? "";
-  return value.replace(/^['"]|['"]$/g, "");
+  const vercelEnvironment = process.env.VERCEL_ENV?.trim();
+  if (vercelEnvironment) return vercelEnvironment === "production";
+  return process.env.NODE_ENV === "production";
 }
 
 function isDemoAuthEnabled() {
@@ -592,291 +696,185 @@ function isDemoAuthEnabled() {
 }
 
 function shouldTrustAuthHeaders() {
-  return process.env.NOVALURE_TRUST_AUTH_HEADERS === "1";
+  return !isProductionDeployment() && process.env.NOVALURE_TRUST_AUTH_HEADERS === "1";
 }
 
 function isStrictAuthEnabled() {
   return process.env.NOVALURE_AUTH_STRICT === "1" || isProductionDeployment() || !isDemoAuthEnabled();
 }
 
-function getSessionSecret() {
-  return envValue("NOVALURE_SESSION_SECRET");
-}
-
-function getLoginPasscodeHash() {
-  return envValue("NOVALURE_LOGIN_PASSCODE_HASH");
-}
-
-function getLoginPasscode() {
-  return envValue("NOVALURE_LOGIN_PASSCODE");
-}
-
 export function isLoginConfigured() {
-  return Boolean(getSessionSecret() && hasDatabaseUrl());
+  return Boolean(isAuthSecurityConfigured() && hasDatabaseUrl());
 }
 
-function base64UrlEncode(value: string | Buffer) {
-  return Buffer.from(value).toString("base64url");
+function toAppSession(
+  membership: AuthenticatedMembership,
+  input: {
+    authSessionId?: string;
+    mfaVerifiedAt?: string | Date | null;
+    sessionCreatedAt?: string | Date;
+    sessionExpiresAt?: string | Date;
+    sessionRotationDue?: boolean;
+    source: AppSession["source"];
+  },
+): AppSession {
+  const productRole = resolveProductRole({
+    productRole: isProductRole(membership.productRole) ? membership.productRole : null,
+    technicalRole: membership.role,
+    workspaceName: membership.workspaceName,
+  });
+
+  return {
+    authenticated: true,
+    authIdentityId: membership.authIdentityId,
+    authSessionId: input.authSessionId,
+    email: membership.email,
+    mfaEnabledAt: membership.mfaEnabledAt,
+    mfaVerifiedAt: input.mfaVerifiedAt ?? null,
+    name: membership.name,
+    permissions: getSessionPermissions(membership.role, productRole),
+    productPermissions: getProductRoleCapabilities(productRole),
+    productRole,
+    role: membership.role,
+    sessionCreatedAt: input.sessionCreatedAt,
+    sessionExpiresAt: input.sessionExpiresAt,
+    sessionRotationDue: input.sessionRotationDue,
+    source: input.source,
+    userId: membership.id,
+    workspaceActiveCalendarProvider: membership.workspaceActiveCalendarProvider ?? "none",
+    workspaceCustomerType: membership.workspaceCustomerType ?? null,
+    workspaceId: membership.workspaceId,
+    workspaceName: membership.workspaceName,
+    workspaceOperatingModel: membership.workspaceOperatingModel ?? null,
+    workspacePublicKey: membership.workspacePublicKey ?? null,
+    workspaceSetupState: membership.workspaceSetupState ?? null,
+    workspaceTeamStructure: membership.workspaceTeamStructure ?? null,
+  };
 }
 
-function base64UrlDecode(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function signSessionPayload(payload: string) {
-  const secret = getSessionSecret();
-  if (!secret) return null;
-  return createHmac("sha256", secret).update(payload).digest("base64url");
-}
-
-function parseCookieHeader(cookieHeader: string | null | undefined) {
-  return Object.fromEntries(
-    (cookieHeader ?? "")
-      .split(";")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .map((part) => {
-        const separator = part.indexOf("=");
-        if (separator === -1) return [part, ""];
-        return [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
-      }),
-  );
-}
-
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
-function hashLoginPasscode(value: string) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-async function findWorkspaceUserForLogin(email: string) {
-  try {
-    return await queryOne<WorkspaceUserRow>(
-      `
-        select
-          wu.id,
-          wu.workspace_id as "workspaceId",
-          w.name as "workspaceName",
-          wu.name,
-          wu.email,
-          wu.password_hash as "passwordHash",
-          wu.product_role as "productRole",
-          w.operating_model as "workspaceOperatingModel",
-          w.customer_type as "workspaceCustomerType",
-          w.team_structure as "workspaceTeamStructure",
-          w.active_calendar_provider as "workspaceActiveCalendarProvider",
-          w.public_key as "workspacePublicKey",
-          w.setup_state as "workspaceSetupState",
-          wu.role
-        from workspace_users wu
-        join workspaces w on w.id = wu.workspace_id
-        where wu.status = 'active'
-          and lower(wu.email) = lower($1)
-        order by wu.created_at asc
-        limit 1
-      `,
-      [email],
-    );
-  } catch {
-    return queryOne<WorkspaceUserRow>(
-      `
-        select
-          wu.id,
-          wu.workspace_id as "workspaceId",
-          w.name as "workspaceName",
-          wu.name,
-          wu.email,
-          null::text as "productRole",
-          null::text as "workspaceOperatingModel",
-          null::text as "workspaceCustomerType",
-          null::text as "workspaceTeamStructure",
-          null::text as "workspaceActiveCalendarProvider",
-          null::text as "workspacePublicKey",
-          null::jsonb as "workspaceSetupState",
-          wu.role
-        from workspace_users wu
-        join workspaces w on w.id = wu.workspace_id
-        where wu.status = 'active'
-          and lower(wu.email) = lower($1)
-        order by wu.created_at asc
-        limit 1
-      `,
-      [email],
-    );
-  }
-}
-
-function verifySessionCookie(value: string | null | undefined): SessionCookiePayload | null {
-  if (!value) return null;
-
-  const [payload, signature] = value.split(".");
-  if (!payload || !signature) return null;
-
-  const expectedSignature = signSessionPayload(payload);
-  if (!expectedSignature || !safeEqual(signature, expectedSignature)) return null;
+async function getSessionFromCookieHeader(cookieHeader: string | null | undefined) {
+  if (!hasDatabaseUrl() || !isAuthSecurityConfigured()) return null;
 
   try {
-    const parsed = JSON.parse(base64UrlDecode(payload)) as Partial<SessionCookiePayload>;
-    if (!parsed.userId || !parsed.workspaceId || !parsed.exp) return null;
-    if (!isUuidLike(parsed.userId) || !isUuidLike(parsed.workspaceId)) return null;
-    if (parsed.exp < Date.now()) return null;
-    return {
-      exp: parsed.exp,
-      userId: parsed.userId,
-      workspaceId: parsed.workspaceId,
-    };
+    const stored = await readPersistedSession(cookieHeader);
+    if (!stored) return null;
+    return toAppSession(stored, {
+      authSessionId: stored.authSessionId,
+      mfaVerifiedAt: stored.mfaVerifiedAt,
+      sessionCreatedAt: stored.createdAt,
+      sessionExpiresAt: stored.expiresAt,
+      sessionRotationDue: stored.rotationDue,
+      source: "cookie",
+    });
   } catch {
     return null;
   }
 }
 
-async function getSessionFromCookieHeader(cookieHeader: string | null | undefined) {
-  if (!hasDatabaseUrl()) return null;
-
-  const cookies = parseCookieHeader(cookieHeader);
-  const payload = verifySessionCookie(cookies[sessionCookieName]);
-  if (!payload) return null;
-
-  const user = await queryOne<WorkspaceUserRow>(
-    `
-      select
-        wu.id,
-        wu.workspace_id as "workspaceId",
-        w.name as "workspaceName",
-        wu.name,
-        wu.email,
-        wu.product_role as "productRole",
-        w.operating_model as "workspaceOperatingModel",
-        w.customer_type as "workspaceCustomerType",
-        w.team_structure as "workspaceTeamStructure",
-        w.active_calendar_provider as "workspaceActiveCalendarProvider",
-        w.public_key as "workspacePublicKey",
-        w.setup_state as "workspaceSetupState",
-        wu.role
-      from workspace_users wu
-      join workspaces w on w.id = wu.workspace_id
-      where wu.status = 'active'
-        and wu.id = $1
-        and wu.workspace_id = $2
-      limit 1
-    `,
-    [payload.userId, payload.workspaceId],
-  );
-
-  if (!user) return null;
-
-  const productRole = resolveProductRole({
-    productRole: isProductRole(user.productRole) ? user.productRole : null,
-    technicalRole: user.role,
-    workspaceName: user.workspaceName,
-  });
-
-  return {
-    authenticated: true,
-    userId: user.id,
-    workspaceId: user.workspaceId,
-    workspaceName: user.workspaceName,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    permissions: getSessionPermissions(user.role, productRole),
-    productPermissions: getProductRoleCapabilities(productRole),
-    productRole,
-    source: "cookie" as const,
-    workspaceActiveCalendarProvider: user.workspaceActiveCalendarProvider ?? "none",
-    workspaceCustomerType: user.workspaceCustomerType ?? null,
-    workspaceOperatingModel: user.workspaceOperatingModel ?? null,
-    workspacePublicKey: user.workspacePublicKey ?? null,
-    workspaceSetupState: user.workspaceSetupState ?? null,
-    workspaceTeamStructure: user.workspaceTeamStructure ?? null,
-  };
-}
-
-export async function authenticateLogin(input: { email: string; password: string }) {
+export async function authenticateLogin(input: { email: string; password: string; request: Request }) {
   if (!hasDatabaseUrl()) {
-    return { error: "database_unavailable" as const, session: null };
+    return { challenge: null, error: "database_unavailable" as const, session: null };
   }
 
   if (!isLoginConfigured()) {
-    return { error: "login_not_configured" as const, session: null };
+    return { challenge: null, error: "login_not_configured" as const, session: null };
   }
 
-  const email = input.email.trim().toLowerCase();
-  const password = input.password.trim();
-
-  if (!email || !password) {
-    return { error: "invalid_credentials" as const, session: null };
-  }
-
-  const user = await findWorkspaceUserForLogin(email);
-
-  if (!user) {
-    return { error: "invalid_credentials" as const, session: null };
-  }
-
-  const passcodeHash = getLoginPasscodeHash();
-  const passcodePlain = getLoginPasscode();
-  const passcodeMatches = passcodeHash
-    ? safeEqual(hashLoginPasscode(password), passcodeHash)
-    : Boolean(passcodePlain && safeEqual(password, passcodePlain));
-  const passwordMatches = user.passwordHash
-    ? await verifyPassword(password, user.passwordHash)
-    : passcodeMatches;
-
-  if (!passwordMatches) {
-    return { error: "invalid_credentials" as const, session: null };
-  }
-
-  const productRole = resolveProductRole({
-    productRole: isProductRole(user.productRole) ? user.productRole : null,
-    technicalRole: user.role,
-    workspaceName: user.workspaceName,
+  const result = await authenticateIdentityLogin({
+    email: input.email,
+    password: input.password,
+    request: input.request,
   });
+  if (result.kind === "error") {
+    return { challenge: null, error: result.error, session: null };
+  }
+  if (result.kind === "challenge") {
+    return { challenge: result, error: null, session: null };
+  }
 
   return {
+    challenge: null,
     error: null,
-    session: {
-      authenticated: true,
-      userId: user.id,
-      workspaceId: user.workspaceId,
-      workspaceName: user.workspaceName,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      permissions: getSessionPermissions(user.role, productRole),
-      productPermissions: getProductRoleCapabilities(productRole),
-      productRole,
-      source: "database" as const,
-      workspaceActiveCalendarProvider: user.workspaceActiveCalendarProvider ?? "none",
-      workspaceCustomerType: user.workspaceCustomerType ?? null,
-      workspaceOperatingModel: user.workspaceOperatingModel ?? null,
-      workspacePublicKey: user.workspacePublicKey ?? null,
-      workspaceSetupState: user.workspaceSetupState ?? null,
-      workspaceTeamStructure: user.workspaceTeamStructure ?? null,
-    } satisfies AppSession,
+    session: toAppSession(result.membership, {
+      mfaVerifiedAt: result.mfaVerifiedAt,
+      source: "database",
+    }),
   };
 }
 
-export function createSessionCookie(session: AppSession) {
-  const payload = base64UrlEncode(
-    JSON.stringify({
-      exp: Date.now() + sessionMaxAgeSeconds * 1000,
-      userId: session.userId,
-      workspaceId: session.workspaceId,
-    } satisfies SessionCookiePayload),
-  );
-  const signature = signSessionPayload(payload);
-  if (!signature) throw new Error("NOVALURE_SESSION_SECRET is not configured");
-
+export async function continueLogin(input: {
+  code?: string;
+  recoveryCodesSaved?: boolean;
+  request: Request;
+  workspaceUserId?: string;
+}) {
+  if (!isLoginConfigured()) {
+    return { challenge: null, error: "login_not_configured" as const, session: null };
+  }
+  const result = await continueIdentityLogin(input);
+  if (result.kind === "error") {
+    return { challenge: null, error: result.error, session: null };
+  }
+  if (result.kind === "challenge") {
+    return { challenge: result, error: null, session: null };
+  }
   return {
-    maxAge: sessionMaxAgeSeconds,
-    name: sessionCookieName,
-    value: `${payload}.${signature}`,
+    challenge: null,
+    error: null,
+    session: toAppSession(result.membership, {
+      mfaVerifiedAt: result.mfaVerifiedAt,
+      source: "database",
+    }),
   };
+}
+
+export async function cancelLoginChallenge(request: Request) {
+  if (!hasDatabaseUrl()) return false;
+  return cancelIdentityLoginChallenge(request);
+}
+
+export async function createSessionCookie(session: AppSession, request: Request) {
+  if (!session.authIdentityId) throw new Error("Central authentication identity is missing");
+  const membership: AuthenticatedMembership = {
+    authIdentityId: session.authIdentityId,
+    email: session.email,
+    id: session.userId,
+    mfaEnabledAt: session.mfaEnabledAt ?? null,
+    name: session.name,
+    productRole: session.productRole,
+    role: session.role,
+    workspaceActiveCalendarProvider: session.workspaceActiveCalendarProvider,
+    workspaceCustomerType: session.workspaceCustomerType,
+    workspaceId: session.workspaceId,
+    workspaceName: session.workspaceName,
+    workspaceOperatingModel: session.workspaceOperatingModel,
+    workspacePublicKey: session.workspacePublicKey,
+    workspaceSetupState: session.workspaceSetupState,
+    workspaceTeamStructure: session.workspaceTeamStructure,
+  };
+  return createPersistedSession({
+    membership,
+    mfaVerifiedAt: session.mfaVerifiedAt ? new Date(session.mfaVerifiedAt) : null,
+    request,
+  });
+}
+
+export async function revokeRequestSession(request: Request, reason = "logout") {
+  if (!hasDatabaseUrl()) return false;
+  return revokePersistedRequestSession(request.headers.get("cookie"), reason);
+}
+
+export async function rotateRequestSession(request: Request) {
+  if (!hasDatabaseUrl()) return null;
+  return rotatePersistedRequestSession({
+    cookieHeader: request.headers.get("cookie"),
+    request,
+  });
+}
+
+export async function touchRequestSession(request: Request) {
+  if (!hasDatabaseUrl()) return false;
+  return touchPersistedRequestSession(request.headers.get("cookie"));
 }
 
 export function getSessionCookieOptions(maxAge = sessionMaxAgeSeconds) {

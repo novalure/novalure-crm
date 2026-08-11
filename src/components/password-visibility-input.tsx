@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ComponentPropsWithRef } from "react";
 
-type PasswordVisibilityInputProps = {
-  autoComplete?: string;
-  className?: string;
+type PasswordVisibilityInputProps = Omit<ComponentPropsWithRef<"input">, "type"> & {
   hideLabel: string;
   id: string;
   name: string;
-  required?: boolean;
   showLabel: string;
 };
 
@@ -42,13 +39,13 @@ function EyeIcon({ revealed }: { revealed: boolean }) {
 }
 
 export function PasswordVisibilityInput({
-  autoComplete,
   className,
   hideLabel,
   id,
   name,
-  required,
+  ref,
   showLabel,
+  ...nativeProps
 }: PasswordVisibilityInputProps) {
   const [revealed, setRevealed] = useState(false);
   const label = revealed ? hideLabel : showLabel;
@@ -56,17 +53,18 @@ export function PasswordVisibilityInput({
   return (
     <div className="relative">
       <input
-        autoComplete={autoComplete}
+        {...nativeProps}
         className={`password-visibility-input pr-12 ${className ?? ""}`}
         id={id}
         name={name}
-        required={required}
+        ref={ref}
         type={revealed ? "text" : "password"}
       />
       <button
+        aria-controls={id}
         aria-label={label}
         aria-pressed={revealed}
-        className="absolute inset-y-1 right-1 grid w-10 place-items-center rounded-md text-[#476178] transition hover:bg-[#edf4fb] hover:text-[#071421] focus:outline-none focus:ring-2 focus:ring-[#b8d8ff]"
+        className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[#476178] transition hover:bg-[#edf4fb] hover:text-[#071421] focus:outline-none focus:ring-2 focus:ring-[#b8d8ff]"
         onClick={() => setRevealed((current) => !current)}
         title={label}
         type="button"

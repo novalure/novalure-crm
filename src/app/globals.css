@@ -1,6 +1,7 @@
 @import "react-grid-layout/css/styles.css";
 @import "react-resizable/css/styles.css";
 @import "tailwindcss";
+@import "../styles/novalure-tokens.css";
 
 :root {
   --background: #d9ecff;
@@ -19,7 +20,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "Segoe UI Mono", ui-monospace, monospace;
 }
 
@@ -28,7 +29,7 @@ body {
     radial-gradient(circle at 82% 4%, rgba(255, 255, 255, 0.7), transparent 30%),
     linear-gradient(180deg, #eef7ff 0%, #d9ecff 48%, #c6e2ff 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-figtree), system-ui, sans-serif;
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -172,16 +173,16 @@ button.bg-emerald-700,
   border-radius: 8px;
 }
 
-input,
-select,
-textarea {
+input:not([data-nl-ui]),
+select:not([data-nl-ui]),
+textarea:not([data-nl-ui]) {
   background: rgba(255, 255, 255, 0.64) !important;
   border-color: var(--nova-line) !important;
   color: #08233f !important;
 }
 
-input::placeholder,
-textarea::placeholder {
+input:not([data-nl-ui])::placeholder,
+textarea:not([data-nl-ui])::placeholder {
   color: rgba(69, 98, 127, 0.76);
 }
 

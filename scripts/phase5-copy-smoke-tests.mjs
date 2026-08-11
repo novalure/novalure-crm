@@ -165,6 +165,7 @@ test("public website subpages share the landing page design system", () => {
     assert.match(readText(route), /<PublicSiteShell/);
   }
 
-  assert.match(readText("src/app/not-found.tsx"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
+  assert.match(readText("src/app/not-found.tsx"), /resolvePublicPageLanguage\(requestHeaders, \{\}\)/);
+  assert.match(readText("src/lib/page-metadata.ts"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
   assert.match(readText("src/app/unsubscribe/page.tsx"), /getUnsubscribeLanguageHref/);
 });

@@ -233,6 +233,7 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(i18nSource, /export function getCrmEnumLabel/);
   assert.match(i18nSource, /export function getCrmDealStageLabel/);
   assert.match(i18nSource, /export function getCrmPropertyTypeLabel/);
+  assert.match(i18nSource, /export function getCrmProjectTypeLabel/);
   assert.match(i18nSource, /export function getCrmFinancingStatusLabel/);
   assert.match(i18nSource, /export function getCrmConsentChannelLabel/);
   assert.match(i18nSource, /export function getCrmConsentStatusLabel/);
@@ -261,10 +262,13 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(formCommandCenterSource, /copy\.fieldTypes\[field\.type\]/);
   assert.match(funnelCommandCenterSource, /text\.messages\.statusTriggerStages/);
   assert.match(funnelCommandCenterSource, /getCrmEnumLabel\(item\.status, language\)/);
+  assert.match(funnelCommandCenterSource, /getCrmProjectTypeLabel\(project\.type, language\)/);
+  assert.match(propertyCommandCenterSource, /getCrmProjectTypeLabel\(project\.type, language\)/);
   assert.match(workspaceSource, /getCrmConsentChannelLabel\(consent\.channel, language\)/);
   assert.match(workspaceSource, /getCrmEnumLabel\(dataSource, language\)/);
   assert.match(workspaceSource, /getCrmLeadTypeKey\(lead\.type\)/);
   assert.match(workspaceSource, /getCrmSourceLabel\(source, language\)/);
+  assert.match(workspaceSource, /getCrmProjectTypeLabel\(project\.type, language\)/);
 });
 
 test("system generated CRM default texts localize at display boundaries only", () => {
@@ -344,7 +348,7 @@ test("phase 2 dashboard KPI labels stay explicit and localized", () => {
   assert.match(i18nSource, /noSourceData:\s*"Keine Leadquellen-Daten in dieser Ansicht\."/);
   assert.match(dashboardSource, /copy\.kpis\.expectedCommission\(forecastOpenDeals\.length, formatEuro\(forecastOpenPipelineValue, locale\), formatEuro\(forecastWeightedPipelineValue, locale\)\)/);
   assert.match(dashboardSource, /copy\.charts\.noSourceData/);
-  assert.match(workspaceSource, /document\.title = copy\.shell\.browserTitle/);
+  assert.match(workspaceSource, /document\.title = `\$\{activeAreaLabel\} \| Novalure CRM`/);
 });
 
 test("phase 2 German copy uses correct umlauts and formal login wording", () => {

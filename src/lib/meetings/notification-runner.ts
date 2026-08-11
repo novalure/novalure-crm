@@ -6,6 +6,12 @@ import {
   renderMeetingNotificationTemplate,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
+import {
+  classifyDeliveryError,
+  createLeaseOwner,
+  retryDelaySeconds,
+  sanitizeJobError,
+} from "@/lib/jobs/durable-queue";
 
 type ProcessResult = {
   checked: number;
@@ -42,16 +48,19 @@ function textToEmailHtml(input: { body: string; title: string }) {
 }
 
 export async function processDueMeetingNotifications(
-  input: { jobIds?: string[]; limit?: number } = {},
+  input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
 ): Promise<ProcessResult> {
   const jobRefs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueMeetingNotificationJobs(input.limit ?? 25);
-  const result: ProcessResult = { checked: jobRefs.length, failed: 0, sent: 0 };
+  const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
 
   for (const jobRef of jobRefs) {
-    const job = await claimMeetingNotificationJob(jobRef.id);
-    if (!job) continue;
+    if (input.shouldContinue && !input.shouldContinue()) break;
+    result.checked += 1;
+    const leaseOwner = createLeaseOwner("meeting-notification");
+    const job = await claimMeetingNotificationJob({ id: jobRef.id, leaseOwner });
+    if (!job?.leaseOwner) continue;
 
     const rendered = renderMeetingNotificationTemplate({
       body: job.body,
@@ -60,18 +69,35 @@ export async function processDueMeetingNotifications(
       tokens: job.tokens,
     });
 
-    const emailResult = await sendNewsletterEmail({
-      html: textToEmailHtml(rendered),
-      idempotencyKey: `meeting-notification-${job.id}`,
-      subject: rendered.subject,
-      to: job.recipientEmail,
-    });
+    let emailResult: Awaited<ReturnType<typeof sendNewsletterEmail>>;
+    try {
+      emailResult = await sendNewsletterEmail({
+        html: textToEmailHtml(rendered),
+        idempotencyKey: `meeting-notification-${job.id}`,
+        subject: rendered.subject,
+        to: job.recipientEmail,
+      });
+    } catch (error) {
+      const message = sanitizeJobError(error);
+      result.failed += 1;
+      await markMeetingNotificationJobFailed({
+        category: classifyDeliveryError({ error }),
+        error: message,
+        id: job.id,
+        leaseOwner: job.leaseOwner,
+        retryDelaySeconds: retryDelaySeconds(job.attemptCount),
+      });
+      continue;
+    }
 
     if (emailResult.status === "failed") {
       result.failed += 1;
       await markMeetingNotificationJobFailed({
-        error: emailResult.error || "Email provider failed",
+        category: classifyDeliveryError({ error: emailResult.error }),
+        error: sanitizeJobError(emailResult.error || "Email provider failed"),
         id: job.id,
+        leaseOwner: job.leaseOwner,
+        retryDelaySeconds: retryDelaySeconds(job.attemptCount),
       });
       continue;
     }
@@ -79,6 +105,7 @@ export async function processDueMeetingNotifications(
     result.sent += 1;
     await markMeetingNotificationJobSent({
       id: job.id,
+      leaseOwner: job.leaseOwner,
       messageId: emailResult.messageId ?? null,
       provider: emailResult.provider,
     });

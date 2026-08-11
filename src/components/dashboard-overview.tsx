@@ -28,6 +28,7 @@ import {
   languageOptionsByCode,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 const NOW = new Date();
 const COMMISSION_RATE = 0.03;
@@ -488,7 +489,7 @@ export function DashboardOverview({
 
     async function loadPersistedViews() {
       try {
-        const response = await fetch("/api/crm/dashboard-views", { cache: "no-store" });
+        const response = await csrfFetch("/api/crm/dashboard-views", { cache: "no-store" });
         if (!response.ok) return;
 
         const payload = await response.json() as { views?: unknown[] };
@@ -635,7 +636,7 @@ export function DashboardOverview({
       String(views.length + 1);
     let nextView: DashboardView = normalizeView({ id: customViewId, name: name.trim(), filters, layout, widgets });
     try {
-      const response = await fetch("/api/crm/dashboard-views", {
+      const response = await csrfFetch("/api/crm/dashboard-views", {
         body: JSON.stringify({
           filters,
           id: activeViewId.startsWith("custom_") ? activeViewId : undefined,

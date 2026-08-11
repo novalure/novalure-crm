@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermissionAndProductCapability } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { mutateUnitReservation, type ReservationWorkflowAction } from "@/lib/db/reservation-repositories";
 
 async function readJson(request: Request) {
@@ -32,7 +32,10 @@ function parseOptionalNumber(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermissionAndProductCapability(request, "crm:write", "reservations:write");
+  const auth = await resolveWorkspaceScopedSession(request, {
+    permission: "crm:write",
+    capability: "reservations:write",
+  });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);

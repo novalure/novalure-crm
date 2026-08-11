@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   automations,
   botCallInsights,
@@ -29,6 +30,9 @@ import {
 } from "@/lib/crm-source";
 import { BotCommandCenter } from "@/components/bot-command-center";
 import { BotLanguageTester } from "@/components/bot-language-tester";
+import { AuditLogPanel } from "@/components/admin/audit-log-panel";
+import { GovernanceCompliancePanel } from "@/components/admin/governance-compliance-panel";
+import { SystemReleasesPanel } from "@/components/admin/system-releases-panel";
 import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CompanyProfileSettings } from "@/components/company-profile-settings";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
@@ -51,6 +55,14 @@ import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
+import {
+  createDefaultCrmScope,
+  createSelectedCrmScope,
+  resolveCrmScope,
+  serializeCrmScopeUrl,
+  writeCrmScopePreference,
+  type CrmScope,
+} from "@/lib/crm-scope";
 import type { CoreCrmDataResult } from "@/lib/db/crm-loaders";
 import type {
   CalendarEvent,
@@ -90,6 +102,7 @@ import {
   getCrmConsentStatusLabel,
   getCrmEnumLabel,
   getCrmLeadTypeKey,
+  getCrmProjectTypeLabel,
   getCrmSourceKey,
   getCrmSourceLabel,
   getCrmStatusLabel,
@@ -100,6 +113,7 @@ import {
   supportedLanguages,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type DashboardSection =
   | "dashboard"
@@ -656,6 +670,19 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   workspaces: { id: "workspaces", section: "managedService" },
 };
 
+const restrictedAdminNavigationEntries = new Set<NavigationEntryId>([
+  "auditLog",
+  "governanceCompliance",
+  "systemReleases",
+]);
+
+function canAccessRestrictedAdminEntry(entryId: NavigationEntryId, productRole: ProductRole) {
+  if (entryId === "auditLog") {
+    return productRole === "platform_admin" || productRole === "novalureAdmin" || productRole === "novalureServiceOps";
+  }
+  return productRole === "platform_admin" || productRole === "novalureAdmin";
+}
+
 const moduleBySection: Partial<Record<DashboardSection, WorkspaceModuleKey>> = {
   analytics: "analytics",
   bots: "bots",
@@ -785,23 +812,84 @@ function ModalShell({
   onClose: () => void;
   title: string;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
+    if (!dialog) return;
+
+    const getFocusableElements = () => Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+
+    (getFocusableElements()[0] ?? dialog).focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    dialog.addEventListener("keydown", handleKeyDown);
+    return () => {
+      dialog.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6">
       <section
+        aria-labelledby={titleId}
         aria-modal="true"
         className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-2xl"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
               {eyebrow}
             </p>
-            <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">{title}</h3>
+            <h3 className="mt-1 break-words text-xl font-semibold text-slate-950" id={titleId}>{title}</h3>
           </div>
           <button
             aria-label={closeLabel}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-stone-300 bg-white text-lg font-semibold text-slate-700 hover:bg-stone-100"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-stone-300 bg-white text-lg font-semibold text-slate-700 hover:bg-stone-100"
             onClick={onClose}
             type="button"
           >
@@ -1019,6 +1107,16 @@ function readStoredLanguage(storageKey: string, fallback = defaultLanguage) {
   return resolveLanguage(window.localStorage.getItem(storageKey), fallback);
 }
 
+function getBrowserCrmScopeStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function readUrlLanguage(): LanguageCode | null {
   if (typeof window === "undefined") {
     return null;
@@ -1052,6 +1150,25 @@ function readStoredPresetId(fallback: NavigationPresetId, allowedPresetIds: Navi
     ? storedPresetId
     : fallback;
 }
+
+const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
+  auditLog: "audit-log",
+  buyerLeads: "buyer-leads",
+  buyerProfiles: "buyer-profiles",
+  dailyQueue: "daily-queue",
+  developerLeads: "leads",
+  governanceCompliance: "governance-compliance",
+  objectsMandates: "objects-mandates",
+  properties: "properties",
+  projectAnalytics: "analytics",
+  projectOverview: "projects",
+  projects: "projects",
+  reservations: "reservations",
+  sellerLeads: "seller-leads",
+  settings: "settings",
+  systemReleases: "system-releases",
+  workspaces: "workspaces",
+};
 
 function readInitialSection(fallbackSection: DashboardSection = "dashboard"): DashboardSection {
   if (typeof window === "undefined") {
@@ -1131,6 +1248,17 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
   return sections[hash] ?? fallbackSection;
 }
 
+function readInitialNavigationEntry(preset: NavigationPreset) {
+  if (typeof window === "undefined") return preset.startEntry;
+
+  const hash = window.location.hash.replace("#", "").toLowerCase();
+  const exactEntry = preset.navigationEntries.find((entryId) => navigationEntryHashes[entryId] === hash);
+  if (exactEntry) return exactEntry;
+
+  const section = readInitialSection(preset.startSection);
+  return preset.navigationEntries.find((entryId) => navigationEntries[entryId].section === section) ?? preset.startEntry;
+}
+
 function parseCrmMoney(value: string) {
   const lower = value.toLowerCase();
   const multiplier = lower.includes("mio") ? 1_000_000 : 1;
@@ -1168,23 +1296,9 @@ function getSectionHash(section: DashboardSection) {
 }
 
 function getNavigationHash(section: DashboardSection, entryId?: NavigationEntryId) {
-  const entryHashes: Partial<Record<NavigationEntryId, string>> = {
-    buyerLeads: "buyer-leads",
-    buyerProfiles: "buyer-profiles",
-    dailyQueue: "daily-queue",
-    developerLeads: "leads",
-    objectsMandates: "objects-mandates",
-    properties: "properties",
-    projectAnalytics: "analytics",
-    projectOverview: "projects",
-    projects: "projects",
-    reservations: "reservations",
-    sellerLeads: "seller-leads",
-    settings: "settings",
-    workspaces: "workspaces",
-  };
-
-  return entryId && entryHashes[entryId] ? entryHashes[entryId] : getSectionHash(section);
+  return entryId && navigationEntryHashes[entryId]
+    ? navigationEntryHashes[entryId]
+    : getSectionHash(section);
 }
 
 type WorkspaceSetupState = Pick<
@@ -1376,7 +1490,7 @@ function ProjectsCommandCenter({
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h4 className="break-words text-lg font-semibold text-slate-950">{project.name}</h4>
-                  <p className="mt-1 break-words text-sm text-stone-500">{project.type}</p>
+                  <p className="mt-1 break-words text-sm text-stone-500">{getCrmProjectTypeLabel(project.type, language)}</p>
                 </div>
                 <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${statusStyles[project.status] ?? statusStyles.Review}`}>
                   {getCrmStatusLabel(project.status, language)}
@@ -1925,13 +2039,26 @@ function WorkspaceContextBar({
     [contextCopy.area, areaLabel],
     [contextCopy.dataScope, dataScopeLabel],
   ];
+  const breadcrumbItems = [workspaceName, projectLabel, profileLabel, areaLabel];
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{contextCopy.label}</p>
-      <h3 className="mt-1 break-words text-base font-semibold text-slate-950">
-        {workspaceName} &gt; {projectLabel} &gt; {profileLabel} &gt; {areaLabel}
-      </h3>
+      <nav aria-label={contextCopy.label} className="mt-1" data-crm-breadcrumb>
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold text-slate-950">
+          {breadcrumbItems.map((item, index) => (
+            <li className="flex min-w-0 items-center gap-2" key={`${index}-${item}`}>
+              {index > 0 ? <span aria-hidden="true" className="text-stone-400">/</span> : null}
+              <span
+                aria-current={index === breadcrumbItems.length - 1 ? "page" : undefined}
+                className="break-words"
+              >
+                {item}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </nav>
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
         {chips.map(([label, value]) => (
           <span className="rounded-md bg-stone-50 px-2.5 py-1.5 font-semibold text-stone-700" key={label}>
@@ -2013,7 +2140,11 @@ function RolePriorityPanel({
     },
     title: "Role start",
   };
-  const profile = roleCopy.profiles[presetId] ?? roleCopy.profiles.default;
+  const profile = roleCopy.profiles[presetId] ?? roleCopy.profiles.default ?? {
+    description: roleCopy.description,
+    nextSteps: [],
+    title: roleCopy.title,
+  };
   const openTasks = tasks.filter((task) => task.status === "open");
   const now = new Date();
   const pipelineValue = deals
@@ -2061,11 +2192,11 @@ function RolePriorityPanel({
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">{roleCopy.title}</p>
-          <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">{profile?.title}</h3>
-          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-emerald-950">{profile?.description ?? roleCopy.description}</p>
+          <h3 className="mt-1 break-words text-xl font-semibold text-slate-950">{profile.title}</h3>
+          <p className="mt-2 max-w-3xl break-words text-sm leading-6 text-emerald-950">{profile.description}</p>
           <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">{roleCopy.nextStepsLabel}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            {(profile?.nextSteps ?? []).map((step) => (
+            {profile.nextSteps.map((step) => (
               <span className="rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-950" key={step}>
                 {step}
               </span>
@@ -2391,6 +2522,7 @@ function WorkspaceScopePanel({
             {scopeCopy.switchLabel}
             <select
               className="w-full min-w-0 max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950"
+              disabled={switchState === "loading"}
               onChange={(event) => onSwitch(event.target.value)}
               value={context.workspaceId}
             >
@@ -2807,6 +2939,24 @@ export function CrmWorkspace({
   sessionUserName,
   sessionWorkspace,
 }: CrmWorkspaceProps) {
+  const router = useRouter();
+  useEffect(() => {
+    const controller = new AbortController();
+    const refreshSession = () => {
+      void csrfFetch("/api/auth/session", {
+        cache: "no-store",
+        credentials: "same-origin",
+        method: "POST",
+        signal: controller.signal,
+      }).catch(() => undefined);
+    };
+    refreshSession();
+    const intervalId = window.setInterval(refreshSession, 5 * 60 * 1_000);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, []);
   const initialProductContext = createWorkspaceProductContext({
     activeCalendarProvider: sessionWorkspace.activeCalendarProvider ?? workspace.activeCalendarProvider,
     customerType: sessionWorkspace.customerType ?? workspace.customerType,
@@ -2823,7 +2973,11 @@ export function CrmWorkspace({
   const initialPresetId = getDefaultNavigationPresetId(initialProductContext);
   const initialAllowedPresetIds = getAllowedNavigationPresetIds(initialProductContext);
   const initialAllowedPresetKey = initialAllowedPresetIds.join("|");
-  const [activeProjectId, setActiveProjectId] = useState("all");
+  const [crmScope, setCrmScope] = useState<CrmScope>(() =>
+    createDefaultCrmScope(sessionWorkspace.id),
+  );
+  const [scopeHydrated, setScopeHydrated] = useState(false);
+  const scopeInitializedWorkspaceRef = useRef("");
   const [workspaceSetup, setWorkspaceSetup] = useState(() => ({
     activeCalendarProvider: initialProductContext.activeCalendarProvider,
     customerType: initialProductContext.customerType,
@@ -2853,6 +3007,7 @@ export function CrmWorkspace({
   const [availableWorkspaces, setAvailableWorkspaces] = useState<ManagedWorkspaceOption[]>([]);
   const [workspaceSwitchState, setWorkspaceSwitchState] = useState<"idle" | "loading" | "error">("idle");
   const [coreDataStatus, setCoreDataStatus] = useState<"idle" | "loading" | "fresh" | "error">("idle");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const lastUnitsRefreshKey = useRef("");
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
   const [importNotice, setImportNotice] = useState("");
@@ -3002,23 +3157,56 @@ export function CrmWorkspace({
 
   async function handleWorkspaceSwitch(workspaceId: string) {
     const nextWorkspace = availableWorkspaces.find((item) => item.id === workspaceId);
-    const nextActiveWorkspace = nextWorkspace ?? { ...activeWorkspace, id: workspaceId };
+    if (!nextWorkspace) {
+      setWorkspaceSwitchState("error");
+      return;
+    }
+    if (nextWorkspace.id === activeWorkspace.id) return;
+
     setWorkspaceSwitchState("loading");
-    setActiveProjectId("all");
-    setUnitBoardFocusScope(null);
-    setPropertyFocusAssetId(undefined);
-    setActiveWorkspace(nextActiveWorkspace);
-    setWorkspaceSetup({
-      activeCalendarProvider: nextActiveWorkspace.activeCalendarProvider ?? "none",
-      customerType: nextActiveWorkspace.customerType ?? "real_estate_broker",
-      operatingModel: nextActiveWorkspace.operatingModel ?? "self_service_customer",
-      teamStructure: nextActiveWorkspace.teamStructure ?? "small_team",
-    });
+    setScopeHydrated(false);
 
     try {
-      const loaded = await refreshCoreData(workspaceId);
-      setWorkspaceSwitchState(loaded ? "idle" : "error");
+      const query = nextWorkspace.id !== sessionWorkspace.id
+        ? `?workspaceId=${encodeURIComponent(nextWorkspace.id)}`
+        : "";
+      const response = await fetch(`/api/crm/core${query}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("CRM data refresh failed");
+
+      const payload = (await response.json()) as { data?: CoreCrmDataResult };
+      if (!payload.data) throw new Error("CRM data refresh failed");
+
+      const nextScope = resolveCrmScope({
+        projects: payload.data.projects,
+        search: "",
+        storage: getBrowserCrmScopeStorage(),
+        userId: sessionUserId,
+        workspaceId: nextWorkspace.id,
+      });
+
+      scopeInitializedWorkspaceRef.current = nextWorkspace.id;
+      setLiveCoreData(payload.data);
+      setCrmScope(nextScope);
+      setUnitBoardFocusScope(null);
+      setPropertyFocusAssetId(undefined);
+      setActiveWorkspace(nextWorkspace);
+      setWorkspaceSetup({
+        activeCalendarProvider: nextWorkspace.activeCalendarProvider ?? "none",
+        customerType: nextWorkspace.customerType ?? "real_estate_broker",
+        operatingModel: nextWorkspace.operatingModel ?? "self_service_customer",
+        teamStructure: nextWorkspace.teamStructure ?? "small_team",
+      });
+      window.history.pushState(
+        null,
+        "",
+        serializeCrmScopeUrl(window.location.href, nextScope),
+      );
+      setScopeHydrated(true);
+      setCoreDataStatus("fresh");
+      setWorkspaceSwitchState("idle");
     } catch {
+      setScopeHydrated(true);
+      setCoreDataStatus("error");
       setWorkspaceSwitchState("error");
     }
   }
@@ -3057,7 +3245,14 @@ export function CrmWorkspace({
   const propertyReservationRecords = liveCoreData.propertyReservations;
   const propertyTextRecords = liveCoreData.propertyTextBlocks ?? [];
   const sellerListingRecords = liveCoreData.sellerListings ?? mockSellerListings;
-  const allProjects = projectRecords;
+  const allProjects = useMemo(
+    () => projectRecords.filter((project) => project.workspaceId === activeWorkspace.id),
+    [activeWorkspace.id, projectRecords],
+  );
+  const availableProjectIds = useMemo(
+    () => new Set(allProjects.map((project) => project.id)),
+    [allProjects],
+  );
   const workspaceContext = createWorkspaceProductContext({
     activeCalendarProvider: workspaceSetup.activeCalendarProvider ?? activeWorkspace.activeCalendarProvider,
     customerType: workspaceSetup.customerType ?? activeWorkspace.customerType,
@@ -3077,13 +3272,42 @@ export function CrmWorkspace({
     : getFallbackNavigationPresetId(workspaceContext, allowedPresetIds);
   const normalizedActivePreset = navigationPresets[normalizedActivePresetId];
   const presetOptionGroups = getNavigationPresetOptionGroups(allowedPresetIds);
-  const activeProject = allProjects.find((project) => project.id === activeProjectId);
-  const projectScopeLabel = activeProject?.name ?? copy.header.allProjects;
+  const resolvedActiveProject = crmScope.projectId
+    ? allProjects.find(
+        (project) =>
+          project.id === crmScope.projectId && project.workspaceId === activeWorkspace.id,
+      )
+    : undefined;
+  const projectScopeInvalid =
+    crmScope.status === "invalid" || Boolean(crmScope.projectId && !resolvedActiveProject);
+  const activeProject = projectScopeInvalid ? undefined : resolvedActiveProject;
+  const activeProjectId = projectScopeInvalid
+    ? crmScope.projectId ?? "invalid"
+    : crmScope.projectId ?? "all";
+  const draftScopeProjects = scopeHydrated && !projectScopeInvalid ? allProjects : [];
+  const projectScopeLabel = !scopeHydrated
+    ? language === "de" ? "Projektscope wird geladen" : "Loading project scope"
+    : projectScopeInvalid
+      ? language === "de" ? "Ungültiger Projektscope" : "Invalid project scope"
+      : activeProject?.name ?? copy.header.allProjects;
+  const isProjectInActiveScope = (projectId?: string, includeUnscoped = false) => {
+    if (!scopeHydrated || projectScopeInvalid) return false;
+    if (!crmScope.projectId) {
+      return projectId ? availableProjectIds.has(projectId) : includeUnscoped;
+    }
+    return projectId ? projectId === crmScope.projectId : includeUnscoped;
+  };
   const sidebarToggleLabel = sidebarCollapsed
     ? copy.shell.expandNavigation
     : copy.shell.collapseNavigation;
   const navigationLabels = copy.navigation as Record<string, string>;
   const enabledNavigationEntryIds = normalizedActivePreset.navigationEntries.filter((entryId) => {
+    if (
+      restrictedAdminNavigationEntries.has(entryId) &&
+      !canAccessRestrictedAdminEntry(entryId, sessionProductRole)
+    ) {
+      return false;
+    }
     const moduleKey = moduleBySection[navigationEntries[entryId].section];
     return !moduleKey || isWorkspaceModuleEnabled(workspaceContext.enabledModules, moduleKey);
   });
@@ -3119,119 +3343,88 @@ export function CrmWorkspace({
     lastUnitsRefreshKey.current = activeWorkspace.id;
     void refreshCoreData(activeWorkspace.id);
   }, [activeWorkspace.id, refreshCoreData, visibleActiveSection]);
-  const visibleLeads = activeProject
-    ? leads.filter((lead) => lead.projectId === activeProject.id)
-    : leads;
+  const visibleLeads = leads.filter((lead) => isProjectInActiveScope(lead.projectId));
   const activeLeadTypes = visibleActiveNavigationEntry.leadTypes;
   const activeLeadInboxLeads = activeLeadTypes?.length
     ? visibleLeads.filter((lead) => activeLeadTypes.includes(getCrmLeadTypeKey(lead.type)))
     : visibleLeads;
-  const visibleContacts = activeProject
-    ? contacts.filter((contact) => contact.projectId === activeProject.id)
-    : contacts;
-  const visibleOrganizations = activeProject
-    ? organizations.filter((organization) =>
-        organization.projectId === activeProject.id &&
-        isVisibleBusinessRecord([organization.name, organization.domain, organization.city]),
-      )
-    : organizations.filter((organization) =>
-        isVisibleBusinessRecord([organization.name, organization.domain, organization.city]),
-      );
-  const visibleContactRelationships = activeProject
-    ? contactRelationships.filter((relationship) => relationship.projectId === activeProject.id)
-    : contactRelationships;
-  const visibleContactTimeline = activeProject
-    ? contactTimeline.filter((item) =>
-        item.projectId === activeProject.id &&
-        isVisibleBusinessRecord([item.title, item.detail]),
-      )
-    : contactTimeline.filter((item) =>
-        isVisibleBusinessRecord([item.title, item.detail]),
-      );
-  const visibleTasks = activeProject
-    ? tasks.filter((task) => task.projectId === activeProject.id)
-    : tasks;
-  const visibleConsents = activeProject
-    ? consents.filter((consent) => !consent.projectId || consent.projectId === activeProject.id)
-    : consents;
-  const visibleConversations = activeProject
-    ? conversations.filter((conversation) =>
-        conversation.projectId === activeProject.id &&
-        isVisibleBusinessRecord([conversation.summary, conversation.channel, conversation.sentiment]),
-      )
-    : conversations.filter((conversation) =>
-        isVisibleBusinessRecord([conversation.summary, conversation.channel, conversation.sentiment]),
-      );
-  const visibleDeals = activeProject
-    ? deals.filter((deal) => deal.projectId === activeProject.id)
-    : deals;
-  const visibleCalendarEvents = activeProject
-    ? calendarEvents.filter((event) => event.projectId === activeProject.id)
-    : calendarEvents;
-  const visibleFunnels = activeProject
-    ? funnelRecords.filter((funnel) => funnel.projectId === activeProject.id)
-    : funnelRecords;
-  const visibleFunnelSteps = activeProject
-    ? funnelStepRecords.filter((step) => step.projectId === activeProject.id)
-    : funnelStepRecords;
-  const visibleLeadSequences = activeProject
-    ? leadSequences.filter(
-        (sequence) => !sequence.projectId || sequence.projectId === activeProject.id,
-      )
-    : leadSequences;
-  const visibleLeadSequenceEvents = activeProject
-    ? leadSequenceEvents.filter(
-        (event) => !event.projectId || event.projectId === activeProject.id,
-      )
-    : leadSequenceEvents;
-  const visibleNewsletterSegments = activeProject
-    ? newsletterSegmentRecords.filter(
-        (segment) => !segment.projectId || segment.projectId === activeProject.id,
-      )
-    : newsletterSegmentRecords;
-  const visibleNewsletterCampaigns = activeProject
-    ? newsletterCampaignRecords.filter(
-        (campaign) => !campaign.projectId || campaign.projectId === activeProject.id,
-      )
-    : newsletterCampaignRecords;
-  const visibleNewsletterAutomations = activeProject
-    ? newsletterAutomations.filter(
-        (automation) => !automation.projectId || automation.projectId === activeProject.id,
-      )
-    : newsletterAutomations;
-  const visibleAutomations = activeProject
-    ? automations.filter((automation) => !automation.projectId || automation.projectId === activeProject.id)
-    : automations;
-  const visibleKnowledgeBase = activeProject
-    ? knowledgeBase.filter((item) => item.projectId === activeProject.id)
-    : knowledgeBase;
-  const visibleBotLanguageRules = activeProject
-    ? botLanguageRules.filter(
-        (rule) => !rule.projectId || rule.projectId === activeProject.id,
-      )
-    : botLanguageRules;
-  const visibleCrmBots = activeProject
-    ? crmBotRecords.filter((bot) => !bot.projectId || bot.projectId === activeProject.id)
-    : crmBotRecords;
-  const visibleCrmBotConversations = activeProject
-    ? crmBotConversations.filter(
-        (conversation) => !conversation.projectId || conversation.projectId === activeProject.id,
-      )
-    : crmBotConversations;
-  const visibleCustomerWorkspaceAccess = customerWorkspaceAccess.filter(
-    (item) => !activeProject || !item.projectId || item.projectId === activeProject.id,
+  const visibleContacts = contacts.filter((contact) => isProjectInActiveScope(contact.projectId));
+  const visibleOrganizations = organizations.filter(
+    (organization) =>
+      isProjectInActiveScope(organization.projectId) &&
+      isVisibleBusinessRecord([organization.name, organization.domain, organization.city]),
   );
-  const visibleBotLeadWorkflows = activeProject
-    ? botLeadWorkflows.filter(
-        (workflow) => !workflow.projectId || workflow.projectId === activeProject.id,
-      )
-    : botLeadWorkflows;
-  const visibleBotCallInsights = activeProject
-    ? botCallInsights.filter(
-        (insight) => !insight.projectId || insight.projectId === activeProject.id,
-      )
-    : botCallInsights;
+  const visibleContactRelationships = contactRelationships.filter((relationship) =>
+    isProjectInActiveScope(relationship.projectId),
+  );
+  const visibleContactTimeline = contactTimeline.filter(
+    (item) =>
+      isProjectInActiveScope(item.projectId) &&
+      isVisibleBusinessRecord([item.title, item.detail]),
+  );
+  const visibleTasks = tasks.filter((task) => isProjectInActiveScope(task.projectId));
+  const visibleConsents = consents.filter((consent) =>
+    isProjectInActiveScope(consent.projectId, true),
+  );
+  const visibleConversations = conversations.filter(
+    (conversation) =>
+      isProjectInActiveScope(conversation.projectId) &&
+      isVisibleBusinessRecord([conversation.summary, conversation.channel, conversation.sentiment]),
+  );
+  const visibleDeals = deals.filter((deal) => isProjectInActiveScope(deal.projectId));
+  const visibleCalendarEvents = calendarEvents.filter((event) =>
+    isProjectInActiveScope(event.projectId),
+  );
+  const visibleFunnels = funnelRecords.filter((funnel) =>
+    isProjectInActiveScope(funnel.projectId),
+  );
+  const visibleFunnelSteps = funnelStepRecords.filter((step) =>
+    isProjectInActiveScope(step.projectId),
+  );
+  const visibleLeadSequences = leadSequences.filter((sequence) =>
+    isProjectInActiveScope(sequence.projectId, true),
+  );
+  const visibleLeadSequenceEvents = leadSequenceEvents.filter((event) =>
+    isProjectInActiveScope(event.projectId, true),
+  );
+  const visibleNewsletterSegments = newsletterSegmentRecords.filter((segment) =>
+    isProjectInActiveScope(segment.projectId, true),
+  );
+  const visibleNewsletterCampaigns = newsletterCampaignRecords.filter((campaign) =>
+    isProjectInActiveScope(campaign.projectId, true),
+  );
+  const visibleNewsletterAutomations = newsletterAutomations.filter((automation) =>
+    isProjectInActiveScope(automation.projectId, true),
+  );
+  const visibleAutomations = automations.filter((automation) =>
+    isProjectInActiveScope(automation.projectId, true),
+  );
+  const visibleKnowledgeBase = knowledgeBase.filter((item) =>
+    isProjectInActiveScope(item.projectId),
+  );
+  const visibleBotLanguageRules = botLanguageRules.filter((rule) =>
+    isProjectInActiveScope(rule.projectId, true),
+  );
+  const visibleCrmBots = crmBotRecords.filter((bot) =>
+    isProjectInActiveScope(bot.projectId, true),
+  );
+  const visibleCrmBotConversations = crmBotConversations.filter((conversation) =>
+    isProjectInActiveScope(conversation.projectId, true),
+  );
+  const visibleCustomerWorkspaceAccess = customerWorkspaceAccess.filter(
+    (item) => isProjectInActiveScope(item.projectId, true),
+  );
+  const visibleBotLeadWorkflows = botLeadWorkflows.filter((workflow) =>
+    isProjectInActiveScope(workflow.projectId, true),
+  );
+  const visibleBotCallInsights = botCallInsights.filter((insight) =>
+    isProjectInActiveScope(insight.projectId, true),
+  );
   const visiblePipeline = pipeline.map((stage) => {
+    if (!scopeHydrated || projectScopeInvalid) {
+      return { ...stage, cards: [], total: 0, value: "0" };
+    }
+
     if (!activeProject) {
       return stage;
     }
@@ -3357,7 +3550,7 @@ export function CrmWorkspace({
     setProjectNotice("");
     let saved = false;
     try {
-      const response = await fetch("/api/crm/projects", {
+      const response = await csrfFetch("/api/crm/projects", {
         body: JSON.stringify({
           project: {
             ...nextProject,
@@ -3392,7 +3585,10 @@ export function CrmWorkspace({
         ...current,
         activeProjects: Math.max(current.activeProjects ?? 0, projectRecords.length + 1),
       }));
-      setActiveProjectId(persistedProject.id);
+      handleProjectScopeChange(persistedProject.id, [
+        persistedProject,
+        ...projectRecords.filter((project) => project.id !== persistedProject.id),
+      ]);
       setProjectNoticeTone("success");
       setProjectNotice(copy.dialogs.project.preparedNotice(persistedProject.name));
       setProjectDraft((current) => ({ ...current, name: "", notes: "" }));
@@ -3408,14 +3604,62 @@ export function CrmWorkspace({
   }
 
   useEffect(() => {
+    if (scopeInitializedWorkspaceRef.current === activeWorkspace.id) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const nextScope = resolveCrmScope({
+        projects: allProjects,
+        search: window.location.search,
+        storage: getBrowserCrmScopeStorage(),
+        userId: sessionUserId,
+        workspaceId: activeWorkspace.id,
+      });
+
+      scopeInitializedWorkspaceRef.current = activeWorkspace.id;
+      setCrmScope(nextScope);
+      setScopeHydrated(true);
+      if (nextScope.status === "valid") {
+        window.history.replaceState(
+          null,
+          "",
+          serializeCrmScopeUrl(window.location.href, nextScope),
+        );
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeWorkspace.id, allProjects, sessionUserId]);
+
+  useEffect(() => {
+    const syncScopeFromHistory = () => {
+      const nextScope = resolveCrmScope({
+        projects: allProjects,
+        search: window.location.search,
+        storage: getBrowserCrmScopeStorage(),
+        userId: sessionUserId,
+        workspaceId: activeWorkspace.id,
+      });
+
+      setCrmScope(nextScope);
+      setScopeHydrated(true);
+      setUnitBoardFocusScope(null);
+      setPropertyFocusAssetId(undefined);
+    };
+
+    window.addEventListener("popstate", syncScopeFromHistory);
+    return () => window.removeEventListener("popstate", syncScopeFromHistory);
+  }, [activeWorkspace.id, allProjects, sessionUserId]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const allowedPresetIds = initialAllowedPresetKey.split("|") as NavigationPresetId[];
       const storedPresetId = readStoredPresetId(initialPresetId, allowedPresetIds);
       const storedPreset = navigationPresets[storedPresetId] ?? navigationPresets[initialPresetId];
-      const nextSection = readInitialSection(storedPreset.startSection);
-      const nextEntryId =
-        storedPreset.navigationEntries.find((entryId) => navigationEntries[entryId].section === nextSection)
-        ?? storedPreset.startEntry;
+      const requestedEntryId = readInitialNavigationEntry(storedPreset);
+      const nextEntryId = restrictedAdminNavigationEntries.has(requestedEntryId) &&
+        !canAccessRestrictedAdminEntry(requestedEntryId, sessionProductRole)
+        ? storedPreset.startEntry
+        : requestedEntryId;
       const resolvedSection = navigationEntries[nextEntryId].section;
 
       setActivePresetId(storedPresetId);
@@ -3425,14 +3669,15 @@ export function CrmWorkspace({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [initialAllowedPresetKey, initialPresetId]);
+  }, [initialAllowedPresetKey, initialPresetId, sessionProductRole]);
 
   useEffect(() => {
     const syncSectionFromHash = () => {
-      const nextSection = readInitialSection(normalizedActivePreset.startSection);
-      const nextEntryId =
-        normalizedActivePreset.navigationEntries.find((entryId) => navigationEntries[entryId].section === nextSection)
-        ?? normalizedActivePreset.startEntry;
+      const requestedEntryId = readInitialNavigationEntry(normalizedActivePreset);
+      const nextEntryId = restrictedAdminNavigationEntries.has(requestedEntryId) &&
+        !canAccessRestrictedAdminEntry(requestedEntryId, sessionProductRole)
+        ? normalizedActivePreset.startEntry
+        : requestedEntryId;
       const resolvedSection = navigationEntries[nextEntryId].section;
       setActiveNavigationEntryId(nextEntryId);
       setActiveSection(resolvedSection);
@@ -3440,9 +3685,13 @@ export function CrmWorkspace({
     };
 
     window.addEventListener("hashchange", syncSectionFromHash);
+    window.addEventListener("popstate", syncSectionFromHash);
 
-    return () => window.removeEventListener("hashchange", syncSectionFromHash);
-  }, [normalizedActivePreset]);
+    return () => {
+      window.removeEventListener("hashchange", syncSectionFromHash);
+      window.removeEventListener("popstate", syncSectionFromHash);
+    };
+  }, [normalizedActivePreset, sessionProductRole]);
 
   useEffect(() => {
     if (activePresetId === normalizedActivePresetId) return;
@@ -3477,9 +3726,9 @@ export function CrmWorkspace({
 
     window.localStorage.setItem(languageStorageKeys.system, language);
     document.documentElement.lang = language;
-    document.title = copy.shell.browserTitle;
+    document.title = `${activeAreaLabel} | Novalure CRM`;
     window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
-  }, [copy.shell.browserTitle, language, languageHydrated]);
+  }, [activeAreaLabel, language, languageHydrated]);
 
   function handleLanguageChange(nextLanguage: LanguageCode) {
     setLanguage(nextLanguage);
@@ -3513,7 +3762,7 @@ export function CrmWorkspace({
       const query = activeWorkspace.id !== sessionWorkspace.id
         ? `?workspaceId=${encodeURIComponent(activeWorkspace.id)}`
         : "";
-      const response = await fetch(`/api/workspaces${query}`, {
+      const response = await csrfFetch(`/api/workspaces${query}`, {
         body: JSON.stringify({
           ...nextSetup,
           setupState: {
@@ -3597,8 +3846,10 @@ export function CrmWorkspace({
       nextSection === "dashboard"
         ? `${window.location.pathname}${window.location.search}`
         : `${window.location.pathname}${window.location.search}#${getNavigationHash(nextSection, matchingEntry)}`;
-
-    window.history.replaceState(null, "", nextUrl);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.pushState(null, "", nextUrl);
+    }
   }
 
   function handleNavigationChange(
@@ -3642,10 +3893,26 @@ export function CrmWorkspace({
     handleNavigationChange("properties", { preservePropertyFocus: true });
   }
 
-  function handleProjectScopeChange(projectId: string) {
-    setActiveProjectId(projectId);
+  function handleProjectScopeChange(projectId: string, scopeProjects = allProjects) {
+    const nextScope = createSelectedCrmScope({
+      projectId: projectId === "all" ? null : projectId,
+      projects: scopeProjects,
+      workspaceId: activeWorkspace.id,
+    });
+
+    setCrmScope(nextScope);
+    setScopeHydrated(true);
     setUnitBoardFocusScope(null);
     setPropertyFocusAssetId(undefined);
+
+    if (nextScope.status === "valid") {
+      writeCrmScopePreference(getBrowserCrmScopeStorage(), sessionUserId, nextScope);
+      const nextUrl = serializeCrmScopeUrl(window.location.href, nextScope);
+      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (nextUrl !== currentUrl) {
+        window.history.pushState(null, "", nextUrl);
+      }
+    }
   }
 
   function handlePresetChange(nextPresetId: NavigationPresetId) {
@@ -3674,6 +3941,19 @@ export function CrmWorkspace({
     const nextSection = quickActionSections[actionId];
     if (nextSection) {
       handleSectionChange(nextSection);
+    }
+  }
+
+  async function handleLogout() {
+    setIsLoggingOut(true);
+
+    try {
+      const response = await csrfFetch(`/api/auth/logout?lang=${language}`, { method: "POST" });
+      if (!response.ok) throw new Error("Logout failed");
+      router.replace(`/login?lang=${language}`);
+      router.refresh();
+    } catch {
+      setIsLoggingOut(false);
     }
   }
 
@@ -3856,7 +4136,7 @@ export function CrmWorkspace({
                               activeProjectId === project.id ? "text-slate-300" : "text-stone-500"
                             }`}
                           >
-                            {project.type}
+                            {getCrmProjectTypeLabel(project.type, language)}
                           </span>
                         </span>
                         <span
@@ -3974,14 +4254,17 @@ export function CrmWorkspace({
                 >
                   {copy.header.newProjectButton}
                 </button>
-                <form action="/api/auth/logout" className="sm:flex" method="post">
+                <div className="sm:flex">
                   <button
-                    className="min-h-12 w-full min-w-32 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-center text-sm font-semibold leading-5 text-slate-800 hover:bg-stone-100 sm:w-auto"
-                    type="submit"
+                    aria-busy={isLoggingOut}
+                    className="min-h-12 w-full min-w-32 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-center text-sm font-semibold leading-5 text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    disabled={isLoggingOut}
+                    onClick={() => void handleLogout()}
+                    type="button"
                   >
                     {copy.header.logout}
                   </button>
-                </form>
+                </div>
               </div>
             </div>
             <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
@@ -4048,11 +4331,30 @@ export function CrmWorkspace({
             <WorkspaceContextBar
               areaLabel={activeAreaLabel}
               copy={copy}
-              dataScopeLabel={activeProject ? activeProject.name : copy.header.allProjects}
+              dataScopeLabel={projectScopeLabel}
               profileLabel={activePresetProfile.label}
               projectLabel={projectScopeLabel}
               workspaceName={workspaceContext.workspaceName}
             />
+
+            {scopeHydrated && projectScopeInvalid ? (
+              <div
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
+                role="alert"
+              >
+                <p className="font-semibold">
+                  {language === "de"
+                    ? "Der angeforderte Projektscope ist nicht verfügbar."
+                    : "The requested project scope is not available."}
+                </p>
+                <p className="mt-1 break-words text-red-800">
+                  {language === "de"
+                    ? "Bis eine gültige Auswahl getroffen wurde, werden keine workspaceweiten Daten angezeigt."
+                    : "No workspace-wide data is shown until you choose a valid scope."}
+                  {crmScope.projectId ? ` (${crmScope.projectId})` : ""}
+                </p>
+              </div>
+            ) : null}
 
             {visibleActiveSection === "dashboard" ? (
               <RolePriorityPanel
@@ -4091,7 +4393,7 @@ export function CrmWorkspace({
                 pipeline={visiblePipeline}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
-                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
                 tasks={visibleTasks}
                 users={users}
               />
@@ -4099,9 +4401,10 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "properties" ? (
               <PropertyCommandCenter
-                brokerMandates={brokerMandates.filter((mandate) => !activeProject || mandate.projectId === activeProject.id)}
-                buildings={propertyBuildingRecords.filter((building) => !activeProject || building.projectId === activeProject.id)}
-                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => !activeProject || profile.projectId === activeProject.id)}
+                activeProjectId={activeProject?.id ?? null}
+                brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
+                buildings={propertyBuildingRecords.filter((building) => isProjectInActiveScope(building.projectId))}
+                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
                 contacts={visibleContacts}
                 context={workspaceContext}
                 initialSelectedAssetId={propertyFocusAssetId}
@@ -4115,18 +4418,18 @@ export function CrmWorkspace({
                   await refreshCoreData();
                 }}
                 projectLabel={projectScopeLabel}
-                projects={allProjects}
-                propertyCostItems={propertyCostRecords.filter((item) => !activeProject || item.projectId === activeProject.id)}
-                propertyDocuments={propertyDocumentRecords.filter((document) => !activeProject || document.projectId === activeProject.id)}
-                propertyMedia={propertyMediaRecords.filter((media) => !activeProject || media.projectId === activeProject.id)}
-                propertyTextBlocks={propertyTextRecords.filter((textBlock) => !activeProject || textBlock.projectId === activeProject.id)}
+                projects={draftScopeProjects}
+                propertyCostItems={propertyCostRecords.filter((item) => isProjectInActiveScope(item.projectId))}
+                propertyDocuments={propertyDocumentRecords.filter((document) => isProjectInActiveScope(document.projectId))}
+                propertyMedia={propertyMediaRecords.filter((media) => isProjectInActiveScope(media.projectId))}
+                propertyTextBlocks={propertyTextRecords.filter((textBlock) => isProjectInActiveScope(textBlock.projectId))}
                 reservations={propertyReservationRecords.filter(
-                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                  (reservation) => isProjectInActiveScope(reservation.projectId),
                 )}
-                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
                 sessionProductRole={sessionProductRole}
                 sessionRole={sessionRole}
-                units={propertyUnitRecords.filter((unit) => !activeProject || unit.projectId === activeProject.id)}
+                units={propertyUnitRecords.filter((unit) => isProjectInActiveScope(unit.projectId))}
               />
             ) : null}
 
@@ -4143,17 +4446,17 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "objectsMandates" ? (
               <ObjectMandateCommandCenter
-                brokerMandates={brokerMandates}
-                buyerSearchProfiles={buyerSearchProfiles}
+                brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
+                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
                 context={workspaceContext}
                 copy={copy}
                 propertyReservations={propertyReservationRecords.filter(
-                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                  (reservation) => isProjectInActiveScope(reservation.projectId),
                 )}
                 propertyUnits={propertyUnitRecords.filter(
-                  (unit) => !activeProject || unit.projectId === activeProject.id,
+                  (unit) => isProjectInActiveScope(unit.projectId),
                 )}
-                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
               />
             ) : null}
 
@@ -4169,7 +4472,9 @@ export function CrmWorkspace({
               />
             ) : null}
 
-            {visibleActiveSection === "settings" ? (
+            {visibleActiveSection === "settings" &&
+            visibleActiveNavigationEntry.id !== "systemReleases" &&
+            visibleActiveNavigationEntry.id !== "governanceCompliance" ? (
               <SettingsCommandCenter
                 context={workspaceContext}
                 copy={copy}
@@ -4178,6 +4483,14 @@ export function CrmWorkspace({
                 moduleSources={liveCoreData.moduleSources}
                 profileLabel={activePresetProfile.label}
               />
+            ) : null}
+
+            {visibleActiveNavigationEntry.id === "systemReleases" ? (
+              <SystemReleasesPanel language={language} />
+            ) : null}
+
+            {visibleActiveNavigationEntry.id === "governanceCompliance" ? (
+              <GovernanceCompliancePanel language={language} />
             ) : null}
 
             {visibleActiveSection === "analysis" ? (
@@ -4202,10 +4515,10 @@ export function CrmWorkspace({
                 newsletterSuppressions={newsletterSuppressions}
                 newsletterSegments={visibleNewsletterSegments}
                 propertyReservations={propertyReservationRecords.filter(
-                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                  (reservation) => isProjectInActiveScope(reservation.projectId),
                 )}
                 propertyUnits={propertyUnitRecords.filter(
-                  (unit) => !activeProject || unit.projectId === activeProject.id,
+                  (unit) => isProjectInActiveScope(unit.projectId),
                 )}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
@@ -4216,7 +4529,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "customerAccess" ? (
               <CustomerAccessCockpit
-                activeProjectId={activeProject?.id ?? "all"}
+                activeProjectId={activeProjectId}
                 customerAccess={visibleCustomerWorkspaceAccess}
                 language={language}
                 projectLabel={projectScopeLabel}
@@ -4225,7 +4538,7 @@ export function CrmWorkspace({
               />
             ) : null}
 
-            {visibleActiveSection === "managedService" ? (
+            {visibleActiveSection === "managedService" && visibleActiveNavigationEntry.id !== "auditLog" ? (
               <InternalWorkspaceView
                 activeProject={activeProject}
                 calendarEvents={visibleCalendarEvents}
@@ -4240,6 +4553,10 @@ export function CrmWorkspace({
                 projects={allProjects}
                 tasks={visibleTasks}
               />
+            ) : null}
+
+            {visibleActiveNavigationEntry.id === "auditLog" ? (
+              <AuditLogPanel language={language} />
             ) : null}
 
             {visibleActiveSection === "onboarding" ? (
@@ -4305,16 +4622,18 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "leadInbox" ? (
               <LeadInbox
-                brokerMandates={brokerMandates}
-                buyerSearchProfiles={buyerSearchProfiles}
+                activeProjectId={activeProject?.id ?? null}
+                brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
+                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
                 consents={visibleConsents}
                 contacts={visibleContacts}
                 conversations={visibleConversations}
                 leads={activeLeadInboxLeads}
                 language={language}
                 onLeadsChanged={refreshCoreData}
-                projects={allProjects}
+                projects={draftScopeProjects}
                 users={users}
+                workspaceId={activeWorkspace.id}
               />
             ) : null}
 
@@ -4344,8 +4663,8 @@ export function CrmWorkspace({
               <DealPipelineWorkspace
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
-                crmPipelineStages={crmPipelineStages.filter((stage) => !activeProject || stage.projectId === activeProject.id)}
-                crmPipelines={crmPipelines.filter((pipeline) => !activeProject || pipeline.projectId === activeProject.id)}
+                crmPipelineStages={crmPipelineStages.filter((stage) => isProjectInActiveScope(stage.projectId))}
+                crmPipelines={crmPipelines.filter((pipeline) => isProjectInActiveScope(pipeline.projectId))}
                 deals={visibleDeals}
                 language={language}
                 leads={visibleLeads}
@@ -4353,17 +4672,17 @@ export function CrmWorkspace({
                 organizations={visibleOrganizations}
                 pipeline={visiblePipeline}
                 projectPipelinePermissions={projectPipelinePermissions.filter(
-                  (permission) => !activeProject || permission.projectId === activeProject.id,
+                  (permission) => isProjectInActiveScope(permission.projectId),
                 )}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
                 propertyReservations={propertyReservationRecords.filter(
-                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                  (reservation) => isProjectInActiveScope(reservation.projectId),
                 )}
                 propertyUnits={propertyUnitRecords.filter(
-                  (unit) => !activeProject || unit.projectId === activeProject.id,
+                  (unit) => isProjectInActiveScope(unit.projectId),
                 )}
-                sellerListings={sellerListingRecords.filter((listing) => !activeProject || listing.projectId === activeProject.id)}
+                sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
                 tasks={visibleTasks}
                 users={users}
                 workspaceId={activeWorkspace.id}
@@ -4372,11 +4691,19 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "units" ? (
               <UnitBoard
-                buildings={propertyBuildingRecords}
-                contacts={contacts}
-                deals={deals}
+                buildings={propertyBuildingRecords.filter((building) => isProjectInActiveScope(building.projectId))}
+                canManage={hasProductCapability(sessionProductRole, "reservations:write")}
+                contacts={visibleContacts}
+                dataState={
+                  coreDataStatus === "loading"
+                    ? "loading"
+                    : liveCoreData.moduleErrors?.propertyUnits
+                      ? "error"
+                      : "ready"
+                }
+                deals={visibleDeals}
                 focusScope={unitBoardFocusScope}
-                initialProjectId={activeProject?.id ?? "all"}
+                initialProjectId={activeProjectId}
                 key={`${activeProject?.id ?? "all"}:${unitBoardFocusScope?.key ?? "all"}`}
                 language={language}
                 leads={visibleLeads}
@@ -4387,24 +4714,24 @@ export function CrmWorkspace({
                 }}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
-                reservations={propertyReservationRecords}
-                units={propertyUnitRecords}
+                reservations={propertyReservationRecords.filter((reservation) => isProjectInActiveScope(reservation.projectId))}
+                units={propertyUnitRecords.filter((unit) => isProjectInActiveScope(unit.projectId))}
               />
             ) : null}
 
             {visibleActiveSection === "reservations" ? (
               <ReservationBoard
-                contacts={contacts}
-                deals={deals}
+                contacts={visibleContacts}
+                deals={visibleDeals}
                 language={language}
                 onOpenUnits={() => handleNavigationChange("units")}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
                 reservations={propertyReservationRecords.filter(
-                  (reservation) => !activeProject || reservation.projectId === activeProject.id,
+                  (reservation) => isProjectInActiveScope(reservation.projectId),
                 )}
                 units={propertyUnitRecords.filter(
-                  (unit) => !activeProject || unit.projectId === activeProject.id,
+                  (unit) => isProjectInActiveScope(unit.projectId),
                 )}
               />
             ) : null}
@@ -4427,6 +4754,7 @@ export function CrmWorkspace({
             <section className="grid gap-4">
               {visibleActiveSection === "tasks" ? (
                 <TaskCommandCenter
+                  activeProjectId={activeProject?.id ?? null}
                   contacts={visibleContacts}
                   language={language}
                   leads={visibleLeads}
@@ -4434,7 +4762,7 @@ export function CrmWorkspace({
                     await refreshCoreData();
                   }}
                   projectLabel={projectScopeLabel}
-                  projects={allProjects}
+                  projects={draftScopeProjects}
                   tasks={visibleTasks}
                   sessionUserId={sessionUserId}
                   sessionUserName={sessionUserName}
@@ -4444,6 +4772,7 @@ export function CrmWorkspace({
 
               {visibleActiveSection === "contacts" ? (
                 <ContactCommandCenter
+                  activeProjectId={activeProject?.id ?? null}
                   canAssignOwner={canManageContactOwners}
                   canWriteContacts={canCreateOrEditContacts}
                   consents={visibleConsents}
@@ -4455,7 +4784,7 @@ export function CrmWorkspace({
                     await refreshCoreData();
                   }}
                   organizations={visibleOrganizations}
-                  projects={allProjects}
+                  projects={draftScopeProjects}
                   relationships={visibleContactRelationships}
                   showTechnicalFields={
                     (normalizedActivePresetId === "admin" ||
@@ -4467,6 +4796,7 @@ export function CrmWorkspace({
                   tasks={visibleTasks}
                   timeline={visibleContactTimeline}
                   users={users}
+                  workspaceId={activeWorkspace.id}
                 />
               ) : null}
 
@@ -4531,12 +4861,13 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "calendar" ? (
               <CalendarCommandCenter
+                activeProjectId={activeProject?.id ?? null}
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}
                 language={language}
                 leads={visibleLeads}
                 projectLabel={projectScopeLabel}
-                projects={allProjects}
+                projects={draftScopeProjects}
                 tasks={visibleTasks}
                 sessionUserId={sessionUserId}
                 sessionUserName={sessionUserName}
@@ -4623,7 +4954,7 @@ export function CrmWorkspace({
               switchState={workspaceSwitchState}
               tasks={visibleTasks}
               units={propertyUnitRecords.filter(
-                (unit) => !activeProject || unit.projectId === activeProject.id,
+                (unit) => isProjectInActiveScope(unit.projectId),
               )}
               workspaces={availableWorkspaces}
             />

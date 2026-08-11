@@ -3,6 +3,7 @@ import { createHash, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import fs from "node:fs";
 import { promisify } from "node:util";
 import { neon } from "@neondatabase/serverless";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const scrypt = promisify(scryptCallback);
 const defaultQaPassword = "QA-Novalure-Local-2026!";
@@ -23,18 +24,19 @@ function loadEnv(path) {
 loadEnv(".env.local");
 loadEnv(".env.production.local");
 
-function resolveDatabaseUrl() {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    ""
-  ).trim().replace(/^['"]|['"]$/g, "");
+const qaTarget = await assertQaTarget();
+const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+
+function qaEmail(localPart) {
+  return `${localPart}+${qaRunSlug}@novalure.local`;
 }
 
 function stableUuid(input) {
-  const chars = createHash("sha1").update(`novalure-livegang:${input}`).digest("hex").slice(0, 32).split("");
+  const chars = createHash("sha1")
+    .update(`novalure-livegang:${qaTarget.runPrefix}:${input}`)
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
   chars[12] = "5";
   chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
   const hex = chars.join("");
@@ -51,13 +53,10 @@ function json(value) {
   return JSON.stringify(value);
 }
 
-const qaPassword = process.env.NOVALURE_QA_SEED_PASSWORD || process.env.NOVALURE_QA_PASSWORD || defaultQaPassword;
-const databaseUrl = resolveDatabaseUrl();
-
-if (!databaseUrl) {
-  console.error("Missing DATABASE_URL/POSTGRES_URL for QA seed.");
-  process.exit(1);
-}
+const configuredQaPassword = process.env.NOVALURE_QA_SEED_PASSWORD || process.env.NOVALURE_QA_PASSWORD;
+if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
+const qaPassword = configuredQaPassword || defaultQaPassword;
+const databaseUrl = qaTarget.databaseUrl;
 
 const sql = neon(databaseUrl);
 
@@ -91,7 +90,7 @@ await applyMigration("migrations/037_novalure_growth_alignment.sql");
 const workspaces = {
   internal: {
     id: stableUuid("workspace:internal"),
-    name: "QA Novalure Internal Workspace",
+    name: `QA Novalure Internal Workspace ${qaTarget.runPrefix}`,
     customerType: "novalure_internal",
     operatingModel: "novalure_internal",
     teamStructure: "backoffice_available",
@@ -100,7 +99,7 @@ const workspaces = {
   },
   developer: {
     id: stableUuid("workspace:developer"),
-    name: "QA Bautr\u00e4ger Workspace",
+    name: `QA Bautr\u00e4ger Workspace ${qaTarget.runPrefix}`,
     customerType: "property_developer",
     operatingModel: "self_service_customer",
     teamStructure: "project_sales_available",
@@ -109,7 +108,7 @@ const workspaces = {
   },
   broker: {
     id: stableUuid("workspace:broker"),
-    name: "QA Makler Workspace",
+    name: `QA Makler Workspace ${qaTarget.runPrefix}`,
     customerType: "real_estate_broker",
     operatingModel: "self_service_customer",
     teamStructure: "small_team",
@@ -120,7 +119,7 @@ const workspaces = {
 
 const users = [
   {
-    email: "qa-platform-admin@novalure.local",
+    email: qaEmail("qa-platform-admin"),
     id: stableUuid("user:platform-admin"),
     name: "QA Platform Admin",
     productRole: "platform_admin",
@@ -128,7 +127,7 @@ const users = [
     workspace: workspaces.internal,
   },
   {
-    email: "qa-assistant@novalure.local",
+    email: qaEmail("qa-assistant"),
     id: stableUuid("user:assistant"),
     name: "QA Assistant",
     productRole: "assistant_backoffice",
@@ -136,7 +135,7 @@ const users = [
     workspace: workspaces.internal,
   },
   {
-    email: "qa-developer-sales@novalure.local",
+    email: qaEmail("qa-developer-sales"),
     id: stableUuid("user:developer-sales"),
     name: "QA Developer Sales",
     productRole: "developer_sales",
@@ -144,7 +143,7 @@ const users = [
     workspace: workspaces.developer,
   },
   {
-    email: "qa-broker-sales@novalure.local",
+    email: qaEmail("qa-broker-sales"),
     id: stableUuid("user:broker-sales"),
     name: "QA Broker Sales",
     productRole: "broker_agent",

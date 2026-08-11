@@ -11,6 +11,7 @@ import {
 } from "@/lib/onboarding-checklist";
 import type { LanguageCode } from "@/lib/i18n";
 import type { ProductRole, TechnicalAppRole } from "@/lib/product-model";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type WorkspaceOnboardingTourProps = {
   language: LanguageCode;
@@ -252,7 +253,7 @@ export function WorkspaceOnboardingTour({
 
     async function loadStatus() {
       try {
-        const response = await fetch("/api/auth/onboarding", { cache: "no-store" });
+        const response = await csrfFetch("/api/auth/onboarding", { cache: "no-store" });
         if (!active) return;
 
         if (!response.ok) {
@@ -305,7 +306,7 @@ export function WorkspaceOnboardingTour({
         return;
       }
 
-      const response = await fetch("/api/auth/onboarding", {
+      const response = await csrfFetch("/api/auth/onboarding", {
         body: JSON.stringify({ action, stepId: step?.id }),
         headers: { "Content-Type": "application/json" },
         method: "POST",

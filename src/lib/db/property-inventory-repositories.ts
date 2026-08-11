@@ -60,7 +60,17 @@ export async function createPropertyBuildingRecord(input: {
         floors,
         metadata
       )
-      values ($1, $2, $3, $4, $5::date, $6, $7::jsonb)
+      select
+        $1::uuid,
+        p.id,
+        $3,
+        $4,
+        $5::date,
+        $6,
+        $7::jsonb
+      from projects p
+      where p.id = $2::uuid
+        and p.workspace_id = $1::uuid
       returning
         id,
         workspace_id as "workspaceId",
@@ -81,7 +91,7 @@ export async function createPropertyBuildingRecord(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Building could not be saved" };
+  if (!row) return { persisted: false, reason: "Project does not belong to this workspace" };
 
   const data = toBuilding(row);
   await writeAuditLog({
@@ -121,6 +131,12 @@ export async function createPropertyUnitRecord(input: {
     : "available";
   const priceCents = toPriceCents(input.priceCents ?? input.price);
   const rawBuildingId = cleanString(input.buildingId);
+  if (input.buildingId != null && typeof input.buildingId !== "string") {
+    return { persisted: false, reason: "Building id is invalid" };
+  }
+  if (rawBuildingId && !isUuid(rawBuildingId)) {
+    return { persisted: false, reason: "Building id is invalid" };
+  }
   const buildingId = isUuid(rawBuildingId) ? rawBuildingId : null;
   const row = await queryOne<UnitRow>(
     `
@@ -136,8 +152,26 @@ export async function createPropertyUnitRecord(input: {
         status,
         metadata
       )
-      values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10::jsonb)
-      on conflict (project_id, unit_number)
+      select
+        $1::uuid,
+        p.id,
+        b.id,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10::jsonb
+      from projects p
+      left join property_buildings b
+        on b.id = $3::uuid
+        and b.workspace_id = p.workspace_id
+        and b.project_id = p.id
+      where p.id = $2::uuid
+        and p.workspace_id = $1::uuid
+        and ($3::uuid is null or b.id is not null)
+      on conflict (workspace_id, project_id, unit_number)
       do update set
         building_id = excluded.building_id,
         floor = excluded.floor,
@@ -147,6 +181,8 @@ export async function createPropertyUnitRecord(input: {
         status = excluded.status,
         metadata = property_units.metadata || excluded.metadata,
         updated_at = now()
+      where property_units.workspace_id = excluded.workspace_id
+        and property_units.project_id = excluded.project_id
       returning
         id,
         workspace_id as "workspaceId",
@@ -176,7 +212,7 @@ export async function createPropertyUnitRecord(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Unit could not be saved" };
+  if (!row) return { persisted: false, reason: "Unit project or building is outside this workspace" };
 
   const data = toUnit(row);
   await writeAuditLog({

@@ -2,30 +2,33 @@ import {
   processDueTeamsNotifications,
   queueScheduledCriticalTeamsAlerts,
 } from "@/lib/db/teams-notification-repositories";
+import { areQueueWorkersPaused, createCronRun, isCronAuthorized } from "@/lib/cron/runtime";
 
 export const maxDuration = 60;
 
-function isAuthorized(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.VERCEL_ENV !== "production";
-
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const run = createCronRun({ route: "teams-alerts" });
+  if (areQueueWorkersPaused()) {
+    return Response.json({ ok: true, paused: true, runId: run.runId });
   }
 
   const queued = await queueScheduledCriticalTeamsAlerts({
     limitPerWorkspace: 25,
+    shouldContinue: run.shouldContinue,
     workspaceLimit: 50,
   });
-  const processed = await processDueTeamsNotifications({ limit: 50 });
+  const processed = run.shouldContinue()
+    ? await processDueTeamsNotifications({ limit: 50, shouldContinue: run.shouldContinue })
+    : { checked: 0, failed: 0, sent: 0 };
 
   return Response.json({
+    durationMs: run.durationMs(),
     ok: true,
     processed,
     queued,
+    runId: run.runId,
   });
 }

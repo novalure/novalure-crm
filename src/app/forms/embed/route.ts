@@ -9,6 +9,11 @@ import {
   type FormVariant,
 } from "@/lib/form-types";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
+import {
+  buildPublicSubmissionScope,
+  createPublicSubmissionProof,
+  publicSubmissionActions,
+} from "@/lib/security/public-submission-abuse";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -30,6 +35,14 @@ export async function GET(request: Request) {
   const publicKey = form.id || formKey;
   const publicUrl = `${origin}${persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`}`;
   const runtimeCopy = { ...fallbackFormRuntimeCopy, ...copy.runtime };
+  const submissionProof = createPublicSubmissionProof({
+    action: publicSubmissionActions.form,
+    scope: buildPublicSubmissionScope({
+      resourceId: persisted.id,
+      resourceType: "form",
+      workspaceId: persisted.workspaceId,
+    }),
+  });
   const formHtml = renderStaticFormHtml({
     action: `${origin}/api/forms/submissions`,
     copy: runtimeCopy,
@@ -37,6 +50,7 @@ export async function GET(request: Request) {
     publicKey,
     returnTo: persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`,
     source: "website",
+    submissionProof,
   });
   const html = renderEmbedHtml({
     copy: copy.runtime,
@@ -193,7 +207,7 @@ function createEmbedScript({
 
   return new Response(script, {
     headers: {
-      "cache-control": "public, max-age=300",
+      "cache-control": "private, no-store",
       "content-type": "application/javascript; charset=utf-8",
     },
   });

@@ -2,6 +2,17 @@ import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import {
+  classifyDeliveryError,
+  createLeaseOwner,
+  PROVIDER_TIMEOUT_MS,
+  retryDelaySeconds,
+  sanitizeJobError,
+} from "@/lib/jobs/durable-queue";
+import {
+  runNotificationTestSinkProbe,
+  validateNotificationTargetReadiness,
+} from "@/lib/notifications/provider-target-readiness";
 
 export type GoogleAlertType =
   | "lead_sla_overdue"
@@ -10,7 +21,15 @@ export type GoogleAlertType =
   | "deal_stage_changed";
 
 export type GoogleNotificationSeverity = "info" | "warning" | "critical";
-export type GoogleNotificationStatus = "queued" | "sending" | "sent" | "failed" | "cancelled";
+export type GoogleNotificationStatus =
+  | "queued"
+  | "retry"
+  | "pending_config"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "dead_letter"
+  | "cancelled";
 export type GoogleDestinationType = "google_chat_webhook" | "space" | "calendar";
 
 export type GoogleFact = {
@@ -32,8 +51,10 @@ export type GoogleNotificationTarget = {
 };
 
 export type GoogleNotificationJob = {
+  adminAction?: string;
   alertType: GoogleAlertType;
   attempts: number;
+  configurationCode?: string;
   createdAt: string;
   error?: string;
   facts: GoogleFact[];
@@ -65,8 +86,10 @@ type TargetRow = {
 };
 
 type JobRow = {
+  adminAction: string | null;
   alertType: GoogleAlertType;
   attempts: number | string;
+  configurationCode: string | null;
   createdAt: string | Date;
   error: string | null;
   facts: unknown;
@@ -84,8 +107,21 @@ type JobRow = {
 };
 
 type ClaimedJobRow = JobRow & {
+  attemptCount: number | string;
   destinationType: GoogleDestinationType | null;
+  leaseOwner: string;
+  targetAlertTypes: string[] | null;
+  targetEnabled: boolean | null;
+  targetProjectId: string | null;
+  targetWorkspaceId: string | null;
   webhookUrl: string | null;
+};
+
+type ReconcileJobRow = JobRow & {
+  attemptCount: number | string;
+  idempotencyKey: string;
+  lastErrorCategory: string | null;
+  providerMessageId: string | null;
 };
 
 type LeadAlertRow = {
@@ -200,8 +236,10 @@ function toTarget(row: TargetRow): GoogleNotificationTarget {
 
 function toJob(row: JobRow): GoogleNotificationJob {
   return {
+    adminAction: row.adminAction ?? undefined,
     alertType: row.alertType,
     attempts: Number(row.attempts ?? 0),
+    configurationCode: row.configurationCode ?? undefined,
     createdAt: toIso(row.createdAt),
     error: row.error ?? undefined,
     facts: normalizeFacts(row.facts),
@@ -318,16 +356,41 @@ async function findGoogleTarget(input: {
         alert_types as "alertTypes"
       from google_notification_targets
       where workspace_id = $1::uuid
-        and enabled = true
-        and $3 = any(alert_types)
         and (
           ($2::uuid is not null and project_id = $2::uuid)
           or project_id is null
         )
-      order by case when project_id = $2::uuid then 0 else 1 end, updated_at desc
+      order by
+        case when project_id = $2::uuid then 0 else 1 end,
+        enabled desc,
+        case when $3 = any(alert_types) then 0 else 1 end,
+        updated_at desc
       limit 1
     `,
     [input.workspaceId, input.projectId ?? null, input.alertType],
+  );
+}
+
+async function getGoogleTargetById(input: { targetId: string; workspaceId: string }) {
+  if (!isUuid(input.targetId) || !isUuid(input.workspaceId)) return null;
+  return queryOne<TargetRow>(
+    `
+      select
+        id,
+        workspace_id as "workspaceId",
+        project_id as "projectId",
+        label,
+        destination_type as "destinationType",
+        webhook_url as "webhookUrl",
+        space_id as "spaceId",
+        calendar_id as "calendarId",
+        enabled,
+        alert_types as "alertTypes"
+      from google_notification_targets
+      where id = $1::uuid and workspace_id = $2::uuid
+      limit 1
+    `,
+    [input.targetId, input.workspaceId],
   );
 }
 
@@ -393,9 +456,19 @@ export async function upsertGoogleNotificationTarget(input: {
     return { persisted: false, reason: "Project does not belong to this workspace" };
   }
 
-  const existing = await queryOne<{ id: string }>(
+  const existing = await queryOne<TargetRow>(
     `
-      select id
+      select
+        id,
+        workspace_id as "workspaceId",
+        project_id as "projectId",
+        label,
+        destination_type as "destinationType",
+        webhook_url as "webhookUrl",
+        space_id as "spaceId",
+        calendar_id as "calendarId",
+        enabled,
+        alert_types as "alertTypes"
       from google_notification_targets
       where workspace_id = $1::uuid
         and (($2::uuid is null and project_id is null) or project_id = $2::uuid)
@@ -407,10 +480,32 @@ export async function upsertGoogleNotificationTarget(input: {
   const alertTypes = normalizeAlertTypes(input.target.alertTypes);
   const destinationType = normalizeDestinationType(input.target.destinationType);
   const label = cleanString(input.target.label) || (projectId ? "Project Google" : "Workspace Google");
-  const webhookUrl = cleanString(input.target.webhookUrl) || null;
+  const webhookUrl = cleanString(input.target.webhookUrl) || existing?.webhookUrl || null;
   const spaceId = cleanString(input.target.spaceId) || null;
   const calendarId = cleanString(input.target.calendarId) || null;
   const enabled = input.target.enabled === false ? false : true;
+  if (enabled) {
+    const readiness = validateNotificationTargetReadiness({
+      alertType: alertTypes[0],
+      projectId,
+      provider: "google",
+      target: {
+        alertTypes,
+        destinationType,
+        enabled,
+        projectId,
+        webhookUrl,
+        workspaceId: input.session.workspaceId,
+      },
+      workspaceId: input.session.workspaceId,
+    });
+    if (!readiness.ok) {
+      return {
+        persisted: false,
+        reason: `${readiness.reason} ${readiness.adminAction}`,
+      };
+    }
+  }
 
   const row = existing
     ? await queryOne<TargetRow>(
@@ -419,7 +514,7 @@ export async function upsertGoogleNotificationTarget(input: {
           set
             label = $3,
             destination_type = $4,
-            webhook_url = coalesce($5, webhook_url),
+            webhook_url = $5,
             space_id = $6,
             calendar_id = $7,
             enabled = $8,
@@ -534,6 +629,8 @@ export async function listGoogleNotificationJobs(input: {
           severity,
           status,
           attempts,
+          admin_action as "adminAction",
+          configuration_code as "configurationCode",
           scheduled_for as "scheduledFor",
           sent_at as "sentAt",
           error,
@@ -597,6 +694,13 @@ export async function queueGoogleNotification(input: {
       projectId,
       workspaceId: input.session.workspaceId,
     });
+    const readiness = validateNotificationTargetReadiness({
+      alertType: input.alertType,
+      projectId,
+      provider: "google",
+      target,
+      workspaceId: input.session.workspaceId,
+    });
     const severity = normalizeSeverity(input.severity);
     const facts = input.facts ?? [];
     const message = input.message || input.summary;
@@ -610,7 +714,6 @@ export async function queueGoogleNotification(input: {
     const idempotencyKey =
       input.idempotencyKey ||
       `${input.alertType}:${input.entityType}:${input.entityId ?? input.leadId ?? input.dealId ?? input.customerAccessId ?? input.calendarEventId ?? "unknown"}`;
-    const targetMissing = !target;
 
     const row = await queryOne<JobRow>(
       `
@@ -635,6 +738,8 @@ export async function queueGoogleNotification(input: {
           facts,
           payload,
           error,
+          configuration_code,
+          admin_action,
           idempotency_key
         )
         values (
@@ -658,27 +763,16 @@ export async function queueGoogleNotification(input: {
           $18::jsonb,
           $19::jsonb,
           $20,
-          $21
+          $21,
+          $22,
+          $23
         )
         on conflict (workspace_id, idempotency_key)
         do update set
-          target_id = coalesce(excluded.target_id, google_notification_jobs.target_id),
-          status = case
-            when google_notification_jobs.status = 'failed' and excluded.target_id is not null then 'queued'
-            else google_notification_jobs.status
-          end,
-          error = case
-            when google_notification_jobs.status = 'failed' and excluded.target_id is not null then null
-            else google_notification_jobs.error
-          end,
-          title = excluded.title,
-          summary = excluded.summary,
-          message = excluded.message,
-          facts = excluded.facts,
-          payload = excluded.payload,
-          updated_at = now()
+          idempotency_key = google_notification_jobs.idempotency_key
         returning
           id,
+          admin_action as "adminAction",
           workspace_id as "workspaceId",
           project_id as "projectId",
           target_id as "targetId",
@@ -686,6 +780,7 @@ export async function queueGoogleNotification(input: {
           severity,
           status,
           attempts,
+          configuration_code as "configurationCode",
           scheduled_for as "scheduledFor",
           sent_at as "sentAt",
           error,
@@ -698,10 +793,10 @@ export async function queueGoogleNotification(input: {
       [
         input.session.workspaceId,
         projectId,
-        target?.id ?? null,
+        readiness.ok ? target?.id ?? null : null,
         input.alertType,
         severity,
-        targetMissing ? "failed" : "queued",
+        readiness.ok ? "queued" : "pending_config",
         input.entityType,
         isUuid(input.entityId) ? input.entityId : null,
         isUuid(input.leadId) ? input.leadId : null,
@@ -725,7 +820,9 @@ export async function queueGoogleNotification(input: {
           },
           googleChatPayload,
         }),
-        targetMissing ? "No Google notification target configured for this workspace or project" : null,
+        readiness.ok ? null : readiness.reason,
+        readiness.ok ? null : readiness.code,
+        readiness.ok ? null : readiness.adminAction,
         idempotencyKey,
       ],
     );
@@ -734,7 +831,7 @@ export async function queueGoogleNotification(input: {
       return { queued: false, reason: "Google notification could not be queued" };
     }
 
-    return { job: toJob(row), queued: row.status !== "failed", reason: row.error ?? undefined };
+    return { job: toJob(row), queued: row.status === "queued", reason: row.error ?? undefined };
   } catch (error) {
     return {
       queued: false,
@@ -746,9 +843,9 @@ export async function queueGoogleNotification(input: {
 export async function queueGoogleLeadSlaOverdueAlerts(input: {
   limit?: number;
   session: AppSession;
-}): Promise<{ checked: number; queued: number; failed: number }> {
+}): Promise<{ checked: number; queued: number; failed: number; pendingConfig: number }> {
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
-    return { checked: 0, failed: 0, queued: 0 };
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
 
   const rows = await queryRows<LeadAlertRow>(
@@ -780,7 +877,7 @@ export async function queueGoogleLeadSlaOverdueAlerts(input: {
           where gn.workspace_id = l.workspace_id
             and gn.alert_type = 'lead_sla_overdue'
             and gn.lead_id = l.id
-            and gn.status in ('queued', 'sending', 'sent')
+            and gn.status <> 'cancelled'
         )
       order by l.sla_due_at asc
       limit $2
@@ -790,6 +887,7 @@ export async function queueGoogleLeadSlaOverdueAlerts(input: {
 
   let queued = 0;
   let failed = 0;
+  let pendingConfig = 0;
   for (const row of rows) {
     const dueAt = toIso(row.dueAt);
     const summary = `${row.contactName ?? "Lead"} ist seit ${dueAt} überfällig.`;
@@ -824,18 +922,19 @@ export async function queueGoogleLeadSlaOverdueAlerts(input: {
       title: "SLA überfällig",
     });
     if (result.queued) queued += 1;
-    if (!result.queued) failed += 1;
+    else if (result.job?.status === "pending_config") pendingConfig += 1;
+    else failed += 1;
   }
 
-  return { checked: rows.length, failed, queued };
+  return { checked: rows.length, failed, pendingConfig, queued };
 }
 
 export async function queueGoogleCustomerAccessRiskAlerts(input: {
   limit?: number;
   session: AppSession;
-}): Promise<{ checked: number; queued: number; failed: number }> {
+}): Promise<{ checked: number; queued: number; failed: number; pendingConfig: number }> {
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
-    return { checked: 0, failed: 0, queued: 0 };
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
 
   const rows = await queryRows<CustomerAccessRiskRow>(
@@ -862,7 +961,7 @@ export async function queueGoogleCustomerAccessRiskAlerts(input: {
           where gn.workspace_id = ca.workspace_id
             and gn.alert_type = 'customer_access_risk'
             and gn.customer_access_id = ca.id
-            and gn.status in ('queued', 'sending', 'sent')
+            and gn.status <> 'cancelled'
         )
       order by ca.activation_score asc, ca.updated_at desc
       limit $2
@@ -872,6 +971,7 @@ export async function queueGoogleCustomerAccessRiskAlerts(input: {
 
   let queued = 0;
   let failed = 0;
+  let pendingConfig = 0;
   for (const row of rows) {
     const risks = Array.isArray(row.risks) ? row.risks.map(String).join(", ") : "";
     const summary = `${row.customerName ?? "Customer Workspace"} ist im Risiko-Status.`;
@@ -904,10 +1004,11 @@ export async function queueGoogleCustomerAccessRiskAlerts(input: {
       title: "Customer Access Risk",
     });
     if (result.queued) queued += 1;
-    if (!result.queued) failed += 1;
+    else if (result.job?.status === "pending_config") pendingConfig += 1;
+    else failed += 1;
   }
 
-  return { checked: rows.length, failed, queued };
+  return { checked: rows.length, failed, pendingConfig, queued };
 }
 
 function isImportantStage(toStage: string) {
@@ -1076,63 +1177,306 @@ function createSystemSession(workspaceId: string): AppSession {
 
 export async function queueScheduledCriticalGoogleAlerts(input: {
   limitPerWorkspace?: number;
+  shouldContinue?: () => boolean;
   workspaceLimit?: number;
 } = {}) {
   if (!hasDatabaseUrl()) {
-    return { checked: 0, failed: 0, queued: 0, workspaces: 0 };
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
   }
 
-  const workspaces = await queryRows<{ id: string }>(
-    "select id from workspaces order by created_at desc limit $1",
-    [input.workspaceLimit ?? 50],
-  );
+  const pageSize = Math.max(1, Math.min(100, input.workspaceLimit ?? 50));
+  let cursor: string | null = null;
+  let processedWorkspaces = 0;
   let checked = 0;
   let queued = 0;
   let failed = 0;
+  let pendingConfig = 0;
 
-  for (const workspace of workspaces) {
-    const session = createSystemSession(workspace.id);
-    const [sla, access] = await Promise.all([
-      queueGoogleLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-      queueGoogleCustomerAccessRiskAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-    ]);
+  while (!input.shouldContinue || input.shouldContinue()) {
+    const workspacePage: Array<{ id: string }> = await queryRows<{ id: string }>(
+      `
+        select id
+        from workspaces
+        where ($2::uuid is null or id > $2::uuid)
+        order by id asc
+        limit $1
+      `,
+      [pageSize, cursor],
+    );
+    if (!workspacePage.length) break;
 
-    checked += sla.checked + access.checked;
-    queued += sla.queued + access.queued;
-    failed += sla.failed + access.failed;
+    for (const workspaceRow of workspacePage) {
+      if (input.shouldContinue && !input.shouldContinue()) break;
+      const session = createSystemSession(workspaceRow.id);
+      const [sla, access] = await Promise.all([
+        queueGoogleLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
+        queueGoogleCustomerAccessRiskAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
+      ]);
+
+      checked += sla.checked + access.checked;
+      queued += sla.queued + access.queued;
+      failed += sla.failed + access.failed;
+      pendingConfig += sla.pendingConfig + access.pendingConfig;
+      processedWorkspaces += 1;
+      cursor = workspaceRow.id;
+    }
+
+    if (workspacePage.length < pageSize || (input.shouldContinue && !input.shouldContinue())) break;
   }
 
-  return { checked, failed, queued, workspaces: workspaces.length };
+  return { checked, failed, pendingConfig, queued, workspaces: processedWorkspaces };
 }
 
-export async function retryGoogleNotificationJob(input: {
+export async function reconcileGoogleNotificationJob(input: {
   notificationId: string;
   session: AppSession;
-}): Promise<{ error?: string; jobId?: string; ok: boolean }> {
-  if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.notificationId)) {
-    return { error: "invalid_notification", ok: false };
+  targetId: string;
+}): Promise<{
+  adminAction?: string;
+  configurationCode?: string;
+  error?: string;
+  jobId?: string;
+  ok: boolean;
+  state?: "already_reconciled" | "blocked" | "reconciled";
+}> {
+  if (
+    !hasDatabaseUrl() ||
+    !isUuid(input.session.workspaceId) ||
+    !isUuid(input.notificationId) ||
+    !isUuid(input.targetId)
+  ) {
+    return { error: "invalid_notification_reconciliation", ok: false };
+  }
+
+  const job = await queryOne<ReconcileJobRow>(
+    `
+      select
+        id,
+        workspace_id as "workspaceId",
+        project_id as "projectId",
+        target_id as "targetId",
+        alert_type as "alertType",
+        severity,
+        status,
+        attempts,
+        attempt_count as "attemptCount",
+        last_error_category as "lastErrorCategory",
+        scheduled_for as "scheduledFor",
+        sent_at as "sentAt",
+        provider_message_id as "providerMessageId",
+        error,
+        configuration_code as "configurationCode",
+        admin_action as "adminAction",
+        title,
+        summary,
+        message,
+        facts,
+        idempotency_key as "idempotencyKey",
+        created_at as "createdAt"
+      from google_notification_jobs
+      where id = $1::uuid and workspace_id = $2::uuid
+      limit 1
+    `,
+    [input.notificationId, input.session.workspaceId],
+  );
+  if (!job) return { error: "notification_not_found", ok: false };
+  if (job.sentAt || job.providerMessageId || job.status === "sent") {
+    return { error: "notification_already_delivered", ok: false };
+  }
+  if (
+    Number(job.attemptCount) > 0 &&
+    ["provider_timeout", "transient", "unknown"].includes(job.lastErrorCategory ?? "")
+  ) {
+    await writeAuditLog({
+      action: "google_notification.reconciliation_blocked_uncertain_delivery",
+      after: { jobId: job.id, targetId: input.targetId },
+      entityId: job.id,
+      entityType: "google_notification_job",
+      projectId: job.projectId,
+      session: input.session,
+    });
+    return {
+      adminAction: "Verify the provider destination for a possible prior delivery, then close or reconcile the job through an authorized incident decision.",
+      configurationCode: "delivery_outcome_uncertain",
+      error: "The prior provider delivery outcome is uncertain; automatic reconciliation is blocked to prevent a duplicate message.",
+      jobId: job.id,
+      ok: false,
+      state: "blocked",
+    };
+  }
+  if (job.status === "queued" || job.status === "retry" || job.status === "sending") {
+    return job.targetId === input.targetId
+      ? { jobId: job.id, ok: true, state: "already_reconciled" }
+      : { error: "notification_already_active_with_different_target", ok: false };
+  }
+  if (!(["failed", "pending_config", "dead_letter"] as GoogleNotificationStatus[]).includes(job.status)) {
+    return { error: "notification_not_reconcilable", ok: false };
+  }
+
+  const target = await getGoogleTargetById({
+    targetId: input.targetId,
+    workspaceId: input.session.workspaceId,
+  });
+  const readiness = validateNotificationTargetReadiness({
+    alertType: job.alertType,
+    projectId: job.projectId,
+    provider: "google",
+    target,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!readiness.ok) {
+    const blocked = await queryOne<{ id: string }>(
+      `
+        update google_notification_jobs
+        set
+          status = 'pending_config',
+          error = $3,
+          configuration_code = $4,
+          admin_action = $5,
+          retry_after = null,
+          locked_by = null,
+          lease_expires_at = null,
+          updated_at = now()
+        where id = $1::uuid
+          and workspace_id = $2::uuid
+          and status in ('failed', 'pending_config', 'dead_letter')
+        returning id
+      `,
+      [job.id, input.session.workspaceId, readiness.reason, readiness.code, readiness.adminAction],
+    );
+    if (blocked) {
+      await writeAuditLog({
+        action: "google_notification.reconciliation_blocked",
+        after: { configurationCode: readiness.code, jobId: job.id, targetId: input.targetId },
+        entityId: job.id,
+        entityType: "google_notification_job",
+        projectId: job.projectId,
+        session: input.session,
+      });
+    }
+    return {
+      adminAction: readiness.adminAction,
+      configurationCode: readiness.code,
+      error: readiness.reason,
+      jobId: job.id,
+      ok: false,
+      state: "blocked",
+    };
   }
 
   const row = await queryOne<{ id: string }>(
     `
       update google_notification_jobs
       set
+        target_id = $3::uuid,
         status = 'queued',
         scheduled_for = now(),
+        available_at = now(),
         error = null,
+        configuration_code = null,
+        admin_action = null,
         retry_after = null,
+        attempt_count = 0,
+        attempts = 0,
+        locked_by = null,
+        lease_expires_at = null,
+        dead_lettered_at = null,
+        last_error_category = null,
+        last_error_message = null,
+        reconciled_at = now(),
+        reconciled_by_user_id = $4::uuid,
         updated_at = now()
       where id = $1::uuid
         and workspace_id = $2::uuid
-        and status = 'failed'
+        and idempotency_key = $5
+        and provider_message_id is null
+        and sent_at is null
+        and status in ('failed', 'pending_config', 'dead_letter')
       returning id
     `,
-    [input.notificationId, input.session.workspaceId],
+    [
+      job.id,
+      input.session.workspaceId,
+      input.targetId,
+      isUuid(input.session.userId) ? input.session.userId : null,
+      job.idempotencyKey,
+    ],
   );
+  if (!row) return { error: "notification_reconciliation_conflict", ok: false };
 
-  return row?.id
-    ? { jobId: row.id, ok: true }
-    : { error: "notification_not_found_or_not_failed", ok: false };
+  await writeAuditLog({
+    action: "google_notification.job_reconciled",
+    after: { jobId: row.id, targetId: input.targetId },
+    entityId: row.id,
+    entityType: "google_notification_job",
+    projectId: job.projectId,
+    session: input.session,
+  });
+
+  return { jobId: row.id, ok: true, state: "reconciled" };
+}
+
+export async function runGoogleNotificationTargetTestSinkHealthcheck(input: {
+  fetchImpl?: typeof fetch;
+  session: AppSession;
+  targetId: string;
+}) {
+  if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.targetId)) {
+    return { error: "invalid_google_target", ok: false as const };
+  }
+  const target = await getGoogleTargetById({
+    targetId: input.targetId,
+    workspaceId: input.session.workspaceId,
+  });
+  const alertType = normalizeAlertTypes(target?.alertTypes)[0];
+  const readiness = validateNotificationTargetReadiness({
+    alertType,
+    projectId: target?.projectId,
+    provider: "google",
+    target,
+    workspaceId: input.session.workspaceId,
+  });
+  if (!readiness.ok) {
+    return {
+      adminAction: readiness.adminAction,
+      configurationCode: readiness.code,
+      error: readiness.reason,
+      ok: false as const,
+    };
+  }
+  if (!target) {
+    return { error: "invalid_google_target", ok: false as const };
+  }
+
+  const sinkUrl = process.env.NOVALURE_NOTIFICATION_TEST_SINK_URL ?? "";
+  const probe = await runNotificationTestSinkProbe({
+    allowInsecureLocalhost: process.env.NODE_ENV !== "production",
+    fetchImpl: input.fetchImpl,
+    provider: "google",
+    sinkUrl,
+    targetId: target.id,
+  });
+  await writeAuditLog({
+    action: "google_notification.test_sink_healthcheck",
+    after: { mode: "test_sink", ok: probe.ok, targetId: target.id },
+    entityId: target.id,
+    entityType: "google_notification_target",
+    projectId: target.projectId,
+    session: input.session,
+  });
+  return probe.ok
+    ? {
+        mode: probe.mode,
+        ok: true as const,
+        providerHealth: "not_probed" as const,
+        providerReconnectPerformed: false,
+      }
+    : {
+        ...probe,
+        error: probe.reason,
+        providerHealth: "not_probed" as const,
+        providerReconnectPerformed: false,
+      };
 }
 
 async function listDueGoogleNotificationJobIds(limit = 25, workspaceId?: string | null) {
@@ -1142,29 +1486,156 @@ async function listDueGoogleNotificationJobIds(limit = 25, workspaceId?: string 
     `
       select id
       from google_notification_jobs
-      where status = 'queued'
-        and scheduled_for <= now()
+      where (
+        (
+            status in ('queued', 'retry')
+            and available_at <= now()
+            and scheduled_for <= now()
+            and attempt_count < max_attempts
+          )
+          or (
+            status = 'sending'
+            and lease_expires_at <= now()
+            and attempt_count < max_attempts
+          )
+        )
         and ($2::uuid is null or workspace_id = $2::uuid)
-      order by scheduled_for asc
+      order by available_at asc, scheduled_for asc
       limit $1
     `,
     [limit, isUuid(workspaceId) ? workspaceId : null],
   );
 }
 
-async function claimGoogleNotificationJob(id: string, workspaceId?: string | null): Promise<ClaimedJobRow | null> {
-  if (!hasDatabaseUrl() || !isUuid(id)) return null;
+async function prepareGoogleNotificationJobForDelivery(input: {
+  id: string;
+  workspaceId?: string | null;
+}): Promise<"pending_config" | "ready" | "skipped"> {
+  if (!hasDatabaseUrl() || !isUuid(input.id)) return "skipped";
+
+  const row = await queryOne<{
+    alertType: GoogleAlertType;
+    destinationType: GoogleDestinationType | null;
+    projectId: string | null;
+    status: GoogleNotificationStatus;
+    targetAlertTypes: string[] | null;
+    targetEnabled: boolean | null;
+    targetProjectId: string | null;
+    targetWorkspaceId: string | null;
+    webhookUrl: string | null;
+    workspaceId: string;
+  }>(
+    `
+      select
+        j.workspace_id as "workspaceId",
+        j.project_id as "projectId",
+        j.alert_type as "alertType",
+        j.status,
+        t.workspace_id as "targetWorkspaceId",
+        t.project_id as "targetProjectId",
+        t.destination_type as "destinationType",
+        t.webhook_url as "webhookUrl",
+        t.enabled as "targetEnabled",
+        t.alert_types as "targetAlertTypes"
+      from google_notification_jobs j
+      left join google_notification_targets t on t.id = j.target_id
+      where j.id = $1::uuid
+        and ($2::uuid is null or j.workspace_id = $2::uuid)
+        and j.sent_at is null
+        and j.provider_message_id is null
+        and (
+          j.status in ('queued', 'retry')
+          or (j.status = 'sending' and j.lease_expires_at <= now())
+        )
+      limit 1
+    `,
+    [input.id, isUuid(input.workspaceId) ? input.workspaceId : null],
+  );
+  if (!row) return "skipped";
+
+  const readiness = validateNotificationTargetReadiness({
+    alertType: row.alertType,
+    projectId: row.projectId,
+    provider: "google",
+    target: row.targetWorkspaceId && row.targetEnabled !== null
+      ? {
+          alertTypes: row.targetAlertTypes,
+          destinationType: row.destinationType,
+          enabled: row.targetEnabled,
+          projectId: row.targetProjectId,
+          webhookUrl: row.webhookUrl,
+          workspaceId: row.targetWorkspaceId,
+        }
+      : null,
+    workspaceId: row.workspaceId,
+  });
+  if (readiness.ok) return "ready";
+
+  const updated = await queryOne<{ id: string }>(
+    `
+      update google_notification_jobs
+      set
+        status = 'pending_config',
+        error = $2,
+        configuration_code = $3,
+        admin_action = $4,
+        last_error_category = 'configuration',
+        last_error_message = $2,
+        retry_after = null,
+        locked_by = null,
+        lease_expires_at = null,
+        updated_at = now()
+      where id = $1::uuid
+        and sent_at is null
+        and provider_message_id is null
+        and (
+          status in ('queued', 'retry')
+          or (status = 'sending' and lease_expires_at <= now())
+        )
+      returning id
+    `,
+    [input.id, readiness.reason, readiness.code, readiness.adminAction],
+  );
+  return updated ? "pending_config" : "skipped";
+}
+
+async function claimGoogleNotificationJob(input: {
+  id: string;
+  leaseOwner: string;
+  workspaceId?: string | null;
+}): Promise<ClaimedJobRow | null> {
+  if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
 
   return queryOne<ClaimedJobRow>(
     `
-      with claimed as (
-        update google_notification_jobs
-        set status = 'sending', attempts = attempts + 1, updated_at = now()
+      with candidate as (
+        select id
+        from google_notification_jobs
         where id = $1::uuid
           and ($2::uuid is null or workspace_id = $2::uuid)
-          and status = 'queued'
-          and scheduled_for <= now()
-        returning *
+          and attempt_count < max_attempts
+          and (
+            (
+              status in ('queued', 'retry')
+              and available_at <= now()
+              and scheduled_for <= now()
+            )
+            or (status = 'sending' and lease_expires_at <= now())
+          )
+        for update skip locked
+      ), claimed as (
+        update google_notification_jobs jobs
+        set
+          status = 'sending',
+          attempts = jobs.attempts + 1,
+          attempt_count = jobs.attempt_count + 1,
+          locked_by = $3,
+          lease_expires_at = now() + interval '45 seconds',
+          last_attempt_at = now(),
+          updated_at = now()
+        from candidate
+        where jobs.id = candidate.id
+        returning jobs.*
       )
       select
         c.id,
@@ -1175,6 +1646,10 @@ async function claimGoogleNotificationJob(id: string, workspaceId?: string | nul
         c.severity,
         c.status,
         c.attempts,
+        c.admin_action as "adminAction",
+        c.configuration_code as "configurationCode",
+        c.attempt_count as "attemptCount",
+        c.locked_by as "leaseOwner",
         c.scheduled_for as "scheduledFor",
         c.sent_at as "sentAt",
         c.error,
@@ -1184,17 +1659,22 @@ async function claimGoogleNotificationJob(id: string, workspaceId?: string | nul
         c.facts,
         c.created_at as "createdAt",
         t.destination_type as "destinationType",
-        t.webhook_url as "webhookUrl"
+        t.webhook_url as "webhookUrl",
+        t.alert_types as "targetAlertTypes",
+        t.enabled as "targetEnabled",
+        t.project_id as "targetProjectId",
+        t.workspace_id as "targetWorkspaceId"
       from claimed c
       left join google_notification_targets t on t.id = c.target_id and t.workspace_id = c.workspace_id and t.enabled = true
       limit 1
     `,
-    [id, isUuid(workspaceId) ? workspaceId : null],
+    [input.id, isUuid(input.workspaceId) ? input.workspaceId : null, input.leaseOwner],
   );
 }
 
 async function markGoogleNotificationSent(input: {
   id: string;
+  leaseOwner: string;
   messageId?: string | null;
 }) {
   await queryOne(
@@ -1205,36 +1685,107 @@ async function markGoogleNotificationSent(input: {
         provider_message_id = $2,
         sent_at = now(),
         error = null,
+        configuration_code = null,
+        admin_action = null,
+        last_error_category = null,
+        last_error_message = null,
+        locked_by = null,
+        lease_expires_at = null,
         updated_at = now()
-      where id = $1::uuid
+      where id = $1::uuid and status = 'sending' and locked_by = $3
       returning id
     `,
-    [input.id, input.messageId ?? null],
+    [input.id, input.messageId ?? null, input.leaseOwner],
   );
 }
 
 async function markGoogleNotificationFailed(input: {
+  adminAction?: string | null;
+  category: string;
+  configurationCode?: string | null;
   error: string;
   id: string;
+  leaseOwner: string;
+  retryDelaySeconds: number;
 }) {
   await queryOne(
     `
       update google_notification_jobs
       set
-        status = 'failed',
-        error = $2,
-        retry_after = now() + interval '15 minutes',
+        status = case
+          when $3 = 'configuration' then 'pending_config'
+          when attempt_count >= max_attempts then 'dead_letter'
+          else 'retry'
+        end,
+        error = left($2, 500),
+        configuration_code = case when $3 = 'configuration' then $6 else null end,
+        admin_action = case when $3 = 'configuration' then $7 else null end,
+        last_error_category = $3,
+        last_error_message = left($2, 500),
+        retry_after = case
+          when $3 = 'configuration' or attempt_count >= max_attempts then null
+          else now() + make_interval(secs => $5::int)
+        end,
+        available_at = case
+          when $3 = 'configuration' or attempt_count >= max_attempts then available_at
+          else now() + make_interval(secs => $5::int)
+        end,
+        dead_lettered_at = case
+          when $3 <> 'configuration' and attempt_count >= max_attempts then now()
+          else null
+        end,
+        locked_by = null,
+        lease_expires_at = null,
         updated_at = now()
-      where id = $1::uuid
+      where id = $1::uuid and status = 'sending' and locked_by = $4
       returning id
     `,
-    [input.id, input.error],
+    [
+      input.id,
+      input.error,
+      input.category,
+      input.leaseOwner,
+      input.retryDelaySeconds,
+      input.configurationCode ?? null,
+      input.adminAction ?? null,
+    ],
   );
 }
 
 async function sendGoogleWebhook(job: ClaimedJobRow) {
-  if (job.destinationType !== "google_chat_webhook" || !job.webhookUrl) {
-    return { error: "Google target has no Google Chat webhook URL", ok: false as const };
+  const readiness = validateNotificationTargetReadiness({
+    alertType: job.alertType,
+    projectId: job.projectId,
+    provider: "google",
+    target: job.targetWorkspaceId && job.targetEnabled !== null
+      ? {
+          alertTypes: job.targetAlertTypes,
+          destinationType: job.destinationType,
+          enabled: job.targetEnabled,
+          projectId: job.targetProjectId,
+          webhookUrl: job.webhookUrl,
+          workspaceId: job.targetWorkspaceId,
+        }
+      : null,
+    workspaceId: job.workspaceId,
+  });
+  if (!readiness.ok) {
+    return {
+      adminAction: readiness.adminAction,
+      configurationCode: readiness.code,
+      error: readiness.reason,
+      ok: false as const,
+      status: null,
+    };
+  }
+  if (!job.webhookUrl) {
+    return {
+      adminAction: "Store a provider-issued webhook credential on the target, then reconcile the job explicitly.",
+      configurationCode: "credential_missing",
+      error: "The provider target has no webhook credential.",
+      ok: false as const,
+      status: null,
+    };
   }
 
   const response = await fetch(job.webhookUrl, {
@@ -1247,43 +1798,117 @@ async function sendGoogleWebhook(job: ClaimedJobRow) {
     })),
     headers: { "Content-Type": "application/json" },
     method: "POST",
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
-    const error = await response.text().catch(() => "");
     return {
-      error: `Google Chat webhook failed with ${response.status}${error ? `: ${error.slice(0, 240)}` : ""}`,
+      adminAction: undefined,
+      configurationCode: undefined,
+      error: `Google Chat webhook failed with HTTP ${response.status}`,
       ok: false as const,
+      status: response.status,
     };
   }
 
   return {
     messageId: response.headers.get("x-request-id") ?? response.headers.get("x-guploader-uploadid"),
     ok: true as const,
+    status: response.status,
   };
 }
 
 export async function processDueGoogleNotifications(
-  input: { jobIds?: string[]; limit?: number; workspaceId?: string | null } = {},
-): Promise<{ checked: number; failed: number; sent: number }> {
+  input: {
+    jobIds?: string[];
+    limit?: number;
+    shouldContinue?: () => boolean;
+    workspaceId?: string | null;
+  } = {},
+): Promise<{ checked: number; failed: number; pendingConfig: number; sent: number }> {
   const refs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueGoogleNotificationJobIds(input.limit ?? 25, input.workspaceId);
-  const result = { checked: refs.length, failed: 0, sent: 0 };
+  const result = { checked: 0, failed: 0, pendingConfig: 0, sent: 0 };
 
   for (const ref of refs) {
-    const job = await claimGoogleNotificationJob(ref.id, input.workspaceId);
+    if (input.shouldContinue && !input.shouldContinue()) break;
+    result.checked += 1;
+    const preparation = await prepareGoogleNotificationJobForDelivery({
+      id: ref.id,
+      workspaceId: input.workspaceId,
+    });
+    if (preparation !== "ready") {
+      if (preparation === "pending_config") result.pendingConfig += 1;
+      continue;
+    }
+    const leaseOwner = createLeaseOwner("google-notification");
+    let job: ClaimedJobRow | null;
+    try {
+      job = await claimGoogleNotificationJob({
+        id: ref.id,
+        leaseOwner,
+        workspaceId: input.workspaceId,
+      });
+    } catch (error) {
+      const afterConflict = await prepareGoogleNotificationJobForDelivery({
+        id: ref.id,
+        workspaceId: input.workspaceId,
+      });
+      if (afterConflict === "pending_config") {
+        result.pendingConfig += 1;
+        continue;
+      }
+      throw error;
+    }
     if (!job) continue;
 
-    const sendResult = await sendGoogleWebhook(job);
-    if (!sendResult.ok) {
+    let sendResult: Awaited<ReturnType<typeof sendGoogleWebhook>>;
+    try {
+      sendResult = await sendGoogleWebhook(job);
+    } catch (error) {
       result.failed += 1;
-      await markGoogleNotificationFailed({ error: sendResult.error, id: job.id });
+      await markGoogleNotificationFailed({
+        adminAction: "Repair the provider target and reconcile this job explicitly.",
+        category: classifyDeliveryError({ error }),
+        configurationCode: "provider_delivery_configuration_error",
+        error: sanitizeJobError(error),
+        id: job.id,
+        leaseOwner: job.leaseOwner,
+        retryDelaySeconds: retryDelaySeconds(Number(job.attemptCount)),
+      });
+      continue;
+    }
+    if (!sendResult.ok) {
+      const deliveryCategory = sendResult.configurationCode
+        ? "configuration"
+        : classifyDeliveryError({ error: sendResult.error, status: sendResult.status });
+      const providerRejectedCredential = deliveryCategory === "provider_auth" ||
+        deliveryCategory === "provider_rejected";
+      if (deliveryCategory === "configuration" || providerRejectedCredential) result.pendingConfig += 1;
+      else result.failed += 1;
+      await markGoogleNotificationFailed({
+        adminAction: sendResult.adminAction ?? (providerRejectedCredential
+          ? "Replace or repair the Google Chat webhook credential, validate it with the test sink, then reconcile explicitly."
+          : null),
+        category: providerRejectedCredential ? "configuration" : deliveryCategory,
+        configurationCode: sendResult.configurationCode ?? (providerRejectedCredential
+          ? "provider_credential_rejected"
+          : null),
+        error: sanitizeJobError(sendResult.error),
+        id: job.id,
+        leaseOwner: job.leaseOwner,
+        retryDelaySeconds: retryDelaySeconds(Number(job.attemptCount)),
+      });
       continue;
     }
 
     result.sent += 1;
-    await markGoogleNotificationSent({ id: job.id, messageId: sendResult.messageId ?? null });
+    await markGoogleNotificationSent({
+      id: job.id,
+      leaseOwner: job.leaseOwner,
+      messageId: sendResult.messageId ?? null,
+    });
   }
 
   return result;

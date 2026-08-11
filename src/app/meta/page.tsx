@@ -8,13 +8,8 @@ import {
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
-import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
-
-export const metadata: Metadata = {
-  title: "Meta Developer Disclosures | Novalure CRM",
-  description:
-    "Public Meta and Facebook developer disclosures for Novalure CRM integrations.",
-};
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { withPublicLanguage } from "@/lib/public-language";
 
 const updated = "20 May 2026";
 const pagePath = "/meta";
@@ -37,6 +32,14 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Meta-Developer-Hinweise",
   },
 };
+
+export async function generateMetadata({ searchParams }: MetaDisclosuresPageProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const page = pageCopy[language];
+  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
+}
 
 function publicUrl(path: string, language: LanguageCode) {
   return new URL(withPublicLanguage(path, language), publicSiteOrigin).toString();
@@ -117,11 +120,7 @@ function getGermanSections(language: LanguageCode) {
 export default async function MetaDisclosuresPage({ searchParams }: MetaDisclosuresPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const page = pageCopy[language];
 
   return (

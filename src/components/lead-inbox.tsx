@@ -31,8 +31,10 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type LeadInboxProps = {
+  activeProjectId: string | null;
   brokerMandates?: BrokerMandate[];
   buyerSearchProfiles?: BuyerSearchProfile[];
   consents: ConsentRecord[];
@@ -43,6 +45,7 @@ type LeadInboxProps = {
   onLeadsChanged?: () => Promise<boolean | void> | boolean | void;
   projects: Project[];
   users: WorkspaceUser[];
+  workspaceId: string;
 };
 
 type LeadView = "queue" | "hot" | "due" | "unassigned" | "handover" | "archived" | "all";
@@ -158,10 +161,14 @@ function splitCriteria(value: string) {
     .filter(Boolean);
 }
 
-function getInitialDraft(leads: Lead[], contacts: Contact[], projects: Project[]) {
+function getInitialDraft(projects: Project[], activeProjectId: string | null) {
+  const activeProject = activeProjectId
+    ? projects.find((project) => project.id === activeProjectId)
+    : undefined;
+
   return {
     contactId: "",
-    projectId: projects[0]?.id ?? "",
+    projectId: activeProject?.id ?? "",
     source: "Manual" as LeadSource,
     type: "Käufer" as LeadType,
     score: 70,
@@ -188,6 +195,7 @@ function getInitialDraft(leads: Lead[], contacts: Contact[], projects: Project[]
 }
 
 export function LeadInbox({
+  activeProjectId,
   brokerMandates = [],
   buyerSearchProfiles = [],
   consents = [],
@@ -198,6 +206,7 @@ export function LeadInbox({
   onLeadsChanged,
   projects = [],
   users = [],
+  workspaceId,
 }: LeadInboxProps) {
   const copy = getDashboardCopy(language).leadInbox;
   const text = getLeadInboxCommandCopy(language);
@@ -212,7 +221,7 @@ export function LeadInbox({
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeTone, setNoticeTone] = useState<NoticeTone>("success");
-  const [leadDraft, setLeadDraft] = useState(() => getInitialDraft(leads, contacts, projects));
+  const [leadDraft, setLeadDraft] = useState(() => getInitialDraft(projects, activeProjectId));
   const [leadDraftErrors, setLeadDraftErrors] = useState<LeadDraftFieldErrors>({});
   const [fieldDraft, setFieldDraft] = useState({
     leadId: leads[0]?.id ?? "",
@@ -233,6 +242,10 @@ export function LeadInbox({
   const projectFieldRef = useRef<HTMLSelectElement | null>(null);
   const intentFieldRef = useRef<HTMLTextAreaElement | null>(null);
   const nextActionFieldRef = useRef<HTMLTextAreaElement | null>(null);
+  const assignableUsers = users.filter((user) => user.status === "active");
+  const draftProjects = activeProjectId
+    ? projects.filter((project) => project.id === activeProjectId)
+    : projects;
 
   const effectiveLeads = useMemo(
     () => [
@@ -251,6 +264,12 @@ export function LeadInbox({
         assignedToUserId: selectedLead?.assignedToUserId ?? "",
         nextAction: selectedLead?.nextAction ?? "",
       };
+  const qualifyingAssigneeMissing = activeFieldDraft.status === "Qualifizieren" &&
+    !assignableUsers.some((user) => user.id === activeFieldDraft.assignedToUserId);
+  const selectedLeadHasActiveAssignee = Boolean(
+    selectedLead?.assignedToUserId &&
+    assignableUsers.some((user) => user.id === selectedLead.assignedToUserId),
+  );
 
   const decoratedLeads = useMemo(
     () =>
@@ -455,7 +474,7 @@ export function LeadInbox({
   };
 
   const persistLead = async (lead: Partial<LocalLead>) => {
-    const response = await fetch("/api/crm/leads", {
+    const response = await csrfFetch("/api/crm/leads", {
       body: JSON.stringify({ lead }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -474,6 +493,11 @@ export function LeadInbox({
 
   const saveFieldDraft = async () => {
     if (!selectedLead || fieldSaving) {
+      return;
+    }
+    if (qualifyingAssigneeMissing) {
+      showNotice(text.qualifyingAssigneeRequired, "error");
+      setFieldFeedback({ message: text.qualifyingAssigneeRequired, tone: "error" });
       return;
     }
 
@@ -501,7 +525,7 @@ export function LeadInbox({
   };
 
   const acceptLead = async (leadId: string) => {
-    const fallbackOwnerId = users[0]?.id;
+    const fallbackOwnerId = assignableUsers[0]?.id;
     const lead = effectiveLeads.find((item) => item.id === leadId);
     const patch = {
       status: "Übergabe",
@@ -524,6 +548,14 @@ export function LeadInbox({
   const archiveLead = async (leadId: string) => {
     const lead = effectiveLeads.find((item) => item.id === leadId);
     const nextStatus = lead?.status === "Archiviert" ? "Qualifizieren" : "Archiviert";
+    if (
+      nextStatus === "Qualifizieren" &&
+      !assignableUsers.some((user) => user.id === lead?.assignedToUserId)
+    ) {
+      showNotice(text.qualifyingAssigneeRequired, "error");
+      setActionFeedback({ message: text.qualifyingAssigneeRequired, tone: "error" });
+      return;
+    }
     const patch = { status: nextStatus } satisfies Partial<LocalLead>;
 
     try {
@@ -546,7 +578,7 @@ export function LeadInbox({
     }
 
     const contact = contacts.find((item) => item.id === selectedLead.contactId);
-    const response = await fetch("/api/crm/recommendation-runtime", {
+    const response = await csrfFetch("/api/crm/recommendation-runtime", {
       body: JSON.stringify({
         actionType: selectedLead.hotStatus || selectedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
         channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
@@ -592,7 +624,7 @@ export function LeadInbox({
 
     setBulkSaving(true);
     try {
-      const response = await fetch("/api/crm/recommendation-runtime", {
+      const response = await csrfFetch("/api/crm/recommendation-runtime", {
         body: JSON.stringify({
           actionType: "lead_inbox_bulk_follow_up",
           leads: candidates.map((item) => ({
@@ -644,7 +676,7 @@ export function LeadInbox({
 
     const detail = noteDraft.trim();
     try {
-      const response = await fetch("/api/crm/notes", {
+      const response = await csrfFetch("/api/crm/notes", {
         body: JSON.stringify({
           note: {
             contactId: selectedLead.contactId || undefined,
@@ -689,7 +721,7 @@ export function LeadInbox({
     const now = new Date();
     const nextLead: LocalLead = {
       id: `lead_local_${now.getTime()}`,
-      workspaceId: contact?.workspaceId ?? users[0]?.workspaceId ?? "ws_novalure",
+      workspaceId,
       projectId: leadDraft.projectId,
       contactId: leadDraft.contactId,
       source: leadDraft.source,
@@ -733,7 +765,7 @@ export function LeadInbox({
               yearBuilt: toOptionalNumber(leadDraft.yearBuilt) ?? 0,
             }
           : undefined,
-      assignedToUserId: users[0]?.id,
+      assignedToUserId: assignableUsers[0]?.id,
       isLocal: true,
     };
 
@@ -751,14 +783,14 @@ export function LeadInbox({
       });
       setActiveView("queue");
       setShowCreateForm(false);
-      setLeadDraft(getInitialDraft(leads, contacts, projects));
+      setLeadDraft(getInitialDraft(projects, activeProjectId));
       setLeadDraftErrors({});
       addActivity(savedLead.id, text.newLeadSaved, savedLead.nextAction, "success");
       showNotice(text.newLeadSaved);
       setFormSuccess(text.newLeadSaved);
       await refreshPersistedLeads(savedLead.id);
       if (createTaskAfterSave) {
-        await fetch("/api/crm/recommendation-runtime", {
+        await csrfFetch("/api/crm/recommendation-runtime", {
           body: JSON.stringify({
             actionType: savedLead.hotStatus || savedLead.score >= 80 ? "hot_lead_follow_up" : "lead_follow_up",
             channel: contact?.email ? "E-Mail" : contact?.phone ? "WhatsApp" : "Telefon",
@@ -858,6 +890,9 @@ export function LeadInbox({
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 onClick={() => {
+                  if (!showCreateForm) {
+                    setLeadDraft(getInitialDraft(projects, activeProjectId));
+                  }
                   setFormError("");
                   setFormSuccess("");
                   setLeadDraftErrors({});
@@ -940,9 +975,13 @@ export function LeadInbox({
                       setLeadDraft((current) => ({ ...current, projectId: event.target.value }));
                     }}
                     ref={projectFieldRef}
+                    required
                     value={leadDraft.projectId}
                   >
-                    {projects.map((project) => (
+                    <option value="">
+                      {language === "de" ? "Projekt auswählen" : "Select project"}
+                    </option>
+                    {draftProjects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.name}
                       </option>
@@ -1213,7 +1252,10 @@ export function LeadInbox({
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <button
                   className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
-                  disabled={leadSaving}
+                  disabled={
+                    leadSaving ||
+                    !draftProjects.some((project) => project.id === leadDraft.projectId)
+                  }
                   onClick={() => {
                     void createLead();
                   }}
@@ -1223,7 +1265,10 @@ export function LeadInbox({
                 </button>
                 <button
                   className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400"
-                  disabled={leadSaving}
+                  disabled={
+                    leadSaving ||
+                    !draftProjects.some((project) => project.id === leadDraft.projectId)
+                  }
                   onClick={() => {
                     void createLead(true);
                   }}
@@ -1238,7 +1283,7 @@ export function LeadInbox({
                     setFormError("");
                     setFormSuccess("");
                     setLeadDraftErrors({});
-                    setLeadDraft(getInitialDraft(leads, contacts, projects));
+                    setLeadDraft(getInitialDraft(projects, activeProjectId));
                   }}
                   type="button"
                 >
@@ -1443,12 +1488,17 @@ export function LeadInbox({
                     >
                       <option value="">{text.unassigned}</option>
                       {users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
+                        <option disabled={user.status !== "active"} key={user.id} value={user.id}>
+                          {user.name}{user.status !== "active" ? ` (${user.status})` : ""}
                         </option>
                       ))}
                     </select>
                   </label>
+                  {qualifyingAssigneeMissing ? (
+                    <p className="text-sm font-semibold text-red-700" role="alert">
+                      {text.qualifyingAssigneeRequired}
+                    </p>
+                  ) : null}
                   <label className="grid gap-1 text-sm font-semibold">
                     {text.nextAction}
                     <textarea
@@ -1459,7 +1509,7 @@ export function LeadInbox({
                   </label>
                   <button
                     className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
-                    disabled={fieldSaving}
+                    disabled={fieldSaving || qualifyingAssigneeMissing}
                     onClick={() => {
                       void saveFieldDraft();
                     }}
@@ -1492,6 +1542,7 @@ export function LeadInbox({
                 </button>
                 <button
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                  disabled={selected.lead.status === "Archiviert" && !selectedLeadHasActiveAssignee}
                   onClick={() => {
                     void createTask();
                   }}
@@ -1508,6 +1559,11 @@ export function LeadInbox({
                 >
                   {selected.lead.status === "Archiviert" ? text.restore : text.archive}
                 </button>
+                {selected.lead.status === "Archiviert" && !selectedLeadHasActiveAssignee ? (
+                  <p className="text-sm font-semibold text-red-700 sm:col-span-3 2xl:col-span-1" role="alert">
+                    {text.restoreRequiresAssignee}
+                  </p>
+                ) : null}
                 {actionFeedback ? (
                   <p
                     className={`text-sm font-semibold sm:col-span-3 2xl:col-span-1 ${

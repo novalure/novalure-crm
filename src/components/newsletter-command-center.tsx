@@ -16,6 +16,7 @@ import type {
 } from "@/lib/crm-types";
 import { getLocale, getNewsletterCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
 import { MediaLibraryPicker } from "@/components/media-library-picker";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type NewsletterCommandCenterProps = {
   automations: NewsletterAutomation[];
@@ -749,7 +750,7 @@ const liveNewsletterMessage =
         throw new Error(text.liveSendNoRecipients);
       }
 
-      const response = await fetch("/api/newsletter/send", {
+      const response = await csrfFetch("/api/newsletter/send", {
         body: JSON.stringify({
           campaignId: selectedCampaign?.campaign.id,
           contentBlocks: selectedDraft.contentBlocks,

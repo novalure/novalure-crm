@@ -22,6 +22,7 @@ import {
   type WebsiteForm,
 } from "@/lib/form-types";
 import { getFormCommandCenterCopy, getLocale, type LanguageCode } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FormCommandCenterProps = {
   contacts: Contact[];
@@ -654,7 +655,7 @@ export function FormCommandCenter({
 
     async function loadPersistedForms() {
       try {
-        const response = await fetch("/api/forms", { cache: "no-store" });
+        const response = await csrfFetch("/api/forms", { cache: "no-store" });
         if (!response.ok) {
           setPersistenceSource("fallback");
           return;
@@ -767,7 +768,7 @@ export function FormCommandCenter({
     setSaveStatus("saving");
 
     try {
-      const response = await fetch("/api/forms", {
+      const response = await csrfFetch("/api/forms", {
         body: JSON.stringify({ form: selectedForm }),
         headers: { "content-type": "application/json" },
         method: "POST",

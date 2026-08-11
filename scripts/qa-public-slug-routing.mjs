@@ -1,10 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { neon } from "@neondatabase/serverless";
-
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
-const prodDbHost = "ep-wandering-union-alem0781-pooler.c-3.eu-central-1.aws.neon.tech";
+import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return;
@@ -55,6 +52,30 @@ function buildField(input) {
   };
 }
 
+const publicSubmissionProofFields = [
+  "_novalure_idempotency_key",
+  "_novalure_proof_issued_at",
+  "_novalure_proof_expires_at",
+  "_novalure_proof",
+  "_novalure_company",
+];
+
+async function appendSubmissionProof(baseUrl, pathname, body) {
+  const response = await fetch(new URL(pathname, baseUrl), {
+    headers: { Accept: "text/html" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert(response.ok, `Proof page failed: ${response.status}`);
+  const html = await response.text();
+  for (const name of publicSubmissionProofFields) {
+    const tag = html.match(new RegExp(`<input[^>]*name=["']${name}["'][^>]*>`, "i"))?.[0] ?? "";
+    const value = tag.match(/value=["']([^"']*)["']/i)?.[1] ?? "";
+    body.set(name, value);
+  }
+  assert(body.get("_novalure_proof"), "Submission proof is missing from public page");
+}
+
 async function postForm(baseUrl, body, acceptJson = false) {
   return fetch(new URL("/api/forms/submissions", baseUrl), {
     body,
@@ -95,16 +116,16 @@ loadEnvFile(join(process.cwd(), ".env.local"));
 
 const databaseUrl = process.env.DATABASE_URL;
 assert(databaseUrl, "DATABASE_URL is missing");
-const parsedDatabaseUrl = new URL(databaseUrl);
-const activeHost = parsedDatabaseUrl.hostname;
+const target = assertDatabaseTarget({
+  databaseUrl,
+  purpose: "public slug routing QA",
+  target: "test",
+});
 const maskedUrl = maskDatabaseUrl(databaseUrl);
 
 console.log(`Active DATABASE_URL: ${maskedUrl}`);
-console.log(`Active DB host: ${activeHost}`);
-console.log(`Expected Test DB suffix: ${testDbSuffix}`);
-
-assert(activeHost === testDbHost, `Refusing to write: active DB host is not the Test DB (${testDbHost})`);
-assert(activeHost !== prodDbHost, "Refusing to write: active DB host is the Prod DB");
+console.log(`Active DB host: ${target.host}`);
+console.log("Active project identity verified");
 
 const publicBaseUrl = process.env.PUBLIC_BASE_URL || process.env.SLUGFIX_BASE_URL || "http://127.0.0.1:3000";
 const runId = `SLUGFIX_TEST_${Date.now()}`;
@@ -213,6 +234,11 @@ try {
     slugfix_probe: runId,
     utm_source: "slugfix_qa",
   });
+  await appendSubmissionProof(
+    publicBaseUrl,
+    `/forms/${workspaceA.publicKey}/${slug}`,
+    formBody,
+  );
   const formResponse = await postForm(publicBaseUrl, formBody, true);
   const formJson = await formResponse.json().catch(() => ({}));
   assert(formResponse.status === 200 && formJson.persisted === true, `Form submit failed: ${formResponse.status}`);
@@ -263,6 +289,11 @@ try {
     utm_source: "slugfix_qa",
     workspace_public_key: workspaceA.publicKey,
   });
+  await appendSubmissionProof(
+    publicBaseUrl,
+    `/book/${workspaceA.publicKey}/${slug}?date=${encodeURIComponent(availabilityA.json.availability.date)}`,
+    bookingBody,
+  );
   const bookingResponse = await postBooking(publicBaseUrl, bookingBody);
   assert([302, 303, 307, 308].includes(bookingResponse.status), `Booking should redirect, got ${bookingResponse.status}`);
   const bookingLocation = bookingResponse.headers.get("location") || "";

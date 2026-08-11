@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 
@@ -19,18 +20,24 @@ function loadEnv(path) {
 loadEnv(".env.local");
 loadEnv(".env.production.local");
 
+const qaTarget = await assertQaTarget();
+const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+
+function qaEmail(localPart) {
+  return `${localPart}+${qaRunSlug}@novalure.local`;
+}
+
 const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const qaPassword =
-  process.env.NOVALURE_QA_PASSWORD ||
-  process.env.NOVALURE_QA_SEED_PASSWORD ||
-  process.env.QA_LOGIN_PASSWORD ||
-  defaultQaPassword;
+const trustedOrigin = new URL(baseUrl).origin;
+const configuredQaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.NOVALURE_QA_SEED_PASSWORD;
+if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
+const qaPassword = configuredQaPassword || defaultQaPassword;
 
 const users = {
-  admin: "qa-platform-admin@novalure.local",
-  assistant: "qa-assistant@novalure.local",
-  broker: "qa-broker-sales@novalure.local",
-  developer: "qa-developer-sales@novalure.local",
+  admin: qaEmail("qa-platform-admin"),
+  assistant: qaEmail("qa-assistant"),
+  broker: qaEmail("qa-broker-sales"),
+  developer: qaEmail("qa-developer-sales"),
 };
 
 function assert(condition, message) {
@@ -67,12 +74,36 @@ function createClient(email) {
     return Array.from(cookies.entries()).map(([name, value]) => `${name}=${value}`).join("; ");
   }
 
+  async function getCsrfToken(method, path) {
+    const target = new URL(path, baseUrl);
+    const params = new URLSearchParams({ method, path: target.pathname });
+    const response = await fetch(`${baseUrl}/api/auth/csrf?${params.toString()}`, {
+      headers: {
+        accept: "application/json",
+        cookie: cookieHeader(),
+        origin: trustedOrigin,
+        "sec-fetch-site": "same-origin",
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || typeof payload?.csrfToken !== "string") {
+      throw new Error(`CSRF token request failed with ${response.status}`);
+    }
+    return payload.csrfToken;
+  }
+
   async function request(path, options = {}) {
     const headers = new Headers(options.headers ?? {});
     if (options.auth !== false && cookies.size > 0) headers.set("cookie", cookieHeader());
+    const method = (options.method ?? "GET").toUpperCase();
+    if (["DELETE", "PATCH", "POST", "PUT"].includes(method) && options.auth !== false && cookies.has("novalure_session")) {
+      headers.set("origin", trustedOrigin);
+      headers.set("sec-fetch-site", "same-origin");
+      headers.set("x-novalure-csrf-token", await getCsrfToken(method, path));
+    }
     const init = {
       headers,
-      method: options.method ?? "GET",
+      method,
       redirect: options.redirect ?? "manual",
     };
 

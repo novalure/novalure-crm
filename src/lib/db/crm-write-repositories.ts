@@ -16,6 +16,7 @@ import type {
   Project,
   Task,
 } from "@/lib/crm-types";
+import { parseDealValueCents, validateDealCloseDate, validateDealValue } from "@/lib/deal-validation";
 import {
   canAssignContactOwner,
   canViewAllWorkspaceContacts,
@@ -410,7 +411,6 @@ const dealCloseReasonCategories: DealCloseReasonCategory[] = [
 ];
 const maxShortTextLength = 180;
 const maxLongTextLength = 1200;
-const maxDealValueCents = 500_000_000 * 100;
 
 function hasExplicitInput(value: unknown) {
   return value !== undefined && value !== null && String(value).trim().length > 0;
@@ -432,18 +432,21 @@ function validateEmailInput(value: unknown) {
 }
 
 function validateDealValueInput(value: unknown) {
-  if (!hasExplicitInput(value)) return null;
-  const cents = toCents(value);
-  if (cents <= 0) return "Deal value must be greater than zero";
-  if (cents > maxDealValueCents) return "Deal value is implausibly high";
-  return null;
+  const code = validateDealValue(value, { required: false });
+  if (code === "value_invalid") return "Deal value must be greater than zero";
+  if (code === "value_too_high") return "Deal value is implausibly high";
+  return code === "value_required" ? "Deal value is required" : null;
 }
 
-function validateFutureDateInput(value: unknown, field: string) {
-  if (!hasExplicitInput(value)) return null;
-  const parsed = new Date(cleanDateInput(value)).getTime();
-  if (!Number.isFinite(parsed)) return `${field} is invalid`;
-  return parsed >= Date.now() - 60_000 ? null : `${field} cannot be in the past`;
+function validateFutureDateInput(value: unknown, field: string, allowHistorical = false) {
+  const code = validateDealCloseDate(value, {
+    allowHistorical,
+    required: false,
+    todayDateKey: new Date().toISOString().slice(0, 10),
+  });
+  if (code === "close_date_invalid") return `${field} is invalid`;
+  if (code === "close_date_past") return `${field} cannot be in the past`;
+  return code === "close_date_required" ? `${field} is required` : null;
 }
 
 export async function listDashboardViews(input: {
@@ -630,6 +633,7 @@ export async function upsertDashboardView(input: {
 }
 
 export async function upsertDealRecord(input: {
+  allowHistoricalCloseDate?: boolean;
   deal: Partial<Deal>;
   idempotencyKey?: string;
   requireExisting?: boolean;
@@ -668,6 +672,25 @@ export async function upsertDealRecord(input: {
   if (input.requireExisting && !existing) {
     return { persisted: false, reason: "Deal not found" };
   }
+  if (!existing && !hasExplicitInput(input.deal.value)) {
+    return { persisted: false, reason: "Deal value is required" };
+  }
+  if (!existing && !hasExplicitInput(input.deal.expectedCloseDate)) {
+    return { persisted: false, reason: "Expected close date is required" };
+  }
+  const requestedCloseDate = normalizeDateOnly(input.deal.expectedCloseDate);
+  const existingCloseDate = normalizeDateOnly(existing?.expectedCloseDate);
+  const closeDateChanged =
+    hasExplicitInput(input.deal.expectedCloseDate) &&
+    (!existing || requestedCloseDate !== existingCloseDate);
+  const closeDateError = closeDateChanged
+    ? validateFutureDateInput(
+        input.deal.expectedCloseDate,
+        "Expected close date",
+        input.allowHistoricalCloseDate === true,
+      )
+    : null;
+  if (closeDateError) return { persisted: false, reason: closeDateError };
   const contact = await resolveContactForWrite(input.session.workspaceId, input.deal.contactId ?? existing?.contactId);
   const resolvedProject = await resolveWorkspaceProjectIdForWrite({
     existingProjectId: existing?.projectId ?? contact?.projectId ?? null,
@@ -1919,10 +1942,19 @@ export async function upsertLeadRecord(input: {
   if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
   const projectId = resolvedProject.projectId;
   const contactId = contact?.id ?? existing?.contactId ?? normalizeWriteProjectId(input.lead.contactId);
-  const ownerUserId =
-    normalizeWriteProjectId(input.lead.assignedToUserId) ??
-    existing?.assignedToUserId ??
-    normalizeWriteProjectId(input.session.userId);
+  const status = (cleanString(input.lead.status) || existing?.status || "Neu") as Lead["status"];
+  const resolvedOwner = await resolveWorkspaceUserIdForWrite({
+    existingUserId: existing?.assignedToUserId ?? null,
+    fallbackUserId: existing ? null : normalizeWriteProjectId(input.session.userId),
+    requestedUserId: input.lead.assignedToUserId,
+    requireActive: status === "Qualifizieren",
+    workspaceId: input.session.workspaceId,
+  });
+  if (!resolvedOwner.ok) return { persisted: false, reason: resolvedOwner.reason };
+  const ownerUserId = resolvedOwner.userId;
+  if (status === "Qualifizieren" && !ownerUserId) {
+    return { persisted: false, reason: "Lead assignee is required for status Qualifizieren" };
+  }
   const score = clampNumber(input.lead.score ?? existing?.score ?? 0, 0, 100);
   const idempotencyKey = cleanString(input.idempotencyKey) || null;
   const receivedAt = cleanDateInput(input.lead.receivedAt) || toIso(existing?.receivedAt ?? null) || new Date().toISOString();
@@ -1949,7 +1981,6 @@ export async function upsertLeadRecord(input: {
   }
   const source = (explicitSource || existing?.source || contact?.source || "Manual") as Lead["source"];
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
-  const status = (cleanString(input.lead.status) || existing?.status || "Neu") as Lead["status"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
 
   const writeAccess = await assertRecordWriteAccess({
@@ -3468,25 +3499,38 @@ async function resolveWorkspaceUserIdForWrite(input: {
   existingUserId?: string | null;
   fallbackUserId?: string | null;
   requestedUserId: unknown;
+  requireActive?: boolean;
   workspaceId: string;
 }): Promise<{ ok: true; userId: string | null } | { ok: false; reason: string }> {
   const requestedUserId = cleanString(input.requestedUserId);
+  const effectiveUserId = requestedUserId || input.existingUserId || input.fallbackUserId || null;
 
-  if (!requestedUserId) {
-    return { ok: true, userId: input.existingUserId ?? input.fallbackUserId ?? null };
-  }
+  if (!effectiveUserId) return { ok: true, userId: null };
+  if (!requestedUserId && !input.requireActive) return { ok: true, userId: effectiveUserId };
 
-  if (!isUuid(requestedUserId)) {
+  if (!isUuid(effectiveUserId)) {
     return { ok: false, reason: "Valid owner is required" };
   }
 
   const owner = await queryOne<IdRow>(
-    "select id from workspace_users where id = $1 and workspace_id = $2 limit 1",
-    [requestedUserId, input.workspaceId],
+    `
+      select id
+      from workspace_users
+      where id = $1
+        and workspace_id = $2
+        and ($3::boolean = false or status = 'active')
+      limit 1
+    `,
+    [effectiveUserId, input.workspaceId, Boolean(input.requireActive)],
   );
 
   if (!owner) {
-    return { ok: false, reason: "Owner is not available in this workspace" };
+    return {
+      ok: false,
+      reason: input.requireActive
+        ? "Active lead assignee is required in this workspace"
+        : "Owner is not available in this workspace",
+    };
   }
 
   return { ok: true, userId: owner.id };
@@ -4294,19 +4338,7 @@ function clampNumber(value: unknown, min: number, max: number) {
 }
 
 function toCents(value: unknown) {
-  const lowerValue = String(value ?? "0").toLowerCase();
-  const isMillion = lowerValue.includes("mio");
-  const normalized = lowerValue
-    .replace(/mio\.?/g, "")
-    .replace(/eur/g, "")
-    .replace(/€/g, "")
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const parsed = Number(normalized.replace(/[^\d.]/g, ""));
-  if (!Number.isFinite(parsed)) return 0;
-
-  return Math.round((isMillion ? parsed * 1_000_000 : parsed) * 100);
+  return parseDealValueCents(value) ?? 0;
 }
 
 function formatEuroFromCents(value: number | string) {

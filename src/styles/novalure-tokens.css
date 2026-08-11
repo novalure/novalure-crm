@@ -1,0 +1,42 @@
+:root {
+  --nl-bg: #faf9f7;
+  --nl-surface: #ffffff;
+  --nl-surface-soft: #f3f0ea;
+  --nl-ink: #33302b;
+  --nl-muted: #6f6a63;
+  --nl-tertiary: #8a837a;
+  --nl-blue: #2d68f0;
+  --nl-blue-dark: #1e4fc2;
+  --nl-blue-tint: #e9f0fe;
+  --nl-amber: #e9a23b;
+  --nl-amber-tint: #fbf1df;
+  --nl-divider: #ede9e2;
+  --nl-border: #e3ded5;
+  --nl-neutral: #f1eee9;
+  --nl-row-divider: #f0ede7;
+  --nl-progress-track: #eae6de;
+  --nl-disabled: #a7a29a;
+
+  --nl-success-bg: #edfff6;
+  --nl-success-border: #a8d7c2;
+  --nl-success-text: #176344;
+  --nl-warning-bg: #fbf1df;
+  --nl-warning-border: #e8d19d;
+  --nl-warning-text: #76531d;
+  --nl-danger-bg: #fff1ef;
+  --nl-danger-border: #e9b9b3;
+  --nl-danger-text: #8a3026;
+
+  --nl-shadow-card: 0 1px 2px rgb(51 48 43 / 4%), 0 8px 24px rgb(51 48 43 / 5%);
+  --nl-shadow-raised: 0 2px 4px rgb(51 48 43 / 4%), 0 16px 40px rgb(51 48 43 / 7%);
+  --nl-shadow-menu: 0 18px 38px rgb(51 48 43 / 10%);
+  --nl-focus-ring: 0 0 0 4px rgb(45 104 240 / 12%);
+
+  --nl-control-height: 50px;
+  --nl-control-height-compact: 44px;
+  --nl-radius-button: 10px;
+  --nl-radius-input: 11px;
+  --nl-radius-surface: 14px;
+  --nl-radius-dialog: 16px;
+  --nl-radius-pill: 999px;
+}
