@@ -9,9 +9,14 @@ function cleanOrigin(value: string | undefined) {
 }
 
 export function getTrustedAppOrigin() {
+  const vercelPreviewOrigin = process.env.VERCEL_ENV === "preview"
+    ? cleanOrigin(process.env.VERCEL_URL)
+    : "";
+
   return (
     cleanOrigin(process.env.NOVALURE_APP_ORIGIN) ||
     cleanOrigin(process.env.NEXT_PUBLIC_APP_URL) ||
+    vercelPreviewOrigin ||
     cleanOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
     publicSiteOrigin
   );

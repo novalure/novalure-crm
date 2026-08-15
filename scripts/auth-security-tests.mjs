@@ -446,3 +446,17 @@ test("password reset email GET is non-mutating and only a same-origin signed POS
   assert.match(reset, /safeEqualAuthValue\(signature \?\? "", expectedSignature\)/);
   assert.match(reset, /expiresAt <= now/);
 });
+
+test("Preview auth trusts the deployment origin before the Production fallback", async () => {
+  const originResolver = await readFile(
+    new URL("../src/lib/auth/app-origin.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(originResolver, /process\.env\.VERCEL_ENV === "preview"/);
+  assert.match(originResolver, /cleanOrigin\(process\.env\.VERCEL_URL\)/);
+  assert.ok(
+    originResolver.indexOf("vercelPreviewOrigin ||") <
+      originResolver.indexOf("cleanOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL)"),
+  );
+});
