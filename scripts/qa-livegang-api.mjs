@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { createHmac } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
@@ -48,6 +49,42 @@ function assert(condition, message) {
 function splitSetCookie(header) {
   if (!header) return [];
   return header.split(/,(?=[^;,]+=)/g);
+}
+
+function decodeBase32(value) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = value.toUpperCase().replace(/=+$/g, "").replace(/[\s-]/g, "");
+  let bits = 0;
+  let buffer = 0;
+  const decoded = [];
+
+  for (const character of normalized) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) return null;
+    buffer = (buffer << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded.push((buffer >>> bits) & 255);
+    }
+  }
+
+  return Buffer.from(decoded);
+}
+
+function createTotpCode(secret, now = Date.now()) {
+  const decoded = decodeBase32(secret);
+  if (!decoded) return null;
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
+  const digest = createHmac("sha1", decoded).update(counter).digest();
+  const offset = digest[digest.length - 1] & 15;
+  const binary =
+    ((digest[offset] & 127) << 24) |
+    ((digest[offset + 1] & 255) << 16) |
+    ((digest[offset + 2] & 255) << 8) |
+    (digest[offset + 3] & 255);
+  return String(binary % 1_000_000).padStart(6, "0");
 }
 
 function createClient(email) {
@@ -139,6 +176,40 @@ function createClient(email) {
       [302, 303, 307, 308].includes(response.status),
       `${email} login redirects (received HTTP ${response.status})`,
     );
+
+    if (!cookies.has("novalure_session")) {
+      const redirectLocation = response.headers.get("location") ?? "";
+      const challengeKind = new URL(redirectLocation, baseUrl).searchParams.get("step");
+      assert(challengeKind === "mfa_enrollment", `${email} receives the expected MFA enrollment challenge`);
+      assert(cookies.has("novalure_login_challenge"), `${email} receives login challenge cookie`);
+
+      const challengePage = await request(redirectLocation || "/login");
+      assert(challengePage.response.ok, `${email} can load MFA enrollment challenge`);
+      const secret = challengePage.text.match(/<code>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
+      const code = secret ? createTotpCode(secret) : null;
+      assert(Boolean(code), `${email} MFA enrollment exposes a valid TOTP secret`);
+
+      const challengeBody = new URLSearchParams({
+        code,
+        flow: "challenge",
+        recoveryCodesSaved: "1",
+        returnTo: "/",
+      });
+      const challengeResponse = await request("/api/auth/login", {
+        body: challengeBody,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: trustedOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        method: "POST",
+      });
+      assert(
+        [302, 303, 307, 308].includes(challengeResponse.response.status),
+        `${email} MFA enrollment redirects (received HTTP ${challengeResponse.response.status})`,
+      );
+    }
+
     assert(cookies.has("novalure_session"), `${email} receives session cookie`);
   }
 
