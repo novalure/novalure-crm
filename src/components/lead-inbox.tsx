@@ -1655,7 +1655,7 @@ export function LeadInbox({
                   ))}
                   {selected.activities.length === 0 && selected.conversations.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
-                      {text.noLead}
+                      {text.noTimeline}
                     </div>
                   ) : null}
                 </div>

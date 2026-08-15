@@ -74,6 +74,19 @@ test("login redirects keep personal data out of query strings", () => {
   assert.match(urlHygiene, /url\.searchParams\.delete\("error"\)/);
 });
 
+test("lead timeline distinguishes an empty selection from an empty timeline", () => {
+  const i18n = readText("src/lib/i18n.ts");
+  const leadInbox = readText("src/components/lead-inbox.tsx");
+
+  assert.match(i18n, /noTimeline: "No timeline entries yet\."/);
+  assert.match(i18n, /noTimeline: "Noch keine Verlaufseinträge\."/);
+  assert.match(
+    leadInbox,
+    /selected\.activities\.length === 0 && selected\.conversations\.length === 0[\s\S]*?\{text\.noTimeline\}/,
+  );
+  assert.match(leadInbox, /\) : \(\s*<div[\s\S]*?\{text\.noLead\}/);
+});
+
 test("public landing keeps German copy localized and gives customers a clear login path", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
