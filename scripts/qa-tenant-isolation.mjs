@@ -151,20 +151,30 @@ function runStaticChecks() {
   addMatrix({
     check: "service ops cross-workspace gate",
     expected: "novalureServiceOps requires explicit membership and writes an audit log",
-    actual: session.includes("Service Ops workspace access requires explicit membership") && session.includes("workspace.cross_workspace_view")
+    actual:
+      session.includes("findActiveMembershipForSession") &&
+      session.includes("Target workspace access requires explicit active membership") &&
+      session.includes("workspace.cross_workspace_view")
       ? "membership gate plus audit"
       : "not confirmed",
-    ok: session.includes("Service Ops workspace access requires explicit membership") && session.includes("workspace.cross_workspace_view"),
+    ok:
+      session.includes("findActiveMembershipForSession") &&
+      session.includes("Target workspace access requires explicit active membership") &&
+      session.includes("workspace.cross_workspace_view"),
     cause: "service ops cross-workspace access is missing membership or audit enforcement",
   });
 
+  const workspaceListIsMembershipBacked =
+    /from workspace_users wu[\s\S]*join workspaces w on w\.id = wu\.workspace_id/.test(workspaceRoute) &&
+    /wu\.id = \$1::uuid[\s\S]*lower\(wu\.email\) = lower\(\$3\)/.test(workspaceRoute) &&
+    workspaceRoute.includes("const listManagedWorkspaces = canSwitchWorkspace(auth.session)");
   addMatrix({
     check: "workspace list isolation",
     expected: "Growth workspace is hidden unless specialized profile or explicit membership applies",
-    actual: workspaceRoute.includes("novalure-growth") && workspaceRoute.includes("specializedGrowthRole")
-      ? "route filters Growth workspace"
+    actual: workspaceListIsMembershipBacked
+      ? "route lists only active memberships"
       : "not confirmed",
-    ok: workspaceRoute.includes("novalure-growth") && workspaceRoute.includes("specializedGrowthRole"),
+    ok: workspaceListIsMembershipBacked,
     cause: "WorkspaceList route does not explicitly isolate Novalure Growth",
   });
 

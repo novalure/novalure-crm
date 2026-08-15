@@ -396,7 +396,14 @@ test("webhook route has no unsigned Meta, caller-workspace or replay side-effect
   const route = await readFile(new URL("../src/app/api/bots/channels/webhook/route.ts", import.meta.url), "utf8");
   const normalizer = await readFile(new URL("../src/lib/bots/omnichannel.ts", import.meta.url), "utf8");
   const repository = await readFile(new URL("../src/lib/db/runtime-repositories.ts", import.meta.url), "utf8");
-  const migration = await readFile(new URL("../migrations/048_bot_webhook_integrity.sql", import.meta.url), "utf8");
+  const expandMigration = await readFile(
+    new URL("../migrations/048_bot_webhook_integrity.sql", import.meta.url),
+    "utf8",
+  );
+  const cutoverMigration = await readFile(
+    new URL("../migrations/057_bot_webhook_legacy_index_cutover.sql", import.meta.url),
+    "utf8",
+  );
 
   assert.doesNotMatch(route, /unsignedMetaDashboardProbe|allowUnsignedWebhooks|getDefaultWorkspaceForWebhook/);
   assert.doesNotMatch(route, /x-novalure-workspace-id|body\.workspaceId|NOVALURE_WORKSPACE_ID/);
@@ -414,9 +421,10 @@ test("webhook route has no unsigned Meta, caller-workspace or replay side-effect
   assert.match(repository, /setup_status in \('ready', 'connected'\)/);
   assert.match(repository, /limit 2/);
   assert.match(repository, /on conflict do nothing/);
-  assert.match(migration, /bot_channel_accounts_active_mapping_uidx/);
-  assert.match(migration, /bot_channel_webhooks_account_event_uidx/);
-  assert.match(migration, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
+  assert.match(expandMigration, /bot_channel_accounts_active_mapping_uidx/);
+  assert.match(expandMigration, /bot_channel_webhooks_account_event_uidx/);
+  assert.doesNotMatch(expandMigration, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
+  assert.match(cutoverMigration, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
 });
 
 test("media signatures reject MIME/content mismatches", () => {
@@ -464,7 +472,14 @@ test("private media routes stream through the app and never redirect to Blob", a
     "utf8",
   );
   const apiRoute = await readFile(new URL("../src/app/api/media/route.ts", import.meta.url), "utf8");
-  const migration = await readFile(new URL("../migrations/051_private_media_access.sql", import.meta.url), "utf8");
+  const expandMigration = await readFile(
+    new URL("../migrations/051_private_media_access.sql", import.meta.url),
+    "utf8",
+  );
+  const cutoverMigration = await readFile(
+    new URL("../migrations/062_private_media_contract_cutover.sql", import.meta.url),
+    "utf8",
+  );
 
   assert.match(store, /put\(relativePath, file, \{[\s\S]*?access: "private"/);
   assert.doesNotMatch(store, /put\([^)]*[\s\S]{0,250}access: "public"/);
@@ -491,14 +506,15 @@ test("private media routes stream through the app and never redirect to Blob", a
   assert.match(apiRoute, /media\.assets\.map\(serializeMediaAsset\)/);
   assert.match(apiRoute, /body\?\.action !== "publish" && body\?\.action !== "revoke"/);
 
-  assert.match(migration, /storage_access in \('private', 'legacy-public', 'published-public'\)/);
-  assert.match(migration, /token_hash text not null/);
-  assert.match(migration, /scope text not null default 'public-download'/);
-  assert.match(migration, /expires_at timestamptz not null/);
-  assert.match(migration, /revoked_at timestamptz/);
-  assert.match(migration, /encode\(digest\(public_token, 'sha256'\), 'hex'\)/);
-  assert.match(migration, /media_assets_public_token_cleartext_check/);
-  assert.match(migration, /set url = '\/api\/media\/files\/' \|\| id::text/);
+  assert.match(expandMigration, /storage_access in \('private', 'legacy-public', 'published-public'\)/);
+  assert.match(expandMigration, /token_hash text not null/);
+  assert.match(expandMigration, /scope text not null default 'public-download'/);
+  assert.match(expandMigration, /expires_at timestamptz not null/);
+  assert.match(expandMigration, /revoked_at timestamptz/);
+  assert.match(expandMigration, /encode\(digest\(public_token, 'sha256'\), 'hex'\)/);
+  assert.doesNotMatch(expandMigration, /add constraint media_assets_public_token_cleartext_check/);
+  assert.match(cutoverMigration, /add constraint media_assets_public_token_cleartext_check/);
+  assert.match(cutoverMigration, /set url = '\/api\/media\/files\/' \|\| id::text/);
 });
 
 test("media consumers do not serialize storage URLs or persist share tokens", async () => {
