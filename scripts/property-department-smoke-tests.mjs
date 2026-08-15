@@ -386,6 +386,19 @@ test("phase 3 complete brokerage preset is additive and covers the full broker w
   assert.match(tenantQa, /sameArray\(navigationOrder, expectedNavigationProfiles\)/);
 });
 
+test("real-estate broker navigation keeps contextual property destinations reachable", () => {
+  const workspace = read("src/components/crm-workspace.tsx");
+  const blockMatch = workspace.match(/realEstateBroker:\s*\{([\s\S]*?)\r?\n  \},\r?\n  completeBrokerage:/);
+
+  assert.ok(blockMatch, "realEstateBroker preset is defined before completeBrokerage");
+  const block = blockMatch[1];
+  for (const entry of ["properties", "projects", "units", "reservations"]) {
+    assert.match(block, new RegExp(`"${entry}"`), `${entry} is reachable for realEstateBroker`);
+  }
+  assert.match(workspace, /onOpenUnits=\{\(\) => handleNavigationChange\("units"\)\}/);
+  assert.match(workspace, /handleNavigationChange\("units", \{ preserveUnitScope: true \}\)/);
+});
+
 test("phase 2 property KPIs use unit scope, default units and non-multiplying project revenue", () => {
   const domain = read("src/lib/property-department.ts");
   const loader = read("src/lib/db/crm-loaders.ts");
