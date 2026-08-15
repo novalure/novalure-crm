@@ -34,12 +34,17 @@ const lockKey = 941041;
 const guardQueryTimeoutMs = 15_000;
 const migrationClientTimeoutMs = 960_000;
 const manualCutoverVersions = new Set([
+  "057_bot_webhook_legacy_index_cutover",
   "060_tenant_rls_pilot_prepare",
   "061_validate_and_activate_tenant_rls_pilot",
+  "062_private_media_contract_cutover",
+  "065_notification_guard_search_path_hardening",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
+  ["057_bot_webhook_legacy_index_cutover", "048_bot_webhook_integrity"],
   ["061_validate_and_activate_tenant_rls_pilot", "060_tenant_rls_pilot_prepare"],
+  ["062_private_media_contract_cutover", "051_private_media_access"],
   ["064_notification_provider_and_lead_assignee_integrity", "050_durable_job_leasing"],
   ["065_notification_guard_search_path_hardening", "064_notification_provider_and_lead_assignee_integrity"],
   ["066_oauth_state_workspace_user_guard", "053_oauth_state_integrity"],

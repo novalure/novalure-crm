@@ -206,14 +206,17 @@ test("migration leaves legacy cohorts non-retrying and enforces active qualifyin
   assert.match(migration, /where status = 'failed'[\s\S]*target_id is null/);
   assert.match(migration, /update teams_notification_jobs[\s\S]*where status = 'pending_config'/);
   assert.doesNotMatch(migration, /update (?:google|teams)_notification_jobs[\s\S]{0,180}status = 'queued'/);
-  assert.match(migration, /google_notification_job_target_guard/);
-  assert.match(migration, /teams_notification_job_target_guard/);
-  assert.equal((migration.match(/target\.enabled is not true/g) ?? []).length, 2);
-  assert.equal((migration.match(/not coalesce\(new\.alert_type = any\(target\.alert_types\), false\)/g) ?? []).length, 2);
-  assert.match(migration, /leads_qualifying_requires_assignee_check[\s\S]*not valid/i);
-  assert.match(migration, /new\.status <> 'Qualifizieren'/);
-  assert.match(migration, /status = 'active'/);
+  assert.doesNotMatch(migration, /google_notification_job_target_guard/);
+  assert.doesNotMatch(migration, /teams_notification_job_target_guard/);
+  assert.doesNotMatch(migration, /leads_qualifying_requires_assignee_check/);
   assert.doesNotMatch(migration, /update leads[\s\S]*assigned_to_user_id\s*=/i);
+  assert.match(hardening, /google_notification_job_target_guard/);
+  assert.match(hardening, /teams_notification_job_target_guard/);
+  assert.equal((hardening.match(/target\.enabled is not true/g) ?? []).length, 2);
+  assert.equal((hardening.match(/not coalesce\(new\.alert_type = any\(target\.alert_types\), false\)/g) ?? []).length, 2);
+  assert.match(hardening, /leads_qualifying_requires_assignee_check[\s\S]*not valid/i);
+  assert.match(hardening, /new\.status <> 'Qualifizieren'/);
+  assert.match(hardening, /status = 'active'/);
   assert.equal(
     (hardening.match(/set search_path = pg_catalog, public, pg_temp/g) ?? []).length,
     3,

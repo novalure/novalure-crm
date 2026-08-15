@@ -25,20 +25,6 @@ alter table media_assets
 alter table media_assets
   validate constraint media_assets_storage_access_check;
 
-update media_assets
-set url = '/api/media/files/' || id::text
-where url is distinct from '/api/media/files/' || id::text;
-
-alter table media_assets
-  drop constraint if exists media_assets_internal_url_check;
-
-alter table media_assets
-  add constraint media_assets_internal_url_check
-  check (url = '/api/media/files/' || id::text) not valid;
-
-alter table media_assets
-  validate constraint media_assets_internal_url_check;
-
 create unique index if not exists media_assets_id_workspace_uidx
   on media_assets(id, workspace_id);
 
@@ -89,44 +75,7 @@ where is_public = true
   and btrim(public_token) <> ''
 on conflict (token_hash) do nothing;
 
-update media_assets
-set public_token = null
-where public_token is not null;
-
-alter table media_assets
-  drop constraint if exists media_assets_public_token_cleartext_check;
-
-alter table media_assets
-  add constraint media_assets_public_token_cleartext_check
-  check (public_token is null) not valid;
-
-alter table media_assets
-  validate constraint media_assets_public_token_cleartext_check;
-
-update bot_document_sends
-set metadata = metadata
-  - 'asset'
-  - 'attachedMediaAssetPublicUrl'
-  - 'attachedMediaAssetUrl'
-  - 'documentUrl'
-where metadata ?| array[
-  'asset',
-  'attachedMediaAssetPublicUrl',
-  'attachedMediaAssetUrl',
-  'documentUrl'
-];
-
-update audit_logs
-set after = jsonb_set(
-  after,
-  '{mediaAsset}',
-  (after->'mediaAsset')
-    - 'publicToken'
-    - 'publicUrl'
-    - 'relativePath'
-    - 'url'
-    - 'workspaceId',
-  false
-)
-where action = 'bot.document_send.attach_media_asset'
-  and jsonb_typeof(after->'mediaAsset') = 'object';
+-- The expand phase intentionally retains legacy URLs, cleartext public tokens
+-- and historical metadata so the currently deployed media code remains
+-- rollback-compatible. Migration 062 performs the irreversible contract step
+-- only after the private-media code has been deployed and verified.

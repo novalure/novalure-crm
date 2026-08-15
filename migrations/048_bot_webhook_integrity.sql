@@ -13,5 +13,6 @@ create unique index if not exists bot_channel_webhooks_account_event_uidx
   where channel_account_id is not null
     and external_message_id is not null;
 
--- The former workspace/channel key was too broad for workspaces with multiple provider accounts.
-drop index if exists bot_channel_webhooks_workspace_message_uidx;
+-- Keep the former workspace/channel key during the expand phase so the
+-- currently deployed application retains its original idempotency contract.
+-- Migration 057 removes it only after the provider-account-aware code is live.

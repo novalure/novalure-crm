@@ -147,3 +147,42 @@ begin
   return new;
 end
 $$;
+
+-- Manual enforcement cutover. The compatible application validates these
+-- invariants before this migration makes them mandatory at the DB boundary.
+drop trigger if exists google_notification_job_target_guard on google_notification_jobs;
+create trigger google_notification_job_target_guard
+before insert or update of status, target_id, workspace_id, project_id, alert_type
+on google_notification_jobs
+for each row
+execute function public.novalure_enforce_google_notification_job_target();
+
+drop trigger if exists teams_notification_job_target_guard on teams_notification_jobs;
+create trigger teams_notification_job_target_guard
+before insert or update of status, target_id, workspace_id, project_id, alert_type
+on teams_notification_jobs
+for each row
+execute function public.novalure_enforce_teams_notification_job_target();
+
+do $migration$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'leads_qualifying_requires_assignee_check'
+      and conrelid = 'leads'::regclass
+  ) then
+    alter table leads
+      add constraint leads_qualifying_requires_assignee_check
+      check (status <> 'Qualifizieren' or assigned_to_user_id is not null)
+      not valid;
+  end if;
+end;
+$migration$;
+
+drop trigger if exists leads_qualifying_assignee_guard on leads;
+create trigger leads_qualifying_assignee_guard
+before insert or update of status, assigned_to_user_id, workspace_id
+on leads
+for each row
+execute function public.novalure_enforce_qualifying_lead_assignee();

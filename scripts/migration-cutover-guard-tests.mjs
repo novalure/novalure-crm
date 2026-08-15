@@ -22,6 +22,27 @@ const workflow = await readFile(
   new URL("../.github/workflows/livegang-e2e.yml", import.meta.url),
   "utf8",
 );
+const [
+  webhookExpand,
+  webhookCutover,
+  mediaExpand,
+  mediaContract,
+  providerExpand,
+  providerCutover,
+] = await Promise.all([
+  readFile(new URL("../migrations/048_bot_webhook_integrity.sql", import.meta.url), "utf8"),
+  readFile(new URL("../migrations/057_bot_webhook_legacy_index_cutover.sql", import.meta.url), "utf8"),
+  readFile(new URL("../migrations/051_private_media_access.sql", import.meta.url), "utf8"),
+  readFile(new URL("../migrations/062_private_media_contract_cutover.sql", import.meta.url), "utf8"),
+  readFile(
+    new URL("../migrations/064_notification_provider_and_lead_assignee_integrity.sql", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../migrations/065_notification_guard_search_path_hardening.sql", import.meta.url),
+    "utf8",
+  ),
+]);
 
 function migration(version, checksum, overrides = {}) {
   return {
@@ -348,6 +369,24 @@ test("060 and 061 remain manual even when alias handling is active", () => {
   );
 });
 
+test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {
+  assert.doesNotMatch(webhookExpand, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
+  assert.match(webhookCutover, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
+
+  assert.doesNotMatch(mediaExpand, /set public_token = null/);
+  assert.doesNotMatch(mediaExpand, /set url = '\/api\/media\/files\/' \|\| id::text/);
+  assert.doesNotMatch(mediaExpand, /media_assets_public_token_cleartext_check/);
+  assert.match(mediaContract, /set public_token = null/);
+  assert.match(mediaContract, /media_assets_public_token_cleartext_check/);
+  assert.match(mediaContract, /legacy public token has no durable share/);
+
+  assert.doesNotMatch(providerExpand, /create trigger google_notification_job_target_guard/);
+  assert.doesNotMatch(providerExpand, /leads_qualifying_requires_assignee_check/);
+  assert.match(providerCutover, /create trigger google_notification_job_target_guard/);
+  assert.match(providerCutover, /create trigger teams_notification_job_target_guard/);
+  assert.match(providerCutover, /leads_qualifying_requires_assignee_check[\s\S]*not valid/i);
+});
+
 test("explicit automatic migrations require their checksummed predecessors", () => {
   const migrations = [
     migration("049_property_inventory_tenant_guards", "sha-049"),
@@ -355,7 +394,9 @@ test("explicit automatic migrations require their checksummed predecessors", () 
     migration("052_validate_property_inventory_tenant_guards", "sha-052"),
     migration("053_oauth_state_integrity", "sha-053"),
     migration("064_notification_provider_and_lead_assignee_integrity", "sha-064"),
-    migration("065_notification_guard_search_path_hardening", "sha-065"),
+    migration("065_notification_guard_search_path_hardening", "sha-065", {
+      manualCutover: true,
+    }),
     migration("066_oauth_state_workspace_user_guard", "sha-066"),
   ];
 
@@ -388,6 +429,7 @@ test("explicit automatic migrations require their checksummed predecessors", () 
   );
   assert.throws(
     () => createMigrationPlan({
+      allowManualCutover: true,
       ledgerRows: [ledgerRow("050_durable_job_leasing", "sha-050")],
       migrations,
       only: "065_notification_guard_search_path_hardening",
@@ -411,10 +453,13 @@ test("explicit automatic migrations require their checksummed predecessors", () 
   );
 });
 
-test("automatic migration plans exclude both tenant RLS cutover phases", () => {
+test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /manualCutoverVersions = new Set\(\[/);
+  assert.match(runner, /"057_bot_webhook_legacy_index_cutover"/);
   assert.match(runner, /"060_tenant_rls_pilot_prepare"/);
   assert.match(runner, /"061_validate_and_activate_tenant_rls_pilot"/);
+  assert.match(runner, /"062_private_media_contract_cutover"/);
+  assert.match(runner, /"065_notification_guard_search_path_hardening"/);
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 
