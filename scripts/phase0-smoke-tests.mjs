@@ -13,12 +13,10 @@ function readJson(path) {
 test("Next.js app baseline scripts and versions are present", () => {
   const pkg = readJson("package.json");
 
-  assert.equal(pkg.dependencies.next, "16.3.0");
-  assert.equal(pkg.dependencies.react, "19.2.8");
-  assert.equal(pkg.dependencies["react-dom"], "19.2.8");
-  assert.equal(pkg.scripts.lint, "eslint --max-warnings=0");
-  assert.equal(pkg.engines.node, ">=24 <25");
-  assert.equal(pkg.packageManager, "npm@11.9.0");
+  assert.equal(pkg.dependencies.next, "16.2.6");
+  assert.equal(pkg.dependencies.react, "19.2.4");
+  assert.equal(pkg.dependencies["react-dom"], "19.2.4");
+  assert.equal(pkg.scripts.lint, "eslint");
   assert.equal(pkg.scripts.build, "next build");
 });
 
@@ -101,13 +99,8 @@ test("server-side CRM route handlers use authorization helpers", () => {
 
 test("auth/session layer verifies users against persisted workspace users", () => {
   const sessionSource = readText("src/lib/auth/session.ts");
-  const sessionStoreSource = readText("src/lib/auth/session-store.ts");
 
-  assert.match(sessionStoreSource, /novalure_session/, "opaque session cookie is defined centrally");
-  assert.match(sessionStoreSource, /createOpaqueToken/, "session ids are generated randomly server-side");
-  assert.match(sessionStoreSource, /hashOpaqueToken/, "only the session id hash is queried and persisted");
-  assert.match(sessionStoreSource, /auth_sessions/, "sessions are backed by the revocation store");
-  assert.match(sessionStoreSource, /revoked_at is null/, "revoked sessions fail validation immediately");
+  assert.match(sessionSource, /novalure_session/, "signed session cookie is defined");
   assert.match(sessionSource, /workspace_users/, "session resolves persisted workspace users");
   assert.match(sessionSource, /workspace_id/, "session is bound to workspace_id");
   assert.match(sessionSource, /Forbidden/, "authorization failures return forbidden responses");

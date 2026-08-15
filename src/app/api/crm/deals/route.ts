@@ -16,8 +16,7 @@ function getDealWriteStatus(reason: string) {
     reason.includes("not available in this workspace") ||
     normalizedReason.includes("permission") ||
     normalizedReason.includes("not allowed") ||
-    normalizedReason.includes("only be changed") ||
-    normalizedReason.includes("historical")
+    normalizedReason.includes("only be changed")
   ) return 403;
   if (reason.includes("not found")) return 404;
   if (
@@ -26,9 +25,7 @@ function getDealWriteStatus(reason: string) {
     reason.includes("too long") ||
     reason.includes("greater than zero") ||
     reason.includes("implausibly") ||
-    reason.includes("not configured") ||
-    normalizedReason.includes("invalid") ||
-    normalizedReason.includes("past")
+    reason.includes("not configured")
   ) return 400;
   return 503;
 }
@@ -69,9 +66,6 @@ export async function POST(request: Request) {
   }
 
   const result = await upsertDealRecord({
-    allowHistoricalCloseDate:
-      input.historicalImport === true &&
-      auth.session.productPermissions.includes("novalure:internal"),
     deal,
     idempotencyKey: idempotencyKey.value,
     reason: typeof input.reason === "string" ? input.reason : undefined,
@@ -99,9 +93,6 @@ export async function PATCH(request: Request) {
   const input = body as Record<string, unknown>;
   const deal = typeof input.deal === "object" && input.deal ? input.deal as Record<string, unknown> : input;
   const result = await upsertDealRecord({
-    allowHistoricalCloseDate:
-      input.historicalImport === true &&
-      auth.session.productPermissions.includes("novalure:internal"),
     deal: withDealIdFromRequest(request, deal),
     reason: typeof input.reason === "string" ? input.reason : undefined,
     reasonCategory: input.reasonCategory,

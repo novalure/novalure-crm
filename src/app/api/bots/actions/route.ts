@@ -6,15 +6,7 @@ import { evaluateOutboundConsent, type ConsentPolicyChannel } from "@/lib/db/con
 import { queryOne, queryRows } from "@/lib/db/client";
 import { confirmMeetingBooking } from "@/lib/db/meeting-repositories";
 import { canPersist, insertNewsletterSend, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
-import {
-  botDocumentAttemptShareTtlSeconds,
-  botDocumentMediaShareTtlSeconds,
-  extendWorkspaceMediaShare,
-  findWorkspaceMediaAsset,
-  getPublicMediaUrl,
-  publishWorkspaceMedia,
-  revokeWorkspaceMediaShare,
-} from "@/lib/media-store";
+import { getPublicMediaUrl, publishWorkspaceMedia, type MediaAsset } from "@/lib/media-store";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
 
 export const maxDuration = 30;
@@ -31,10 +23,11 @@ type BotDocumentSendRow = {
   createdAt: string;
   documentName: string;
   mediaAssetId: string | null;
-  mediaAssetHasActivePublicShare: boolean | null;
   mediaAssetIsPublic: boolean | null;
   mediaAssetMimeType: string | null;
   mediaAssetName: string | null;
+  mediaAssetPublicToken: string | null;
+  mediaAssetPublicUrl?: string | null;
   mediaAssetUrl: string | null;
   metadata: unknown;
   sentAt: string | null;
@@ -51,6 +44,15 @@ type BotMeetingBookingRow = {
   startsAt: string;
   status: string;
   title: string;
+};
+
+type BotMediaAssetRow = {
+  id: string;
+  mimeType: string;
+  name: string;
+  publicToken: string | null;
+  isPublic: boolean;
+  url: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -81,23 +83,25 @@ function toPublicUrl(value: string | null, requestUrl: string) {
   }
 }
 
-function toClientDocumentSend(documentSend: BotDocumentSendRow): BotDocumentSendRow {
+function withDocumentPublicUrl(documentSend: BotDocumentSendRow, requestUrl: string): BotDocumentSendRow {
   return {
     ...documentSend,
-    mediaAssetUrl: documentSend.mediaAssetId ? `/api/media/files/${documentSend.mediaAssetId}` : null,
-    metadata: sanitizeDocumentSendMetadata(documentSend.metadata),
+    mediaAssetPublicUrl:
+      documentSend.mediaAssetIsPublic && documentSend.mediaAssetPublicToken
+        ? new URL(`/api/media/public/${documentSend.mediaAssetPublicToken}`, requestUrl).toString()
+        : null,
   };
 }
 
-function sanitizeDocumentSendMetadata(metadata: unknown) {
-  if (!isRecord(metadata)) return {};
-
-  const sanitized = { ...metadata };
-  delete sanitized.asset;
-  delete sanitized.attachedMediaAssetPublicUrl;
-  delete sanitized.attachedMediaAssetUrl;
-  delete sanitized.documentUrl;
-  return sanitized;
+function toBotMediaAssetRow(asset: MediaAsset): BotMediaAssetRow {
+  return {
+    id: asset.id,
+    isPublic: asset.isPublic,
+    mimeType: asset.mimeType,
+    name: asset.name,
+    publicToken: asset.publicToken ?? null,
+    url: asset.url,
+  };
 }
 
 function getConsentChannel(channel: string, recipientEmail?: string | null): ConsentPolicyChannel {
@@ -121,19 +125,11 @@ function getDocumentSendSelect(whereSql: string) {
       bds.created_at as "createdAt",
       bds.document_name as "documentName",
       bds.media_asset_id as "mediaAssetId",
-      exists (
-        select 1
-        from media_asset_shares mas
-        where mas.asset_id = ma.id
-          and mas.workspace_id = ma.workspace_id
-          and mas.scope = 'public-download'
-          and mas.revoked_at is null
-          and mas.expires_at > now()
-      ) as "mediaAssetHasActivePublicShare",
       ma.is_public as "mediaAssetIsPublic",
       ma.mime_type as "mediaAssetMimeType",
       ma.name as "mediaAssetName",
-      case when ma.id is null then null else '/api/media/files/' || ma.id::text end as "mediaAssetUrl",
+      ma.public_token as "mediaAssetPublicToken",
+      ma.url as "mediaAssetUrl",
       bds.metadata,
       bds.sent_at as "sentAt",
       bds.status
@@ -170,114 +166,6 @@ async function readJson(request: Request) {
   }
 }
 
-async function claimDocumentDeliveryAttempt(input: {
-  documentSendId: string;
-  deliveryAttemptId: string;
-  workspaceId: string;
-}) {
-  const startedAt = new Date().toISOString();
-  return Boolean(await queryOne<{ id: string }>(
-    `
-      update bot_document_sends
-      set status = 'sending',
-          metadata = metadata || $3::jsonb
-      where id = $1
-        and workspace_id = $2
-        and status not in ('sent', 'sending')
-        and coalesce(metadata->>'deliveryAttemptState', '') <> 'in_flight'
-      returning id
-    `,
-    [
-      input.documentSendId,
-      input.workspaceId,
-      JSON.stringify({
-        deliveryAttemptId: input.deliveryAttemptId,
-        deliveryAttemptStartedAt: startedAt,
-        deliveryAttemptState: "in_flight",
-      }),
-    ],
-  ));
-}
-
-async function updateDocumentDeliveryAttempt(input: {
-  documentSendId: string;
-  deliveryAttemptId: string;
-  metadata: Record<string, unknown>;
-  sentAt?: string | null;
-  status: string;
-  workspaceId: string;
-}) {
-  return Boolean(await queryOne<{ id: string }>(
-    `
-      update bot_document_sends
-      set status = $4,
-          sent_at = coalesce($5::timestamptz, sent_at),
-          metadata = metadata || $6::jsonb
-      where id = $1
-        and workspace_id = $2
-        and status = 'sending'
-        and metadata->>'deliveryAttemptId' = $3
-      returning id
-    `,
-    [
-      input.documentSendId,
-      input.workspaceId,
-      input.deliveryAttemptId,
-      input.status,
-      input.sentAt ?? null,
-      JSON.stringify(input.metadata),
-    ],
-  ));
-}
-
-function toPersistedDocumentDelivery(delivery: Awaited<ReturnType<typeof sendBotDocument>>) {
-  return {
-    deliveryMode: delivery.deliveryMode,
-    errorCode: delivery.error ? "provider_delivery_failed" : null,
-    messageId: delivery.messageId ?? null,
-    provider: delivery.provider,
-    recipient: delivery.recipient,
-    status: delivery.status,
-  };
-}
-
-async function revokeDocumentAttemptShare(input: {
-  assetId: string;
-  publicShareId: string;
-  workspaceId: string;
-}) {
-  try {
-    return await revokeWorkspaceMediaShare(input.assetId, input.workspaceId, input.publicShareId)
-      ? "revoked"
-      : "failed";
-  } catch {
-    return "failed";
-  }
-}
-
-async function extendSentDocumentShare(input: {
-  assetId: string;
-  publicShareId: string;
-  workspaceId: string;
-}) {
-  try {
-    const share = await extendWorkspaceMediaShare(
-      input.assetId,
-      input.workspaceId,
-      input.publicShareId,
-      botDocumentMediaShareTtlSeconds,
-    );
-    return share
-      ? {
-          expiresAt: share.expiresAt instanceof Date ? share.expiresAt.toISOString() : String(share.expiresAt),
-          state: "extended" as const,
-        }
-      : { expiresAt: null, state: "failed" as const };
-  } catch {
-    return { expiresAt: null, state: "failed" as const };
-  }
-}
-
 export async function GET(request: Request) {
   const auth = await requirePermission(request, "bots:run");
   if (!auth.ok) return auth.response;
@@ -298,7 +186,7 @@ export async function GET(request: Request) {
     order by "createdAt" desc
     limit 50`,
     [auth.session.workspaceId],
-  )).map(toClientDocumentSend);
+  )).map((documentSend) => withDocumentPublicUrl(documentSend, request.url));
 
   const meetingBookings = await queryRows<BotMeetingBookingRow>(
     `${getMeetingBookingSelect(`
@@ -352,7 +240,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid media asset id" }, { status: 400 });
     }
 
-    const mediaAsset = await findWorkspaceMediaAsset(mediaAssetId, auth.session.workspaceId);
+    const publishedMediaAsset = await publishWorkspaceMedia(mediaAssetId, auth.session.workspaceId);
+    const mediaAsset = publishedMediaAsset ? toBotMediaAssetRow(publishedMediaAsset) : null;
+    const mediaAssetPublicUrl = publishedMediaAsset ? getPublicMediaUrl(publishedMediaAsset, request.url) : null;
 
     if (!mediaAsset) {
       return NextResponse.json({ error: "Media asset not found" }, { status: 404 });
@@ -378,7 +268,9 @@ export async function POST(request: Request) {
           attachedAt: new Date().toISOString(),
           attachedMediaAssetId: mediaAsset.id,
           attachedMediaAssetMimeType: mediaAsset.mimeType,
-          publicShareCreated: false,
+          attachedMediaAssetPublicUrl: mediaAssetPublicUrl,
+          attachedMediaAssetUrl: mediaAsset.url,
+          publicShare: Boolean(mediaAssetPublicUrl),
         }),
       ],
     );
@@ -402,18 +294,13 @@ export async function POST(request: Request) {
       entityId: id,
       entityType: "bot_document_send",
       after: {
-        mediaAsset: {
-          id: mediaAsset.id,
-          mimeType: mediaAsset.mimeType,
-          name: mediaAsset.name,
-          url: `/api/media/files/${mediaAsset.id}`,
-        },
+        mediaAsset: { ...mediaAsset, publicUrl: mediaAssetPublicUrl },
         status: updatedDocumentSend?.status ?? "ready_to_send",
       },
     });
 
     return NextResponse.json({
-      documentSend: updatedDocumentSend ? toClientDocumentSend(updatedDocumentSend) : null,
+      documentSend: updatedDocumentSend ? withDocumentPublicUrl(updatedDocumentSend, request.url) : null,
       status: updatedDocumentSend?.status ?? "ready_to_send",
     });
   }
@@ -436,25 +323,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Document is not approved for sending" }, { status: 409 });
     }
 
-    if (existingDocumentSend.status === "sent") {
-      return NextResponse.json({
-        documentSend: toClientDocumentSend(existingDocumentSend),
-        replay: true,
-        status: "sent",
-      });
+    const existingDocumentWithPublicUrl = withDocumentPublicUrl(existingDocumentSend, request.url);
+    const publicDocumentUrl = toPublicUrl(existingDocumentWithPublicUrl.mediaAssetPublicUrl ?? null, request.url);
+    if (!publicDocumentUrl) {
+      return NextResponse.json({ error: "Document must be explicitly shared before sending" }, { status: 409 });
     }
-
-    if (existingDocumentSend.status === "sending") {
-      return NextResponse.json(
-        { documentSend: toClientDocumentSend(existingDocumentSend), error: "Document delivery is already in flight" },
-        { status: 409 },
-      );
-    }
-
-    const clientDocumentSend = toClientDocumentSend(existingDocumentSend);
-    const prospectivePublicUrl = existingDocumentSend.mediaAssetId
-      ? toPublicUrl("/api/media/public/pending", request.url)
-      : null;
 
     const customerData = getCustomerData(existingDocumentSend.metadata);
     const decision = evaluateBotAction({
@@ -462,7 +335,7 @@ export async function POST(request: Request) {
       controls: manualActionControls,
       document: {
         approved: true,
-        publicUrl: prospectivePublicUrl,
+        publicUrl: publicDocumentUrl,
         recipient: existingDocumentSend.contactEmail ?? customerData.email ?? existingDocumentSend.contactPhone ?? customerData.phone,
       },
       risk: "high",
@@ -482,7 +355,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         decision,
-        documentSend: clientDocumentSend,
+        documentSend: existingDocumentWithPublicUrl,
         status: decision.mode === "test" ? "test" : "blocked",
       }, { status: decision.mode === "block" ? 409 : 202 });
     }
@@ -535,169 +408,23 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         consentDecision,
-        documentSend: clientDocumentSend,
+        documentSend: existingDocumentWithPublicUrl,
         status: "blocked",
       }, { status: 409 });
     }
 
-    if (!existingDocumentSend.mediaAssetId) {
-      return NextResponse.json({ error: "Document must be attached before sending" }, { status: 409 });
-    }
-
-    const deliveryAttemptId = crypto.randomUUID();
-    const claimed = await claimDocumentDeliveryAttempt({
-      deliveryAttemptId,
-      documentSendId: existingDocumentSend.id,
-      workspaceId: auth.session.workspaceId,
+    const delivery = await sendBotDocument({
+      channel: existingDocumentSend.channel,
+      documentName: existingDocumentSend.mediaAssetName ?? existingDocumentSend.documentName,
+      documentUrl: publicDocumentUrl,
+      idempotencyKey: `bot-document-send:${existingDocumentSend.id}`,
+      mediaMimeType: existingDocumentSend.mediaAssetMimeType,
+      recipientEmail: existingDocumentSend.contactEmail ?? customerData.email,
+      recipientName: existingDocumentSend.contactName ?? customerData.name,
+      recipientPhone: existingDocumentSend.contactPhone ?? customerData.phone,
     });
-    if (!claimed) {
-      return NextResponse.json({ error: "Document delivery was already claimed" }, { status: 409 });
-    }
-
-    let publishedMediaAsset: Awaited<ReturnType<typeof publishWorkspaceMedia>> = null;
-    try {
-      publishedMediaAsset = await publishWorkspaceMedia(
-        existingDocumentSend.mediaAssetId,
-        auth.session.workspaceId,
-        { expiresInSeconds: botDocumentAttemptShareTtlSeconds },
-      );
-    } catch {
-      await updateDocumentDeliveryAttempt({
-        deliveryAttemptId,
-        documentSendId: existingDocumentSend.id,
-        metadata: {
-          deliveryAttemptFinishedAt: new Date().toISOString(),
-          deliveryAttemptState: "failed",
-          deliveryErrorCode: "share_creation_failed",
-        },
-        status: "failed",
-        workspaceId: auth.session.workspaceId,
-      });
-      return NextResponse.json({ error: "Document share could not be created" }, { status: 503 });
-    }
-
-    const publicDocumentUrl = publishedMediaAsset
-      ? toPublicUrl(getPublicMediaUrl(publishedMediaAsset, request.url), request.url)
-      : null;
-    if (!(publishedMediaAsset?.publicShareId && publishedMediaAsset.publicShareExpiresAt && publicDocumentUrl)) {
-      const publicShareRevocationState = publishedMediaAsset?.publicShareId
-        ? await revokeDocumentAttemptShare({
-            assetId: existingDocumentSend.mediaAssetId,
-            publicShareId: publishedMediaAsset.publicShareId,
-            workspaceId: auth.session.workspaceId,
-          })
-        : "not_required";
-      await updateDocumentDeliveryAttempt({
-        deliveryAttemptId,
-        documentSendId: existingDocumentSend.id,
-        metadata: {
-          deliveryAttemptFinishedAt: new Date().toISOString(),
-          deliveryAttemptState: "failed",
-          deliveryErrorCode: "share_publication_incomplete",
-          publicShareRevocationState,
-        },
-        status: "failed",
-        workspaceId: auth.session.workspaceId,
-      });
-      return NextResponse.json({ error: "Document share could not be created" }, { status: 503 });
-    }
-
-    const publicationTracked = await updateDocumentDeliveryAttempt({
-      deliveryAttemptId,
-      documentSendId: existingDocumentSend.id,
-      metadata: {
-        deliveryAttemptState: "in_flight",
-        publicShareExpiresAt: publishedMediaAsset.publicShareExpiresAt,
-        publicShareId: publishedMediaAsset.publicShareId,
-      },
-      status: "sending",
-      workspaceId: auth.session.workspaceId,
-    });
-    if (!publicationTracked) {
-      await revokeDocumentAttemptShare({
-        assetId: existingDocumentSend.mediaAssetId,
-        publicShareId: publishedMediaAsset.publicShareId,
-        workspaceId: auth.session.workspaceId,
-      });
-      return NextResponse.json({ error: "Document delivery claim was lost" }, { status: 409 });
-    }
-
-    let delivery: Awaited<ReturnType<typeof sendBotDocument>>;
-    try {
-      delivery = await sendBotDocument({
-        channel: existingDocumentSend.channel,
-        documentName: existingDocumentSend.mediaAssetName ?? existingDocumentSend.documentName,
-        documentUrl: publicDocumentUrl,
-        idempotencyKey: `bot-document-send:${existingDocumentSend.id}`,
-        mediaMimeType: existingDocumentSend.mediaAssetMimeType,
-        recipientEmail: existingDocumentSend.contactEmail ?? customerData.email,
-        recipientName: existingDocumentSend.contactName ?? customerData.name,
-        recipientPhone: existingDocumentSend.contactPhone ?? customerData.phone,
-      });
-    } catch {
-      const publicShareRevocationState = await revokeDocumentAttemptShare({
-        assetId: existingDocumentSend.mediaAssetId,
-        publicShareId: publishedMediaAsset.publicShareId,
-        workspaceId: auth.session.workspaceId,
-      });
-      await updateDocumentDeliveryAttempt({
-        deliveryAttemptId,
-        documentSendId: existingDocumentSend.id,
-        metadata: {
-          deliveryAttemptFinishedAt: new Date().toISOString(),
-          deliveryAttemptState: "failed",
-          deliveryErrorCode: "provider_exception",
-          publicShareRevokedAt: new Date().toISOString(),
-          publicShareRevocationState,
-        },
-        status: "failed",
-        workspaceId: auth.session.workspaceId,
-      });
-      return NextResponse.json({ error: "Document provider failed" }, { status: 502 });
-    }
     const nextStatus = delivery.status;
     const sentAt = delivery.status === "sent" ? new Date().toISOString() : null;
-
-    const publicShareRevokedAt = delivery.status === "sent" ? null : new Date().toISOString();
-    const publicShareRevocationState = publicShareRevokedAt
-      ? await revokeDocumentAttemptShare({
-          assetId: existingDocumentSend.mediaAssetId,
-          publicShareId: publishedMediaAsset.publicShareId,
-          workspaceId: auth.session.workspaceId,
-        })
-      : "not_required";
-    const publicShareExtension = sentAt
-      ? await extendSentDocumentShare({
-          assetId: existingDocumentSend.mediaAssetId,
-          publicShareId: publishedMediaAsset.publicShareId,
-          workspaceId: auth.session.workspaceId,
-        })
-      : { expiresAt: null, state: "not_required" as const };
-    const persistedDelivery = toPersistedDocumentDelivery(delivery);
-
-    const deliveryUpdated = await updateDocumentDeliveryAttempt({
-      deliveryAttemptId,
-      documentSendId: existingDocumentSend.id,
-      metadata: {
-        consentDecision,
-        deliveredAt: sentAt,
-        delivery: persistedDelivery,
-        deliveryAttemptFinishedAt: new Date().toISOString(),
-        deliveryAttemptState: delivery.status === "sent" ? "sent" : "failed",
-        lastDeliveryAttemptAt: new Date().toISOString(),
-        publicShareExpiresAt: publicShareExtension.expiresAt ?? publishedMediaAsset.publicShareExpiresAt,
-        publicShareExtensionState: publicShareExtension.state,
-        publicShareId: publishedMediaAsset.publicShareId,
-        publicShareRevokedAt,
-        publicShareRevocationState,
-      },
-      sentAt,
-      status: nextStatus,
-      workspaceId: auth.session.workspaceId,
-    });
-    if (!deliveryUpdated) {
-      return NextResponse.json({ error: "Document delivery result could not be persisted" }, { status: 503 });
-    }
 
     if (delivery.deliveryMode === "email" && delivery.recipient) {
       await insertNewsletterSend({
@@ -709,7 +436,7 @@ export async function POST(request: Request) {
         toEmail: delivery.recipient,
         subject: `Ihr angefragtes Dokument: ${existingDocumentSend.mediaAssetName ?? existingDocumentSend.documentName}`,
         status: delivery.status,
-        error: delivery.error ? "provider_delivery_failed" : null,
+        error: delivery.error ?? null,
         metadata: {
           botDocumentSendId: existingDocumentSend.id,
           channel: existingDocumentSend.channel,
@@ -721,14 +448,40 @@ export async function POST(request: Request) {
       });
     }
 
-    const updatedDocumentSend = await queryOne<BotDocumentSendRow>(
-      `${getDocumentSendSelect(`
-        where bds.id = $1
-          and bds.workspace_id = $2
-      `)}
-      limit 1`,
-      [id, auth.session.workspaceId],
+    const documentSend = await queryOne<{ id: string }>(
+      `
+        update bot_document_sends
+        set status = $3,
+            sent_at = coalesce($4::timestamptz, sent_at),
+            metadata = metadata || $5::jsonb
+        where id = $1
+          and workspace_id = $2
+        returning id
+      `,
+      [
+        id,
+        auth.session.workspaceId,
+        nextStatus,
+        sentAt,
+        JSON.stringify({
+          delivery,
+          consentDecision,
+          deliveredAt: delivery.status === "sent" ? sentAt : null,
+          lastDeliveryAttemptAt: new Date().toISOString(),
+        }),
+      ],
     );
+
+    const updatedDocumentSend = documentSend
+      ? await queryOne<BotDocumentSendRow>(
+          `${getDocumentSendSelect(`
+            where bds.id = $1
+              and bds.workspace_id = $2
+          `)}
+          limit 1`,
+          [id, auth.session.workspaceId],
+        )
+      : null;
 
     await writeAuditLog({
       session: auth.session,
@@ -736,14 +489,14 @@ export async function POST(request: Request) {
       entityId: existingDocumentSend.id,
       entityType: "bot_document_send",
       after: {
-        delivery: persistedDelivery,
+        delivery,
         status: nextStatus,
       },
     });
 
     return NextResponse.json({
       delivery,
-      documentSend: updatedDocumentSend ? toClientDocumentSend(updatedDocumentSend) : null,
+      documentSend: updatedDocumentSend ? withDocumentPublicUrl(updatedDocumentSend, request.url) : null,
       status: nextStatus,
     });
   }
@@ -841,7 +594,7 @@ export async function POST(request: Request) {
         `
           update meeting_notification_jobs
           set status = 'cancelled', updated_at = now()
-          where booking_id = $1 and status in ('queued', 'retry', 'sending')
+          where booking_id = $1 and status in ('queued', 'sending')
           returning id
         `,
         [id],

@@ -58,24 +58,12 @@ test("settings command center keeps wide role tables inside local scroll contain
   assert.match(workspace, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,0\.85fr\)\]/);
 });
 
-test("responsive premium shell prevents body overflow and exposes a real mobile drawer", () => {
+test("global shell prevents accidental body-level horizontal scrolling", () => {
   const workspace = readText("src/components/crm-workspace.tsx");
   const globals = readText("src/app/globals.css");
-  const theme = readText("src/styles/crm-theme.css");
 
-  assert.match(workspace, /<main className="crm-app min-h-screen max-w-full overflow-hidden/);
-  assert.match(workspace, /data-crm-shell/);
-  assert.match(workspace, /data-crm-mobile-trigger/);
-  assert.match(workspace, /data-crm-mobile-drawer/);
-  assert.match(workspace, /aria-modal="true"/);
-  assert.match(workspace, /mobileNavigationRef/);
-  assert.match(workspace, /inert=\{mobileNavigationOpen \? true : undefined\}/);
-  assert.match(workspace, /window\.matchMedia\("\(min-width: 1181px\)"\)/);
-  assert.match(workspace, /<h1[^>]+data-crm-header-title/);
-  assert.match(workspace, /focusableSelector/);
-  assert.match(workspace, /previouslyFocused\?\.focus\(\)/);
-  assert.match(theme, /@media \(max-width: 640px\)/);
-  assert.match(theme, /\[data-crm-mobile-overlay\]/);
+  assert.match(workspace, /<main className="min-h-screen max-w-full overflow-hidden bg-\[#f4f2ec\] text-slate-950"/);
+  assert.match(workspace, /<div className="mx-auto flex min-h-screen w-full min-w-0 max-w-\[1500px\]">/);
   assert.match(globals, /body\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*hidden;/);
   assert.match(globals, /html\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*hidden;/);
   assert.match(globals, /overflow-wrap:\s*anywhere/);

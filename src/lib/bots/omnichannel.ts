@@ -173,22 +173,18 @@ function normalizeMetaWhatsAppValue(value: Record<string, unknown>): NormalizedB
     getString(status?.recipient_id) ??
     getString(contact?.wa_id);
   const timestamp = getString(message?.timestamp) ?? getString(status?.timestamp);
-  const accountRef = getString(metadata.phone_number_id);
   const receivedAt = timestamp && Number.isFinite(Number(timestamp))
     ? new Date(Number(timestamp) * 1000).toISOString()
     : new Date().toISOString();
 
   if (message) {
-    const externalMessageId = getString(message.id);
-    if (!accountRef || !externalMessageId) return null;
-
     return {
-      accountRef,
+      accountRef: getString(metadata.phone_number_id),
       channel: "WhatsApp",
       contactRef: phone ?? "anonymous",
       customerName: getString(profile.name),
       eventType: "message",
-      externalMessageId,
+      externalMessageId: getString(message.id) ?? crypto.randomUUID(),
       phone,
       receivedAt,
       text: getMetaMessageText(message),
@@ -196,16 +192,13 @@ function normalizeMetaWhatsAppValue(value: Record<string, unknown>): NormalizedB
   }
 
   if (status) {
-    const externalMessageId = getString(status.id);
-    if (!accountRef || !externalMessageId) return null;
-
     return {
-      accountRef,
+      accountRef: getString(metadata.phone_number_id),
       channel: "WhatsApp",
       contactRef: phone ?? "anonymous",
       customerName: null,
       eventType: getString(status.status) ?? "status",
-      externalMessageId,
+      externalMessageId: getString(status.id) ?? crypto.randomUUID(),
       phone,
       receivedAt,
       text: "",
@@ -260,13 +253,14 @@ function normalizeMetaMessagingEvent(
   const senderId = getString(sender.id);
   const recipientId = getString(recipient.id) ?? getString(entry.id);
 
+  if (!channel || !senderId) return null;
+
   const externalMessageId =
     getString(message?.mid) ??
     getString(postback?.mid) ??
     firstString(delivery?.mids) ??
-    getString(read?.watermark);
-
-  if (!channel || !senderId || !recipientId || !externalMessageId) return null;
+    getString(read?.watermark) ??
+    crypto.randomUUID();
   const eventType = message
     ? "message"
     : postback
@@ -317,7 +311,7 @@ export function normalizeIncomingBotMessage(input: {
   payload?: unknown;
   phone?: unknown;
   text?: unknown;
-}): NormalizedBotMessage | null {
+}): NormalizedBotMessage {
   const metaPayload = input as Record<string, unknown>;
   const metaMessage = normalizeMetaWhatsAppMessage(metaPayload) ?? normalizeMetaMessagingMessage(metaPayload);
 
@@ -327,20 +321,18 @@ export function normalizeIncomingBotMessage(input: {
     ? input.payload
     : {};
   const payloadText = payload.text ?? payload.message ?? payload.body;
-  const accountRef = getString(input.accountRef);
-  const channel = getString(input.channel);
-  const contactRef = getString(input.contactRef) ?? accountRef;
-  const externalMessageId = getString(input.externalMessageId);
-
-  if (!accountRef || !channel || !contactRef || !externalMessageId) return null;
 
   return {
-    accountRef,
-    channel,
-    contactRef,
+    accountRef: getString(input.accountRef),
+    channel: typeof input.channel === "string" ? input.channel : "API/Webhook",
+    contactRef: typeof input.contactRef === "string"
+      ? input.contactRef
+      : typeof input.accountRef === "string"
+        ? input.accountRef
+        : "anonymous",
     customerName: getString(input.name) ?? getString(payload.name),
     eventType: typeof input.eventType === "string" ? input.eventType : "message",
-    externalMessageId,
+    externalMessageId: typeof input.externalMessageId === "string" ? input.externalMessageId : crypto.randomUUID(),
     phone: getString(input.phone) ?? getString(payload.phone),
     receivedAt: new Date().toISOString(),
     text: typeof input.text === "string" ? input.text : typeof payloadText === "string" ? payloadText : "",

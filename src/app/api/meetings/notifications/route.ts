@@ -37,11 +37,11 @@ function textToEmailHtml(input: { body: string; title: string }) {
     .join("");
 
   return `
-    <div style="background:#f4f6fa;padding:32px 16px;font-family:Inter,Arial,sans-serif;color:#07080b">
-      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dde3ec;border-radius:8px;padding:28px;box-shadow:0 18px 60px rgba(8,13,24,.08)">
-        <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#6b5200;font-weight:800">Novalure Meeting</p>
-        <h1 style="margin:0 0 20px;font-size:24px;line-height:1.25;color:#07080b">${escapeHtml(input.title)}</h1>
-        <div style="font-size:15px;line-height:1.65;color:#667085">${body}</div>
+    <div style="background:#f6f9fc;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dbeafe;border-radius:12px;padding:28px">
+        <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#2563eb;font-weight:700">Novalure Meeting</p>
+        <h1 style="margin:0 0 20px;font-size:24px;line-height:1.25;color:#0f172a">${escapeHtml(input.title)}</h1>
+        <div style="font-size:15px;line-height:1.65;color:#1e293b">${body}</div>
       </div>
     </div>
   `;

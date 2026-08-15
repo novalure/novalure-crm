@@ -1,22 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { AppSession } from "@/lib/auth/session";
 import { runBotChat } from "@/lib/bots/chat-runtime";
 import { normalizeIncomingBotMessage } from "@/lib/bots/omnichannel";
 import { readBoolean } from "@/lib/bots/policy";
 import { sendBotChannelReply } from "@/lib/bots/provider-actions";
-import {
-  constantTimeEqualStrings,
-  hasSupportedWebhookContentEncoding,
-  isJsonWebhookContentType,
-  isMetaWebhookPayload,
-  readLimitedWebhookBody,
-  verifyMetaWebhookSignature,
-} from "@/lib/bots/webhook-security";
 import { evaluateOutboundConsent, type ConsentPolicyChannel } from "@/lib/db/consent-policy";
 import {
   findBotChannelAccountForWebhook,
+  getDefaultWorkspaceForWebhook,
   insertBotChannelWebhook,
+  isUuid,
   writeAuditLog,
 } from "@/lib/db/runtime-repositories";
 import type { LanguageCode } from "@/lib/i18n";
@@ -24,15 +18,9 @@ import { getProductRoleCapabilities } from "@/lib/product-model";
 
 export const maxDuration = 30;
 
-type ChannelAccountResolution = Awaited<ReturnType<typeof findBotChannelAccountForWebhook>>;
-type MappedChannelAccount = Extract<ChannelAccountResolution, { status: "matched" }>["account"];
-type SafeProvider = "custom" | "meta" | "unknown";
-type SafeMappingStatus = ChannelAccountResolution["status"] | "not_attempted";
-
-function parseJson(rawBody: Buffer) {
+function parseJson(rawBody: string) {
   try {
-    const decodedBody = new TextDecoder("utf-8", { fatal: true }).decode(rawBody);
-    return JSON.parse(decodedBody) as unknown;
+    return JSON.parse(rawBody) as unknown;
   } catch {
     return null;
   }
@@ -42,7 +30,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function createWebhookSession(channelAccount: MappedChannelAccount): AppSession {
+function isMetaWebhookPayload(value: unknown) {
+  return isRecord(value) && (Array.isArray(value.entry) || (value.field === "messages" && isRecord(value.value)));
+}
+
+function isMetaDashboardFieldProbe(value: unknown) {
+  return isRecord(value) && value.field === "messages" && isRecord(value.value) && !Array.isArray(value.entry);
+}
+
+function safeEqual(left: string, right: string) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  if (leftBuffer.length !== rightBuffer.length) return false;
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function verifyMetaSignature(rawBody: string, signature: string | null) {
+  const appSecret = process.env.META_APP_SECRET?.trim();
+
+  if (!appSecret || !signature?.startsWith("sha256=")) return false;
+
+  const expectedSignature = `sha256=${createHmac("sha256", appSecret).update(rawBody).digest("hex")}`;
+  return safeEqual(signature, expectedSignature);
+}
+
+function allowUnsignedWebhooks() {
+  return readBoolean(process.env.NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS) ?? process.env.NODE_ENV !== "production";
+}
+
+async function resolveWebhookSession(
+  request: Request,
+  body: Record<string, unknown>,
+  channelAccount?: Awaited<ReturnType<typeof findBotChannelAccountForWebhook>>,
+): Promise<AppSession | null> {
+  const workspaceIdFromRequest =
+    channelAccount?.workspaceId ||
+    request.headers.get("x-novalure-workspace-id") ||
+    (typeof body.workspaceId === "string" ? body.workspaceId : null) ||
+    process.env.NOVALURE_WORKSPACE_ID ||
+    null;
+  const fallbackWorkspace = isUuid(workspaceIdFromRequest)
+    ? { id: workspaceIdFromRequest, name: "Novalure" }
+    : await getDefaultWorkspaceForWebhook();
+  const workspaceId = fallbackWorkspace?.id ?? workspaceIdFromRequest;
+  const resolvedWorkspaceId = typeof workspaceId === "string" && isUuid(workspaceId) ? workspaceId : null;
+
+  if (!resolvedWorkspaceId) return null;
+
   return {
     authenticated: true,
     email: "bot-webhook@novalure.local",
@@ -51,50 +87,11 @@ function createWebhookSession(channelAccount: MappedChannelAccount): AppSession 
     productPermissions: getProductRoleCapabilities("assistant_backoffice"),
     productRole: "assistant_backoffice",
     role: "assistant",
-    source: "database",
+    source: "headers",
     userId: "bot-webhook",
-    workspaceId: channelAccount.workspaceId,
-    workspaceName: channelAccount.workspaceName ?? "Novalure",
+    workspaceId: resolvedWorkspaceId,
+    workspaceName: channelAccount?.workspaceName ?? fallbackWorkspace?.name ?? "Novalure",
   };
-}
-
-function allowUnsignedCustomWebhooks() {
-  return process.env.NODE_ENV !== "production" && readBoolean(process.env.NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS) === true;
-}
-
-function webhookProcessingDisabled() {
-  return [
-    process.env.NOVALURE_BOT_WEBHOOK_DISABLED,
-    process.env.NOVALURE_BOT_KILL_SWITCH,
-    process.env.NOVALURE_BOT_NOT_AUS,
-    process.env.NOVALURE_BOT_DISABLED,
-  ].some((value) => readBoolean(value) === true);
-}
-
-function logWebhookStatus(input: {
-  correlationId: string;
-  mapping: SafeMappingStatus;
-  provider: SafeProvider;
-  status: string;
-}) {
-  console.info("bot_channel_webhook", input);
-}
-
-function jsonWebhookResponse(
-  correlationId: string,
-  status: number,
-  body: { accepted: boolean; error?: string } = { accepted: status >= 200 && status < 300 },
-) {
-  return NextResponse.json(
-    { ...body, correlationId },
-    {
-      headers: {
-        "cache-control": "no-store",
-        "x-correlation-id": correlationId,
-      },
-      status,
-    },
-  );
 }
 
 function detectWebhookLanguage(text: string): LanguageCode {
@@ -111,147 +108,104 @@ function getConsentChannel(channel: string): ConsentPolicyChannel {
 }
 
 export async function GET(request: Request) {
-  const correlationId = randomUUID();
   const url = new URL(request.url);
   const challenge =
     url.searchParams.get("hub.challenge") ||
     url.searchParams.get("challenge") ||
     url.searchParams.get("crc_token");
   const token = url.searchParams.get("hub.verify_token") || url.searchParams.get("verify_token");
-  const expectedToken = process.env.NOVALURE_BOT_WEBHOOK_VERIFY_TOKEN?.trim();
-  const mode = url.searchParams.get("hub.mode");
+  const expectedToken = process.env.NOVALURE_BOT_WEBHOOK_VERIFY_TOKEN;
 
-  if (!challenge || !token || (mode && mode !== "subscribe")) {
-    logWebhookStatus({ correlationId, mapping: "not_attempted", provider: "meta", status: "verification_rejected" });
-    return jsonWebhookResponse(correlationId, 400, { accepted: false, error: "invalid_verification_request" });
+  if (challenge) {
+    if (expectedToken && token !== expectedToken) {
+      return new Response("Invalid verify token", { status: 403 });
+    }
+
+    return new Response(challenge, {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+      status: 200,
+    });
   }
 
-  if (!expectedToken) {
-    logWebhookStatus({ correlationId, mapping: "not_attempted", provider: "meta", status: "verification_unavailable" });
-    return jsonWebhookResponse(correlationId, 503, { accepted: false, error: "verification_unavailable" });
-  }
-
-  if (!constantTimeEqualStrings(token, expectedToken)) {
-    logWebhookStatus({ correlationId, mapping: "not_attempted", provider: "meta", status: "verification_rejected" });
-    return jsonWebhookResponse(correlationId, 403, { accepted: false, error: "verification_rejected" });
-  }
-
-  logWebhookStatus({ correlationId, mapping: "not_attempted", provider: "meta", status: "verification_accepted" });
-  return new Response(challenge, {
-    headers: {
-      "cache-control": "no-store",
-      "content-type": "text/plain; charset=utf-8",
-      "x-correlation-id": correlationId,
-    },
-    status: 200,
+  return NextResponse.json({
+    ok: true,
+    supportedChannels: ["Webchat", "WhatsApp", "Instagram", "Facebook Messenger", "E-Mail", "API/Webhook"],
   });
 }
 
 export async function POST(request: Request) {
-  const correlationId = randomUUID();
-  let mappingStatus: SafeMappingStatus = "not_attempted";
-  let provider: SafeProvider = "unknown";
+  const expectedSecret = process.env.NOVALURE_BOT_WEBHOOK_SECRET?.trim();
+  const providedSecret =
+    request.headers.get("x-novalure-webhook-secret") ||
+    request.headers.get("x-webhook-secret") ||
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const rawBody = await request.text();
+  const body = parseJson(rawBody);
 
-  try {
-    if (webhookProcessingDisabled()) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "processing_disabled" });
-      return jsonWebhookResponse(correlationId, 503, { accepted: false, error: "webhook_unavailable" });
-    }
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
-    if (!isJsonWebhookContentType(request.headers.get("content-type"))) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "content_type_rejected" });
-      return jsonWebhookResponse(correlationId, 415, { accepted: false, error: "unsupported_content_type" });
-    }
+  const signature = request.headers.get("x-hub-signature-256");
+  const metaSignatureValid = isMetaWebhookPayload(body) ? verifyMetaSignature(rawBody, signature) : false;
+  const unsignedMetaDashboardProbe = isMetaDashboardFieldProbe(body) && !signature;
+  const customSecretValid = Boolean(expectedSecret && providedSecret && safeEqual(providedSecret, expectedSecret));
+  const authenticatedWebhook =
+    customSecretValid ||
+    metaSignatureValid ||
+    unsignedMetaDashboardProbe ||
+    (!expectedSecret && allowUnsignedWebhooks());
 
-    if (!hasSupportedWebhookContentEncoding(request.headers.get("content-encoding"))) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "content_encoding_rejected" });
-      return jsonWebhookResponse(correlationId, 415, { accepted: false, error: "unsupported_content_encoding" });
-    }
+  if (!authenticatedWebhook) {
+    return NextResponse.json({
+      error: "Invalid webhook secret or Meta signature",
+      hint: "Set NOVALURE_BOT_WEBHOOK_SECRET or META_APP_SECRET. Use NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS=1 only for local tests.",
+    }, { status: 401 });
+  }
 
-    const rawBodyResult = await readLimitedWebhookBody(request);
-    if (!rawBodyResult.ok) {
-      const status = rawBodyResult.reason === "payload_too_large" ? 413 : 400;
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: rawBodyResult.reason });
-      return jsonWebhookResponse(correlationId, status, { accepted: false, error: rawBodyResult.reason });
-    }
+  const message = normalizeIncomingBotMessage(body as Record<string, unknown>);
+  const channelAccount = await findBotChannelAccountForWebhook({
+    accountRef: message.accountRef,
+    channel: message.channel,
+  });
+  const webhookSession = await resolveWebhookSession(request, body as Record<string, unknown>, channelAccount);
+  const webhookRecord = webhookSession
+    ? await insertBotChannelWebhook({
+        workspaceId: webhookSession.workspaceId,
+        channelAccountId: channelAccount?.id ?? null,
+        channel: message.channel,
+        contactRef: message.contactRef,
+        eventType: message.eventType,
+        externalMessageId: message.externalMessageId,
+        normalizedMessage: message,
+        payload: body,
+        status: message.text ? "routed" : "ignored",
+      })
+    : null;
+  const webhookEventId = webhookRecord?.id ?? null;
+  const duplicateWebhook = Boolean(webhookRecord?.duplicate);
 
-    const body = parseJson(rawBodyResult.body);
-    if (!isRecord(body)) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "invalid_json" });
-      return jsonWebhookResponse(correlationId, 400, { accepted: false, error: "invalid_json" });
-    }
-
-    const metaPayload = isMetaWebhookPayload(body);
-    provider = metaPayload ? "meta" : "custom";
-    const authorization = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
-    const expectedCustomSecret = process.env.NOVALURE_BOT_WEBHOOK_SECRET?.trim();
-    const providedCustomSecret =
-      request.headers.get("x-novalure-webhook-secret") ||
-      request.headers.get("x-webhook-secret") ||
-      authorization;
-    const authenticated = metaPayload
-      ? verifyMetaWebhookSignature(
-          rawBodyResult.body,
-          request.headers.get("x-hub-signature-256"),
-          process.env.META_APP_SECRET,
-        )
-      : constantTimeEqualStrings(providedCustomSecret, expectedCustomSecret) || allowUnsignedCustomWebhooks();
-
-    if (!authenticated) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "authentication_rejected" });
-      return jsonWebhookResponse(correlationId, 401, { accepted: false, error: "unauthorized" });
-    }
-
-    const normalizedMessage = normalizeIncomingBotMessage(body);
-    if (!normalizedMessage) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "event_rejected" });
-      return jsonWebhookResponse(correlationId, 400, { accepted: false, error: "invalid_event" });
-    }
-
-    const channelAccountResolution = await findBotChannelAccountForWebhook({
-      accountRef: normalizedMessage.accountRef,
-      channel: normalizedMessage.channel,
+  if (webhookSession && duplicateWebhook) {
+    await writeAuditLog({
+      session: webhookSession,
+      action: "bot.channel_webhook.duplicate_ignored",
+      entityId: webhookEventId,
+      entityType: "bot_channel_webhook",
+      after: {
+        channel: message.channel,
+        contactRef: message.contactRef,
+        eventType: message.eventType,
+        externalMessageId: message.externalMessageId,
+      },
     });
-    mappingStatus = channelAccountResolution.status;
+  }
 
-    if (channelAccountResolution.status !== "matched") {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "mapping_rejected" });
-      return jsonWebhookResponse(correlationId, 200);
-    }
-
-    const channelAccount = channelAccountResolution.account;
-    const webhookSession = createWebhookSession(channelAccount);
-    const message = {
-      ...normalizedMessage,
-      accountRef: channelAccount.externalAccountId,
-      channel: channelAccount.channel,
-    };
-    const webhookRecord = await insertBotChannelWebhook({
-      workspaceId: webhookSession.workspaceId,
-      channelAccountId: channelAccount.id,
-      contactRef: message.contactRef,
-      eventType: message.eventType,
-      externalMessageId: message.externalMessageId,
-      normalizedMessage: message,
-      payload: body,
-      status: message.text ? "routed" : "ignored",
-    });
-
-    if (!webhookRecord) {
-      throw new Error("webhook_event_not_persisted");
-    }
-
-    if (webhookRecord.duplicate) {
-      logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "duplicate_ignored" });
-      return jsonWebhookResponse(correlationId, 200);
-    }
-
-    const webhookEventId = webhookRecord.id;
-    const botRun = message.text
+  const botRun =
+    webhookSession && message.text && !duplicateWebhook
       ? await runBotChat({
           language: detectWebhookLanguage(message.text),
           payload: {
-            ...body,
+            ...(body as Record<string, unknown>),
             channel: message.channel,
             contactRef: message.contactRef,
             name: message.customerName,
@@ -266,74 +220,71 @@ export async function POST(request: Request) {
           session: webhookSession,
         })
       : null;
-    const channelReplyDecision = botRun?.autonomy.decisions.find((decision) => decision.action === "channel_reply") ?? null;
-    const outboundConsent =
-      botRun && message.text && channelReplyDecision?.allowed && channelReplyDecision.mode !== "block"
-        ? await evaluateOutboundConsent({
-            channel: getConsentChannel(message.channel),
-            metadata: {
-              channel: message.channel,
-              source: "bot_channel_webhook",
-              webhookEventId,
-            },
-            phone: message.phone ?? message.contactRef,
-            purpose: "botOutreach",
-            session: webhookSession,
-          })
+  const channelReplyDecision = botRun?.autonomy.decisions.find((decision) => decision.action === "channel_reply") ?? null;
+  const outboundConsent =
+    webhookSession && botRun && message.text && channelReplyDecision?.allowed && channelReplyDecision.mode !== "block"
+      ? await evaluateOutboundConsent({
+          channel: getConsentChannel(message.channel),
+          metadata: {
+            accountRef: message.accountRef,
+            channel: message.channel,
+            conversationId: botRun.conversationId,
+            source: "bot_channel_webhook",
+            webhookEventId,
+          },
+          phone: message.phone ?? message.contactRef,
+          purpose: "botOutreach",
+          session: webhookSession,
+        })
+      : null;
+  const outboundDelivery =
+    webhookSession && botRun && message.text && channelReplyDecision?.allowed && channelReplyDecision.mode !== "block" && outboundConsent?.allowed
+      ? await sendBotChannelReply({
+          accountRef: message.accountRef,
+          channel: message.channel,
+          credentials: channelAccount?.credentials ?? null,
+          idempotencyKey: `bot-channel-reply:${webhookEventId ?? message.externalMessageId}`,
+          message: botRun.message.content,
+          recipientPhone: message.phone ?? message.contactRef,
+          testMode: botRun.autonomy.controls.testMode || channelReplyDecision.mode === "test",
+        })
+      : outboundConsent && !outboundConsent.allowed
+        ? {
+            deliveryMode: "mock" as const,
+            error: `consent_${outboundConsent.reason}`,
+            provider: "mock" as const,
+            recipient: message.phone ?? message.contactRef ?? null,
+            status: "blocked" as const,
+          }
         : null;
-    const outboundDelivery =
-      botRun && message.text && channelReplyDecision?.allowed && channelReplyDecision.mode !== "block" && outboundConsent?.allowed
-        ? await sendBotChannelReply({
-            accountRef: channelAccount.externalAccountId,
-            channel: channelAccount.channel,
-            credentials: channelAccount.credentials,
-            idempotencyKey: `bot-channel-reply:${webhookEventId}`,
-            message: botRun.message.content,
-            recipientPhone: message.phone ?? message.contactRef,
-            testMode: botRun.autonomy.controls.testMode || channelReplyDecision.mode === "test",
-          })
-        : outboundConsent && !outboundConsent.allowed
-          ? {
-              deliveryMode: "mock" as const,
-              error: `consent_${outboundConsent.reason}`,
-              provider: "mock" as const,
-              recipient: message.phone ?? message.contactRef ?? null,
-              status: "blocked" as const,
-            }
-          : null;
 
-    if (botRun) {
-      await writeAuditLog({
-        session: webhookSession,
-        action: "bot.channel_reply.decision",
-        entityId: botRun.conversationId,
-        entityType: "bot_conversation",
-        after: {
-          channelReplyDecision,
-          outboundConsent: outboundConsent
-            ? {
-                allowed: outboundConsent.allowed,
-                channel: outboundConsent.channel,
-                purpose: outboundConsent.purpose,
-                reason: outboundConsent.reason,
-              }
-            : null,
-          outboundDelivery: outboundDelivery
-            ? {
-                deliveryMode: outboundDelivery.deliveryMode,
-                provider: outboundDelivery.provider,
-                status: outboundDelivery.status,
-              }
-            : null,
-          webhookEventId,
-        },
-      });
-    }
-
-    logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "processed" });
-    return jsonWebhookResponse(correlationId, 200);
-  } catch {
-    logWebhookStatus({ correlationId, mapping: mappingStatus, provider, status: "processing_error" });
-    return jsonWebhookResponse(correlationId, 500, { accepted: false, error: "processing_failed" });
+  if (webhookSession && botRun) {
+    await writeAuditLog({
+      session: webhookSession,
+      action: "bot.channel_reply.decision",
+      entityId: botRun.conversationId,
+      entityType: "bot_conversation",
+      after: {
+        channelReplyDecision,
+        outboundConsent,
+        outboundDelivery,
+        webhookEventId,
+      },
+    });
   }
+
+  return NextResponse.json({
+    accepted: true,
+    botReply: botRun?.message ?? null,
+    conversationId: botRun?.conversationId ?? null,
+    duplicateWebhook,
+    message,
+    nextAction: duplicateWebhook ? "ignore_duplicate_message" : message.text ? "route_to_bot_chat" : "ignore_empty_message",
+    outboundDelivery,
+    outboundConsent,
+    persisted: Boolean(webhookEventId || botRun?.conversationId),
+    route: "/api/bots/chat",
+    runSummary: botRun?.runSummary ?? null,
+    webhookEventId,
+  });
 }

@@ -709,7 +709,7 @@ export function LeadSequenceCommandCenter({
                       <div className="flex shrink-0 gap-1">
                         <button
                           aria-label={text.moveUp}
-                          className="grid h-11 w-11 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="grid h-9 w-9 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={index === 0}
                           onClick={() => handleMoveStep(step.id, -1)}
                           title={text.moveUp}
@@ -719,7 +719,7 @@ export function LeadSequenceCommandCenter({
                         </button>
                         <button
                           aria-label={text.moveDown}
-                          className="grid h-11 w-11 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="grid h-9 w-9 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={index === sortedSteps.length - 1}
                           onClick={() => handleMoveStep(step.id, 1)}
                           title={text.moveDown}
@@ -1038,7 +1038,7 @@ export function LeadSequenceCommandCenter({
                           <div className="flex gap-1 md:grid md:content-start">
                             <button
                               aria-label={text.moveUp}
-                              className="grid h-11 w-11 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="grid h-9 w-9 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={index === 0}
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -1051,7 +1051,7 @@ export function LeadSequenceCommandCenter({
                             </button>
                             <button
                               aria-label={text.moveDown}
-                              className="grid h-11 w-11 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="grid h-9 w-9 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={index === sortedSteps.length - 1}
                               onClick={(event) => {
                                 event.stopPropagation();

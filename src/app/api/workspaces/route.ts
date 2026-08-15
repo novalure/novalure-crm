@@ -1,15 +1,15 @@
 import {
   canSwitchWorkspace,
   requirePermission,
-  resolveWorkspaceMembershipAccess,
   resolveWorkspaceScopedSession,
 } from "@/lib/auth/session";
-import type { AppRole } from "@/lib/auth/permissions";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import {
+  getProductRoleCapabilities,
   hasProductCapability,
   isCalendarProviderChoice,
+  isProductRole,
   isWorkspaceCustomerType,
   isWorkspaceOperatingModel,
   isWorkspaceTeamStructure,
@@ -24,7 +24,7 @@ type WorkspaceRow = {
   id: string;
   name: string;
   plan: string;
-  role: AppRole;
+  role: string;
   activeUsers: number | string;
   activeProjects: number | string;
   activeCalendarProvider: CalendarProviderChoice | null;
@@ -70,59 +70,108 @@ export async function GET(request: Request) {
   }
 
   const listManagedWorkspaces = canSwitchWorkspace(auth.session);
-  const workspaces = await queryRows<WorkspaceRow>(
-    `
-      select
-        w.id,
-        w.name,
-        w.plan,
-        wu.role,
-        wu.product_role as "productRole",
-        w.operating_model as "operatingModel",
-        w.customer_type as "customerType",
-        w.team_structure as "teamStructure",
-        w.active_calendar_provider as "activeCalendarProvider",
-        w.setup_state as "setupState",
-        count(distinct active_users.id) as "activeUsers",
-        count(distinct p.id) as "activeProjects"
-      from workspace_users wu
-      join workspaces w on w.id = wu.workspace_id
-      left join workspace_users active_users on active_users.workspace_id = w.id and active_users.status = 'active'
-      left join projects p on p.workspace_id = w.id and p.status <> 'Archiviert'
-      where wu.status = 'active'
-        and (
-          wu.id = $1::uuid
-          or ($2::boolean and lower(wu.email) = lower($3))
-        )
-      group by w.id, w.name, w.plan, wu.role, wu.product_role, w.operating_model, w.customer_type, w.team_structure, w.active_calendar_provider, w.setup_state, w.created_at
-      order by
-        case when w.id = $4::uuid then 0 else 1 end,
-        w.customer_type asc,
-        w.created_at asc
-    `,
-    [auth.session.userId, listManagedWorkspaces, auth.session.email, auth.session.workspaceId],
-  );
+  const specializedGrowthRole =
+    auth.session.productRole === "novalureGrowth" ||
+    auth.session.productRole === "novalureServiceOps" ||
+    auth.session.productRole === "novalureAdmin";
+  const workspaces = listManagedWorkspaces
+    ? await queryRows<WorkspaceRow>(
+        `
+          select
+            w.id,
+            w.name,
+            w.plan,
+            $1::text as role,
+            $2::text as "productRole",
+            w.operating_model as "operatingModel",
+            w.customer_type as "customerType",
+            w.team_structure as "teamStructure",
+            w.active_calendar_provider as "activeCalendarProvider",
+            w.setup_state as "setupState",
+            count(distinct active_users.id) as "activeUsers",
+            count(distinct p.id) as "activeProjects"
+          from workspaces w
+          left join workspace_users active_users on active_users.workspace_id = w.id and active_users.status = 'active'
+          left join projects p on p.workspace_id = w.id and p.status <> 'Archiviert'
+          where (
+            (
+              w.name <> 'Novalure Growth'
+              and coalesce(w.setup_state->>'workspaceKey', '') <> 'novalure-growth'
+            )
+            or $4::boolean
+            or exists (
+              select 1
+              from workspace_users explicit_growth_member
+              where explicit_growth_member.workspace_id = w.id
+                and explicit_growth_member.status = 'active'
+                and lower(explicit_growth_member.email) = lower($5)
+            )
+          )
+            and (
+              $6::text <> 'novalureServiceOps'
+              or w.id = $3::uuid
+              or exists (
+                select 1
+                from workspace_users service_ops_member
+                where service_ops_member.workspace_id = w.id
+                  and service_ops_member.status = 'active'
+                  and lower(service_ops_member.email) = lower($5)
+              )
+            )
+          group by w.id, w.name, w.plan, w.operating_model, w.customer_type, w.team_structure, w.active_calendar_provider, w.setup_state, w.created_at
+          order by
+            case when w.id = $3::uuid then 0 else 1 end,
+            w.customer_type asc,
+            w.created_at asc
+        `,
+        [
+          auth.session.role,
+          auth.session.productRole,
+          auth.session.workspaceId,
+          specializedGrowthRole,
+          auth.session.email,
+          auth.session.productRole,
+        ],
+      )
+    : await queryRows<WorkspaceRow>(
+        `
+          select
+            w.id,
+            w.name,
+            w.plan,
+            wu.role,
+            wu.product_role as "productRole",
+            w.operating_model as "operatingModel",
+            w.customer_type as "customerType",
+            w.team_structure as "teamStructure",
+            w.active_calendar_provider as "activeCalendarProvider",
+            w.setup_state as "setupState",
+            count(distinct active_users.id) as "activeUsers",
+            count(distinct p.id) as "activeProjects"
+          from workspace_users wu
+          join workspaces w on w.id = wu.workspace_id
+          left join workspace_users active_users on active_users.workspace_id = w.id and active_users.status = 'active'
+          left join projects p on p.workspace_id = w.id and p.status <> 'Archiviert'
+          where wu.id = $1 and wu.status = 'active'
+          group by w.id, w.name, w.plan, wu.role, wu.product_role, w.operating_model, w.customer_type, w.team_structure, w.active_calendar_provider, w.setup_state, w.created_at
+          order by w.created_at asc
+        `,
+        [auth.session.userId],
+      );
 
   return Response.json({
     source: "database",
     activeWorkspaceId: auth.session.workspaceId,
-    workspaces: workspaces.map((workspace) => {
-      const access = resolveWorkspaceMembershipAccess({
-        productRole: workspace.productRole,
-        role: workspace.role,
-        workspaceName: workspace.name,
-      });
-
-      return {
-        ...workspace,
-        activeUsers: Number(workspace.activeUsers),
-        activeProjects: Number(workspace.activeProjects),
-        permissions: access.permissions,
-        productPermissions: access.productPermissions,
-        productRole: access.productRole,
-        role: access.role,
-      };
-    }),
+    workspaces: workspaces.map((workspace) => ({
+      ...workspace,
+      activeUsers: Number(workspace.activeUsers),
+      activeProjects: Number(workspace.activeProjects),
+      permissions: auth.session.permissions,
+      productPermissions: getProductRoleCapabilities(
+        isProductRole(workspace.productRole) ? workspace.productRole : auth.session.productRole,
+      ),
+      productRole: isProductRole(workspace.productRole) ? workspace.productRole : auth.session.productRole,
+    })),
   });
 }
 

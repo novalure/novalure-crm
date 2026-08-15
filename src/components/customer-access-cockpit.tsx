@@ -15,7 +15,6 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { productRoles, type ProductRole } from "@/lib/product-model";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type CustomerAccessCockpitProps = {
   activeProjectId?: string;
@@ -245,7 +244,7 @@ export function CustomerAccessCockpit({
     if (activeProjectId && activeProjectId !== "all") params.set("projectId", activeProjectId);
 
     try {
-      const response = await csrfFetch(`/api/crm/customer-access?${params.toString()}`, { cache: "no-store" });
+      const response = await fetch(`/api/crm/customer-access?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) return;
 
       const nextPayload = (await response.json()) as CustomerAccessCockpitPayload;
@@ -321,7 +320,7 @@ export function CustomerAccessCockpit({
     if (activeProjectId && activeProjectId !== "all") params.set("projectId", activeProjectId);
 
     try {
-      const response = await csrfFetch(`/api/crm/customer-access?${params.toString()}`, {
+      const response = await fetch(`/api/crm/customer-access?${params.toString()}`, {
         body: JSON.stringify(input),
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
@@ -355,7 +354,7 @@ export function CustomerAccessCockpit({
     setSaveState("loading");
 
     try {
-      const response = await csrfFetch("/api/crm/recommendation-runtime", {
+      const response = await fetch("/api/crm/recommendation-runtime", {
         body: JSON.stringify({
           operation: "customer_onboarding_risks",
           projectId: activeProjectId && activeProjectId !== "all" ? activeProjectId : null,

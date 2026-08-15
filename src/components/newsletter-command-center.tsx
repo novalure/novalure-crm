@@ -16,7 +16,6 @@ import type {
 } from "@/lib/crm-types";
 import { getLocale, getNewsletterCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
 import { MediaLibraryPicker } from "@/components/media-library-picker";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type NewsletterCommandCenterProps = {
   automations: NewsletterAutomation[];
@@ -750,7 +749,7 @@ const liveNewsletterMessage =
         throw new Error(text.liveSendNoRecipients);
       }
 
-      const response = await csrfFetch("/api/newsletter/send", {
+      const response = await fetch("/api/newsletter/send", {
         body: JSON.stringify({
           campaignId: selectedCampaign?.campaign.id,
           contentBlocks: selectedDraft.contentBlocks,
@@ -1407,7 +1406,7 @@ const liveNewsletterMessage =
 
   if (isBuilderMode) {
     return (
-      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#eef7ff] text-slate-950">
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">

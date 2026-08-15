@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTrustedAuthClientIp } from "@/lib/auth/auth-security";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import {
   inviteSettingsWorkspaceUser,
@@ -72,7 +71,7 @@ export async function POST(request: Request) {
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "invite";
   const language = resolveRequestLanguage(request);
-  const requestIp = getTrustedAuthClientIp(request.headers);
+  const requestIp = request.headers.get("x-forwarded-for");
   const userAgent = request.headers.get("user-agent");
 
   const result =

@@ -2,19 +2,19 @@
   "crons": [
     {
       "path": "/api/cron/meeting-reminders",
-      "schedule": "2 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/teams-alerts",
-      "schedule": "4,19,34,49 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/google-alerts",
-      "schedule": "9,24,39,54 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/property-reservations",
-      "schedule": "7 * * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }

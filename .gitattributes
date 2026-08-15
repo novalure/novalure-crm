@@ -1,3 +1,2 @@
 *.sql text eol=lf
 migrations/*.sql text eol=lf
-docs/go-live/changed-files-2026-08-11.md whitespace=-blank-at-eof

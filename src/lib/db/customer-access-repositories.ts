@@ -1,6 +1,5 @@
+import { createHash, randomBytes } from "crypto";
 import type { AppSession } from "@/lib/auth/session";
-import { createMembershipPasswordResetLink } from "@/lib/auth/password-reset";
-import { writeAuthAuditEvent } from "@/lib/auth/auth-audit";
 import type {
   CustomerWorkspaceAccess,
   CustomerWorkspaceAccessStatus,
@@ -69,7 +68,7 @@ export type WorkspaceUserInviteResult = {
   deliveryConfigured: boolean;
   deliveryProvider: string;
   deliveryStatus: string;
-  setupUrl?: string;
+  setupUrl: string;
   user: WorkspaceUser;
 };
 
@@ -630,6 +629,10 @@ function normalizeInviteEmail(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
+function hashInviteToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 function getInviteEmailCopy(language: string, setupUrl: string) {
   if (language === "de") {
     return {
@@ -731,33 +734,40 @@ export async function inviteWorkspaceUser(input: {
 
   if (!row) return { ok: false as const, reason: "Workspace invitation could not be saved" };
 
-  await queryOne<{ id: string }>(
+  const token = randomBytes(32).toString("base64url");
+  const setupUrl = new URL("/login/reset-password", input.origin);
+  setupUrl.searchParams.set("token", token);
+  setupUrl.searchParams.set("lang", input.language === "de" ? "de" : "en");
+
+  await queryOne<IdRow>(
     `
-      update auth_identities identity
-      set credential_state = 'reset_required', disabled_at = null, updated_at = now()
-      where identity.id = (
-        select wu.auth_identity_id from workspace_users wu where wu.id = $1
+      insert into auth_password_reset_tokens (
+        workspace_id,
+        user_id,
+        token_hash,
+        requested_email,
+        request_ip,
+        user_agent,
+        expires_at
       )
-        and identity.credential_state = 'disabled'
-      returning identity.id
+      values ($1, $2, $3, $4, $5, $6, now() + ($7::int * interval '1 minute'))
+      returning id
     `,
-    [row.id],
+    [
+      input.session.workspaceId,
+      row.id,
+      hashInviteToken(token),
+      email,
+      input.requestIp ?? null,
+      input.userAgent ?? null,
+      10080,
+    ],
   );
 
-  const created = await createMembershipPasswordResetLink({
-    language: input.language === "de" ? "de" : "en",
-    requestIp: input.requestIp,
-    ttlMinutes: 10080,
-    userAgent: input.userAgent,
-    workspaceId: input.session.workspaceId,
-    workspaceUserId: row.id,
-  });
-
   const provider = getNewsletterProviderStatus();
-  const emailCopy = getInviteEmailCopy(input.language ?? "en", created.resetUrl);
+  const emailCopy = getInviteEmailCopy(input.language ?? "en", setupUrl.toString());
   const delivery = await sendNewsletterEmail({
     html: emailCopy.html,
-    idempotencyKey: `workspace-invite:${created.tokenId}`,
     subject: emailCopy.subject,
     to: email,
   });
@@ -807,17 +817,6 @@ export async function inviteWorkspaceUser(input: {
       userId: input.session.userId,
       workspaceId: input.session.workspaceId,
     }),
-    writeAuthAuditEvent({
-      authIdentityId: created.authIdentityId,
-      eventType: "auth.invitation.issued",
-      metadata: {
-        actorUserId: input.session.userId,
-        deliveryStatus: delivery.status,
-      },
-      outcome: delivery.status === "failed" ? "failure" : "success",
-      workspaceId: input.session.workspaceId,
-      workspaceUserId: row.id,
-    }),
   ]);
 
   return {
@@ -825,6 +824,7 @@ export async function inviteWorkspaceUser(input: {
       deliveryConfigured: provider.configured,
       deliveryProvider: delivery.provider,
       deliveryStatus: delivery.status,
+      setupUrl: setupUrl.toString(),
       user: { ...row, productRole: row.productRole ?? undefined },
     } satisfies WorkspaceUserInviteResult,
     ok: true as const,
@@ -879,110 +879,20 @@ export async function updateWorkspaceUserAccess(input: {
     return { ok: false as const, reason: "Current user cannot be deactivated" };
   }
 
-  const accessChanged =
-    existing.role !== role || existing.productRole !== productRole || existing.status !== status;
-  const sessionRevocationReason = existing.status !== status && status !== "active"
-    ? "admin_deactivation"
-    : "admin_access_changed";
   const row = await queryOne<WorkspaceUserRow>(
     `
-      with updated_user as (
-        update workspace_users
-        set role = $3,
-            status = $4,
-            product_role = $5,
-            updated_at = now()
-        where id = $1 and workspace_id = $2
-        returning id, workspace_id, name, email, role, product_role, status
-      ), revoked_sessions as (
-        update auth_sessions session
-        set revoked_at = now(), revoked_reason = $7
-        from updated_user
-        where $6::boolean
-          and session.workspace_user_id = updated_user.id
-          and session.revoked_at is null
-        returning
-          session.id,
-          session.auth_identity_id,
-          session.workspace_user_id,
-          session.workspace_id
-      ), session_audited as (
-        insert into auth_audit_events (
-          event_type,
-          outcome,
-          auth_identity_id,
-          workspace_user_id,
-          workspace_id,
-          session_id,
-          metadata
-        )
-        select
-          'auth.session.revoked',
-          'success',
-          revoked_sessions.auth_identity_id,
-          revoked_sessions.workspace_user_id,
-          revoked_sessions.workspace_id,
-          revoked_sessions.id,
-          jsonb_build_object('reason', $7::text)
-        from revoked_sessions
-        returning session_id
-      )
-      select
-        updated_user.id,
-        updated_user.workspace_id as "workspaceId",
-        updated_user.name,
-        updated_user.email,
-        updated_user.role,
-        updated_user.product_role as "productRole",
-        updated_user.status,
-        (select count(*) from session_audited) as "revokedSessionCount"
-      from updated_user
+      update workspace_users
+      set role = $3,
+          status = $4,
+          product_role = $5,
+          updated_at = now()
+      where id = $1 and workspace_id = $2
+      returning id, workspace_id as "workspaceId", name, email, role, product_role as "productRole", status
     `,
-    [
-      input.userId,
-      input.session.workspaceId,
-      role,
-      status,
-      productRole,
-      accessChanged,
-      sessionRevocationReason,
-    ],
+    [input.userId, input.session.workspaceId, role, status, productRole],
   );
 
   if (!row) return { ok: false as const, reason: "Workspace user could not be saved" };
-
-  if (existing.status !== "suspended" && status === "suspended") {
-    await queryOne<{ id: string }>(
-      `
-        update auth_identities identity
-        set credential_state = 'disabled', disabled_at = now(), updated_at = now()
-        where identity.id = (
-          select wu.auth_identity_id from workspace_users wu where wu.id = $1
-        )
-          and not exists (
-            select 1
-            from workspace_users active_membership
-            where active_membership.auth_identity_id = identity.id
-              and active_membership.status in ('active', 'invited')
-          )
-        returning identity.id
-      `,
-      [row.id],
-    );
-  } else if (existing.status !== "active" && status === "active") {
-    await queryOne<{ id: string }>(
-      `
-        update auth_identities identity
-        set credential_state = 'reset_required', disabled_at = null, updated_at = now()
-        where identity.id = (
-          select wu.auth_identity_id from workspace_users wu where wu.id = $1
-        )
-          and identity.credential_state = 'disabled'
-        returning identity.id
-      `,
-      [row.id],
-    );
-  }
 
   await Promise.all([
     writeAuditLog({
@@ -1007,18 +917,6 @@ export async function updateWorkspaceUserAccess(input: {
       source: "customer_access_cockpit",
       userId: input.session.userId,
       workspaceId: input.session.workspaceId,
-    }),
-    writeAuthAuditEvent({
-      eventType: "auth.membership.access_updated",
-      metadata: {
-        actorUserId: input.session.userId,
-        productRole,
-        role,
-        status,
-      },
-      outcome: "success",
-      workspaceId: input.session.workspaceId,
-      workspaceUserId: row.id,
     }),
   ]);
 

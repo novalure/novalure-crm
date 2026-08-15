@@ -11,10 +11,8 @@ import {
   getTaskCommandCenterCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type TaskCommandCenterProps = {
-  activeProjectId: string | null;
   contacts: Contact[];
   language: LanguageCode;
   leads: Lead[];
@@ -149,11 +147,7 @@ function toDateTimeLocalInput(date: Date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function createDefaultTaskDraft(
-  projects: Project[],
-  sessionUserId: string,
-  activeProjectId: string | null,
-): NewTaskDraft {
+function createDefaultTaskDraft(projects: Project[], sessionUserId: string): NewTaskDraft {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(9, 0, 0, 0);
@@ -165,16 +159,13 @@ function createDefaultTaskDraft(
     leadId: "",
     ownerUserId: sessionUserId,
     priority: "Normal",
-    projectId: activeProjectId && projects.some((project) => project.id === activeProjectId)
-      ? activeProjectId
-      : "",
+    projectId: projects[0]?.id ?? "",
     status: "open",
     title: "",
   };
 }
 
 export function TaskCommandCenter({
-  activeProjectId,
   contacts,
   language,
   leads,
@@ -196,9 +187,7 @@ export function TaskCommandCenter({
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);
-  const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() =>
-    createDefaultTaskDraft(projects, sessionUserId, activeProjectId),
-  );
+  const [taskDraft, setTaskDraft] = useState<NewTaskDraft>(() => createDefaultTaskDraft(projects, sessionUserId));
   const [notice, setNotice] = useState("");
   const effectiveTasks = useMemo(() => {
     const overlayIds = new Set(taskOverlays.map((task) => task.id));
@@ -274,9 +263,6 @@ export function TaskCommandCenter({
     () => users.filter((user) => isUuid(user.id) && user.id !== sessionUserId),
     [sessionUserId, users],
   );
-  const draftProjects = activeProjectId
-    ? projects.filter((project) => project.id === activeProjectId)
-    : projects;
   const views: Array<{ id: TaskView; label: string; count: number }> = [
     { id: "focus", label: text.focus, count: openTasks.length },
     { id: "today", label: text.today, count: dueTodayTasks.length },
@@ -296,15 +282,11 @@ export function TaskCommandCenter({
       setNotice(text.titleRequired);
       return;
     }
-    if (!draftProjects.some((project) => project.id === taskDraft.projectId)) {
-      setNotice(language === "de" ? "Projekt ist erforderlich." : "Project is required.");
-      return;
-    }
 
     setTaskSaving(true);
     setNotice("");
     try {
-      const response = await csrfFetch("/api/crm/tasks", {
+      const response = await fetch("/api/crm/tasks", {
         body: JSON.stringify({
           task: {
             contactId: taskDraft.contactId || undefined,
@@ -329,7 +311,7 @@ export function TaskCommandCenter({
 
       setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
       setSelectedTaskId(payload.task.id);
-      setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
+      setTaskDraft(createDefaultTaskDraft(projects, sessionUserId));
       setIsCreateOpen(false);
       setNotice(text.taskCreated);
       void onTasksChanged?.();
@@ -351,7 +333,7 @@ export function TaskCommandCenter({
     );
 
     if (currentTask) {
-      void csrfFetch("/api/crm/tasks", {
+      void fetch("/api/crm/tasks", {
         body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus } }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -374,7 +356,7 @@ export function TaskCommandCenter({
 
     setFollowUpSaving(true);
     try {
-      const response = await csrfFetch("/api/crm/recommendation-runtime", {
+      const response = await fetch("/api/crm/recommendation-runtime", {
         body: JSON.stringify({
           actionType: selectedTask.task.priority === "Hoch" ? "task_priority_follow_up" : "task_follow_up",
           channel: selectedTask.contact?.email ? "E-Mail" : selectedTask.contact?.phone ? "WhatsApp" : "Telefon",
@@ -436,12 +418,7 @@ export function TaskCommandCenter({
         <div className="mt-4 flex flex-col items-stretch gap-2 sm:items-end">
           <button
             className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
-            onClick={() => {
-              if (!isCreateOpen) {
-                setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
-              }
-              setIsCreateOpen((current) => !current);
-            }}
+            onClick={() => setIsCreateOpen((current) => !current)}
             type="button"
           >
             {isCreateOpen ? text.cancel : text.newTask}
@@ -512,13 +489,9 @@ export function TaskCommandCenter({
                 <select
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateTaskDraft("projectId", event.target.value)}
-                  required
                   value={taskDraft.projectId}
                 >
-                  <option value="">
-                    {language === "de" ? "Projekt auswählen" : "Select project"}
-                  </option>
-                  {draftProjects.map((project) => (
+                  {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
                     </option>
@@ -575,10 +548,7 @@ export function TaskCommandCenter({
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
                 className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                disabled={
-                  taskSaving ||
-                  !draftProjects.some((project) => project.id === taskDraft.projectId)
-                }
+                disabled={taskSaving}
                 onClick={() => void createTask()}
                 type="button"
               >
@@ -587,7 +557,7 @@ export function TaskCommandCenter({
               <button
                 className="rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-white"
                 onClick={() => {
-                  setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
+                  setTaskDraft(createDefaultTaskDraft(projects, sessionUserId));
                   setIsCreateOpen(false);
                 }}
                 type="button"

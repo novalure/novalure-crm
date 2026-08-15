@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getMediaLibraryPickerCopy, type LanguageCode } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 export type CrmMediaAsset = {
-  accessClass?: "legacy-public" | "private" | "published-public";
   id: string;
   name: string;
   originalName: string;
@@ -16,7 +14,6 @@ export type CrmMediaAsset = {
   alt?: string;
   createdAt: string;
   isPublic?: boolean;
-  hasActivePublicShare?: boolean;
   publicUrl?: string | null;
 };
 
@@ -52,7 +49,6 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
   const [assets, setAssets] = useState<CrmMediaAsset[]>([]);
   const [quota, setQuota] = useState<MediaQuota>(defaultQuota);
   const [error, setError] = useState("");
-  const [publishingId, setPublishingId] = useState("");
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -100,7 +96,7 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
 
     setUploading(true);
     try {
-      const response = await csrfFetch("/api/media", {
+      const response = await fetch("/api/media", {
         method: "POST",
         body: formData,
       });
@@ -114,31 +110,6 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
       setError(uploadError instanceof Error ? uploadError.message : copy.uploadFailed);
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function selectForPublicUse(asset: CrmMediaAsset) {
-    if (asset.publicUrl) {
-      onSelect(toPublicSelection(asset));
-      return;
-    }
-
-    setError("");
-    setPublishingId(asset.id);
-    try {
-      const response = await csrfFetch("/api/media", {
-        body: JSON.stringify({ action: "publish", assetId: asset.id }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      const payload = (await response.json()) as { asset?: CrmMediaAsset; error?: string };
-      if (!response.ok || !payload.asset?.publicUrl) throw new Error(payload.error || copy.uploadFailed);
-      setAssets((current) => current.map((item) => item.id === asset.id ? payload.asset as CrmMediaAsset : item));
-      onSelect(toPublicSelection(payload.asset));
-    } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : copy.uploadFailed);
-    } finally {
-      setPublishingId("");
     }
   }
 
@@ -186,9 +157,8 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
               className={`grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-md border p-2 text-left text-xs ${
                 currentUrl === (asset.publicUrl ?? asset.url) ? "border-slate-950 bg-white" : "border-stone-200 bg-white"
               }`}
-              disabled={Boolean(publishingId)}
               key={asset.id}
-              onClick={() => void selectForPublicUse(asset)}
+              onClick={() => onSelect(toPublicSelection(asset))}
               type="button"
             >
               <span
@@ -201,7 +171,6 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
                 <strong className="block truncate text-slate-950">{asset.name}</strong>
                 <span className="block truncate text-stone-500">{asset.folder}</span>
                 <span className="block text-stone-500">{formatBytes(asset.sizeBytes)}</span>
-                {publishingId === asset.id ? <span className="block text-stone-500">{copy.uploading}</span> : null}
               </span>
             </button>
           ))

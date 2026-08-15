@@ -1,6 +1,5 @@
 import { neon } from "@neondatabase/serverless";
 import { databaseEnv } from "@/lib/db/schema";
-import { withDatabaseConnectionRetry } from "@/lib/db/connection-retry";
 
 type SqlClient = ReturnType<typeof neon>;
 
@@ -43,14 +42,7 @@ export function getSqlClient() {
 }
 
 export async function queryRows<Row extends Record<string, unknown>>(query: string, params: unknown[] = []) {
-  const rows = await withDatabaseConnectionRetry(
-    () => getSqlClient().query(query, params),
-    {
-      onRetry: ({ attempt, delayMs, reason }) => {
-        console.warn(JSON.stringify({ attempt, delayMs, event: "database_connection_retry", reason }));
-      },
-    },
-  );
+  const rows = await getSqlClient().query(query, params);
   return rows as Row[];
 }
 
@@ -60,12 +52,5 @@ export async function queryOne<Row extends Record<string, unknown>>(query: strin
 }
 
 export async function executeQuery(query: string, params: unknown[] = []) {
-  await withDatabaseConnectionRetry(
-    () => getSqlClient().query(query, params),
-    {
-      onRetry: ({ attempt, delayMs, reason }) => {
-        console.warn(JSON.stringify({ attempt, delayMs, event: "database_connection_retry", reason }));
-      },
-    },
-  );
+  await getSqlClient().query(query, params);
 }

@@ -15,7 +15,6 @@ import {
   updateSellerListingRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
-import { enforceCsrfForSession } from "@/lib/security/csrf";
 import {
   routePropertyInquiry,
   runPropertyChannelPreflight,
@@ -84,11 +83,6 @@ function parseStatus(value: string | null) {
   return /^[a-z_]{1,50}$/i.test(status) ? status : undefined;
 }
 
-function parseIdempotencyKey(request: Request) {
-  const value = request.headers.get("idempotency-key")?.trim() ?? "";
-  return /^[A-Za-z0-9._:-]{16,160}$/.test(value) ? value : null;
-}
-
 export async function GET(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
@@ -131,8 +125,6 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const csrf = await enforceCsrfForSession(request, session);
-  if (!csrf.ok) return csrf.response;
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -170,10 +162,6 @@ export async function POST(request: Request) {
   }
 
   if (operation === "run_preflight") {
-    const idempotencyKey = parseIdempotencyKey(request);
-    if (input.recordHistory !== false && !idempotencyKey) {
-      return NextResponse.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
-    }
     const asset = asObject(input.asset) as PropertyAssetSummary;
     const channel = typeof input.channel === "string" && input.channel.trim()
       ? input.channel.trim()
@@ -194,7 +182,6 @@ export async function POST(request: Request) {
     const result = await recordPropertyPreflightRun({
       assetId: asset.sellerListingId ? `listing:${asset.sellerListingId}` : asset.id,
       channel,
-      idempotencyKey: idempotencyKey ?? "not-persisted",
       preflight,
       projectId: asset.projectId,
       session,

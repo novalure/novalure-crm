@@ -1,23 +1,23 @@
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
-import { areQueueWorkersPaused, createCronRun, isCronAuthorized } from "@/lib/cron/runtime";
 
 export const maxDuration = 60;
 
+function isAuthorized(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.VERCEL_ENV !== "production";
+
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
 export async function GET(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!isAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const run = createCronRun({ route: "meeting-reminders" });
-  if (areQueueWorkersPaused()) {
-    return Response.json({ ok: true, paused: true, runId: run.runId });
-  }
 
-  const result = await processDueMeetingNotifications({ limit: 25, shouldContinue: run.shouldContinue });
+  const result = await processDueMeetingNotifications({ limit: 25 });
 
   return Response.json({
-    durationMs: run.durationMs(),
     ok: true,
-    runId: run.runId,
     ...result,
   });
 }

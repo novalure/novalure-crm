@@ -8,7 +8,13 @@ import {
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { companyLegalDetails } from "@/lib/legal";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { resolvePublicLanguage } from "@/lib/public-language";
+
+export const metadata: Metadata = {
+  title: "Cookie Notice | Novalure CRM",
+  description:
+    "Cookie and tracking technology notice for Novalure CRM under Irish ePrivacy and EU data protection rules.",
+};
 
 const updated = "20 May 2026";
 const pagePath = "/cookies";
@@ -31,14 +37,6 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Cookie-Hinweis",
   },
 };
-
-export async function generateMetadata({ searchParams }: CookieNoticePageProps): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
-  const page = pageCopy[language];
-  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
-}
 
 const englishSections = [
   {
@@ -135,7 +133,11 @@ const germanSections = [
 export default async function CookieNoticePage({ searchParams }: CookieNoticePageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const language = resolvePublicLanguage({
+    acceptLanguage: requestHeaders.get("accept-language"),
+    country: requestHeaders.get("x-vercel-ip-country"),
+    requestedLanguage: query.lang,
+  });
   const page = pageCopy[language];
 
   return (
