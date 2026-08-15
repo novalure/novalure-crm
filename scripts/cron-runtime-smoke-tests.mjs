@@ -59,3 +59,20 @@ test("production schedules are staggered and workers use shared guards", async (
     assert.doesNotMatch(source, /VERCEL_ENV\s*!==\s*["']production["']/);
   }
 });
+
+test("Google workspace scans avoid parallel database bursts while durable workers stay leased", async () => {
+  const google = await readFile(
+    new URL("../src/lib/db/google-notification-repositories.ts", import.meta.url),
+    "utf8",
+  );
+  const scheduledStart = google.indexOf("export async function queueScheduledCriticalGoogleAlerts");
+  const scheduledEnd = google.indexOf("export async function reconcileGoogleNotificationJob", scheduledStart);
+  const scheduledWorker = google.slice(scheduledStart, scheduledEnd);
+
+  assert.ok(scheduledStart >= 0 && scheduledEnd > scheduledStart);
+  assert.doesNotMatch(scheduledWorker, /Promise\.all/);
+  assert.match(scheduledWorker, /await queueGoogleLeadSlaOverdueAlerts/);
+  assert.match(scheduledWorker, /await queueGoogleCustomerAccessRiskAlerts/);
+  assert.match(google, /for update skip locked/i);
+  assert.match(google, /lease_expires_at = now\(\) \+ interval '45 seconds'/i);
+});

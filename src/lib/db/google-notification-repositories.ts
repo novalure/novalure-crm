@@ -1208,10 +1208,16 @@ export async function queueScheduledCriticalGoogleAlerts(input: {
     for (const workspaceRow of workspacePage) {
       if (input.shouldContinue && !input.shouldContinue()) break;
       const session = createSystemSession(workspaceRow.id);
-      const [sla, access] = await Promise.all([
-        queueGoogleLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-        queueGoogleCustomerAccessRiskAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-      ]);
+      const sla = await queueGoogleLeadSlaOverdueAlerts({
+        limit: input.limitPerWorkspace ?? 25,
+        session,
+      });
+      const access = input.shouldContinue && !input.shouldContinue()
+        ? { checked: 0, failed: 0, pendingConfig: 0, queued: 0 }
+        : await queueGoogleCustomerAccessRiskAlerts({
+            limit: input.limitPerWorkspace ?? 25,
+            session,
+          });
 
       checked += sla.checked + access.checked;
       queued += sla.queued + access.queued;
