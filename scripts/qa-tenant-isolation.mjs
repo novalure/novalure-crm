@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import process from "node:process";
 import { neon } from "@neondatabase/serverless";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const growthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const growthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
@@ -50,20 +51,9 @@ function loadEnv(path) {
 
 for (const file of envFiles) loadEnv(file);
 
-function cleanDatabaseUrl(value) {
-  if (!value) return "";
-  const trimmed = String(value).trim().replace(/^['"]|['"]$/g, "");
-  const prefixedUrl = trimmed.match(/^[A-Z0-9_]+=((?:postgres|postgresql):\/\/.+)$/i);
-  return prefixedUrl?.[1] ?? trimmed;
-}
-
-const databaseUrl =
-  cleanDatabaseUrl(process.env.DATABASE_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_DATABASE_URL) ||
-  cleanDatabaseUrl(process.env.POSTGRES_PRISMA_URL);
-
-const sql = databaseUrl ? neon(databaseUrl) : null;
+const qaTarget = await assertQaTarget();
+const databaseUrl = qaTarget.databaseUrl;
+const sql = neon(databaseUrl);
 
 function readText(path) {
   return fs.readFileSync(path, "utf8");
@@ -161,20 +151,30 @@ function runStaticChecks() {
   addMatrix({
     check: "service ops cross-workspace gate",
     expected: "novalureServiceOps requires explicit membership and writes an audit log",
-    actual: session.includes("Service Ops workspace access requires explicit membership") && session.includes("workspace.cross_workspace_view")
+    actual:
+      session.includes("findActiveMembershipForSession") &&
+      session.includes("Target workspace access requires explicit active membership") &&
+      session.includes("workspace.cross_workspace_view")
       ? "membership gate plus audit"
       : "not confirmed",
-    ok: session.includes("Service Ops workspace access requires explicit membership") && session.includes("workspace.cross_workspace_view"),
+    ok:
+      session.includes("findActiveMembershipForSession") &&
+      session.includes("Target workspace access requires explicit active membership") &&
+      session.includes("workspace.cross_workspace_view"),
     cause: "service ops cross-workspace access is missing membership or audit enforcement",
   });
 
+  const workspaceListIsMembershipBacked =
+    /from workspace_users wu[\s\S]*join workspaces w on w\.id = wu\.workspace_id/.test(workspaceRoute) &&
+    /wu\.id = \$1::uuid[\s\S]*lower\(wu\.email\) = lower\(\$3\)/.test(workspaceRoute) &&
+    workspaceRoute.includes("const listManagedWorkspaces = canSwitchWorkspace(auth.session)");
   addMatrix({
     check: "workspace list isolation",
     expected: "Growth workspace is hidden unless specialized profile or explicit membership applies",
-    actual: workspaceRoute.includes("novalure-growth") && workspaceRoute.includes("specializedGrowthRole")
-      ? "route filters Growth workspace"
+    actual: workspaceListIsMembershipBacked
+      ? "route lists only active memberships"
       : "not confirmed",
-    ok: workspaceRoute.includes("novalure-growth") && workspaceRoute.includes("specializedGrowthRole"),
+    ok: workspaceListIsMembershipBacked,
     cause: "WorkspaceList route does not explicitly isolate Novalure Growth",
   });
 
@@ -348,17 +348,7 @@ function printMarkdownTable(rows) {
 async function main() {
   runStaticChecks();
 
-  if (!databaseUrl) {
-    addMatrix({
-      check: "database-backed tenant matrix",
-      expected: "DATABASE_URL or POSTGRES_URL is configured",
-      actual: "missing database URL",
-      ok: false,
-      cause: "DB-backed tenant-isolation checks could not run",
-    });
-  } else {
-    await runDbChecks();
-  }
+  await runDbChecks();
 
   console.log("TENANT_ISOLATION_MATRIX");
   printMarkdownTable(matrix);

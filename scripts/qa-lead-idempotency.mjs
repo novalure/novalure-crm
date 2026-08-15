@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { createJiti } from "jiti";
 import { Pool } from "@neondatabase/serverless";
+import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
 const marker = "QALEADIDEM_";
 
 const workspaceId = "7f640000-0000-4000-8000-000000000001";
@@ -40,17 +39,15 @@ function maskDatabaseUrl(value) {
 }
 
 function assertTestDatabase(env, databaseUrl) {
-  const parsed = new URL(databaseUrl);
-  const projectIdValue = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
+  const target = assertDatabaseTarget({
+    databaseUrl,
+    env,
+    purpose: "lead idempotency QA",
+    target: "test",
+  });
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${parsed.hostname}`);
-  console.log(`Project ID suffix verified: ${projectIdValue ? "***" + projectIdValue.slice(-8) : "missing"}`);
-  if (parsed.hostname !== testDbHost) {
-    throw new Error(`Refusing lead idempotency QA: active DB host is not test (${testDbHost})`);
-  }
-  if (!projectIdValue.includes(testDbSuffix)) {
-    throw new Error(`Refusing lead idempotency QA: project id does not contain ${testDbSuffix}`);
-  }
+  console.log(`Active DB host: ${target.host}`);
+  console.log("Active project identity verified");
 }
 
 function quoteIdent(value) {

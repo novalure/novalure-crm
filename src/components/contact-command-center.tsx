@@ -31,8 +31,10 @@ import {
   getCrmTaskPriorityLabel,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type ContactCommandCenterProps = {
+  activeProjectId: string | null;
   canAssignOwner?: boolean;
   canWriteContacts?: boolean;
   consents: ConsentRecord[];
@@ -48,6 +50,7 @@ type ContactCommandCenterProps = {
   tasks: Task[];
   timeline: ContactTimelineItem[];
   users: WorkspaceUser[];
+  workspaceId: string;
 };
 
 type ContactView = "all" | "hot" | "missingData" | "missingConsent" | "duplicates";
@@ -145,12 +148,15 @@ function createContactLeadDraft(contact: Contact): ContactLeadDraft {
 }
 
 function createContactDraft(input: {
+  activeProjectId: string | null;
   contacts: Contact[];
   currentUserId?: string;
   organizations: Organization[];
   projects: Project[];
 }): Contact {
-  const project = input.projects[0];
+  const project = input.activeProjectId
+    ? input.projects.find((item) => item.id === input.activeProjectId)
+    : undefined;
 
   return {
     consent: "Nur CRM",
@@ -165,7 +171,7 @@ function createContactDraft(input: {
     projectId: project?.id ?? "",
     role: input.contacts[0]?.role ?? "Käufer",
     source: "Manual",
-    workspaceId: input.contacts[0]?.workspaceId ?? project?.workspaceId ?? "",
+    workspaceId: project?.workspaceId ?? "",
   };
 }
 
@@ -190,6 +196,7 @@ const qualityStyles = {
 } as const;
 
 export function ContactCommandCenter({
+  activeProjectId,
   canAssignOwner = false,
   canWriteContacts = true,
   consents,
@@ -205,6 +212,7 @@ export function ContactCommandCenter({
   tasks,
   timeline,
   users,
+  workspaceId,
 }: ContactCommandCenterProps) {
   const copy = getContactCommandCenterCopy(language);
   const [serverContactOverlays, setServerContactOverlays] = useState<Contact[]>([]);
@@ -234,7 +242,7 @@ export function ContactCommandCenter({
   const [activeDetailTab, setActiveDetailTab] = useState<ContactDetailTab>("overview");
   const [newContactKind, setNewContactKind] = useState<ContactKind>("person");
   const [newContact, setNewContact] = useState<Contact>(() =>
-    createContactDraft({ contacts, currentUserId, organizations, projects }),
+    createContactDraft({ activeProjectId, contacts, currentUserId, organizations, projects }),
   );
   const [postCreateAction, setPostCreateAction] = useState<ContactPostCreateAction>(null);
   const [postCreateContact, setPostCreateContact] = useState<Contact | null>(null);
@@ -253,11 +261,10 @@ export function ContactCommandCenter({
   const effectiveSelectedContactId = contactRecords.some((contact) => contact.id === selectedContactId)
     ? selectedContactId
     : contactRecords[0]?.id ?? "";
-  const hasSelectedContact = contactRecords.length > 0;
-  const selectedContact =
+  const selectedContact: Contact | null =
     contactRecords.find((contact) => contact.id === effectiveSelectedContactId) ??
     contactRecords[0] ??
-    createContactDraft({ contacts: contactRecords, currentUserId, organizations, projects });
+    null;
   const selectedOrganization = selectedContact?.organizationId
     ? organizations.find((organization) => organization.id === selectedContact.organizationId)
     : undefined;
@@ -344,91 +351,97 @@ export function ContactCommandCenter({
       return matchesView && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
   }, [activeView, consentContactIds, contactRecords, duplicateSignals, leads, organizations, searchTerm]);
-  const dataModelMapping = [
-    {
-      label: copy.mapping.name,
-      novalure: selectedContact.name,
-      targetField: "first_name, last_name",
-      ready: Boolean(selectedContact.name),
-    },
-    {
-      label: copy.mapping.email,
-      novalure: selectedContact.email,
-      targetField: "email",
-      ready: Boolean(selectedContact.email),
-    },
-    {
-      label: copy.mapping.phone,
-      novalure: selectedContact.phone,
-      targetField: "phone / mobile_phone",
-      ready: Boolean(selectedContact.phone),
-    },
-    {
-      label: copy.mapping.organization,
-      novalure: selectedOrganization?.name,
-      targetField: "linked_organization",
-      ready: Boolean(selectedOrganization),
-    },
-    {
-      label: copy.mapping.lifecycle,
-      novalure: selectedOrganization?.lifecycleStage
-        ? getCrmLifecycleLabel(selectedOrganization.lifecycleStage, language)
-        : undefined,
-      targetField: "contact_status",
-      ready: Boolean(selectedOrganization?.lifecycleStage),
-    },
-    {
-      label: copy.mapping.source,
-      novalure: getCrmSourceLabel(selectedContact.source, language),
-      targetField: "analytics_source / record_source",
-      ready: Boolean(selectedContact.source),
-    },
-    {
-      label: copy.mapping.owner,
-      novalure: contactOwner?.name,
-      targetField: "owner_id",
-      ready: Boolean(contactOwner),
-    },
-  ];
-  const qualityChecks = [
-    {
-      label: copy.qualityContactChannel,
-      detail: selectedContact.email ?? selectedContact.phone ?? "",
-      status: selectedContact.email || selectedContact.phone ? "ok" : "missing",
-    },
-    {
-      label: copy.qualityOrganization,
-      detail: selectedOrganization?.name ?? "",
-      status: selectedOrganization ? "ok" : "warning",
-    },
-    {
-      label: copy.qualityDealRole,
-      detail: selectedRelationships
-        .map((relationship) => getCrmRelationshipRoleLabel(relationship.role, language))
-        .join(", "),
-      status: selectedRelationships.length > 0 ? "ok" : "warning",
-    },
-    {
-      label: copy.qualityConsent,
-      detail: selectedConsents
-        .map((consent) => `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`)
-        .join(", "),
-      status: selectedConsents.length > 0 ? "ok" : "warning",
-    },
-    {
-      label: copy.qualityNextAction,
-      detail: selectedLead?.nextAction ? getCrmSystemTextLabel(selectedLead.nextAction, language) : "",
-      status: selectedLead?.nextAction ? "ok" : "warning",
-    },
-    {
-      label: copy.qualityNoDuplicate,
-      detail: selectedDuplicateSignals.map((contact) => contact.name).join(", "),
-      status: selectedDuplicateSignals.length === 0 ? "ok" : "warning",
-    },
-  ] as const;
-  const qualityScore = Math.round(
-    (qualityChecks.filter((check) => check.status === "ok").length / qualityChecks.length) * 100,
-  );
+  const dataModelMapping = selectedContact
+    ? [
+        {
+          label: copy.mapping.name,
+          novalure: selectedContact.name,
+          targetField: "first_name, last_name",
+          ready: Boolean(selectedContact.name),
+        },
+        {
+          label: copy.mapping.email,
+          novalure: selectedContact.email,
+          targetField: "email",
+          ready: Boolean(selectedContact.email),
+        },
+        {
+          label: copy.mapping.phone,
+          novalure: selectedContact.phone,
+          targetField: "phone / mobile_phone",
+          ready: Boolean(selectedContact.phone),
+        },
+        {
+          label: copy.mapping.organization,
+          novalure: selectedOrganization?.name,
+          targetField: "linked_organization",
+          ready: Boolean(selectedOrganization),
+        },
+        {
+          label: copy.mapping.lifecycle,
+          novalure: selectedOrganization?.lifecycleStage
+            ? getCrmLifecycleLabel(selectedOrganization.lifecycleStage, language)
+            : undefined,
+          targetField: "contact_status",
+          ready: Boolean(selectedOrganization?.lifecycleStage),
+        },
+        {
+          label: copy.mapping.source,
+          novalure: getCrmSourceLabel(selectedContact.source, language),
+          targetField: "analytics_source / record_source",
+          ready: Boolean(selectedContact.source),
+        },
+        {
+          label: copy.mapping.owner,
+          novalure: contactOwner?.name,
+          targetField: "owner_id",
+          ready: Boolean(contactOwner),
+        },
+      ]
+    : [];
+  const qualityChecks = selectedContact
+    ? ([
+        {
+          label: copy.qualityContactChannel,
+          detail: selectedContact.email ?? selectedContact.phone ?? "",
+          status: selectedContact.email || selectedContact.phone ? "ok" : "missing",
+        },
+        {
+          label: copy.qualityOrganization,
+          detail: selectedOrganization?.name ?? "",
+          status: selectedOrganization ? "ok" : "warning",
+        },
+        {
+          label: copy.qualityDealRole,
+          detail: selectedRelationships
+            .map((relationship) => getCrmRelationshipRoleLabel(relationship.role, language))
+            .join(", "),
+          status: selectedRelationships.length > 0 ? "ok" : "warning",
+        },
+        {
+          label: copy.qualityConsent,
+          detail: selectedConsents
+            .map((consent) => `${getCrmConsentChannelLabel(consent.channel, language)}: ${getCrmConsentStatusLabel(consent.status, language)}`)
+            .join(", "),
+          status: selectedConsents.length > 0 ? "ok" : "warning",
+        },
+        {
+          label: copy.qualityNextAction,
+          detail: selectedLead?.nextAction ? getCrmSystemTextLabel(selectedLead.nextAction, language) : "",
+          status: selectedLead?.nextAction ? "ok" : "warning",
+        },
+        {
+          label: copy.qualityNoDuplicate,
+          detail: selectedDuplicateSignals.map((contact) => contact.name).join(", "),
+          status: selectedDuplicateSignals.length === 0 ? "ok" : "warning",
+        },
+      ] as const)
+    : [];
+  const qualityScore = qualityChecks.length
+    ? Math.round(
+        (qualityChecks.filter((check) => check.status === "ok").length / qualityChecks.length) * 100,
+      )
+    : 0;
   const readyMappingCount = dataModelMapping.filter((item) => item.ready).length;
   const contactDetailTabs: Array<{ id: ContactDetailTab; label: string }> = [
     { id: "overview", label: copy.tabs.overview },
@@ -485,10 +498,25 @@ export function ContactCommandCenter({
       ...contactRecords.map((contact) => contact.source).filter(isCrmLeadSource),
     ]),
   );
+  const draftProjects = activeProjectId
+    ? projects.filter((project) => project.id === activeProjectId)
+    : projects;
   const showFeedback = (tone: ContactFeedback["tone"], message: string) => {
     setFeedback({ message, tone });
   };
   const clearFeedback = () => setFeedback(null);
+  const openCreateContact = () => {
+    setNewContact(createContactDraft({
+      activeProjectId,
+      contacts,
+      currentUserId,
+      organizations,
+      projects,
+    }));
+    setIsCreateOpen(true);
+    setArchiveConfirmContactId("");
+    clearFeedback();
+  };
   const refreshAfterContactChange = async (overlayContactIdToClear?: string) => {
     await onContactsChanged?.();
     if (overlayContactIdToClear) {
@@ -523,7 +551,7 @@ export function ContactCommandCenter({
   };
   const persistContact = async (contact: Contact) => {
     try {
-      const response = await fetch("/api/crm/contacts", {
+      const response = await csrfFetch("/api/crm/contacts", {
         body: JSON.stringify({ contact }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -543,16 +571,20 @@ export function ContactCommandCenter({
       return;
     }
 
-    const project = projects.find((item) => item.id === newContact.projectId) ?? projects[0];
+    const project = draftProjects.find((item) => item.id === newContact.projectId);
+    if (!project) {
+      showFeedback("error", copy.validationRequired);
+      return;
+    }
     const createdContact: Contact = {
       ...newContact,
       id: "",
-      workspaceId: newContact.workspaceId || contacts[0]?.workspaceId || project?.workspaceId || "",
-      projectId: project?.id ?? contacts[0]?.projectId ?? "",
+      workspaceId,
+      projectId: project.id,
       organizationId: newContact.organizationId,
       ownerUserId: canAssignOwner ? newContact.ownerUserId : undefined,
       name: newContact.name.trim() || newContact.email || newContact.phone || copy.newContactFallback,
-      project: project?.name ?? newContact.project,
+      project: project.name,
       intent: newContact.intent || copy.manualIntent,
       consent: newContact.consent || "Nur CRM",
       source: newContact.source || ("Manual" as Contact["source"]),
@@ -570,7 +602,13 @@ export function ContactCommandCenter({
 
     setServerContactOverlays((current) => [persistedContact, ...current.filter((contact) => contact.id !== persistedContact.id)]);
     setSelectedContactId(persistedContact.id);
-    setNewContact(createContactDraft({ contacts: [persistedContact, ...contacts], currentUserId, organizations, projects }));
+    setNewContact(createContactDraft({
+      activeProjectId,
+      contacts: [persistedContact, ...contacts],
+      currentUserId,
+      organizations,
+      projects,
+    }));
     setIsCreateOpen(false);
     setActiveView("all");
     if (nextAction === "task") {
@@ -602,7 +640,7 @@ export function ContactCommandCenter({
 
     setPostCreateSaving(true);
     try {
-      const response = await fetch("/api/crm/tasks", {
+      const response = await csrfFetch("/api/crm/tasks", {
         body: JSON.stringify({
           task: {
             contactId: postCreateContact.id,
@@ -639,7 +677,7 @@ export function ContactCommandCenter({
 
     setPostCreateSaving(true);
     try {
-      const response = await fetch("/api/crm/leads", {
+      const response = await csrfFetch("/api/crm/leads", {
         body: JSON.stringify({
           lead: {
             contactId: postCreateContact.id,
@@ -700,7 +738,7 @@ export function ContactCommandCenter({
     if (!selectedContact) return;
 
     try {
-      const response = await fetch(`/api/crm/contacts?id=${encodeURIComponent(selectedContact.id)}`, {
+      const response = await csrfFetch(`/api/crm/contacts?id=${encodeURIComponent(selectedContact.id)}`, {
         method: "DELETE",
       });
       const payload = await response.json().catch(() => null) as { error?: string } | null;
@@ -722,14 +760,6 @@ export function ContactCommandCenter({
     }
   };
 
-  if (!hasSelectedContact && !canWriteContacts) {
-    return (
-      <section className="rounded-lg border border-dashed border-stone-300 bg-white p-6 text-sm text-stone-600">
-        {copy.noContact}
-      </section>
-    );
-  }
-
   return (
     <section className="min-w-0 space-y-4">
       <article className="rounded-lg border border-stone-200 bg-white p-5">
@@ -745,11 +775,7 @@ export function ContactCommandCenter({
             {canWriteContacts ? (
               <button
                 className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={() => {
-                  setIsCreateOpen(true);
-                  setArchiveConfirmContactId("");
-                  clearFeedback();
-                }}
+                onClick={openCreateContact}
                 type="button"
               >
                 {copy.addContact}
@@ -882,13 +908,17 @@ export function ContactCommandCenter({
                     const project = projects.find((item) => item.id === event.target.value);
                     setNewContact((current) => ({
                       ...current,
-                      projectId: project?.id ?? current.projectId,
-                      project: project?.name ?? current.project,
+                      projectId: project?.id ?? "",
+                      project: project?.name ?? "",
                     }));
                   }}
+                  required
                   value={newContact.projectId}
                 >
-                  {projects.map((project) => (
+                  <option value="">
+                    {language === "de" ? "Projekt auswählen" : "Select project"}
+                  </option>
+                  {draftProjects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
                     </option>
@@ -942,7 +972,8 @@ export function ContactCommandCenter({
                 { action: "lead" as const, label: copy.saveAndLead },
               ].map((button) => (
                 <button
-                  className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                  className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!draftProjects.some((project) => project.id === newContact.projectId)}
                   key={button.label}
                   onClick={() => void createContact(button.action)}
                   type="button"
@@ -1152,7 +1183,8 @@ export function ContactCommandCenter({
         ) : null}
       </article>
 
-      <section className="grid min-w-0 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)]">
+      {selectedContact ? (
+        <section className="grid min-w-0 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)]">
         <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-sm font-semibold">{copy.people}</h4>
@@ -1278,7 +1310,7 @@ export function ContactCommandCenter({
                     {copy.personRecord}
                   </p>
                   <h4 className="mt-1 break-words text-2xl font-semibold">
-                    {selectedContact.name}
+                    {selectedContact.name || copy.noValue}
                   </h4>
                   <p className="mt-1 break-words text-sm text-stone-600">
                     {getCrmLeadTypeLabel(selectedContact.role, language)} · {getCrmSourceLabel(selectedContact.source, language)}
@@ -1724,9 +1756,29 @@ export function ContactCommandCenter({
             </div>
           </article>
         </section>
-      </section>
+        </section>
+      ) : (
+        <article
+          className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center"
+          data-contact-empty-state="true"
+        >
+          <h4 className="text-lg font-semibold text-slate-900">{copy.noContact}</h4>
+          {canWriteContacts ? (
+            <>
+              <p className="mx-auto mt-2 max-w-2xl text-sm text-stone-600">{copy.quickCreateHelp}</p>
+              <button
+                className="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={openCreateContact}
+                type="button"
+              >
+                {copy.addContact}
+              </button>
+            </>
+          ) : (
+            <p className="mx-auto mt-2 max-w-2xl text-sm text-stone-600">{copy.readOnlyContacts}</p>
+          )}
+        </article>
+      )}
     </section>
   );
 }
-
-

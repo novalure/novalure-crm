@@ -1,37 +1,35 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
-import {
-  processDueTeamsNotifications,
-  retryTeamsNotificationJob,
-} from "@/lib/db/teams-notification-repositories";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { reconcileTeamsNotificationJob } from "@/lib/db/teams-notification-repositories";
 
 type RouteContext = {
   params: Promise<{ notificationId: string }>;
 };
 
 export async function POST(request: Request, context: RouteContext) {
-  const auth = await requirePermission(request, "crm:write");
+  const auth = await resolveWorkspaceScopedSession(request, {
+    capability: "settings:manage",
+    permission: "crm:write",
+  });
   if (!auth.ok) return auth.response;
 
+  const body = await request.json().catch(() => null) as { targetId?: unknown } | null;
+  const targetId = typeof body?.targetId === "string" ? body.targetId : "";
   const { notificationId } = await context.params;
-  const retry = await retryTeamsNotificationJob({
+  const reconciliation = await reconcileTeamsNotificationJob({
     notificationId,
     session: auth.session,
+    targetId,
   });
 
-  if (!retry.ok || !retry.jobId) {
-    return NextResponse.json({ error: retry.error ?? "retry_failed" }, { status: 400 });
+  if (!reconciliation.ok || !reconciliation.jobId) {
+    return NextResponse.json(reconciliation, { status: reconciliation.state === "blocked" ? 409 : 400 });
   }
-
-  const processed = await processDueTeamsNotifications({
-    jobIds: [retry.jobId],
-    workspaceId: auth.session.workspaceId,
-  });
 
   return NextResponse.json({
     ok: true,
-    jobId: retry.jobId,
-    processed,
+    jobId: reconciliation.jobId,
+    state: reconciliation.state,
   });
 }
 

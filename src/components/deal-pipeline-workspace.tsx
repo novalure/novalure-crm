@@ -22,6 +22,7 @@ import type {
   Task,
   WorkspaceUser,
 } from "@/lib/crm-types";
+import { parseDealValueCents, validateDealCloseDate, validateDealValue } from "@/lib/deal-validation";
 import {
   getCrmDealStageLabel,
   getCrmLeadTypeLabel,
@@ -35,6 +36,7 @@ import {
   displayTimeZone,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type DealPipelineWorkspaceProps = {
   calendarEvents: CalendarEvent[];
@@ -139,6 +141,11 @@ const PRIORITY_OPTIONS: Array<Task["priority"]> = ["Hoch", "Mittel", "Normal"];
 
 const NOW = new Date();
 const TODAY_START = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).getTime();
+const TODAY_DATE_KEY = [
+  NOW.getFullYear(),
+  String(NOW.getMonth() + 1).padStart(2, "0"),
+  String(NOW.getDate()).padStart(2, "0"),
+].join("-");
 
 const riskStyles: Record<Deal["riskLevel"], string> = {
   niedrig: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -352,11 +359,6 @@ function formatDateTime(value: string | undefined, locale: string) {
   }).format(date);
 }
 
-function sanitizeAmount(value: string) {
-  const trimmed = value.trim();
-  return trimmed || "0";
-}
-
 function getDaysBetween(start: string | undefined, end = NOW) {
   if (!start) {
     return 0;
@@ -548,13 +550,14 @@ export function DealPipelineWorkspace({
   const [savedMessage, setSavedMessage] = useState("");
   const [savingDealId, setSavingDealId] = useState("");
   const [creatingDeal, setCreatingDeal] = useState(false);
+  const [createValidationError, setCreateValidationError] = useState("");
   const [newDeal, setNewDeal] = useState({
     contactId: initialContact?.id ?? "",
-    expectedCloseDate: "2026-06-30",
+    expectedCloseDate: "",
     name: initialContact ? `${initialContact.name} Deal` : "",
     probability: 50,
     stage: WORK_STAGE_TITLES[0],
-    value: "250.000",
+    value: "",
   });
   const activeStageConfigs = useMemo(
     () => getStageConfigs({ crmPipelineStages, deals, pipeline, projectFilter }),
@@ -598,7 +601,7 @@ export function DealPipelineWorkspace({
     if (!selectedDealId) return;
 
     let cancelled = false;
-    void fetch(`/api/crm/deals/${encodeURIComponent(selectedDealId)}/stage-history${workspaceQuery}`, { cache: "no-store" })
+    void csrfFetch(`/api/crm/deals/${encodeURIComponent(selectedDealId)}/stage-history${workspaceQuery}`, { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
       .then((payload: { history?: DealStageHistoryEntry[]; source?: string } | null) => {
         const history = payload?.history;
@@ -890,7 +893,7 @@ export function DealPipelineWorkspace({
 
   const persistDeal = async (deal: Deal, reason?: string) => {
     try {
-      const response = await fetch(`/api/crm/deals${workspaceQuery}`, {
+      const response = await csrfFetch(`/api/crm/deals${workspaceQuery}`, {
         body: JSON.stringify({ deal, reason }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -913,7 +916,7 @@ export function DealPipelineWorkspace({
     toStage: DealStage;
   }) => {
     try {
-      const response = await fetch(`/api/crm/deals/${encodeURIComponent(input.dealId)}/stage${workspaceQuery}`, {
+      const response = await csrfFetch(`/api/crm/deals/${encodeURIComponent(input.dealId)}/stage${workspaceQuery}`, {
         body: JSON.stringify({
           reason: input.reason,
           reasonCategory: input.reasonCategory,
@@ -1193,8 +1196,31 @@ export function DealPipelineWorkspace({
       return;
     }
 
+    const normalizedValue = newDeal.value.trim();
+    const validationCode =
+      validateDealValue(normalizedValue, { required: true }) ??
+      validateDealCloseDate(newDeal.expectedCloseDate, {
+        required: true,
+        todayDateKey: TODAY_DATE_KEY,
+      });
+    const validationError = validationCode
+      ? {
+          close_date_invalid: text.closeDateInvalid,
+          close_date_past: text.closeDatePast,
+          close_date_required: text.closeDateRequired,
+          value_invalid: text.dealValueInvalid,
+          value_required: text.dealValueRequired,
+          value_too_high: text.dealValueTooHigh,
+        }[validationCode]
+      : "";
+    if (validationError) {
+      setCreateValidationError(validationError);
+      return;
+    }
+
     setCreatingDeal(true);
     setSavedMessage("");
+    setCreateValidationError("");
     const project = projects.find((item) => item.id === contact.projectId);
     const now = new Date();
     const probability = Number(newDeal.probability);
@@ -1208,7 +1234,7 @@ export function DealPipelineWorkspace({
       ownerUserId: users[0]?.id,
       name: newDeal.name.trim() || `${contact.name} Deal`,
       stage: normalizeDealStage(createStage, orderedStageTitles),
-      value: sanitizeAmount(newDeal.value),
+      value: String((parseDealValueCents(newDeal.value) ?? 0) / 100),
       probability,
       expectedCloseDate: newDeal.expectedCloseDate,
       riskLevel: probability < 45 ? "hoch" : probability < 65 ? "mittel" : "niedrig",
@@ -1236,9 +1262,10 @@ export function DealPipelineWorkspace({
       setNewDeal((current) => ({
         ...current,
         name: "",
+        expectedCloseDate: "",
         probability: 50,
         stage: firstWorkStage,
-        value: "250.000",
+        value: "",
       }));
       setIsCreateOpen(false);
       setSavedMessage(text.createdDeal(project?.name ?? contact.project));
@@ -1463,8 +1490,11 @@ export function DealPipelineWorkspace({
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.amount}
                 <input
+                  aria-invalid={Boolean(createValidationError) || undefined}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  inputMode="decimal"
                   onChange={(event) => setNewDeal((current) => ({ ...current, value: event.target.value }))}
+                  required
                   value={newDeal.value}
                 />
               </label>
@@ -1482,13 +1512,21 @@ export function DealPipelineWorkspace({
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.closeDate}
                 <input
+                  aria-invalid={Boolean(createValidationError) || undefined}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  min={TODAY_DATE_KEY}
                   onChange={(event) => setNewDeal((current) => ({ ...current, expectedCloseDate: event.target.value }))}
+                  required
                   type="date"
                   value={newDeal.expectedCloseDate}
                 />
               </label>
             </div>
+            {createValidationError ? (
+              <p aria-live="polite" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
+                {createValidationError}
+              </p>
+            ) : null}
             <button
               className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
               disabled={contacts.length === 0 || creatingDeal}

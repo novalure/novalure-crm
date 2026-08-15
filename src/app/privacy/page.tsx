@@ -7,13 +7,7 @@ import {
   LegalSections,
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
-import { resolvePublicLanguage } from "@/lib/public-language";
-
-export const metadata: Metadata = {
-  title: "Privacy Policy | Novalure CRM",
-  description:
-    "Privacy Policy for Novalure CRM under Irish and EU data protection law.",
-};
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
 
 const updated = "20 May 2026";
 const pagePath = "/privacy";
@@ -36,6 +30,14 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Datenschutzerklärung",
   },
 };
+
+export async function generateMetadata({ searchParams }: PrivacyPageProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const page = pageCopy[language];
+  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
+}
 
 const englishSections = [
   {
@@ -292,11 +294,7 @@ const germanSections = [
 export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const page = pageCopy[language];
 
   return (

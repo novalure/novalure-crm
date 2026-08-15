@@ -1,33 +1,72 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
-import { listWorkspaceMedia, maxMediaUploadBytes, MediaStoreError, publishWorkspaceMedia, saveWorkspaceFile } from "@/lib/media-store";
+import {
+  listWorkspaceMedia,
+  maxMediaUploadBytes,
+  MediaStoreError,
+  publishWorkspaceMedia,
+  revokeWorkspaceMediaPublication,
+  saveWorkspaceFile,
+  serializeMediaAsset,
+} from "@/lib/media-store";
+
+const privateJsonHeaders = { "cache-control": "private, no-store" };
 
 export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
   const media = await listWorkspaceMedia(auth.session.workspaceId);
-  return NextResponse.json(media);
+  return NextResponse.json(
+    { assets: media.assets.map(serializeMediaAsset), quota: media.quota },
+    { headers: privateJsonHeaders },
+  );
 }
 
 export async function POST(request: Request) {
   const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
 
+  if (request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const assetId = typeof body?.assetId === "string" ? body.assetId : "";
+    if ((body?.action !== "publish" && body?.action !== "revoke") || !assetId) {
+      return NextResponse.json({ error: "Invalid media action." }, { headers: privateJsonHeaders, status: 400 });
+    }
+
+    try {
+      const changedAsset = body.action === "publish"
+        ? await publishWorkspaceMedia(assetId, auth.session.workspaceId)
+        : await revokeWorkspaceMediaPublication(assetId, auth.session.workspaceId);
+      if (!changedAsset) {
+        return NextResponse.json({ error: "Media asset not found." }, { headers: privateJsonHeaders, status: 404 });
+      }
+      return NextResponse.json({ asset: serializeMediaAsset(changedAsset) }, { headers: privateJsonHeaders });
+    } catch (error) {
+      if (error instanceof MediaStoreError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { headers: privateJsonHeaders, status: statusForMediaError(error) },
+        );
+      }
+      return NextResponse.json({ error: "Media publication failed." }, { headers: privateJsonHeaders, status: 500 });
+    }
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ error: "Invalid upload form data." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid upload form data." }, { headers: privateJsonHeaders, status: 400 });
   }
 
   const file = formData.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing media file." }, { status: 400 });
+    return NextResponse.json({ error: "Missing media file." }, { headers: privateJsonHeaders, status: 400 });
   }
 
   if (file.size > maxMediaUploadBytes) {
-    return NextResponse.json({ error: "Files must be 10 MB or smaller." }, { status: 413 });
+    return NextResponse.json({ error: "Files must be 10 MB or smaller." }, { headers: privateJsonHeaders, status: 413 });
   }
 
   try {
@@ -42,12 +81,18 @@ export async function POST(request: Request) {
       ? await publishWorkspaceMedia(asset.id, auth.session.workspaceId)
       : null;
     const media = await listWorkspaceMedia(auth.session.workspaceId);
-    return NextResponse.json({ asset: publishedAsset ?? asset, quota: media.quota }, { status: 201 });
+    return NextResponse.json(
+      { asset: serializeMediaAsset(publishedAsset ?? asset), quota: media.quota },
+      { headers: privateJsonHeaders, status: 201 },
+    );
   } catch (error) {
     if (error instanceof MediaStoreError) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: statusForMediaError(error) });
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { headers: privateJsonHeaders, status: statusForMediaError(error) },
+      );
     }
-    return NextResponse.json({ error: "Media upload failed." }, { status: 500 });
+    return NextResponse.json({ error: "Media upload failed." }, { headers: privateJsonHeaders, status: 500 });
   }
 }
 
@@ -61,6 +106,7 @@ function isTruthy(value: FormDataEntryValue | null) {
 
 function statusForMediaError(error: MediaStoreError) {
   if (error.code === "FILE_TOO_LARGE" || error.code === "IMAGE_TOO_LARGE") return 413;
+  if (error.code === "PRIVATE_STORAGE_UNAVAILABLE" || error.code === "PUBLIC_STORAGE_UNAVAILABLE") return 503;
   if (error.code === "WORKSPACE_QUOTA_EXCEEDED") return 409;
   return 415;
 }

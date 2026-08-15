@@ -6,6 +6,10 @@ import {
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
 import type { FormField, WebsiteForm } from "@/lib/form-types";
+import {
+  publicSubmissionControlFields,
+  type PublicSubmissionProof,
+} from "@/lib/public-submission-contract";
 
 export function renderStaticFormHtml({
   action,
@@ -14,6 +18,7 @@ export function renderStaticFormHtml({
   publicKey,
   returnTo,
   source,
+  submissionProof,
 }: {
   action: string;
   copy: FormRuntimeCopy;
@@ -21,6 +26,7 @@ export function renderStaticFormHtml({
   publicKey: string;
   returnTo: string;
   source: string;
+  submissionProof: PublicSubmissionProof;
 }) {
   const steps = normalizeFormSteps(form);
   const progress = steps.length > 1 ? Math.round((1 / steps.length) * 100) : 100;
@@ -59,6 +65,11 @@ export function renderStaticFormHtml({
 <input name="funnel_id" type="hidden" value="${escapeHtml(form.funnelId)}">
 <input name="page_url" type="hidden" value="">
 <input name="referrer" type="hidden" value="">
+<input name="${publicSubmissionControlFields.idempotencyKey}" type="hidden" value="${escapeHtml(submissionProof.idempotencyKey)}">
+<input name="${publicSubmissionControlFields.issuedAt}" type="hidden" value="${submissionProof.issuedAt}">
+<input name="${publicSubmissionControlFields.expiresAt}" type="hidden" value="${submissionProof.expiresAt}">
+<input name="${publicSubmissionControlFields.proof}" type="hidden" value="${escapeHtml(submissionProof.signature)}">
+<label aria-hidden="true" class="novalure-honeypot">Company<input autocomplete="off" name="${publicSubmissionControlFields.honeypot}" tabindex="-1" type="text"></label>
 ${hiddenFields.map((field) => `<input data-field-id="${escapeHtml(field.id)}" name="${escapeHtml(getFieldName(field))}" type="hidden" value="${escapeHtml(getFieldDefaultValue(field))}">`).join("")}
 <div class="novalure-card">
 <p class="novalure-eyebrow">Novalure</p>

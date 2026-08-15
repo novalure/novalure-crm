@@ -1874,13 +1874,15 @@ export async function findBotChannelAccountForWebhook(input: {
   channel: string;
 }) {
   const accountRef = cleanString(input.accountRef);
-  if (!canPersist() || !accountRef) return null;
+  if (!canPersist()) return { account: null, status: "unavailable" as const };
+  if (!accountRef) return { account: null, status: "not_found" as const };
 
-  const row = await queryOne<{
+  const rows = await queryRows<{
     id: string;
     workspaceId: string;
     workspaceName: string | null;
     channel: string;
+    externalAccountId: string;
     provider: string;
     metadata: unknown;
   }>(
@@ -1890,62 +1892,55 @@ export async function findBotChannelAccountForWebhook(input: {
         bca.workspace_id as "workspaceId",
         w.name as "workspaceName",
         bca.channel,
+        bca.external_account_id as "externalAccountId",
         bca.provider,
         bca.metadata
       from bot_channel_accounts bca
       left join workspaces w on w.id = bca.workspace_id
       where bca.active = true
-        and bca.channel = $1
+        and bca.setup_status in ('ready', 'connected')
+        and bca.workspace_id is not null
+        and lower(bca.channel) = lower($1)
         and bca.external_account_id = $2
       order by bca.updated_at desc
-      limit 1
+      limit 2
     `,
     [input.channel, accountRef],
   );
 
-  if (!row) return null;
+  if (rows.length === 0) return { account: null, status: "not_found" as const };
+  if (rows.length !== 1) return { account: null, status: "ambiguous" as const };
+
+  const row = rows[0];
+  if (!row || !isUuid(row.workspaceId)) return { account: null, status: "not_found" as const };
 
   return {
-    ...row,
-    credentials: decryptBotChannelCredentials(row.metadata),
+    account: {
+      ...row,
+      credentials: decryptBotChannelCredentials(row.metadata),
+    },
+    status: "matched" as const,
   };
 }
 
 export async function insertBotChannelWebhook(input: {
-  workspaceId?: string | null;
-  channelAccountId?: string | null;
-  channel: string;
-  externalMessageId?: string | null;
+  workspaceId: string;
+  channelAccountId: string;
+  externalMessageId: string;
   contactRef?: string | null;
   eventType: string;
   payload: unknown;
   normalizedMessage: unknown;
   status?: string;
 }) {
-  if (!canPersist() || !isUuid(input.workspaceId)) return null;
+  if (
+    !canPersist() ||
+    !isUuid(input.workspaceId) ||
+    !isUuid(input.channelAccountId) ||
+    !cleanString(input.externalMessageId)
+  ) return null;
 
-  if (input.externalMessageId) {
-    const existing = await queryOne<{ id: string; status: string }>(
-      `
-        select id, status
-        from bot_channel_webhooks
-        where workspace_id = $1
-          and channel = $2
-          and external_message_id = $3
-        order by received_at asc
-        limit 1
-      `,
-      [input.workspaceId, input.channel, input.externalMessageId],
-    );
-
-    if (existing) {
-      return { duplicate: true, id: existing.id, status: existing.status };
-    }
-  }
-
-  const params: unknown[] = [input.workspaceId];
-  const accountSql = addUuidParam(params, input.channelAccountId);
-  const channelSql = addParam(params, input.channel);
+  const params: unknown[] = [input.channelAccountId, input.workspaceId];
   const externalSql = addParam(params, input.externalMessageId ?? null);
   const contactSql = addParam(params, input.contactRef ?? null);
   const eventSql = addParam(params, input.eventType);
@@ -1959,16 +1954,35 @@ export async function insertBotChannelWebhook(input: {
         workspace_id, channel_account_id, channel, external_message_id, contact_ref,
         event_type, payload, normalized_message, status
       )
-      values (
-        $1, ${accountSql}, ${channelSql}, ${externalSql}, ${contactSql},
+      select
+        bca.workspace_id, bca.id, bca.channel, ${externalSql}, ${contactSql},
         ${eventSql}, ${payloadSql}::jsonb, ${normalizedSql}::jsonb, ${statusSql}
-      )
+      from bot_channel_accounts bca
+      where bca.id = $1::uuid
+        and bca.workspace_id = $2::uuid
+        and bca.active = true
+        and bca.setup_status in ('ready', 'connected')
+      on conflict do nothing
       returning id, status
     `,
     params,
   );
 
-  return row ? { duplicate: false, id: row.id, status: row.status } : null;
+  if (row) return { duplicate: false, id: row.id, status: row.status };
+
+  const existing = await queryOne<{ id: string; status: string }>(
+    `
+      select id, status
+      from bot_channel_webhooks
+      where channel_account_id = $1::uuid
+        and external_message_id = $2
+      order by received_at asc
+      limit 1
+    `,
+    [input.channelAccountId, input.externalMessageId],
+  );
+
+  return existing ? { duplicate: true, id: existing.id, status: existing.status } : null;
 }
 
 export async function listBotChannelWebhookEvents(input: {

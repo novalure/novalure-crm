@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermissionAndProductCapability, resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import type { PropertyUnitStatus } from "@/lib/crm-types";
 import { loadPaginatedPropertyUnits } from "@/lib/db/crm-loaders";
 import {
@@ -75,7 +75,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermissionAndProductCapability(request, "crm:write", "reservations:write");
+  const auth = await resolveWorkspaceScopedSession(request, {
+    permission: "crm:write",
+    capability: "reservations:write",
+  });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);

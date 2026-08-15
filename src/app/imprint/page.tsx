@@ -8,13 +8,7 @@ import {
 } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
 import { companyLegalDetails } from "@/lib/legal";
-import { resolvePublicLanguage } from "@/lib/public-language";
-
-export const metadata: Metadata = {
-  title: "Legal Imprint | Novalure CRM",
-  description:
-    "Company and contact information for Novalure CLG, an Irish company limited by guarantee.",
-};
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
 
 const updated = "December 2025";
 const pagePath = "/imprint";
@@ -37,6 +31,14 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Impressum",
   },
 };
+
+export async function generateMetadata({ searchParams }: ImprintPageProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const page = pageCopy[language];
+  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
+}
 
 const englishSections = [
   {
@@ -123,11 +125,7 @@ const germanSections = [
 export default async function ImprintPage({ searchParams }: ImprintPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const page = pageCopy[language];
 
   return (

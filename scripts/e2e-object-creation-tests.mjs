@@ -4,17 +4,17 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "@neondatabase/serverless";
+import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const require = createRequire(import.meta.url);
 const { createJiti } = require("jiti");
 
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
 const workspaceId = "e2e00000-0000-4000-8000-000000000001";
 const userId = "e2e00000-0000-4000-8000-000000000002";
 const workspaceName = "UATTEST_E2E_Object_Flow";
 const workspaceSlug = "uattest-e2e-object-flow";
 const testDataPrefix = "UATTEST_E2E";
+const testOwnerEmail = "uattest_e2e_owner@example.test";
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return {};
@@ -43,26 +43,17 @@ function maskDatabaseUrl(value) {
 }
 
 function createDatabaseGuard(env, databaseUrl) {
-  const parsed = new URL(databaseUrl);
-  const projectId = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
-
   function assertTestDatabase(scope = "database access") {
-    if (parsed.hostname !== testDbHost) {
-      throw new Error(`Refusing ${scope}: active DB host is not test (${testDbHost})`);
-    }
-    if (!projectId.includes(testDbSuffix)) {
-      throw new Error(`Refusing ${scope}: project id does not contain ${testDbSuffix}`);
-    }
+    return assertDatabaseTarget({ databaseUrl, env, purpose: scope, target: "test" });
   }
 
   return {
     assertTestDatabase,
-    projectId,
     report() {
+      const target = assertTestDatabase("phase2 UATTEST_E2E run");
       console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-      console.log(`Active DB host: ${parsed.hostname}`);
-      console.log(`Project ID suffix verified: ${projectId ? "***" + projectId.slice(-8) : "missing"}`);
-      assertTestDatabase("phase2 UATTEST_E2E run");
+      console.log(`Active DB host: ${target.host}`);
+      console.log("Active project identity verified");
     },
   };
 }
@@ -125,6 +116,24 @@ async function readExternalMarkerCounts(pool) {
 }
 
 async function collectCleanupInventory(pool) {
+  const authIdentityRows = await pool.query(
+    `
+      select
+        ai.id,
+        ai.normalized_email as "normalizedEmail",
+        ai.display_email as "displayEmail",
+        coalesce(
+          array_agg(wu.workspace_id::text order by wu.workspace_id) filter (where wu.id is not null),
+          '{}'::text[]
+        ) as "workspaceIds"
+      from auth_identities ai
+      left join workspace_users wu on wu.auth_identity_id = ai.id
+      where ai.normalized_email = $1
+      group by ai.id, ai.normalized_email, ai.display_email
+      order by ai.created_at
+    `,
+    [testOwnerEmail],
+  );
   const workspaceRows = await pool.query(
     `
       select id, name, slug
@@ -140,6 +149,7 @@ async function collectCleanupInventory(pool) {
   const scopedCounts = await listWorkspaceScopedCounts(pool);
   if (workspaceRows.rowCount === 0) {
     return {
+      authIdentities: authIdentityRows.rows,
       details: {},
       externalMarkers: await readExternalMarkerCounts(pool),
       scopedCounts,
@@ -229,6 +239,7 @@ async function collectCleanupInventory(pool) {
   }
 
   return {
+    authIdentities: authIdentityRows.rows,
     details,
     externalMarkers: await readExternalMarkerCounts(pool),
     scopedCounts,
@@ -238,7 +249,23 @@ async function collectCleanupInventory(pool) {
 }
 
 function assertCleanupInventorySafe(inventory) {
-  if (!inventory.workspace) return;
+  const unsafe = [];
+  for (const row of inventory.authIdentities ?? []) {
+    if (
+      row.normalizedEmail !== testOwnerEmail ||
+      row.displayEmail !== testOwnerEmail ||
+      row.workspaceIds.some((id) => id !== workspaceId)
+    ) {
+      unsafe.push(["auth_identities", row.id]);
+    }
+  }
+
+  if (!inventory.workspace) {
+    if (unsafe.length) {
+      throw new Error(`Cleanup guard failed: non-UATTEST_E2E rows in delete list: ${JSON.stringify(unsafe)}`);
+    }
+    return;
+  }
   const workspaceSafe =
     inventory.workspace.id === workspaceId &&
     inventory.workspace.name === workspaceName &&
@@ -248,7 +275,6 @@ function assertCleanupInventorySafe(inventory) {
     throw new Error(`Cleanup guard failed: fixture workspace identity mismatch (${JSON.stringify(inventory.workspace)}).`);
   }
 
-  const unsafe = [];
   for (const row of inventory.details.workspaceUsers ?? []) {
     if (!hasTestPrefix(row.name) && !String(row.email ?? "").startsWith("uattest_e2e")) unsafe.push(["workspace_users", row.id]);
   }
@@ -295,8 +321,8 @@ async function cleanupFixture(pool, guard, { execute }) {
   assertCleanupInventorySafe(inventory);
   console.log(`[CLEANUP-DRY-RUN] ${JSON.stringify(inventory, null, 2)}`);
 
-  if (!inventory.workspace) {
-    console.log("[CLEANUP] No UATTEST_E2E fixture workspace found.");
+  if (!inventory.workspace && (inventory.authIdentities?.length ?? 0) === 0) {
+    console.log("[CLEANUP] No UATTEST_E2E fixture workspace or auth identity found.");
     return inventory;
   }
 
@@ -304,18 +330,40 @@ async function cleanupFixture(pool, guard, { execute }) {
 
   await writeQuery(pool, guard, "phase4 cleanup begin", "begin");
   try {
-    const deleted = await writeQuery(pool, guard, "delete UATTEST_E2E fixture workspace", `
-      delete from workspaces
-      where id = $1::uuid
-        and name = $2
-        and slug = $3
-      returning id, name, slug
-    `, [workspaceId, workspaceName, workspaceSlug]);
-    if (deleted.rowCount !== 1) {
-      throw new Error(`Cleanup delete expected one workspace row, deleted ${deleted.rowCount}.`);
+    let deletedWorkspace = { rowCount: 0, rows: [] };
+    if (inventory.workspace) {
+      deletedWorkspace = await writeQuery(pool, guard, "delete UATTEST_E2E fixture workspace", `
+        delete from workspaces
+        where id = $1::uuid
+          and name = $2
+          and slug = $3
+        returning id, name, slug
+      `, [workspaceId, workspaceName, workspaceSlug]);
+      if (deletedWorkspace.rowCount !== 1) {
+        throw new Error(`Cleanup delete expected one workspace row, deleted ${deletedWorkspace.rowCount}.`);
+      }
     }
+
+    const deletedAuthIdentities = await writeQuery(pool, guard, "delete orphaned UATTEST_E2E auth identity", `
+      delete from auth_identities ai
+      where ai.normalized_email = $1
+        and ai.display_email = $1
+        and not exists (
+          select 1
+          from workspace_users wu
+          where wu.auth_identity_id = ai.id
+        )
+      returning id, normalized_email as "normalizedEmail"
+    `, [testOwnerEmail]);
+    if (deletedAuthIdentities.rowCount !== (inventory.authIdentities?.length ?? 0)) {
+      throw new Error(
+        `Cleanup delete expected ${(inventory.authIdentities?.length ?? 0)} auth identity row(s), deleted ${deletedAuthIdentities.rowCount}.`,
+      );
+    }
+
     await writeQuery(pool, guard, "phase4 cleanup commit", "commit");
-    console.log(`[CLEANUP] Deleted fixture workspace: ${JSON.stringify(deleted.rows[0], null, 2)}`);
+    console.log(`[CLEANUP] Deleted fixture workspace: ${JSON.stringify(deletedWorkspace.rows[0] ?? null, null, 2)}`);
+    console.log(`[CLEANUP] Deleted fixture auth identities: ${JSON.stringify(deletedAuthIdentities.rows, null, 2)}`);
   } catch (error) {
     await writeQuery(pool, guard, "phase4 cleanup rollback", "rollback");
     throw error;
@@ -326,14 +374,19 @@ async function cleanupFixture(pool, guard, { execute }) {
     `select id, name, slug from workspaces where id = $1::uuid or name = $2 or slug = $3`,
     [workspaceId, workspaceName, workspaceSlug],
   );
+  const afterAuthIdentities = await pool.query(
+    `select id, normalized_email as "normalizedEmail" from auth_identities where normalized_email = $1`,
+    [testOwnerEmail],
+  );
   const afterExternalMarkers = await readExternalMarkerCounts(pool);
   console.log(`[CLEANUP-READBACK] ${JSON.stringify({
     remainingFixtureWorkspaceRows: afterWorkspace.rows,
+    remainingFixtureAuthIdentityRows: afterAuthIdentities.rows,
     remainingWorkspaceScopedRows: afterCounts,
     externalMarkersAfter: afterExternalMarkers,
     externalMarkersBefore: beforeExternalMarkers,
   }, null, 2)}`);
-  if (afterWorkspace.rowCount > 0 || afterCounts.length > 0) {
+  if (afterWorkspace.rowCount > 0 || afterAuthIdentities.rowCount > 0 || afterCounts.length > 0) {
     throw new Error("Cleanup read-back failed: fixture workspace rows still exist.");
   }
   if (JSON.stringify(beforeExternalMarkers) !== JSON.stringify(afterExternalMarkers)) {
@@ -959,12 +1012,12 @@ async function main() {
         $1::uuid,
         $2::uuid,
         'UATTEST_E2E Owner',
-        'uattest_e2e_owner@example.test',
+        $3,
         'owner',
         'active',
         'customer_owner'
       )
-    `, [userId, workspaceId]);
+    `, [userId, workspaceId, testOwnerEmail]);
     await readQuery(pool, "workspace + user", `
       select jsonb_build_object(
         'workspace', (select row_to_json(w) from (

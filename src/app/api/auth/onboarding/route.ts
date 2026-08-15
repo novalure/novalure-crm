@@ -9,6 +9,7 @@ import {
   type OnboardingStepId,
 } from "@/lib/onboarding-checklist";
 import type { LanguageCode } from "@/lib/i18n";
+import { enforceCsrfForSession } from "@/lib/security/csrf";
 
 type OnboardingRow = {
   completedAt: string | null;
@@ -122,6 +123,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await getRequestSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const csrf = await enforceCsrfForSession(request, session);
+  if (!csrf.ok) return csrf.response;
 
   if (!hasDatabaseUrl()) {
     return NextResponse.json({ completedAt: new Date().toISOString(), persisted: false, source: "fallback" });

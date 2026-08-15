@@ -4,41 +4,37 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import subpageStyles from "@/components/public-subpage.module.css";
 import { PublicSiteShell } from "@/components/public-site-shell";
+import { SubmitOnceForm } from "@/components/submit-once-form";
 import { getSessionFromHeaders } from "@/lib/auth/session";
 import { getLoginPageCopy } from "@/lib/i18n";
-import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
+import { withPublicLanguage } from "@/lib/public-language";
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
 
 type ForgotPasswordPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export const metadata: Metadata = {
-  title: "Reset password | Novalure CRM",
-  description: "Request a secure password reset link for Novalure CRM.",
-};
+export async function generateMetadata({ searchParams }: ForgotPasswordPageProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const language = resolvePublicPageLanguage(requestHeaders, query);
+  return buildPublicPageMetadata({
+    description: language === "de"
+      ? "Fordern Sie einen sicheren, einmalig nutzbaren Link für Ihren Novalure CRM Zugang an."
+      : "Request a secure, single-use link for your Novalure CRM access.",
+    language,
+    path: "/login/forgot-password",
+    title: language === "de" ? "Passwort zurücksetzen" : "Reset password",
+  });
+}
 
 function getQueryValue(value: string | string[] | undefined, fallback = "") {
   if (Array.isArray(value)) return value[0] ?? fallback;
   return value ?? fallback;
 }
 
-function getRequestCountry(requestHeaders: Headers) {
-  return (
-    requestHeaders.get("x-vercel-ip-country") ??
-    requestHeaders.get("cf-ipcountry") ??
-    requestHeaders.get("x-country-code")
-  );
-}
-
-function getResetErrorText(error: string, reset: ReturnType<typeof getLoginPageCopy>["passwordReset"]) {
-  if (error === "rate_limited") return reset.errors.rate_limited;
-  if (error === "reset_unavailable") return reset.errors.reset_unavailable;
-  return "";
-}
-
-function getForgotLanguageHref(language: "de" | "en", email: string, sent = false) {
+function getForgotLanguageHref(language: "de" | "en", sent = false) {
   const params = new URLSearchParams({ lang: language });
-  if (email) params.set("email", email);
   if (sent) params.set("sent", "1");
   return `/login/forgot-password?${params.toString()}`;
 }
@@ -50,15 +46,9 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
 
   if (session) redirect("/");
 
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: getRequestCountry(requestHeaders),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const login = getLoginPageCopy(language);
   const reset = login.passwordReset;
-  const email = getQueryValue(query.email);
-  const errorText = getResetErrorText(getQueryValue(query.error), reset);
   const sent = getQueryValue(query.sent) === "1";
   const intro = language === "de"
     ? {
@@ -77,8 +67,8 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
       currentPath="/login/forgot-password"
       language={language}
       languageHrefs={{
-        de: getForgotLanguageHref("de", email, sent),
-        en: getForgotLanguageHref("en", email, sent),
+        de: getForgotLanguageHref("de", sent),
+        en: getForgotLanguageHref("en", sent),
       }}
     >
       <div className={subpageStyles.authLayout}>
@@ -102,24 +92,13 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
             </p>
           ) : null}
 
-          {errorText ? (
-            <p
-              aria-live="polite"
-              className={subpageStyles.noticeError}
-              role="alert"
-            >
-              {errorText}
-            </p>
-          ) : null}
-
-          <form action="/api/auth/password-reset/request" className={subpageStyles.form} method="post">
+          <SubmitOnceForm action="/api/auth/password-reset/request" className={subpageStyles.form} method="post">
             <input name="lang" type="hidden" value={language} />
             <label className={subpageStyles.field}>
               {reset.emailLabel}
               <input
-                autoComplete="email"
+                autoComplete="username"
                 className={subpageStyles.input}
-                defaultValue={email}
                 name="email"
                 placeholder={login.placeholderEmail}
                 required
@@ -132,7 +111,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
             >
               {reset.requestSubmit}
             </button>
-          </form>
+          </SubmitOnceForm>
 
           <p className={subpageStyles.authHelp}>{reset.requestHelp}</p>
           <Link

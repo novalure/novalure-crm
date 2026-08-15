@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
 import { getKnowledgeCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type KnowledgeImportType = "text" | "faq" | "file" | "url" | "call" | "social";
 
@@ -145,7 +146,7 @@ export function KnowledgeCommandCenter({
 
     async function loadPersistedSources() {
       try {
-        const response = await fetch("/api/bots/knowledge?limit=25");
+        const response = await csrfFetch("/api/bots/knowledge?limit=25");
         if (!response.ok) return;
 
         const data = (await response.json()) as { sources?: PersistedKnowledgeSource[] };
@@ -203,7 +204,7 @@ export function KnowledgeCommandCenter({
     setIsSyncing(true);
 
     try {
-      const response = await fetch("/api/bots/knowledge", {
+      const response = await csrfFetch("/api/bots/knowledge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -320,7 +321,7 @@ export function KnowledgeCommandCenter({
                 type="button"
               >
                 <span
-                  className={`grid h-9 w-9 place-items-center rounded-md text-xs font-black ${
+                  className={`grid h-11 w-11 place-items-center rounded-md text-xs font-black ${
                     selectedType === item.id ? "bg-white text-slate-950" : "bg-slate-950 text-white"
                   }`}
                 >
