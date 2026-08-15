@@ -151,7 +151,7 @@ function createClient(email) {
       init.body = options.body;
     }
 
-    const response = await fetch(`${baseUrl}${path}`, init);
+    const response = await fetch(new URL(path, baseUrl), init);
     storeCookies(response.headers);
     const contentType = response.headers.get("content-type") ?? "";
     const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
