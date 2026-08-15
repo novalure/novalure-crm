@@ -7,6 +7,11 @@ import {
   languageRequestHeaderName,
   resolveLanguage,
 } from "@/lib/language-runtime";
+import {
+  isPublicLanguageCode,
+  publicLanguageRequestHeaderName,
+  type PublicLanguageCode,
+} from "@/lib/public-language";
 import { figtree } from "@/app/fonts";
 import "./globals.css";
 
@@ -23,8 +28,11 @@ export const viewport: Viewport = {
   themeColor: "#d9ecff",
 };
 
-async function getInitialLanguage() {
+async function getInitialLanguage(): Promise<PublicLanguageCode> {
   const requestHeaders = await headers();
+  const publicHeaderLanguage = requestHeaders.get(publicLanguageRequestHeaderName);
+  if (isPublicLanguageCode(publicHeaderLanguage)) return publicHeaderLanguage;
+
   const headerLanguage = requestHeaders.get(languageRequestHeaderName);
   if (headerLanguage) return resolveLanguage(headerLanguage, defaultLanguage);
 

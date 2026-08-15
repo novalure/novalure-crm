@@ -13,7 +13,11 @@ import {
 } from "@/lib/i18n";
 import { publicSiteOrigin } from "@/lib/legal";
 import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
-import { resolvePublicLanguage } from "@/lib/public-language";
+import {
+  publicLanguageRequestHeaderName,
+  resolvePublicSiteLanguage,
+  toAppLanguage,
+} from "@/lib/public-language";
 
 type HomeProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -38,6 +42,14 @@ const homeMetadata = {
     openGraphDescription:
       "Privater Lead-Workspace für Maklerteams, Bauträger und Projektvertriebe.",
   },
+  es: {
+    title: "Novalure CRM | Espacio privado de leads para equipos inmobiliarios",
+    description:
+      "Novalure CRM reune consultas inmobiliarias, responsables y proximas acciones en un workspace protegido para promotoras, agencias y equipos de venta de proyectos.",
+    openGraphTitle: "Cada consulta inmobiliaria recibe el siguiente paso.",
+    openGraphDescription:
+      "Workspace privado de leads para promotoras, agencias y equipos de venta de proyectos.",
+  },
 } as const;
 
 function resolveHomeLanguage(
@@ -45,10 +57,10 @@ function resolveHomeLanguage(
   query: Record<string, string | string[] | undefined>,
 ) {
   const country = getRequestCountry(requestHeaders);
-  const language = resolvePublicLanguage({
+  const language = resolvePublicSiteLanguage({
     acceptLanguage: requestHeaders.get("accept-language"),
     country,
-    persistedLanguage: requestHeaders.get(languageRequestHeaderName),
+    persistedLanguage: requestHeaders.get(publicLanguageRequestHeaderName) ?? requestHeaders.get(languageRequestHeaderName),
     requestedLanguage: query.lang,
   });
 
@@ -71,12 +83,13 @@ export async function generateMetadata({ searchParams }: HomeProps): Promise<Met
       languages: {
         de: `${publicSiteOrigin}/?lang=de`,
         en: `${publicSiteOrigin}/?lang=en`,
+        es: `${publicSiteOrigin}/?lang=es`,
       },
     },
     openGraph: {
       title: copy.openGraphTitle,
       description: copy.openGraphDescription,
-      locale: language === "de" ? "de_AT" : "en_GB",
+      locale: language === "de" ? "de_AT" : language === "es" ? "es_ES" : "en_GB",
       siteName: "Novalure CRM",
       type: "website",
       url: canonicalUrl.toString(),
@@ -89,16 +102,17 @@ export default async function Home({ searchParams }: HomeProps) {
   const session = await getSessionFromHeaders(requestHeaders);
   const query = searchParams ? await searchParams : {};
   const { country, language } = resolveHomeLanguage(requestHeaders, query);
+  const appLanguage = toAppLanguage(language);
 
   if (!session) {
     return (
       <PublicCrmLanding
-        auditHref={resolveAuditHref(country, language)}
+        auditHref={resolveAuditHref(country, appLanguage)}
         basePath="/"
-        copy={getCrmLandingPageCopy(language)}
+        copy={getCrmLandingPageCopy(appLanguage)}
         language={language}
-        legalCopy={getLoginLegalFooterCopy(language)}
-        pageCopy={getPublicPageCopy(language)}
+        legalCopy={getLoginLegalFooterCopy(appLanguage)}
+        pageCopy={getPublicPageCopy(appLanguage)}
       />
     );
   }
@@ -113,7 +127,7 @@ export default async function Home({ searchParams }: HomeProps) {
   return (
     <CrmWorkspace
       coreData={coreData}
-      initialLanguage={language}
+      initialLanguage={appLanguage}
       sessionProductRole={session.productRole}
       sessionRole={session.role}
       sessionUserId={session.userId}

@@ -3,12 +3,35 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 import ts from "typescript";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function readProjectFile(path) {
   return readFileSync(join(rootDir, path), "utf8");
+}
+
+function loadTranspiledExports(path) {
+  const source = readProjectFile(path);
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: path,
+  });
+  const cjsModule = { exports: {} };
+  const sandbox = {
+    exports: cjsModule.exports,
+    module: cjsModule,
+    require(specifier) {
+      throw new Error(`Unexpected runtime import in ${path}: ${specifier}`);
+    },
+  };
+  vm.runInNewContext(outputText, sandbox, { filename: path });
+  return cjsModule.exports;
 }
 
 function unwrapExpression(expression) {
@@ -160,6 +183,7 @@ const layoutSource = readProjectFile("src/app/layout.tsx");
 const globalsSource = readProjectFile("src/app/globals.css");
 const htmlSyncSource = readProjectFile("src/components/language-html-sync.tsx");
 const languageRuntimeSource = readProjectFile("src/lib/language-runtime.ts");
+const publicLanguageSource = readProjectFile("src/lib/public-language.ts");
 const proxySource = readProjectFile("src/proxy.ts");
 const bookingPageSource = readProjectFile("src/app/book/[slug]/page.tsx");
 const chatRuntimeSource = readProjectFile("src/lib/bots/chat-runtime.ts");
@@ -180,6 +204,38 @@ test("localized i18n exports keep matching de/en key structure", () => {
     assert.deepEqual(missingInGerman, [], `${localizedExport.name}: German copy misses keys`);
     assert.deepEqual(missingInEnglish, [], `${localizedExport.name}: English copy misses keys`);
   }
+});
+
+test("public geotargeting defaults to de, es or en by visitor country", () => {
+  const {
+    publicLanguageRequestHeaderName,
+    resolvePublicLanguage,
+    resolvePublicSiteLanguage,
+    toAppLanguage,
+  } = loadTranspiledExports("src/lib/public-language.ts");
+
+  for (const country of ["AT", "DE", "CH", "LU"]) {
+    assert.equal(resolvePublicSiteLanguage({ country }), "de", `${country} should default to German`);
+  }
+
+  for (const country of ["AR", "BO", "CL", "CO", "CR", "CU", "DO", "EC", "ES", "GQ", "GT", "HN", "MX", "NI", "PA", "PE", "PR", "PT", "PY", "SV", "UY", "VE"]) {
+    assert.equal(resolvePublicSiteLanguage({ country }), "es", `${country} should default to Spanish`);
+  }
+
+  for (const country of ["BR", "GB", "IE", "IT", "US"]) {
+    assert.equal(resolvePublicSiteLanguage({ country }), "en", `${country} should default to English`);
+  }
+
+  assert.equal(resolvePublicSiteLanguage({ country: "US", requestedLanguage: "es" }), "es");
+  assert.equal(resolvePublicSiteLanguage({ country: "ES", persistedLanguage: "de" }), "de");
+  assert.equal(resolvePublicSiteLanguage({ acceptLanguage: "es-MX,es;q=0.9,en;q=0.8" }), "es");
+  assert.equal(resolvePublicSiteLanguage({ acceptLanguage: "de-LU,de;q=0.9,en;q=0.8" }), "de");
+  assert.equal(resolvePublicLanguage({ country: "ES" }), "en", "Spanish public visitors use the English app fallback");
+  assert.equal(toAppLanguage("es"), "en");
+  assert.equal(publicLanguageRequestHeaderName, "x-novalure-public-language");
+
+  assert.match(publicLanguageSource, /const germanDefaultCountries = new Set\(\["AT", "CH", "DE", "LU"\]\)/);
+  assert.match(proxySource, /requestHeaders\.set\(publicLanguageRequestHeaderName, publicLanguage\)/);
 });
 
 test("confirmed German lead inbox copy regressions stay fixed", () => {
@@ -313,14 +369,19 @@ test("system generated CRM default texts localize at display boundaries only", (
 test("system language persists to document html lang", () => {
   assert.match(languageRuntimeSource, /languageCookieName = "novalure\.system-language"/);
   assert.match(languageRuntimeSource, /languageRequestHeaderName = "x-novalure-language"/);
+  assert.match(publicLanguageSource, /publicLanguageRequestHeaderName = "x-novalure-public-language"/);
   assert.match(proxySource, /export function proxy\(request: NextRequest\)/);
   assert.match(proxySource, /requestHeaders\.set\(languageRequestHeaderName, language\)/);
+  assert.match(proxySource, /requestHeaders\.set\(publicLanguageRequestHeaderName, publicLanguage\)/);
   assert.match(proxySource, /response\.cookies\.set\(languageCookieName, requestedLanguage/);
   assert.match(layoutSource, /headers\(\)/);
+  assert.match(layoutSource, /publicLanguageRequestHeaderName/);
   assert.match(layoutSource, /cookies\(\)/);
   assert.match(layoutSource, /<html lang=\{language\}/);
   assert.match(layoutSource, /<LanguageHtmlSync \/>/);
   assert.match(htmlSyncSource, /languageStorageKeys\.system/);
+  assert.match(htmlSyncSource, /isPublicLanguageCode/);
+  assert.match(htmlSyncSource, /\[data-public-language\]/);
   assert.match(htmlSyncSource, /document\.documentElement\.lang = language/);
   assert.match(htmlSyncSource, /document\.cookie = `\$\{languageCookieName\}=\$\{language\}/);
   assert.match(workspaceSource, /window\.localStorage\.setItem\(languageStorageKeys\.system, language\)/);
