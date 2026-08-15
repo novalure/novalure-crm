@@ -128,10 +128,17 @@ function createClient(email) {
     const { response } = await request("/api/auth/login", {
       auth: false,
       body,
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: trustedOrigin,
+        "sec-fetch-site": "same-origin",
+      },
       method: "POST",
     });
-    assert([302, 303, 307, 308].includes(response.status), `${email} login redirects`);
+    assert(
+      [302, 303, 307, 308].includes(response.status),
+      `${email} login redirects (received HTTP ${response.status})`,
+    );
     assert(cookies.has("novalure_session"), `${email} receives session cookie`);
   }
 
