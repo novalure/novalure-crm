@@ -32,6 +32,26 @@ const protectedPageHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
 ] as const;
 
+const visualQaContentHeaders = [
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'none'",
+      "connect-src 'none'",
+      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'none'",
+      "frame-ancestors 'self'",
+    ].join("; "),
+  },
+  { key: "Cache-Control", value: "private, no-store, max-age=0" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+] as const;
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {
@@ -47,6 +67,10 @@ const nextConfig: NextConfig = {
       {
         headers: [...protectedPageHeaders],
         source: "/login/:path*",
+      },
+      {
+        headers: [...visualQaContentHeaders],
+        source: "/visual-qa/crm/content",
       },
     ];
   },

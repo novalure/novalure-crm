@@ -181,3 +181,39 @@ test("foundation controls, focus, semantic status, and live states are accessibl
   assert.match(states, /role = "alert"/);
   assert.match(states, /ariaLive = "assertive"/);
 });
+
+test("visual QA renders mock CRM data only on the exact protected preview branch", async () => {
+  const [content, guard, nextConfig, page, styles] = await Promise.all([
+    read("src/app/visual-qa/crm/content/page.tsx"),
+    read("src/app/visual-qa/crm/preview-guard.ts"),
+    read("next.config.ts"),
+    read("src/app/visual-qa/crm/page.tsx"),
+    read("src/app/visual-qa/crm/visual-qa.module.css"),
+  ]);
+
+  assert.match(guard, /process\.env\.VERCEL_ENV === "preview"/);
+  assert.match(guard, /process\.env\.VERCEL_GIT_COMMIT_REF === visualQaBranch/);
+  assert.match(guard, /codex\/go-live-remediation-2026-08-11/);
+  assert.match(page, /notFound\(\)/);
+  assert.doesNotMatch(page, /CrmWorkspace/);
+  assert.doesNotMatch(page, /getMockCoreCrmData/);
+  assert.match(page, /sandbox="allow-same-origin"/);
+  assert.match(page, /src="\/visual-qa\/crm\/content"/);
+  assert.match(content, /notFound\(\)/);
+  assert.match(content, /getMockCoreCrmData\(workspace\.id\)/);
+  assert.doesNotMatch(content, /getCoreCrmData\(/);
+  assert.match(content, /className=\{styles\.content\} inert/);
+  assert.match(page, /follow: false/);
+  assert.match(page, /index: false/);
+  assert.match(content, /follow: false/);
+  assert.match(content, /index: false/);
+  assert.match(nextConfig, /source: "\/visual-qa\/crm\/content"/);
+  assert.match(nextConfig, /"script-src 'none'"/);
+  assert.match(nextConfig, /"connect-src 'none'"/);
+  assert.match(nextConfig, /"form-action 'none'"/);
+  assert.match(nextConfig, /"frame-ancestors 'self'"/);
+  assert.match(nextConfig, /X-Frame-Options", value: "SAMEORIGIN"/);
+  assert.match(styles, /width: 390px/);
+  assert.match(styles, /height: min\(844px, calc\(100vh - 4rem\)\)/);
+  assert.match(styles, /pointer-events: none/);
+});
