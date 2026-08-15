@@ -10,7 +10,7 @@ test("project creation no longer creates session-only projects", () => {
   const workspace = readText("src/components/crm-workspace.tsx");
 
   assert.doesNotMatch(workspace, /sessionProjects|setSessionProjects|project_session_/);
-  assert.match(workspace, /fetch\("\/api\/crm\/projects"/);
+  assert.match(workspace, /csrfFetch\("\/api\/crm\/projects"/);
   assert.match(workspace, /setLiveCoreData/);
   assert.match(workspace, /await refreshCoreData\(\)/);
 });

@@ -10,6 +10,7 @@ import {
   formatNumber,
   getCrmEnumLabel,
   getCrmLeadTypeLabel,
+  getCrmProjectTypeLabel,
   getCrmSourceLabel,
   getCrmStatusLabel,
   getCrmSystemTextLabel,
@@ -22,6 +23,7 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FunnelCommandCenterProps = {
   funnels: Funnel[];
@@ -740,7 +742,7 @@ export function FunnelCommandCenter({
     setDraftSaving(true);
 
     try {
-      const response = await fetch("/api/crm/funnels", {
+      const response = await csrfFetch("/api/crm/funnels", {
         body: JSON.stringify({ funnel: selected.funnel, steps: selectedSteps }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -821,7 +823,7 @@ export function FunnelCommandCenter({
 
   if (isDesignerMode && selectedBlueprint) {
     return (
-      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#eef7ff] text-slate-950">
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">
@@ -1160,7 +1162,7 @@ export function FunnelCommandCenter({
                 >
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
-                      {project.name} · {project.type}
+                      {project.name} · {getCrmProjectTypeLabel(project.type, language)}
                     </option>
                   ))}
                 </select>
@@ -1559,5 +1561,3 @@ export function FunnelCommandCenter({
     </section>
   );
 }
-
-

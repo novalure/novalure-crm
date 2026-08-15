@@ -4,12 +4,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { neon } from "@neondatabase/serverless";
+import { assertDatabaseHost, assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const scrypt = promisify(scryptCallback);
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
-const prodDbHost = "ep-wandering-union-alem0781-pooler.c-3.eu-central-1.aws.neon.tech";
-const prodDbSuffix = "70835427";
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 const runStamp = Date.now();
 const marker = `CODEXTEST_PRODUCTROLE_INVITE_${runStamp}`;
@@ -226,13 +223,14 @@ async function createUser(sql, input, password) {
 }
 
 async function verifyTarget(sql, databaseUrl, envValues) {
-  const parsed = new URL(databaseUrl);
+  const hostTarget = assertDatabaseHost({
+    databaseUrl,
+    env: envValues,
+    purpose: "product-role invite hardening QA",
+    target: "test",
+  });
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${parsed.hostname}`);
-  console.log(`Expected Test DB suffix: ${testDbSuffix}`);
-
-  assert(parsed.hostname === testDbHost, `active DB host is the Test DB (${testDbHost})`);
-  assert(parsed.hostname !== prodDbHost, "active DB host is not the Prod DB");
+  console.log(`Active DB host: ${hostTarget.host}`);
 
   let projectId = envValues.POSTGRES_NEON_PROJECT_ID || envValues.NEON_PROJECT_ID || process.env.POSTGRES_NEON_PROJECT_ID || process.env.NEON_PROJECT_ID || "";
   try {
@@ -259,9 +257,14 @@ async function verifyTarget(sql, databaseUrl, envValues) {
     console.log(`Connected user: ${identity?.databaseUser ?? "unknown"}`);
   }
 
-  console.log(`Project ID suffix verified: ${projectId ? `***${projectId.slice(-8)}` : "missing"}`);
-  assert(projectId.includes(testDbSuffix), `active project id contains Test DB suffix ${testDbSuffix}`);
-  assert(!projectId.includes(prodDbSuffix), "active project id does not contain Prod DB suffix");
+  assertDatabaseTarget({
+    databaseUrl,
+    env: envValues,
+    projectId,
+    purpose: "product-role invite hardening QA",
+    target: "test",
+  });
+  console.log("Active project identity verified");
   targetVerified = true;
 }
 
@@ -408,7 +411,7 @@ try {
     marker,
     denied: ["novalure_onboarding -> platform_admin", "novalure_onboarding -> novalureAdmin", "customer_owner -> platform_admin"],
     allowed: ["novalure_onboarding -> broker_agent", "platform_admin -> platform_admin"],
-    testDbSuffix,
+    target: "test",
   }, null, 2));
 } finally {
   try {

@@ -1,8 +1,21 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 import { executeQuery, hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import { isUuid } from "@/lib/db/runtime-repositories";
+import {
+  createSignedOAuthState,
+  decryptOAuthStateSecret,
+  encryptOAuthStateSecret,
+  hashOAuthState,
+  parseSignedOAuthState,
+  type CalendarOAuthProvider,
+} from "@/lib/integrations/calendar-oauth-state";
 
-export type CalendarOAuthProvider = "google" | "microsoft";
+export type { CalendarOAuthProvider } from "@/lib/integrations/calendar-oauth-state";
 
 export type CalendarConnectionStatus = {
   accountLabel: string | null;
@@ -32,6 +45,11 @@ type TokenResponse = {
   token_type?: string;
 };
 
+type OAuthStateRow = {
+  codeVerifierEncrypted: string;
+  returnTo: string;
+};
+
 const providerKeys: Record<CalendarOAuthProvider, string> = {
   google: "google-calendar",
   microsoft: "microsoft-calendar",
@@ -55,19 +73,6 @@ function envValue(name: string) {
 
 function base64UrlEncode(value: string | Buffer) {
   return Buffer.from(value).toString("base64url");
-}
-
-function base64UrlDecode(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function getStateSecret() {
-  return (
-    envValue("OAUTH_STATE_SECRET") ||
-    envValue("CRON_SECRET") ||
-    envValue("OAUTH_TOKEN_ENCRYPTION_KEY") ||
-    "novalure-local-oauth-state"
-  );
 }
 
 function getTokenEncryptionKey() {
@@ -117,56 +122,116 @@ function getAppOrigin(requestUrl: string) {
   return envValue("NEXT_PUBLIC_APP_URL") || origin;
 }
 
-function signState(payload: string) {
-  return createHmac("sha256", getStateSecret()).update(payload).digest("base64url");
-}
-
-export function createOAuthState(input: {
+export async function createOAuthState(input: {
   provider: CalendarOAuthProvider;
   returnTo?: string;
   userId: string;
   workspaceId: string;
 }) {
-  const payload = base64UrlEncode(
-    JSON.stringify({
-      provider: input.provider,
-      returnTo: input.returnTo || "/",
-      userId: input.userId,
-      workspaceId: input.workspaceId,
-    }),
+  if (!hasDatabaseUrl()) {
+    throw new Error("Database is required for OAuth state integrity");
+  }
+
+  const returnTo = input.returnTo || "/";
+  const signed = createSignedOAuthState({ ...input, returnTo });
+
+  await executeQuery(
+    `
+      with pruned as (
+        delete from oauth_authorization_states
+        where expires_at < now() - interval '1 day'
+           or consumed_at < now() - interval '1 day'
+      )
+      insert into oauth_authorization_states (
+        state_hash,
+        nonce_hash,
+        provider,
+        workspace_id,
+        user_id,
+        return_to,
+        code_verifier_encrypted,
+        expires_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8))
+    `,
+    [
+      hashOAuthState(signed.state),
+      hashOAuthState(signed.nonce),
+      input.provider,
+      input.workspaceId,
+      input.userId,
+      returnTo,
+      encryptOAuthStateSecret(signed.codeVerifier),
+      signed.expiresAt,
+    ],
   );
 
-  return `${payload}.${signState(payload)}`;
+  return {
+    codeChallenge: signed.codeChallenge,
+    state: signed.state,
+  };
 }
 
 export function parseOAuthState(value: string | null, expectedProvider: CalendarOAuthProvider) {
-  if (!value) return null;
-  const [payload, signature] = value.split(".");
-  if (!payload || !signature || signState(payload) !== signature) return null;
+  const parsed = parseSignedOAuthState(value, expectedProvider);
+  if (!parsed || !isUuid(parsed.workspaceId) || !isUuid(parsed.userId)) return null;
+  return parsed;
+}
 
-  try {
-    const parsed = JSON.parse(base64UrlDecode(payload)) as {
-      provider?: string;
-      returnTo?: string;
-      userId?: string;
-      workspaceId?: string;
-    };
-
-    if (parsed.provider !== expectedProvider || !isUuid(parsed.workspaceId) || !parsed.userId) {
-      return null;
-    }
-
-    return {
-      returnTo: parsed.returnTo || "/",
-      userId: parsed.userId,
-      workspaceId: parsed.workspaceId,
-    };
-  } catch {
+export async function consumeOAuthState(input: {
+  expectedProvider: CalendarOAuthProvider;
+  sessionUserId: string;
+  sessionWorkspaceId: string;
+  value: string | null;
+}) {
+  const parsed = parseOAuthState(input.value, input.expectedProvider);
+  if (
+    !parsed ||
+    parsed.userId !== input.sessionUserId ||
+    parsed.workspaceId !== input.sessionWorkspaceId ||
+    !input.value
+  ) {
     return null;
   }
+
+  const row = await queryOne<OAuthStateRow>(
+    `
+      update oauth_authorization_states
+      set consumed_at = now()
+      where state_hash = $1
+        and nonce_hash = $2
+        and provider = $3
+        and workspace_id = $4
+        and user_id = $5
+        and return_to = $6
+        and consumed_at is null
+        and expires_at > now()
+      returning
+        code_verifier_encrypted as "codeVerifierEncrypted",
+        return_to as "returnTo"
+    `,
+    [
+      hashOAuthState(input.value),
+      hashOAuthState(parsed.nonce),
+      input.expectedProvider,
+      input.sessionWorkspaceId,
+      input.sessionUserId,
+      parsed.returnTo,
+    ],
+  );
+
+  if (!row) return null;
+
+  return {
+    codeVerifier: decryptOAuthStateSecret(row.codeVerifierEncrypted),
+    returnTo: row.returnTo,
+    userId: parsed.userId,
+    workspaceId: parsed.workspaceId,
+  };
 }
 
 export function getOAuthAuthorizationUrl(input: {
+  codeChallenge: string;
   provider: CalendarOAuthProvider;
   requestUrl: string;
   state: string;
@@ -186,6 +251,8 @@ export function getOAuthAuthorizationUrl(input: {
     url.searchParams.set("prompt", "consent");
     url.searchParams.set("scope", defaultScopes.google.join(" "));
     url.searchParams.set("state", input.state);
+    url.searchParams.set("code_challenge", input.codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
     return url.toString();
   }
 
@@ -200,11 +267,14 @@ export function getOAuthAuthorizationUrl(input: {
   url.searchParams.set("response_mode", "query");
   url.searchParams.set("scope", defaultScopes.microsoft.join(" "));
   url.searchParams.set("state", input.state);
+  url.searchParams.set("code_challenge", input.codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
   return url.toString();
 }
 
 export async function exchangeOAuthCode(input: {
   code: string;
+  codeVerifier: string;
   provider: CalendarOAuthProvider;
   requestUrl: string;
 }) {
@@ -220,6 +290,7 @@ export async function exchangeOAuthCode(input: {
       client_id: clientId,
       client_secret: clientSecret,
       code: input.code,
+      code_verifier: input.codeVerifier,
       grant_type: "authorization_code",
       redirect_uri: redirectUri,
     });
@@ -234,6 +305,7 @@ export async function exchangeOAuthCode(input: {
     client_id: clientId,
     client_secret: clientSecret,
     code: input.code,
+    code_verifier: input.codeVerifier,
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
     scope: defaultScopes.microsoft.join(" "),

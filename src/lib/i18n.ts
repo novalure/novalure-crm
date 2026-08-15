@@ -5995,6 +5995,7 @@ export const leadInboxCommandCopy = {
     selectedLead: "Selected lead",
     workspaceFields: "Work fields",
     owner: "Owner",
+    qualifyingAssigneeRequired: "Select an active owner before setting the status to Qualify.",
     status: "Status",
     saveChanges: "Save changes",
     addNote: "Add note",
@@ -6007,8 +6008,10 @@ export const leadInboxCommandCopy = {
     accept: "Move to pipeline",
     archive: "Archive",
     restore: "Reopen",
+    restoreRequiresAssignee: "Assign an active owner and save before reopening this lead.",
     noResults: "No leads for this view.",
     noLead: "No lead selected.",
+    noTimeline: "No timeline entries yet.",
     noContactData: "No contact data",
     consentReady: "Consent checked",
     consentMissing: "Check consent",
@@ -6096,6 +6099,7 @@ export const leadInboxCommandCopy = {
     selectedLead: "Ausgewählter Lead",
     workspaceFields: "Arbeitsfelder",
     owner: "Zuständig",
+    qualifyingAssigneeRequired: "Wähle eine aktive Zuständigkeit, bevor du den Status auf „Qualifizieren“ setzt.",
     status: "Status",
     saveChanges: "Änderungen speichern",
     addNote: "Notiz hinzufügen",
@@ -6108,8 +6112,10 @@ export const leadInboxCommandCopy = {
     accept: "In Pipeline übernehmen",
     archive: "Archivieren",
     restore: "Wieder öffnen",
+    restoreRequiresAssignee: "Weise zuerst eine aktive Zuständigkeit zu und speichere, bevor du diesen Lead wieder öffnest.",
     noResults: "Keine Leads für diese Ansicht.",
     noLead: "Kein Lead ausgewählt.",
+    noTimeline: "Noch keine Verlaufseinträge.",
     noContactData: "Keine Kontaktdaten",
     consentReady: "Consent geprüft",
     consentMissing: "Consent prüfen",
@@ -6210,6 +6216,12 @@ export const dealPipelineCommandCopy = {
     newDealName: "Deal name",
     amount: "Amount",
     closeDate: "Close date",
+    closeDateInvalid: "Enter a valid close date.",
+    closeDatePast: "The close date cannot be in the past.",
+    closeDateRequired: "Select an expected close date.",
+    dealValueInvalid: "Enter a deal value greater than zero.",
+    dealValueRequired: "Enter a deal value.",
+    dealValueTooHigh: "The deal value exceeds the supported maximum of €500,000,000.",
     contactLabel: "Contact",
     contactMissing: "No contact available",
     workBoard: "Active pipeline",
@@ -6375,6 +6387,12 @@ export const dealPipelineCommandCopy = {
     newDealName: "Dealname",
     amount: "Betrag",
     closeDate: "Abschlussdatum",
+    closeDateInvalid: "Gib ein gültiges Abschlussdatum ein.",
+    closeDatePast: "Das Abschlussdatum darf nicht in der Vergangenheit liegen.",
+    closeDateRequired: "Wähle ein erwartetes Abschlussdatum.",
+    dealValueInvalid: "Gib einen Deal-Wert größer als null ein.",
+    dealValueRequired: "Gib einen Deal-Wert ein.",
+    dealValueTooHigh: "Der Deal-Wert überschreitet das unterstützte Maximum von 500.000.000 €.",
     contactLabel: "Kontakt",
     contactMissing: "Kein Kontakt vorhanden",
     workBoard: "Aktive Pipeline",
@@ -11267,6 +11285,23 @@ const crmPropertyTypeLabels: Record<string, Record<LanguageCode, string>> = {
   Portfolio: { en: "Portfolio", de: "Portfolio" },
 };
 
+const crmProjectTypeLabels: Record<string, Record<LanguageCode, string>> = {
+  real_estate_project: { en: "Real estate project", de: "Immobilienprojekt" },
+  buyer_pipeline: { en: "Buyer sales pipeline", de: "Käufer-Pipeline" },
+  seller_pipeline: { en: "Seller mandate pipeline", de: "Verkäufer-/Mandats-Pipeline" },
+  investment_mandate: { en: "Investment mandate", de: "Investment-Mandat" },
+  b2b_workspace: { en: "B2B workspace", de: "B2B-Workspace" },
+  internal_service: { en: "Internal service", de: "Interner Service" },
+  property_development: { en: "Property development", de: "Bauträgerprojekt" },
+  brokerage: { en: "Brokerage", de: "Maklergeschäft" },
+  owner_funnel: { en: "Owner funnel", de: "Eigentümer-Funnel" },
+  real_estate_agency: { en: "Real estate agency", de: "Immobilienagentur" },
+  investment_company: { en: "Investment company", de: "Investmentgesellschaft" },
+  investment_property: { en: "Investment property", de: "Kapitalanlage" },
+  new_build_sales: { en: "New-build sales", de: "Neubau-Vertrieb" },
+  website_leads: { en: "Website leads", de: "Website-Leads" },
+};
+
 const crmFinancingStatusLabels: Record<string, Record<LanguageCode, string>> = {
   offen: { en: "Open", de: "Offen" },
   vorqualifiziert: { en: "Pre-qualified", de: "Vorqualifiziert" },
@@ -11346,6 +11381,32 @@ const crmPropertyTypeAliases: Record<string, string> = {
   portfolio: "Portfolio",
   wohnung: "Wohnung",
   zinshaus: "Zinshaus",
+};
+
+const crmProjectTypeAliases: Record<string, string> = {
+  b2b_workspace: "b2b_workspace",
+  bautragerprojekt: "property_development",
+  brokerage: "brokerage",
+  buyer_pipeline: "buyer_pipeline",
+  eigentumer_funnel: "owner_funnel",
+  eigentuemer_funnel: "owner_funnel",
+  immobilienagentur: "real_estate_agency",
+  immobilienprojekt: "real_estate_project",
+  internal_service: "internal_service",
+  investment_company: "investment_company",
+  investment_mandate: "investment_mandate",
+  investmentgesellschaft: "investment_company",
+  investment_mandat: "investment_mandate",
+  kapitalanlage: "investment_property",
+  maklergeschaft: "brokerage",
+  maklergeschaeft: "brokerage",
+  neubau_vertrieb: "new_build_sales",
+  owner_funnel: "owner_funnel",
+  property_development: "property_development",
+  real_estate_agency: "real_estate_agency",
+  real_estate_project: "real_estate_project",
+  seller_pipeline: "seller_pipeline",
+  website_leads: "website_leads",
 };
 
 const crmFinancingStatusAliases: Record<string, string> = {
@@ -12397,6 +12458,10 @@ export function getCrmSourceKey(source: string) {
 
 export function getCrmPropertyTypeLabel(propertyType: string, language: LanguageCode) {
   return getLocalizedEnumLabel(crmPropertyTypeLabels, crmPropertyTypeAliases, propertyType, language);
+}
+
+export function getCrmProjectTypeLabel(projectType: string, language: LanguageCode) {
+  return getLocalizedEnumLabel(crmProjectTypeLabels, crmProjectTypeAliases, projectType, language);
 }
 
 export function getCrmFinancingStatusLabel(status: string, language: LanguageCode) {

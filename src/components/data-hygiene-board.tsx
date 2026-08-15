@@ -14,6 +14,7 @@ import {
   getDataHygieneBoardCopy,
   type LanguageCode,
 } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type DataHygieneBoardProps = {
   consents: ConsentRecord[];
@@ -143,7 +144,7 @@ export function DataHygieneBoard({
 
     async function syncIssues() {
       try {
-        const response = await fetch("/api/crm/data-quality", {
+        const response = await csrfFetch("/api/crm/data-quality", {
           body: JSON.stringify({
             issues: issues.map(toDataQualityIssuePayload),
             operation: "sync",
@@ -282,7 +283,7 @@ export function DataHygieneBoard({
     try {
       const isCleanupAction = actionId === "mergeDuplicate" || actionId === "quickEditContact" || actionId === "cleanupHistory";
       const response = isCleanupAction
-        ? await fetch("/api/crm/recommendation-runtime", {
+        ? await csrfFetch("/api/crm/recommendation-runtime", {
             body: JSON.stringify({
               actionType: actionId,
               contactId: issue.contactId ?? null,
@@ -298,7 +299,7 @@ export function DataHygieneBoard({
             headers: { "Content-Type": "application/json" },
             method: "POST",
           })
-        : await fetch("/api/crm/data-quality", {
+        : await csrfFetch("/api/crm/data-quality", {
             body: JSON.stringify({
               actionId,
               actionLabel: text.actions[actionId],
@@ -327,7 +328,7 @@ export function DataHygieneBoard({
     setBusyIssueIds((current) => ({ ...current, [issue.id]: true }));
 
     try {
-      const response = await fetch("/api/crm/data-quality", {
+      const response = await csrfFetch("/api/crm/data-quality", {
         body: JSON.stringify({
           issue: toDataQualityIssuePayload(issue),
           operation: status === "resolved" ? "resolve" : "ignore",

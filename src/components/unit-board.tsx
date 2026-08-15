@@ -19,10 +19,14 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { csrfFetch } from "@/lib/security/csrf-client";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 
 type UnitBoardProps = {
   buildings: PropertyBuilding[];
+  canManage: boolean;
   contacts: Contact[];
+  dataState?: "error" | "loading" | "ready";
   deals: Deal[];
   focusScope?: PropertyUnitBoardScope | null;
   initialProjectId?: string;
@@ -268,7 +272,9 @@ function getBuyerMatches(
 
 export function UnitBoard({
   buildings,
+  canManage,
   contacts,
+  dataState = "ready",
   deals,
   focusScope,
   initialProjectId = "all",
@@ -304,7 +310,7 @@ export function UnitBoard({
     floors: "",
     name: "",
     price: "",
-    projectId: initialBoardProjectId !== "all" ? initialBoardProjectId : projects[0]?.id ?? "",
+    projectId: initialBoardProjectId !== "all" ? initialBoardProjectId : "",
     rooms: "",
     unitNumber: "",
   }));
@@ -438,7 +444,8 @@ export function UnitBoard({
   const selectedHasActiveReservation = isActiveReservation(selectedView?.reservation);
   const milestoneOptions = Object.entries(text.contractMilestoneLabels);
   const canSaveWorkflow = Boolean(
-    workflowDraft &&
+    canManage &&
+      workflowDraft &&
       selectedView &&
       workflowDraft.contactId &&
       workflowDraft.expiresAt &&
@@ -462,6 +469,7 @@ export function UnitBoard({
   }
 
   function openWorkflow(view: UnitBoardView, action: ReservationWorkflowAction) {
+    if (!canManage) return;
     const reservation = view.reservation;
     setWorkflowNotice(null);
     setWorkflowDraft({
@@ -480,7 +488,8 @@ export function UnitBoard({
   }
 
   function openInventory(mode: Exclude<InventoryMode, null>) {
-    const projectId = projectFilter !== "all" ? projectFilter : projects[0]?.id ?? "";
+    if (!canManage) return;
+    const projectId = projectFilter !== "all" ? projectFilter : "";
     const buildingId = buildings.find((building) => building.projectId === projectId)?.id ?? "";
     setInventoryNotice(null);
     setInventoryMode(mode);
@@ -497,13 +506,13 @@ export function UnitBoard({
 
   async function submitInventory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!inventoryMode || !inventoryDraft.projectId) return;
+    if (!canManage || !inventoryMode || !inventoryDraft.projectId) return;
 
     setInventorySaving(true);
     setInventoryNotice(null);
 
     try {
-      const response = await fetch("/api/crm/units", {
+      const response = await csrfFetch("/api/crm/units", {
         body: JSON.stringify({
           operation: inventoryMode,
           ...inventoryDraft,
@@ -534,11 +543,12 @@ export function UnitBoard({
   }
 
   async function postRuntimeWorkflow(key: string, payload: Record<string, unknown>, successMessage: string) {
+    if (!canManage) return;
     setRuntimeBusyKey(key);
     setRuntimeNotice(null);
 
     try {
-      const response = await fetch("/api/crm/recommendation-runtime", {
+      const response = await csrfFetch("/api/crm/recommendation-runtime", {
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -648,7 +658,7 @@ export function UnitBoard({
     setWorkflowNotice(null);
 
     try {
-      const response = await fetch("/api/crm/reservations", {
+      const response = await csrfFetch("/api/crm/reservations", {
         body: JSON.stringify({
           action: workflowDraft.action,
           contactId: workflowDraft.contactId,
@@ -672,7 +682,7 @@ export function UnitBoard({
       }
 
       if (workflowDraft.action === "convert") {
-        await fetch("/api/crm/recommendation-runtime", {
+        await csrfFetch("/api/crm/recommendation-runtime", {
           body: JSON.stringify({
             contactId: workflowDraft.contactId,
             dealId: workflowDraft.dealId || null,
@@ -712,26 +722,30 @@ export function UnitBoard({
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50"
+              className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-50"
               onClick={resetFilters}
               type="button"
             >
               {text.resetFilters}
             </button>
-            <button
-              className="rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
-              onClick={() => openInventory("building")}
-              type="button"
-            >
-              {text.createBuildingAction}
-            </button>
-            <button
-              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              onClick={() => openInventory("unit")}
-              type="button"
-            >
-              {text.createUnitAction}
-            </button>
+            {canManage ? (
+              <>
+                <button
+                  className="min-h-11 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
+                  onClick={() => openInventory("building")}
+                  type="button"
+                >
+                  {text.createBuildingAction}
+                </button>
+                <button
+                  className="min-h-11 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  onClick={() => openInventory("unit")}
+                  type="button"
+                >
+                  {text.createUnitAction}
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -744,6 +758,14 @@ export function UnitBoard({
           ))}
         </div>
       </div>
+
+      {!canManage ? (
+        <p className="rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700" role="status">
+          {language === "de"
+            ? "Sie haben Lesezugriff. Änderungen an Einheiten und Reservierungen sind für Ihre Rolle gesperrt."
+            : "You have read access. Unit and reservation changes are disabled for your role."}
+        </p>
+      ) : null}
 
       {focusScope ? (
         <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
@@ -791,7 +813,7 @@ export function UnitBoard({
         </Pill>
       ) : null}
 
-      {inventoryMode ? (
+      {inventoryMode && canManage ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
           <h4 className="text-lg font-semibold text-slate-950">
             {inventoryMode === "building" ? text.createBuildingTitle : text.createUnitTitle}
@@ -1037,7 +1059,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.projectFilter}
             <select
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
               onChange={(event) => {
                 setProjectFilter(event.target.value);
                 setBuildingFilter("all");
@@ -1055,7 +1077,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.statusFilter}
             <select
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
               onChange={(event) => setStatusFilter(event.target.value as UnitStatusFilter)}
               value={statusFilter}
             >
@@ -1070,7 +1092,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.buildingFilter}
             <select
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
               onChange={(event) => setBuildingFilter(event.target.value)}
               value={buildingFilter}
             >
@@ -1085,7 +1107,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.roomsFilter}
             <select
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
               onChange={(event) => setRoomFilter(event.target.value)}
               value={roomFilter}
             >
@@ -1100,7 +1122,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.minPrice}
             <input
-              className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
               min="0"
               onChange={(event) => setMinPrice(event.target.value)}
               placeholder="0"
@@ -1111,7 +1133,7 @@ export function UnitBoard({
           <label className="grid gap-1 text-sm font-semibold text-slate-800">
             {text.maxPrice}
             <input
-              className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+              className="min-h-11 rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
               min="0"
               onChange={(event) => setMaxPrice(event.target.value)}
               placeholder="750000"
@@ -1152,7 +1174,7 @@ export function UnitBoard({
           ) : null}
         </div>
 
-        {workflowDraft && selectedView ? (
+        {workflowDraft && selectedView && canManage ? (
           <form className="mt-5 space-y-4" onSubmit={submitReservationWorkflow}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-slate-800">
@@ -1171,7 +1193,7 @@ export function UnitBoard({
                         ? "border-emerald-700 bg-emerald-700 text-white"
                         : "border-stone-300 text-slate-800 hover:bg-stone-50"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
-                    disabled={disabled}
+                    disabled={!canManage || disabled}
                     key={action}
                     onClick={() => updateWorkflowDraft("action", action)}
                     type="button"
@@ -1280,7 +1302,7 @@ export function UnitBoard({
                 {text.notifyTeams}
               </label>
               <button
-                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-11 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={!canSaveWorkflow || workflowSaving}
                 type="submit"
               >
@@ -1293,6 +1315,17 @@ export function UnitBoard({
         )}
       </article>
 
+      {dataState === "loading" ? (
+        <LoadingState
+          description={language === "de" ? "Einheiten und Reservierungen werden workspacegebunden geladen." : "Loading workspace-bound units and reservations."}
+          title={language === "de" ? "Bestand wird geladen" : "Loading inventory"}
+        />
+      ) : dataState === "error" ? (
+        <ErrorState
+          description={language === "de" ? "Die Datenquelle ist derzeit nicht erreichbar. Es werden keine Demo- oder Importaktionen angeboten." : "The data source is currently unavailable. Demo and import actions are disabled."}
+          title={language === "de" ? "Bestand nicht verfügbar" : "Inventory unavailable"}
+        />
+      ) : (
       <article className="overflow-hidden rounded-lg border border-stone-200 bg-white">
         <div className="border-b border-stone-200 px-5 py-4">
           <h4 className="text-lg font-semibold text-slate-950">{text.tableTitle}</h4>
@@ -1312,7 +1345,7 @@ export function UnitBoard({
                 <th className="px-4 py-3">{text.deal}</th>
                 <th className="px-4 py-3">{text.reservation}</th>
                 <th className="px-4 py-3">{text.buyerMatches}</th>
-                <th className="px-4 py-3">{text.actions}</th>
+                <th className="min-w-60 px-4 py-3">{text.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -1328,7 +1361,7 @@ export function UnitBoard({
                       <p className="mt-1 text-xs text-stone-500">{project?.name ?? text.noProject}</p>
                       {onOpenProperty ? (
                         <button
-                          className="mt-2 text-xs font-semibold text-emerald-800 hover:text-emerald-950"
+                          className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-emerald-800 hover:text-emerald-950"
                           onClick={() => onOpenProperty({ projectId: unit.projectId, unitId: unit.id })}
                           type="button"
                         >
@@ -1407,53 +1440,53 @@ export function UnitBoard({
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex min-w-36 flex-col gap-2">
+                      <div className="flex w-56 min-w-0 flex-col gap-2">
                         <button
-                          className="rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={unit.status !== "available" || hasActiveReservation}
+                          className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!canManage || unit.status !== "available" || hasActiveReservation}
                           onClick={() => openWorkflow(view, "create")}
                           type="button"
                         >
                           {text.reserveAction}
                         </button>
                         <button
-                          className="rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!hasActiveReservation}
+                          className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!canManage || !hasActiveReservation}
                           onClick={() => openWorkflow(view, "extend")}
                           type="button"
                         >
                           {text.extendAction}
                         </button>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid gap-2">
                           <button
-                            className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!hasActiveReservation}
+                            className="min-h-11 whitespace-normal break-words rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!canManage || !hasActiveReservation}
                             onClick={() => openWorkflow(view, "expire")}
                             type="button"
                           >
                             {text.expireAction}
                           </button>
                           <button
-                            className="rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!hasActiveReservation}
+                            className="min-h-11 whitespace-normal break-words rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!canManage || !hasActiveReservation}
                             onClick={() => openWorkflow(view, "convert")}
                             type="button"
                           >
                             {text.convertAction}
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid gap-2">
                           <button
-                            className="rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={Boolean(runtimeBusyKey) || (!buyer && !buyerMatches.length)}
+                            className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!canManage || Boolean(runtimeBusyKey) || (!buyer && !buyerMatches.length)}
                             onClick={() => void createViewingSlot(view)}
                             type="button"
                           >
                             {runtimeBusyKey === `viewing:${unit.id}` ? text.saving : text.viewingSlotAction}
                           </button>
                           <button
-                            className="rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={Boolean(runtimeBusyKey) || !reservation}
+                            className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!canManage || Boolean(runtimeBusyKey) || !reservation}
                             onClick={() => void createOfferMilestone(view)}
                             type="button"
                           >
@@ -1461,16 +1494,16 @@ export function UnitBoard({
                           </button>
                         </div>
                         <button
-                          className="rounded-md border border-rose-200 px-3 py-2 text-left text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={Boolean(runtimeBusyKey) || (!reservation && !deal)}
+                          className="min-h-11 whitespace-normal break-words rounded-md border border-rose-200 px-3 py-2 text-left text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!canManage || Boolean(runtimeBusyKey) || (!reservation && !deal)}
                           onClick={() => void markOfferLost(view)}
                           type="button"
                         >
                           {runtimeBusyKey === `offer-lost:${unit.id}` ? text.saving : text.offerLostAction}
                         </button>
                         <button
-                          className="rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={Boolean(runtimeBusyKey)}
+                          className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!canManage || Boolean(runtimeBusyKey)}
                           onClick={() => void createUnitAudit(view)}
                           type="button"
                         >
@@ -1486,29 +1519,44 @@ export function UnitBoard({
         </div>
         {unitViews.length === 0 ? (
           <div className="border-t border-stone-100 p-5">
-            <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5">
-              <p className="text-base font-semibold text-slate-950">{text.emptyTitle}</p>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{text.empty}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
+            <EmptyState
+              actions={(
+                <>
                 <button
-                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                  className="min-h-11 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                   onClick={resetFilters}
                   type="button"
                 >
                   {text.emptyResetFilters}
                 </button>
-                <button
-                  className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={() => openInventory("unit")}
-                  type="button"
-                >
-                  {text.emptyImportOrCreate}
-                </button>
-              </div>
-            </div>
+                {units.length === 0 && canManage ? (
+                  <button
+                    className="min-h-11 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                    onClick={() => openInventory("unit")}
+                    type="button"
+                  >
+                    {text.emptyImportOrCreate}
+                  </button>
+                ) : null}
+                </>
+              )}
+              description={
+                units.length === 0
+                  ? canManage
+                    ? text.empty
+                    : language === "de"
+                      ? "Für diesen Projektscope gibt es keine Einheiten. Ihre Rolle besitzt keinen Erstellzugriff."
+                      : "There are no units in this project scope. Your role does not have create access."
+                  : language === "de"
+                    ? "Keine Einheit entspricht den aktiven Filtern."
+                    : "No unit matches the active filters."
+              }
+              title={units.length === 0 ? text.emptyTitle : language === "de" ? "Keine Filtertreffer" : "No filter matches"}
+            />
           </div>
         ) : null}
       </article>
+      )}
     </section>
   );
 }

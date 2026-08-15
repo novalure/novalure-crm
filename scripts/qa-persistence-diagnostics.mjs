@@ -4,11 +4,10 @@ import fs from "node:fs";
 import process from "node:process";
 import { neon } from "@neondatabase/serverless";
 import { createJiti } from "jiti";
+import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const CODEX_PREFIX = "CODEXTEST_";
 const envFiles = [".env.local"];
-const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
-const testDbSuffix = "98273025";
 const novalureGrowthWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const novalureGrowthStages = ["Neu", "Qualifiziert", "Demo gebucht", "Demo gehalten", "Angebot", "Pilot", "Gewonnen", "Verloren"];
 const novalureGrowthSources = ["Website", "Empfehlung", "LinkedIn", "Partner", "Event", "Newsletter", "Outbound", "Formular"];
@@ -86,16 +85,13 @@ function sameArray(actual, expected) {
 
 function assertTestDatabase() {
   if (!databaseUrl) throw new Error("No database URL found. DATABASE_URL or POSTGRES_URL is required for DB verification.");
-  const parsed = new URL(databaseUrl);
-  const projectId = process.env.POSTGRES_NEON_PROJECT_ID || process.env.NEON_PROJECT_ID || "";
-  console.log(`Active DB host: ${parsed.hostname}`);
-  console.log(`Project ID suffix verified: ${projectId ? `***${projectId.slice(-8)}` : "missing"}`);
-  if (parsed.hostname !== testDbHost) {
-    throw new Error(`Refusing qa:persistence: active DB host is not test (${testDbHost})`);
-  }
-  if (!projectId.includes(testDbSuffix)) {
-    throw new Error(`Refusing qa:persistence: project id does not contain ${testDbSuffix}`);
-  }
+  const target = assertDatabaseTarget({
+    databaseUrl,
+    purpose: "qa:persistence",
+    target: "test",
+  });
+  console.log(`Active DB host: ${target.host}`);
+  console.log("Active project identity verified");
 }
 
 assertTestDatabase();

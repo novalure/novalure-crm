@@ -4,57 +4,17 @@ import { queryRows } from "@/lib/db/client";
 import { crmTables, getDatabaseStatus } from "@/lib/db/schema";
 import { hasProductCapability } from "@/lib/product-model";
 
-const migrations = [
-  "migrations/001_initial_novalure_crm.sql",
-  "migrations/002_product_runtime.sql",
-  "migrations/003_media_storage.sql",
-  "migrations/004_forms_runtime.sql",
-  "migrations/005_meeting_pages.sql",
-  "migrations/006_meeting_bookings.sql",
-  "migrations/007_bot_omnichannel_agents.sql",
-  "migrations/008_meeting_calendar_integrations.sql",
-  "migrations/009_bot_autonomy_policy.sql",
-  "migrations/010_media_public_shares.sql",
-  "migrations/011_customer_meta_channel_accounts.sql",
-  "migrations/012_lead_sequences.sql",
-  "migrations/013_analysis_bot_70_sprint.sql",
-  "migrations/013_newsletter_suppressions.sql",
-  "migrations/014_password_reset.sql",
-  "migrations/015_pipeline_governance.sql",
-  "migrations/016_teams_notifications.sql",
-  "migrations/017_google_meet_notifications.sql",
-  "migrations/018_crm_analytics_events.sql",
-  "migrations/019_customer_access_cockpit.sql",
-  "migrations/020_production_readiness_repair.sql",
-  "migrations/021_reservation_workflow_notifications.sql",
-  "migrations/022_recommendation_runtime.sql",
-  "migrations/023_recommendation_depth.sql",
-  "migrations/024_follow_up_delivery_runtime.sql",
-  "migrations/025_analysis_recommendation_completion.sql",
-  "migrations/026_workspace_operating_model.sql",
-  "migrations/027_broker_pipeline_preflights.sql",
-  "migrations/028_contact_archiving.sql",
-  "migrations/029_contact_owner_scope.sql",
-  "migrations/030_novalure_growth_workspace.sql",
-  "migrations/031_user_onboarding.sql",
-  "migrations/032_public_slug_routing.sql",
-  "migrations/033_rename_demo_form_source.sql",
-  "migrations/034_property_department.sql",
-  "migrations/035_property_department_content.sql",
-  "migrations/036_company_profiles.sql",
-  "migrations/037_novalure_growth_alignment.sql",
-  "migrations/038_property_default_units.sql",
-  "migrations/039_property_content_partial_unique_indexes.sql",
-];
-
 type TableStatusRow = {
   exists: boolean;
   tableName: string;
 };
 
-function isProductionDiagnosticsRestricted() {
-  return process.env.VERCEL_ENV === "production" || process.env.NOVALURE_RESTRICT_SYSTEM_DIAGNOSTICS === "1";
-}
+type MigrationLedgerRow = {
+  appliedAt: string | Date;
+  checksum: string | null;
+  name: string;
+  version: string;
+};
 
 function canViewSystemDiagnostics(session: Awaited<ReturnType<typeof getRequestSession>>) {
   if (!session) return false;
@@ -62,23 +22,26 @@ function canViewSystemDiagnostics(session: Awaited<ReturnType<typeof getRequestS
 }
 
 export async function GET(request: Request) {
-  const status = getDatabaseStatus();
-
-  if (isProductionDiagnosticsRestricted()) {
-    const session = await getRequestSession(request);
-    if (!canViewSystemDiagnostics(session)) {
-      return NextResponse.json({
-        ok: status.configured,
-      });
-    }
+  const session = await getRequestSession(request);
+  if (!canViewSystemDiagnostics(session)) {
+    return NextResponse.json(
+      { error: "not_found" },
+      {
+        headers: { "Cache-Control": "private, no-store" },
+        status: 404,
+      },
+    );
   }
 
+  const status = getDatabaseStatus();
   let tableStatus: TableStatusRow[] = [];
   let tableCheckError: string | null = null;
+  let migrationLedger: MigrationLedgerRow[] = [];
+  let migrationLedgerError: string | null = null;
 
   if (status.configured) {
-    try {
-      tableStatus = await queryRows<TableStatusRow>(
+    const [tableResult, ledgerResult] = await Promise.allSettled([
+      queryRows<TableStatusRow>(
         `
           select
             expected.table_name as "tableName",
@@ -90,21 +53,52 @@ export async function GET(request: Request) {
           order by expected.table_name
         `,
         [[...crmTables]],
-      );
-    } catch (error) {
-      tableCheckError = error instanceof Error ? error.message : "Table check failed";
+      ),
+      queryRows<MigrationLedgerRow>(
+        `
+          select
+            version,
+            name,
+            checksum,
+            applied_at as "appliedAt"
+          from novalure_schema_migrations
+          order by version asc
+        `,
+      ),
+    ]);
+
+    if (tableResult.status === "fulfilled") {
+      tableStatus = tableResult.value;
+    } else {
+      tableCheckError = "table_check_failed";
+    }
+
+    if (ledgerResult.status === "fulfilled") {
+      migrationLedger = ledgerResult.value;
+    } else {
+      migrationLedgerError = "migration_ledger_unavailable";
     }
   }
 
   const missingTables = tableStatus.filter((table) => !table.exists).map((table) => table.tableName);
+  const currentMigration = migrationLedger.at(-1)?.version ?? null;
 
-  return NextResponse.json({
-    ok: status.configured && missingTables.length === 0 && !tableCheckError,
-    status,
-    expectedTables: crmTables,
-    migrations,
-    missingTables,
-    tableCheckError,
-    tableStatus,
-  });
+  return NextResponse.json(
+    {
+      ok: status.configured && missingTables.length === 0 && !tableCheckError && !migrationLedgerError,
+      status,
+      expectedTables: crmTables,
+      migrationLedger,
+      migrationLedgerError,
+      migrationStatus: {
+        checksumRows: migrationLedger.filter((migration) => Boolean(migration.checksum)).length,
+        currentVersion: currentMigration,
+        rows: migrationLedger.length,
+      },
+      missingTables,
+      tableCheckError,
+      tableStatus,
+    },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
