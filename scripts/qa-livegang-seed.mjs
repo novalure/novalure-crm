@@ -105,6 +105,22 @@ const users = [
     workspace: workspaces.internal,
   },
   {
+    email: qaEmail("qa-platform-admin"),
+    id: stableUuid("user:platform-admin:developer"),
+    name: "QA Platform Admin",
+    productRole: "platform_admin",
+    role: "owner",
+    workspace: workspaces.developer,
+  },
+  {
+    email: qaEmail("qa-platform-admin"),
+    id: stableUuid("user:platform-admin:broker"),
+    name: "QA Platform Admin",
+    productRole: "platform_admin",
+    role: "owner",
+    workspace: workspaces.broker,
+  },
+  {
     email: qaEmail("qa-assistant"),
     id: stableUuid("user:assistant"),
     name: "QA Assistant",
