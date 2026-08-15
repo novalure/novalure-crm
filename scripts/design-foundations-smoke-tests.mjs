@@ -129,6 +129,46 @@ test("CRM controls preserve sizing utilities and all small-copy tokens retain AA
   assert.match(mobileMenu, /window\.innerWidth > MOBILE_NAV_MAX_WIDTH/);
 });
 
+test("CRM shell primitives override the generic utility palette", async () => {
+  const crmTheme = await read("src/styles/crm-theme.css");
+
+  assert.match(
+    crmTheme,
+    /\.crm-app \[class~="bg-white"\]:where\(:not\(\[style\*="background-color"\]\)\)/,
+  );
+  assert.match(
+    crmTheme,
+    /\.crm-app \[class~="bg-stone-50"\]:where\(:not\(\[style\*="background-color"\]\)\)/,
+  );
+  assert.match(
+    crmTheme,
+    /\.crm-app \[class~="border-stone-200"\]:where\(:not\(\[style\*="border-color"\]\)\)/,
+  );
+  assert.match(
+    crmTheme,
+    /\.crm-app \[class~="rounded-md"\]:where\(:not\(\[style\*="border-radius"\]\)\)/,
+  );
+  assert.match(
+    crmTheme,
+    /\.crm-app :where\(:is\(article, section, aside, details\)\[class~="rounded-lg"\]\[class~="border"\]\[class~="bg-white"\]\)/,
+  );
+  assert.match(
+    crmTheme,
+    /\.crm-app :where\([\s\S]*?button\[class~="hover:bg-stone-100"\][\s\S]*?\):hover/,
+  );
+  assert.doesNotMatch(
+    crmTheme,
+    /(?<!:where\():not\(\[style\*=/,
+  );
+  assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\] \{/);
+  assert.match(crmTheme, /\.crm-app \[data-crm-header\] \{/);
+  assert.match(crmTheme, /\[data-crm-projects\] summary \{\s*color: #ffffff !important;/);
+  assert.match(
+    crmTheme,
+    /\.crm-app \[role="dialog"\]:where\(:not\(\[data-crm-mobile-drawer\]\)\)/,
+  );
+});
+
 test("focus outline meets the WCAG non-text contrast threshold on light and dark CRM surfaces", () => {
   const focusPairs = [
     ["#8a6800", "#ffffff"],

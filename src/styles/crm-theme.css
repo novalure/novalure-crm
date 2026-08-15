@@ -52,42 +52,42 @@
 }
 
 /* Website-aligned utility palette inside the authenticated product. */
-.crm-app [class~="bg-white"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white"]:where(:not([style*="background-color"])) {
   background: var(--nl-surface) !important;
 }
 
-.crm-app [class~="bg-white/95"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white/95"]:where(:not([style*="background-color"])) {
   background: rgb(255 255 255 / 95%) !important;
 }
 
-.crm-app [class~="bg-white/90"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white/90"]:where(:not([style*="background-color"])) {
   background: rgb(255 255 255 / 90%) !important;
 }
 
-.crm-app [class~="bg-white/80"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white/80"]:where(:not([style*="background-color"])) {
   background: rgb(255 255 255 / 80%) !important;
 }
 
-.crm-app [class~="bg-white/70"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white/70"]:where(:not([style*="background-color"])) {
   background: rgb(255 255 255 / 70%) !important;
 }
 
-.crm-app [class~="bg-white/60"]:not([style*="background-color"]) {
+.crm-app [class~="bg-white/60"]:where(:not([style*="background-color"])) {
   background: rgb(255 255 255 / 60%) !important;
 }
 
-.crm-app [class~="bg-stone-50"]:not([style*="background-color"]),
-.crm-app [class~="bg-slate-50"]:not([style*="background-color"]),
-.crm-app [class~="bg-[#f8f7f1]"]:not([style*="background-color"]) {
+.crm-app [class~="bg-stone-50"]:where(:not([style*="background-color"])),
+.crm-app [class~="bg-slate-50"]:where(:not([style*="background-color"])),
+.crm-app [class~="bg-[#f8f7f1]"]:where(:not([style*="background-color"])) {
   background: var(--nl-surface-soft) !important;
 }
 
-.crm-app [class~="bg-stone-100"]:not([style*="background-color"]),
-.crm-app [class~="bg-slate-100"]:not([style*="background-color"]) {
+.crm-app [class~="bg-stone-100"]:where(:not([style*="background-color"])),
+.crm-app [class~="bg-slate-100"]:where(:not([style*="background-color"])) {
   background: var(--nl-neutral) !important;
 }
 
-.crm-app [class~="bg-stone-200"]:not([style*="background-color"]) {
+.crm-app [class~="bg-stone-200"]:where(:not([style*="background-color"])) {
   background: var(--nl-progress-track) !important;
 }
 
@@ -230,10 +230,10 @@
   color: var(--nl-danger-text) !important;
 }
 
-.crm-app [class~="border-stone-200"]:not([style*="border-color"]),
-.crm-app [class~="border-stone-300"]:not([style*="border-color"]),
-.crm-app [class~="border-slate-200"]:not([style*="border-color"]),
-.crm-app [class~="border-slate-300"]:not([style*="border-color"]) {
+.crm-app [class~="border-stone-200"]:where(:not([style*="border-color"])),
+.crm-app [class~="border-stone-300"]:where(:not([style*="border-color"])),
+.crm-app [class~="border-slate-200"]:where(:not([style*="border-color"])),
+.crm-app [class~="border-slate-300"]:where(:not([style*="border-color"])) {
   border-color: var(--nl-border) !important;
 }
 
@@ -287,36 +287,36 @@
 }
 
 /* Shared surfaces, cards and interactive rows. */
-.crm-app :is(article, section, aside, details)[class~="rounded-lg"][class~="border"][class~="bg-white"] {
+.crm-app :where(:is(article, section, aside, details)[class~="rounded-lg"][class~="border"][class~="bg-white"]) {
   border-radius: var(--nl-radius-surface) !important;
   border-color: var(--nl-divider) !important;
   box-shadow: var(--nl-shadow-card) !important;
 }
 
-.crm-app :is(article, section, aside, details, header)[class~="rounded-xl"][class~="border"][class~="bg-white"] {
+.crm-app :where(:is(article, section, aside, details, header)[class~="rounded-xl"][class~="border"][class~="bg-white"]) {
   border-radius: var(--nl-radius-surface) !important;
   border-color: var(--nl-divider) !important;
   box-shadow: var(--nl-shadow-card) !important;
 }
 
-.crm-app :is(article, section, aside, details)[class~="rounded-lg"][class~="border"][class~="bg-stone-50"] {
+.crm-app :where(:is(article, section, aside, details)[class~="rounded-lg"][class~="border"][class~="bg-stone-50"]) {
   border-radius: var(--nl-radius-surface) !important;
   border-color: var(--nl-divider) !important;
 }
 
-.crm-app div[class~="rounded-lg"][class~="border"]:not([style*="border-radius"]),
-.crm-app li[class~="rounded-lg"][class~="border"]:not([style*="border-radius"]) {
+.crm-app div[class~="rounded-lg"][class~="border"]:where(:not([style*="border-radius"])),
+.crm-app li[class~="rounded-lg"][class~="border"]:where(:not([style*="border-radius"])) {
   border-radius: var(--nl-radius-input) !important;
 }
 
-.crm-app [class~="rounded-md"]:not([style*="border-radius"]),
-.crm-app [class~="rounded-lg"]:not([style*="border-radius"]) {
+.crm-app [class~="rounded-md"]:where(:not([style*="border-radius"])),
+.crm-app [class~="rounded-lg"]:where(:not([style*="border-radius"])) {
   border-radius: var(--nl-radius-surface) !important;
 }
 
-.crm-app [class~="rounded-xl"]:not([style*="border-radius"]),
-.crm-app [class~="rounded-2xl"]:not([style*="border-radius"]),
-.crm-app [class~="rounded-3xl"]:not([style*="border-radius"]) {
+.crm-app [class~="rounded-xl"]:where(:not([style*="border-radius"])),
+.crm-app [class~="rounded-2xl"]:where(:not([style*="border-radius"])),
+.crm-app [class~="rounded-3xl"]:where(:not([style*="border-radius"])) {
   border-radius: var(--nl-radius-surface) !important;
 }
 
@@ -341,8 +341,8 @@
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
-.crm-app button[class~="rounded-md"]:not([class~="text-left"]):not([style*="border-radius"]),
-.crm-app button[class~="rounded-lg"]:not([class~="text-left"]):not([style*="border-radius"]),
+.crm-app button[class~="rounded-md"]:not([class~="text-left"]):where(:not([style*="border-radius"])),
+.crm-app button[class~="rounded-lg"]:not([class~="text-left"]):where(:not([style*="border-radius"])),
 .crm-app a[class~="rounded-md"][class~="bg-slate-950"],
 .crm-app a[class~="rounded-lg"][class~="bg-slate-950"],
 .crm-app a[class~="rounded-md"][class~="bg-emerald-700"],
@@ -357,9 +357,11 @@
   transform: translateY(-1px);
 }
 
-.crm-app button[class~="bg-white"]:hover,
-.crm-app button[class~="bg-stone-50"]:hover,
-.crm-app button[class~="hover:bg-stone-100"]:hover {
+.crm-app :where(
+  button[class~="bg-white"],
+  button[class~="bg-stone-50"],
+  button[class~="hover:bg-stone-100"]
+):hover {
   background: var(--nl-blue-tint) !important;
   border-color: #ead36a !important;
   color: var(--nl-gold-text) !important;
@@ -635,7 +637,7 @@
 }
 
 .crm-app [data-crm-projects] summary {
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .crm-app [data-crm-projects] {
@@ -803,13 +805,13 @@
   backdrop-filter: blur(5px);
 }
 
-.crm-app [role="dialog"] {
+.crm-app [role="dialog"]:where(:not([data-crm-mobile-drawer])) {
   border-radius: var(--nl-radius-dialog) !important;
   border-color: var(--nl-divider) !important;
   box-shadow: 0 28px 90px rgb(0 0 0 / 28%) !important;
 }
 
-.crm-app [role="dialog"] > :first-child {
+.crm-app [role="dialog"]:where(:not([data-crm-mobile-drawer])) > :first-child {
   border-bottom-color: var(--nl-divider) !important;
 }
 
