@@ -192,9 +192,9 @@ function createClient(email) {
       const challengeBody = new URLSearchParams({ flow: "challenge", returnTo: "/" });
 
       if (challengeKind === "workspace_selection") {
-        const workspaceUserId = challengePage.text.match(
-          /name="workspaceUserId"[^>]*value="([0-9a-f-]{36})"/i,
-        )?.[1] ?? null;
+        const workspaceButton = Array.from(challengePage.text.matchAll(/<button\b([^>]*)>/gi))
+          .find((match) => /\bname="workspaceUserId"/i.test(match[1]));
+        const workspaceUserId = workspaceButton?.[1].match(/\bvalue="([0-9a-f-]{36})"/i)?.[1] ?? null;
         assert(Boolean(workspaceUserId), `${email} workspace selection exposes a membership`);
         challengeBody.set("workspaceUserId", workspaceUserId);
       } else {
