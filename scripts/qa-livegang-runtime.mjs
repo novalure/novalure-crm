@@ -91,23 +91,6 @@ function assert(condition, message) {
   console.log(`PASS ${message}`);
 }
 
-const publicSubmissionProofFields = [
-  "_novalure_idempotency_key",
-  "_novalure_proof_issued_at",
-  "_novalure_proof_expires_at",
-  "_novalure_proof",
-  "_novalure_company",
-];
-
-function appendSubmissionProof(body, html) {
-  for (const name of publicSubmissionProofFields) {
-    const tag = html.match(new RegExp(`<input[^>]*name=["']${name}["'][^>]*>`, "i"))?.[0] ?? "";
-    const value = tag.match(/value=["']([^"']*)["']/i)?.[1] ?? "";
-    body.set(name, value);
-  }
-  assert(body.get("_novalure_proof"), "public form exposes a signed submission proof");
-}
-
 async function login() {
   const form = new URLSearchParams({ email: loginEmail, password: loginPassword, returnTo: "/" });
   const { response } = await request("/api/auth/login", {
@@ -287,7 +270,7 @@ async function testPublicForms(timestamp) {
   createdForm = createResponse.json?.form;
   assert(createdForm?.id, "saved public form has a database id");
 
-  const publicPage = await request(`/forms/${slug}`, { auth: false, redirect: "follow" });
+  const publicPage = await request(`/forms/${slug}`, { auth: false });
   assert(publicPage.response.status === 200, "public form page loads without CRM cookie");
   assert(publicPage.text.includes("QA Public Form"), "public form page renders the persisted form");
 
@@ -303,7 +286,6 @@ async function testPublicForms(timestamp) {
     return_to: `/forms/${slug}`,
     utm_source: "qa",
   });
-  appendSubmissionProof(validSubmit, publicPage.text);
   const submitResponse = await request("/api/forms/submissions", {
     auth: false,
     body: validSubmit,
@@ -327,8 +309,6 @@ async function testPublicForms(timestamp) {
     name: "Missing Consent",
     return_to: `/forms/${slug}`,
   });
-  const missingConsentPage = await request(`/forms/${slug}`, { auth: false, redirect: "follow" });
-  appendSubmissionProof(missingConsent, missingConsentPage.text);
   const blockedConsent = await request("/api/forms/submissions", {
     auth: false,
     body: missingConsent,

@@ -5,12 +5,13 @@ import process from "node:process";
 import { promisify } from "node:util";
 import { neon } from "@neondatabase/serverless";
 import { createJiti } from "jiti";
-import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const scrypt = promisify(scryptCallback);
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 const runStamp = Date.now();
 const marker = `QAACCESS_CONTACT_ACCESS_${runStamp}`;
+const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
+const testDbSuffix = "98273025";
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -64,14 +65,17 @@ function maskDatabaseUrl(value) {
 }
 
 function assertTestDatabase() {
-  const target = assertDatabaseTarget({
-    databaseUrl,
-    purpose: "qa:contact-access",
-    target: "test",
-  });
+  const parsed = new URL(databaseUrl);
+  const projectId = process.env.POSTGRES_NEON_PROJECT_ID || process.env.NEON_PROJECT_ID || "";
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${target.host}`);
-  console.log("Active project identity verified");
+  console.log(`Active DB host: ${parsed.hostname}`);
+  console.log(`Project ID suffix verified: ${projectId ? "***" + projectId.slice(-8) : "missing"}`);
+  if (parsed.hostname !== testDbHost) {
+    throw new Error(`Refusing qa:contact-access: active DB host is not test (${testDbHost})`);
+  }
+  if (!projectId.includes(testDbSuffix)) {
+    throw new Error(`Refusing qa:contact-access: project id does not contain ${testDbSuffix}`);
+  }
 }
 
 const sql = neon(databaseUrl);

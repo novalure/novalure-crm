@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "@neondatabase/serverless";
-import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
+const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
+const testDbSuffix = "98273025";
 const marker = "QAKPI_";
 
 const workspaceId = "9a8d1111-1111-4111-8111-111111111111";
@@ -52,15 +53,17 @@ function maskDatabaseUrl(value) {
 }
 
 function assertTestDatabase(env, databaseUrl) {
-  const target = assertDatabaseTarget({
-    databaseUrl,
-    env,
-    purpose: "phase2 KPI QA",
-    target: "test",
-  });
+  const parsed = new URL(databaseUrl);
+  const projectId = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${target.host}`);
-  console.log("Active project identity verified");
+  console.log(`Active DB host: ${parsed.hostname}`);
+  console.log(`Project ID suffix verified: ${projectId ? "***" + projectId.slice(-8) : "missing"}`);
+  if (parsed.hostname !== testDbHost) {
+    throw new Error(`Refusing phase2 KPI QA: active DB host is not test (${testDbHost})`);
+  }
+  if (!projectId.includes(testDbSuffix)) {
+    throw new Error(`Refusing phase2 KPI QA: project id does not contain ${testDbSuffix}`);
+  }
 }
 
 async function cleanup(pool) {

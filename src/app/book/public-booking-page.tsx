@@ -8,12 +8,6 @@ import {
 import { getLocale, getPublicBookingPageCopy, type LanguageCode } from "@/lib/i18n";
 import { buildPublicMeetingPath } from "@/lib/public-routing";
 import { resolvePublicLanguage } from "@/lib/public-language";
-import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
-import {
-  buildPublicSubmissionScope,
-  createPublicSubmissionProof,
-  publicSubmissionActions,
-} from "@/lib/security/public-submission-abuse";
 
 type BookingPageProps = {
   slug: string;
@@ -219,20 +213,10 @@ export async function renderPublicBookingPage({
     savedAutomation.reminderEnabled && Array.isArray(savedAutomation.reminders)
       ? savedAutomation.reminders.filter((reminder) => reminder.enabled !== false).length
       : 0;
-  const submissionProof = savedPage?.id && savedPage.workspaceId
-    ? createPublicSubmissionProof({
-        action: publicSubmissionActions.booking,
-        scope: buildPublicSubmissionScope({
-          resourceId: savedPage.id,
-          resourceType: "meeting",
-          workspaceId: savedPage.workspaceId,
-        }),
-      })
-    : null;
 
   return (
     <main
-      className={`novalure-public-runtime min-h-screen px-4 py-8 ${
+      className={`min-h-screen px-4 py-8 ${
         isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-950"
       }`}
     >
@@ -456,42 +440,6 @@ export async function renderPublicBookingPage({
               <input name="selectedDate" type="hidden" value={selectedDate} />
               <input name="theme" type="hidden" value={theme} />
               <input name="utm_source" type="hidden" value={source} />
-              {submissionProof ? (
-                <>
-                  <input
-                    name={publicSubmissionControlFields.idempotencyKey}
-                    type="hidden"
-                    value={submissionProof.idempotencyKey}
-                  />
-                  <input
-                    name={publicSubmissionControlFields.issuedAt}
-                    type="hidden"
-                    value={submissionProof.issuedAt}
-                  />
-                  <input
-                    name={publicSubmissionControlFields.expiresAt}
-                    type="hidden"
-                    value={submissionProof.expiresAt}
-                  />
-                  <input
-                    name={publicSubmissionControlFields.proof}
-                    type="hidden"
-                    value={submissionProof.signature}
-                  />
-                  <label
-                    aria-hidden="true"
-                    className="absolute -left-[10000px] h-px w-px overflow-hidden"
-                  >
-                    Company
-                    <input
-                      autoComplete="off"
-                      name={publicSubmissionControlFields.honeypot}
-                      tabIndex={-1}
-                      type="text"
-                    />
-                  </label>
-                </>
-              ) : null}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   {copy.availableTimes}

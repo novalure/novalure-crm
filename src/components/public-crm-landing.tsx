@@ -243,7 +243,7 @@ export function PublicCrmLanding({
   const privacyIcons: readonly IconName[] = ["key", "shield", "document"];
 
   return (
-    <div className={`${styles.page} ${figtree.variable} novalure-public-legacy`} lang={language}>
+    <div className={`${styles.page} ${figtree.variable}`} lang={language}>
       <PublicHashRouteLoginRedirect language={language} />
       <header className={styles.header}>
         <div className={styles.headerInner}>

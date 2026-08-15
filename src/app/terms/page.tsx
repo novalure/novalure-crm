@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { LanguageBlock, LegalPage, LegalSections } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { resolvePublicLanguage } from "@/lib/public-language";
+
+export const metadata: Metadata = {
+  title: "Terms of Service | Novalure CRM",
+  description: "Terms of Service for Novalure CRM.",
+};
 
 const updated = "20 May 2026";
 const pagePath = "/terms";
@@ -25,14 +30,6 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Nutzungsbedingungen",
   },
 };
-
-export async function generateMetadata({ searchParams }: TermsPageProps): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
-  const page = pageCopy[language];
-  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
-}
 
 const englishSections = [
   {
@@ -199,7 +196,11 @@ const germanSections = [
 export default async function TermsPage({ searchParams }: TermsPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const language = resolvePublicLanguage({
+    acceptLanguage: requestHeaders.get("accept-language"),
+    country: requestHeaders.get("x-vercel-ip-country"),
+    requestedLanguage: query.lang,
+  });
   const page = pageCopy[language];
 
   return (

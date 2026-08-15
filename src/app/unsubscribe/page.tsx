@@ -8,31 +8,18 @@ import {
   getNewsletterUnsubscribePageCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
-import { withPublicLanguage } from "@/lib/public-language";
+import { resolvePublicLanguage, withPublicLanguage } from "@/lib/public-language";
 
 export const dynamic = "force-dynamic";
 
-const pagePath = "/unsubscribe";
+export const metadata: Metadata = {
+  title: "Newsletter unsubscribe | Novalure CRM",
+  description: "One-click newsletter unsubscribe for Novalure CRM messages.",
+};
 
 type UnsubscribePageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
-
-export async function generateMetadata({ searchParams }: UnsubscribePageProps): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
-  const copy = getNewsletterUnsubscribePageCopy(language);
-  return buildPublicPageMetadata({
-    description: language === "de"
-      ? "Sichere Newsletter-Abmeldung für Novalure CRM Nachrichten."
-      : "Secure newsletter unsubscribe for Novalure CRM messages.",
-    language,
-    path: pagePath,
-    title: copy.title,
-  });
-}
 
 function firstQueryValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -53,7 +40,11 @@ function getUnsubscribeLanguageHref(
 export default async function UnsubscribePage({ searchParams }: UnsubscribePageProps) {
   const query = searchParams ? await searchParams : {};
   const headersList = await headers();
-  const language: LanguageCode = resolvePublicPageLanguage(headersList, query);
+  const language: LanguageCode = resolvePublicLanguage({
+    acceptLanguage: headersList.get("accept-language"),
+    country: headersList.get("x-vercel-ip-country"),
+    requestedLanguage: query.lang,
+  });
   const copy = getNewsletterUnsubscribePageCopy(language);
   const email = firstQueryValue(query.email).trim();
   const workspaceId = (firstQueryValue(query.workspaceId) || firstQueryValue(query.wid)).trim();

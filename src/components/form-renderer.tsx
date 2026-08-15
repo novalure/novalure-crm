@@ -1,9 +1,5 @@
 import type { ChangeEvent, FocusEvent, FormEvent, Ref } from "react";
 import type { FormField, FormStep, WebsiteForm } from "@/lib/form-types";
-import {
-  publicSubmissionControlFields,
-  type PublicSubmissionProof,
-} from "@/lib/public-submission-contract";
 
 export type FormRuntimeCopy = {
   back: string;
@@ -36,33 +32,29 @@ export const fallbackFormRuntimeCopy: FormRuntimeCopy = {
 };
 
 export const embeddedFormStyles = `
-.novalure-runtime{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#07080b}
-.novalure-card{display:grid;gap:16px;background:#fff;border:1px solid #dde3ec;border-radius:8px;padding:20px;box-shadow:0 18px 60px rgba(8,13,24,.08)}
-.novalure-eyebrow{font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:#7a5e00;margin:0}
-.novalure-title{font-size:24px;line-height:1.12;font-weight:850;margin:0;color:#07080b}
-.novalure-description{font-size:14px;line-height:1.6;color:#667085;margin:0}
-.novalure-progress{display:grid;gap:8px;font-size:12px;font-weight:800;color:#667085}
-.novalure-progress-track{height:7px;background:#e4e8ef;border-radius:999px;overflow:hidden}
-.novalure-progress-value{display:block;height:100%;background:#ffd43b;border-radius:999px}
+.novalure-runtime{font-family:Arial,sans-serif;color:#08233f}
+.novalure-card{display:grid;gap:16px;background:#fff;border:1px solid #d8e5f7;border-radius:14px;padding:20px;box-shadow:0 18px 45px rgba(15,23,42,.12)}
+.novalure-eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#2563eb;margin:0}
+.novalure-title{font-size:24px;line-height:1.15;font-weight:800;margin:0;color:#08233f}
+.novalure-description{font-size:14px;line-height:1.5;color:#52637a;margin:0}
+.novalure-progress{display:grid;gap:8px;font-size:12px;font-weight:700;color:#52637a}
+.novalure-progress-track{height:7px;background:#edf4ff;border-radius:999px;overflow:hidden}
+.novalure-progress-value{display:block;height:100%;background:#2563eb;border-radius:999px}
 .novalure-step{display:grid;gap:12px}
-.novalure-step-title{font-size:13px;font-weight:850;color:#07080b;margin:0}
+.novalure-step-title{font-size:13px;font-weight:800;color:#08233f;margin:0}
 .novalure-field{display:grid;gap:6px;font-size:13px;font-weight:700}
 .novalure-label-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.novalure-required{font-size:11px;color:#667085;font-weight:750}
-.novalure-control{width:100%;min-height:50px;box-sizing:border-box;border:1px solid #dde3ec;border-radius:8px;padding:12px 14px;font:inherit;font-weight:600;background:#f8fafc;color:#07080b;outline:0;transition:border-color 160ms ease,box-shadow 160ms ease}
-.novalure-control:focus{border-color:#e4b900;box-shadow:0 0 0 4px rgba(255,212,59,.24)}
+.novalure-required{font-size:11px;color:#64748b;font-weight:700}
+.novalure-control{width:100%;box-sizing:border-box;border:1px solid #b9cbe6;border-radius:10px;padding:12px;font:inherit;font-weight:600;background:#f8fbff;color:#08233f}
 .novalure-textarea{min-height:96px;resize:vertical}
-.novalure-help{font-size:12px;line-height:1.4;color:#667085;font-weight:600}
-.novalure-error{font-size:12px;line-height:1.4;color:#b42318;font-weight:750}
+.novalure-help{font-size:12px;line-height:1.4;color:#52637a;font-weight:600}
+.novalure-error{font-size:12px;line-height:1.4;color:#b91c1c;font-weight:700}
 .novalure-choice-list{display:grid;gap:8px}
-.novalure-choice{display:flex;gap:9px;align-items:flex-start;border:1px solid #dde3ec;border-radius:8px;padding:10px;background:#f8fafc;font-weight:700}
-.novalure-choice input{accent-color:#e4b900}
+.novalure-choice{display:flex;gap:9px;align-items:flex-start;border:1px solid #d8e5f7;border-radius:10px;padding:10px;background:#f8fbff;font-weight:700}
 .novalure-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
-.novalure-button{min-height:44px;border:1px solid #e4b900;border-radius:999px;background:#ffd43b;color:#211800;font-weight:850;padding:10px 18px;cursor:pointer;box-shadow:0 14px 32px rgba(255,212,59,.22);transition:background 160ms ease,transform 160ms ease}
-.novalure-button:hover{background:#ffe06b;transform:translateY(-1px)}
-.novalure-secondary{border-color:#dde3ec;background:#fff;color:#07080b;box-shadow:none}
+.novalure-button{border:0;border-radius:10px;background:#08233f;color:#fff;font-weight:800;padding:12px 16px;cursor:pointer}
+.novalure-secondary{border:1px solid #b9cbe6;background:#fff;color:#08233f}
 .novalure-hidden{display:none!important}
-.novalure-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
 `;
 
 type FormRendererMode = "editor" | "embed" | "public";
@@ -86,7 +78,6 @@ type FormRendererProps = {
   returnTo: string;
   selectedFieldId?: string;
   source?: string;
-  submissionProof?: PublicSubmissionProof;
   tracking?: {
     pageUrl?: string;
     referrer?: string;
@@ -135,7 +126,6 @@ export function FormRenderer({
   returnTo,
   selectedFieldId,
   source = "website",
-  submissionProof,
   tracking,
   values = {},
   visibleFieldIds,
@@ -166,7 +156,6 @@ export function FormRenderer({
       <input name="funnel_id" readOnly type="hidden" value={form.funnelId} />
       <input name="page_url" readOnly type="hidden" value={tracking?.pageUrl ?? ""} />
       <input name="referrer" readOnly type="hidden" value={tracking?.referrer ?? ""} />
-      {submissionProof ? <PublicSubmissionProofInputs proof={submissionProof} /> : null}
       {hiddenFields.map((field) => (
         <input
           data-field-id={field.id}
@@ -195,7 +184,7 @@ export function FormRenderer({
                 : `${copy.step} ${safeStepIndex + 1} / ${steps.length}`}
             </span>
             <span className="novalure-progress-track block h-2 overflow-hidden rounded-full bg-blue-50">
-              <span className="novalure-progress-value block h-full rounded-full bg-[#ffd43b]" style={{ width: `${progress}%` }} />
+              <span className="novalure-progress-value block h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} />
             </span>
           </div>
         ) : null}
@@ -280,46 +269,6 @@ export function FormRenderer({
   );
 }
 
-function PublicSubmissionProofInputs({ proof }: { proof: PublicSubmissionProof }) {
-  return (
-    <>
-      <input
-        name={publicSubmissionControlFields.idempotencyKey}
-        readOnly
-        type="hidden"
-        value={proof.idempotencyKey}
-      />
-      <input
-        name={publicSubmissionControlFields.issuedAt}
-        readOnly
-        type="hidden"
-        value={proof.issuedAt}
-      />
-      <input
-        name={publicSubmissionControlFields.expiresAt}
-        readOnly
-        type="hidden"
-        value={proof.expiresAt}
-      />
-      <input
-        name={publicSubmissionControlFields.proof}
-        readOnly
-        type="hidden"
-        value={proof.signature}
-      />
-      <label aria-hidden="true" className="novalure-honeypot">
-        Company
-        <input
-          autoComplete="off"
-          name={publicSubmissionControlFields.honeypot}
-          tabIndex={-1}
-          type="text"
-        />
-      </label>
-    </>
-  );
-}
-
 function RenderedField({
   copy,
   error,
@@ -348,7 +297,7 @@ function RenderedField({
   const errorId = `${field.id}_error`;
   const describedBy = [field.helpText ? helpId : "", error ? errorId : ""].filter(Boolean).join(" ") || undefined;
   const fieldClass = `novalure-field grid min-w-0 gap-2 rounded-lg text-sm font-semibold ${
-    selected ? "border border-[#e4b900] bg-[#fff8d6] p-3" : ""
+    selected ? "border border-blue-600 bg-blue-50 p-3" : ""
   } ${
     visible ? "" : "novalure-hidden hidden"
   }`;

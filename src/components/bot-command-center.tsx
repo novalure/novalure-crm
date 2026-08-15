@@ -17,7 +17,6 @@ import {
   getCrmEnumLabel,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type BotCommandCenterProps = {
   automations: Automation[];
@@ -124,12 +123,13 @@ type BotActionDocumentSend = {
   conversationTitle?: string | null;
   createdAt: string;
   documentName: string;
-  mediaAssetHasActivePublicShare?: boolean | null;
   mediaAssetId?: string | null;
   mediaAssetIsPublic?: boolean | null;
   mediaAssetMimeType?: string | null;
   metadata?: unknown;
   mediaAssetName?: string | null;
+  mediaAssetPublicToken?: string | null;
+  mediaAssetPublicUrl?: string | null;
   mediaAssetUrl?: string | null;
   sentAt?: string | null;
   status: string;
@@ -379,8 +379,8 @@ function isSendableDocumentAsset(asset: BotDocumentAsset) {
   );
 }
 
-function hasAttachedDocumentAsset(documentSend: BotActionDocumentSend) {
-  return Boolean(documentSend.mediaAssetId);
+function hasPublicDocumentUrl(documentSend: BotActionDocumentSend) {
+  return Boolean(documentSend.mediaAssetId && documentSend.mediaAssetPublicUrl);
 }
 
 function formatFileSize(bytes: number) {
@@ -604,7 +604,7 @@ export function BotCommandCenter({
     async function loadEvaluationRuns() {
       try {
         setEvaluationStatus("loading");
-        const response = await csrfFetch("/api/bots/evaluations?limit=20");
+        const response = await fetch("/api/bots/evaluations?limit=20");
 
         if (!response.ok) {
           throw new Error("Bot evaluations unavailable");
@@ -636,7 +636,7 @@ export function BotCommandCenter({
     try {
       setEvaluationResult(null);
       setEvaluationRunningId(bot.id);
-      const response = await csrfFetch("/api/bots/evaluations", {
+      const response = await fetch("/api/bots/evaluations", {
         body: JSON.stringify({ botId: bot.id, projectId: bot.projectId }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -672,12 +672,12 @@ export function BotCommandCenter({
         setApprovalLoadStatus("loading");
         setBotActionStatus("loading");
         const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
-          csrfFetch("/api/bots/chat?limit=12"),
-          csrfFetch("/api/bots/channels"),
-          csrfFetch("/api/approvals?status=pending"),
-          csrfFetch("/api/bots/actions"),
-          csrfFetch("/api/bots/documents"),
-          csrfFetch("/api/bots/knowledge?limit=50"),
+          fetch("/api/bots/chat?limit=12"),
+          fetch("/api/bots/channels"),
+          fetch("/api/approvals?status=pending"),
+          fetch("/api/bots/actions"),
+          fetch("/api/bots/documents"),
+          fetch("/api/bots/knowledge?limit=50"),
         ]);
 
         if (!chatResponse.ok || !channelResponse.ok || !approvalResponse.ok || !actionResponse.ok || !documentResponse.ok) {
@@ -747,7 +747,7 @@ export function BotCommandCenter({
   async function decideApproval(approvalId: string, decision: ApprovalDecision) {
     try {
       setApprovalUpdatingId(approvalId);
-      const response = await csrfFetch("/api/approvals", {
+      const response = await fetch("/api/approvals", {
         body: JSON.stringify({ approvalId, decision }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -769,7 +769,7 @@ export function BotCommandCenter({
           .replace("{{count}}", formatNumber(typeof result.updatedToolCalls === "number" ? result.updatedToolCalls : 0, language))
           .replace("{{actions}}", formatNumber(actionCount, language)),
       );
-      const actionResponse = await csrfFetch("/api/bots/actions");
+      const actionResponse = await fetch("/api/bots/actions");
       if (actionResponse.ok) {
         const actionData = (await actionResponse.json()) as BotActionsApiResponse;
         setDocumentSends(actionData.documentSends ?? []);
@@ -789,7 +789,7 @@ export function BotCommandCenter({
       setBotSetupSaveMessage(null);
       setBotSetupSaveStatus("idle");
       setBotSetupSavingId(bot.id);
-      const response = await csrfFetch("/api/crm/bots", {
+      const response = await fetch("/api/crm/bots", {
         body: JSON.stringify({ bot }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -817,7 +817,7 @@ export function BotCommandCenter({
     try {
       setBotActionUpdatingId(input.id);
       setBotActionResult(null);
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await fetch("/api/bots/actions", {
         body: JSON.stringify(input),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -863,7 +863,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await fetch("/api/bots/actions", {
         body: JSON.stringify({
           action: "attach_media_asset",
           id: documentSendId,
@@ -925,7 +925,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/media", {
+      const response = await fetch("/api/media", {
         body: formData,
         method: "POST",
       });
@@ -1606,7 +1606,7 @@ export function BotCommandCenter({
                     documentSends.map((documentSend) => {
                       const isUpdating = botActionUpdatingId === documentSend.id;
                       const isUploading = documentUploadingId === documentSend.id;
-                      const canSendDocument = hasAttachedDocumentAsset(documentSend);
+                      const canSendDocument = hasPublicDocumentUrl(documentSend);
                       const deliveryError = getDocumentDeliveryError(documentSend);
                       const uploadError = documentUploadErrors[documentSend.id];
 
@@ -1620,7 +1620,7 @@ export function BotCommandCenter({
                               <p className="mt-1 break-words text-xs text-stone-500">
                                 {documentSend.channel} - {documentSend.conversationTitle ?? text.noConversationPreview}
                               </p>
-                              {documentSend.mediaAssetName && documentSend.mediaAssetId ? (
+                              {documentSend.mediaAssetName && documentSend.mediaAssetPublicUrl ? (
                                 <p className="mt-2 break-words text-xs font-semibold text-emerald-800">
                                   {text.attachedDocument}: {documentSend.mediaAssetName}
                                 </p>

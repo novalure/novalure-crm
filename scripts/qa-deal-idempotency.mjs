@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { createJiti } from "jiti";
 import { Pool } from "@neondatabase/serverless";
-import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
+const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
+const testDbSuffix = "98273025";
 const marker = "GOLIVETEST_DEALIDEM_";
 
 const workspaceId = "7f630000-0000-4000-8000-000000000001";
@@ -47,15 +48,17 @@ function maskDatabaseUrl(value) {
 }
 
 function assertTestDatabase(env, databaseUrl) {
-  const target = assertDatabaseTarget({
-    databaseUrl,
-    env,
-    purpose: "deal idempotency QA",
-    target: "test",
-  });
+  const parsed = new URL(databaseUrl);
+  const projectIdValue = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${target.host}`);
-  console.log("Active project identity verified");
+  console.log(`Active DB host: ${parsed.hostname}`);
+  console.log(`Project ID suffix verified: ${projectIdValue ? "***" + projectIdValue.slice(-8) : "missing"}`);
+  if (parsed.hostname !== testDbHost) {
+    throw new Error(`Refusing deal idempotency QA: active DB host is not test (${testDbHost})`);
+  }
+  if (!projectIdValue.includes(testDbSuffix)) {
+    throw new Error(`Refusing deal idempotency QA: project id does not contain ${testDbSuffix}`);
+  }
 }
 
 function quoteIdent(value) {
@@ -225,13 +228,9 @@ async function postDeal(POST, body, extraHeaders = {}) {
 }
 
 function buildDealBody(label, contactId) {
-  const expectedCloseDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
   return {
     deal: {
       contactId,
-      expectedCloseDate,
       name: `${marker}${label}`,
       nextAction: "QA next action",
       probability: 100,

@@ -48,7 +48,6 @@ import {
   getCrmAnalysisBotCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type AnalysisAudience = "all" | "developer" | "novalure";
 type AnalysisPriority = "all" | "p0" | "p1" | "p2";
@@ -277,7 +276,7 @@ export function CrmAnalysisBot({
   const moduleSourcesPayload = JSON.stringify(moduleSources ?? {});
 
   const loadRuntimeSummary = useCallback(async (signal?: AbortSignal) => {
-    const response = await csrfFetch("/api/crm/recommendation-runtime", { cache: "no-store", signal });
+    const response = await fetch("/api/crm/recommendation-runtime", { cache: "no-store", signal });
     if (!response.ok) return;
 
     const payload = (await response.json()) as { summary?: RecommendationRuntimeSummary };
@@ -291,7 +290,7 @@ export function CrmAnalysisBot({
 
     async function syncRuntimeAudit() {
       try {
-        await csrfFetch("/api/crm/recommendation-runtime", {
+        await fetch("/api/crm/recommendation-runtime", {
           body: JSON.stringify({
             missingTables: JSON.parse(missingTablesPayload) as string[],
             moduleSources: JSON.parse(moduleSourcesPayload) as Record<string, string>,
@@ -317,7 +316,7 @@ export function CrmAnalysisBot({
   async function runRuntimeChecks() {
     setRuntimeNotice(copy.runtime.checking);
 
-    await csrfFetch("/api/crm/recommendation-runtime", {
+    await fetch("/api/crm/recommendation-runtime", {
       body: JSON.stringify({
         missingTables,
         moduleSources: moduleSources ?? {},

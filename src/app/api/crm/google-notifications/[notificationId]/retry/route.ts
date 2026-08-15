@@ -1,35 +1,37 @@
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
-import { reconcileGoogleNotificationJob } from "@/lib/db/google-notification-repositories";
+import { requirePermission } from "@/lib/auth/session";
+import {
+  processDueGoogleNotifications,
+  retryGoogleNotificationJob,
+} from "@/lib/db/google-notification-repositories";
 
 type RouteContext = {
   params: Promise<{ notificationId: string }>;
 };
 
 export async function POST(request: Request, context: RouteContext) {
-  const auth = await resolveWorkspaceScopedSession(request, {
-    capability: "settings:manage",
-    permission: "crm:write",
-  });
+  const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
 
-  const body = await request.json().catch(() => null) as { targetId?: unknown } | null;
-  const targetId = typeof body?.targetId === "string" ? body.targetId : "";
   const { notificationId } = await context.params;
-  const reconciliation = await reconcileGoogleNotificationJob({
+  const retry = await retryGoogleNotificationJob({
     notificationId,
     session: auth.session,
-    targetId,
   });
 
-  if (!reconciliation.ok || !reconciliation.jobId) {
-    return NextResponse.json(reconciliation, { status: reconciliation.state === "blocked" ? 409 : 400 });
+  if (!retry.ok || !retry.jobId) {
+    return NextResponse.json({ error: retry.error ?? "retry_failed" }, { status: 400 });
   }
+
+  const processed = await processDueGoogleNotifications({
+    jobIds: [retry.jobId],
+    workspaceId: auth.session.workspaceId,
+  });
 
   return NextResponse.json({
     ok: true,
-    jobId: reconciliation.jobId,
-    state: reconciliation.state,
+    jobId: retry.jobId,
+    processed,
   });
 }
 

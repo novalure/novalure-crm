@@ -13,7 +13,6 @@ import {
   type FunnelRuleGroup,
 } from "@/lib/funnel-schema";
 import { getFunnelRendererCopy, type LanguageCode } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FunnelRendererProps = {
   blueprint: FunnelBlueprint;
@@ -410,8 +409,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     setSubmitState("sending");
     try {
       const consent = buildConsentPayload(allFields, runtimeAnswers);
-      const apiFetch = testOnly ? csrfFetch : fetch;
-      const response = await apiFetch(`/api/funnels/${blueprint.id}/submissions`, {
+      const response = await fetch(`/api/funnels/${blueprint.id}/submissions`, {
         body: JSON.stringify({
           funnelId: blueprint.id,
           mode: testOnly ? "test" : "live",

@@ -74,19 +74,6 @@ test("login redirects keep personal data out of query strings", () => {
   assert.match(urlHygiene, /url\.searchParams\.delete\("error"\)/);
 });
 
-test("lead timeline distinguishes an empty selection from an empty timeline", () => {
-  const i18n = readText("src/lib/i18n.ts");
-  const leadInbox = readText("src/components/lead-inbox.tsx");
-
-  assert.match(i18n, /noTimeline: "No timeline entries yet\."/);
-  assert.match(i18n, /noTimeline: "Noch keine Verlaufseinträge\."/);
-  assert.match(
-    leadInbox,
-    /selected\.activities\.length === 0 && selected\.conversations\.length === 0[\s\S]*?\{text\.noTimeline\}/,
-  );
-  assert.match(leadInbox, /\) : \(\s*<div[\s\S]*?\{text\.noLead\}/);
-});
-
 test("public landing keeps German copy localized and gives customers a clear login path", () => {
   const i18n = readText("src/lib/i18n.ts");
   const landing = readText("src/components/public-crm-landing.tsx");
@@ -157,18 +144,15 @@ test("public landing uses anonymized CRM proof and real privacy content instead 
   assert.doesNotMatch(landing, /proofPlaceholders/);
 });
 
-test("public website subpages retain the established landing page design system", () => {
+test("public website subpages share the landing page design system", () => {
   const shell = readText("src/components/public-site-shell.tsx");
   const shellStyles = readText("src/components/public-site-shell.module.css");
   const legalPage = readText("src/components/legal-page.tsx");
 
-  assert.match(shell, /className=\{styles\.wordmark\}>Novalure<span>\.<\/span>/);
-  assert.match(shell, /novalure-public-legacy/);
+  assert.match(shell, /Novalure<span>\.<\/span>/);
   assert.match(shell, /publicLegalLinks\.map/);
   assert.match(shellStyles, /--nl-bg: #faf9f7/);
   assert.match(shellStyles, /--nl-blue: #2d68f0/);
-  assert.match(shellStyles, /background: rgb\(250 249 247 \/ 92%\)/);
-  assert.doesNotMatch(shellStyles, /--nl-gold: #ffd43b/);
   assert.match(legalPage, /<PublicSiteShell currentPath=\{path\} language=\{language\}>/);
 
   for (const route of [
@@ -181,7 +165,6 @@ test("public website subpages retain the established landing page design system"
     assert.match(readText(route), /<PublicSiteShell/);
   }
 
-  assert.match(readText("src/app/not-found.tsx"), /resolvePublicPageLanguage\(requestHeaders, \{\}\)/);
-  assert.match(readText("src/lib/page-metadata.ts"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
+  assert.match(readText("src/app/not-found.tsx"), /persistedLanguage: requestHeaders\.get\(languageRequestHeaderName\)/);
   assert.match(readText("src/app/unsubscribe/page.tsx"), /getUnsubscribeLanguageHref/);
 });

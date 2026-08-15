@@ -34,7 +34,7 @@ test("offline model fallback answers only from approved knowledge excerpts and e
 test("bot command center reads persisted knowledge instead of relying only on static demo props", () => {
   const component = readText("src/components/bot-command-center.tsx");
 
-  assert.match(component, /csrfFetch\("\/api\/bots\/knowledge\?limit=50"\)/);
+  assert.match(component, /fetch\("\/api\/bots\/knowledge\?limit=50"\)/);
   assert.match(component, /knowledgeItemFromApi/);
   assert.match(component, /liveKnowledgeItems/);
   assert.match(component, /displayedKnowledgeItems/);

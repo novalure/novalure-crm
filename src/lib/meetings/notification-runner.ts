@@ -6,12 +6,6 @@ import {
   renderMeetingNotificationTemplate,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
-import {
-  classifyDeliveryError,
-  createLeaseOwner,
-  retryDelaySeconds,
-  sanitizeJobError,
-} from "@/lib/jobs/durable-queue";
 
 type ProcessResult = {
   checked: number;
@@ -37,30 +31,27 @@ function textToEmailHtml(input: { body: string; title: string }) {
     .join("");
 
   return `
-    <div style="margin:0;padding:32px;background:#f4f6fa;font-family:Inter,Arial,sans-serif;color:#07080b">
-      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dde3ec;border-radius:8px;padding:28px;box-shadow:0 18px 60px rgba(8,13,24,.08)">
-        <p style="margin:0 0 10px;color:#6b5200;font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase">Novalure Meeting</p>
+    <div style="margin:0;padding:32px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dbeafe;border-radius:16px;padding:28px">
+        <p style="margin:0 0 10px;color:#2563eb;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase">Novalure Meeting</p>
         <h1 style="margin:0 0 20px;font-size:24px;line-height:1.25">${escapeHtml(input.title)}</h1>
-        <div style="font-size:15px;line-height:1.65;color:#667085">${paragraphs}</div>
+        <div style="font-size:15px;line-height:1.65;color:#1e293b">${paragraphs}</div>
       </div>
     </div>
   `;
 }
 
 export async function processDueMeetingNotifications(
-  input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
+  input: { jobIds?: string[]; limit?: number } = {},
 ): Promise<ProcessResult> {
   const jobRefs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueMeetingNotificationJobs(input.limit ?? 25);
-  const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
+  const result: ProcessResult = { checked: jobRefs.length, failed: 0, sent: 0 };
 
   for (const jobRef of jobRefs) {
-    if (input.shouldContinue && !input.shouldContinue()) break;
-    result.checked += 1;
-    const leaseOwner = createLeaseOwner("meeting-notification");
-    const job = await claimMeetingNotificationJob({ id: jobRef.id, leaseOwner });
-    if (!job?.leaseOwner) continue;
+    const job = await claimMeetingNotificationJob(jobRef.id);
+    if (!job) continue;
 
     const rendered = renderMeetingNotificationTemplate({
       body: job.body,
@@ -69,35 +60,18 @@ export async function processDueMeetingNotifications(
       tokens: job.tokens,
     });
 
-    let emailResult: Awaited<ReturnType<typeof sendNewsletterEmail>>;
-    try {
-      emailResult = await sendNewsletterEmail({
-        html: textToEmailHtml(rendered),
-        idempotencyKey: `meeting-notification-${job.id}`,
-        subject: rendered.subject,
-        to: job.recipientEmail,
-      });
-    } catch (error) {
-      const message = sanitizeJobError(error);
-      result.failed += 1;
-      await markMeetingNotificationJobFailed({
-        category: classifyDeliveryError({ error }),
-        error: message,
-        id: job.id,
-        leaseOwner: job.leaseOwner,
-        retryDelaySeconds: retryDelaySeconds(job.attemptCount),
-      });
-      continue;
-    }
+    const emailResult = await sendNewsletterEmail({
+      html: textToEmailHtml(rendered),
+      idempotencyKey: `meeting-notification-${job.id}`,
+      subject: rendered.subject,
+      to: job.recipientEmail,
+    });
 
     if (emailResult.status === "failed") {
       result.failed += 1;
       await markMeetingNotificationJobFailed({
-        category: classifyDeliveryError({ error: emailResult.error }),
-        error: sanitizeJobError(emailResult.error || "Email provider failed"),
+        error: emailResult.error || "Email provider failed",
         id: job.id,
-        leaseOwner: job.leaseOwner,
-        retryDelaySeconds: retryDelaySeconds(job.attemptCount),
       });
       continue;
     }
@@ -105,7 +79,6 @@ export async function processDueMeetingNotifications(
     result.sent += 1;
     await markMeetingNotificationJobSent({
       id: job.id,
-      leaseOwner: job.leaseOwner,
       messageId: emailResult.messageId ?? null,
       provider: emailResult.provider,
     });

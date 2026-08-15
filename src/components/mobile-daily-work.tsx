@@ -11,7 +11,6 @@ import {
   getMobileDailyWorkCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type MobileDailySection = "leadInbox" | "tasks" | "calendar";
 export type MobileDailyPanel = "overdueSla" | "hotLeads" | "meetings" | "tasks";
@@ -239,7 +238,7 @@ export function MobileDailyWork({
   ) {
     setNotice(text.notices.followUp(name));
 
-    await csrfFetch("/api/crm/recommendation-runtime", {
+    await fetch("/api/crm/recommendation-runtime", {
       body: JSON.stringify({
         actionType: input.lead?.score && input.lead.score >= 80 ? "mobile_hot_lead_follow_up" : "mobile_follow_up",
         channel: input.contact?.email ? "E-Mail" : input.contact?.phone ? "WhatsApp" : "Telefon",
@@ -271,7 +270,7 @@ export function MobileDailyWork({
     );
     setNotice(text.notices.taskDone(task.title));
 
-    void csrfFetch("/api/crm/tasks", {
+    void fetch("/api/crm/tasks", {
       body: JSON.stringify({ task: { ...task, status: "done" } }),
       headers: { "Content-Type": "application/json" },
       method: "POST",

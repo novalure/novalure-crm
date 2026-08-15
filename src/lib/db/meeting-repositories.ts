@@ -22,7 +22,6 @@ import {
   syncGoogleCalendarEvent,
   updateGoogleCalendarEvent,
 } from "@/lib/integrations/google-calendar";
-import { escapeHtmlText } from "@/lib/security/public-submission-abuse";
 
 export type MeetingPageSettings = {
   automation: unknown;
@@ -410,17 +409,14 @@ export type MeetingBookingInput = {
   slot: string;
   slug: string;
   source?: string;
-  suppressExternalEffects?: boolean;
   workspacePublicKey?: string;
 };
 
 export type MeetingNotificationJob = {
-  attemptCount: number;
   body: string;
   bookingId: string;
   id: string;
   kind: "confirmation" | "reminder" | "follow_up";
-  leaseOwner?: string;
   provider: string | null;
   recipientEmail: string;
   scheduledFor: string | Date;
@@ -544,12 +540,10 @@ type MeetingBookingConfirmationRow = {
 };
 
 type MeetingNotificationJobRow = {
-  attemptCount: number | string;
   body: string;
   bookingId: string;
   id: string;
   kind: "confirmation" | "reminder" | "follow_up";
-  leaseOwner?: string | null;
   provider: string | null;
   recipientEmail: string;
   scheduledFor: string | Date;
@@ -893,17 +887,13 @@ async function queueMeetingNotificationJob(input: {
         booking_id,
         kind,
         scheduled_for,
-        available_at,
         recipient_email,
         subject,
         title,
         body,
-        tokens,
-        idempotency_key
+        tokens
       )
-      values ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10::jsonb, $11)
-      on conflict (workspace_id, idempotency_key) do update
-      set updated_at = meeting_notification_jobs.updated_at
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
       returning id
     `,
     [
@@ -917,7 +907,6 @@ async function queueMeetingNotificationJob(input: {
       input.title,
       input.body,
       JSON.stringify(input.tokens),
-      `meeting-notification:${input.bookingId}:${input.kind}:${input.scheduledFor.toISOString()}`,
     ],
   );
 
@@ -1239,17 +1228,6 @@ export async function createMeetingBookingWithNotifications(
     return { persisted: false, reason: "slot_unavailable" };
   }
 
-  if (input.suppressExternalEffects) {
-    return {
-      autoConfirmed: false,
-      bookingId: bookingRow.id,
-      confirmationStatus: "qa_suppressed",
-      jobsQueued: 0,
-      onlineMeetingUrl: null,
-      persisted: true,
-    };
-  }
-
   const tokens = getTokenValues({
     bookingId: bookingRow.id,
     contactEmail,
@@ -1420,9 +1398,9 @@ export async function listMeetingBookingOverview(input: {
           select
             (select count(*)::int from meeting_bookings where workspace_id = $1) as "totalBookings",
             (select count(*)::int from meeting_bookings where workspace_id = $1 and status = 'requested') as "requestedBookings",
-            (select count(*)::int from meeting_notification_jobs where workspace_id = $1 and status in ('queued', 'retry', 'sending')) as "queuedNotifications",
+            (select count(*)::int from meeting_notification_jobs where workspace_id = $1 and status = 'queued') as "queuedNotifications",
             (select count(*)::int from meeting_notification_jobs where workspace_id = $1 and status = 'sent') as "sentNotifications",
-            (select count(*)::int from meeting_notification_jobs where workspace_id = $1 and status in ('failed', 'dead_letter')) as "failedNotifications"
+            (select count(*)::int from meeting_notification_jobs where workspace_id = $1 and status = 'failed') as "failedNotifications"
         `,
         [input.session.workspaceId],
       ),
@@ -1758,7 +1736,7 @@ export async function cancelPublicMeetingBooking(input: {
     `
       update meeting_notification_jobs
       set status = 'cancelled', updated_at = now()
-      where booking_id = $1 and status in ('queued', 'retry', 'sending')
+      where booking_id = $1 and status in ('queued', 'sending')
       returning id
     `,
     [booking.id],
@@ -1870,7 +1848,7 @@ export async function reschedulePublicMeetingBooking(input: {
     action: "reschedule",
     body: [
       `<p>Termin aus Novalure CRM Buchungsseite wurde verschoben.</p>`,
-      booking.contactNote ? `<p>${escapeHtmlText(booking.contactNote)}</p>` : "",
+      booking.contactNote ? `<p>${booking.contactNote}</p>` : "",
     ].join(""),
     booking,
     endsAt: endsAt.toISOString(),
@@ -1923,7 +1901,7 @@ export async function reschedulePublicMeetingBooking(input: {
     `
       update meeting_notification_jobs
       set status = 'cancelled', updated_at = now()
-      where booking_id = $1 and status in ('queued', 'retry', 'sending')
+      where booking_id = $1 and status in ('queued', 'sending')
       returning id
     `,
     [booking.id],
@@ -1976,19 +1954,11 @@ export async function retryMeetingNotificationJob(input: {
       update meeting_notification_jobs
       set status = 'queued',
           scheduled_for = now(),
-          available_at = now(),
           error = null,
-          attempt_count = 0,
-          attempts = 0,
-          locked_by = null,
-          lease_expires_at = null,
-          dead_lettered_at = null,
-          last_error_category = null,
-          last_error_message = null,
           updated_at = now()
       where id = $1
         and workspace_id = $2
-        and status in ('failed', 'dead_letter')
+        and status = 'failed'
       returning id
     `,
     [input.notificationId, input.session.workspaceId],
@@ -2170,7 +2140,7 @@ export async function confirmMeetingBooking(input: {
         attendees: [booking.contactEmail],
         body: [
           `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
-          booking.contactNote ? `<p>${escapeHtmlText(booking.contactNote)}</p>` : "",
+          booking.contactNote ? `<p>${booking.contactNote}</p>` : "",
         ].join(""),
         createOnlineMeeting: booking.meetingProvider === "microsoft-teams",
         endsAt: normalizeDateInput(booking.endsAt),
@@ -2184,7 +2154,7 @@ export async function confirmMeetingBooking(input: {
           attendees: [booking.contactEmail],
           body: [
             `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
-            booking.contactNote ? `<p>${escapeHtmlText(booking.contactNote)}</p>` : "",
+            booking.contactNote ? `<p>${booking.contactNote}</p>` : "",
           ].join(""),
           createOnlineMeeting: booking.meetingProvider === "google-meet",
           endsAt: normalizeDateInput(booking.endsAt),
@@ -2364,12 +2334,10 @@ export async function confirmMeetingBooking(input: {
 
 function toMeetingNotificationJob(row: MeetingNotificationJobRow): MeetingNotificationJob {
   return {
-    attemptCount: Number(row.attemptCount ?? 0),
     body: row.body,
     bookingId: row.bookingId,
     id: row.id,
     kind: row.kind,
-    leaseOwner: row.leaseOwner ?? undefined,
     provider: row.provider,
     recipientEmail: row.recipientEmail,
     scheduledFor: row.scheduledFor,
@@ -2386,7 +2354,6 @@ export async function listDueMeetingNotificationJobs(limit = 25): Promise<Meetin
     `
       select
         id,
-        attempt_count as "attemptCount",
         booking_id as "bookingId",
         kind,
         scheduled_for as "scheduledFor",
@@ -2397,18 +2364,8 @@ export async function listDueMeetingNotificationJobs(limit = 25): Promise<Meetin
         tokens,
         provider
       from meeting_notification_jobs
-      where (
-          status in ('queued', 'retry')
-          and available_at <= now()
-          and scheduled_for <= now()
-          and attempt_count < max_attempts
-        )
-        or (
-          status = 'sending'
-          and lease_expires_at <= now()
-          and attempt_count < max_attempts
-        )
-      order by available_at asc, scheduled_for asc
+      where status = 'queued' and scheduled_for <= now()
+      order by scheduled_for asc
       limit $1
     `,
     [limit],
@@ -2417,55 +2374,27 @@ export async function listDueMeetingNotificationJobs(limit = 25): Promise<Meetin
   return rows.map(toMeetingNotificationJob);
 }
 
-export async function claimMeetingNotificationJob(input: {
-  id: string;
-  leaseOwner: string;
-}): Promise<MeetingNotificationJob | null> {
-  if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
+export async function claimMeetingNotificationJob(id: string): Promise<MeetingNotificationJob | null> {
+  if (!hasDatabaseUrl() || !isUuid(id)) return null;
 
   const row = await queryOne<MeetingNotificationJobRow>(
     `
-      with candidate as (
-        select id
-        from meeting_notification_jobs
-        where id = $1::uuid
-          and attempt_count < max_attempts
-          and (
-            (
-              status in ('queued', 'retry')
-              and available_at <= now()
-              and scheduled_for <= now()
-            )
-            or (status = 'sending' and lease_expires_at <= now())
-          )
-        for update skip locked
-      )
-      update meeting_notification_jobs jobs
-      set
-        status = 'sending',
-        attempts = jobs.attempts + 1,
-        attempt_count = jobs.attempt_count + 1,
-        locked_by = $2,
-        lease_expires_at = now() + interval '45 seconds',
-        last_attempt_at = now(),
-        updated_at = now()
-      from candidate
-      where jobs.id = candidate.id
+      update meeting_notification_jobs
+      set status = 'sending', attempts = attempts + 1, updated_at = now()
+      where id = $1 and status = 'queued'
       returning
-        jobs.id,
-        jobs.attempt_count as "attemptCount",
-        jobs.booking_id as "bookingId",
-        jobs.kind,
-        jobs.scheduled_for as "scheduledFor",
-        jobs.recipient_email as "recipientEmail",
-        jobs.subject,
-        jobs.title,
-        jobs.body,
-        jobs.tokens,
-        jobs.provider,
-        jobs.locked_by as "leaseOwner"
+        id,
+        booking_id as "bookingId",
+        kind,
+        scheduled_for as "scheduledFor",
+        recipient_email as "recipientEmail",
+        subject,
+        title,
+        body,
+        tokens,
+        provider
     `,
-    [input.id, input.leaseOwner],
+    [id],
   );
 
   return row ? toMeetingNotificationJob(row) : null;
@@ -2473,7 +2402,6 @@ export async function claimMeetingNotificationJob(input: {
 
 export async function markMeetingNotificationJobSent(input: {
   id: string;
-  leaseOwner: string;
   messageId?: string | null;
   provider: string;
 }) {
@@ -2488,47 +2416,25 @@ export async function markMeetingNotificationJobSent(input: {
         provider_message_id = $3,
         sent_at = now(),
         updated_at = now(),
-        error = null,
-        last_error_category = null,
-        last_error_message = null,
-        locked_by = null,
-        lease_expires_at = null
-      where id = $1 and status = 'sending' and locked_by = $4
+        error = null
+      where id = $1
       returning id
     `,
-    [input.id, input.provider, input.messageId ?? null, input.leaseOwner],
+    [input.id, input.provider, input.messageId ?? null],
   );
 }
 
-export async function markMeetingNotificationJobFailed(input: {
-  category: string;
-  error: string;
-  id: string;
-  leaseOwner: string;
-  retryDelaySeconds: number;
-}) {
+export async function markMeetingNotificationJobFailed(input: { error: string; id: string }) {
   if (!hasDatabaseUrl() || !isUuid(input.id)) return;
 
   await queryOne<IdRow>(
     `
       update meeting_notification_jobs
-      set
-        status = case when attempt_count >= max_attempts then 'dead_letter' else 'retry' end,
-        error = left($2, 500),
-        last_error_category = $3,
-        last_error_message = left($2, 500),
-        available_at = case
-          when attempt_count >= max_attempts then available_at
-          else now() + make_interval(secs => $5::int)
-        end,
-        dead_lettered_at = case when attempt_count >= max_attempts then now() else null end,
-        locked_by = null,
-        lease_expires_at = null,
-        updated_at = now()
-      where id = $1 and status = 'sending' and locked_by = $4
+      set status = 'failed', error = $2, updated_at = now()
+      where id = $1
       returning id
     `,
-    [input.id, input.error, input.category, input.leaseOwner, input.retryDelaySeconds],
+    [input.id, input.error],
   );
 }
 
@@ -2539,7 +2445,7 @@ export async function countQueuedMeetingNotificationJobs() {
     `
       select count(*)::int as count
       from meeting_notification_jobs
-      where status in ('queued', 'retry')
+      where status = 'queued'
     `,
   );
 

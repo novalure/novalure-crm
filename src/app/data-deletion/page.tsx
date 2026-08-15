@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { LanguageBlock, LegalPage, LegalSections } from "@/components/legal-page";
 import type { LanguageCode } from "@/lib/i18n";
-import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { resolvePublicLanguage } from "@/lib/public-language";
+
+export const metadata: Metadata = {
+  title: "Data Deletion Instructions | Novalure CRM",
+  description:
+    "Instructions for requesting deletion of Novalure CRM and Meta-derived data.",
+};
 
 const updated = "20 May 2026";
 const pagePath = "/data-deletion";
@@ -25,14 +31,6 @@ const pageCopy: Record<LanguageCode, { blockTitle: string; subtitle: string; tit
     title: "Anleitung zur Datenlöschung",
   },
 };
-
-export async function generateMetadata({ searchParams }: DataDeletionPageProps): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
-  const page = pageCopy[language];
-  return buildPublicPageMetadata({ description: page.subtitle, language, path: pagePath, title: page.title });
-}
 
 const englishSections = [
   {
@@ -147,7 +145,11 @@ const germanSections = [
 export default async function DataDeletionPage({ searchParams }: DataDeletionPageProps) {
   const requestHeaders = await headers();
   const query = searchParams ? await searchParams : {};
-  const language = resolvePublicPageLanguage(requestHeaders, query);
+  const language = resolvePublicLanguage({
+    acceptLanguage: requestHeaders.get("accept-language"),
+    country: requestHeaders.get("x-vercel-ip-country"),
+    requestedLanguage: query.lang,
+  });
   const page = pageCopy[language];
 
   return (

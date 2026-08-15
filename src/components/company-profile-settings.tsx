@@ -17,7 +17,6 @@ import {
   type WorkspaceProductContext,
 } from "@/lib/product-model";
 import type { LanguageCode } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
 
 type CountryFieldRequirement = {
   appliesToRealEstate?: boolean;
@@ -442,7 +441,7 @@ export function CompanyProfileSettings({
 
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch(getProfileUrl(profileScope, organizationId.trim()));
+    const response = await fetch(getProfileUrl(profileScope, organizationId.trim()));
     const nextPayload = response.ok ? await readJsonResponse<CompanyProfilePayload>(response) : null;
     if (!nextPayload) {
       setPayload(null);
@@ -461,7 +460,7 @@ export function CompanyProfileSettings({
   const loadAccess = useCallback(async () => {
     await Promise.resolve();
 
-    const response = await csrfFetch("/api/settings/access/users");
+    const response = await fetch("/api/settings/access/users");
     const nextPayload = response.ok ? await readJsonResponse<WorkspaceAccessSettingsPayload>(response) : null;
     if (nextPayload) setAccessPayload(nextPayload);
   }, []);
@@ -513,7 +512,7 @@ export function CompanyProfileSettings({
     if (!draft) return;
     setProfileBusy(true);
     setProfileMessage("");
-    const response = await csrfFetch("/api/settings/company-profile", {
+    const response = await fetch("/api/settings/company-profile", {
       body: JSON.stringify({
         ...draft,
         organizationId: profileScope === "crm_account" ? organizationId.trim() : undefined,
@@ -559,7 +558,7 @@ export function CompanyProfileSettings({
     setAccessBusy("invite");
     setAccessMessage("");
     const role = mapProductRoleToTechnicalRole(inviteDraft.productRole);
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await fetch("/api/settings/access/users", {
       body: JSON.stringify({ ...inviteDraft, role }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -572,7 +571,7 @@ export function CompanyProfileSettings({
   async function updateUser(user: WorkspaceUser) {
     setAccessBusy(user.id);
     setAccessMessage("");
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await fetch("/api/settings/access/users", {
       body: JSON.stringify({
         productRole: user.productRole,
         role: user.role,
@@ -589,7 +588,7 @@ export function CompanyProfileSettings({
   async function runAccessAction(action: AccessAction, userId: string) {
     setAccessBusy(`${action}:${userId}`);
     setAccessMessage("");
-    const response = await csrfFetch("/api/settings/access/users", {
+    const response = await fetch("/api/settings/access/users", {
       body: JSON.stringify({ operation: action, userId }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -601,7 +600,7 @@ export function CompanyProfileSettings({
   async function changePassword() {
     setAccessBusy("password");
     setAccessMessage("");
-    const response = await csrfFetch("/api/settings/access/password", {
+    const response = await fetch("/api/settings/access/password", {
       body: JSON.stringify(passwordDraft),
       headers: { "Content-Type": "application/json" },
       method: "PATCH",
@@ -901,7 +900,7 @@ export function CompanyProfileSettings({
                       <td className="px-3 py-3 text-stone-700">{user.email}</td>
                       <td className="px-3 py-3">
                         <select
-                          className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
+                          className="min-h-9 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => {
                             const productRole = event.target.value as ProductRole;
@@ -919,7 +918,7 @@ export function CompanyProfileSettings({
                       </td>
                       <td className="px-3 py-3">
                         <select
-                          className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
+                          className="min-h-9 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => patchAccessUser(user.id, { role: event.target.value as WorkspaceRole })}
                           value={user.role}
@@ -931,7 +930,7 @@ export function CompanyProfileSettings({
                       </td>
                       <td className="px-3 py-3">
                         <select
-                          className="min-h-11 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
+                          className="min-h-9 rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950"
                           disabled={!accessPayload?.canManage}
                           onChange={(event) => patchAccessUser(user.id, { status: event.target.value as WorkspaceUser["status"] })}
                           value={user.status}

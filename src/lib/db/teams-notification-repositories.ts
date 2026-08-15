@@ -3,17 +3,6 @@ import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
-import {
-  classifyDeliveryError,
-  createLeaseOwner,
-  PROVIDER_TIMEOUT_MS,
-  retryDelaySeconds,
-  sanitizeJobError,
-} from "@/lib/jobs/durable-queue";
-import {
-  runNotificationTestSinkProbe,
-  validateNotificationTargetReadiness,
-} from "@/lib/notifications/provider-target-readiness";
 
 export type TeamsAlertType =
   | "lead_sla_overdue"
@@ -24,15 +13,7 @@ export type TeamsAlertType =
   | "reservation_workflow";
 
 export type TeamsNotificationSeverity = "info" | "warning" | "critical";
-export type TeamsNotificationStatus =
-  | "queued"
-  | "retry"
-  | "pending_config"
-  | "sending"
-  | "sent"
-  | "failed"
-  | "dead_letter"
-  | "cancelled";
+export type TeamsNotificationStatus = "queued" | "pending_config" | "sending" | "sent" | "failed" | "cancelled";
 export type TeamsDestinationType = "incoming_webhook" | "channel" | "chat";
 
 export type TeamsFact = {
@@ -56,10 +37,8 @@ export type TeamsNotificationTarget = {
 };
 
 export type TeamsNotificationJob = {
-  adminAction?: string;
   alertType: TeamsAlertType;
   attempts: number;
-  configurationCode?: string;
   createdAt: string;
   error?: string;
   facts: TeamsFact[];
@@ -93,10 +72,8 @@ type TargetRow = {
 };
 
 type JobRow = {
-  adminAction: string | null;
   alertType: TeamsAlertType;
   attempts: number | string;
-  configurationCode: string | null;
   createdAt: string | Date;
   error: string | null;
   facts: unknown;
@@ -114,21 +91,8 @@ type JobRow = {
 };
 
 type ClaimedJobRow = JobRow & {
-  attemptCount: number | string;
   destinationType: TeamsDestinationType | null;
-  leaseOwner: string;
-  targetAlertTypes: string[] | null;
-  targetEnabled: boolean | null;
-  targetProjectId: string | null;
-  targetWorkspaceId: string | null;
   webhookUrl: string | null;
-};
-
-type ReconcileJobRow = JobRow & {
-  attemptCount: number | string;
-  idempotencyKey: string;
-  lastErrorCategory: string | null;
-  providerMessageId: string | null;
 };
 
 type LeadAlertRow = {
@@ -252,10 +216,8 @@ function toTarget(row: TargetRow): TeamsNotificationTarget {
 
 function toJob(row: JobRow): TeamsNotificationJob {
   return {
-    adminAction: row.adminAction ?? undefined,
     alertType: row.alertType,
     attempts: Number(row.attempts ?? 0),
-    configurationCode: row.configurationCode ?? undefined,
     createdAt: toIso(row.createdAt),
     error: row.error ?? undefined,
     facts: normalizeFacts(row.facts),
@@ -359,46 +321,19 @@ async function findTeamsTarget(input: {
         alert_types as "alertTypes"
       from teams_notification_targets
       where workspace_id = $1::uuid
+        and enabled = true
+        and $3 = any(alert_types)
         and (
           ($2::uuid is not null and project_id = $2::uuid)
           or project_id is null
         )
-      order by
-        case when project_id = $2::uuid then 0 else 1 end,
-        enabled desc,
-        case when $3 = any(alert_types) then 0 else 1 end,
-        updated_at desc
+      order by case when project_id = $2::uuid then 0 else 1 end, updated_at desc
       limit 1
     `,
     [input.workspaceId, input.projectId ?? null, input.alertType],
   );
 
   return row;
-}
-
-async function getTeamsTargetById(input: { targetId: string; workspaceId: string }) {
-  if (!isUuid(input.targetId) || !isUuid(input.workspaceId)) return null;
-  return queryOne<TargetRow>(
-    `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        label,
-        destination_type as "destinationType",
-        webhook_url as "webhookUrl",
-        team_id as "teamId",
-        channel_id as "channelId",
-        chat_id as "chatId",
-        channel_name as "channelName",
-        enabled,
-        alert_types as "alertTypes"
-      from teams_notification_targets
-      where id = $1::uuid and workspace_id = $2::uuid
-      limit 1
-    `,
-    [input.targetId, input.workspaceId],
-  );
 }
 
 export async function listTeamsNotificationTargets(input: {
@@ -467,21 +402,9 @@ export async function upsertTeamsNotificationTarget(input: {
     return { persisted: false, reason: "Project does not belong to this workspace" };
   }
 
-  const existing = await queryOne<TargetRow>(
+  const existing = await queryOne<{ id: string }>(
     `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        label,
-        destination_type as "destinationType",
-        webhook_url as "webhookUrl",
-        team_id as "teamId",
-        channel_id as "channelId",
-        chat_id as "chatId",
-        channel_name as "channelName",
-        enabled,
-        alert_types as "alertTypes"
+      select id
       from teams_notification_targets
       where workspace_id = $1::uuid
         and (($2::uuid is null and project_id is null) or project_id = $2::uuid)
@@ -493,34 +416,12 @@ export async function upsertTeamsNotificationTarget(input: {
   const alertTypes = normalizeAlertTypes(input.target.alertTypes);
   const destinationType = normalizeDestinationType(input.target.destinationType);
   const label = cleanString(input.target.label) || (projectId ? "Project Teams" : "Workspace Teams");
-  const webhookUrl = cleanString(input.target.webhookUrl) || existing?.webhookUrl || null;
+  const webhookUrl = cleanString(input.target.webhookUrl) || null;
   const teamId = cleanString(input.target.teamId) || null;
   const channelId = cleanString(input.target.channelId) || null;
   const chatId = cleanString(input.target.chatId) || null;
   const channelName = cleanString(input.target.channelName) || null;
   const enabled = input.target.enabled === false ? false : true;
-  if (enabled) {
-    const readiness = validateNotificationTargetReadiness({
-      alertType: alertTypes[0],
-      projectId,
-      provider: "teams",
-      target: {
-        alertTypes,
-        destinationType,
-        enabled,
-        projectId,
-        webhookUrl,
-        workspaceId: input.session.workspaceId,
-      },
-      workspaceId: input.session.workspaceId,
-    });
-    if (!readiness.ok) {
-      return {
-        persisted: false,
-        reason: `${readiness.reason} ${readiness.adminAction}`,
-      };
-    }
-  }
 
   const row = existing
     ? await queryOne<TargetRow>(
@@ -529,7 +430,7 @@ export async function upsertTeamsNotificationTarget(input: {
           set
             label = $3,
             destination_type = $4,
-            webhook_url = $5,
+            webhook_url = coalesce($5, webhook_url),
             team_id = $6,
             channel_id = $7,
             chat_id = $8,
@@ -656,8 +557,6 @@ export async function listTeamsNotificationJobs(input: {
           severity,
           status,
           attempts,
-          configuration_code as "configurationCode",
-          admin_action as "adminAction",
           scheduled_for as "scheduledFor",
           sent_at as "sentAt",
           error,
@@ -721,13 +620,6 @@ export async function queueTeamsNotification(input: {
       projectId,
       workspaceId: input.session.workspaceId,
     });
-    const readiness = validateNotificationTargetReadiness({
-      alertType: input.alertType,
-      projectId,
-      provider: "teams",
-      target,
-      workspaceId: input.session.workspaceId,
-    });
     const severity = normalizeSeverity(input.severity);
     const facts = input.facts ?? [];
     const message = input.message || input.summary;
@@ -741,6 +633,7 @@ export async function queueTeamsNotification(input: {
     const idempotencyKey =
       input.idempotencyKey ||
       `${input.alertType}:${input.entityType}:${input.entityId ?? input.leadId ?? input.dealId ?? input.customerAccessId ?? input.calendarEventId ?? "unknown"}`;
+    const targetMissing = !target;
 
     const row = await queryOne<JobRow>(
       `
@@ -765,8 +658,6 @@ export async function queueTeamsNotification(input: {
           facts,
           payload,
           error,
-          configuration_code,
-          admin_action,
           idempotency_key
         )
         values (
@@ -790,16 +681,29 @@ export async function queueTeamsNotification(input: {
           $18::jsonb,
           $19::jsonb,
           $20,
-          $21,
-          $22,
-          $23
+          $21
         )
         on conflict (workspace_id, idempotency_key)
         do update set
-          idempotency_key = teams_notification_jobs.idempotency_key
+          target_id = coalesce(excluded.target_id, teams_notification_jobs.target_id),
+          status = case
+            when teams_notification_jobs.status in ('failed', 'pending_config') and excluded.target_id is not null then 'queued'
+            when teams_notification_jobs.status = 'failed' and excluded.target_id is null then 'pending_config'
+            else teams_notification_jobs.status
+          end,
+          error = case
+            when teams_notification_jobs.status in ('failed', 'pending_config') and excluded.target_id is not null then null
+            when teams_notification_jobs.status = 'failed' and excluded.target_id is null then excluded.error
+            else teams_notification_jobs.error
+          end,
+          title = excluded.title,
+          summary = excluded.summary,
+          message = excluded.message,
+          facts = excluded.facts,
+          payload = excluded.payload,
+          updated_at = now()
         returning
           id,
-          admin_action as "adminAction",
           workspace_id as "workspaceId",
           project_id as "projectId",
           target_id as "targetId",
@@ -807,7 +711,6 @@ export async function queueTeamsNotification(input: {
           severity,
           status,
           attempts,
-          configuration_code as "configurationCode",
           scheduled_for as "scheduledFor",
           sent_at as "sentAt",
           error,
@@ -820,10 +723,10 @@ export async function queueTeamsNotification(input: {
       [
         input.session.workspaceId,
         projectId,
-        readiness.ok ? target?.id ?? null : null,
+        target?.id ?? null,
         input.alertType,
         severity,
-        readiness.ok ? "queued" : "pending_config",
+        targetMissing ? "pending_config" : "queued",
         input.entityType,
         isUuid(input.entityId) ? input.entityId : null,
         isUuid(input.leadId) ? input.leadId : null,
@@ -849,9 +752,7 @@ export async function queueTeamsNotification(input: {
           },
           webhookPayload: teamsPayload,
         }),
-        readiness.ok ? null : readiness.reason,
-        readiness.ok ? null : readiness.code,
-        readiness.ok ? null : readiness.adminAction,
+        targetMissing ? "No Teams notification target configured for this workspace or project" : null,
         idempotencyKey,
       ],
     );
@@ -907,7 +808,7 @@ export async function queueLeadSlaOverdueAlerts(input: {
           where tn.workspace_id = l.workspace_id
             and tn.alert_type = 'lead_sla_overdue'
             and tn.lead_id = l.id
-            and tn.status <> 'cancelled'
+            and tn.status in ('queued', 'pending_config', 'sending', 'sent')
         )
       order by l.sla_due_at asc
       limit $2
@@ -1148,7 +1049,7 @@ export async function queueLeadSlaDueSoonAlerts(input: {
           where tn.workspace_id = l.workspace_id
             and tn.alert_type = 'lead_sla_due_soon'
             and tn.lead_id = l.id
-            and tn.status <> 'cancelled'
+            and tn.status in ('queued', 'pending_config', 'sending', 'sent')
         )
       order by l.sla_due_at asc
       limit $2
@@ -1256,7 +1157,7 @@ export async function queueCustomerAccessRiskAlerts(input: {
           where tn.workspace_id = ca.workspace_id
             and tn.alert_type = 'customer_access_risk'
             and tn.customer_access_id = ca.id
-            and tn.status <> 'cancelled'
+            and tn.status in ('queued', 'pending_config', 'sending', 'sent')
         )
       order by ca.activation_score asc, ca.updated_at desc
       limit $2
@@ -1470,440 +1371,81 @@ function createSystemSession(workspaceId: string): AppSession {
 
 export async function queueScheduledCriticalTeamsAlerts(input: {
   limitPerWorkspace?: number;
-  shouldContinue?: () => boolean;
   workspaceLimit?: number;
 } = {}) {
   if (!hasDatabaseUrl()) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
   }
 
-  const pageSize = Math.max(1, Math.min(100, input.workspaceLimit ?? 50));
-  let cursor: string | null = null;
-  let processedWorkspaces = 0;
+  const workspaces = await queryRows<{ id: string }>(
+    "select id from workspaces order by created_at desc limit $1",
+    [input.workspaceLimit ?? 50],
+  );
   let checked = 0;
   let queued = 0;
   let failed = 0;
   let pendingConfig = 0;
 
-  while (!input.shouldContinue || input.shouldContinue()) {
-    const workspacePage: Array<{ id: string }> = await queryRows<{ id: string }>(
-      `
-        select id
-        from workspaces
-        where ($2::uuid is null or id > $2::uuid)
-        order by id asc
-        limit $1
-      `,
-      [pageSize, cursor],
-    );
-    if (!workspacePage.length) break;
+  for (const workspace of workspaces) {
+    const session = createSystemSession(workspace.id);
+    const [overdue, dueSoon, access] = await Promise.all([
+      queueLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
+      queueLeadSlaDueSoonAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
+      queueCustomerAccessRiskAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
+    ]);
 
-    for (const workspaceRow of workspacePage) {
-      if (input.shouldContinue && !input.shouldContinue()) break;
-      const session = createSystemSession(workspaceRow.id);
-      const [overdue, dueSoon, access] = await Promise.all([
-        queueLeadSlaOverdueAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-        queueLeadSlaDueSoonAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-        queueCustomerAccessRiskAlerts({ limit: input.limitPerWorkspace ?? 25, session }),
-      ]);
-
-      checked += overdue.checked + dueSoon.checked + access.checked;
-      queued += overdue.queued + dueSoon.queued + access.queued;
-      failed += overdue.failed + dueSoon.failed + access.failed;
-      pendingConfig += overdue.pendingConfig + dueSoon.pendingConfig + access.pendingConfig;
-      processedWorkspaces += 1;
-      cursor = workspaceRow.id;
-    }
-
-    if (workspacePage.length < pageSize || (input.shouldContinue && !input.shouldContinue())) break;
+    checked += overdue.checked + dueSoon.checked + access.checked;
+    queued += overdue.queued + dueSoon.queued + access.queued;
+    failed += overdue.failed + dueSoon.failed + access.failed;
+    pendingConfig += overdue.pendingConfig + dueSoon.pendingConfig + access.pendingConfig;
   }
 
-  return { checked, failed, pendingConfig, queued, workspaces: processedWorkspaces };
+  return { checked, failed, pendingConfig, queued, workspaces: workspaces.length };
 }
 
-export async function reconcileTeamsNotificationJob(input: {
+export async function retryTeamsNotificationJob(input: {
   notificationId: string;
   session: AppSession;
-  targetId: string;
-}): Promise<{
-  adminAction?: string;
-  configurationCode?: string;
-  error?: string;
-  jobId?: string;
-  ok: boolean;
-  state?: "already_reconciled" | "blocked" | "reconciled";
-}> {
-  if (
-    !hasDatabaseUrl() ||
-    !isUuid(input.session.workspaceId) ||
-    !isUuid(input.notificationId) ||
-    !isUuid(input.targetId)
-  ) {
-    return { error: "invalid_notification_reconciliation", ok: false };
-  }
-
-  const job = await queryOne<ReconcileJobRow>(
-    `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        target_id as "targetId",
-        alert_type as "alertType",
-        severity,
-        status,
-        attempts,
-        attempt_count as "attemptCount",
-        last_error_category as "lastErrorCategory",
-        scheduled_for as "scheduledFor",
-        sent_at as "sentAt",
-        provider_message_id as "providerMessageId",
-        error,
-        configuration_code as "configurationCode",
-        admin_action as "adminAction",
-        title,
-        summary,
-        message,
-        facts,
-        idempotency_key as "idempotencyKey",
-        created_at as "createdAt"
-      from teams_notification_jobs
-      where id = $1::uuid
-        and workspace_id = $2::uuid
-      limit 1
-    `,
-    [input.notificationId, input.session.workspaceId],
-  );
-  if (!job) return { error: "notification_not_found", ok: false };
-  if (job.sentAt || job.providerMessageId || job.status === "sent") {
-    return { error: "notification_already_delivered", ok: false };
-  }
-  if (
-    Number(job.attemptCount) > 0 &&
-    ["provider_timeout", "transient", "unknown"].includes(job.lastErrorCategory ?? "")
-  ) {
-    await writeAuditLog({
-      action: "teams_notification.reconciliation_blocked_uncertain_delivery",
-      after: { jobId: job.id, targetId: input.targetId },
-      entityId: job.id,
-      entityType: "teams_notification_job",
-      projectId: job.projectId,
-      session: input.session,
-    });
-    return {
-      adminAction: "Verify the provider destination for a possible prior delivery, then close or reconcile the job through an authorized incident decision.",
-      configurationCode: "delivery_outcome_uncertain",
-      error: "The prior provider delivery outcome is uncertain; automatic reconciliation is blocked to prevent a duplicate message.",
-      jobId: job.id,
-      ok: false,
-      state: "blocked",
-    };
-  }
-  if (job.status === "queued" || job.status === "retry" || job.status === "sending") {
-    return job.targetId === input.targetId
-      ? { jobId: job.id, ok: true, state: "already_reconciled" }
-      : { error: "notification_already_active_with_different_target", ok: false };
-  }
-  if (!(["failed", "pending_config", "dead_letter"] as TeamsNotificationStatus[]).includes(job.status)) {
-    return { error: "notification_not_reconcilable", ok: false };
-  }
-
-  const target = await getTeamsTargetById({
-    targetId: input.targetId,
-    workspaceId: input.session.workspaceId,
-  });
-  const readiness = validateNotificationTargetReadiness({
-    alertType: job.alertType,
-    projectId: job.projectId,
-    provider: "teams",
-    target,
-    workspaceId: input.session.workspaceId,
-  });
-  if (!readiness.ok) {
-    const blocked = await queryOne<{ id: string }>(
-      `
-        update teams_notification_jobs
-        set
-          status = 'pending_config',
-          error = $3,
-          configuration_code = $4,
-          admin_action = $5,
-          last_error_category = 'configuration',
-          last_error_message = $3,
-          retry_after = null,
-          locked_by = null,
-          lease_expires_at = null,
-          updated_at = now()
-        where id = $1::uuid
-          and workspace_id = $2::uuid
-          and status in ('failed', 'pending_config', 'dead_letter')
-        returning id
-      `,
-      [job.id, input.session.workspaceId, readiness.reason, readiness.code, readiness.adminAction],
-    );
-    if (blocked) {
-      await writeAuditLog({
-        action: "teams_notification.reconciliation_blocked",
-        after: { configurationCode: readiness.code, jobId: job.id, targetId: input.targetId },
-        entityId: job.id,
-        entityType: "teams_notification_job",
-        projectId: job.projectId,
-        session: input.session,
-      });
-    }
-    return {
-      adminAction: readiness.adminAction,
-      configurationCode: readiness.code,
-      error: readiness.reason,
-      jobId: job.id,
-      ok: false,
-      state: "blocked",
-    };
+}): Promise<{ error?: string; jobId?: string; ok: boolean }> {
+  if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.notificationId)) {
+    return { error: "invalid_notification", ok: false };
   }
 
   const row = await queryOne<{ id: string }>(
     `
       update teams_notification_jobs
       set
-        target_id = $3::uuid,
         status = 'queued',
         scheduled_for = now(),
-        available_at = now(),
         error = null,
-        configuration_code = null,
-        admin_action = null,
         retry_after = null,
-        attempt_count = 0,
-        attempts = 0,
-        locked_by = null,
-        lease_expires_at = null,
-        dead_lettered_at = null,
-        last_error_category = null,
-        last_error_message = null,
-        reconciled_at = now(),
-        reconciled_by_user_id = $4::uuid,
         updated_at = now()
       where id = $1::uuid
         and workspace_id = $2::uuid
-        and idempotency_key = $5
-        and provider_message_id is null
-        and sent_at is null
-        and status in ('failed', 'pending_config', 'dead_letter')
+        and status in ('failed', 'pending_config')
       returning id
     `,
-    [
-      job.id,
-      input.session.workspaceId,
-      input.targetId,
-      isUuid(input.session.userId) ? input.session.userId : null,
-      job.idempotencyKey,
-    ],
+    [input.notificationId, input.session.workspaceId],
   );
-  if (!row) return { error: "notification_reconciliation_conflict", ok: false };
 
-  await writeAuditLog({
-    action: "teams_notification.job_reconciled",
-    after: { jobId: row.id, targetId: input.targetId },
-    entityId: row.id,
-    entityType: "teams_notification_job",
-    projectId: job.projectId,
-    session: input.session,
-  });
-
-  return { jobId: row.id, ok: true, state: "reconciled" };
+  return row?.id
+    ? { jobId: row.id, ok: true }
+    : { error: "notification_not_found_or_not_retriable", ok: false };
 }
 
-export async function runTeamsNotificationTargetTestSinkHealthcheck(input: {
-  fetchImpl?: typeof fetch;
-  session: AppSession;
-  targetId: string;
-}) {
-  if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.targetId)) {
-    return { error: "invalid_teams_target", ok: false as const };
-  }
-  const target = await getTeamsTargetById({
-    targetId: input.targetId,
-    workspaceId: input.session.workspaceId,
-  });
-  const alertType = normalizeAlertTypes(target?.alertTypes)[0];
-  const readiness = validateNotificationTargetReadiness({
-    alertType,
-    projectId: target?.projectId,
-    provider: "teams",
-    target,
-    workspaceId: input.session.workspaceId,
-  });
-  if (!readiness.ok) {
-    return {
-      adminAction: readiness.adminAction,
-      configurationCode: readiness.code,
-      error: readiness.reason,
-      ok: false as const,
-    };
-  }
-  if (!target) {
-    return { error: "invalid_teams_target", ok: false as const };
-  }
-
-  const sinkUrl = process.env.NOVALURE_NOTIFICATION_TEST_SINK_URL ?? "";
-  const probe = await runNotificationTestSinkProbe({
-    allowInsecureLocalhost: process.env.NODE_ENV !== "production",
-    fetchImpl: input.fetchImpl,
-    provider: "teams",
-    sinkUrl,
-    targetId: target.id,
-  });
-  await writeAuditLog({
-    action: "teams_notification.test_sink_healthcheck",
-    after: { mode: "test_sink", ok: probe.ok, targetId: target.id },
-    entityId: target.id,
-    entityType: "teams_notification_target",
-    projectId: target.projectId,
-    session: input.session,
-  });
-
-  return probe.ok
-    ? {
-        mode: probe.mode,
-        ok: true as const,
-        providerHealth: "not_probed" as const,
-        providerReconnectPerformed: false,
-      }
-    : {
-        ...probe,
-        error: probe.reason,
-        providerHealth: "not_probed" as const,
-        providerReconnectPerformed: false,
-      };
-}
-
-async function prepareTeamsNotificationJobForDelivery(input: {
-  id: string;
-  workspaceId?: string | null;
-}): Promise<"pending_config" | "ready" | "skipped"> {
-  if (!hasDatabaseUrl() || !isUuid(input.id)) return "skipped";
-
-  const row = await queryOne<{
-    alertType: TeamsAlertType;
-    destinationType: TeamsDestinationType | null;
-    projectId: string | null;
-    targetAlertTypes: string[] | null;
-    targetEnabled: boolean | null;
-    targetProjectId: string | null;
-    targetWorkspaceId: string | null;
-    webhookUrl: string | null;
-    workspaceId: string;
-  }>(
-    `
-      select
-        j.workspace_id as "workspaceId",
-        j.project_id as "projectId",
-        j.alert_type as "alertType",
-        t.workspace_id as "targetWorkspaceId",
-        t.project_id as "targetProjectId",
-        t.destination_type as "destinationType",
-        t.webhook_url as "webhookUrl",
-        t.enabled as "targetEnabled",
-        t.alert_types as "targetAlertTypes"
-      from teams_notification_jobs j
-      left join teams_notification_targets t on t.id = j.target_id
-      where j.id = $1::uuid
-        and ($2::uuid is null or j.workspace_id = $2::uuid)
-        and j.sent_at is null
-        and j.provider_message_id is null
-        and (
-          j.status in ('queued', 'retry')
-          or (j.status = 'sending' and j.lease_expires_at <= now())
-        )
-      limit 1
-    `,
-    [input.id, isUuid(input.workspaceId) ? input.workspaceId : null],
-  );
-  if (!row) return "skipped";
-
-  const readiness = validateNotificationTargetReadiness({
-    alertType: row.alertType,
-    projectId: row.projectId,
-    provider: "teams",
-    target: row.targetWorkspaceId && row.targetEnabled !== null
-      ? {
-          alertTypes: row.targetAlertTypes,
-          destinationType: row.destinationType,
-          enabled: row.targetEnabled,
-          projectId: row.targetProjectId,
-          webhookUrl: row.webhookUrl,
-          workspaceId: row.targetWorkspaceId,
-        }
-      : null,
-    workspaceId: row.workspaceId,
-  });
-  if (readiness.ok) return "ready";
-
-  const updated = await queryOne<{ id: string }>(
-    `
-      update teams_notification_jobs
-      set
-        status = 'pending_config',
-        error = $2,
-        configuration_code = $3,
-        admin_action = $4,
-        last_error_category = 'configuration',
-        last_error_message = $2,
-        retry_after = null,
-        locked_by = null,
-        lease_expires_at = null,
-        updated_at = now()
-      where id = $1::uuid
-        and sent_at is null
-        and provider_message_id is null
-        and (
-          status in ('queued', 'retry')
-          or (status = 'sending' and lease_expires_at <= now())
-        )
-      returning id
-    `,
-    [input.id, readiness.reason, readiness.code, readiness.adminAction],
-  );
-  return updated ? "pending_config" : "skipped";
-}
-
-async function claimTeamsNotificationJob(input: {
-  id: string;
-  leaseOwner: string;
-  workspaceId?: string | null;
-}): Promise<ClaimedJobRow | null> {
-  if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
+async function claimTeamsNotificationJob(id: string, workspaceId?: string | null): Promise<ClaimedJobRow | null> {
+  if (!hasDatabaseUrl() || !isUuid(id)) return null;
 
   return queryOne<ClaimedJobRow>(
     `
-      with candidate as (
-        select id
-        from teams_notification_jobs
+      with claimed as (
+        update teams_notification_jobs
+        set status = 'sending', attempts = attempts + 1, updated_at = now()
         where id = $1::uuid
           and ($2::uuid is null or workspace_id = $2::uuid)
-          and attempt_count < max_attempts
-          and (
-            (
-              status in ('queued', 'retry')
-              and available_at <= now()
-              and scheduled_for <= now()
-            )
-            or (status = 'sending' and lease_expires_at <= now())
-          )
-        for update skip locked
-      ), claimed as (
-        update teams_notification_jobs jobs
-        set
-          status = 'sending',
-          attempts = jobs.attempts + 1,
-          attempt_count = jobs.attempt_count + 1,
-          locked_by = $3,
-          lease_expires_at = now() + interval '45 seconds',
-          last_attempt_at = now(),
-          updated_at = now()
-        from candidate
-        where jobs.id = candidate.id
-        returning jobs.*
+          and status = 'queued'
+          and scheduled_for <= now()
+        returning *
       )
       select
         c.id,
@@ -1914,10 +1456,6 @@ async function claimTeamsNotificationJob(input: {
         c.severity,
         c.status,
         c.attempts,
-        c.admin_action as "adminAction",
-        c.configuration_code as "configurationCode",
-        c.attempt_count as "attemptCount",
-        c.locked_by as "leaseOwner",
         c.scheduled_for as "scheduledFor",
         c.sent_at as "sentAt",
         c.error,
@@ -1927,16 +1465,12 @@ async function claimTeamsNotificationJob(input: {
         c.facts,
         c.created_at as "createdAt",
         t.destination_type as "destinationType",
-        t.webhook_url as "webhookUrl",
-        t.alert_types as "targetAlertTypes",
-        t.enabled as "targetEnabled",
-        t.project_id as "targetProjectId",
-        t.workspace_id as "targetWorkspaceId"
+        t.webhook_url as "webhookUrl"
       from claimed c
       left join teams_notification_targets t on t.id = c.target_id and t.workspace_id = c.workspace_id and t.enabled = true
       limit 1
     `,
-    [input.id, isUuid(input.workspaceId) ? input.workspaceId : null, input.leaseOwner],
+    [id, isUuid(workspaceId) ? workspaceId : null],
   );
 }
 
@@ -1947,21 +1481,10 @@ async function listDueTeamsNotificationJobIds(limit = 25, workspaceId?: string |
     `
       select id
       from teams_notification_jobs
-      where (
-        (
-            status in ('queued', 'retry')
-            and available_at <= now()
-            and scheduled_for <= now()
-            and attempt_count < max_attempts
-          )
-          or (
-            status = 'sending'
-            and lease_expires_at <= now()
-            and attempt_count < max_attempts
-          )
-        )
+      where status = 'queued'
+        and scheduled_for <= now()
         and ($2::uuid is null or workspace_id = $2::uuid)
-      order by available_at asc, scheduled_for asc
+      order by scheduled_for asc
       limit $1
     `,
     [limit, isUuid(workspaceId) ? workspaceId : null],
@@ -1970,7 +1493,6 @@ async function listDueTeamsNotificationJobIds(limit = 25, workspaceId?: string |
 
 async function markTeamsNotificationSent(input: {
   id: string;
-  leaseOwner: string;
   messageId?: string | null;
 }) {
   await queryOne(
@@ -1981,107 +1503,36 @@ async function markTeamsNotificationSent(input: {
         provider_message_id = $2,
         sent_at = now(),
         error = null,
-        configuration_code = null,
-        admin_action = null,
-        last_error_category = null,
-        last_error_message = null,
-        locked_by = null,
-        lease_expires_at = null,
         updated_at = now()
-      where id = $1::uuid and status = 'sending' and locked_by = $3
+      where id = $1::uuid
       returning id
     `,
-    [input.id, input.messageId ?? null, input.leaseOwner],
+    [input.id, input.messageId ?? null],
   );
 }
 
 async function markTeamsNotificationFailed(input: {
-  adminAction?: string | null;
-  category: string;
-  configurationCode?: string | null;
   error: string;
   id: string;
-  leaseOwner: string;
-  retryDelaySeconds: number;
 }) {
   await queryOne(
     `
       update teams_notification_jobs
       set
-        status = case
-          when $3 = 'configuration' then 'pending_config'
-          when attempt_count >= max_attempts then 'dead_letter'
-          else 'retry'
-        end,
-        error = left($2, 500),
-        configuration_code = case when $3 = 'configuration' then $6 else null end,
-        admin_action = case when $3 = 'configuration' then $7 else null end,
-        last_error_category = $3,
-        last_error_message = left($2, 500),
-        retry_after = case
-          when $3 = 'configuration' or attempt_count >= max_attempts then null
-          else now() + make_interval(secs => $5::int)
-        end,
-        available_at = case
-          when $3 = 'configuration' or attempt_count >= max_attempts then available_at
-          else now() + make_interval(secs => $5::int)
-        end,
-        dead_lettered_at = case
-          when $3 <> 'configuration' and attempt_count >= max_attempts then now()
-          else null
-        end,
-        locked_by = null,
-        lease_expires_at = null,
+        status = 'failed',
+        error = $2,
+        retry_after = now() + interval '15 minutes',
         updated_at = now()
-      where id = $1::uuid and status = 'sending' and locked_by = $4
+      where id = $1::uuid
       returning id
     `,
-    [
-      input.id,
-      input.error,
-      input.category,
-      input.leaseOwner,
-      input.retryDelaySeconds,
-      input.configurationCode ?? null,
-      input.adminAction ?? null,
-    ],
+    [input.id, input.error],
   );
 }
 
 async function sendTeamsWebhook(job: ClaimedJobRow) {
-  const readiness = validateNotificationTargetReadiness({
-    alertType: job.alertType,
-    projectId: job.projectId,
-    provider: "teams",
-    target: job.targetWorkspaceId && job.targetEnabled !== null
-      ? {
-          alertTypes: job.targetAlertTypes,
-          destinationType: job.destinationType,
-          enabled: job.targetEnabled,
-          projectId: job.targetProjectId,
-          webhookUrl: job.webhookUrl,
-          workspaceId: job.targetWorkspaceId,
-        }
-      : null,
-    workspaceId: job.workspaceId,
-  });
-  if (!readiness.ok) {
-    return {
-      adminAction: readiness.adminAction,
-      configurationCode: readiness.code,
-      error: readiness.reason,
-      ok: false as const,
-      status: null,
-    };
-  }
-  if (!job.webhookUrl) {
-    return {
-      adminAction: "Store a provider-issued webhook credential on the target, then reconcile the job explicitly.",
-      configurationCode: "credential_missing",
-      error: "The provider target has no webhook credential.",
-      ok: false as const,
-      status: null,
-    };
+  if (job.destinationType !== "incoming_webhook" || !job.webhookUrl) {
+    return { error: "Teams target has no incoming webhook URL", ok: false as const };
   }
 
   const payload = buildTeamsPayload({
@@ -2096,117 +1547,43 @@ async function sendTeamsWebhook(job: ClaimedJobRow) {
     body: JSON.stringify(payload),
     headers: { "Content-Type": "application/json" },
     method: "POST",
-    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
+    const error = await response.text().catch(() => "");
     return {
-      adminAction: undefined,
-      configurationCode: undefined,
-      error: `Teams webhook failed with HTTP ${response.status}`,
+      error: `Teams webhook failed with ${response.status}${error ? `: ${error.slice(0, 240)}` : ""}`,
       ok: false as const,
-      status: response.status,
     };
   }
 
   return {
     messageId: response.headers.get("request-id") ?? response.headers.get("x-ms-request-id"),
     ok: true as const,
-    status: response.status,
   };
 }
 
 export async function processDueTeamsNotifications(
-  input: {
-    jobIds?: string[];
-    limit?: number;
-    shouldContinue?: () => boolean;
-    workspaceId?: string | null;
-  } = {},
-): Promise<{ checked: number; failed: number; pendingConfig: number; sent: number }> {
+  input: { jobIds?: string[]; limit?: number; workspaceId?: string | null } = {},
+): Promise<{ checked: number; failed: number; sent: number }> {
   const refs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueTeamsNotificationJobIds(input.limit ?? 25, input.workspaceId);
-  const result = { checked: 0, failed: 0, pendingConfig: 0, sent: 0 };
+  const result = { checked: refs.length, failed: 0, sent: 0 };
 
   for (const ref of refs) {
-    if (input.shouldContinue && !input.shouldContinue()) break;
-    result.checked += 1;
-    const preparation = await prepareTeamsNotificationJobForDelivery({
-      id: ref.id,
-      workspaceId: input.workspaceId,
-    });
-    if (preparation !== "ready") {
-      if (preparation === "pending_config") result.pendingConfig += 1;
-      continue;
-    }
-    const leaseOwner = createLeaseOwner("teams-notification");
-    let job: ClaimedJobRow | null;
-    try {
-      job = await claimTeamsNotificationJob({
-        id: ref.id,
-        leaseOwner,
-        workspaceId: input.workspaceId,
-      });
-    } catch (error) {
-      const afterConflict = await prepareTeamsNotificationJobForDelivery({
-        id: ref.id,
-        workspaceId: input.workspaceId,
-      });
-      if (afterConflict === "pending_config") {
-        result.pendingConfig += 1;
-        continue;
-      }
-      throw error;
-    }
+    const job = await claimTeamsNotificationJob(ref.id, input.workspaceId);
     if (!job) continue;
 
-    let sendResult: Awaited<ReturnType<typeof sendTeamsWebhook>>;
-    try {
-      sendResult = await sendTeamsWebhook(job);
-    } catch (error) {
-      result.failed += 1;
-      await markTeamsNotificationFailed({
-        adminAction: "Repair the provider target and reconcile this job explicitly.",
-        category: classifyDeliveryError({ error }),
-        configurationCode: "provider_delivery_configuration_error",
-        error: sanitizeJobError(error),
-        id: job.id,
-        leaseOwner: job.leaseOwner,
-        retryDelaySeconds: retryDelaySeconds(Number(job.attemptCount)),
-      });
-      continue;
-    }
+    const sendResult = await sendTeamsWebhook(job);
     if (!sendResult.ok) {
-      const deliveryCategory = sendResult.configurationCode
-        ? "configuration"
-        : classifyDeliveryError({ error: sendResult.error, status: sendResult.status });
-      const providerRejectedCredential = deliveryCategory === "provider_auth" ||
-        deliveryCategory === "provider_rejected";
-      if (deliveryCategory === "configuration" || providerRejectedCredential) result.pendingConfig += 1;
-      else result.failed += 1;
-      await markTeamsNotificationFailed({
-        adminAction: sendResult.adminAction ?? (providerRejectedCredential
-          ? "Replace or repair the Teams incoming-webhook credential, validate it with the test sink, then reconcile explicitly."
-          : null),
-        category: providerRejectedCredential ? "configuration" : deliveryCategory,
-        configurationCode: sendResult.configurationCode ?? (providerRejectedCredential
-          ? "provider_credential_rejected"
-          : null),
-        error: sanitizeJobError(sendResult.error),
-        id: job.id,
-        leaseOwner: job.leaseOwner,
-        retryDelaySeconds: retryDelaySeconds(Number(job.attemptCount)),
-      });
+      result.failed += 1;
+      await markTeamsNotificationFailed({ error: sendResult.error, id: job.id });
       continue;
     }
 
     result.sent += 1;
-    await markTeamsNotificationSent({
-      id: job.id,
-      leaseOwner: job.leaseOwner,
-      messageId: sendResult.messageId ?? null,
-    });
+    await markTeamsNotificationSent({ id: job.id, messageId: sendResult.messageId ?? null });
   }
 
   return result;

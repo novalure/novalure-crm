@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import {
   listTeamsNotificationJobs,
   listTeamsNotificationTargets,
@@ -7,7 +7,6 @@ import {
   queueCustomerAccessRiskAlerts,
   queueLeadSlaDueSoonAlerts,
   queueLeadSlaOverdueAlerts,
-  runTeamsNotificationTargetTestSinkHealthcheck,
   upsertTeamsNotificationTarget,
   type TeamsNotificationStatus,
 } from "@/lib/db/teams-notification-repositories";
@@ -28,19 +27,17 @@ function getLimit(url: URL) {
 function getStatus(url: URL): TeamsNotificationStatus | "all" {
   const status = url.searchParams.get("status");
   return status === "queued" ||
-    status === "retry" ||
     status === "pending_config" ||
     status === "sending" ||
     status === "sent" ||
     status === "failed" ||
-    status === "dead_letter" ||
     status === "cancelled"
     ? status
     : "all";
 }
 
 export async function GET(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
@@ -60,7 +57,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
+  const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);
@@ -72,9 +69,6 @@ export async function POST(request: Request) {
   const operation = typeof input.operation === "string" ? input.operation : "target";
 
   if (operation === "target") {
-    if (!auth.session.productPermissions.includes("settings:manage")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
     const target = typeof input.target === "object" && input.target ? input.target as Record<string, unknown> : input;
     const result = await upsertTeamsNotificationTarget({
       session: auth.session,
@@ -86,18 +80,6 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(result);
-  }
-
-  if (operation === "healthcheck" || operation === "reconnect") {
-    if (!auth.session.productPermissions.includes("settings:manage")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    const targetId = typeof input.targetId === "string" ? input.targetId : "";
-    const result = await runTeamsNotificationTargetTestSinkHealthcheck({
-      session: auth.session,
-      targetId,
-    });
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
   }
 
   if (operation === "queue_sla_overdue") {
@@ -125,9 +107,6 @@ export async function POST(request: Request) {
   }
 
   if (operation === "process") {
-    if (!auth.session.productPermissions.includes("settings:manage")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
     const result = await processDueTeamsNotifications({
       limit: typeof input.limit === "number" ? input.limit : 25,
       workspaceId: auth.session.workspaceId,

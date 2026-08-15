@@ -3,8 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createJiti } from "jiti";
 import { Pool } from "@neondatabase/serverless";
-import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
+const testDbHost = "ep-morning-fog-al1enszq-pooler.c-3.eu-central-1.aws.neon.tech";
+const testDbSuffix = "98273025";
 const marker = "GOLIVETEST_STAGEFIX_";
 
 const workspaceId = "7f610000-0000-4000-8000-000000000001";
@@ -52,15 +53,17 @@ function maskDatabaseUrl(value) {
 }
 
 function assertTestDatabase(env, databaseUrl) {
-  const target = assertDatabaseTarget({
-    databaseUrl,
-    env,
-    purpose: "reservation stage resolver QA",
-    target: "test",
-  });
+  const parsed = new URL(databaseUrl);
+  const projectIdValue = env.POSTGRES_NEON_PROJECT_ID || env.NEON_PROJECT_ID || "";
   console.log(`Active DATABASE_URL: ${maskDatabaseUrl(databaseUrl)}`);
-  console.log(`Active DB host: ${target.host}`);
-  console.log("Active project identity verified");
+  console.log(`Active DB host: ${parsed.hostname}`);
+  console.log(`Project ID suffix verified: ${projectIdValue ? "***" + projectIdValue.slice(-8) : "missing"}`);
+  if (parsed.hostname !== testDbHost) {
+    throw new Error(`Refusing reservation stage resolver QA: active DB host is not test (${testDbHost})`);
+  }
+  if (!projectIdValue.includes(testDbSuffix)) {
+    throw new Error(`Refusing reservation stage resolver QA: project id does not contain ${testDbSuffix}`);
+  }
 }
 
 async function cleanup(pool) {

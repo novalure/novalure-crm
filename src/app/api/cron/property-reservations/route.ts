@@ -1,7 +1,13 @@
 import { expireOverduePropertyReservations } from "@/lib/db/reservation-repositories";
-import { areQueueWorkersPaused, createCronRun, isCronAuthorized } from "@/lib/cron/runtime";
 
 export const maxDuration = 60;
+
+function isAuthorized(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.VERCEL_ENV !== "production";
+
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
 
 function getLimit(request: Request) {
   const value = new URL(request.url).searchParams.get("limit");
@@ -10,12 +16,8 @@ function getLimit(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!isCronAuthorized(request)) {
+  if (!isAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const run = createCronRun({ route: "property-reservations" });
-  if (areQueueWorkersPaused()) {
-    return Response.json({ ok: true, paused: true, runId: run.runId });
   }
 
   const result = await expireOverduePropertyReservations({
@@ -24,9 +26,7 @@ export async function GET(request: Request) {
   });
 
   return Response.json({
-    durationMs: run.durationMs(),
     ok: true,
-    runId: run.runId,
     ...result,
   });
 }

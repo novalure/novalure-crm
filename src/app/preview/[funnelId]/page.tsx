@@ -32,8 +32,8 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
   const copy = getFunnelPreviewCopy(language);
 
   return (
-    <main className="novalure-funnel-preview-page min-h-screen bg-stone-100 px-4 py-6 text-slate-950">
-      <section className="novalure-funnel-preview-toolbar mx-auto mb-4 flex max-w-5xl flex-col gap-3 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+    <main className="min-h-screen bg-stone-100 px-4 py-6 text-slate-950">
+      <section className="mx-auto mb-4 flex max-w-5xl flex-col gap-3 rounded-lg border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{copy.label}</p>
           <h1 className="mt-1 break-words text-xl font-semibold">{blueprint.name}</h1>
