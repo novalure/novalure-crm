@@ -89,6 +89,7 @@ function createTotpCode(secret, now = Date.now()) {
 
 function createClient(email) {
   const cookies = new Map();
+  let enrolledMfaSecret = null;
 
   function storeCookies(headers) {
     const values =
@@ -182,7 +183,7 @@ function createClient(email) {
       const redirectLocation = challengeResponse.headers.get("location") ?? "";
       const challengeKind = new URL(redirectLocation, baseUrl).searchParams.get("step");
       assert(
-        challengeKind === "workspace_selection" || challengeKind === "mfa_enrollment",
+        ["workspace_selection", "mfa_enrollment", "mfa_verification"].includes(challengeKind),
         `${email} receives an expected login challenge`,
       );
       assert(cookies.has("novalure_login_challenge"), `${email} receives login challenge cookie`);
@@ -197,12 +198,16 @@ function createClient(email) {
         const workspaceUserId = workspaceButton?.[1].match(/\bvalue="([0-9a-f-]{36})"/i)?.[1] ?? null;
         assert(Boolean(workspaceUserId), `${email} workspace selection exposes a membership`);
         challengeBody.set("workspaceUserId", workspaceUserId);
-      } else {
-        const secret = challengePage.text.match(/<code>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
-        const code = secret ? createTotpCode(secret) : null;
+      } else if (challengeKind === "mfa_enrollment") {
+        enrolledMfaSecret = challengePage.text.match(/<code>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
+        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
         assert(Boolean(code), `${email} MFA enrollment exposes a valid TOTP secret`);
         challengeBody.set("code", code);
         challengeBody.set("recoveryCodesSaved", "1");
+      } else {
+        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
+        assert(Boolean(code), `${email} reuses the enrolled TOTP secret for MFA verification`);
+        challengeBody.set("code", code);
       }
 
       const challengeResult = await request("/api/auth/login", {
