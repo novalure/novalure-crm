@@ -31,6 +31,11 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import {
+  compareLeadDeadlines,
+  formatLeadDateTime,
+  minutesUntilLeadDeadline,
+} from "@/lib/lead-deadline";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type LeadInboxProps = {
@@ -113,12 +118,7 @@ const viewStyles = {
 };
 
 function formatDateTime(value: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatLeadDateTime(value, locale);
 }
 
 function formatMoney(value: number | undefined, locale: string) {
@@ -132,7 +132,7 @@ function formatMoney(value: number | undefined, locale: string) {
 }
 
 function minutesUntil(value: string) {
-  return Math.round((new Date(value).getTime() - new Date().getTime()) / 60000);
+  return minutesUntilLeadDeadline(value);
 }
 
 function getPriorityRank(lead: LocalLead) {
@@ -354,7 +354,7 @@ export function LeadInbox({
           return b.lead.score - a.lead.score;
         }
         if (sortBy === "sla") {
-          return new Date(a.lead.slaDueAt).getTime() - new Date(b.lead.slaDueAt).getTime();
+          return compareLeadDeadlines(a.lead.slaDueAt, b.lead.slaDueAt);
         }
         if (sortBy === "newest") {
           return new Date(b.lead.receivedAt).getTime() - new Date(a.lead.receivedAt).getTime();
