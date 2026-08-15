@@ -26,7 +26,7 @@ function contrastRatio(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-test("Figtree is loaded centrally and wired through the root layout", async () => {
+test("Inter is bundled for the CRM while the local public-page fallback remains available", async () => {
   const [fonts, globals, layout] = await Promise.all([
     read("src/app/fonts.ts"),
     read("src/app/globals.css"),
@@ -38,25 +38,33 @@ test("Figtree is loaded centrally and wired through the root layout", async () =
   assert.match(fonts, /weight: "400 800"/);
   assert.match(fonts, /variable: "--font-figtree"/);
   assert.match(layout, /className=\{`\$\{figtree\.variable\} h-full`\}/);
-  assert.match(layout, /themeColor: "#faf9f7"/);
+  assert.match(layout, /themeColor: "#07080b"/);
+  assert.match(globals, /@import "@fontsource-variable\/inter"/);
   assert.match(globals, /--font-sans: var\(--font-figtree\), system-ui, sans-serif/);
   assert.match(globals, /font-family: var\(--font-figtree\), system-ui, sans-serif/);
+  assert.match(await read("src/styles/crm-theme.css"), /font-family: "Inter Variable", Inter/);
 });
 
-test("Novalure website tokens are centralized without mutating the legacy palette", async () => {
-  const [globals, tokens] = await Promise.all([
+test("current Novalure website tokens drive the authenticated CRM theme", async () => {
+  const [crmTheme, globals, tokens] = await Promise.all([
+    read("src/styles/crm-theme.css"),
     read("src/app/globals.css"),
     read("src/styles/novalure-tokens.css"),
   ]);
 
   const requiredTokens = {
-    "--nl-bg": "#faf9f7",
+    "--nl-ink": "#07080b",
+    "--nl-graphite": "#111318",
+    "--nl-steel": "#1b2029",
+    "--nl-mist": "#f4f6fa",
     "--nl-surface": "#ffffff",
-    "--nl-ink": "#33302b",
-    "--nl-muted": "#6f6a63",
-    "--nl-blue": "#2d68f0",
-    "--nl-blue-dark": "#1e4fc2",
-    "--nl-border": "#e3ded5",
+    "--nl-muted": "#667085",
+    "--nl-tertiary": "#667085",
+    "--nl-gold": "#ffd43b",
+    "--nl-gold-strong": "#e4b900",
+    "--nl-focus-outline": "#8a6800",
+    "--nl-green": "#42d39b",
+    "--nl-border": "#dde3ec",
     "--nl-success-text": "#176344",
     "--nl-warning-text": "#76531d",
     "--nl-danger-text": "#8a3026",
@@ -67,24 +75,72 @@ test("Novalure website tokens are centralized without mutating the legacy palett
   }
 
   assert.match(globals, /@import "\.\.\/styles\/novalure-tokens\.css"/);
-  assert.match(globals, /--background: #d9ecff/);
+  assert.match(globals, /@import "\.\.\/styles\/crm-theme\.css"/);
+  assert.match(globals, /--background: var\(--nl-bg\)/);
+  assert.doesNotMatch(globals, /--background: #d9ecff/);
+  assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\]/);
+  assert.match(crmTheme, /var\(--nl-gold\)/);
+  assert.match(crmTheme, /var\(--nl-graphite\)/);
 });
 
 test("required text and status token pairs meet WCAG AA contrast", () => {
   const pairs = [
-    ["#ffffff", "#2d68f0"],
-    ["#33302b", "#ffffff"],
-    ["#6f6a63", "#ffffff"],
+    ["#211800", "#ffd43b"],
+    ["#ffffff", "#111318"],
+    ["#07080b", "#ffffff"],
+    ["#667085", "#ffffff"],
+    ["#667085", "#f4f6fa"],
     ["#176344", "#edfff6"],
     ["#76531d", "#fbf1df"],
     ["#8a3026", "#fff1ef"],
-    ["#1e4fc2", "#e9f0fe"],
+    ["#6b5200", "#fff8d6"],
   ];
 
   for (const [foreground, background] of pairs) {
     assert.ok(
       contrastRatio(foreground, background) >= 4.5,
       `${foreground} on ${background} must meet WCAG AA`,
+    );
+  }
+});
+
+test("CRM controls preserve sizing utilities and all small-copy tokens retain AA contrast", async () => {
+  const [crmTheme, mobileMenu, publicLanding, publicSite] = await Promise.all([
+    read("src/styles/crm-theme.css"),
+    read("src/components/public-crm-mobile-menu.tsx"),
+    read("src/components/public-crm-landing.module.css"),
+    read("src/components/public-site-shell.module.css"),
+  ]);
+
+  const formRule = crmTheme.match(
+    /\n\.crm-app input:not\(\[type="button"\]\)[\s\S]*?\{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+
+  assert.doesNotMatch(formRule, /\bwidth:\s*100%/);
+  assert.doesNotMatch(formRule, /\bmin-width:\s*0/);
+  assert.match(crmTheme, /:where\(\.crm-app\) :where\([\s\S]*?\{\s*min-width: 0;\s*\}/);
+  assert.match(crmTheme, /input::placeholder,[\s\S]*?color: var\(--nl-tertiary\) !important;[\s\S]*?opacity: 1;/);
+  assert.match(publicLanding, /--nl-tertiary: #667085;/);
+  assert.match(publicSite, /--nl-tertiary: #667085;/);
+  assert.doesNotMatch(publicLanding, /--nl-tertiary: #98a2b3;/);
+  assert.doesNotMatch(publicSite, /--nl-tertiary: #98a2b3;/);
+  assert.match(publicLanding, /@media \(max-width: 1180px\)/);
+  assert.match(mobileMenu, /const MOBILE_NAV_MAX_WIDTH = 1180;/);
+  assert.match(mobileMenu, /window\.innerWidth > MOBILE_NAV_MAX_WIDTH/);
+});
+
+test("focus outline meets the WCAG non-text contrast threshold on light and dark CRM surfaces", () => {
+  const focusPairs = [
+    ["#8a6800", "#ffffff"],
+    ["#8a6800", "#f4f6fa"],
+    ["#8a6800", "#07080b"],
+    ["#8a6800", "#111318"],
+  ];
+
+  for (const [foreground, background] of focusPairs) {
+    assert.ok(
+      contrastRatio(foreground, background) >= 3,
+      `${foreground} on ${background} must meet WCAG non-text contrast`,
     );
   }
 });

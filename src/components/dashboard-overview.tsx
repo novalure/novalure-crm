@@ -51,7 +51,7 @@ const periodOptions = ["Heute", "Woche", "Monat", "Quartal", "YTD", "Custom"] as
 const regionOptions: Array<Region | "Alle"> = ["Alle", "Tirol", "Steiermark"];
 const sourceOptions = CRM_LEAD_SOURCES;
 
-const PDF_EXPORT_BACKGROUND = "#f4f2ec";
+const PDF_EXPORT_BACKGROUND = "#f4f6fa";
 const PDF_EXPORT_MARGIN_MM = 8;
 const DISPLAY_TIME_ZONE = "Europe/Vienna";
 
@@ -63,19 +63,19 @@ function prepareDashboardPdfClone(clonedDocument: Document) {
   style.textContent = `
     [data-dashboard-pdf-root="true"] {
       background: ${PDF_EXPORT_BACKGROUND} !important;
-      color: #08233f !important;
+      color: #07080b !important;
     }
 
     [data-dashboard-pdf-root="true"],
     [data-dashboard-pdf-root="true"] * {
-      border-color: rgba(74, 144, 226, 0.28) !important;
+      border-color: #dde3ec !important;
       box-shadow: none !important;
-      color: #08233f !important;
+      color: #07080b !important;
       text-shadow: none !important;
     }
 
     [data-dashboard-pdf-root="true"] [class*="bg-"] {
-      background: #eef7ff !important;
+      background: #ffffff !important;
       background-image: none !important;
     }
 
@@ -88,7 +88,7 @@ function prepareDashboardPdfClone(clonedDocument: Document) {
     [data-dashboard-pdf-root="true"] .bg-red-50,
     [data-dashboard-pdf-root="true"] .bg-violet-50,
     [data-dashboard-pdf-root="true"] [class*="bg-[conic-gradient"] {
-      background: #d8ecff !important;
+      background: #f8fafc !important;
       background-image: none !important;
     }
 
@@ -97,22 +97,29 @@ function prepareDashboardPdfClone(clonedDocument: Document) {
     [data-dashboard-pdf-root="true"] .bg-slate-950,
     [data-dashboard-pdf-root="true"] button.bg-emerald-700,
     [data-dashboard-pdf-root="true"] button.bg-slate-950 {
-      background: #4a90e2 !important;
+      background: #ffd43b !important;
       background-image: none !important;
+      color: #211800 !important;
+    }
+
+    [data-dashboard-pdf-root="true"] article.bg-slate-950,
+    [data-dashboard-pdf-root="true"] section.bg-slate-950 {
+      background: #111318 !important;
       color: #ffffff !important;
     }
 
-    [data-dashboard-pdf-root="true"] .text-white,
+    [data-dashboard-pdf-root="true"] article.bg-slate-950 *,
+    [data-dashboard-pdf-root="true"] section.bg-slate-950 *,
     [data-dashboard-pdf-root="true"] button.bg-emerald-700 *,
     [data-dashboard-pdf-root="true"] button.bg-slate-950 * {
-      color: #ffffff !important;
+      color: inherit !important;
     }
 
     [data-dashboard-pdf-root="true"] input,
     [data-dashboard-pdf-root="true"] select,
     [data-dashboard-pdf-root="true"] textarea {
       background: #ffffff !important;
-      color: #08233f !important;
+      color: #07080b !important;
     }
   `;
   clonedDocument.head.appendChild(style);
@@ -764,7 +771,7 @@ export function DashboardOverview({
       case "requestsLine":
         return <div className="flex h-full items-end gap-2 pt-4">{requestTrend.map((item) => <div className="flex flex-1 flex-col items-center gap-2" key={item.key}><div className="w-full rounded-t-md bg-emerald-700" style={{ height: String(Math.max(12, (item.count / trendMax) * 120)) + "px" }} /><span className="text-xs font-semibold text-stone-500">{item.label}</span></div>)}</div>;
       case "statusDonut":
-        return <div className="grid gap-3 sm:grid-cols-[150px_1fr]"><div className="grid aspect-square place-items-center rounded-full bg-[conic-gradient(#059669_0_25%,#2563eb_25%_50%,#f59e0b_50%_75%,#7c3aed_75%_90%,#94a3b8_90%_100%)]"><div className="grid h-24 w-24 place-items-center rounded-full bg-white text-lg font-semibold">{filteredLeads.length}</div></div><div className="grid content-center gap-2">{statusRows.map((row) => <div className="flex justify-between text-sm" key={row.status}><span>{getCrmStatusLabel(row.status, language)}</span><span>{Math.round((row.count / totalStatus) * 100)}%</span></div>)}</div></div>;
+        return <div className="grid gap-3 sm:grid-cols-[150px_1fr]"><div className="grid aspect-square place-items-center rounded-full bg-[conic-gradient(#059669_0_25%,#ffd43b_25%_50%,#f59e0b_50%_75%,#7c3aed_75%_90%,#94a3b8_90%_100%)]"><div className="grid h-24 w-24 place-items-center rounded-full bg-white text-lg font-semibold">{filteredLeads.length}</div></div><div className="grid content-center gap-2">{statusRows.map((row) => <div className="flex justify-between text-sm" key={row.status}><span>{getCrmStatusLabel(row.status, language)}</span><span>{Math.round((row.count / totalStatus) * 100)}%</span></div>)}</div></div>;
       case "overdueFollowupsList":
         return <ListRows rows={overdueLeads.sort((a, b) => getAging(b).days - getAging(a).days).map((lead) => ({ id: lead.id, title: getLeadName(lead, contacts, language), meta: getCrmSystemTextLabel(lead.nextAction, language) + " | " + copy.lists.daysWithoutContact(getAging(lead).days), className: getAging(lead).className }))} empty={copy.lists.noOverdueFollowups} />;
       case "todayTasks":

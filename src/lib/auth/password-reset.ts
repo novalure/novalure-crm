@@ -113,12 +113,12 @@ function buildResetEmail(input: {
   return {
     subject: copy.subject,
     html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#071421">
+      <div style="font-family:Inter,Arial,sans-serif;line-height:1.6;color:#07080b">
         <h1 style="font-size:22px">${escapeHtml(copy.heading)}</h1>
         <p>${escapeHtml(copy.greeting(input.userName))}</p>
         <p>${escapeHtml(copy.intro("Novalure CRM"))}</p>
         <p>
-          <a href="${safeResetUrl}" style="display:inline-block;background:#071421;color:#ffffff;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700">
+          <a href="${safeResetUrl}" style="display:inline-block;background:#ffd43b;color:#211800;padding:12px 18px;border:1px solid #e4b900;border-radius:999px;text-decoration:none;font-weight:800">
             ${escapeHtml(copy.button)}
           </a>
         </p>

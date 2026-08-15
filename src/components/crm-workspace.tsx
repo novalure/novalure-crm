@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   automations,
@@ -1074,8 +1075,58 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
 function NovalureGlyph() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-      <path d="M12 3 20 8v8l-8 5-8-5V8z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="m8.5 13 2.3 2.4 4.9-6.3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="M6 18V6l12 12V6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      <path d="M6 6h4M14 18h4" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
+function CrmBrand({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <span data-crm-brandmark>
+        <NovalureGlyph />
+      </span>
+    );
+  }
+
+  return (
+    <span data-crm-brand>
+      <Image
+        alt="NovaLure — we create success"
+        data-crm-logo
+        height={55}
+        src="/novalure-logo.svg"
+        unoptimized
+        width={150}
+      />
+      <span data-crm-badge>CRM</span>
+    </span>
+  );
+}
+
+function MenuGlyph({ open = false }: { open?: boolean }) {
+  return (
+    <svg aria-hidden="true" fill="none" height="20" viewBox="0 0 24 24" width="20">
+      {open ? (
+        <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+      ) : (
+        <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+      )}
+    </svg>
+  );
+}
+
+function SidebarToggleGlyph({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path
+        d={collapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
     </svg>
   );
 }
@@ -2042,7 +2093,7 @@ function WorkspaceContextBar({
   const breadcrumbItems = [workspaceName, projectLabel, profileLabel, areaLabel];
 
   return (
-    <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm">
+    <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm" data-crm-context>
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{contextCopy.label}</p>
       <nav aria-label={contextCopy.label} className="mt-1" data-crm-breadcrumb>
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold text-slate-950">
@@ -2061,7 +2112,7 @@ function WorkspaceContextBar({
       </nav>
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
         {chips.map(([label, value]) => (
-          <span className="rounded-md bg-stone-50 px-2.5 py-1.5 font-semibold text-stone-700" key={label}>
+          <span className="rounded-md bg-stone-50 px-2.5 py-1.5 font-semibold text-stone-700" data-crm-context-chip key={label}>
             {label}: <span className="text-slate-950">{value}</span>
           </span>
         ))}
@@ -3009,6 +3060,9 @@ export function CrmWorkspace({
   const [coreDataStatus, setCoreDataStatus] = useState<"idle" | "loading" | "fresh" | "error">("idle");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const lastUnitsRefreshKey = useRef("");
+  const mobileNavigationRef = useRef<HTMLElement | null>(null);
+  const pageTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const focusPageTitleAfterNavigationRef = useRef(false);
   const [actionModal, setActionModal] = useState<HeaderActionModal>(null);
   const [importNotice, setImportNotice] = useState("");
   const [importSource, setImportSource] = useState<ImportSource>("hubspot");
@@ -3040,6 +3094,7 @@ export function CrmWorkspace({
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
   const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
 
@@ -3730,6 +3785,86 @@ export function CrmWorkspace({
     window.dispatchEvent(new CustomEvent("novalure:language-change", { detail: { language } }));
   }, [activeAreaLabel, language, languageHydrated]);
 
+  useEffect(() => {
+    if (!mobileNavigationOpen) return;
+
+    const drawer = mobileNavigationRef.current;
+    const previousOverflow = document.body.style.overflow;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "select:not([disabled])",
+      "input:not([disabled])",
+      "textarea:not([disabled])",
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(",");
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileNavigationOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab" || !drawer) return;
+
+      const focusableElements = Array.from(
+        drawer.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter((element) => (
+        !element.hasAttribute("disabled") &&
+        !element.hidden &&
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getClientRects().length > 0
+      ));
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+
+      if (!first || !last) {
+        event.preventDefault();
+        drawer.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleEscape);
+    const focusFrame = window.requestAnimationFrame(() => {
+      drawer?.querySelector<HTMLElement>(focusableSelector)?.focus();
+    });
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleEscape);
+      window.cancelAnimationFrame(focusFrame);
+      previouslyFocused?.focus();
+    };
+  }, [mobileNavigationOpen]);
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia("(min-width: 1181px)");
+    const closeMobileNavigation = (event: MediaQueryListEvent) => {
+      if (event.matches) setMobileNavigationOpen(false);
+    };
+
+    desktopQuery.addEventListener("change", closeMobileNavigation);
+    return () => desktopQuery.removeEventListener("change", closeMobileNavigation);
+  }, []);
+
+  useEffect(() => {
+    if (mobileNavigationOpen || !focusPageTitleAfterNavigationRef.current) return;
+
+    focusPageTitleAfterNavigationRef.current = false;
+    const focusFrame = window.requestAnimationFrame(() => pageTitleRef.current?.focus());
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [mobileNavigationOpen, visibleActiveNavigationEntry.id]);
+
   function handleLanguageChange(nextLanguage: LanguageCode) {
     setLanguage(nextLanguage);
   }
@@ -3804,6 +3939,7 @@ export function CrmWorkspace({
 
   function handleSectionChange(nextSection: DashboardSection, preferredEntryId?: NavigationEntryId) {
     setActiveSection(nextSection);
+    setMobileNavigationOpen(false);
     const matchingEntry =
       preferredEntryId ??
       normalizedActivePreset.navigationEntries.find(
@@ -3902,6 +4038,7 @@ export function CrmWorkspace({
 
     setCrmScope(nextScope);
     setScopeHydrated(true);
+    setMobileNavigationOpen(false);
     setUnitBoardFocusScope(null);
     setPropertyFocusAssetId(undefined);
 
@@ -3958,44 +4095,39 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="min-h-screen max-w-full overflow-hidden bg-[#f4f2ec] text-slate-950" lang={language}>
-      <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]">
+    <main className="crm-app min-h-screen max-w-full overflow-hidden bg-[#f4f6fa] text-slate-950" lang={language}>
+      <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
+          aria-hidden={mobileNavigationOpen ? true : undefined}
           className={`hidden shrink-0 overflow-hidden border-r border-stone-200 bg-white py-6 transition-all duration-200 xl:block ${
             sidebarCollapsed ? "w-16 px-2" : "w-80 px-5"
           }`}
+          data-collapsed={sidebarCollapsed ? "true" : "false"}
+          data-crm-sidebar
+          inert={mobileNavigationOpen ? true : undefined}
         >
           <div
             className={`mb-8 flex gap-3 ${
               sidebarCollapsed ? "flex-col items-center" : "items-start justify-between"
             }`}
+            data-crm-brand-row
           >
-            {sidebarCollapsed ? (
-              <div className="grid h-10 w-10 place-items-center rounded-md bg-slate-950 text-white">
-                <NovalureGlyph />
-              </div>
-            ) : (
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-                  Novalure
-                </p>
-                <h1 className="mt-2 text-2xl font-semibold">{copy.shell.appTitle}</h1>
-              </div>
-            )}
+            {sidebarCollapsed ? <CrmBrand compact /> : <CrmBrand />}
             <button
               aria-expanded={!sidebarCollapsed}
               aria-label={sidebarToggleLabel}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-stone-300 bg-white text-sm font-semibold text-slate-800 hover:bg-stone-100"
+              data-crm-collapse
               onClick={() => setSidebarCollapsed((current) => !current)}
               title={sidebarToggleLabel}
               type="button"
             >
-              {sidebarCollapsed ? ">>" : "<<"}
+              <SidebarToggleGlyph collapsed={sidebarCollapsed} />
             </button>
           </div>
 
           {!sidebarCollapsed ? (
-            <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
+            <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-profile-card>
               <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {copy.navigationPresets.label}
                 <select
@@ -4025,37 +4157,32 @@ export function CrmWorkspace({
             </div>
           ) : null}
 
-          <nav className="space-y-1 text-sm font-medium">
+          <nav aria-label={copy.navigationPresets.mobileNavigationLabel} className="space-y-1 text-sm font-medium" data-crm-nav>
             {focusedNavigationItems.map((item) => (
               <button
+                aria-current={visibleActiveNavigationEntry.id === item.id ? "page" : undefined}
                 aria-label={item.label}
                 className={`flex w-full items-center rounded-md py-2.5 text-left ${
                   visibleActiveNavigationEntry.id === item.id
                     ? "bg-slate-950 text-white"
                     : "text-slate-600 hover:bg-stone-100 hover:text-slate-950"
                 } ${sidebarCollapsed ? "justify-center px-0" : "justify-between px-3"}`}
+                data-active={visibleActiveNavigationEntry.id === item.id ? "true" : "false"}
+                data-crm-nav-item
                 key={item.id}
                 onClick={() => handleNavigationChange(item.id)}
                 title={item.label}
                 type="button"
               >
-                {sidebarCollapsed ? (
-                  <span className="grid h-8 w-8 place-items-center rounded-md">
-                    <NavigationIcon section={item.section} />
-                  </span>
-                ) : (
-                  <span className="min-w-0 break-words">{item.label}</span>
-                )}
-                {!sidebarCollapsed && visibleActiveNavigationEntry.id === item.id ? (
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-300" />
-                ) : null}
+                <NavigationIcon section={item.section} />
+                {!sidebarCollapsed ? <span className="min-w-0 break-words">{item.label}</span> : null}
               </button>
             ))}
           </nav>
 
           {!sidebarCollapsed ? (
             <>
-              <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div className="mt-8 rounded-lg border border-stone-200 bg-stone-50 p-4" data-crm-workspace-card>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
                   {copy.sidebar.workspace}
                 </p>
@@ -4075,17 +4202,20 @@ export function CrmWorkspace({
                 </div>
               </div>
 
-              <details className="mt-4 rounded-lg border border-stone-200 bg-white p-4" open>
+              <details className="mt-4 rounded-lg border border-stone-200 bg-white p-4" data-crm-projects open>
                 <summary className="cursor-pointer select-none text-sm font-semibold text-slate-900">
                   {copy.sidebar.projects}
                 </summary>
                 <div className="mt-4 space-y-2">
                   <button
+                    aria-pressed={activeProjectId === "all"}
                     className={`block w-full rounded-md border p-3 text-left text-sm ${
                       activeProjectId === "all"
                         ? "border-slate-950 bg-slate-950 text-white"
                         : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
                     }`}
+                    data-active={activeProjectId === "all" ? "true" : "false"}
+                    data-crm-project-button
                     onClick={() => handleProjectScopeChange("all")}
                     type="button"
                   >
@@ -4113,11 +4243,14 @@ export function CrmWorkspace({
                   </button>
                   {allProjects.map((project) => (
                     <button
+                      aria-pressed={activeProjectId === project.id}
                       className={`block w-full rounded-md border p-3 text-left text-sm ${
                         activeProjectId === project.id
                           ? "border-slate-950 bg-slate-950 text-white"
                           : "border-stone-200 bg-stone-50 text-slate-900 hover:border-emerald-200 hover:bg-emerald-50"
                       }`}
+                      data-active={activeProjectId === project.id ? "true" : "false"}
+                      data-crm-project-button
                       key={project.name}
                       onClick={() => handleProjectScopeChange(project.id)}
                       type="button"
@@ -4197,20 +4330,207 @@ export function CrmWorkspace({
           ) : null}
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col">
-          <header className="border-b border-stone-200 bg-white/90 px-4 py-4 backdrop-blur md:px-8">
+        <section className="flex min-w-0 flex-1 flex-col" data-crm-stage>
+          <div
+            aria-hidden={mobileNavigationOpen ? true : undefined}
+            data-crm-mobile-bar
+            inert={mobileNavigationOpen ? true : undefined}
+          >
+            <CrmBrand />
+            <span data-crm-mobile-current>{activeAreaLabel}</span>
+            <button
+              aria-expanded={mobileNavigationOpen}
+              aria-label={language === "de" ? "Navigation öffnen" : "Open navigation"}
+              aria-controls="crm-mobile-navigation"
+              data-crm-mobile-trigger
+              onClick={() => setMobileNavigationOpen(true)}
+              type="button"
+            >
+              <MenuGlyph />
+            </button>
+          </div>
+
+          {mobileNavigationOpen ? (
+            <div data-crm-mobile-overlay>
+              <button
+                aria-hidden="true"
+                data-crm-mobile-scrim
+                onClick={() => setMobileNavigationOpen(false)}
+                tabIndex={-1}
+                type="button"
+              />
+              <aside
+                aria-label={copy.navigationPresets.mobileNavigationLabel}
+                aria-modal="true"
+                data-crm-mobile-drawer
+                id="crm-mobile-navigation"
+                ref={mobileNavigationRef}
+                role="dialog"
+                tabIndex={-1}
+              >
+                <div data-crm-mobile-drawer-header>
+                  <CrmBrand />
+                  <button
+                    aria-label={language === "de" ? "Navigation schließen" : "Close navigation"}
+                    data-crm-mobile-close
+                    onClick={() => setMobileNavigationOpen(false)}
+                    type="button"
+                  >
+                    <MenuGlyph open />
+                  </button>
+                </div>
+                <div data-crm-mobile-drawer-body>
+                  <section>
+                    <h2 data-crm-mobile-section-label>{copy.sidebar.workspace}</h2>
+                    <p className="text-sm font-semibold text-white">{workspaceContext.workspaceName}</p>
+                    <label className="mt-3 grid gap-2 text-xs font-semibold text-stone-500">
+                      {copy.sidebar.projects}
+                      <select
+                        className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                        onChange={(event) => handleProjectScopeChange(event.target.value)}
+                        value={activeProjectId}
+                      >
+                        <option value="all">{copy.header.allProjects}</option>
+                        {allProjects.map((project) => (
+                          <option key={project.id} value={project.id}>{project.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </section>
+
+                  <section>
+                    <h2 data-crm-mobile-section-label>{copy.navigationPresets.label}</h2>
+                    <select
+                      aria-label={copy.navigationPresets.label}
+                      className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                      onChange={(event) => {
+                        focusPageTitleAfterNavigationRef.current = true;
+                        handlePresetChange(event.target.value as NavigationPresetId);
+                      }}
+                      value={normalizedActivePresetId}
+                    >
+                      {presetOptionGroups.map((group) => (
+                        <optgroup key={group.id} label={copy.navigationPresets.groups[group.id]}>
+                          {group.presetIds.map((presetId) => (
+                            <option key={presetId} value={presetId}>
+                              {copy.navigationPresets.profiles[presetId].label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </section>
+
+                  <section>
+                    <h2 data-crm-mobile-section-label>{copy.language.systemLabel}</h2>
+                    <select
+                      aria-label={copy.language.systemLabel}
+                      className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                      onChange={(event) => handleLanguageChange(event.target.value as LanguageCode)}
+                      value={language}
+                    >
+                      {supportedLanguages.map((item) => (
+                        <option key={item.code} value={item.code}>{item.nativeName}</option>
+                      ))}
+                    </select>
+                  </section>
+
+                  <section>
+                    <h2 data-crm-mobile-section-label>{copy.navigationPresets.mobileNavigationLabel}</h2>
+                    <nav aria-label={copy.navigationPresets.mobileNavigationLabel} data-crm-nav>
+                      {focusedNavigationItems.map((item) => (
+                        <button
+                          aria-current={visibleActiveNavigationEntry.id === item.id ? "page" : undefined}
+                          data-active={visibleActiveNavigationEntry.id === item.id ? "true" : "false"}
+                          data-crm-nav-item
+                          key={item.id}
+                          onClick={() => {
+                            focusPageTitleAfterNavigationRef.current = true;
+                            handleNavigationChange(item.id);
+                          }}
+                          type="button"
+                        >
+                          <NavigationIcon section={item.section} />
+                          <span className="min-w-0 break-words">{item.label}</span>
+                        </button>
+                      ))}
+                    </nav>
+                  </section>
+
+                  <section>
+                    <h2 data-crm-mobile-section-label>{copy.navigationPresets.quickActionsLabel}</h2>
+                    <div className="grid gap-2">
+                      <button
+                        className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
+                        disabled={coreDataStatus === "loading"}
+                        onClick={() => {
+                          setMobileNavigationOpen(false);
+                          void refreshCoreData();
+                        }}
+                        type="button"
+                      >
+                        {coreDataStatus === "loading" ? copy.header.refreshingButton : copy.header.refreshButton}
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
+                        onClick={() => {
+                          setMobileNavigationOpen(false);
+                          openImportReview();
+                        }}
+                        type="button"
+                      >
+                        {copy.header.importButton}
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
+                        onClick={() => {
+                          setMobileNavigationOpen(false);
+                          openProjectWizard();
+                        }}
+                        type="button"
+                      >
+                        {copy.header.newProjectButton}
+                      </button>
+                    </div>
+                  </section>
+
+                  <button
+                    aria-busy={isLoggingOut}
+                    className="min-h-12 w-full rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
+                    disabled={isLoggingOut}
+                    onClick={() => void handleLogout()}
+                    type="button"
+                  >
+                    {copy.header.logout}
+                  </button>
+                </div>
+              </aside>
+            </div>
+          ) : null}
+
+          <header
+            aria-hidden={mobileNavigationOpen ? true : undefined}
+            className="border-b border-stone-200 bg-white/90 px-4 py-4 backdrop-blur md:px-8"
+            data-crm-header
+            inert={mobileNavigationOpen ? true : undefined}
+          >
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <p className="break-words text-sm font-medium text-emerald-700">
+                <p className="break-words text-sm font-medium text-emerald-700" data-crm-eyebrow>
                   {projectScopeLabel}
                 </p>
-                <h2 className="mt-1 max-w-3xl break-words text-2xl font-semibold md:text-4xl">
+                <h1
+                  className="mt-1 max-w-3xl break-words text-2xl font-semibold md:text-4xl"
+                  data-crm-header-title
+                  ref={pageTitleRef}
+                  tabIndex={-1}
+                >
                   {activeProject
                     ? copy.header.projectHeadline(activeProject.type)
                     : copy.header.defaultHeadline}
-                </h2>
+                </h1>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end" data-crm-header-actions>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600">
                   {copy.language.systemLabel}
                   <select
@@ -4267,7 +4587,7 @@ export function CrmWorkspace({
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-4 lg:flex-row lg:items-center lg:justify-between" data-crm-quickbar>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
                   {copy.navigationPresets.quickActionsLabel}
@@ -4276,7 +4596,7 @@ export function CrmWorkspace({
                   {activePresetProfile.label}
                 </p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end" data-crm-quick-actions>
                 <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-stone-600 xl:hidden">
                   {copy.navigationPresets.mobileNavigationLabel}
                   <select
@@ -4327,7 +4647,12 @@ export function CrmWorkspace({
             </div>
           </header>
 
-          <div className="min-w-0 space-y-6 px-4 py-6 md:px-8">
+          <div
+            aria-hidden={mobileNavigationOpen ? true : undefined}
+            className="min-w-0 space-y-6 px-4 py-6 md:px-8"
+            data-crm-content
+            inert={mobileNavigationOpen ? true : undefined}
+          >
             <WorkspaceContextBar
               areaLabel={activeAreaLabel}
               copy={copy}

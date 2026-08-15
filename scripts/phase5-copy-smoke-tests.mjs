@@ -149,10 +149,12 @@ test("public website subpages share the landing page design system", () => {
   const shellStyles = readText("src/components/public-site-shell.module.css");
   const legalPage = readText("src/components/legal-page.tsx");
 
-  assert.match(shell, /Novalure<span>\.<\/span>/);
+  assert.match(shell, /src="\/novalure-logo\.svg"/);
   assert.match(shell, /publicLegalLinks\.map/);
-  assert.match(shellStyles, /--nl-bg: #faf9f7/);
-  assert.match(shellStyles, /--nl-blue: #2d68f0/);
+  assert.match(shellStyles, /--nl-bg: #f4f6fa/);
+  assert.match(shellStyles, /--nl-gold: #ffd43b/);
+  assert.match(shellStyles, /background: rgb\(7 8 11 \/ 96%\)/);
+  assert.doesNotMatch(shellStyles, /#2d68f0|#faf9f7/);
   assert.match(legalPage, /<PublicSiteShell currentPath=\{path\} language=\{language\}>/);
 
   for (const route of [

@@ -42,7 +42,7 @@ export default async function LegacyBookingPage({ params, searchParams }: Legacy
   const copy = getPublicBookingPageCopy("de");
 
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-50 px-4 py-12 text-slate-950">
+    <main className="novalure-public-runtime grid min-h-screen place-items-center bg-slate-50 px-4 py-12 text-slate-950">
       <section className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           {copy.eyebrow}

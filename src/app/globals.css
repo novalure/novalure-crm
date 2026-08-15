@@ -1,20 +1,14 @@
 @import "react-grid-layout/css/styles.css";
 @import "react-resizable/css/styles.css";
+@import "@fontsource-variable/inter";
 @import "tailwindcss";
 @import "../styles/novalure-tokens.css";
+@import "../styles/crm-theme.css";
+@import "../styles/public-runtime.css";
 
 :root {
-  --background: #d9ecff;
-  --foreground: #08233f;
-  --nova-panel: #eef7ff;
-  --nova-panel-soft: #d8ecff;
-  --nova-panel-raised: #c1e0ff;
-  --nova-muted: #45627f;
-  --nova-line: rgba(74, 144, 226, 0.28);
-  --nova-accent: #4a90e2;
-  --nova-accent-2: #1f6fbe;
-  --nova-accent-soft: rgba(74, 144, 226, 0.16);
-  --nova-shadow: 0 24px 70px rgba(51, 111, 170, 0.18);
+  --background: var(--nl-bg);
+  --foreground: var(--nl-ink);
 }
 
 @theme inline {
@@ -25,9 +19,7 @@
 }
 
 body {
-  background:
-    radial-gradient(circle at 82% 4%, rgba(255, 255, 255, 0.7), transparent 30%),
-    linear-gradient(180deg, #eef7ff 0%, #d9ecff 48%, #c6e2ff 100%);
+  background: var(--nl-bg);
   color: var(--foreground);
   font-family: var(--font-figtree), system-ui, sans-serif;
   max-width: 100%;
@@ -84,106 +76,8 @@ textarea {
 }
 
 main.min-h-screen {
-  background:
-    radial-gradient(circle at 82% 4%, rgba(255, 255, 255, 0.7), transparent 30%),
-    linear-gradient(180deg, #eef7ff 0%, #d9ecff 48%, #c6e2ff 100%) !important;
+  background: var(--nl-bg);
   color: var(--foreground) !important;
-}
-
-.bg-white,
-.bg-stone-50,
-.bg-stone-100 {
-  background: var(--nova-panel) !important;
-}
-
-.bg-stone-200,
-.bg-slate-100,
-.bg-blue-50,
-.bg-emerald-50,
-.bg-amber-50,
-.bg-red-50,
-.bg-violet-50 {
-  background: var(--nova-panel-soft) !important;
-}
-
-.bg-slate-950 {
-  background: #4a90e2 !important;
-}
-
-button.bg-slate-950,
-button.bg-emerald-700,
-.bg-emerald-700 {
-  background: linear-gradient(135deg, var(--nova-accent), #5bb6ff) !important;
-  box-shadow: 0 12px 30px rgba(74, 144, 226, 0.28);
-  color: #ffffff !important;
-}
-
-.border-stone-200,
-.border-stone-300,
-.border-slate-950,
-.border-blue-100,
-.border-blue-200,
-.border-emerald-100,
-.border-emerald-200,
-.border-amber-200,
-.border-red-200,
-.border-violet-200 {
-  border-color: var(--nova-line) !important;
-}
-
-.text-slate-950,
-.text-slate-900,
-.text-slate-800,
-.text-blue-950,
-.text-emerald-950,
-.text-red-900,
-.text-amber-900,
-.text-violet-900 {
-  color: #08233f !important;
-}
-
-.text-slate-700,
-.text-slate-600,
-.text-stone-700,
-.text-stone-600,
-.text-stone-500,
-.text-blue-900,
-.text-blue-800,
-.text-emerald-900,
-.text-emerald-800,
-.text-amber-800,
-.text-violet-800 {
-  color: var(--nova-muted) !important;
-}
-
-.text-emerald-700,
-.text-emerald-300 {
-  color: var(--nova-accent) !important;
-}
-
-.shadow-sm,
-.shadow,
-.shadow-md,
-.shadow-lg {
-  box-shadow: var(--nova-shadow) !important;
-}
-
-.rounded-lg,
-.rounded-md {
-  border-radius: 8px;
-}
-
-input:not([data-nl-ui]),
-select:not([data-nl-ui]),
-textarea:not([data-nl-ui]) {
-  background: rgba(255, 255, 255, 0.64) !important;
-  border-color: var(--nova-line) !important;
-  color: #08233f !important;
-}
-
-input:not([data-nl-ui])::placeholder,
-textarea:not([data-nl-ui])::placeholder {
-  color: rgba(69, 98, 127, 0.76);
 }
 
 .login-auth-input {
@@ -197,8 +91,8 @@ textarea:not([data-nl-ui])::placeholder {
 }
 
 .login-auth-input:focus {
-  border-color: #93c5fd !important;
-  box-shadow: 0 0 0 4px rgba(217, 236, 255, 0.9) !important;
+  border-color: var(--nl-gold-strong) !important;
+  box-shadow: var(--nl-focus-ring) !important;
 }
 
 .login-auth-input:-webkit-autofill,
@@ -211,8 +105,8 @@ textarea:not([data-nl-ui])::placeholder {
 }
 
 .login-auth-submit:hover {
-  background: #1f2937 !important;
-  border-color: #1f2937 !important;
+  background: var(--nl-gold-hover) !important;
+  border-color: var(--nl-gold-strong) !important;
 }
 
 .password-visibility-input::-ms-clear,
@@ -220,24 +114,8 @@ textarea:not([data-nl-ui])::placeholder {
   display: none;
 }
 
-option {
-  background: #eef7ff;
-  color: #08233f;
-}
-
-button:hover {
-  border-color: rgba(89, 215, 255, 0.45) !important;
-}
-
-button.bg-stone-50:hover,
-button.hover\:bg-stone-100:hover,
-button.hover\:bg-emerald-50:hover {
-  background: var(--nova-accent-soft) !important;
-  color: #ffffff !important;
-}
-
 .react-grid-item.react-grid-placeholder {
-  background: var(--nova-accent) !important;
+  background: var(--nl-gold) !important;
   opacity: 0.18;
 }
 
@@ -247,7 +125,7 @@ button.hover\:bg-emerald-50:hover {
 
 .react-grid-item.react-grid-placeholder {
   border-radius: 8px;
-  background: var(--nova-accent) !important;
+  background: var(--nl-gold) !important;
   opacity: 0.18;
 }
 
@@ -265,8 +143,8 @@ button.hover\:bg-emerald-50:hover {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #9fd8be;
-  box-shadow: 0 0 0 8px rgba(159, 216, 190, 0.08);
+  background: var(--nl-green);
+  box-shadow: 0 0 0 8px rgb(66 211 155 / 10%);
   transform: translateY(-50%);
   animation: crm-flow-dot 7s ease-in-out infinite;
 }
@@ -308,10 +186,10 @@ button.hover\:bg-emerald-50:hover {
 @keyframes crm-pulse-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(159, 216, 190, 0.18);
+    box-shadow: 0 0 0 0 rgb(66 211 155 / 20%);
   }
   50% {
-    box-shadow: 0 0 0 9px rgba(159, 216, 190, 0);
+    box-shadow: 0 0 0 9px rgb(66 211 155 / 0%);
   }
 }
 

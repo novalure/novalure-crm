@@ -64,7 +64,7 @@ export function PasswordVisibilityInput({
         aria-controls={id}
         aria-label={label}
         aria-pressed={revealed}
-        className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[#476178] transition hover:bg-[#edf4fb] hover:text-[#071421] focus:outline-none focus:ring-2 focus:ring-[#b8d8ff]"
+        className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[#667085] transition hover:bg-[#fff8d6] hover:text-[#07080b] focus:outline-none focus:ring-2 focus:ring-[#ffd43b]"
         onClick={() => setRevealed((current) => !current)}
         title={label}
         type="button"

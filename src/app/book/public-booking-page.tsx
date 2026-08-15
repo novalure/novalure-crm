@@ -232,7 +232,7 @@ export async function renderPublicBookingPage({
 
   return (
     <main
-      className={`min-h-screen px-4 py-8 ${
+      className={`novalure-public-runtime min-h-screen px-4 py-8 ${
         isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-950"
       }`}
     >

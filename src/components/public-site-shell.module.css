@@ -1,23 +1,28 @@
 .page {
-  --nl-bg: #faf9f7;
+  --nl-bg: #f4f6fa;
   --nl-surface: #ffffff;
-  --nl-surface-soft: #f3f0ea;
-  --nl-ink: #33302b;
-  --nl-muted: #6f6a63;
-  --nl-tertiary: #8a837a;
-  --nl-blue: #2d68f0;
-  --nl-blue-dark: #1e4fc2;
-  --nl-blue-tint: #e9f0fe;
-  --nl-amber-tint: #fbf1df;
-  --nl-divider: #ede9e2;
-  --nl-border: #e3ded5;
-  --nl-edge: clamp(20px, 5vw, 64px);
+  --nl-surface-soft: #f8fafc;
+  --nl-ink: #07080b;
+  --nl-graphite: #111318;
+  --nl-muted: #667085;
+  --nl-tertiary: #667085;
+  --nl-gold: #ffd43b;
+  --nl-gold-strong: #e4b900;
+  --nl-gold-text: #6b5200;
+  --nl-green: #42d39b;
+  --nl-blue: var(--nl-gold);
+  --nl-blue-dark: var(--nl-gold-text);
+  --nl-blue-tint: #fff8d6;
+  --nl-amber-tint: #fff7df;
+  --nl-divider: #e7ebf1;
+  --nl-border: #dde3ec;
+  --nl-edge: clamp(20px, 5vw, 48px);
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
   background: var(--nl-bg);
   color: var(--nl-ink);
-  font-family: var(--font-figtree), system-ui, sans-serif;
+  font-family: "Inter Variable", Inter, var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.6;
   overflow-x: clip;
@@ -38,7 +43,7 @@
 
 .page :focus-visible {
   border-radius: 4px;
-  outline: 2px solid var(--nl-blue);
+  outline: 3px solid var(--nl-ink);
   outline-offset: 3px;
 }
 
@@ -46,26 +51,26 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  border-bottom: 1px solid var(--nl-divider);
-  background: rgb(250 249 247 / 92%);
-  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  background: rgb(7 8 11 / 96%);
+  backdrop-filter: blur(16px);
 }
 
 .headerInner,
 .main,
 .footerInner {
   width: 100%;
-  max-width: 1160px;
+  max-width: 1180px;
   margin: 0 auto;
   padding-inline: var(--nl-edge);
 }
 
 .headerInner {
   display: flex;
-  min-height: 66px;
+  min-height: 76px;
   align-items: center;
   gap: 26px;
-  padding-block: 10px;
+  padding-block: 12px;
 }
 
 .brand {
@@ -76,22 +81,16 @@
   margin-right: auto;
 }
 
-.wordmark {
-  color: var(--nl-ink);
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.wordmark span,
-.footer strong span {
-  color: var(--nl-blue);
+.headerLogo {
+  display: block;
+  width: clamp(118px, 11vw, 150px);
+  height: auto;
 }
 
 .crmBadge {
   border-radius: 999px;
-  background: var(--nl-blue-tint);
-  color: var(--nl-blue-dark);
+  background: var(--nl-gold);
+  color: #211800;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -111,7 +110,7 @@
 }
 
 .desktopNav a {
-  color: var(--nl-ink);
+  color: rgb(248 250 252 / 76%);
   font-size: 15px;
   font-weight: 500;
 }
@@ -128,12 +127,13 @@
 }
 
 .languageSwitch span {
+  color: #ffffff;
   font-weight: 700;
 }
 
 .languageSwitch a,
 .languageSwitch i {
-  color: var(--nl-muted);
+  color: rgb(248 250 252 / 56%);
   font-style: normal;
   font-weight: 500;
 }
@@ -144,8 +144,9 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--nl-blue);
-  color: #fff !important;
+  background: var(--nl-gold);
+  box-shadow: 0 12px 28px rgb(255 212 59 / 20%);
+  color: #211800 !important;
   font-size: 14px;
   font-weight: 700;
   padding: 9px 18px;
@@ -153,14 +154,19 @@
 }
 
 .headerButton:hover {
-  background: var(--nl-blue-dark);
+  background: var(--nl-gold-strong);
   transform: translateY(-1px);
 }
 
 .desktopNav a:hover,
 .languageSwitch a:hover,
 .footer a:hover {
-  color: var(--nl-blue-dark);
+  color: var(--nl-gold);
+}
+
+.header :focus-visible,
+.footer :focus-visible {
+  outline-color: var(--nl-gold);
 }
 
 .main {
@@ -169,9 +175,10 @@
 
 .footer {
   margin-top: 72px;
-  border-top: 1px solid var(--nl-divider);
-  background: var(--nl-bg);
-  color: var(--nl-tertiary);
+  min-height: 76px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  background: var(--nl-graphite);
+  color: rgb(248 250 252 / 62%);
   font-size: 13.5px;
   line-height: 1.8;
   padding: 36px 0 46px;
@@ -188,9 +195,17 @@
   margin: 0;
 }
 
-.footer strong {
-  color: var(--nl-ink);
-  font-weight: 700;
+.footerBrandLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+}
+
+.footerLogo {
+  width: clamp(150px, 18vw, 190px);
+  height: auto;
+  flex: none;
 }
 
 .footerInner > div > a {
@@ -205,11 +220,13 @@
   gap: 6px 18px;
 }
 
-@media (max-width: 880px) {
+@media (max-width: 1180px) {
   .desktopNav {
     display: none;
   }
+}
 
+@media (max-width: 900px) {
   .footerInner {
     align-items: flex-start;
     flex-direction: column;
@@ -220,17 +237,13 @@
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 560px) {
   .headerInner {
     gap: 10px;
   }
 
   .brand {
     gap: 7px;
-  }
-
-  .wordmark {
-    font-size: 18px;
   }
 
   .crmBadge {
