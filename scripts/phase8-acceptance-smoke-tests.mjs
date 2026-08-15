@@ -50,6 +50,7 @@ test("fresh-user onboarding tour has a persisted profile confirmation path", () 
   const migration = readText("migrations/031_user_onboarding.sql");
   const databaseRoute = readText("src/app/api/system/database/route.ts");
   const seed = readText("scripts/qa-livegang-seed.mjs");
+  const workflow = readText(".github/workflows/livegang-e2e.yml");
   const apiRoute = readText("src/app/api/auth/onboarding/route.ts");
   const tour = readText("src/components/workspace-onboarding-tour.tsx");
   const checklist = readText("src/lib/onboarding-checklist.ts");
@@ -60,7 +61,8 @@ test("fresh-user onboarding tour has a persisted profile confirmation path", () 
   assert.match(migration, /add column if not exists onboarding_completed_steps text\[\] not null default '\{\}'/);
   assert.match(migration, /add column if not exists onboarding_skipped_steps text\[\] not null default '\{\}'/);
   assert.match(databaseRoute, /from novalure_schema_migrations/);
-  assert.match(seed, /applyMigration\("migrations\/031_user_onboarding\.sql"\)/);
+  assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Seed two or more isolated QA workspaces/);
+  assert.doesNotMatch(seed, /applyMigration\(/);
   assert.match(apiRoute, /select[\s\S]*onboarding_completed_at as "completedAt"/);
   assert.match(apiRoute, /onboarding_completed_at = case when \$8::boolean then coalesce\(onboarding_completed_at, now\(\)\)/);
   assert.match(apiRoute, /onboarding_step_forbidden/);

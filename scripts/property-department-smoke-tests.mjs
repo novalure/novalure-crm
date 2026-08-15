@@ -28,10 +28,14 @@ test("property department migration creates canonical support tables without rep
   assert.match(migration, /'properties', true/i);
 });
 
-test("system diagnostics and QA seed include the property department migration", () => {
+test("system diagnostics and trusted-candidate workflow include the property department migration", () => {
+  const workflow = read(".github/workflows/livegang-e2e.yml");
+  const seed = read("scripts/qa-livegang-seed.mjs");
+
   assert.match(read("src/app/api/system/database/route.ts"), /from novalure_schema_migrations/);
-  assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/034_property_department\.sql/);
-  assert.match(read("scripts/qa-livegang-seed.mjs"), /migrations\/035_property_department_content\.sql/);
+  assert.match(workflow, /Preview checksummed QA migration plan without writes/);
+  assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Seed two or more isolated QA workspaces/);
+  assert.doesNotMatch(seed, /applyMigration\(/);
   assert.match(read("package.json"), /db:migrate:property-default-units/);
   assert.match(read("package.json"), /db:migrate:property-content-guards/);
   assert.match(read("package.json"), /qa:phase2-property-kpis/);
