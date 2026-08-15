@@ -3,8 +3,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import styles from "@/components/public-crm-landing.module.css";
 
-const MOBILE_NAV_MAX_WIDTH = 1180;
-
 type MenuItem = {
   href: string;
   label: string;
@@ -68,7 +66,7 @@ export function PublicCrmMobileMenu({
     }
 
     function onResize() {
-      if (window.innerWidth > MOBILE_NAV_MAX_WIDTH) setOpen(false);
+      if (window.innerWidth > 880) setOpen(false);
     }
 
     document.addEventListener("keydown", onKeyDown);

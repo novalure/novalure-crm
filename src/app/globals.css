@@ -5,6 +5,7 @@
 @import "../styles/novalure-tokens.css";
 @import "../styles/crm-theme.css";
 @import "../styles/public-runtime.css";
+@import "../styles/public-legacy.css";
 
 :root {
   --background: var(--nl-bg);

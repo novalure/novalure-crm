@@ -157,17 +157,18 @@ test("public landing uses anonymized CRM proof and real privacy content instead 
   assert.doesNotMatch(landing, /proofPlaceholders/);
 });
 
-test("public website subpages share the landing page design system", () => {
+test("public website subpages retain the established landing page design system", () => {
   const shell = readText("src/components/public-site-shell.tsx");
   const shellStyles = readText("src/components/public-site-shell.module.css");
   const legalPage = readText("src/components/legal-page.tsx");
 
-  assert.match(shell, /src="\/novalure-logo\.svg"/);
+  assert.match(shell, /className=\{styles\.wordmark\}>Novalure<span>\.<\/span>/);
+  assert.match(shell, /novalure-public-legacy/);
   assert.match(shell, /publicLegalLinks\.map/);
-  assert.match(shellStyles, /--nl-bg: #f4f6fa/);
-  assert.match(shellStyles, /--nl-gold: #ffd43b/);
-  assert.match(shellStyles, /background: rgb\(7 8 11 \/ 96%\)/);
-  assert.doesNotMatch(shellStyles, /#2d68f0|#faf9f7/);
+  assert.match(shellStyles, /--nl-bg: #faf9f7/);
+  assert.match(shellStyles, /--nl-blue: #2d68f0/);
+  assert.match(shellStyles, /background: rgb\(250 249 247 \/ 92%\)/);
+  assert.doesNotMatch(shellStyles, /--nl-gold: #ffd43b/);
   assert.match(legalPage, /<PublicSiteShell currentPath=\{path\} language=\{language\}>/);
 
   for (const route of [
