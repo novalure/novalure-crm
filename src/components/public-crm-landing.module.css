@@ -1215,6 +1215,18 @@
 }
 
 @media (max-width: 880px) {
+  .page {
+    --nl-bg: #eef7ff;
+    --nl-surface-soft: #dcecff;
+    --nl-divider: #c9def8;
+    --nl-border: #b8d2f2;
+    background: linear-gradient(180deg, #eef7ff 0%, #f8fbff 46%, #e9f0fe 100%);
+  }
+
+  .header {
+    background: rgb(238 247 255 / 94%);
+  }
+
   .headerInner {
     min-height: 66px;
   }
@@ -1226,6 +1238,30 @@
 
   .mobileActions {
     display: flex;
+  }
+
+  .mobileMenuButton {
+    border-color: var(--nl-blue);
+    background: var(--nl-blue);
+    box-shadow: 0 10px 24px rgb(45 104 240 / 18%);
+    color: #ffffff;
+  }
+
+  .mobileMenuPanel {
+    border-bottom-color: rgb(45 104 240 / 18%);
+    background: rgb(238 247 255 / 98%);
+    box-shadow: 0 18px 38px rgb(45 104 240 / 14%);
+  }
+
+  .mobileMenuLinks a {
+    border-bottom-color: rgb(45 104 240 / 16%);
+    color: var(--nl-blue-dark);
+  }
+
+  .mobileLoginLink {
+    border-color: rgb(45 104 240 / 32%);
+    background: var(--nl-surface);
+    color: var(--nl-blue-dark);
   }
 
   .hero {
@@ -1285,6 +1321,22 @@
   .languageSwitch {
     gap: 4px;
     font-size: 12px;
+  }
+
+  .regionPills span,
+  .privacyGrid article > span,
+  .audienceCard > div span {
+    background: var(--nl-blue-tint);
+    color: var(--nl-blue-dark);
+  }
+
+  .reminderBadge svg,
+  .protectedList h3 svg {
+    color: var(--nl-blue);
+  }
+
+  .privacyLists .protectedList {
+    background: #f6f9ff;
   }
 
   .hero {
