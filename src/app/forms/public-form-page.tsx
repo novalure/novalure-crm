@@ -4,6 +4,11 @@ import { FormRuntimeClient } from "@/components/form-runtime-client";
 import { getPublicWebsiteForm } from "@/lib/db/form-repositories";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import {
+  buildPublicSubmissionScope,
+  createPublicSubmissionProof,
+  publicSubmissionActions,
+} from "@/lib/security/public-submission-abuse";
 
 export type PublicFormPageInput = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -65,9 +70,19 @@ export async function renderPublicFormPage({
   const form = persisted?.form ?? null;
   const title = form?.name || titleFromFormSlug(slug) || copy.publicPage.unavailableTitle;
   const returnTo = persisted?.publicPath ?? `/forms/${workspacePublicKey}/${slug}`;
+  const submissionProof = persisted
+    ? createPublicSubmissionProof({
+        action: publicSubmissionActions.form,
+        scope: buildPublicSubmissionScope({
+          resourceId: persisted.id,
+          resourceType: "form",
+          workspaceId: persisted.workspaceId,
+        }),
+      })
+    : undefined;
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
+    <main className="novalure-public-runtime min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
       <section className="mx-auto grid max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl lg:grid-cols-[0.9fr_1.1fr]">
         <div className="bg-slate-950 p-6 text-white lg:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">
@@ -112,6 +127,7 @@ export async function renderPublicFormPage({
               publicKey={`${workspacePublicKey}/${slug}`}
               returnTo={returnTo}
               source={source}
+              submissionProof={submissionProof}
             />
           ) : (
             <UnavailableFormNotice copy={copy} />
@@ -139,7 +155,7 @@ export async function renderUnavailableFormPage({
   const title = titleFromFormSlug(slug) || copy.publicPage.unavailableTitle;
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
+    <main className="novalure-public-runtime min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
       <section className="mx-auto grid max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl lg:grid-cols-[0.9fr_1.1fr]">
         <div className="bg-slate-950 p-6 text-white lg:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">

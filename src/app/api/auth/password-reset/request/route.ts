@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requestPasswordReset } from "@/lib/auth/password-reset";
+import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
+import { protectAuthResponse } from "@/lib/auth/response-security";
 import { resolveLanguage } from "@/lib/i18n";
+import { validateCsrfRequestContext } from "@/lib/security/csrf-core";
 
 function getFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -8,22 +11,21 @@ function getFormValue(formData: FormData, key: string) {
 }
 
 export async function POST(request: Request) {
+  const trustedOrigin = getTrustedAppOrigin();
+  const requestContext = validateCsrfRequestContext(request.headers, trustedOrigin);
+  if (!requestContext.ok) {
+    return protectAuthResponse(
+      NextResponse.json({ error: "Reset request validation failed" }, { status: 403 }),
+    );
+  }
   const formData = await request.formData();
   const email = getFormValue(formData, "email");
   const language = resolveLanguage(getFormValue(formData, "lang"));
-  const result = await requestPasswordReset({ email, language, request });
-  const redirectUrl = new URL("/login/forgot-password", request.url);
+  await requestPasswordReset({ email, language, request });
+  const redirectUrl = new URL("/login/forgot-password", trustedOrigin);
 
   redirectUrl.searchParams.set("lang", language);
-  if (email) redirectUrl.searchParams.set("email", email);
+  redirectUrl.searchParams.set("sent", "1");
 
-  if (result.status === "rate_limited") {
-    redirectUrl.searchParams.set("error", "rate_limited");
-  } else if (result.status === "unavailable") {
-    redirectUrl.searchParams.set("error", "reset_unavailable");
-  } else {
-    redirectUrl.searchParams.set("sent", "1");
-  }
-
-  return NextResponse.redirect(redirectUrl, 303);
+  return protectAuthResponse(NextResponse.redirect(redirectUrl, 303));
 }

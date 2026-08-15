@@ -6,6 +6,7 @@ import { createTrackingSnippet } from "@/lib/funnel-tracking";
 import { funnelFieldTypes, type FunnelBlueprint, type FunnelDevice, type FunnelElement, type FunnelElementType, type FunnelField, type FunnelMediaAsset, type FunnelPage, type FunnelRule, type FunnelRuleOperator, type FunnelVersion } from "@/lib/funnel-schema";
 import { getFunnelDesignerCopy, getLocale, type LanguageCode } from "@/lib/i18n";
 import { MediaLibraryPicker, type CrmMediaAsset } from "@/components/media-library-picker";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FunnelBlueprintDesignerProps = {
   initialBlueprint: FunnelBlueprint;
@@ -225,7 +226,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/funnels/${initialBlueprint.id}/blueprint`)
+    csrfFetch(`/api/funnels/${initialBlueprint.id}/blueprint`)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { blueprint?: FunnelBlueprint; versions?: FunnelVersion[] } | null) => {
         if (!active || !payload?.blueprint) return;
@@ -271,7 +272,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   async function saveBlueprint() {
     setSaveState("saving");
     try {
-      const response = await fetch(`/api/funnels/${blueprint.id}/blueprint`, {
+      const response = await csrfFetch(`/api/funnels/${blueprint.id}/blueprint`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ blueprint, label: "Designer-Version" }),
@@ -826,5 +827,4 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
     </div>
   );
 }
-
 

@@ -1163,6 +1163,7 @@ export async function persistPropertyInquiryRoute(input: {
 export async function recordPropertyPreflightRun(input: {
   assetId?: string;
   channel: string;
+  idempotencyKey: string;
   preflight: PropertyPreflightResult;
   projectId?: string | null;
   session: AppSession;
@@ -1185,7 +1186,8 @@ export async function recordPropertyPreflightRun(input: {
         preflight_status,
         started_by_user_id,
         export_history,
-        metadata
+        metadata,
+        idempotency_key
       )
       values (
         $1,
@@ -1197,8 +1199,11 @@ export async function recordPropertyPreflightRun(input: {
         $6,
         $7::uuid,
         $8::jsonb,
-        $9::jsonb
+        $9::jsonb,
+        $10
       )
+      on conflict (workspace_id, idempotency_key) do update
+      set updated_at = property_export_jobs.updated_at
       returning id
     `,
     [
@@ -1211,6 +1216,7 @@ export async function recordPropertyPreflightRun(input: {
       nullableUuid(input.session.userId),
       JSON.stringify([{ at: new Date().toISOString(), preflight: input.preflight }]),
       JSON.stringify({ assetId: input.assetId ?? null, channel: input.channel }),
+      input.idempotencyKey,
     ],
   );
 

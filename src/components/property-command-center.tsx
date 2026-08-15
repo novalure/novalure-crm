@@ -42,9 +42,11 @@ import {
   type PropertyUnitBoardScope,
 } from "@/lib/property-department";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
-import { formatCurrency, formatNumber, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
+import { formatCurrency, formatNumber, getCrmProjectTypeLabel, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
+import { csrfFetch } from "@/lib/security/csrf-client";
 
 type PropertyCommandCenterProps = {
+  activeProjectId: string | null;
   brokerMandates: BrokerMandate[];
   buyerSearchProfiles: BuyerSearchProfile[];
   buildings: PropertyBuilding[];
@@ -290,6 +292,7 @@ function createUnitBoardScope(asset: PropertyAssetSummary | undefined): Property
 }
 
 export function PropertyCommandCenter({
+  activeProjectId,
   brokerMandates,
   buyerSearchProfiles,
   buildings,
@@ -337,6 +340,9 @@ export function PropertyCommandCenter({
     () => getPropertyActionStates({ language, productRole: sessionProductRole, technicalRole: sessionRole }),
     [language, sessionProductRole, sessionRole],
   );
+  const draftProjects = activeProjectId
+    ? projects.filter((project) => project.id === activeProjectId)
+    : projects;
   const [activeTab, setActiveTab] = useState<PropertyDepartmentTabId>("overview");
   const [statusFilter, setStatusFilter] = useState<PropertyAssetStatus | "all">("all");
   const [query, setQuery] = useState("");
@@ -368,7 +374,9 @@ export function PropertyCommandCenter({
     postalCode: "",
     price: "",
     priceVisibility: "publish_price",
-    projectId: projects[0]?.id ?? "",
+    projectId: activeProjectId && projects.some((project) => project.id === activeProjectId)
+      ? activeProjectId
+      : "",
     publicPrice: "",
     purchaseAncillaryCosts: "",
     region: "",
@@ -481,7 +489,7 @@ export function PropertyCommandCenter({
   }
 
   async function postPropertyOperation(body: Record<string, unknown>) {
-    const response = await fetch("/api/crm/properties", {
+    const response = await csrfFetch("/api/crm/properties", {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -527,7 +535,7 @@ export function PropertyCommandCenter({
       formData.append("name", file.name);
       formData.append("alt", file.name.replace(/\.[^.]+$/, ""));
       if (kind === "media") formData.append("public", "true");
-      const uploadResponse = await fetch("/api/media", { body: formData, method: "POST" });
+      const uploadResponse = await csrfFetch("/api/media", { body: formData, method: "POST" });
       const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
       if (!uploadResponse.ok || !uploadPayload.asset?.id) {
         throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed);
@@ -571,11 +579,18 @@ export function PropertyCommandCenter({
   async function submitProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!actions.createProperty.enabled || saving) return;
+    if (!draftProjects.some((project) => project.id === draft.projectId)) {
+      setNotice({
+        kind: "error",
+        message: language === "de" ? "Projekt ist erforderlich." : "Project is required.",
+      });
+      return;
+    }
     setSaving(true);
     setNotice(null);
 
     try {
-      const response = await fetch("/api/crm/properties", {
+      const response = await csrfFetch("/api/crm/properties", {
         body: JSON.stringify({
           operation: "create_property",
           ...draft,
@@ -599,6 +614,7 @@ export function PropertyCommandCenter({
         availableFromText: "",
         availabilityNote: "",
         costItems: createCostDrafts(),
+        projectId: activeProjectId ?? "",
         price: "",
         publicPrice: "",
         rooms: "",
@@ -625,7 +641,13 @@ export function PropertyCommandCenter({
             </p>
           </div>
           <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:w-[520px]">
-            <ActionButton action={actions.createProperty} onClick={() => setActiveTab("create")} />
+            <ActionButton
+              action={actions.createProperty}
+              onClick={() => {
+                setDraft((current) => ({ ...current, projectId: activeProjectId ?? "" }));
+                setActiveTab("create");
+              }}
+            />
             <ActionButton action={actions.assignInquiry} onClick={() => setActiveTab("inquiries")} />
             <ActionButton action={actions.reserveUnit} onClick={() => onOpenUnits()} />
             <ActionButton action={actions.exportChannel} onClick={() => setActiveTab("channels")} />
@@ -649,7 +671,12 @@ export function PropertyCommandCenter({
                 activeTab === tab.id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-stone-100"
               }`}
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                if (tab.id === "create" && activeTab !== "create") {
+                  setDraft((current) => ({ ...current, projectId: activeProjectId ?? "" }));
+                }
+                setActiveTab(tab.id);
+              }}
               type="button"
             >
               <span className="flex flex-col leading-tight">
@@ -811,7 +838,7 @@ export function PropertyCommandCenter({
                 {notice ? (
                   <span className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>{notice.message}</span>
                 ) : null}
-                <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving} type="submit">
+                <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving || !draftProjects.some((project) => project.id === draft.projectId)} type="submit">
                   {saving ? copy.form.saving : actions.createProperty.label}
                 </button>
               </div>
@@ -832,8 +859,9 @@ export function PropertyCommandCenter({
                   </label>
                   <label className={propertyFieldClass}>
                     <span>{copy.form.project}</span>
-                    <select className={propertySelectClass} onChange={(event) => updateDraft("projectId", event.target.value)} value={draft.projectId}>
-                      {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    <select className={propertySelectClass} onChange={(event) => updateDraft("projectId", event.target.value)} required value={draft.projectId}>
+                      <option value="">{language === "de" ? "Projekt auswählen" : "Select project"}</option>
+                      {draftProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                     </select>
                   </label>
                   <label className={propertyFieldClass}>
@@ -1103,7 +1131,7 @@ export function PropertyCommandCenter({
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <p className="font-semibold text-slate-950">{project.name}</p>
-                      <p className="mt-1 text-sm text-stone-600">{project.type}</p>
+                      <p className="mt-1 text-sm text-stone-600">{getCrmProjectTypeLabel(project.type, language)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
                       <span className="rounded-md bg-white px-2 py-1">{projectBuildings.length} {copy.unitBadges.buildings}</span>

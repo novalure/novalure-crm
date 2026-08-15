@@ -1,9 +1,10 @@
-import { createHash, randomBytes } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { getPasswordValidationError, hashPassword, verifyPassword } from "@/lib/auth/passwords";
+import { createMembershipPasswordResetLink } from "@/lib/auth/password-reset";
+import { writeAuthAuditEvent } from "@/lib/auth/auth-audit";
 import type { WorkspaceRole, WorkspaceUser } from "@/lib/crm-types";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
-import { executeQuery, queryOne, queryRows } from "@/lib/db/client";
+import { queryOne, queryRows } from "@/lib/db/client";
 import { inviteWorkspaceUser, updateWorkspaceUserAccess } from "@/lib/db/customer-access-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
@@ -41,9 +42,8 @@ type WorkspaceUserRow = {
   workspaceId: string;
 };
 
-type IdRow = { id: string };
-
 type PasswordUserRow = {
+  authIdentityId: string;
   email: string;
   id: string;
   passwordHash: string | null;
@@ -60,10 +60,6 @@ function toWorkspaceUser(row: WorkspaceUserRow): WorkspaceUser {
     status: row.status,
     workspaceId: row.workspaceId,
   };
-}
-
-function hashToken(value: string) {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeEmail(value: unknown) {
@@ -222,47 +218,26 @@ export async function triggerWorkspacePasswordReset(input: {
     return { ok: false as const, reason: "Only active or invited users can reset their password", status: 400 };
   }
 
-  const token = randomBytes(32).toString("base64url");
-  const resetUrl = new URL("/login/reset-password", getTrustedAppOrigin());
-  resetUrl.searchParams.set("token", token);
-  resetUrl.searchParams.set("lang", input.language === "de" ? "de" : "en");
-
-  await queryOne<IdRow>(
-    `
-      insert into auth_password_reset_tokens (
-        workspace_id,
-        user_id,
-        token_hash,
-        requested_email,
-        request_ip,
-        user_agent,
-        expires_at
-      )
-      values ($1, $2, $3, $4, $5, $6, now() + interval '60 minutes')
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      user.id,
-      hashToken(token),
-      user.email,
-      input.requestIp ?? null,
-      input.userAgent ?? null,
-    ],
-  );
+  const created = await createMembershipPasswordResetLink({
+    language: input.language === "de" ? "de" : "en",
+    requestIp: input.requestIp,
+    userAgent: input.userAgent,
+    workspaceId: input.session.workspaceId,
+    workspaceUserId: user.id,
+  });
 
   const provider = getNewsletterProviderStatus();
   const language = input.language === "de" ? "de" : "en";
   const subject = language === "de" ? "Passwort für Novalure CRM neu setzen" : "Reset your Novalure CRM password";
   const safeName = escapeHtml(user.name || user.email);
-  const safeResetUrl = escapeHtml(resetUrl.toString());
+  const safeResetUrl = escapeHtml(created.resetUrl);
   const html = language === "de"
     ? `<p>Hallo ${safeName},</p><p>Ein Administrator hat einen Passwort-Link für Ihren Novalure CRM Zugang ausgelöst.</p><p><a href="${safeResetUrl}">${safeResetUrl}</a></p><p>Der Link ist 60 Minuten gültig und kann nur einmal verwendet werden.</p>`
     : `<p>Hello ${safeName},</p><p>An administrator requested a password link for your Novalure CRM account.</p><p><a href="${safeResetUrl}">${safeResetUrl}</a></p><p>The link expires after 60 minutes and can only be used once.</p>`;
 
   const delivery = await sendNewsletterEmail({
     html,
-    idempotencyKey: `settings-password-reset:${user.id}:${hashToken(token).slice(0, 16)}`,
+    idempotencyKey: `settings-password-reset:${created.tokenId}`,
     subject,
     to: user.email,
   });
@@ -280,13 +255,23 @@ export async function triggerWorkspacePasswordReset(input: {
     entityType: "workspace_user",
     session: input.session,
   });
+  await writeAuthAuditEvent({
+    authIdentityId: created.authIdentityId,
+    eventType: "auth.password_reset.admin_requested",
+    metadata: {
+      actorUserId: input.session.userId,
+      deliveryStatus: delivery.status,
+    },
+    outcome: delivery.status === "failed" ? "failure" : "success",
+    workspaceId: input.session.workspaceId,
+    workspaceUserId: user.id,
+  });
 
   return {
     data: {
       deliveryConfigured: provider.configured,
       deliveryProvider: delivery.provider,
       deliveryStatus: delivery.status,
-      setupUrl: resetUrl.toString(),
       user: toWorkspaceUser(user),
     },
     ok: true as const,
@@ -311,11 +296,18 @@ export async function changeOwnWorkspacePassword(input: {
 
   const user = await queryOne<PasswordUserRow>(
     `
-      select id, workspace_id as "workspaceId", email, password_hash as "passwordHash"
-      from workspace_users
-      where id = $1
-        and workspace_id = $2
-        and status = 'active'
+      select
+        wu.id,
+        wu.workspace_id as "workspaceId",
+        wu.email,
+        wu.auth_identity_id as "authIdentityId",
+        identity.password_hash as "passwordHash"
+      from workspace_users wu
+      join auth_identities identity on identity.id = wu.auth_identity_id
+      where wu.id = $1
+        and wu.workspace_id = $2
+        and wu.status = 'active'
+        and identity.credential_state = 'active'
       limit 1
     `,
     [input.session.userId, input.session.workspaceId],
@@ -329,15 +321,64 @@ export async function changeOwnWorkspacePassword(input: {
     return { ok: false as const, reason: "current_password_invalid", status: 400 };
   }
 
-  await executeQuery(
+  const passwordHash = await hashPassword(password);
+  const updated = await queryOne<{ id: string }>(
     `
-      update workspace_users
-      set password_hash = $3, updated_at = now()
-      where id = $1
-        and workspace_id = $2
+      with credential_updated as (
+        update auth_identities identity
+        set password_hash = $2,
+            credential_state = 'active',
+            password_changed_at = now(),
+            updated_at = now()
+        where identity.id = $1
+          and identity.credential_state = 'active'
+        returning identity.id
+      ), password_mirrored as (
+        update workspace_users wu
+        set password_hash = $2, updated_at = now()
+        from credential_updated
+        where wu.auth_identity_id = credential_updated.id
+        returning wu.id
+      ), sessions_revoked as (
+        update auth_sessions session
+        set revoked_at = now(), revoked_reason = 'password_change'
+        from credential_updated
+        where session.auth_identity_id = credential_updated.id
+          and session.revoked_at is null
+          and ($3::uuid is null or session.id <> $3::uuid)
+        returning session.id
+      ), audited as (
+        insert into auth_audit_events (
+          event_type,
+          outcome,
+          auth_identity_id,
+          workspace_user_id,
+          workspace_id,
+          session_id,
+          metadata
+        )
+        select
+          'auth.password.changed',
+          'success',
+          credential_updated.id,
+          $4::uuid,
+          $5::uuid,
+          $3::uuid,
+          jsonb_build_object('revokedSessionCount', (select count(*) from sessions_revoked))
+        from credential_updated
+        returning auth_identity_id as id
+      )
+      select id from audited
     `,
-    [user.id, user.workspaceId, await hashPassword(password)],
+    [
+      user.authIdentityId,
+      passwordHash,
+      input.session.authSessionId ?? null,
+      user.id,
+      user.workspaceId,
+    ],
   );
+  if (!updated) return { ok: false as const, reason: "password_change_unavailable", status: 503 };
 
   await writeAuditLog({
     action: "settings_access.own_password_changed",

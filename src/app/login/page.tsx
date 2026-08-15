@@ -8,7 +8,13 @@ import { LoginUrlHygiene } from "@/components/login-url-hygiene";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import subpageStyles from "@/components/public-subpage.module.css";
 import { PublicSiteShell } from "@/components/public-site-shell";
-import { getSessionFromHeaders, isLoginConfigured } from "@/lib/auth/session";
+import { SubmitOnceForm } from "@/components/submit-once-form";
+import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
+import {
+  getLoginChallengeView,
+  getSessionFromHeaders,
+  isLoginConfigured,
+} from "@/lib/auth/session";
 import {
   getCrmLandingPageCopy,
   getLoginPageCopy,
@@ -18,25 +24,30 @@ import {
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
 import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
 import { resolvePublicLanguage } from "@/lib/public-language";
+import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
 
 type LoginPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export const metadata: Metadata = {
-  title: "Login | Novalure CRM",
-  description: "Protected Novalure CRM workspace login for approved teams.",
-};
+export async function generateMetadata({ searchParams }: LoginPageProps): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const query = searchParams ? await searchParams : {};
+  const language = resolvePublicPageLanguage(requestHeaders, query);
+  return buildPublicPageMetadata({
+    description: language === "de"
+      ? "Sicherer Zugang zu freigegebenen Novalure CRM Workspaces."
+      : "Secure access to approved Novalure CRM workspaces.",
+    language,
+    path: "/login",
+    title: language === "de" ? "Anmelden" : "Sign in",
+  });
+}
 
 function getQueryValue(value: string | string[] | undefined, fallback = "") {
   if (Array.isArray(value)) return value[0] ?? fallback;
   return value ?? fallback;
-}
-
-function getSafeReturnTo(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/api/") || value.startsWith("/login")) return "/";
-  return value;
 }
 
 function getErrorText(error: string, text: ReturnType<typeof getLoginPageCopy>) {
@@ -149,7 +160,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     persistedLanguage: requestHeaders.get(languageRequestHeaderName),
     requestedLanguage: query.lang,
   });
-  const returnTo = getSafeReturnTo(getQueryValue(query.returnTo, "/"));
+  const returnTo = resolveSafeLocalRedirect(getQueryValue(query.returnTo, "/"), {
+    blockedPathPrefixes: ["/api", "/login"],
+    fallback: "/",
+    trustedOrigin: getTrustedAppOrigin(),
+  });
 
   if (session) {
     redirect(returnTo);
@@ -158,6 +173,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const loginCopy = getLoginPageCopy(language);
   const landingCopy = getCrmLandingPageCopy(language);
   const configured = isLoginConfigured();
+  const loginChallenge = configured ? await getLoginChallengeView(requestHeaders) : null;
   const errorText = getErrorText(getQueryValue(query.error), loginCopy);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
@@ -231,7 +247,94 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 </div>
               ) : null}
 
-              <form action="/api/auth/login" className={subpageStyles.form} method="post">
+              {loginChallenge ? (
+                <SubmitOnceForm action="/api/auth/login" className={subpageStyles.form} method="post">
+                  <LoginUrlHygiene clearError={Boolean(errorText)} />
+                  <input name="flow" type="hidden" value="challenge" />
+                  <input name="returnTo" type="hidden" value={returnTo} />
+                  <input name="language" type="hidden" value={language} />
+
+                  {loginChallenge.kind === "workspace_selection" ? (
+                    <>
+                      <p className={subpageStyles.fieldHelp}>
+                        {language === "de"
+                          ? "Wählen Sie den Workspace für diese Sitzung. Ihre Identität und Ihr Passwort gelten zentral."
+                          : "Choose the workspace for this session. Your identity and password are shared centrally."}
+                      </p>
+                      {loginChallenge.workspaces.map((workspace) => (
+                        <button
+                          className={subpageStyles.submitButton}
+                          key={workspace.id}
+                          name="workspaceUserId"
+                          type="submit"
+                          value={workspace.id}
+                        >
+                          <span>{workspace.name}</span>
+                          <ArrowRightIcon />
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <p className={subpageStyles.fieldHelp}>
+                        {language === "de"
+                          ? `Zusätzliche Bestätigung für den privilegierten Zugang zu ${loginChallenge.workspaceName}.`
+                          : `Additional verification for privileged access to ${loginChallenge.workspaceName}.`}
+                      </p>
+
+                      {loginChallenge.kind === "mfa_enrollment" ? (
+                        <div className={subpageStyles.noticeStack}>
+                          <p className={subpageStyles.notice}>
+                            {language === "de"
+                              ? "Richten Sie den Schlüssel in einer TOTP-App ein und bewahren Sie die einmaligen Wiederherstellungscodes sicher auf."
+                              : "Add this key to a TOTP app and store the one-time recovery codes securely."}
+                          </p>
+                          <p className={subpageStyles.fieldHelp}>
+                            <strong>{language === "de" ? "TOTP-Schlüssel:" : "TOTP key:"}</strong>{" "}
+                            <code>{loginChallenge.secret}</code>
+                          </p>
+                          <p className={subpageStyles.fieldHelp}>
+                            <strong>{language === "de" ? "Provisioning-URI:" : "Provisioning URI:"}</strong>{" "}
+                            <code>{loginChallenge.provisioningUri}</code>
+                          </p>
+                          <p className={subpageStyles.fieldHelp}>
+                            <strong>{language === "de" ? "Wiederherstellungscodes:" : "Recovery codes:"}</strong>
+                          </p>
+                          <ul className={subpageStyles.authPoints}>
+                            {loginChallenge.recoveryCodes.map((code) => <li key={code}><code>{code}</code></li>)}
+                          </ul>
+                          <label className={subpageStyles.field}>
+                            <input name="recoveryCodesSaved" required type="checkbox" value="1" />
+                            {language === "de"
+                              ? "Ich habe die Wiederherstellungscodes sicher gespeichert."
+                              : "I stored the recovery codes securely."}
+                          </label>
+                        </div>
+                      ) : null}
+
+                      <label className={subpageStyles.field} htmlFor="login-mfa-code">
+                        {language === "de"
+                          ? "Code aus der Authenticator-App oder Wiederherstellungscode"
+                          : "Authenticator or recovery code"}
+                        <input
+                          autoComplete="one-time-code"
+                          autoFocus
+                          className={subpageStyles.input}
+                          id="login-mfa-code"
+                          name="code"
+                          required
+                          type="text"
+                        />
+                      </label>
+                      <button className={subpageStyles.submitButton} type="submit">
+                        <span>{language === "de" ? "Sicher bestätigen" : "Verify securely"}</span>
+                        <ArrowRightIcon />
+                      </button>
+                    </>
+                  )}
+                </SubmitOnceForm>
+              ) : (
+              <SubmitOnceForm action="/api/auth/login" className={subpageStyles.form} method="post">
                 <LoginEmailAutofocus />
                 <LoginUrlHygiene clearError={Boolean(errorText)} />
                 <input name="returnTo" type="hidden" value={returnTo} />
@@ -245,8 +348,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                       <MailIcon />
                     </span>
                     <input
-                      autoComplete="email"
-                      autoFocus
+                      autoComplete="username"
                       className={subpageStyles.inputWithIcon}
                       id="login-email"
                       name="email"
@@ -265,7 +367,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                       <LockIcon />
                     </span>
                     <PasswordVisibilityInput
-                      autoComplete="off"
+                      autoComplete="current-password"
                       className={subpageStyles.inputWithIcon}
                       hideLabel={loginCopy.passcodeHideLabel}
                       id="login-password"
@@ -292,7 +394,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                   <span>{loginCopy.submit}</span>
                   <ArrowRightIcon />
                 </button>
-              </form>
+              </SubmitOnceForm>
+              )}
+
+              {loginChallenge ? (
+                <SubmitOnceForm action="/api/auth/login" method="post">
+                  <input name="flow" type="hidden" value="cancel" />
+                  <input name="returnTo" type="hidden" value={returnTo} />
+                  <input name="language" type="hidden" value={language} />
+                  <button className={subpageStyles.textLink} type="submit">
+                    {language === "de" ? "Anmeldung neu starten" : "Restart sign-in"}
+                  </button>
+                </SubmitOnceForm>
+              ) : null}
 
             <div className={subpageStyles.authLinks}>
               <Link

@@ -10,6 +10,7 @@ import {
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
 import type { FormField, WebsiteForm } from "@/lib/form-types";
+import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
 
 type FormRuntimeClientProps = {
   action?: string;
@@ -23,6 +24,7 @@ type FormRuntimeClientProps = {
   returnTo: string;
   selectedFieldId?: string;
   source?: string;
+  submissionProof?: PublicSubmissionProof;
 };
 
 export function FormRuntimeClient({
@@ -46,6 +48,7 @@ function FormRuntimeClientRuntime({
   returnTo,
   selectedFieldId,
   source,
+  submissionProof,
 }: FormRuntimeClientProps) {
   const runtimeCopy = { ...fallbackFormRuntimeCopy, ...copy };
   const formRef = useRef<HTMLFormElement>(null);
@@ -160,6 +163,7 @@ function FormRuntimeClientRuntime({
       returnTo={returnTo}
       selectedFieldId={selectedFieldId}
       source={source}
+      submissionProof={submissionProof}
       values={values}
       visibleFieldIds={visibleFieldIds}
     />

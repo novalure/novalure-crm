@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { neon } from "@neondatabase/serverless";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -21,18 +22,19 @@ function loadEnv(path) {
 loadEnv(".env.local");
 loadEnv(".env.production.local");
 
-function resolveDatabaseUrl() {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.POSTGRES_DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    ""
-  ).trim().replace(/^['"]|['"]$/g, "");
+const qaTarget = await assertQaTarget();
+const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+
+function qaEmail(localPart) {
+  return `${localPart}+${qaRunSlug}@novalure.local`;
 }
 
 function stableUuid(input) {
-  const chars = createHash("sha1").update(`novalure-livegang:${input}`).digest("hex").slice(0, 32).split("");
+  const chars = createHash("sha1")
+    .update(`novalure-livegang:${qaTarget.runPrefix}:${input}`)
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
   chars[12] = "5";
   chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
   const hex = chars.join("");
@@ -50,12 +52,7 @@ if (args.has("--help")) {
   process.exit(0);
 }
 
-const databaseUrl = resolveDatabaseUrl();
-
-if (!databaseUrl) {
-  console.error("Missing DATABASE_URL/POSTGRES_URL for QA cleanup.");
-  process.exit(1);
-}
+const databaseUrl = qaTarget.databaseUrl;
 
 const sql = neon(databaseUrl);
 
@@ -66,16 +63,16 @@ const qaWorkspaceIds = [
 ];
 
 const qaWorkspaceNames = [
-  "QA Novalure Internal Workspace",
-  "QA Bautr\u00e4ger Workspace",
-  "QA Makler Workspace",
+  `QA Novalure Internal Workspace ${qaTarget.runPrefix}`,
+  `QA Bautr\u00e4ger Workspace ${qaTarget.runPrefix}`,
+  `QA Makler Workspace ${qaTarget.runPrefix}`,
 ];
 
 const qaEmails = [
-  "qa-platform-admin@novalure.local",
-  "qa-developer-sales@novalure.local",
-  "qa-broker-sales@novalure.local",
-  "qa-assistant@novalure.local",
+  qaEmail("qa-platform-admin"),
+  qaEmail("qa-developer-sales"),
+  qaEmail("qa-broker-sales"),
+  qaEmail("qa-assistant"),
 ];
 
 async function countDeleted(query, params = []) {

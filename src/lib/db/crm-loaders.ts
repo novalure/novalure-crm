@@ -515,7 +515,6 @@ type PropertyMediaRow = {
   createdAt: string | Date;
   id: string;
   isCover: boolean;
-  isPublic: boolean | null;
   mediaAssetId: string | null;
   mediaType: string;
   metadata: Record<string, unknown> | null;
@@ -523,12 +522,10 @@ type PropertyMediaRow = {
   position: number | string;
   projectId: string | null;
   propertyId: string | null;
-  publicToken: string | null;
   status: string;
   title: string;
   unitId: string | null;
   updatedAt: string | Date;
-  url: string | null;
   visibility: string;
   workspaceId: string;
 };
@@ -542,20 +539,17 @@ type PropertyDocumentRow = {
   createdAt: string | Date;
   documentDate: string | Date | null;
   id: string;
-  isPublic: boolean | null;
   mediaAssetId: string | null;
   metadata: Record<string, unknown> | null;
   mimeType: string | null;
   projectId: string | null;
   propertyId: string | null;
-  publicToken: string | null;
   requiredForPublication: boolean;
   sentAt: string | Date | null;
   status: string;
   title: string;
   unitId: string | null;
   updatedAt: string | Date;
-  url: string | null;
   versionLabel: string | null;
   visibility: string;
   workspaceId: string;
@@ -2201,10 +2195,7 @@ export async function loadPropertyMedia(workspaceId: string): Promise<PropertyMe
       pm.created_at as "createdAt",
       pm.updated_at as "updatedAt",
       ma.name as "assetName",
-      ma.mime_type as "mimeType",
-      ma.url,
-      ma.is_public as "isPublic",
-      ma.public_token as "publicToken"
+      ma.mime_type as "mimeType"
     from property_media pm
     left join media_assets ma
       on ma.id = pm.media_asset_id
@@ -2230,12 +2221,12 @@ export async function loadPropertyMedia(workspaceId: string): Promise<PropertyMe
     position: Number(row.position ?? 0),
     projectId: row.projectId ?? undefined,
     propertyId: row.propertyId ?? undefined,
-    publicUrl: getMediaPublicPath(row.isPublic, row.publicToken),
+    publicUrl: null,
     status: row.status,
     title: row.title || row.assetName || "Medium",
     unitId: row.unitId ?? undefined,
     updatedAt: toIso(row.updatedAt),
-    url: row.url ?? undefined,
+    url: row.mediaAssetId ? `/api/media/files/${row.mediaAssetId}` : undefined,
     visibility: row.visibility,
     workspaceId: row.workspaceId,
   }));
@@ -2267,10 +2258,7 @@ export async function loadPropertyDocuments(workspaceId: string): Promise<Proper
       pd.created_at as "createdAt",
       pd.updated_at as "updatedAt",
       ma.name as "assetName",
-      ma.mime_type as "mimeType",
-      ma.url,
-      ma.is_public as "isPublic",
-      ma.public_token as "publicToken"
+      ma.mime_type as "mimeType"
     from property_documents pd
     left join media_assets ma
       on ma.id = pd.media_asset_id
@@ -2296,14 +2284,14 @@ export async function loadPropertyDocuments(workspaceId: string): Promise<Proper
     mimeType: row.mimeType ?? undefined,
     projectId: row.projectId ?? undefined,
     propertyId: row.propertyId ?? undefined,
-    publicUrl: getMediaPublicPath(row.isPublic, row.publicToken),
+    publicUrl: null,
     requiredForPublication: row.requiredForPublication,
     sentAt: toOptionalIso(row.sentAt),
     status: row.status,
     title: row.title || row.assetName || "Dokument",
     unitId: row.unitId ?? undefined,
     updatedAt: toIso(row.updatedAt),
-    url: row.url ?? undefined,
+    url: row.mediaAssetId ? `/api/media/files/${row.mediaAssetId}` : undefined,
     versionLabel: row.versionLabel ?? undefined,
     visibility: row.visibility,
     workspaceId: row.workspaceId,
@@ -3136,10 +3124,6 @@ function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {
 function normalizePriceVisibilityMap(value: Record<string, unknown> | null | undefined) {
   const entries = Object.entries(asRecord(value)).map(([key, item]) => [key, normalizePriceVisibility(item)] as const);
   return Object.fromEntries(entries);
-}
-
-function getMediaPublicPath(isPublic: boolean | null, publicToken: string | null) {
-  return isPublic && publicToken ? `/api/media/public/${publicToken}` : null;
 }
 
 function normalizeContractMilestone(value: string): PropertyReservation["contractMilestone"] {

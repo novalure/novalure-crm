@@ -40,23 +40,73 @@ test("specialized Novalure internal product roles are additive and scoped", () =
   assert.doesNotMatch(serviceOpsBlock, /bots:publish|settings:manage|customer-access:manage/);
 
   const adminBlock = productRoleBlock(productModel, "novalureAdmin");
-  assert.match(adminBlock, /settings:manage/);
-  assert.match(adminBlock, /bots:publish/);
-  assert.match(adminBlock, /customer-access:manage/);
-  assert.doesNotMatch(adminBlock, /pipeline:write|newsletter:send|funnels:publish/);
+  const adminCapabilities = [...adminBlock.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(adminCapabilities, [
+    "analytics:read",
+    "bots:publish",
+    "calendar:manage",
+    "customer-access:manage",
+    "customer-access:read",
+    "funnels:publish",
+    "knowledge:write",
+    "managed-service:operate",
+    "newsletter:send",
+    "novalure:internal",
+    "pipeline:write",
+    "reservations:write",
+    "settings:manage",
+    "workspace:admin",
+    "workspace:operate",
+    "workspace:read",
+  ]);
 });
 
-test("workspace-scoped sessions deny tenant switching unless managed-service rights are present", () => {
+test("workspace-scoped sessions adopt an active target membership before authorization", () => {
   const session = readText("src/lib/auth/session.ts");
 
   assert.match(session, /export async function resolveWorkspaceScopedSession/);
-  assert.match(session, /requestedWorkspaceId === auth\.session\.workspaceId/);
-  assert.match(session, /if \(!canSwitchWorkspace\(auth\.session\)\)/);
+  assert.match(session, /requestedWorkspaceId === originSession\.workspaceId/);
+  assert.match(session, /if \(!canSwitchWorkspace\(originSession\)\)/);
   assert.match(session, /Managed-service workspace switch is forbidden/);
-  assert.match(session, /wu\.id = \$1\s+and wu\.workspace_id = \$2/s);
-  assert.match(session, /Service Ops workspace access requires explicit membership/);
-  assert.match(session, /Novalure Growth workspace requires explicit internal membership/);
+  assert.match(session, /wu\.workspace_id = \$1[\s\S]*wu\.status = 'active'/);
+  assert.match(session, /Target workspace access requires explicit active membership/);
+  assert.match(session, /userId: membership\.id/);
+  assert.match(session, /role: access\.role/);
+  assert.match(session, /permissions: access\.permissions/);
+  assert.match(session, /productPermissions: access\.productPermissions/);
+  assert.match(session, /productRole: access\.productRole/);
+
+  const membershipIndex = session.indexOf("const membership = await findActiveMembershipForSession");
+  const targetSessionIndex = session.indexOf("const targetSession: AppSession");
+  const authorizationIndex = session.indexOf("authorizeWorkspaceScopedSession(targetSession, input)");
+  assert.ok(membershipIndex >= 0 && membershipIndex < targetSessionIndex);
+  assert.ok(targetSessionIndex < authorizationIndex);
+
+  const auditStart = session.indexOf("async function auditCrossWorkspaceView");
+  const auditEnd = session.indexOf("type WorkspaceScopeRequirement", auditStart);
+  const auditBlock = session.slice(auditStart, auditEnd);
   assert.match(session, /workspace\.cross_workspace_view/);
+  assert.doesNotMatch(auditBlock, /catch/);
+  assert.match(session, /Workspace switch audit could not be persisted/);
+});
+
+test("workspace list is membership-backed and maps target roles and permissions", () => {
+  const route = readText("src/app/api/workspaces/route.ts");
+  const databaseListStart = route.indexOf("const listManagedWorkspaces");
+  const databaseListEnd = route.indexOf("export async function PATCH", databaseListStart);
+  const databaseList = route.slice(databaseListStart, databaseListEnd);
+
+  assert.match(databaseList, /from workspace_users wu\s+join workspaces w on w\.id = wu\.workspace_id/);
+  assert.match(databaseList, /where wu\.status = 'active'/);
+  assert.match(databaseList, /wu\.id = \$1::uuid/);
+  assert.match(databaseList, /\$2::boolean and lower\(wu\.email\) = lower\(\$3\)/);
+  assert.match(databaseList, /wu\.role/);
+  assert.match(databaseList, /wu\.product_role as "productRole"/);
+  assert.match(databaseList, /resolveWorkspaceMembershipAccess/);
+  assert.match(databaseList, /permissions: access\.permissions/);
+  assert.match(databaseList, /productRole: access\.productRole/);
+  assert.doesNotMatch(databaseList, /\$\d+::text as role/);
+  assert.doesNotMatch(databaseList, /permissions: auth\.session\.permissions/);
 });
 
 test("core CRM writes enforce owner or project-scoped record access", () => {

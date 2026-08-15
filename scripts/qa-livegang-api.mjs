@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { createHmac } from "node:crypto";
+import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 
@@ -19,18 +21,24 @@ function loadEnv(path) {
 loadEnv(".env.local");
 loadEnv(".env.production.local");
 
+const qaTarget = await assertQaTarget();
+const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+
+function qaEmail(localPart) {
+  return `${localPart}+${qaRunSlug}@novalure.local`;
+}
+
 const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const qaPassword =
-  process.env.NOVALURE_QA_PASSWORD ||
-  process.env.NOVALURE_QA_SEED_PASSWORD ||
-  process.env.QA_LOGIN_PASSWORD ||
-  defaultQaPassword;
+const trustedOrigin = new URL(baseUrl).origin;
+const configuredQaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.NOVALURE_QA_SEED_PASSWORD;
+if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
+const qaPassword = configuredQaPassword || defaultQaPassword;
 
 const users = {
-  admin: "qa-platform-admin@novalure.local",
-  assistant: "qa-assistant@novalure.local",
-  broker: "qa-broker-sales@novalure.local",
-  developer: "qa-developer-sales@novalure.local",
+  admin: qaEmail("qa-platform-admin"),
+  assistant: qaEmail("qa-assistant"),
+  broker: qaEmail("qa-broker-sales"),
+  developer: qaEmail("qa-developer-sales"),
 };
 
 function assert(condition, message) {
@@ -43,8 +51,45 @@ function splitSetCookie(header) {
   return header.split(/,(?=[^;,]+=)/g);
 }
 
+function decodeBase32(value) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = value.toUpperCase().replace(/=+$/g, "").replace(/[\s-]/g, "");
+  let bits = 0;
+  let buffer = 0;
+  const decoded = [];
+
+  for (const character of normalized) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) return null;
+    buffer = (buffer << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded.push((buffer >>> bits) & 255);
+    }
+  }
+
+  return Buffer.from(decoded);
+}
+
+function createTotpCode(secret, now = Date.now()) {
+  const decoded = decodeBase32(secret);
+  if (!decoded) return null;
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
+  const digest = createHmac("sha1", decoded).update(counter).digest();
+  const offset = digest[digest.length - 1] & 15;
+  const binary =
+    ((digest[offset] & 127) << 24) |
+    ((digest[offset + 1] & 255) << 16) |
+    ((digest[offset + 2] & 255) << 8) |
+    (digest[offset + 3] & 255);
+  return String(binary % 1_000_000).padStart(6, "0");
+}
+
 function createClient(email) {
   const cookies = new Map();
+  let enrolledMfaSecret = null;
 
   function storeCookies(headers) {
     const values =
@@ -67,12 +112,36 @@ function createClient(email) {
     return Array.from(cookies.entries()).map(([name, value]) => `${name}=${value}`).join("; ");
   }
 
+  async function getCsrfToken(method, path) {
+    const target = new URL(path, baseUrl);
+    const params = new URLSearchParams({ method, path: target.pathname });
+    const response = await fetch(`${baseUrl}/api/auth/csrf?${params.toString()}`, {
+      headers: {
+        accept: "application/json",
+        cookie: cookieHeader(),
+        origin: trustedOrigin,
+        "sec-fetch-site": "same-origin",
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || typeof payload?.csrfToken !== "string") {
+      throw new Error(`CSRF token request failed with ${response.status}`);
+    }
+    return payload.csrfToken;
+  }
+
   async function request(path, options = {}) {
     const headers = new Headers(options.headers ?? {});
     if (options.auth !== false && cookies.size > 0) headers.set("cookie", cookieHeader());
+    const method = (options.method ?? "GET").toUpperCase();
+    if (["DELETE", "PATCH", "POST", "PUT"].includes(method) && options.auth !== false && cookies.has("novalure_session")) {
+      headers.set("origin", trustedOrigin);
+      headers.set("sec-fetch-site", "same-origin");
+      headers.set("x-novalure-csrf-token", await getCsrfToken(method, path));
+    }
     const init = {
       headers,
-      method: options.method ?? "GET",
+      method,
       redirect: options.redirect ?? "manual",
     };
 
@@ -83,7 +152,7 @@ function createClient(email) {
       init.body = options.body;
     }
 
-    const response = await fetch(`${baseUrl}${path}`, init);
+    const response = await fetch(new URL(path, baseUrl), init);
     storeCookies(response.headers);
     const contentType = response.headers.get("content-type") ?? "";
     const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
@@ -97,10 +166,66 @@ function createClient(email) {
     const { response } = await request("/api/auth/login", {
       auth: false,
       body,
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: trustedOrigin,
+        "sec-fetch-site": "same-origin",
+      },
       method: "POST",
     });
-    assert([302, 303, 307, 308].includes(response.status), `${email} login redirects`);
+    assert(
+      [302, 303, 307, 308].includes(response.status),
+      `${email} login redirects (received HTTP ${response.status})`,
+    );
+
+    let challengeResponse = response;
+    for (let challengeCount = 0; !cookies.has("novalure_session") && challengeCount < 3; challengeCount += 1) {
+      const redirectLocation = challengeResponse.headers.get("location") ?? "";
+      const challengeKind = new URL(redirectLocation, baseUrl).searchParams.get("step");
+      assert(
+        ["workspace_selection", "mfa_enrollment", "mfa_verification"].includes(challengeKind),
+        `${email} receives an expected login challenge`,
+      );
+      assert(cookies.has("novalure_login_challenge"), `${email} receives login challenge cookie`);
+
+      const challengePage = await request(redirectLocation || "/login");
+      assert(challengePage.response.ok, `${email} can load ${challengeKind} challenge`);
+      const challengeBody = new URLSearchParams({ flow: "challenge", returnTo: "/" });
+
+      if (challengeKind === "workspace_selection") {
+        const workspaceButton = Array.from(challengePage.text.matchAll(/<button\b([^>]*)>/gi))
+          .find((match) => /\bname="workspaceUserId"/i.test(match[1]));
+        const workspaceUserId = workspaceButton?.[1].match(/\bvalue="([0-9a-f-]{36})"/i)?.[1] ?? null;
+        assert(Boolean(workspaceUserId), `${email} workspace selection exposes a membership`);
+        challengeBody.set("workspaceUserId", workspaceUserId);
+      } else if (challengeKind === "mfa_enrollment") {
+        enrolledMfaSecret = challengePage.text.match(/<code>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
+        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
+        assert(Boolean(code), `${email} MFA enrollment exposes a valid TOTP secret`);
+        challengeBody.set("code", code);
+        challengeBody.set("recoveryCodesSaved", "1");
+      } else {
+        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
+        assert(Boolean(code), `${email} reuses the enrolled TOTP secret for MFA verification`);
+        challengeBody.set("code", code);
+      }
+
+      const challengeResult = await request("/api/auth/login", {
+        body: challengeBody,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: trustedOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        method: "POST",
+      });
+      assert(
+        [302, 303, 307, 308].includes(challengeResult.response.status),
+        `${email} ${challengeKind} redirects (received HTTP ${challengeResult.response.status})`,
+      );
+      challengeResponse = challengeResult.response;
+    }
+
     assert(cookies.has("novalure_session"), `${email} receives session cookie`);
   }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getTrustedAuthClientIp } from "@/lib/auth/auth-security";
 import { requireProductCapability } from "@/lib/auth/session";
 import {
   inviteWorkspaceUser,
@@ -86,7 +87,7 @@ export async function PATCH(request: Request) {
               name: input.name,
               origin: getTrustedAppOrigin(),
               productRole: input.productRole,
-              requestIp: request.headers.get("x-forwarded-for"),
+              requestIp: getTrustedAuthClientIp(request.headers),
               role: input.role,
               session: auth.session,
               userAgent: request.headers.get("user-agent"),
