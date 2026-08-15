@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { LanguageCode } from "@/lib/i18n";
+import type { PublicLanguageCode } from "@/lib/public-language";
 
 const appRouteHashes = new Set([
   "analysis",
@@ -40,7 +40,7 @@ const appRouteHashes = new Set([
 ]);
 
 type PublicHashRouteLoginRedirectProps = {
-  language: LanguageCode;
+  language: PublicLanguageCode;
 };
 
 export function PublicHashRouteLoginRedirect({ language }: PublicHashRouteLoginRedirectProps) {

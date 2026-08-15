@@ -1,23 +1,73 @@
-import type { CSSProperties, ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import localFont from "next/font/local";
 import Link from "next/link";
-import { CookieConsentButton } from "@/components/cookie-consent-button";
+import { CookieConsentButton, type CookieConsentButtonCopy } from "@/components/cookie-consent-button";
 import { PublicHashRouteLoginRedirect } from "@/components/public-hash-route-login-redirect";
 import { PublicCrmMobileMenu } from "@/components/public-crm-mobile-menu";
 import styles from "@/components/public-crm-landing.module.css";
 import {
   getCrmLandingPageCopy,
-  getLoginLegalFooterCopy,
   getPublicPageCopy,
-  type LanguageCode,
 } from "@/lib/i18n";
 import { companyLegalDetails, publicLegalLinks } from "@/lib/legal";
 import { getPublicCrmLandingV2Copy } from "@/lib/public-crm-landing-v2";
-import { withPublicLanguage } from "@/lib/public-language";
+import { type PublicLanguageCode, withPublicLanguage } from "@/lib/public-language";
 
 type LegacyLandingCopy = ReturnType<typeof getCrmLandingPageCopy>;
-type LegalCopy = ReturnType<typeof getLoginLegalFooterCopy>;
+type LegalCopy = {
+  readonly ariaLabel: string;
+  readonly companyLine: string;
+  readonly companyNumber: string;
+  readonly contactPrefix: string;
+  readonly description: string;
+  readonly links: Readonly<Record<(typeof publicLegalLinks)[number]["key"], string>>;
+  readonly registeredPlace: string;
+};
 type PublicCopy = ReturnType<typeof getPublicPageCopy>;
+
+const spanishLegalCopy: LegalCopy = {
+  ariaLabel: "Información legal",
+  description: "La información legal está disponible sin iniciar sesión.",
+  links: {
+    imprint: "Aviso legal",
+    privacy: "Política de privacidad",
+    cookies: "Aviso de cookies",
+    terms: "Condiciones de uso",
+    dataDeletion: "Eliminación de datos",
+    meta: "Avisos de Meta",
+  },
+  companyLine: "Novalure CLG · número de empresa irlandesa 796735 · Dublín, Irlanda",
+  companyNumber: "Número de empresa irlandesa",
+  contactPrefix: "Consultas legales y de privacidad:",
+  registeredPlace: "Dublín, Irlanda",
+};
+
+const spanishCookieConsentCopy: CookieConsentButtonCopy = {
+  title: "Configuración de cookies",
+  description:
+    "Novalure CRM usa cookies necesarias para seguridad, idioma, login y funciones solicitadas de la plataforma. Las cookies de analítica y marketing permanecen desactivadas salvo que aceptes todo.",
+  analyticsLabel: "Cookies de analítica",
+  marketingLabel: "Cookies de marketing",
+  necessaryTitle: "Cookies necesarias",
+  necessaryDescription:
+    "Necesarias para entregar la página, mantener la seguridad, gestionar sesiones de login y recordar tu elección de cookies.",
+  optionalTitle: "Analítica y marketing",
+  optionalDescription:
+    "Se usan solo tras tu consentimiento para entender la demanda, el rendimiento de campañas y los recorridos de leads listos para CRM.",
+  rejectOptional: "Solo necesarias",
+  customize: "Personalizar",
+  saveSelection: "Guardar selección",
+  acceptAll: "Aceptar todo",
+  detailsLink: "Leer el Aviso de cookies",
+  privacyLink: "Política de privacidad",
+  preferencesTitle: "Seleccionar categorías de cookies",
+  preferencesDescription:
+    "Las cookies necesarias permanecen activas. Las categorías opcionales solo se guardan si las seleccionas explícitamente.",
+  manageButton: "Cookies",
+  savedNecessary: "Solo están activas las cookies necesarias.",
+  savedCustom: "Tus categorías de cookies seleccionadas están activas.",
+  savedAll: "Todas las categorías de cookies están aceptadas.",
+};
 
 const figtree = localFont({
   display: "swap",
@@ -32,7 +82,7 @@ type PublicCrmLandingProps = {
   auditHref: string;
   basePath: "/" | "/login";
   copy: LegacyLandingCopy;
-  language: LanguageCode;
+  language: PublicLanguageCode;
   legalCopy: LegalCopy;
   pageCopy: PublicCopy;
 };
@@ -129,7 +179,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   );
 }
 
-function Brand({ language }: { language: LanguageCode }) {
+function Brand({ language }: { language: PublicLanguageCode }) {
   return (
     <Link aria-label="Novalure CRM" className={styles.brand} href={withPublicLanguage("/", language)}>
       <span className={styles.wordmark}>Novalure<span>.</span></span>
@@ -138,28 +188,55 @@ function Brand({ language }: { language: LanguageCode }) {
   );
 }
 
-function LanguageSwitch({
-  basePath,
-  language,
-  pageCopy,
-}: {
+const publicLanguageOptions = [
+  { code: "de", shortLabel: "DE" },
+  { code: "en", shortLabel: "EN" },
+  { code: "es", shortLabel: "ES" },
+] as const satisfies readonly { code: PublicLanguageCode; shortLabel: string }[];
+
+function getLanguageSwitchLabels(language: PublicLanguageCode, pageCopy: PublicCopy) {
+  if (language === "es") {
+    return {
+      ariaLabel: "Idioma de la página",
+      labels: {
+        de: "Alemán",
+        en: "Inglés",
+        es: "Español",
+      },
+    };
+  }
+
+  return {
+    ariaLabel: pageCopy.languageAriaLabel,
+    labels: {
+      de: pageCopy.switchToGerman,
+      en: pageCopy.switchToEnglish,
+      es: "Español",
+    },
+  };
+}
+
+function LanguageSwitch({ basePath, language, pageCopy }: {
   basePath: "/" | "/login";
-  language: LanguageCode;
+  language: PublicLanguageCode;
   pageCopy: PublicCopy;
 }) {
+  const labels = getLanguageSwitchLabels(language, pageCopy);
+
   return (
-    <nav aria-label={pageCopy.languageAriaLabel} className={styles.languageSwitch}>
-      {language === "de" ? (
-        <span aria-current="page">DE</span>
-      ) : (
-        <Link aria-label={pageCopy.switchToGerman} href={withPublicLanguage(basePath, "de")}>DE</Link>
-      )}
-      <i aria-hidden="true">/</i>
-      {language === "en" ? (
-        <span aria-current="page">EN</span>
-      ) : (
-        <Link aria-label={pageCopy.switchToEnglish} href={withPublicLanguage(basePath, "en")}>EN</Link>
-      )}
+    <nav aria-label={labels.ariaLabel} className={styles.languageSwitch}>
+      {publicLanguageOptions.map((option, index) => (
+        <Fragment key={option.code}>
+          {index > 0 ? <i aria-hidden="true">/</i> : null}
+          {language === option.code ? (
+            <span aria-current="page">{option.shortLabel}</span>
+          ) : (
+            <Link aria-label={labels.labels[option.code]} href={withPublicLanguage(basePath, option.code)}>
+              {option.shortLabel}
+            </Link>
+          )}
+        </Fragment>
+      ))}
     </nav>
   );
 }
@@ -231,6 +308,8 @@ export function PublicCrmLanding({
   pageCopy,
 }: PublicCrmLandingProps) {
   const copy = getPublicCrmLandingV2Copy(language);
+  const localizedLegalCopy = language === "es" ? spanishLegalCopy : legalCopy;
+  const cookieConsentCopy = language === "es" ? spanishCookieConsentCopy : legacyCopy.cookieConsent;
   const loginHref = withPublicLanguage("/login", language);
   const cookieHref = withPublicLanguage("/cookies", language);
   const privacyHref = withPublicLanguage("/privacy", language);
@@ -243,7 +322,11 @@ export function PublicCrmLanding({
   const privacyIcons: readonly IconName[] = ["key", "shield", "document"];
 
   return (
-    <div className={`${styles.page} ${figtree.variable} novalure-public-legacy`} lang={language}>
+    <div
+      className={`${styles.page} ${figtree.variable} novalure-public-legacy`}
+      data-public-language={language}
+      lang={language}
+    >
       <PublicHashRouteLoginRedirect language={language} />
       <header className={styles.header}>
         <div className={styles.headerInner}>
@@ -418,20 +501,20 @@ export function PublicCrmLanding({
         </section>
       </main>
 
-      <footer aria-label={legalCopy.ariaLabel} className={styles.footer}>
+      <footer aria-label={localizedLegalCopy.ariaLabel} className={styles.footer}>
         <div className={styles.footerInner}>
           <div>
-            <p><strong>Novalure<span>.</span></strong> · {legalCopy.companyLine}</p>
+            <p><strong>Novalure<span>.</span></strong> · {localizedLegalCopy.companyLine}</p>
             <a href={`mailto:${companyLegalDetails.email}`}>{companyLegalDetails.email}</a>
           </div>
-          <nav aria-label={legalCopy.ariaLabel}>
+          <nav aria-label={localizedLegalCopy.ariaLabel}>
             {publicLegalLinks.map((link) => (
-              <Link href={withPublicLanguage(link.href, language)} key={link.key}>{legalCopy.links[link.key]}</Link>
+              <Link href={withPublicLanguage(link.href, language)} key={link.key}>{localizedLegalCopy.links[link.key]}</Link>
             ))}
           </nav>
         </div>
       </footer>
-      <CookieConsentButton cookieHref={cookieHref} copy={legacyCopy.cookieConsent} privacyHref={privacyHref} />
+      <CookieConsentButton cookieHref={cookieHref} copy={cookieConsentCopy} privacyHref={privacyHref} />
     </div>
   );
 }

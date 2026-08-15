@@ -1,4 +1,4 @@
-import type { LanguageCode } from "@/lib/i18n";
+import type { PublicLanguageCode } from "@/lib/public-language";
 
 type CardCopy = {
   title: string;
@@ -520,8 +520,217 @@ const copy = {
       noRealData: "No real customer data",
     },
   },
-} as const satisfies Record<LanguageCode, LandingV2Copy>;
+  es: {
+    nav: {
+      preview: "Vista previa",
+      audit: "Auditoría",
+      faq: "FAQ",
+      login: "Login del equipo",
+      auditCta: "Solicitar auditoría",
+      menuOpen: "Abrir menú",
+      menuClose: "Cerrar menú",
+    },
+    hero: {
+      title: "Cada consulta inmobiliaria recibe contexto, responsable y",
+      titleAccent: "el siguiente paso.",
+      description:
+        "Novalure CRM es el workspace privado de leads para equipos inmobiliarios en España, Portugal y mercados hispanohablantes: consultas, responsables, citas y pipeline en un solo lugar, gestionados con confidencialidad.",
+      primaryCta: "Solicitar auditoría de pipeline",
+      secondaryCta: "Ver vista previa del CRM",
+      accessLine: "Sin suscripción self-service · Acceso tras revisión",
+      regions: ["España", "Portugal", "LATAM", "UE"],
+    },
+    leadCard: {
+      reminder: "Llamada hoy, 15:00",
+      type: "Consulta de vendedor",
+      status: "Cualificado",
+      title: "Lead n.º 2481",
+      received: "Recibido hoy, 11:42",
+      rows: [
+        ["Fuente", "Recomendación"],
+        ["Estado", "Cualificado"],
+        ["Responsable", "S. Molina"],
+        ["Siguiente acción", "Llamada hoy, 15:00"],
+        ["Fase del pipeline", "Primera llamada agendada"],
+      ],
+      firstStage: "Nuevo",
+      progress: "Fase 3 de 5",
+      lastStage: "Cierre",
+      note: "Vista de ejemplo anonimizada · sin datos reales de clientes",
+    },
+    problem: {
+      eyebrow: "El problema",
+      title: "Se pierde facturación entre la consulta y la siguiente acción.",
+      cards: [
+        {
+          title: "No hay siguiente acción visible",
+          body: "Las consultas quedan en una bandeja de entrada sin que nadie vea claramente el próximo paso.",
+        },
+        {
+          title: "El seguimiento depende de personas",
+          body: "Que alguien haga seguimiento depende de quién lo recuerde en ese momento.",
+        },
+        {
+          title: "Las campañas se juzgan demasiado pronto",
+          body: "Las campañas se evalúan por clics antes de que el lead esté cualificado.",
+        },
+        {
+          title: "Citas y pipeline separados",
+          body: "El calendario no conoce el estado del pipeline, y el pipeline no conoce las citas.",
+        },
+      ],
+      funnelCaption: "Dónde se pierden consultas · valores de ejemplo",
+      funnel: [
+        { label: "Consultas recibidas", value: 100 },
+        { label: "Respondidas", value: 64 },
+        { label: "Siguiente acción agendada", value: 31 },
+        { label: "Cita realizada", value: 18 },
+      ],
+      funnelNote: "Representación esquemática · sin datos reales de clientes.",
+    },
+    preview: {
+      eyebrow: "Vista previa del CRM",
+      title: "La estructura es visible; los datos siguen protegidos.",
+      description:
+        "La tarjeta de lead superior y los extractos de aquí son vistas reales del workspace, completamente anonimizadas: nombres ocultos, precios y notas no visibles.",
+      pipelineCaption: "Pipeline",
+      columns: [
+        {
+          title: "Nuevo",
+          cards: [
+            { source: "Portal", title: "Consulta de comprador · M. ●●●", action: "Primer contacto pendiente" },
+            { source: "Campaña", title: "Consulta de comprador · A. ●●●", action: "Asignación pendiente" },
+          ],
+        },
+        {
+          title: "Cualificado",
+          cards: [
+            { source: "Recomendación", title: "Consulta de vendedor · S. ●●●", action: "Llamada hoy, 15:00" },
+            { source: "Portal", title: "Consulta de comprador · R. ●●●", action: "Enviar dossier" },
+          ],
+        },
+        {
+          title: "Primera llamada",
+          cards: [
+            { source: "Campaña", title: "Consulta de comprador · T. ●●●", action: "Cita vie., 14:00" },
+            { source: "Portal", title: "Consulta de vendedor · K. ●●●", action: "Revisar documentos" },
+          ],
+        },
+        {
+          title: "Visita",
+          cards: [
+            { source: "Recomendación", title: "Consulta de comprador · J. ●●●", action: "Inmueble jue., 9:00" },
+          ],
+        },
+      ],
+      inboxCaption: "Bandeja de consultas",
+      inbox: [
+        { time: "09:12", title: "Consulta de comprador · Portal", status: "Nuevo", owner: "SM" },
+        { time: "10:05", title: "Consulta de vendedor · Recomendación", status: "Cualificado", owner: "SM" },
+        { time: "11:42", title: "Consulta de comprador · Campaña", status: "Nuevo", owner: "LK" },
+        { time: "13:20", title: "Consulta de vendedor · Portal", status: "Cualificado", owner: "LK" },
+      ],
+      visibleTitle: "Visible en la vista previa",
+      protectedTitle: "Protegido de la vista pública",
+      visible: ["Fuente de la consulta", "Estado", "Responsable del equipo", "Siguiente acción con hora", "Fase del pipeline"],
+      protected: ["Nombres de clientes", "Datos de contacto", "Precios y condiciones", "Notas internas"],
+    },
+    audiences: {
+      eyebrow: "Para quién es",
+      title: "Creado para equipos que trabajan consultas en conjunto.",
+      resultLabel: "Resultado",
+      items: [
+        {
+          title: "Promotoras inmobiliarias",
+          body: "Las consultas de proyecto entran en un pipeline compartido, organizado por proyecto y unidad.",
+          result: "Estado comercial de cada proyecto de un vistazo.",
+        },
+        {
+          title: "Equipos de agencia",
+          body: "Cada consulta tiene responsable y un siguiente paso agendado.",
+          result: "Ningún lead queda sin respuesta.",
+        },
+        {
+          title: "Equipos de venta de proyectos",
+          body: "Campañas, primeras llamadas y reservas permanecen conectadas a un mismo registro.",
+          result: "Las campañas se miden por cierres, no por clics.",
+        },
+      ],
+    },
+    audit: {
+      eyebrow: "Auditoría de pipeline",
+      title: "Primero auditoría. Después workspace.",
+      steps: [
+        { title: "Auditoría", body: "Revisamos juntos los caminos de lead, desde la primera consulta hasta la cita." },
+        { title: "Análisis de cuellos de botella", body: "Identificamos dónde se frenan las consultas y cuánto cuesta." },
+        { title: "Decisión de setup", body: "Decide con una base clara si Novalure encaja con tu operación comercial." },
+        { title: "Operación de leads lista para CRM", body: "Tu equipo trabaja con responsables, plazos y un pipeline mantenido." },
+      ],
+      outcomesTitle: "Qué tienes después de la auditoría",
+      outcomes: [
+        "Una vista documentada de tus caminos de lead actuales",
+        "Cuellos de botella priorizados por impacto en ingresos",
+        "Una recomendación clara a favor o en contra de un setup",
+        "Una hoja de ruta para las primeras semanas",
+      ],
+      cta: "Solicitar auditoría de pipeline",
+    },
+    privacy: {
+      eyebrow: "Acceso y privacidad",
+      title: "Tu workspace permanece privado.",
+      items: [
+        {
+          title: "Acceso solo por invitación",
+          body: "Tu equipo trabaja en un workspace cerrado; el acceso llega tras la auditoría y no mediante un formulario público.",
+        },
+        {
+          title: "Sin datos públicos de clientes",
+          body: "Esta página muestra solo ejemplos anonimizados; nombres, datos de contacto y precios permanecen en el workspace.",
+        },
+        {
+          title: "Información legal sin login",
+          body: "El imprint, la política de privacidad y las páginas legales siguen disponibles sin iniciar sesión.",
+        },
+      ],
+    },
+    faq: {
+      eyebrow: "Preguntas",
+      title: "Cinco preguntas, respuestas breves.",
+      items: [
+        {
+          question: "¿Hay una suscripción o una lista pública de precios?",
+          answer: "No. Novalure no se vende como suscripción. La auditoría de pipeline determina si un setup de workspace tiene sentido; después recibes una propuesta para tu setup.",
+        },
+        {
+          question: "¿Puedo probar el CRM antes?",
+          answer: "No hay demo abierta. La tarjeta de lead anonimizada muestra la estructura; durante la auditoría ves el workspace en vivo en el contexto de tus procesos.",
+        },
+        {
+          question: "¿Cómo funciona la auditoría de pipeline?",
+          answer: "Es una sesión con las personas que gestionan consultas hoy. Revisamos caminos de lead, detectamos cuellos de botella y entregamos una recomendación por escrito.",
+        },
+        {
+          question: "¿Novalure es un CRM estándar?",
+          answer: "No. Novalure es un workspace configurado alrededor de tu proceso comercial: fases, responsables y plazos siguen a tu equipo, no al revés.",
+        },
+        {
+          question: "¿Para quién es Novalure?",
+          answer: "Para agencias, promotoras y equipos de venta de proyectos que gestionan consultas en equipo y necesitan visibilidad sobre la siguiente acción.",
+        },
+      ],
+    },
+    finalCta: {
+      title: "Revisar primero. Luego construir el workspace CRM correcto.",
+      description: "La auditoría de pipeline es el primer paso y la base de todo lo que sigue.",
+      cta: "Solicitar auditoría de pipeline",
+    },
+    labels: {
+      example: "Vista de ejemplo anonimizada",
+      noRealData: "Sin datos reales de clientes",
+    },
+  },
+} as const satisfies Record<PublicLanguageCode, LandingV2Copy>;
 
-export function getPublicCrmLandingV2Copy(language: LanguageCode): LandingV2Copy {
+export function getPublicCrmLandingV2Copy(language: PublicLanguageCode): LandingV2Copy {
   return copy[language] ?? copy.en;
 }
