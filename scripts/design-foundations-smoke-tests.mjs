@@ -156,6 +156,10 @@ test("CRM shell primitives override the generic utility palette", async () => {
     crmTheme,
     /\.crm-app :where\([\s\S]*?button\[class~="hover:bg-stone-100"\][\s\S]*?\):hover/,
   );
+  assert.match(
+    crmTheme,
+    /\.crm-app :where\(button:not\(:disabled\), a\[class\*="rounded"\]\):hover/,
+  );
   assert.doesNotMatch(
     crmTheme,
     /(?<!:where\():not\(\[style\*=/,

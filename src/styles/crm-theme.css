@@ -352,8 +352,7 @@
   border-radius: var(--nl-radius-button) !important;
 }
 
-.crm-app button:not(:disabled):hover,
-.crm-app a[class*="rounded"]:hover {
+.crm-app :where(button:not(:disabled), a[class*="rounded"]):hover {
   transform: translateY(-1px);
 }
 
