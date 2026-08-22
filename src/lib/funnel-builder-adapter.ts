@@ -377,7 +377,6 @@ export function buildFunnelBlueprint({ funnel, project, owner, steps }: BuildFun
       gtmId: funnel.gtmId,
       matomoSiteId: funnel.matomoSiteId,
       consentMode: mapConsentMode(funnel.consentMode),
-      webhookUrl: funnel.webhookUrl,
     },
     crmHandover: {
       destination: mapDestination(funnel.leadDestination),
@@ -413,7 +412,12 @@ export function findFunnelBlueprint(
     steps: FunnelStep[];
     users: WorkspaceUser[];
   },
+  options: { mode?: "production" | "demo" } = {},
 ) {
+  // Fixture-derived blueprints are an explicit local demo facility. Production
+  // callers must use the persisted blueprint API and fail closed when it is absent.
+  if (options.mode !== "demo" || process.env.NODE_ENV === "production") return null;
+
   const funnel = data.funnels.find((item) => item.id === funnelId);
   if (!funnel) return null;
 

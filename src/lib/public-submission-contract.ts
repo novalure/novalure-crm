@@ -1,6 +1,7 @@
 export const publicSubmissionActions = {
   booking: "meeting_booking",
   form: "website_form",
+  funnel: "funnel_submission",
 } as const;
 
 export const publicSubmissionControlFields = {

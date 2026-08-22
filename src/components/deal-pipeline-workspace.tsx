@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import type {
   CalendarEvent,
   Contact,
@@ -63,6 +63,8 @@ type DealPipelineWorkspaceProps = {
 type DealPatch = Partial<
   Pick<Deal, "expectedCloseDate" | "nextAction" | "ownerUserId" | "probability" | "riskLevel" | "stage" | "value">
 >;
+
+type CreateDealField = "contactId" | "expectedCloseDate" | "value";
 
 type WarningItem = {
   id: "blockedUnit" | "highRisk" | "longStage" | "noNextAction" | "noTask" | "overdueTask" | "reservationDue";
@@ -551,6 +553,10 @@ export function DealPipelineWorkspace({
   const [savingDealId, setSavingDealId] = useState("");
   const [creatingDeal, setCreatingDeal] = useState(false);
   const [createValidationError, setCreateValidationError] = useState("");
+  const [createFieldErrors, setCreateFieldErrors] = useState<
+    Partial<Record<CreateDealField, string>>
+  >({});
+  const createDealInFlight = useRef(false);
   const [newDeal, setNewDeal] = useState({
     contactId: initialContact?.id ?? "",
     expectedCloseDate: "",
@@ -1187,40 +1193,51 @@ export function DealPipelineWorkspace({
   };
 
   const createDeal = async () => {
-    if (creatingDeal) {
+    if (createDealInFlight.current) {
       return;
     }
 
     const contact = contacts.find((item) => item.id === createContactId);
-    if (!contact) {
-      return;
-    }
-
     const normalizedValue = newDeal.value.trim();
-    const validationCode =
-      validateDealValue(normalizedValue, { required: true }) ??
-      validateDealCloseDate(newDeal.expectedCloseDate, {
-        required: true,
-        todayDateKey: TODAY_DATE_KEY,
+    const valueValidationCode = validateDealValue(normalizedValue, { required: true });
+    const closeDateValidationCode = validateDealCloseDate(newDeal.expectedCloseDate, {
+      required: true,
+      todayDateKey: TODAY_DATE_KEY,
+    });
+    const validationMessages = {
+      close_date_invalid: text.closeDateInvalid,
+      close_date_past: text.closeDatePast,
+      close_date_required: text.closeDateRequired,
+      value_invalid: text.dealValueInvalid,
+      value_required: text.dealValueRequired,
+      value_too_high: text.dealValueTooHigh,
+    };
+    const fieldErrors: Partial<Record<CreateDealField, string>> = {};
+    if (!contact) fieldErrors.contactId = text.contactMissing;
+    if (valueValidationCode) fieldErrors.value = validationMessages[valueValidationCode];
+    if (closeDateValidationCode) {
+      fieldErrors.expectedCloseDate = validationMessages[closeDateValidationCode];
+    }
+    const firstInvalidField = (["contactId", "value", "expectedCloseDate"] as const).find(
+      (field) => Boolean(fieldErrors[field]),
+    );
+    if (firstInvalidField) {
+      setCreateFieldErrors(fieldErrors);
+      setCreateValidationError(fieldErrors[firstInvalidField] ?? text.createFailed);
+      requestAnimationFrame(() => {
+        document.getElementById(`new-deal-${firstInvalidField}`)?.focus();
       });
-    const validationError = validationCode
-      ? {
-          close_date_invalid: text.closeDateInvalid,
-          close_date_past: text.closeDatePast,
-          close_date_required: text.closeDateRequired,
-          value_invalid: text.dealValueInvalid,
-          value_required: text.dealValueRequired,
-          value_too_high: text.dealValueTooHigh,
-        }[validationCode]
-      : "";
-    if (validationError) {
-      setCreateValidationError(validationError);
       return;
     }
+    if (!contact) {
+      throw new Error("Deal contact validation invariant failed");
+    }
 
+    createDealInFlight.current = true;
     setCreatingDeal(true);
     setSavedMessage("");
     setCreateValidationError("");
+    setCreateFieldErrors({});
     const project = projects.find((item) => item.id === contact.projectId);
     const now = new Date();
     const probability = Number(newDeal.probability);
@@ -1275,6 +1292,7 @@ export function DealPipelineWorkspace({
         removeServerSyncedDealOverlay(persistedDeal.id);
       }
     } finally {
+      createDealInFlight.current = false;
       setCreatingDeal(false);
     }
   };
@@ -1444,7 +1462,14 @@ export function DealPipelineWorkspace({
         ) : null}
 
         {isCreateOpen ? (
-          <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
+          <form
+            className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createDeal();
+            }}
+          >
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 xl:col-span-2">
                 {text.newDealName}
@@ -1457,9 +1482,15 @@ export function DealPipelineWorkspace({
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.contactLabel}
                 <select
+                  aria-describedby={createFieldErrors.contactId ? "new-deal-contactId-error" : undefined}
+                  aria-invalid={Boolean(createFieldErrors.contactId) || undefined}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   disabled={contacts.length === 0}
-                  onChange={(event) => setNewDeal((current) => ({ ...current, contactId: event.target.value }))}
+                  id="new-deal-contactId"
+                  onChange={(event) => {
+                    setNewDeal((current) => ({ ...current, contactId: event.target.value }));
+                    setCreateFieldErrors((current) => ({ ...current, contactId: undefined }));
+                  }}
                   value={createContactId}
                 >
                   {contacts.length > 0 ? (
@@ -1472,6 +1503,11 @@ export function DealPipelineWorkspace({
                     <option>{text.contactMissing}</option>
                   )}
                 </select>
+                {createFieldErrors.contactId ? (
+                  <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-red-800" id="new-deal-contactId-error">
+                    {createFieldErrors.contactId}
+                  </span>
+                ) : null}
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.stage}
@@ -1490,13 +1526,23 @@ export function DealPipelineWorkspace({
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.amount}
                 <input
-                  aria-invalid={Boolean(createValidationError) || undefined}
+                  aria-describedby={createFieldErrors.value ? "new-deal-value-error" : undefined}
+                  aria-invalid={Boolean(createFieldErrors.value) || undefined}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  id="new-deal-value"
                   inputMode="decimal"
-                  onChange={(event) => setNewDeal((current) => ({ ...current, value: event.target.value }))}
+                  onChange={(event) => {
+                    setNewDeal((current) => ({ ...current, value: event.target.value }));
+                    setCreateFieldErrors((current) => ({ ...current, value: undefined }));
+                  }}
                   required
                   value={newDeal.value}
                 />
+                {createFieldErrors.value ? (
+                  <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-red-800" id="new-deal-value-error">
+                    {createFieldErrors.value}
+                  </span>
+                ) : null}
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.probability}
@@ -1512,30 +1558,39 @@ export function DealPipelineWorkspace({
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.closeDate}
                 <input
-                  aria-invalid={Boolean(createValidationError) || undefined}
+                  aria-describedby={createFieldErrors.expectedCloseDate ? "new-deal-expectedCloseDate-error" : undefined}
+                  aria-invalid={Boolean(createFieldErrors.expectedCloseDate) || undefined}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
+                  id="new-deal-expectedCloseDate"
                   min={TODAY_DATE_KEY}
-                  onChange={(event) => setNewDeal((current) => ({ ...current, expectedCloseDate: event.target.value }))}
+                  onChange={(event) => {
+                    setNewDeal((current) => ({ ...current, expectedCloseDate: event.target.value }));
+                    setCreateFieldErrors((current) => ({ ...current, expectedCloseDate: undefined }));
+                  }}
                   required
                   type="date"
                   value={newDeal.expectedCloseDate}
                 />
+                {createFieldErrors.expectedCloseDate ? (
+                  <span className="mt-1 block text-xs font-semibold normal-case tracking-normal text-red-800" id="new-deal-expectedCloseDate-error">
+                    {createFieldErrors.expectedCloseDate}
+                  </span>
+                ) : null}
               </label>
             </div>
             {createValidationError ? (
-              <p aria-live="polite" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
+              <p aria-live="assertive" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900" role="alert">
                 {createValidationError}
               </p>
             ) : null}
             <button
               className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:w-auto"
               disabled={contacts.length === 0 || creatingDeal}
-              onClick={() => void createDeal()}
-              type="button"
+              type="submit"
             >
               {creatingDeal ? text.creating : text.create}
             </button>
-          </div>
+          </form>
         ) : null}
       </article>
 

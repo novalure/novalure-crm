@@ -153,6 +153,8 @@ type HeaderActionModal = "import" | "project" | null;
 
 type ImportSource = "hubspot" | "csv" | "contacts" | "meetings";
 
+const importLaunchEnabled = false;
+
 type ProjectWizardDraft = {
   calendarProvider: CalendarProviderChoice;
   customerType: WorkspaceCustomerType;
@@ -495,7 +497,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   marketing: {
     mobilePanels: ["hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "properties", "funnels", "newsletter", "leadInbox", "contacts", "forms", "analytics", "communication"],
+    navigationEntries: ["dashboard", "properties", "funnels", "newsletter", "leadInbox", "contacts", "forms", "analysis", "analytics", "communication"],
     startSection: "dashboard",
     startEntry: "dashboard",
     quickActions: ["funnels", "newsletter", "leadInbox", "analysis"],
@@ -509,7 +511,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
   },
   management: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
-    navigationEntries: ["dashboard", "properties", "analytics", "pipelines", "contacts", "tasks", "customerAccess", "dataHygiene"],
+    navigationEntries: ["dashboard", "properties", "analysis", "analytics", "pipelines", "contacts", "tasks", "customerAccess", "dataHygiene"],
     startSection: "analytics",
     startEntry: "analytics",
     quickActions: ["dashboard", "analysis", "pipeline", "dataHygiene"],
@@ -590,6 +592,7 @@ const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
       "governanceCompliance",
       "botGovernance",
       "systemReleases",
+      "analysis",
       "settings",
     ],
     startSection: "settings",
@@ -3369,6 +3372,17 @@ export function CrmWorkspace({
     const moduleKey = moduleBySection[navigationEntries[entryId].section];
     return !moduleKey || isWorkspaceModuleEnabled(workspaceContext.enabledModules, moduleKey);
   });
+  const visibleQuickActionIds = normalizedActivePreset.quickActions.filter((actionId) => {
+    if (actionId === "reviewImport") return importLaunchEnabled;
+    if (actionId === "newProject") return true;
+    const targetSection = quickActionSections[actionId];
+    return Boolean(
+      targetSection &&
+        enabledNavigationEntryIds.some(
+          (entryId) => navigationEntries[entryId].section === targetSection,
+        ),
+    );
+  });
   const profileNavigationItems = enabledNavigationEntryIds.map((entryId) => ({
     ...navigationEntries[entryId],
     label: navigationLabels[entryId] ?? navigationLabels[navigationEntries[entryId].section],
@@ -3564,6 +3578,7 @@ export function CrmWorkspace({
     projectDraft.name.trim().length >= 3 && Boolean(projectDraft.type && projectDraft.pipelineId);
 
   function openImportReview() {
+    if (!importLaunchEnabled) return;
     setImportNotice("");
     setActionModal("import");
   }
@@ -4069,7 +4084,7 @@ export function CrmWorkspace({
 
   function handleQuickAction(actionId: QuickActionId) {
     if (actionId === "reviewImport") {
-      openImportReview();
+      if (importLaunchEnabled) openImportReview();
       return;
     }
 
@@ -4080,7 +4095,12 @@ export function CrmWorkspace({
 
     const nextSection = quickActionSections[actionId];
     if (nextSection) {
-      handleSectionChange(nextSection);
+      const matchingEntryId = enabledNavigationEntryIds.find(
+        (entryId) => navigationEntries[entryId].section === nextSection,
+      );
+      if (matchingEntryId) {
+        handleNavigationChange(matchingEntryId);
+      }
     }
   }
 
@@ -4474,16 +4494,18 @@ export function CrmWorkspace({
                       >
                         {coreDataStatus === "loading" ? copy.header.refreshingButton : copy.header.refreshButton}
                       </button>
-                      <button
-                        className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
-                        onClick={() => {
-                          setMobileNavigationOpen(false);
-                          openImportReview();
-                        }}
-                        type="button"
-                      >
-                        {copy.header.importButton}
-                      </button>
+                      {importLaunchEnabled ? (
+                        <button
+                          className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
+                          onClick={() => {
+                            setMobileNavigationOpen(false);
+                            openImportReview();
+                          }}
+                          type="button"
+                        >
+                          {copy.header.importButton}
+                        </button>
+                      ) : null}
                       <button
                         className="min-h-11 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
                         onClick={() => {
@@ -4563,13 +4585,15 @@ export function CrmWorkspace({
                 >
                   {coreDataStatus === "loading" ? copy.header.refreshingButton : copy.header.refreshButton}
                 </button>
-                <button
-                  className="min-h-12 min-w-32 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-center text-sm font-semibold leading-5 text-slate-800 hover:bg-stone-100"
-                  onClick={openImportReview}
-                  type="button"
-                >
-                  {copy.header.importButton}
-                </button>
+                {importLaunchEnabled ? (
+                  <button
+                    className="min-h-12 min-w-32 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-center text-sm font-semibold leading-5 text-slate-800 hover:bg-stone-100"
+                    onClick={openImportReview}
+                    type="button"
+                  >
+                    {copy.header.importButton}
+                  </button>
+                ) : null}
                 <button
                   className="min-h-12 min-w-32 rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-semibold leading-5 text-white hover:bg-slate-800"
                   onClick={openProjectWizard}
@@ -4635,7 +4659,7 @@ export function CrmWorkspace({
                   </select>
                 </label>
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  {normalizedActivePreset.quickActions.map((actionId) => (
+                  {visibleQuickActionIds.map((actionId) => (
                     <button
                       className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                       key={actionId}
@@ -5289,7 +5313,7 @@ export function CrmWorkspace({
           </div>
         </section>
       </div>
-      {actionModal === "import" ? (
+      {importLaunchEnabled && actionModal === "import" ? (
         <ModalShell
           closeLabel={copy.dialogs.close}
           eyebrow={copy.dialogs.import.eyebrow}

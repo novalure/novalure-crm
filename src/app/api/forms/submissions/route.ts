@@ -11,8 +11,10 @@ import {
 } from "@/lib/db/public-submission-abuse-repository";
 import type { WebsiteForm } from "@/lib/form-types";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
+import { getPublicFormLaunchBlockReason } from "@/lib/public-form-dto";
 import {
   buildPublicSubmissionScope,
+  createCanonicalPublicSubmissionFormDataFingerprint,
   createPublicSubmissionIdempotencyHashes,
   createPublicSubmissionRateLimitPolicies,
   formSubmissionBodyLimits,
@@ -60,7 +62,12 @@ export async function POST(request: Request) {
   const returnTo = getString(formData, "return_to");
   const formSlug = getString(formData, "form_slug") || getString(formData, "form_id") || getString(formData, "form") || "formular";
   const source = getString(formData, "utm_source") || "website";
-  const lookup = await getPublicWebsiteFormByKey(formSlug).catch(() => null);
+  let lookup: Awaited<ReturnType<typeof getPublicWebsiteFormByKey>>;
+  try {
+    lookup = await getPublicWebsiteFormByKey(formSlug);
+  } catch {
+    return unavailableResponse();
+  }
   if (!lookup) {
     return responseFromSnapshot(
       createPublicFormFailureSnapshot({
@@ -70,6 +77,20 @@ export async function POST(request: Request) {
         returnTo,
         source,
         status: 404,
+      }),
+    );
+  }
+
+  const launchBlockReason = getPublicFormLaunchBlockReason(lookup.form, lookup.ownerActive);
+  if (launchBlockReason) {
+    return responseFromSnapshot(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: launchBlockReason,
+        request,
+        returnTo,
+        source,
+        status: 503,
       }),
     );
   }
@@ -135,10 +156,13 @@ export async function POST(request: Request) {
         }),
       );
     }
+    const semanticRequestFingerprint = await createCanonicalPublicSubmissionFormDataFingerprint({
+      formData,
+    });
     hashes = createPublicSubmissionIdempotencyHashes({
       action: publicSubmissionActions.form,
       idempotencyKey: proofValidation.proof.idempotencyKey,
-      requestFingerprint: parsed.requestFingerprint,
+      requestFingerprint: semanticRequestFingerprint,
       scope,
     });
   } catch {
@@ -147,7 +171,10 @@ export async function POST(request: Request) {
 
   let claim: Awaited<ReturnType<typeof claimPublicSubmissionIdempotency>>;
   try {
-    claim = await claimPublicSubmissionIdempotency(hashes);
+    claim = await claimPublicSubmissionIdempotency({
+      ...hashes,
+      allowLeaseReclaim: true,
+    });
   } catch {
     return unavailableResponse();
   }
@@ -169,6 +196,7 @@ export async function POST(request: Request) {
     try {
       await completePublicSubmissionIdempotency({
         idempotencyHash: hashes.idempotencyHash,
+        leaseVersion: claim.leaseVersion,
         requestHash: hashes.requestHash,
         response,
       });
@@ -243,17 +271,35 @@ export async function POST(request: Request) {
   stripPublicSubmissionControlFields(formData);
   try {
     const persistence = await persistWebsiteFormSubmission({
+      actionHash: hashes.actionHash,
       formData,
+      formId: lookup.id,
       formKey: formSlug,
+      idempotencyHash: hashes.idempotencyHash,
+      leaseVersion: claim.leaseVersion,
       requestUrl: request.url,
-    });
-    return complete(
-      createPublicFormPersistenceSnapshot({
+      requestHash: hashes.requestHash,
+      scopeHash: hashes.scopeHash,
+      successResponse: createPublicFormSuccessSnapshot({
+        form: lookup.form,
         formSlug,
-        persistence,
         request,
         returnTo,
         source,
+      }),
+      workspaceId: lookup.workspaceId,
+    });
+    if (persistence.persisted) {
+      return responseFromSnapshot(persistence.response);
+    }
+    return complete(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: persistence.reason,
+        request,
+        returnTo,
+        source,
+        status: getPersistenceFailureStatus(persistence.reason),
       }),
     );
   } catch {
@@ -268,38 +314,33 @@ export async function POST(request: Request) {
       }),
     );
   }
+
 }
 
-function createPublicFormPersistenceSnapshot(input: {
+function createPublicFormSuccessSnapshot(input: {
+  form: WebsiteForm;
   formSlug: string;
-  persistence: Awaited<ReturnType<typeof persistWebsiteFormSubmission>>;
   request: Request;
   returnTo: string;
   source: string;
 }): PublicSubmissionResponseSnapshot {
   if (input.request.headers.get("accept")?.includes("application/json")) {
     return {
-      body: input.persistence.persisted
-        ? { persisted: true, form: input.persistence.form }
-        : { error: normalizePublicFormReason(input.persistence.reason), persisted: false },
+      body: { persisted: true },
       kind: "json",
-      status: input.persistence.persisted ? 200 : getFailureStatus(input.persistence.reason),
+      status: 200,
     };
   }
 
-  const configuredRedirect = input.persistence.persisted ? input.persistence.redirectUrl ?? "" : "";
   const redirectUrl = resolvePublicFormRedirect({
-    configuredRedirect,
+    configuredRedirect: input.form.actions.redirectUrl,
     formSlug: input.formSlug,
     returnTo: input.returnTo,
   });
 
-  redirectUrl.searchParams.set("submitted", input.persistence.persisted ? "1" : "0");
+  redirectUrl.searchParams.set("submitted", "1");
   redirectUrl.searchParams.set("utm_source", input.source);
-  redirectUrl.searchParams.set("crm_status", input.persistence.persisted ? "saved" : "failed");
-  if (!input.persistence.persisted) {
-    redirectUrl.searchParams.set("crm_reason", normalizePublicFormReason(input.persistence.reason));
-  }
+  redirectUrl.searchParams.set("crm_status", "saved");
 
   return { kind: "redirect", location: redirectUrl.toString(), status: 303 };
 }
@@ -371,14 +412,14 @@ function buildPublicFormFieldRules(form: WebsiteForm) {
     name: string;
   }>();
   for (const field of form.fields) {
-    const name = field.crmField || field.id;
-    rules.set(name, {
+    if (field.type === "hidden") continue;
+    rules.set(field.id, {
       allowFile: field.type === "file",
       maxEntries: field.multiple || field.type === "multiCheckbox"
         ? Math.max(1, Math.min(20, field.options.length || 5))
         : 1,
       maxLength: getPublicFormFieldMaxLength(field.type),
-      name,
+      name: field.id,
     });
   }
 
@@ -422,12 +463,12 @@ function getPublicFormSystemFieldRules() {
 function getPublicFormIdentifier(form: WebsiteForm, formData: FormData, fallback: string) {
   const emailField = form.fields.find((field) => field.type === "email");
   if (emailField) {
-    const email = getString(formData, emailField.crmField || emailField.id);
+    const email = getString(formData, emailField.id);
     if (email) return normalizePublicSubmissionIdentifier(email, "email");
   }
   const phoneField = form.fields.find((field) => field.type === "phone");
   if (phoneField) {
-    const phone = getString(formData, phoneField.crmField || phoneField.id);
+    const phone = getString(formData, phoneField.id);
     if (phone) return normalizePublicSubmissionIdentifier(phone, "phone");
   }
   return normalizePublicSubmissionIdentifier(fallback, "opaque");
@@ -436,7 +477,17 @@ function getPublicFormIdentifier(form: WebsiteForm, formData: FormData, fallback
 function normalizePublicFormReason(reason: string) {
   if (reason === "Form not found") return reason;
   if (reason === "privacy_consent_required" || reason.startsWith("required_field_missing")) return reason;
-  if (reason === "invalid_email") return reason;
+  if (reason.startsWith("invalid_")) return reason;
+  if (
+    reason === "contact_identity_conflict" ||
+    reason === "form_consent_configuration_unavailable" ||
+    reason === "form_custom_pattern_unavailable" ||
+    reason === "form_file_upload_unavailable" ||
+    reason === "form_owner_unavailable" ||
+    reason === "form_round_robin_unavailable" ||
+    reason === "multiple_email_values" ||
+    reason === "multiple_phone_values"
+  ) return reason;
   if (
     reason === "rate_limited" ||
     reason === "submission_in_progress" ||
@@ -453,11 +504,31 @@ function normalizePublicFormReason(reason: string) {
   return "temporarily_unavailable";
 }
 
-function getFailureStatus(reason: string) {
+function getPersistenceFailureStatus(reason: string) {
+  if (reason === "submission_replay_conflict") return 409;
+  if (reason === "contact_identity_conflict") return 409;
   if (reason === "Form not found") return 404;
-  if (reason === "privacy_consent_required" || reason.startsWith("required_field_missing") || reason === "invalid_email") {
+  if (
+    reason === "privacy_consent_required" ||
+    reason.startsWith("required_field_missing") ||
+    isPublicFormFieldValidationReason(reason)
+  ) {
     return 422;
   }
+  return 503;
+}
 
-  return 400;
+function isPublicFormFieldValidationReason(reason: string) {
+  return [
+    "invalid_date",
+    "invalid_email",
+    "invalid_max_value",
+    "invalid_min_value",
+    "invalid_number",
+    "invalid_option",
+    "invalid_pattern",
+    "invalid_phone",
+    "invalid_time",
+    "invalid_url",
+  ].some((prefix) => reason === prefix || reason.startsWith(`${prefix}:`));
 }

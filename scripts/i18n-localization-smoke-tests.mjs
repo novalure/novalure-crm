@@ -314,7 +314,7 @@ test("critical CRM enum surfaces use localized labels instead of raw values", ()
   assert.match(dealPipelineSource, /text\.nextStageHint\(stageLabel\(nextStage\)\)/);
   assert.match(dealPipelineSource, /leadTypeLabel\(item\.leadType\)/);
   assert.match(dealPipelineSource, /getCrmSystemTextLabel\(item\.deal\.nextAction, language\)/);
-  assert.match(formCommandCenterSource, /copy\.builder\.statusOptions\[form\.status\]/);
+  assert.match(formCommandCenterSource, /copy\.builder\.statusOptions\[selectedForm\.status\]/);
   assert.match(formCommandCenterSource, /copy\.fieldTypes\[field\.type\]/);
   assert.match(funnelCommandCenterSource, /text\.messages\.statusTriggerStages/);
   assert.match(funnelCommandCenterSource, /getCrmEnumLabel\(item\.status, language\)/);
@@ -346,7 +346,6 @@ test("system generated CRM default texts localize at display boundaries only", (
     ["daily queue", dailyQueueBoardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
     ["dashboard", dashboardSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
     ["workspace", workspaceSource, [/getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
-    ["funnel", funnelCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction, language\)/]],
     ["contact", contactCommandCenterSource, [/getCrmSystemTextLabel\(selectedLead\.nextAction, language\)/]],
     ["property", propertyCommandCenterSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/, /getCrmSystemTextLabel\(lead\.nextAction \|\| lead\.intent, language\)/]],
     ["mobile daily", mobileDailyWorkSource, [/getCrmSystemTextLabel\(lead\.intent, language\)/]],
@@ -360,6 +359,12 @@ test("system generated CRM default texts localize at display boundaries only", (
       assert.match(source, pattern, `${name} should localize known system CRM text at display time`);
     }
   }
+
+  assert.doesNotMatch(
+    funnelCommandCenterSource,
+    /getCrmSystemTextLabel\(lead\.(?:intent|nextAction), language\)/,
+    "funnel KPIs must not render project-wide lead intent or next-action values",
+  );
 
   assert.match(i18nSource, /microsoft:\s*"Create Teams link automatically"/);
   assert.match(i18nSource, /google:\s*"Create Google Meet link automatically"/);
@@ -425,7 +430,8 @@ test("phase 2 German copy uses correct umlauts and formal login wording", () => 
   assert.match(crmLoadersSource, /Keine heißen Leads - Lead-Zentrale prüfen\./);
   assert.match(crmLoadersSource, /Keine überfälligen Angebote\./);
   assert.match(chatRuntimeSource, /Terminvorschläge nach Regeln vorbereitet/);
-  assert.match(bookingPageSource, /vollständigen Buchungslink/);
+  assert.match(bookingPageSource, /notFound\(\)/);
+  assert.doesNotMatch(bookingPageSource, /vollständigen Buchungslink/);
   assert.match(modelProviderSource, /Für Details oder unklare Punkte bereite ich die Übergabe an das Team vor\./);
   assert.match(pipelineDefaultsSource, /Verkäufer-Pipeline/);
   assert.match(propertyDepartmentSource, /Kostenübersicht/);

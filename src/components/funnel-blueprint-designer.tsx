@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { calculateAbTestResults } from "@/lib/funnel-ab-testing";
 import { createTrackingSnippet } from "@/lib/funnel-tracking";
 import { funnelFieldTypes, type FunnelBlueprint, type FunnelDevice, type FunnelElement, type FunnelElementType, type FunnelField, type FunnelMediaAsset, type FunnelPage, type FunnelRule, type FunnelRuleOperator, type FunnelVersion } from "@/lib/funnel-schema";
+import { toSafeFunnelText } from "@/lib/funnel-safe-content";
 import { getFunnelDesignerCopy, getLocale, type LanguageCode } from "@/lib/i18n";
 import { MediaLibraryPicker, type CrmMediaAsset } from "@/components/media-library-picker";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -209,6 +210,9 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   const text = getFunnelDesignerCopy(language);
   const locale = getLocale(language);
   const isImmersive = variant === "immersive";
+  const safeHtmlNotice = language === "de"
+    ? "HTML wird nur als sicherer Klartext angezeigt; Code und Links werden nicht ausgeführt."
+    : "HTML is shown only as safe plain text; code and links do not execute.";
   const [blueprint, setBlueprint] = useState(initialBlueprint);
   const [device, setDevice] = useState<FunnelDevice>("mobile");
   const [selectedPageId, setSelectedPageId] = useState(initialBlueprint.pages[0]?.id ?? "");
@@ -483,12 +487,6 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
     });
   }
 
-  function richPreview(value: string | undefined) {
-    const content = value ?? "";
-    if (content.includes("<")) return <span dangerouslySetInnerHTML={{ __html: content }} />;
-    return <span>{content}</span>;
-  }
-
   function renderDesignerElement(element: FunnelElement) {
     const isSelected = selectedElement?.id === element.id;
     const radius = element.styles?.borderRadius ?? blueprint.theme.radii.block;
@@ -506,11 +504,11 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
 
     return (
       <button className={wrapperClass} key={element.id} onClick={() => setSelectedElementId(element.id)} style={style} type="button">
-        {element.type === "headline" ? <h2 className="break-words text-3xl font-semibold leading-tight">{richPreview(element.content)}</h2> : null}
+        {element.type === "headline" ? <h2 className="whitespace-pre-line break-words text-3xl font-semibold leading-tight">{toSafeFunnelText(element.content)}</h2> : null}
         {element.type === "text" || element.type === "testimonial" ? (
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{element.name}</p>
-            <p className="mt-2 break-words text-sm text-stone-700">{richPreview(element.content)}</p>
+            <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{toSafeFunnelText(element.content)}</p>
           </div>
         ) : null}
         {element.type === "button" ? (
@@ -529,22 +527,27 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
         {element.type === "video" ? <span className="grid aspect-video place-items-center rounded-md bg-slate-950 text-sm font-semibold text-white">{element.url ? text.videoEmbedded : text.videoPlaceholder}</span> : null}
         {element.type === "choice" ? (
           <div className="grid gap-2">
-            <p className="break-words text-lg font-semibold">{element.content}</p>
+            <p className="whitespace-pre-line break-words text-lg font-semibold">{toSafeFunnelText(element.content)}</p>
             {(element.options ?? []).map((option) => <span className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold" key={option}>{option}</span>)}
           </div>
         ) : null}
         {element.type === "form" ? (
           <div className="grid gap-2">
-            <p className="break-words text-lg font-semibold">{element.content ?? element.name}</p>
+            <p className="whitespace-pre-line break-words text-lg font-semibold">{toSafeFunnelText(element.content ?? element.name)}</p>
             {(element.fields ?? []).slice(0, 4).map((field) => (
               <span className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600" key={field.id}>{field.label}</span>
             ))}
           </div>
         ) : null}
-        {element.type === "calendar" ? <span className="block rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">{element.content ?? text.calendarPlaceholder}</span> : null}
-        {element.type === "html" ? <span className="block max-h-40 overflow-auto rounded-md bg-stone-50 p-3 text-xs">{element.content}</span> : null}
+        {element.type === "calendar" ? <span className="block whitespace-pre-line rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">{toSafeFunnelText(element.content) || text.calendarPlaceholder}</span> : null}
+        {element.type === "html" ? (
+          <span className="block max-h-40 overflow-auto rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+            <span className="block font-semibold">{safeHtmlNotice}</span>
+            <code className="mt-2 block whitespace-pre-wrap break-words font-mono text-slate-800">{toSafeFunnelText(element.content)}</code>
+          </span>
+        ) : null}
         {element.type === "spacer" ? <span className="block h-10 rounded-md border border-dashed border-stone-300 bg-stone-50" /> : null}
-        {element.type === "countdown" ? <span className="block rounded-md bg-amber-50 p-4 text-center text-sm font-semibold text-amber-900">{element.content ?? text.countdownPlaceholder}</span> : null}
+        {element.type === "countdown" ? <span className="block whitespace-pre-line rounded-md bg-amber-50 p-4 text-center text-sm font-semibold text-amber-900">{toSafeFunnelText(element.content) || text.countdownPlaceholder}</span> : null}
       </button>
     );
   }

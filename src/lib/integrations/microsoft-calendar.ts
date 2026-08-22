@@ -166,6 +166,7 @@ export async function syncMicrosoftCalendarEvent(input: {
   startsAt: string;
   endsAt: string;
   body?: string;
+  correlationId?: string;
   createOnlineMeeting?: boolean;
   location?: string;
   attendees?: string[];
@@ -192,7 +193,7 @@ export async function syncMicrosoftCalendarEvent(input: {
       };
     }
 
-    const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
+    const timeZone = "UTC";
     const response = await fetch(graph.eventEndpoint, {
       method: "POST",
       headers: {
@@ -223,6 +224,7 @@ export async function syncMicrosoftCalendarEvent(input: {
           : undefined,
         isOnlineMeeting: input.createOnlineMeeting || undefined,
         onlineMeetingProvider: input.createOnlineMeeting ? "teamsForBusiness" : undefined,
+        transactionId: input.correlationId,
       }),
     });
 
@@ -278,7 +280,7 @@ export async function listMicrosoftBusyTimes(input: {
   workspaceId?: string;
 }): Promise<Array<{ end: string; start: string }>> {
   const graph = await getGraphToken(input.workspaceId);
-  if (!graph) return [];
+  if (!graph) throw new Error("Microsoft calendar is not connected");
 
   const url = new URL(graph.calendarViewEndpoint);
   url.searchParams.set("startDateTime", input.timeMin);
@@ -300,7 +302,7 @@ export async function listMicrosoftBusyTimes(input: {
     }>;
   };
 
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`Microsoft Calendar busy-time request returned ${response.status}`);
 
   return (data.value ?? [])
     .filter((event) => event.showAs !== "free")
@@ -341,7 +343,7 @@ export async function updateMicrosoftCalendarEvent(input: {
       };
     }
 
-    const timeZone = envValue("MICROSOFT_CALENDAR_TIME_ZONE") || "W. Europe Standard Time";
+    const timeZone = "UTC";
     const eventUrl = graph.eventEndpoint.replace(/\/events$/, `/events/${encodeURIComponent(input.eventId)}`);
     const response = await fetch(eventUrl, {
       method: "PATCH",

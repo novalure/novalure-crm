@@ -7,6 +7,7 @@ import type {
 } from "@/lib/crm-types";
 import { queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { hasReplaceableNewsletterUnsubscribeToken } from "@/lib/newsletter-unsubscribe-placeholder";
 
 type EditorPreflightRunRow = {
   blockers: string[] | null;
@@ -180,7 +181,7 @@ function buildNewsletterChecks(payload: Record<string, unknown>) {
       ? 1
       : 0;
   const subject = text(payload.subject);
-  const hasUnsubscribe = /unsubscribe|abmelden|NOVALURE_UNSUBSCRIBE_URL|RESEND_UNSUBSCRIBE_URL/i.test(html);
+  const hasUnsubscribe = hasReplaceableNewsletterUnsubscribeToken(html);
 
   return [
     buildCheck({
@@ -204,7 +205,7 @@ function buildNewsletterChecks(payload: Record<string, unknown>) {
     buildCheck({
       id: "newsletter:unsubscribe",
       label: "Unsubscribe",
-      message: "An unsubscribe placeholder or link is required.",
+      message: "A replaceable per-recipient unsubscribe placeholder is required.",
       passed: hasUnsubscribe,
     }),
     buildCheck({

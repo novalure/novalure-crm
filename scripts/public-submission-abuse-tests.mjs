@@ -147,11 +147,17 @@ test("body reader enforces content type, actual byte size, charset and field lim
 });
 
 test("multipart files require an allowlisted type, extension and matching magic bytes", async () => {
+  const fileUploadLimits = {
+    ...formSubmissionBodyLimits,
+    allowedFileBytes: 1024 * 1024,
+    allowedFiles: 1,
+    maxBodyBytes: 2 * 1024 * 1024,
+  };
   const valid = new FormData();
   valid.set("document", new File([Buffer.from("%PDF-1.7\nqa")], "qa.pdf", { type: "application/pdf" }));
   const parsed = await readBoundedPublicSubmissionFormData(
     new Request("https://crm.example/api/forms/submissions", { body: valid, method: "POST" }),
-    formSubmissionBodyLimits,
+    fileUploadLimits,
   );
   assert.equal(parsed.formData.get("document")?.name, "qa.pdf");
 
@@ -160,7 +166,7 @@ test("multipart files require an allowlisted type, extension and matching magic 
   await assert.rejects(
     readBoundedPublicSubmissionFormData(
       new Request("https://crm.example/api/forms/submissions", { body: forged, method: "POST" }),
-      formSubmissionBodyLimits,
+      fileUploadLimits,
     ),
     (error) => error instanceof PublicSubmissionRequestError && error.code === "file_signature_invalid",
   );
@@ -244,6 +250,14 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
     formRoute.indexOf("await claimPublicSubmissionIdempotency") <
       formRoute.indexOf("await persistWebsiteFormSubmission"),
   );
+  assert.doesNotMatch(bookingRoute, /allowLeaseReclaim/u);
+  assert.match(formRoute, /allowLeaseReclaim: true/u);
+  assert.match(bookingRoute, /leaseVersion: claim\.leaseVersion/u);
+  assert.match(formRoute, /leaseVersion: claim\.leaseVersion/u);
+  assert.match(repository, /allowLeaseReclaim\?: boolean/u);
+  assert.match(repository, /const allowLeaseReclaim = input\.allowLeaseReclaim === true/u);
+  assert.match(repository, /value: publicSubmissionActions\.form/u);
+  assert.match(repository, /value: publicSubmissionActions\.funnel/u);
   assert.match(repository, /on conflict \(idempotency_hash\) do nothing/);
   assert.match(repository, /existing\.request_hash <> \$4/);
   assert.match(repository, /on conflict \(key_hash, bucket_started_at\) do update/);

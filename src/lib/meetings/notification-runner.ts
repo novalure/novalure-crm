@@ -19,6 +19,8 @@ type ProcessResult = {
   sent: number;
 };
 
+const MAX_NOTIFICATION_BATCH = 25;
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -50,9 +52,12 @@ function textToEmailHtml(input: { body: string; title: string }) {
 export async function processDueMeetingNotifications(
   input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
 ): Promise<ProcessResult> {
-  const jobRefs = input.jobIds?.length
-    ? input.jobIds.map((id) => ({ id }))
-    : await listDueMeetingNotificationJobs(input.limit ?? 25);
+  const requestedJobIds = [...new Set(input.jobIds ?? [])].slice(0, MAX_NOTIFICATION_BATCH);
+  const requestedLimit = Math.trunc(input.limit ?? MAX_NOTIFICATION_BATCH);
+  const limit = Math.max(1, Math.min(MAX_NOTIFICATION_BATCH, requestedLimit || MAX_NOTIFICATION_BATCH));
+  const jobRefs = requestedJobIds.length
+    ? requestedJobIds.map((id) => ({ id }))
+    : await listDueMeetingNotificationJobs(limit);
   const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
 
   for (const jobRef of jobRefs) {
@@ -90,10 +95,13 @@ export async function processDueMeetingNotifications(
       continue;
     }
 
-    if (emailResult.status === "failed") {
+    if (emailResult.status !== "sent") {
       result.failed += 1;
       await markMeetingNotificationJobFailed({
-        category: classifyDeliveryError({ error: emailResult.error }),
+        category:
+          emailResult.errorCode === "invalid_input"
+            ? "provider_rejected"
+            : emailResult.errorCode ?? classifyDeliveryError({ error: emailResult.error }),
         error: sanitizeJobError(emailResult.error || "Email provider failed"),
         id: job.id,
         leaseOwner: job.leaseOwner,

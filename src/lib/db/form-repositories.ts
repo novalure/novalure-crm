@@ -1,15 +1,30 @@
 import type { AppSession } from "@/lib/auth/session";
-import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
-import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
+import { withTenantTransaction } from "@/lib/db/tenant-client";
+import { isTruthyPublicConsentValue } from "@/lib/form-consent";
+import { validatePublicFormFieldValue } from "@/lib/form-submission-validation";
 import { createFormField } from "@/lib/form-types";
-import { getProductRoleCapabilities } from "@/lib/product-model";
 import {
   buildPublicFormPath,
   parsePublicSlugLookup,
   type PublicSlugLookup,
 } from "@/lib/public-routing";
+import {
+  getPublicFormLaunchBlockReason,
+  isMarketingConsentField,
+  isPrivacyConsentField,
+} from "@/lib/public-form-dto";
+import {
+  parsePublicSubmissionResponseSnapshot,
+  type PublicSubmissionResponseSnapshot,
+} from "@/lib/security/public-submission-abuse";
+import {
+  buildPublicContactIdentityLocks,
+  normalizePublicContactEmail,
+  normalizePublicContactPhone,
+  publicContactIdentityLockNamespace,
+} from "@/lib/security/public-contact-identity";
 import type {
   FormField,
   FormFieldType,
@@ -49,11 +64,13 @@ type FormRow = {
   conversionRate: number | string;
   lastSubmission: string | Date | null;
   workspacePublicKey?: string | null;
+  writeApplied?: boolean;
 };
 
 type PublicFormRow = FormRow & {
   workspaceName: string | null;
   funnelAudience: string | null;
+  ownerActive: boolean;
 };
 
 type SubmissionRow = {
@@ -69,12 +86,33 @@ type SubmissionRow = {
   createdAt: string | Date;
 };
 
+type AtomicFormSubmissionRow = {
+  contactId: string | null;
+  dealId: string | null;
+  invariant: number | string;
+  leadId: string | null;
+  persistenceState: "conflict" | "created" | "identity_conflict" | "replay";
+  responsePayload: unknown;
+  submissionId: string | null;
+  taskId: string | null;
+  timelineItemId: string | null;
+};
+
+export type WebsiteFormSubmissionPersistenceResult =
+  | (Extract<PersistenceResult, { persisted: true }> & {
+      form: WebsiteForm;
+      redirectUrl: string;
+      response: PublicSubmissionResponseSnapshot;
+    })
+  | (Extract<PersistenceResult, { persisted: false }> & { form?: WebsiteForm });
+
 type FormLookup = {
   id: string;
   workspaceId: string;
   workspaceName: string | null;
   projectId: string | null;
   ownerUserId: string | null;
+  ownerActive: boolean;
   funnelId: string | null;
   funnelAudience: string | null;
   form: WebsiteForm;
@@ -191,9 +229,23 @@ export async function listWebsiteForms(input: { session: AppSession; limit?: num
 }
 
 export async function upsertWebsiteForm(input: {
+  expectedVersion: number;
   session: AppSession;
   form: WebsiteForm;
-}): Promise<{ form: WebsiteForm | null; persisted: boolean; reason?: string }> {
+  operationId: string;
+}): Promise<{
+  code?:
+    | "FORM_CONSENT_CONFIGURATION_UNAVAILABLE"
+    | "FORM_CUSTOM_PATTERN_UNAVAILABLE"
+    | "FORM_FILE_UPLOAD_UNAVAILABLE"
+    | "FORM_OWNER_INVALID"
+    | "FORM_OWNER_MODE_UNAVAILABLE"
+    | "FORM_PERSISTENCE_UNAVAILABLE"
+    | "FORM_SAVE_CONFLICT";
+  form: WebsiteForm | null;
+  persisted: boolean;
+  reason?: string;
+}> {
   if (!hasDatabaseUrl()) {
     return { form: null, persisted: false, reason: "DATABASE_URL is not configured" };
   }
@@ -203,12 +255,76 @@ export async function upsertWebsiteForm(input: {
   }
 
   const form = normalizeWebsiteForm(input.form);
+  if (form.ownerMode !== "user") {
+    return {
+      code: "FORM_OWNER_MODE_UNAVAILABLE",
+      form: null,
+      persisted: false,
+      reason: "Round-robin assignment is not available for public forms",
+    };
+  }
+  if (
+    (form.status === "aktiv" || form.status === "eingebaut") &&
+    form.fields.some((field) => Boolean(field.validationPattern.trim()))
+  ) {
+    return {
+      code: "FORM_CUSTOM_PATTERN_UNAVAILABLE",
+      form: null,
+      persisted: false,
+      reason: "Custom validation patterns require a linear-time validator before this form can be published",
+    };
+  }
+  if (
+    (form.status === "aktiv" || form.status === "eingebaut") &&
+    getPublicFormLaunchBlockReason(form) === "form_consent_configuration_unavailable"
+  ) {
+    return {
+      code: "FORM_CONSENT_CONFIGURATION_UNAVAILABLE",
+      form: null,
+      persisted: false,
+      reason: "Public forms require one unconditional required privacy consent field and no unclassified consent fields",
+    };
+  }
+  if (
+    (form.status === "aktiv" || form.status === "eingebaut") &&
+    form.fields.some((field) => field.type === "file")
+  ) {
+    return {
+      code: "FORM_FILE_UPLOAD_UNAVAILABLE",
+      form: null,
+      persisted: false,
+      reason: "File fields require durable file storage before this form can be published",
+    };
+  }
+  if (form.status === "aktiv" || form.status === "eingebaut") {
+    const workspace = await queryOne<{ publicKey: string | null }>(
+      "select public_key as \"publicKey\" from workspaces where id = $1 limit 1",
+      [input.session.workspaceId],
+    );
+    if (!workspace?.publicKey?.trim()) {
+      return {
+        form: null,
+        persisted: false,
+        reason: "A workspace public key is required before publishing a form",
+      };
+    }
+  }
   const existingId = await resolveExistingFormId(input.session.workspaceId, form);
   const funnel = await resolveFunnel(input.session.workspaceId, form.funnelId);
   const projectId = funnel?.projectId ?? (await resolveFallbackProjectId(input.session.workspaceId));
-  const ownerUserId = form.ownerMode === "user" && isUuid(form.ownerUserId)
-    ? form.ownerUserId
-    : funnel?.ownerUserId ?? (isUuid(input.session.userId) ? input.session.userId : null);
+  const requestedOwnerUserId = form.ownerUserId;
+  const ownerUserId = await resolveActiveWorkspaceOwner(
+    input.session.workspaceId,
+    requestedOwnerUserId,
+  );
+  if (!ownerUserId) {
+    return {
+      code: "FORM_OWNER_INVALID",
+      form: null,
+      persisted: false,
+      reason: "The selected form owner is not an active member of this workspace",
+    };
+  }
   const slug = slugify(form.slug || form.name) || `formular-${Date.now()}`;
   const tags = parseTags(form.tags);
   const settings = {
@@ -219,10 +335,21 @@ export async function upsertWebsiteForm(input: {
     steps: form.steps,
     utmCapture: form.utmCapture,
   };
+  const insertSettings = {
+    ...settings,
+    lastSaveOperationId: input.operationId,
+    version: 1,
+  };
 
   const row = existingId
     ? await queryOne<FormRow>(
         `
+          with previous as materialized (
+            select id as previous_id, settings as previous_settings
+            from forms
+            where workspace_id = $1 and id = $2
+            for update
+          )
           update forms
           set
             project_id = $3,
@@ -240,9 +367,28 @@ export async function upsertWebsiteForm(input: {
             tags = $15::text[],
             fields = $16::jsonb,
             actions = $17::jsonb,
-            settings = settings || $18::jsonb,
+            settings = settings || $18::jsonb || jsonb_build_object(
+              'lastSaveOperationId', $19::text,
+              'version', case
+                when settings->>'lastSaveOperationId' = $19::text
+                  then coalesce((settings->>'version')::integer, 1)
+                else coalesce((settings->>'version')::integer, 1) + 1
+              end
+            ),
             updated_at = now()
-          where workspace_id = $1 and id = $2
+          from previous
+          where forms.workspace_id = $1 and forms.id = previous.previous_id
+            and (
+              previous.previous_settings->>'lastSaveOperationId' = $19::text
+              or coalesce((previous.previous_settings->>'version')::integer, 1) = $20::integer
+            )
+            and not exists (
+              select 1
+              from forms conflicting_form
+              where conflicting_form.workspace_id = $1
+                and conflicting_form.slug = $7
+                and conflicting_form.id <> forms.id
+            )
           returning
             id,
             workspace_id as "workspaceId",
@@ -266,7 +412,8 @@ export async function upsertWebsiteForm(input: {
             submissions_count as submissions,
             conversion_rate as "conversionRate",
             last_submission_at as "lastSubmission",
-            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey"
+            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey",
+            (previous.previous_settings->>'lastSaveOperationId' is distinct from $19::text) as "writeApplied"
         `,
         [
           input.session.workspaceId,
@@ -287,6 +434,8 @@ export async function upsertWebsiteForm(input: {
           JSON.stringify(form.fields),
           JSON.stringify(form.actions),
           JSON.stringify(settings),
+          input.operationId,
+          input.expectedVersion,
         ],
       )
     : await queryOne<FormRow>(
@@ -319,6 +468,9 @@ export async function upsertWebsiteForm(input: {
             $11, $12, $13, $14::text[], $15::jsonb, $16::jsonb, $17::jsonb,
             $18, $19, $20, $21::timestamptz
           )
+          on conflict (workspace_id, slug) do update
+          set updated_at = forms.updated_at
+          where forms.settings->>'lastSaveOperationId' = excluded.settings->>'lastSaveOperationId'
           returning
             id,
             workspace_id as "workspaceId",
@@ -342,7 +494,8 @@ export async function upsertWebsiteForm(input: {
             submissions_count as submissions,
             conversion_rate as "conversionRate",
             last_submission_at as "lastSubmission",
-            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey"
+            (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey",
+            (xmax = 0) as "writeApplied"
         `,
         [
           input.session.workspaceId,
@@ -361,7 +514,7 @@ export async function upsertWebsiteForm(input: {
           tags,
           JSON.stringify(form.fields),
           JSON.stringify(form.actions),
-          JSON.stringify(settings),
+          JSON.stringify(insertSettings),
           form.visits,
           form.submissions,
           form.conversionRate,
@@ -370,16 +523,23 @@ export async function upsertWebsiteForm(input: {
       );
 
   if (!row) {
-    return { form: null, persisted: false, reason: "Form could not be saved" };
+    return {
+      code: "FORM_SAVE_CONFLICT",
+      form: null,
+      persisted: false,
+      reason: "The form changed in another tab or its public slug is already in use. Reload before retrying.",
+    };
   }
 
-  await writeAuditLog({
-    session: input.session,
-    action: existingId ? "form.updated" : "form.created",
-    entityType: "form",
-    entityId: row.id,
-    after: { formId: row.id, name: row.name, status: row.status },
-  });
+  if (row.writeApplied) {
+    await writeAuditLog({
+      session: input.session,
+      action: existingId ? "form.updated" : "form.created",
+      entityType: "form",
+      entityId: row.id,
+      after: { formId: row.id, name: row.name, status: row.status },
+    });
+  }
 
   return { form: toWebsiteForm(row), persisted: true };
 }
@@ -424,10 +584,18 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
         f.last_submission_at as "lastSubmission",
         w.name as "workspaceName",
         w.public_key as "workspacePublicKey",
+        (form_owner.id is not null) as "ownerActive",
         fn.audience as "funnelAudience"
       from forms f
       join workspaces w on w.id = f.workspace_id
-      left join funnels fn on fn.id = f.funnel_id
+      left join workspace_users form_owner
+        on form_owner.workspace_id = f.workspace_id
+       and form_owner.id = f.owner_user_id
+       and form_owner.status = 'active'
+      left join funnels fn
+        on fn.workspace_id = f.workspace_id
+       and fn.id = f.funnel_id
+       and fn.project_id is not distinct from f.project_id
       where f.status in ('aktiv', 'eingebaut')
         and (
           ($1::uuid is not null and f.id = $1::uuid)
@@ -456,6 +624,7 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
     workspaceName: row.workspaceName,
     projectId: row.projectId,
     ownerUserId: row.ownerUserId,
+    ownerActive: row.ownerActive,
     funnelId: row.funnelId,
     funnelAudience: row.funnelAudience,
     form: toWebsiteForm(row),
@@ -521,490 +690,1076 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
 }
 
 export async function persistWebsiteFormSubmission(input: {
+  actionHash: string;
   formData: FormDataLike;
+  formId: string;
   formKey: string;
+  idempotencyHash: string;
+  leaseVersion: number;
   requestUrl: string;
-}): Promise<PersistenceResult & { form?: WebsiteForm; redirectUrl?: string }> {
+  requestHash: string;
+  scopeHash: string;
+  successResponse: PublicSubmissionResponseSnapshot;
+  workspaceId: string;
+}): Promise<WebsiteFormSubmissionPersistenceResult> {
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
+  if (
+    !isUuid(input.formId) ||
+    !isUuid(input.workspaceId) ||
+    !Number.isSafeInteger(input.leaseVersion) ||
+    input.leaseVersion < 1 ||
+    [input.actionHash, input.idempotencyHash, input.requestHash, input.scopeHash]
+      .some((value) => !/^[a-f0-9]{64}$/u.test(value))
+  ) {
+    return { persisted: false, reason: "invalid_atomic_submission_scope" };
+  }
+
+  const successResponse = parsePublicSubmissionResponseSnapshot(input.successResponse);
+  if (!successResponse) {
+    return { persisted: false, reason: "invalid_atomic_submission_response" };
+  }
+
   const lookup = await getPublicWebsiteFormByKey(input.formKey);
-  if (!lookup) {
+  if (
+    !lookup ||
+    lookup.id !== input.formId ||
+    lookup.workspaceId !== input.workspaceId
+  ) {
     return { persisted: false, reason: "Form not found" };
   }
 
   const form = lookup.form;
-  const answers = extractAnswers(form, input.formData);
-  const consent = extractConsent(form, input.formData);
-
-  if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {
-    return { persisted: false, reason: "privacy_consent_required", form };
+  const launchBlockReason = getPublicFormLaunchBlockReason(form, lookup.ownerActive);
+  if (launchBlockReason) return { form, persisted: false, reason: launchBlockReason };
+  if (!isUuid(lookup.ownerUserId)) return { form, persisted: false, reason: "form_owner_unavailable" };
+  if (Array.from(input.formData.entries()).some(([, value]) => typeof value !== "string")) {
+    return { form, persisted: false, reason: "form_file_upload_unavailable" };
   }
+  const answers = extractAnswers(form, input.formData);
+  const consent = extractConsent(form, answers, input.formData);
 
-  const validationError = validateWebsiteFormSubmission(form, answers, input.formData, consent);
+  const validationError = validateWebsiteFormSubmission(form, answers, input.formData);
   if (validationError) {
     return { persisted: false, reason: validationError, form };
   }
 
+  const emailIdentity = resolveSemanticFieldValue(form, answers, input.formData, "email");
+  if (emailIdentity.conflict) {
+    return { form, persisted: false, reason: "multiple_email_values" };
+  }
+  const phoneIdentity = resolveSemanticFieldValue(form, answers, input.formData, "phone");
+  if (phoneIdentity.conflict) {
+    return { form, persisted: false, reason: "multiple_phone_values" };
+  }
+
   const tracking = extractTracking(input.formData, input.requestUrl, form);
-  const email = firstString(answers, ["email", "e_mail", "mail"]);
-  const phone = firstString(answers, ["phone", "telefon", "telephone"]);
+  const email = emailIdentity.value;
+  const phone = phoneIdentity.value;
   const name = firstString(answers, ["name", "full_name", "fullname", "contact_name"]) || email || "Website Formular";
   const message = firstString(answers, ["message", "nachricht", "intent", "bedarf"]);
   const intent = message || `${form.name} Anfrage`;
   const score = scoreFormSubmission(form, answers, consent);
-  const now = new Date().toISOString();
-  const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
   const source = form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
   const leadType = normalizeLeadType(lookup.funnelAudience);
-  const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
-
-  const contactId = await upsertContact({
-    answers,
-    consentLabel: consent.marketing && !form.doubleOptIn ? "Opt-in" : "Nur CRM",
+  const idempotencyKey = `form:${input.idempotencyHash}`;
+  const contactIdentityLocks = buildPublicContactIdentityLocks({
     email,
-    form,
-    intent,
-    leadType,
-    name,
-    ownerUserId: assignedOwnerId,
+    fallback: input.idempotencyHash,
     phone,
-    projectId: lookup.projectId,
-    source,
-    tracking,
-    workspaceId: lookup.workspaceId,
   });
 
-  const lead = form.crmTarget === "contact"
-    ? null
-    : await queryOne<IdRow>(
-        `
-          insert into leads (
-            workspace_id,
-            project_id,
-            contact_id,
-            assigned_to_user_id,
-            source,
-            type,
-            status,
-            score,
-            budget,
-            intent,
-            next_action,
-            received_at,
-            sla_due_at,
-            hot_status,
-            metadata
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz, $13::timestamptz, $14, $15::jsonb)
-          returning id
-        `,
-        [
-          lookup.workspaceId,
-          lookup.projectId,
-          contactId,
-          assignedOwnerId,
-          source,
-          leadType,
-          "Neu",
-          score,
-          firstString(answers, ["budget", "preis", "price"]) || null,
-          intent,
-          getNextAction(form),
-          now,
-          slaDueAt,
-          score >= 70,
-          JSON.stringify({ answers, consent, formId: lookup.id, pipelineStage: form.pipelineStage, tracking }),
-        ],
-      );
-
-  const deal = form.crmTarget === "deal"
-    ? await queryOne<IdRow>(
-        `
-          insert into deals (
-            workspace_id, project_id, contact_id, owner_user_id, lead_id, name, stage, probability, source, next_action, metadata
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
-          returning id
-        `,
-        [
-          lookup.workspaceId,
-          lookup.projectId,
-          contactId,
-          assignedOwnerId,
-          lead?.id ?? null,
-          `${name} - ${form.name}`,
-          form.pipelineStage || "Neuer Lead",
-          Math.min(95, Math.max(15, score)),
-          source,
-          getNextAction(form),
-          JSON.stringify({ formId: lookup.id, tracking }),
-        ],
-      )
-    : null;
-
-  const task = form.actions.createTask || form.crmTarget === "ticket"
-    ? await queryOne<IdRow>(
-        `
-          insert into tasks (workspace_id, project_id, contact_id, lead_id, owner_user_id, title, due_at, priority, status, metadata)
-          values ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, 'open', $9::jsonb)
-          returning id
-        `,
-        [
-          lookup.workspaceId,
-          lookup.projectId,
-          contactId,
-          lead?.id ?? null,
-          assignedOwnerId,
-          form.crmTarget === "ticket" ? `Ticket prüfen: ${form.name}` : getNextAction(form),
-          new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString(),
-          score >= 70 ? "Hoch" : "Mittel",
-          JSON.stringify({ formId: lookup.id, dealId: deal?.id ?? null, tracking }),
-        ],
-      )
-    : null;
-
-  if (contactId && consent.privacy) {
-    await queryOne(
-      `
-        insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
-        values ($1, $2, $3, $4, $5, $6, $7::jsonb)
-        returning id
-      `,
-      [
-        lookup.workspaceId,
-        contactId,
-        lookup.projectId,
-        "Website Formular",
-        form.doubleOptIn ? "Double-Opt-in offen" : "Opt-in",
-        form.name,
-        JSON.stringify({ formId: lookup.id, consent, tracking }),
-      ],
-    );
-  }
-
-  if (contactId && consent.marketing) {
-    await queryOne(
-      `
-        insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
-        values ($1, $2, $3, $4, $5, $6, $7::jsonb)
-        returning id
-      `,
-      [
-        lookup.workspaceId,
-        contactId,
-        lookup.projectId,
-        "Newsletter",
-        form.doubleOptIn ? "Double-Opt-in offen" : "Opt-in",
-        form.name,
-        JSON.stringify({ formId: lookup.id, consent, tracking }),
-      ],
-    );
-  }
-
-  const submission = await queryOne<IdRow>(
+  const row = await withTenantTransaction(
+    { actorId: lookup.ownerUserId, workspaceId: lookup.workspaceId },
+    async (transaction) => {
+      // Each identity lock is a separate READ COMMITTED statement. The CTE
+      // below therefore starts with a fresh snapshot after a prior submitter
+      // holding the same lock commits.
+      for (const contactIdentityLock of contactIdentityLocks) {
+        await transaction.execute(
+          `select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text, 0))`,
+          [lookup.workspaceId, publicContactIdentityLockNamespace, contactIdentityLock],
+        );
+      }
+      return transaction.queryOne<AtomicFormSubmissionRow>(
     `
-      insert into form_submissions (
-        workspace_id,
-        project_id,
-        form_id,
-        funnel_id,
-        contact_id,
-        lead_id,
-        deal_id,
-        task_id,
-        mode,
-        status,
-        score,
-        answers,
-        consent,
-        tracking,
-        raw_payload
+      with claim_fence as materialized (
+        select claim.idempotency_hash
+        from public_submission_idempotency claim
+        where claim.idempotency_hash = $3
+          and claim.action_hash = $4
+          and claim.scope_hash = $5
+          and claim.request_hash = $6
+          and claim.lease_version = $7::bigint
+          and claim.state = 'processing'
+          and claim.expires_at > now()
+        for update
+      ),
+      selected_form as materialized (
+        select
+          form.id,
+          form.workspace_id as "workspaceId",
+          form.project_id as "projectId",
+          form.funnel_id as "funnelId",
+          owner.id as "assignedOwnerId",
+          owner.id as "ownerUserId",
+          form.name,
+          form.template,
+          form.crm_target as "crmTarget"
+        from forms form
+        join workspaces workspace
+          on workspace.id = form.workspace_id
+        cross join claim_fence
+        left join projects project
+          on project.workspace_id = form.workspace_id
+         and project.id = form.project_id
+        left join workspace_users owner
+          on owner.workspace_id = form.workspace_id
+         and owner.id = form.owner_user_id
+         and owner.status = 'active'
+        left join funnels funnel
+          on funnel.workspace_id = form.workspace_id
+         and funnel.id = form.funnel_id
+         and funnel.project_id is not distinct from form.project_id
+        where form.workspace_id = $1::uuid
+          and form.id = $2::uuid
+          and form.status in ('aktiv', 'eingebaut')
+          and form.owner_mode = 'user'
+          and form.owner_user_id = $35::uuid
+          and (form.project_id is null or project.id is not null)
+          and owner.id = $35::uuid
+          and (form.funnel_id is null or funnel.id is not null)
+        for update of form
+      ),
+      existing_submission as materialized (
+        select
+          submission.id as "submissionId",
+          submission.contact_id as "contactId",
+          submission.lead_id as "leadId",
+          submission.deal_id as "dealId",
+          submission.task_id as "taskId",
+          submission.request_hash as "requestHash",
+          submission.response_payload as "responsePayload",
+          (
+            select timeline.id
+            from contact_timeline_items timeline
+            where timeline.workspace_id = submission.workspace_id
+              and timeline.metadata->>'submissionIdempotencyHash' = $3
+            order by timeline.occurred_at asc
+            limit 1
+          ) as "timelineItemId"
+        from form_submissions submission
+        join selected_form form
+          on form."workspaceId" = submission.workspace_id
+         and form.id = submission.form_id
+        where submission.idempotency_key = $8
+        limit 1
+        for update of submission
+      ),
+      email_contacts as materialized (
+        select
+          contact.id,
+          contact.created_at,
+          contact.project_id,
+          lower(btrim(contact.email)) as normalized_email,
+          regexp_replace(coalesce(contact.phone, ''), '[^0-9+]', '', 'g') as normalized_phone
+        from contacts contact
+        join selected_form form
+          on form."workspaceId" = contact.workspace_id
+        where not exists (select 1 from existing_submission)
+          and $36::text is not null
+          and contact.archived_at is null
+          and (contact.project_id = form."projectId" or contact.project_id is null)
+          and lower(btrim(contact.email)) = $36::text
+        for update of contact
+      ),
+      phone_contacts as materialized (
+        select
+          contact.id,
+          contact.created_at,
+          contact.project_id,
+          lower(btrim(contact.email)) as normalized_email,
+          regexp_replace(coalesce(contact.phone, ''), '[^0-9+]', '', 'g') as normalized_phone
+        from contacts contact
+        join selected_form form
+          on form."workspaceId" = contact.workspace_id
+        where not exists (select 1 from existing_submission)
+          and $37::text is not null
+          and contact.archived_at is null
+          and (contact.project_id = form."projectId" or contact.project_id is null)
+          and regexp_replace(coalesce(contact.phone, ''), '[^0-9+]', '', 'g') = $37::text
+        for update of contact
+      ),
+      contact_identity as materialized (
+        select
+          (
+            select email.id
+            from email_contacts email
+            order by (email.project_id = form."projectId") desc, email.created_at asc
+            limit 1
+          ) as "emailContactId",
+          (
+            select phone.id
+            from phone_contacts phone
+            order by (phone.project_id = form."projectId") desc, phone.created_at asc
+            limit 1
+          ) as "phoneContactId",
+          (
+            select count(distinct matched.id) > 1
+            from (
+              select id from email_contacts
+              union all
+              select id from phone_contacts
+            ) matched
+          )
+          or exists (
+            select 1
+            from email_contacts email
+            where $37::text is not null
+              and nullif(email.normalized_phone, '') is not null
+              and email.normalized_phone <> $37::text
+          )
+          or exists (
+            select 1
+            from phone_contacts phone
+            where $36::text is not null
+              and nullif(phone.normalized_email, '') is not null
+              and phone.normalized_email <> $36::text
+          ) as conflict
+        from selected_form form
+      ),
+      existing_contact as materialized (
+        select contact.id
+        from contacts contact
+        cross join contact_identity identity
+        where not identity.conflict
+          and contact.id = coalesce(identity."emailContactId", identity."phoneContactId")
+      ),
+      updated_contact as (
+        update contacts contact
+        set
+          owner_user_id = coalesce(contact.owner_user_id, form."assignedOwnerId"),
+          project_id = coalesce(form."projectId", contact.project_id),
+          name = coalesce(nullif($9::text, ''), contact.name),
+          role = $10,
+          source = $11,
+          intent = $12,
+          consent_label = $13,
+          email = coalesce(nullif(btrim(contact.email), ''), $14::text),
+          phone = coalesce(nullif(btrim(contact.phone), ''), $15::text),
+          metadata = contact.metadata || $16::jsonb,
+          updated_at = now()
+        from selected_form form
+        cross join existing_contact existing
+        where contact.workspace_id = form."workspaceId"
+          and contact.id = existing.id
+        returning contact.id
+      ),
+      inserted_contact as (
+        insert into contacts (
+          workspace_id,
+          project_id,
+          owner_user_id,
+          name,
+          role,
+          source,
+          intent,
+          consent_label,
+          email,
+          phone,
+          metadata
+        )
+        select
+          form."workspaceId",
+          form."projectId",
+          form."assignedOwnerId",
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14::text,
+          $15::text,
+          $16::jsonb
+        from selected_form form
+        cross join contact_identity identity
+        where not exists (select 1 from existing_submission)
+          and not identity.conflict
+          and not exists (select 1 from existing_contact)
+        returning id
+      ),
+      chosen_contact as materialized (
+        select id from updated_contact
+        union all
+        select id from inserted_contact
+        limit 1
+      ),
+      prepared_ids as materialized (
+        select
+          gen_random_uuid() as "leadId",
+          gen_random_uuid() as "dealId",
+          gen_random_uuid() as "taskId",
+          gen_random_uuid() as "submissionId",
+          gen_random_uuid() as "privacyConsentId",
+          gen_random_uuid() as "marketingConsentId",
+          gen_random_uuid() as "timelineItemId",
+          gen_random_uuid() as "auditId",
+          gen_random_uuid() as "funnelAnalyticsId",
+          gen_random_uuid() as "leadAnalyticsId",
+          gen_random_uuid() as "speedToLeadId",
+          gen_random_uuid() as "newsletterAnalyticsId"
+        from selected_form
+        where not exists (select 1 from existing_submission)
+      ),
+      inserted_lead as (
+        insert into leads (
+          id,
+          workspace_id,
+          project_id,
+          contact_id,
+          assigned_to_user_id,
+          source,
+          type,
+          status,
+          score,
+          budget,
+          intent,
+          next_action,
+          received_at,
+          sla_due_at,
+          hot_status,
+          metadata,
+          idempotency_key
+        )
+        select
+          ids."leadId",
+          form."workspaceId",
+          form."projectId",
+          contact.id,
+          form."assignedOwnerId",
+          $11,
+          $10,
+          'Neu',
+          $17::integer,
+          $18::text,
+          $12,
+          $19,
+          now(),
+          now() + interval '4 hours',
+          $17::integer >= 70,
+          jsonb_build_object(
+            'answers', $20::jsonb,
+            'consent', $21::jsonb,
+            'formId', form.id,
+            'pipelineStage', $26::text,
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          ),
+          $8
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        where $24::boolean
+        returning id
+      ),
+      inserted_deal as (
+        insert into deals (
+          id,
+          workspace_id,
+          project_id,
+          contact_id,
+          owner_user_id,
+          lead_id,
+          name,
+          stage,
+          probability,
+          source,
+          next_action,
+          metadata,
+          idempotency_key
+        )
+        select
+          ids."dealId",
+          form."workspaceId",
+          form."projectId",
+          contact.id,
+          form."assignedOwnerId",
+          (select id from inserted_lead limit 1),
+          $9 || ' - ' || form.name,
+          $26,
+          least(95, greatest(15, $17::integer)),
+          $11,
+          $19,
+          jsonb_build_object(
+            'formId', form.id,
+            'submissionId', ids."submissionId",
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          ),
+          $8
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        where $25::boolean
+        returning id
+      ),
+      inserted_task as (
+        insert into tasks (
+          id,
+          workspace_id,
+          project_id,
+          contact_id,
+          lead_id,
+          owner_user_id,
+          title,
+          due_at,
+          priority,
+          status,
+          metadata
+        )
+        select
+          ids."taskId",
+          form."workspaceId",
+          form."projectId",
+          contact.id,
+          (select id from inserted_lead limit 1),
+          form."assignedOwnerId",
+          $28,
+          now() + interval '2 hours',
+          case when $17::integer >= 70 then 'Hoch' else 'Mittel' end,
+          'open',
+          jsonb_build_object(
+            'dealId', (select id from inserted_deal limit 1),
+            'formId', form.id,
+            'submissionId', ids."submissionId",
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        where $27::boolean
+        returning id
+      ),
+      success_response as materialized (
+        select $34::jsonb as payload
+        from chosen_contact contact
+        cross join prepared_ids ids
+      ),
+      inserted_submission as (
+        insert into form_submissions (
+          id,
+          workspace_id,
+          project_id,
+          form_id,
+          funnel_id,
+          contact_id,
+          lead_id,
+          deal_id,
+          task_id,
+          mode,
+          status,
+          score,
+          answers,
+          consent,
+          tracking,
+          raw_payload,
+          idempotency_key,
+          request_hash,
+          response_payload,
+          claim_lease_version
+        )
+        select
+          ids."submissionId",
+          form."workspaceId",
+          form."projectId",
+          form.id,
+          form."funnelId",
+          contact.id,
+          (select id from inserted_lead limit 1),
+          (select id from inserted_deal limit 1),
+          (select id from inserted_task limit 1),
+          'live',
+          'processed',
+          $17::integer,
+          $20::jsonb,
+          $21::jsonb,
+          $22::jsonb,
+          $23::jsonb,
+          $8,
+          $6,
+          response.payload,
+          $7::bigint
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join success_response response
+        returning id, contact_id, lead_id, deal_id, task_id, response_payload
+      ),
+      inserted_privacy_consent as (
+        insert into consent_records (
+          id,
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          status,
+          source,
+          metadata
+        )
+        select
+          ids."privacyConsentId",
+          form."workspaceId",
+          contact.id,
+          form."projectId",
+          'Website Formular',
+          'Opt-in',
+          form.name,
+          jsonb_build_object(
+            'consent', $21::jsonb,
+            'formId', form.id,
+            'submissionId', submission.id,
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        where $29::boolean
+        returning id
+      ),
+      inserted_marketing_consent as (
+        insert into consent_records (
+          id,
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          status,
+          source,
+          metadata
+        )
+        select
+          ids."marketingConsentId",
+          form."workspaceId",
+          contact.id,
+          form."projectId",
+          'Newsletter',
+          case when $31::boolean then 'Double-Opt-in offen' else 'Opt-in' end,
+          form.name,
+          jsonb_build_object(
+            'consent', $21::jsonb,
+            'formId', form.id,
+            'submissionId', submission.id,
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        where $30::boolean
+        returning id
+      ),
+      inserted_timeline as (
+        insert into contact_timeline_items (
+          id,
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          title,
+          detail,
+          outcome,
+          metadata
+        )
+        select
+          ids."timelineItemId",
+          form."workspaceId",
+          contact.id,
+          form."projectId",
+          'Website',
+          'Formular eingesendet',
+          form.name || ' - Score ' || $17::text,
+          'offen',
+          jsonb_build_object(
+            'formId', form.id,
+            'leadId', (select id from inserted_lead limit 1),
+            'submissionId', submission.id,
+            'submissionIdempotencyHash', $3
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        returning id
+      ),
+      updated_form as (
+        update forms form
+        set
+          submissions_count = form.submissions_count + 1,
+          last_submission_at = now(),
+          conversion_rate = case
+            when form.visits_count > 0
+              then round(((form.submissions_count + 1)::numeric / form.visits_count::numeric) * 100, 2)
+            else form.conversion_rate
+          end,
+          updated_at = now()
+        from inserted_submission submission
+        where form.workspace_id = $1::uuid
+          and form.id = $2::uuid
+        returning form.id
+      ),
+      inserted_audit as (
+        insert into audit_logs (
+          id,
+          workspace_id,
+          project_id,
+          actor_user_id,
+          action,
+          entity_type,
+          entity_id,
+          before,
+          after
+        )
+        select
+          ids."auditId",
+          form."workspaceId",
+          form."projectId",
+          form."ownerUserId",
+          'form.submission.persisted',
+          'form_submission',
+          submission.id,
+          null,
+          jsonb_build_object(
+            'contactId', contact.id,
+            'dealId', (select id from inserted_deal limit 1),
+            'formId', form.id,
+            'leadId', (select id from inserted_lead limit 1),
+            'submissionIdempotencyHash', $3,
+            'taskId', (select id from inserted_task limit 1)
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        returning id
+      ),
+      inserted_funnel_analytics as (
+        insert into analytics_events (
+          id,
+          workspace_id,
+          project_id,
+          entity_id,
+          entity_type,
+          user_id,
+          contact_id,
+          lead_id,
+          deal_id,
+          funnel_id,
+          event_type,
+          module,
+          source,
+          channel,
+          value_cents,
+          occurred_at,
+          metadata
+        )
+        select
+          ids."funnelAnalyticsId",
+          form."workspaceId",
+          form."projectId",
+          submission.id,
+          'form_submission',
+          form."ownerUserId",
+          contact.id,
+          (select id from inserted_lead limit 1),
+          (select id from inserted_deal limit 1),
+          form."funnelId",
+          'funnel_submit',
+          'funnel',
+          $11,
+          $11,
+          0,
+          now(),
+          jsonb_build_object(
+            'analyticsVersion', 1,
+            'crmTarget', form."crmTarget",
+            'entityId', submission.id,
+            'entityType', 'form_submission',
+            'formId', form.id,
+            'formTemplate', form.template,
+            'score', $17::integer,
+            'submissionIdempotencyHash', $3,
+            'taskId', (select id from inserted_task limit 1),
+            'tracking', $22::jsonb
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        where $32::boolean
+        returning id
+      ),
+      inserted_lead_analytics as (
+        insert into analytics_events (
+          id,
+          workspace_id,
+          project_id,
+          entity_id,
+          entity_type,
+          user_id,
+          contact_id,
+          lead_id,
+          deal_id,
+          funnel_id,
+          event_type,
+          module,
+          source,
+          channel,
+          value_cents,
+          occurred_at,
+          metadata
+        )
+        select
+          ids."leadAnalyticsId",
+          form."workspaceId",
+          form."projectId",
+          lead.id,
+          'lead',
+          form."ownerUserId",
+          contact.id,
+          lead.id,
+          (select id from inserted_deal limit 1),
+          form."funnelId",
+          'lead_created',
+          'lead_inbox',
+          $11,
+          $11,
+          0,
+          now(),
+          jsonb_build_object(
+            'analyticsVersion', 1,
+            'crmTarget', form."crmTarget",
+            'entityId', lead.id,
+            'entityType', 'lead',
+            'formId', form.id,
+            'formTemplate', form.template,
+            'score', $17::integer,
+            'submissionIdempotencyHash', $3,
+            'trigger', case when form."funnelId" is not null then 'funnel_submit' else 'form_submit' end
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_lead lead
+        returning id
+      ),
+      inserted_speed_to_lead as (
+        insert into speed_to_lead_events (
+          id,
+          workspace_id,
+          project_id,
+          lead_id,
+          contact_id,
+          owner_user_id,
+          state,
+          due_at,
+          first_response_at,
+          minutes_until_due,
+          notification_channel,
+          metadata
+        )
+        select
+          ids."speedToLeadId",
+          form."workspaceId",
+          form."projectId",
+          lead.id,
+          contact.id,
+          form."assignedOwnerId",
+          'covered',
+          now() + interval '4 hours',
+          null,
+          240,
+          'teams',
+          jsonb_build_object(
+            'formId', form.id,
+            'formTemplate', form.template,
+            'score', $17::integer,
+            'source', $11,
+            'sourcePayload', 'website_form',
+            'submissionId', submission.id,
+            'submissionIdempotencyHash', $3,
+            'trigger', case when form."funnelId" is not null then 'funnel_submit' else 'form_submit' end
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_lead lead
+        cross join inserted_submission submission
+        returning id
+      ),
+      inserted_newsletter_analytics as (
+        insert into analytics_events (
+          id,
+          workspace_id,
+          project_id,
+          entity_id,
+          entity_type,
+          user_id,
+          contact_id,
+          lead_id,
+          funnel_id,
+          event_type,
+          module,
+          source,
+          channel,
+          value_cents,
+          occurred_at,
+          metadata
+        )
+        select
+          ids."newsletterAnalyticsId",
+          form."workspaceId",
+          form."projectId",
+          submission.id,
+          'form_submission',
+          form."ownerUserId",
+          contact.id,
+          (select id from inserted_lead limit 1),
+          form."funnelId",
+          'newsletter_event',
+          'newsletter',
+          $11,
+          'email',
+          0,
+          now(),
+          jsonb_build_object(
+            'analyticsVersion', 1,
+            'entityId', submission.id,
+            'entityType', 'form_submission',
+            'event', 'form_opt_in',
+            'formId', form.id,
+            'formTemplate', form.template,
+            'score', $17::integer,
+            'submissionIdempotencyHash', $3,
+            'tracking', $22::jsonb
+          )
+        from selected_form form
+        cross join chosen_contact contact
+        cross join prepared_ids ids
+        cross join inserted_submission submission
+        where $33::boolean
+        returning id
+      ),
+      submission_outcome as materialized (
+        select
+          'created'::text as "persistenceState",
+          submission.id as "submissionId",
+          submission.contact_id as "contactId",
+          submission.lead_id as "leadId",
+          submission.deal_id as "dealId",
+          submission.task_id as "taskId",
+          timeline.id as "timelineItemId",
+          submission.response_payload as "responsePayload"
+        from inserted_submission submission
+        cross join inserted_timeline timeline
+        union all
+        select
+          case
+            when existing."requestHash" = $6 then 'replay'::text
+            else 'conflict'::text
+          end,
+          existing."submissionId",
+          existing."contactId",
+          existing."leadId",
+          existing."dealId",
+          existing."taskId",
+          existing."timelineItemId",
+          existing."responsePayload"
+        from existing_submission existing
+        union all
+        select
+          'identity_conflict'::text,
+          null::uuid,
+          null::uuid,
+          null::uuid,
+          null::uuid,
+          null::uuid,
+          null::uuid,
+          null::jsonb
+        from contact_identity identity
+        where identity.conflict
+          and not exists (select 1 from existing_submission)
+      ),
+      atomic_ready as materialized (
+        select
+          case
+            when exists (
+              select 1 from contact_identity identity where identity.conflict
+            ) then true
+            when exists (
+              select 1
+              from existing_submission existing
+              where existing."requestHash" <> $6
+            ) then true
+            when exists (
+              select 1
+              from existing_submission existing
+              where existing."requestHash" = $6
+                and jsonb_typeof(existing."responsePayload") = 'object'
+            ) then true
+            when not exists (select 1 from existing_submission) then
+              (select count(*) from chosen_contact) = 1
+              and (select count(*) from inserted_lead) = case when $24::boolean then 1 else 0 end
+              and (select count(*) from inserted_deal) = case when $25::boolean then 1 else 0 end
+              and (select count(*) from inserted_task) = case when $27::boolean then 1 else 0 end
+              and (select count(*) from inserted_submission) = 1
+              and (select count(*) from inserted_privacy_consent) = case when $29::boolean then 1 else 0 end
+              and (select count(*) from inserted_marketing_consent) = case when $30::boolean then 1 else 0 end
+              and (select count(*) from inserted_timeline) = 1
+              and (select count(*) from updated_form) = 1
+              and (select count(*) from inserted_audit) = 1
+              and (select count(*) from inserted_funnel_analytics) = case when $32::boolean then 1 else 0 end
+              and (select count(*) from inserted_lead_analytics) = case when $24::boolean then 1 else 0 end
+              and (select count(*) from inserted_speed_to_lead) = case when $24::boolean then 1 else 0 end
+              and (select count(*) from inserted_newsletter_analytics) = case when $33::boolean then 1 else 0 end
+            else false
+          end as ready
+        from selected_form
+      ),
+      completed_claim as (
+        update public_submission_idempotency claim
+        set
+          state = 'completed',
+          response_payload = outcome."responsePayload",
+          completed_at = now(),
+          expires_at = greatest(claim.expires_at, now() + interval '24 hours')
+        from submission_outcome outcome
+        cross join atomic_ready ready
+        where ready.ready
+          and outcome."persistenceState" in ('created', 'replay')
+          and claim.idempotency_hash = $3
+          and claim.action_hash = $4
+          and claim.scope_hash = $5
+          and claim.request_hash = $6
+          and claim.lease_version = $7::bigint
+          and claim.state = 'processing'
+          and exists (select 1 from claim_fence)
+        returning claim.response_payload
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, 'live', 'processed', $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)
-      returning id
+      select
+        outcome."persistenceState",
+        outcome."submissionId",
+        outcome."contactId",
+        outcome."leadId",
+        outcome."dealId",
+        outcome."taskId",
+        outcome."timelineItemId",
+        completed.response_payload as "responsePayload",
+        1 / case
+          when ready.ready
+            and (
+              (outcome."persistenceState" in ('conflict', 'identity_conflict') and completed.response_payload is null)
+              or (outcome."persistenceState" in ('created', 'replay') and completed.response_payload is not null)
+            )
+          then 1
+          else 0
+        end as invariant
+      from submission_outcome outcome
+      cross join atomic_ready ready
+      left join completed_claim completed
+        on outcome."persistenceState" in ('created', 'replay')
+      limit 1
     `,
     [
       lookup.workspaceId,
-      lookup.projectId,
       lookup.id,
-      lookup.funnelId,
-      contactId,
-      lead?.id ?? null,
-      deal?.id ?? null,
-      task?.id ?? null,
+      input.idempotencyHash,
+      input.actionHash,
+      input.scopeHash,
+      input.requestHash,
+      input.leaseVersion,
+      idempotencyKey,
+      name,
+      leadType,
+      source,
+      intent,
+      consent.marketing && !form.doubleOptIn ? "Opt-in" : "Nur CRM",
+      email || null,
+      phone || null,
+      JSON.stringify({
+        answers,
+        formId: lookup.id,
+        submissionIdempotencyHash: input.idempotencyHash,
+        tracking,
+      }),
       score,
+      firstString(answers, ["budget", "preis", "price"]) || null,
+      getNextAction(form),
       JSON.stringify(answers),
       JSON.stringify(consent),
-      JSON.stringify(tracking),
-      JSON.stringify(Object.fromEntries(input.formData.entries())),
+      JSON.stringify({ ...tracking, submissionIdempotencyHash: input.idempotencyHash }),
+      JSON.stringify({
+        ...serializeFormDataPayload(input.formData),
+        submissionIdempotencyHash: input.idempotencyHash,
+      }),
+      form.crmTarget !== "contact",
+      form.crmTarget === "deal",
+      form.pipelineStage || "Neuer Lead",
+      form.actions.createTask || form.crmTarget === "ticket",
+      form.crmTarget === "ticket" ? `Ticket prüfen: ${form.name}` : getNextAction(form),
+      consent.privacy,
+      consent.marketing,
+      form.doubleOptIn,
+      Boolean(lookup.funnelId),
+      form.template === "newsletter" || form.actions.newsletterList,
+      JSON.stringify(successResponse),
+      lookup.ownerUserId,
+      emailIdentity.normalizedValue || null,
+      phoneIdentity.normalizedValue || null,
     ],
+      );
+    },
   );
 
-  if (contactId) {
-    await queryOne(
-      `
-        insert into contact_timeline_items (
-          workspace_id, contact_id, project_id, channel, title, detail, outcome, metadata
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-        returning id
-      `,
-      [
-        lookup.workspaceId,
-        contactId,
-        lookup.projectId,
-        "Website",
-        "Formular eingesendet",
-        `${form.name} - Score ${score}`,
-        "offen",
-        JSON.stringify({ formId: lookup.id, submissionId: submission?.id ?? null, leadId: lead?.id ?? null }),
-      ],
-    );
+  if (!row) {
+    return { form, persisted: false, reason: "atomic_submission_scope_unavailable" };
+  }
+  if (row.persistenceState === "conflict") {
+    return { form, persisted: false, reason: "submission_replay_conflict" };
+  }
+  if (row.persistenceState === "identity_conflict") {
+    return { form, persisted: false, reason: "contact_identity_conflict" };
   }
 
-  await queryOne(
-    `
-      update forms
-      set submissions_count = submissions_count + 1,
-          last_submission_at = now(),
-          conversion_rate = case
-            when visits_count > 0 then round(((submissions_count + 1)::numeric / visits_count::numeric) * 100, 2)
-            else conversion_rate
-          end,
-          updated_at = now()
-      where id = $1
-      returning id
-    `,
-    [lookup.id],
-  );
-
-  const formSession: AppSession = {
-    authenticated: true,
-    email: "website@novalure.local",
-    name: "Website Formular",
-    permissions: [],
-    productPermissions: getProductRoleCapabilities("assistant_backoffice"),
-    productRole: "assistant_backoffice",
-    role: "owner",
-    source: "database",
-    userId: lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
-    workspaceId: lookup.workspaceId,
-    workspaceName: lookup.workspaceName ?? "Novalure",
-  };
-
-  await Promise.all([
-    writeAuditLog({
-      session: formSession,
-      action: "form.submission.persisted",
-      entityType: "form_submission",
-      entityId: submission?.id,
-      after: { contactId, dealId: deal?.id ?? null, formId: lookup.id, leadId: lead?.id ?? null, taskId: task?.id ?? null },
-    }),
-    lookup.funnelId
-      ? writeCrmAnalyticsEvent({
-          channel: source,
-          contactId,
-          dealId: deal?.id ?? null,
-          entityId: submission?.id ?? null,
-          entityType: "form_submission",
-          eventType: "funnel_submit",
-          funnelId: lookup.funnelId,
-          leadId: lead?.id ?? null,
-          metadata: {
-            crmTarget: form.crmTarget,
-            formId: lookup.id,
-            formTemplate: form.template,
-            score,
-            taskId: task?.id ?? null,
-            tracking,
-          },
-          module: "funnel",
-          projectId: lookup.projectId,
-          source,
-          userId: lookup.ownerUserId,
-          workspaceId: lookup.workspaceId,
-        })
-      : null,
-    lead?.id
-      ? writeCrmAnalyticsEvent({
-          channel: source,
-          contactId,
-          dealId: deal?.id ?? null,
-          entityId: lead.id,
-          entityType: "lead",
-          eventType: "lead_created",
-          funnelId: lookup.funnelId,
-          leadId: lead.id,
-          metadata: {
-            crmTarget: form.crmTarget,
-            formId: lookup.id,
-            formTemplate: form.template,
-            score,
-            trigger: lookup.funnelId ? "funnel_submit" : "form_submit",
-          },
-          module: "lead_inbox",
-          projectId: lookup.projectId,
-          source,
-          userId: lookup.ownerUserId,
-          workspaceId: lookup.workspaceId,
-        })
-      : null,
-    lead?.id
-      ? recordSpeedToLeadEvent({
-          channel: source,
-          contactId,
-          dueAt: slaDueAt,
-          leadId: lead.id,
-          metadata: {
-            formId: lookup.id,
-            formTemplate: form.template,
-            score,
-            sourcePayload: "website_form",
-            trigger: lookup.funnelId ? "funnel_submit" : "form_submit",
-          },
-          ownerUserId: assignedOwnerId,
-          projectId: lookup.projectId,
-          source,
-          state: "covered",
-          userId: lookup.ownerUserId,
-          workspaceId: lookup.workspaceId,
-        })
-      : null,
-    form.template === "newsletter" || form.actions.newsletterList
-      ? writeCrmAnalyticsEvent({
-          channel: "email",
-          contactId,
-          entityId: submission?.id ?? contactId,
-          entityType: "form_submission",
-          eventType: "newsletter_event",
-          funnelId: lookup.funnelId,
-          leadId: lead?.id ?? null,
-          metadata: {
-            event: "form_opt_in",
-            formId: lookup.id,
-            formTemplate: form.template,
-            score,
-            tracking,
-          },
-          module: "newsletter",
-          projectId: lookup.projectId,
-          source,
-          userId: lookup.ownerUserId,
-          workspaceId: lookup.workspaceId,
-        })
-      : null,
-  ]);
+  const response = parsePublicSubmissionResponseSnapshot(row.responsePayload);
+  if (
+    !response ||
+    Number(row.invariant) !== 1 ||
+    !row.submissionId ||
+    !row.contactId
+  ) {
+    return { form, persisted: false, reason: "atomic_submission_response_invalid" };
+  }
 
   return {
     form,
+    ids: {
+      contactId: row.contactId,
+      dealId: row.dealId,
+      leadId: row.leadId,
+      submissionId: row.submissionId,
+      taskId: row.taskId,
+      timelineItemId: row.timelineItemId,
+    },
     persisted: true,
     redirectUrl: form.actions.redirectUrl,
-    ids: {
-      contactId,
-      dealId: deal?.id ?? null,
-      leadId: lead?.id ?? null,
-      submissionId: submission?.id ?? null,
-      taskId: task?.id ?? null,
-    },
+    response,
   };
-}
-
-async function upsertContact(input: {
-  answers: Record<string, unknown>;
-  consentLabel: string;
-  email: string;
-  form: WebsiteForm;
-  intent: string;
-  leadType: string;
-  name: string;
-  ownerUserId: string | null;
-  phone: string;
-  projectId: string | null;
-  source: string;
-  tracking: Record<string, unknown>;
-  workspaceId: string;
-}) {
-  const existing = input.email || input.phone
-    ? await queryOne<IdRow>(
-        `
-          select id
-          from contacts
-          where workspace_id = $1
-            and (
-              ($2::text <> '' and lower(email) = lower($2))
-              or ($3::text <> '' and phone = $3)
-            )
-          order by updated_at desc
-          limit 1
-        `,
-        [input.workspaceId, input.email, input.phone],
-      )
-    : null;
-
-  if (existing) {
-    await queryOne(
-      `
-        update contacts
-        set
-          owner_user_id = coalesce(owner_user_id, $3::uuid),
-          project_id = coalesce($4, project_id),
-          name = coalesce(nullif($5, ''), name),
-          role = $6,
-          source = $7,
-          intent = $8,
-          consent_label = $9,
-          email = coalesce(nullif($10, ''), email),
-          phone = coalesce(nullif($11, ''), phone),
-          metadata = metadata || $12::jsonb,
-          updated_at = now()
-        where workspace_id = $1 and id = $2
-        returning id
-      `,
-      [
-        input.workspaceId,
-        existing.id,
-        input.ownerUserId,
-        input.projectId,
-        input.name,
-        input.leadType,
-        input.source,
-        input.intent,
-        input.consentLabel,
-        input.email,
-        input.phone,
-        JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking }),
-      ],
-    );
-
-    return existing.id;
-  }
-
-  const contact = await queryOne<IdRow>(
-    `
-      insert into contacts (
-        workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
-      )
-      values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
-      returning id
-    `,
-    [
-      input.workspaceId,
-      input.projectId,
-      input.ownerUserId,
-      input.name,
-      input.leadType,
-      input.source,
-      input.intent,
-      input.consentLabel,
-      input.email,
-      input.phone,
-      JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking }),
-    ],
-  );
-
-  return contact?.id ?? null;
 }
 
 async function resolveExistingFormId(workspaceId: string, form: WebsiteForm) {
@@ -1036,6 +1791,23 @@ async function resolveFunnel(workspaceId: string, funnelId: string) {
     `,
     [workspaceId, funnelId],
   );
+}
+
+async function resolveActiveWorkspaceOwner(workspaceId: string, userId: string | null | undefined) {
+  if (!isUuid(workspaceId) || !isUuid(userId)) return null;
+
+  const owner = await queryOne<IdRow>(
+    `
+      select id
+      from workspace_users
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'active'
+      limit 1
+    `,
+    [workspaceId, userId],
+  );
+  return owner?.id ?? null;
 }
 
 async function resolveFallbackProjectId(workspaceId: string) {
@@ -1080,9 +1852,15 @@ function toWebsiteForm(row: FormRow): WebsiteForm {
     template: normalizeTemplate(row.template),
     utmCapture: settings.utmCapture !== false,
     variant: normalizeVariant(row.variant),
+    version: normalizeVersion(settings.version),
     visits: Number(row.visits ?? 0),
     workspacePublicKey: row.workspacePublicKey ?? undefined,
   };
+}
+
+function normalizeVersion(value: unknown) {
+  const version = Number(value);
+  return Number.isInteger(version) && version > 0 ? version : 1;
 }
 
 function toSubmissionSummary(row: SubmissionRow): FormSubmissionSummary {
@@ -1123,12 +1901,12 @@ function extractAnswers(form: WebsiteForm, formData: FormDataLike) {
   const answers: Record<string, unknown> = {};
 
   for (const field of form.fields) {
-    const keys = [field.id, field.crmField, field.type, slugify(field.label)].filter(
-      (key): key is string => Boolean(key),
-    );
-    const entries = keys.flatMap((key) => formData.getAll(key)).filter((value): value is FormDataEntryValue => value !== null);
-    const normalized =
-      field.type === "multiCheckbox"
+    const entries = field.type === "hidden"
+      ? []
+      : formData.getAll(field.id).filter((value): value is FormDataEntryValue => value !== null);
+    const normalized = field.type === "hidden"
+      ? field.defaultValue.trim()
+      : field.type === "multiCheckbox"
         ? entries.map(normalizeEntry).filter((value) => value !== "")
         : normalizeEntry(entries[0] ?? null);
     if (Array.isArray(normalized) ? normalized.length > 0 : normalized !== "") {
@@ -1136,29 +1914,15 @@ function extractAnswers(form: WebsiteForm, formData: FormDataLike) {
     }
   }
 
-  for (const [key, value] of formData.entries()) {
-    if (
-      key.startsWith("utm_") ||
-      key === "form_id" ||
-      key === "form_slug" ||
-      key === "form_variant" ||
-      key === "funnel_id" ||
-      key === "page_url" ||
-      key === "referrer" ||
-      key === "return_to"
-    ) continue;
-    if (!(key in answers)) {
-      const normalized = normalizeEntry(value);
-      if (normalized !== "") answers[key] = normalized;
-    }
-  }
-
   return answers;
 }
 
-function extractConsent(form: WebsiteForm, formData: FormDataLike) {
-  const privacy = Boolean(formData.get("privacy")) || Boolean(formData.get("privacy_consent"));
-  const marketing = Boolean(formData.get("marketing_consent")) || (form.template === "newsletter" && privacy);
+function extractConsent(form: WebsiteForm, answers: Record<string, unknown>, formData: FormDataLike) {
+  const submittedFields = form.fields
+    .filter((field) => isSubmittedFormFieldVisible(form, field, answers, formData))
+    .filter((field) => getFormDataFieldEntries(field, formData).some(isTruthyPublicConsentValue));
+  const privacy = submittedFields.some(isPrivacyConsentField);
+  const marketing = submittedFields.some(isMarketingConsentField);
 
   return {
     doubleOptIn: form.doubleOptIn,
@@ -1171,45 +1935,94 @@ function validateWebsiteFormSubmission(
   form: WebsiteForm,
   answers: Record<string, unknown>,
   formData: FormDataLike,
-  consent: { privacy: boolean; marketing: boolean },
 ) {
   for (const field of form.fields) {
     if (field.type === "hidden") continue;
-
-    if (field.required && field.type === "consent" && !consent.privacy) {
-      return "privacy_consent_required";
-    }
+    if (!isSubmittedFormFieldVisible(form, field, answers, formData)) continue;
 
     const value = getSubmittedFieldValue(field, answers, formData);
-    if (field.required && isEmptySubmittedValue(value)) {
-      return `required_field_missing:${field.crmField || field.id}`;
+    if (
+      field.required &&
+      (field.type === "checkbox" || field.type === "consent") &&
+      !getFormDataFieldEntries(field, formData).some(isTruthyPublicConsentValue)
+    ) {
+      return isPrivacyConsentField(field)
+        ? "privacy_consent_required"
+        : `required_field_missing:${field.id}`;
     }
 
-    if (field.type === "email" && !isEmptySubmittedValue(value) && !isValidEmail(String(Array.isArray(value) ? value[0] : value))) {
-      return "invalid_email";
+    if (field.required && isEmptySubmittedValue(value)) {
+      return `required_field_missing:${field.id}`;
     }
+
+    const validationError = validatePublicFormFieldValue(field, value);
+    if (validationError) return validationError;
   }
 
-  const email = firstString(answers, ["email", "e_mail", "mail"]);
-  if (email && !isValidEmail(email)) return "invalid_email";
-
   return "";
+}
+
+function isSubmittedFormFieldVisible(
+  form: WebsiteForm,
+  field: FormField,
+  answers: Record<string, unknown>,
+  formData: FormDataLike,
+) {
+  if (!field.conditionalFieldId || !field.conditionalValue) return true;
+  const controller = form.fields.find((candidate) =>
+    candidate.id === field.conditionalFieldId ||
+    candidate.crmField === field.conditionalFieldId
+  );
+  if (!controller) return true;
+  const value = getSubmittedFieldValue(controller, answers, formData);
+  if (Array.isArray(value)) {
+    return value.some((entry) => String(entry).trim() === field.conditionalValue);
+  }
+  return String(value ?? "").trim() === field.conditionalValue;
+}
+
+function resolveSemanticFieldValue(
+  form: WebsiteForm,
+  answers: Record<string, unknown>,
+  formData: FormDataLike,
+  type: "email" | "phone",
+) {
+  const values = form.fields
+    .filter((field) => field.type === type)
+    .flatMap((field) => {
+      const value = getSubmittedFieldValue(field, answers, formData);
+      return Array.isArray(value) ? value : [value];
+    })
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    .map((value) => value.trim());
+  const unique = new Map<string, string>();
+  for (const value of values) {
+    const identity = type === "email"
+      ? normalizePublicContactEmail(value)
+      : normalizePublicContactPhone(value);
+    if (identity) unique.set(identity, value);
+  }
+  return {
+    conflict: unique.size > 1,
+    normalizedValue: unique.keys().next().value ?? "",
+    value: unique.values().next().value ?? "",
+  };
 }
 
 function getSubmittedFieldValue(field: FormField, answers: Record<string, unknown>, formData: FormDataLike) {
   const key = field.crmField || field.id;
   if (key in answers) return answers[key];
-  const entries = formData.getAll(key).map(normalizeEntry).filter(Boolean);
+  const entries = field.type === "hidden" ? [] : formData.getAll(field.id).map(normalizeEntry).filter(Boolean);
   return field.type === "multiCheckbox" ? entries : entries[0] ?? "";
+}
+
+function getFormDataFieldEntries(field: FormField, formData: FormDataLike) {
+  return field.type === "hidden" ? [] : formData.getAll(field.id);
 }
 
 function isEmptySubmittedValue(value: unknown) {
   if (Array.isArray(value)) return value.length === 0 || value.every((item) => String(item).trim() === "");
   return String(value ?? "").trim() === "";
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 function extractTracking(formData: FormDataLike, requestUrl: string, form: WebsiteForm) {
@@ -1239,7 +2052,7 @@ function extractTracking(formData: FormDataLike, requestUrl: string, form: Websi
 function scoreFormSubmission(form: WebsiteForm, answers: Record<string, unknown>, consent: { privacy: boolean; marketing: boolean }) {
   let score = 20;
   score += Math.min(45, Object.values(answers).filter(Boolean).length * 8);
-  if (firstString(answers, ["phone", "telefon"])) score += 10;
+  if (firstString(answers, form.fields.filter((field) => field.type === "phone").map((field) => field.crmField || field.id))) score += 10;
   if (firstString(answers, ["budget", "investment_volume", "living_area"])) score += 8;
   if (firstString(answers, ["preferred_date", "preferred_time", "selling_timeline"])) score += 6;
   if (consent.privacy) score += 10;
@@ -1259,6 +2072,20 @@ function normalizeEntry(value: FormDataEntryValue | null) {
   if (value === null) return "";
   if (typeof value === "string") return value.trim();
   return value.name ? { fileName: value.name, size: value.size, type: value.type } : "";
+}
+
+function serializeFormDataPayload(formData: FormDataLike) {
+  const payload: Record<string, unknown> = {};
+  for (const [key, entry] of formData.entries()) {
+    const value = normalizeEntry(entry);
+    if (!(key in payload)) {
+      payload[key] = value;
+      continue;
+    }
+    const previous = payload[key];
+    payload[key] = Array.isArray(previous) ? [...previous, value] : [previous, value];
+  }
+  return payload;
 }
 
 function firstString(answers: Record<string, unknown>, keys: string[]) {
@@ -1285,11 +2112,14 @@ function normalizeFields(value: unknown, fallbackStepId = defaultSteps[0].id): F
     const object = asObject(item);
     const type = normalizeFieldType(object.type);
     if (!type) return [];
+    const crmField = typeof object.crmField === "string" && object.crmField ? object.crmField : defaultCrmField(type);
     return [createFormField({
       conditionalFieldId: typeof object.conditionalFieldId === "string" ? object.conditionalFieldId : "",
       conditionalValue: typeof object.conditionalValue === "string" ? object.conditionalValue : "",
-      crmField: typeof object.crmField === "string" && object.crmField ? object.crmField : defaultCrmField(type),
-      defaultValue: typeof object.defaultValue === "string" ? object.defaultValue : "",
+      crmField,
+      defaultValue: type === "consent" || (type === "checkbox" && isMarketingConsentCrmField(crmField))
+        ? ""
+        : typeof object.defaultValue === "string" ? object.defaultValue : "",
       errorMessage: typeof object.errorMessage === "string" ? object.errorMessage : "",
       fileAccept: typeof object.fileAccept === "string" ? object.fileAccept : type === "file" ? ".pdf,.jpg,.jpeg,.png,.doc,.docx" : "",
       fileMaxMb: typeof object.fileMaxMb === "number" ? object.fileMaxMb : type === "file" ? 10 : 0,
@@ -1309,6 +2139,10 @@ function normalizeFields(value: unknown, fallbackStepId = defaultSteps[0].id): F
   });
 
   return fields.length ? fields : defaultFields.map((field) => ({ ...field, stepId: field.type === "hidden" ? "" : fallbackStepId }));
+}
+
+function isMarketingConsentCrmField(value: string) {
+  return ["marketing_consent", "newsletter_consent"].includes(value.trim().toLowerCase());
 }
 
 function normalizeSteps(value: unknown, fallbackTitle: string): FormStep[] {

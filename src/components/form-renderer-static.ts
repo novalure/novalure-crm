@@ -5,11 +5,11 @@ import {
   normalizeFormSteps,
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
-import type { FormField, WebsiteForm } from "@/lib/form-types";
 import {
   publicSubmissionControlFields,
   type PublicSubmissionProof,
 } from "@/lib/public-submission-contract";
+import type { PublicFormDto, PublicFormFieldDto } from "@/lib/public-form-dto";
 
 export function renderStaticFormHtml({
   action,
@@ -22,7 +22,7 @@ export function renderStaticFormHtml({
 }: {
   action: string;
   copy: FormRuntimeCopy;
-  form: WebsiteForm;
+  form: PublicFormDto;
   publicKey: string;
   returnTo: string;
   source: string;
@@ -30,7 +30,6 @@ export function renderStaticFormHtml({
 }) {
   const steps = normalizeFormSteps(form);
   const progress = steps.length > 1 ? Math.round((1 / steps.length) * 100) : 100;
-  const hiddenFields = form.fields.filter((field) => field.type === "hidden");
   const visibleFields = steps
     .map((step, stepIndex) => {
       const isActive = stepIndex === 0;
@@ -51,18 +50,16 @@ export function renderStaticFormHtml({
   const previousButton = steps.length > 1
     ? `<button class="novalure-button novalure-secondary" data-action="previous" disabled type="button">${escapeHtml(copy.back)}</button>`
     : "<span></span>";
-  const nextOrSubmit = steps.length > 1
+  const nextButton = steps.length > 1
     ? `<button class="novalure-button" data-action="next" type="button">${escapeHtml(copy.next)}</button>`
-    : `<button class="novalure-button" type="submit">${escapeHtml(copy.submit)}</button>`;
+    : "";
+  const submitButton = `<button class="novalure-button${steps.length > 1 ? " novalure-hidden" : ""}" data-action="submit"${steps.length > 1 ? " hidden" : ""} type="submit">${escapeHtml(copy.submit)}</button>`;
 
   return `<form action="${escapeHtml(action)}" class="novalure-runtime" data-novalure-runtime="form" enctype="multipart/form-data" method="post" novalidate>
 <input name="form_id" type="hidden" value="${escapeHtml(publicKey)}">
 <input name="form_slug" type="hidden" value="${escapeHtml(publicKey)}">
 <input name="return_to" type="hidden" value="${escapeHtml(returnTo)}">
 <input name="utm_source" type="hidden" value="${escapeHtml(source)}">
-<input name="utm_campaign" type="hidden" value="${escapeHtml(form.campaign)}">
-<input name="form_variant" type="hidden" value="${escapeHtml(form.variant)}">
-<input name="funnel_id" type="hidden" value="${escapeHtml(form.funnelId)}">
 <input name="page_url" type="hidden" value="">
 <input name="referrer" type="hidden" value="">
 <input name="${publicSubmissionControlFields.idempotencyKey}" type="hidden" value="${escapeHtml(submissionProof.idempotencyKey)}">
@@ -70,24 +67,21 @@ export function renderStaticFormHtml({
 <input name="${publicSubmissionControlFields.expiresAt}" type="hidden" value="${submissionProof.expiresAt}">
 <input name="${publicSubmissionControlFields.proof}" type="hidden" value="${escapeHtml(submissionProof.signature)}">
 <label aria-hidden="true" class="novalure-honeypot">Company<input autocomplete="off" name="${publicSubmissionControlFields.honeypot}" tabindex="-1" type="text"></label>
-${hiddenFields.map((field) => `<input data-field-id="${escapeHtml(field.id)}" name="${escapeHtml(getFieldName(field))}" type="hidden" value="${escapeHtml(getFieldDefaultValue(field))}">`).join("")}
 <div class="novalure-card">
 <p class="novalure-eyebrow">Novalure</p>
 <h2 class="novalure-title">${escapeHtml(form.name)}</h2>
-${form.actions.thankYouMessage ? `<p class="novalure-description">${escapeHtml(form.actions.thankYouMessage)}</p>` : ""}
+${form.thankYouMessage ? `<p class="novalure-description">${escapeHtml(form.thankYouMessage)}</p>` : ""}
 ${progressHtml}
 ${visibleFields}
-<div class="novalure-actions">${previousButton}${nextOrSubmit}</div>
+<div class="novalure-actions">${previousButton}${nextButton}${submitButton}</div>
 </div>
 </form>`;
 }
 
-function renderStaticField(field: FormField, copy: FormRuntimeCopy) {
-  if (field.type === "hidden") return "";
-
+function renderStaticField(field: PublicFormFieldDto, copy: FormRuntimeCopy) {
   const name = getFieldName(field);
   const describedBy = field.helpText ? `${field.id}_help` : "";
-  const conditionAttrs = `${field.conditionalFieldId ? ` data-condition-field="${escapeHtml(field.conditionalFieldId)}"` : ""}${field.conditionalValue ? ` data-condition-value="${escapeHtml(field.conditionalValue)}"` : ""}`;
+  const conditionAttrs = `${field.visibleWhen ? ` data-condition-field="${escapeHtml(field.visibleWhen.fieldId)}" data-condition-value="${escapeHtml(field.visibleWhen.value)}"` : ""}`;
   const label = `<span class="novalure-label-row"><span>${escapeHtml(field.label)}${field.required ? "*" : ""}</span>${field.required ? `<span class="novalure-required">${escapeHtml(copy.required)}</span>` : ""}</span>`;
   const help = field.helpText ? `<span class="novalure-help" id="${escapeHtml(describedBy)}">${escapeHtml(field.helpText)}</span>` : "";
   const control = renderStaticControl(field, name, describedBy);
@@ -95,7 +89,7 @@ function renderStaticField(field: FormField, copy: FormRuntimeCopy) {
   return `<label class="novalure-field" data-field-id="${escapeHtml(field.id)}" data-field-type="${escapeHtml(field.type)}"${conditionAttrs}>${label}${control}${help}</label>`;
 }
 
-function renderStaticControl(field: FormField, name: string, describedBy: string) {
+function renderStaticControl(field: PublicFormFieldDto, name: string, describedBy: string) {
   const describedByAttr = describedBy ? ` aria-describedby="${escapeHtml(describedBy)}"` : "";
   const required = field.required ? " required" : "";
   const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
@@ -122,10 +116,6 @@ function renderStaticControl(field: FormField, name: string, describedBy: string
 
   if (field.type === "checkbox" || field.type === "consent") {
     return `<span class="novalure-choice"><input${describedByAttr}${field.defaultValue ? " checked" : ""} name="${escapeHtml(name)}"${required} type="checkbox" value="1"><span>${escapeHtml(field.helpText || field.label)}</span></span>`;
-  }
-
-  if (field.type === "file") {
-    return `<input ${baseAttrs}${field.fileAccept ? ` accept="${escapeHtml(field.fileAccept)}"` : ""}${field.fileMaxMb ? ` data-file-max-mb="${field.fileMaxMb}"` : ""}${field.multiple ? " multiple" : ""} type="file">`;
   }
 
   const inputType =

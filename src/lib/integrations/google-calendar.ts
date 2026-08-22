@@ -1,4 +1,5 @@
 import { getCalendarAccessToken } from "@/lib/integrations/calendar-connections";
+import { createProviderEventKey } from "@/lib/meetings/booking-lifecycle";
 
 export type GoogleCalendarResult = {
   error?: string | null;
@@ -51,11 +52,13 @@ function getMeetUrl(data: {
 export async function syncGoogleCalendarEvent(input: {
   attendees?: string[];
   body?: string;
+  correlationId?: string;
   createOnlineMeeting?: boolean;
   endsAt: string;
   location?: string;
   startsAt: string;
   subject: string;
+  timeZone?: string;
   workspaceId: string;
 }): Promise<GoogleCalendarResult> {
   const accessToken = await getCalendarAccessToken({
@@ -74,6 +77,7 @@ export async function syncGoogleCalendarEvent(input: {
   }
 
   try {
+    const eventKey = input.correlationId ? createProviderEventKey(input.correlationId) : undefined;
     const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
     if (input.createOnlineMeeting) url.searchParams.set("conferenceDataVersion", "1");
     url.searchParams.set("sendUpdates", "all");
@@ -85,14 +89,18 @@ export async function syncGoogleCalendarEvent(input: {
           ? {
               createRequest: {
                 conferenceSolutionKey: { type: "hangoutsMeet" },
-                requestId: `novalure-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                requestId: eventKey ?? `novalure-${Date.now()}-${Math.random().toString(36).slice(2)}`,
               },
             }
           : undefined,
         description: input.body ?? "",
-        end: { dateTime: input.endsAt, timeZone: "Europe/Vienna" },
+        end: { dateTime: input.endsAt, timeZone: input.timeZone ?? "UTC" },
+        extendedProperties: input.correlationId
+          ? { private: { novalureCorrelationId: input.correlationId } }
+          : undefined,
+        id: eventKey,
         location: input.location,
-        start: { dateTime: input.startsAt, timeZone: "Europe/Vienna" },
+        start: { dateTime: input.startsAt, timeZone: input.timeZone ?? "UTC" },
         summary: input.subject,
       }),
       headers: {
@@ -110,6 +118,33 @@ export async function syncGoogleCalendarEvent(input: {
           id?: string;
         })
       : {};
+
+    if (response.status === 409 && eventKey) {
+      const existingUrl = new URL(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventKey)}`,
+      );
+      const existingResponse = await fetch(existingUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const existingBody = await existingResponse.text();
+      const existing = existingBody
+        ? (JSON.parse(existingBody) as {
+            conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
+            hangoutLink?: string;
+            htmlLink?: string;
+            id?: string;
+          })
+        : {};
+      if (existingResponse.ok) {
+        return {
+          eventId: existing.id ?? eventKey,
+          onlineMeetingUrl: getMeetUrl(existing),
+          provider: "google-workspace",
+          status: "synced",
+          webLink: existing.htmlLink ?? null,
+        };
+      }
+    }
 
     if (!response.ok) {
       return {
@@ -146,7 +181,7 @@ export async function listGoogleBusyTimes(input: {
     provider: "google",
     workspaceId: input.workspaceId,
   });
-  if (!accessToken) return [];
+  if (!accessToken) throw new Error("Google calendar is not connected");
 
   const response = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     body: JSON.stringify({
@@ -165,7 +200,7 @@ export async function listGoogleBusyTimes(input: {
     calendars?: Record<string, { busy?: BusyTimeRange[] }>;
   };
 
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`Google Calendar busy-time request returned ${response.status}`);
   return Object.values(data.calendars ?? {}).flatMap((calendar) => calendar.busy ?? []);
 }
 
@@ -176,6 +211,7 @@ export async function updateGoogleCalendarEvent(input: {
   location?: string;
   startsAt: string;
   subject: string;
+  timeZone?: string;
   workspaceId: string;
 }): Promise<GoogleCalendarMutationResult> {
   const accessToken = await getCalendarAccessToken({
@@ -200,9 +236,9 @@ export async function updateGoogleCalendarEvent(input: {
     const response = await fetch(url, {
       body: JSON.stringify({
         description: input.body ?? "",
-        end: { dateTime: input.endsAt, timeZone: "Europe/Vienna" },
+        end: { dateTime: input.endsAt, timeZone: input.timeZone ?? "UTC" },
         location: input.location,
-        start: { dateTime: input.startsAt, timeZone: "Europe/Vienna" },
+        start: { dateTime: input.startsAt, timeZone: input.timeZone ?? "UTC" },
         summary: input.subject,
       }),
       headers: {
@@ -273,7 +309,7 @@ export async function deleteGoogleCalendarEvent(input: {
     });
     const rawBody = await response.text();
 
-    if (!response.ok && response.status !== 410) {
+    if (!response.ok && response.status !== 404 && response.status !== 410) {
       return {
         error: googleErrorMessage(response.status, rawBody),
         eventId: input.eventId,

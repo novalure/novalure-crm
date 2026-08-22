@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -1068,6 +1069,7 @@ async function main() {
       completionDate: "2027-12-31",
       floors: 4,
       name: "UATTEST_E2E_Bauteil_A",
+      operationId: randomUUID(),
       projectId: unitProject.id,
       session,
     }));
@@ -1082,7 +1084,8 @@ async function main() {
       areaSqm: 82,
       buildingId: building.id,
       floor: 1,
-      priceCents: 30000000,
+      operationId: randomUUID(),
+      priceEuros: 300000,
       projectId: unitProject.id,
       rooms: 3,
       session,
@@ -1093,7 +1096,8 @@ async function main() {
       areaSqm: 96,
       buildingId: building.id,
       floor: 2,
-      priceCents: 35000000,
+      operationId: randomUUID(),
+      priceEuros: 350000,
       projectId: unitProject.id,
       rooms: 4,
       session,
@@ -1104,7 +1108,8 @@ async function main() {
       areaSqm: 58,
       buildingId: building.id,
       floor: 1,
-      priceCents: 45000000,
+      operationId: randomUUID(),
+      priceEuros: 450000,
       projectId: unitProject.id,
       rooms: 2,
       session,
@@ -1115,7 +1120,8 @@ async function main() {
       areaSqm: 74,
       buildingId: building.id,
       floor: 3,
-      priceCents: 25000000,
+      operationId: randomUUID(),
+      priceEuros: 250000,
       projectId: unitProject.id,
       rooms: 3,
       session,

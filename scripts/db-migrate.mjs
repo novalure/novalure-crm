@@ -39,6 +39,7 @@ const manualCutoverVersions = new Set([
   "061_validate_and_activate_tenant_rls_pilot",
   "062_private_media_contract_cutover",
   "065_notification_guard_search_path_hardening",
+  "068_qa_batch_reset_safety",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -48,8 +49,22 @@ const migrationDependencies = new Map([
   ["064_notification_provider_and_lead_assignee_integrity", "050_durable_job_leasing"],
   ["065_notification_guard_search_path_hardening", "064_notification_provider_and_lead_assignee_integrity"],
   ["066_oauth_state_workspace_user_guard", "053_oauth_state_integrity"],
+  ["068_qa_batch_reset_safety", "061_validate_and_activate_tenant_rls_pilot"],
+  ["069_property_unit_idempotency", "049_property_inventory_tenant_guards"],
+  ["070_funnel_submission_idempotency_recovery", "055_public_submission_abuse_guards"],
+  ["071_forms_owner_tenant_guard", "066_oauth_state_workspace_user_guard"],
+  ["072_form_submission_atomicity", [
+    "070_funnel_submission_idempotency_recovery",
+    "071_forms_owner_tenant_guard",
+  ]],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
+
+function requiredMigrationVersions(version) {
+  const required = migrationDependencies.get(version);
+  if (!required) return [];
+  return Array.isArray(required) ? required : [required];
+}
 
 function fail(message) {
   console.error(`[ERROR] ${message}`);
@@ -452,8 +467,9 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
     });
   }
 
-  for (const [version, requiredVersion] of migrationDependencies) {
-    if (appliedVersions.has(version) && !appliedVersions.has(requiredVersion)) {
+  for (const [version] of migrationDependencies) {
+    for (const requiredVersion of requiredMigrationVersions(version)) {
+      if (!appliedVersions.has(version) || appliedVersions.has(requiredVersion)) continue;
       throw new Error(
         `Invalid migration ledger: ${version} is applied without required predecessor ${requiredVersion}`,
       );
@@ -505,10 +521,11 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
         `Refusing manual cutover migration ${migration.version}: repeat with both --only and --allow-manual-cutover after its documented gates pass`,
       );
     }
-    const requiredMigration = migrationDependencies.get(migration.version);
-    if (requiredMigration && !appliedVersions.has(requiredMigration)) {
+    const missingRequiredMigrations = requiredMigrationVersions(migration.version)
+      .filter((requiredMigration) => !appliedVersions.has(requiredMigration));
+    if (missingRequiredMigrations.length) {
       throw new Error(
-        `Refusing migration ${migration.version}: required predecessor ${requiredMigration} is not checksummed in the ledger`,
+        `Refusing migration ${migration.version}: required predecessor ${missingRequiredMigrations.join(", ")} is not checksummed in the ledger`,
       );
     }
     return appliedVersions.has(migration.version) ? [] : [migration];

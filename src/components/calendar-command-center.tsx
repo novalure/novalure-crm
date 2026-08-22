@@ -168,7 +168,7 @@ type EmailDraftPreview = {
 
 type MeetingSettingsSaveStatus = "idle" | "loading" | "saving" | "saved" | "error";
 
-type MeetingNotificationStatus = "idle" | "sending" | "queued" | "sent" | "error";
+type MeetingNotificationStatus = "idle" | "sending" | "sent" | "error";
 
 type NewCalendarEventDraft = {
   contactId: string;
@@ -710,6 +710,31 @@ export function CalendarCommandCenter({
   workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
+  const qaTestCopy = language === "de"
+    ? {
+        apiUnavailable: "Der externe QA-Testversand ist derzeit nicht erreichbar.",
+        button: "Externe Testmail senden",
+        error: "Die externe Testmail wurde nicht bestätigt. Es wird kein Versand-Erfolg angezeigt.",
+        label: "Freigegebene QA-Testadresse",
+        notice: "Dies ist ein echter externer Versand über Resend. Die Adresse muss in NOVALURE_QA_EMAIL_ALLOWLIST stehen; CRM-Kontakte werden nie automatisch verwendet.",
+        placeholder: "qa@ihre-domain.tld",
+        recipientRequired: "Geben Sie eine ausdrücklich freigegebene QA-Testadresse ein.",
+        sending: "Externe Testsendung über Resend wird ausgeführt …",
+        sendingButton: "Externe Testmail wird gesendet …",
+        sent: (recipient: string) => `Resend hat die externe Testmail an ${recipient} bestätigt.`,
+      }
+    : {
+        apiUnavailable: "External QA email testing is currently unavailable.",
+        button: "Send external test email",
+        error: "The external test email was not confirmed. No delivery success is being shown.",
+        label: "Approved QA test address",
+        notice: "This triggers a real external send through Resend. The address must be listed in NOVALURE_QA_EMAIL_ALLOWLIST; CRM contacts are never selected automatically.",
+        placeholder: "qa@your-domain.example",
+        recipientRequired: "Enter an explicitly approved QA test address.",
+        sending: "Sending an external test email through Resend …",
+        sendingButton: "Sending external test email …",
+        sent: (recipient: string) => `Resend confirmed the external test email to ${recipient}.`,
+      };
   const locale = getLocale(language);
   const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
   const assignableUsers = useMemo(
@@ -787,6 +812,7 @@ export function CalendarCommandCenter({
     useState<MeetingSettingsSaveStatus>("idle");
   const [meetingNotificationStatus, setMeetingNotificationStatus] =
     useState<MeetingNotificationStatus>("idle");
+  const [meetingTestRecipient, setMeetingTestRecipient] = useState("");
   const [meetingStatusMessage, setMeetingStatusMessage] = useState("");
   const [meetingBookingOverview, setMeetingBookingOverview] =
     useState<MeetingBookingOverviewPayload>(emptyMeetingBookingOverview);
@@ -1325,22 +1351,21 @@ export function CalendarCommandCenter({
   };
 
   const sendMeetingTestNotification = async () => {
-    const to = selectedEvent?.contact?.email ?? users[0]?.email ?? "";
+    const to = meetingTestRecipient.trim();
 
     if (!to) {
       setMeetingNotificationStatus("error");
-      setMeetingStatusMessage(text.messages.noTestEmail);
+      setMeetingStatusMessage(qaTestCopy.recipientRequired);
       return;
     }
 
     setMeetingNotificationStatus("sending");
-    setMeetingStatusMessage(text.messages.preparingTestMail(to));
+    setMeetingStatusMessage(qaTestCopy.sending);
 
     try {
       const response = await csrfFetch("/api/meetings/notifications", {
         body: JSON.stringify({
           body: previewDraft.body,
-          idempotencyKey: `meeting:${bookingSlug}:${automationStep}:${previewDraft.subject}:${to}`,
           kind: automationStep === "reminders" ? "reminder" : "confirmation",
           subject: previewDraft.subject,
           title: previewDraft.title,
@@ -1351,25 +1376,23 @@ export function CalendarCommandCenter({
         method: "POST",
       });
       const result = (await response.json().catch(() => ({}))) as {
+        external?: boolean;
+        recipient?: string;
         send?: { status?: string | null };
       };
       const status = result.send?.status;
 
-      if (!response.ok || status === "failed") {
+      if (!response.ok || result.external !== true || status !== "sent") {
         setMeetingNotificationStatus("error");
-        setMeetingStatusMessage(text.messages.testMailError);
+        setMeetingStatusMessage(qaTestCopy.error);
         return;
       }
 
-      setMeetingNotificationStatus(status === "sent" ? "sent" : "queued");
-      setMeetingStatusMessage(
-        status === "sent"
-          ? text.messages.testMailSent(to)
-          : text.messages.testMailQueued,
-      );
+      setMeetingNotificationStatus("sent");
+      setMeetingStatusMessage(qaTestCopy.sent(result.recipient ?? "***"));
     } catch {
       setMeetingNotificationStatus("error");
-      setMeetingStatusMessage(text.messages.testMailApiUnavailable);
+      setMeetingStatusMessage(qaTestCopy.apiUnavailable);
     }
   };
 
@@ -1699,11 +1722,11 @@ export function CalendarCommandCenter({
               </a>
               <button
                 className="rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={meetingNotificationStatus === "sending"}
+                disabled={meetingNotificationStatus === "sending" || !meetingTestRecipient.trim()}
                 onClick={sendMeetingTestNotification}
                 type="button"
               >
-                {meetingNotificationStatus === "sending" ? text.builder.sendingTest : text.builder.sendTest}
+                {meetingNotificationStatus === "sending" ? qaTestCopy.sendingButton : qaTestCopy.button}
               </button>
               <button
                 className="rounded-md bg-blue-500 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-blue-300"
@@ -1714,6 +1737,27 @@ export function CalendarCommandCenter({
                 {meetingSettingsStatus === "saving" ? text.builder.saving : text.builder.save}
               </button>
             </div>
+          </div>
+          <div
+            className="mt-3 grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 lg:grid-cols-[minmax(240px,360px)_1fr] lg:items-end"
+            data-external-email-test="true"
+          >
+            <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-amber-950">
+              {qaTestCopy.label}
+              <input
+                autoComplete="off"
+                className="rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-950"
+                onChange={(event) => {
+                  setMeetingTestRecipient(event.target.value);
+                  setMeetingNotificationStatus("idle");
+                  setMeetingStatusMessage("");
+                }}
+                placeholder={qaTestCopy.placeholder}
+                type="email"
+                value={meetingTestRecipient}
+              />
+            </label>
+            <p className="text-xs leading-5 text-amber-950">{qaTestCopy.notice}</p>
           </div>
           {meetingStatusMessage ? (
             <p

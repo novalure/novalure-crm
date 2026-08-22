@@ -6,6 +6,8 @@ export type EmbeddingResult = {
   reason?: string;
 };
 
+const EMBEDDING_PROVIDER_TIMEOUT_MS = 10_000;
+
 function normalizeBaseUrl(value: string) {
   return value.replace(/\/$/, "");
 }
@@ -84,6 +86,7 @@ export async function embedText(text: string): Promise<EmbeddingResult> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ model: config.model, input: text }),
+      signal: AbortSignal.timeout(EMBEDDING_PROVIDER_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -118,7 +121,10 @@ export async function embedText(text: string): Promise<EmbeddingResult> {
       model: "deterministic-local-1536",
       provider: "deterministic-local",
       external: false,
-      reason: error instanceof Error ? error.message : "Embedding provider request failed",
+      reason:
+        error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")
+          ? "Embedding provider timed out"
+          : "Embedding provider request failed",
     };
   }
 }

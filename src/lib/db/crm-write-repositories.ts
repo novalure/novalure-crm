@@ -2573,7 +2573,6 @@ export async function upsertFunnelDraft(input: {
     gtmId: cleanString(input.funnel.gtmId),
     legacyId: isUuid(input.funnel.id) ? undefined : input.funnel.id,
     metaPixelId: cleanString(input.funnel.metaPixelId),
-    webhookUrl: cleanString(input.funnel.webhookUrl),
   };
   const row = existingId
     ? await queryOne<FunnelRow>(
@@ -2591,7 +2590,7 @@ export async function upsertFunnelDraft(input: {
             leads_count = $11,
             conversion_rate = $12,
             blueprint = $13::jsonb,
-            tracking = tracking || $14::jsonb,
+            tracking = (tracking - 'webhookUrl') || $14::jsonb,
             updated_at = now()
           where id = $1 and workspace_id = $2
           returning

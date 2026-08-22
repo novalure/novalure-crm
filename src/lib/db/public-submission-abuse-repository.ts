@@ -2,12 +2,15 @@ import "server-only";
 
 import { queryOne } from "@/lib/db/client";
 import {
+  createPublicSubmissionOpaqueHash,
   parsePublicSubmissionResponseSnapshot,
+  publicSubmissionActions,
   type PublicSubmissionResponseSnapshot,
 } from "@/lib/security/public-submission-abuse";
 
 type IdempotencyClaimRow = {
   claimState: "claimed" | "conflict" | "processing" | "replay";
+  leaseVersion: number | string;
   responsePayload: unknown;
 };
 
@@ -18,18 +21,38 @@ type RateLimitRow = {
 const sha256Pattern = /^[a-f0-9]{64}$/u;
 
 export type PublicSubmissionIdempotencyClaim =
-  | { state: "claimed" }
+  | { leaseVersion: number; state: "claimed" }
   | { state: "conflict" }
-  | { state: "processing" }
+  | { leaseVersion: number; state: "processing" }
   | { response: PublicSubmissionResponseSnapshot; state: "replay" };
 
 export async function claimPublicSubmissionIdempotency(input: {
   actionHash: string;
+  allowLeaseReclaim?: boolean;
   idempotencyHash: string;
   requestHash: string;
   scopeHash: string;
 }): Promise<PublicSubmissionIdempotencyClaim> {
-  assertSha256Hashes(input);
+  assertSha256Hashes({
+    actionHash: input.actionHash,
+    idempotencyHash: input.idempotencyHash,
+    requestHash: input.requestHash,
+    scopeHash: input.scopeHash,
+  });
+  const allowLeaseReclaim = input.allowLeaseReclaim === true;
+  const reclaimActionHashes = new Set([
+    createPublicSubmissionOpaqueHash({
+      label: "idempotency-action",
+      value: publicSubmissionActions.form,
+    }),
+    createPublicSubmissionOpaqueHash({
+      label: "idempotency-action",
+      value: publicSubmissionActions.funnel,
+    }),
+  ]);
+  if (allowLeaseReclaim && !reclaimActionHashes.has(input.actionHash)) {
+    throw new Error("Public submission lease reclaim is not enabled for this action");
+  }
 
   const row = await queryOne<IdempotencyClaimRow>(
     `
@@ -42,14 +65,45 @@ export async function claimPublicSubmissionIdempotency(input: {
           state,
           expires_at
         )
-        values ($1, $2, $3, $4, 'processing', now() + interval '24 hours')
+        values (
+          $1,
+          $2,
+          $3,
+          $4,
+          'processing',
+          now() + case
+            when $5::boolean then interval '2 minutes'
+            else interval '24 hours'
+          end
+        )
         on conflict (idempotency_hash) do nothing
-        returning idempotency_hash
+        returning idempotency_hash, lease_version
+      ), reclaimed as (
+        update public_submission_idempotency existing
+        set
+          expires_at = now() + interval '2 minutes',
+          lease_version = existing.lease_version + 1
+        where existing.idempotency_hash = $1
+          and $5::boolean
+          and existing.action_hash = $2
+          and existing.scope_hash = $3
+          and existing.request_hash = $4
+          and existing.state = 'processing'
+          and existing.expires_at <= now()
+          and not exists (select 1 from inserted)
+        returning existing.idempotency_hash, existing.lease_version
       )
       select
         'claimed'::text as "claimState",
+        inserted.lease_version as "leaseVersion",
         null::jsonb as "responsePayload"
       from inserted
+      union all
+      select
+        'claimed'::text as "claimState",
+        reclaimed.lease_version as "leaseVersion",
+        null::jsonb as "responsePayload"
+      from reclaimed
       union all
       select
         case
@@ -61,13 +115,15 @@ export async function claimPublicSubmissionIdempotency(input: {
             then 'replay'
           else 'processing'
         end as "claimState",
+        existing.lease_version as "leaseVersion",
         existing.response_payload as "responsePayload"
       from public_submission_idempotency existing
       where existing.idempotency_hash = $1
         and not exists (select 1 from inserted)
+        and not exists (select 1 from reclaimed)
       limit 1
     `,
-    [input.idempotencyHash, input.actionHash, input.scopeHash, input.requestHash],
+    [input.idempotencyHash, input.actionHash, input.scopeHash, input.requestHash, allowLeaseReclaim],
   );
 
   if (!row) throw new Error("Public submission idempotency claim failed closed");
@@ -77,12 +133,17 @@ export async function claimPublicSubmissionIdempotency(input: {
     return { response, state: "replay" };
   }
   if (row.claimState === "conflict") return { state: "conflict" };
-  if (row.claimState === "processing") return { state: "processing" };
-  return { state: "claimed" };
+  const leaseVersion = Number(row.leaseVersion);
+  if (!Number.isSafeInteger(leaseVersion) || leaseVersion < 1) {
+    throw new Error("Public submission idempotency lease is invalid");
+  }
+  if (row.claimState === "processing") return { leaseVersion, state: "processing" };
+  return { leaseVersion, state: "claimed" };
 }
 
 export async function completePublicSubmissionIdempotency(input: {
   idempotencyHash: string;
+  leaseVersion: number;
   requestHash: string;
   response: PublicSubmissionResponseSnapshot;
 }) {
@@ -92,6 +153,9 @@ export async function completePublicSubmissionIdempotency(input: {
   });
   const response = parsePublicSubmissionResponseSnapshot(input.response);
   if (!response) throw new Error("Public submission response cannot be persisted");
+  if (!Number.isSafeInteger(input.leaseVersion) || input.leaseVersion < 1) {
+    throw new Error("Public submission idempotency lease is invalid");
+  }
 
   const row = await queryOne<{ idempotencyHash: string }>(
     `
@@ -99,13 +163,15 @@ export async function completePublicSubmissionIdempotency(input: {
       set
         state = 'completed',
         response_payload = $3::jsonb,
-        completed_at = now()
+        completed_at = now(),
+        expires_at = greatest(expires_at, now() + interval '24 hours')
       where idempotency_hash = $1
         and request_hash = $2
         and state = 'processing'
+        and lease_version = $4::bigint
       returning idempotency_hash as "idempotencyHash"
     `,
-    [input.idempotencyHash, input.requestHash, JSON.stringify(response)],
+    [input.idempotencyHash, input.requestHash, JSON.stringify(response), input.leaseVersion],
   );
 
   if (!row) throw new Error("Public submission idempotency completion failed closed");

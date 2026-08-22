@@ -1,18 +1,66 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
-import { evaluateOutboundConsent } from "@/lib/db/consent-policy";
-import { insertNewsletterSend, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { hasDatabaseUrl } from "@/lib/db/client";
+import { insertNewsletterSend, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 
 type NotificationInput = {
   body?: string;
-  idempotencyKey?: string;
   kind?: "confirmation" | "reminder" | "follow_up";
   subject?: string;
   title?: string;
   to?: string;
   tokens?: Record<string, string>;
 };
+
+const EMAIL_PATTERN = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
+const MAX_BODY_LENGTH = 20_000;
+const MAX_QA_RECIPIENTS = 20;
+const MAX_SUBJECT_LENGTH = 200;
+const QA_IDEMPOTENCY_WINDOW_MS = 10 * 60_000;
+
+function normalizeEmail(value: unknown) {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return EMAIL_PATTERN.test(email) && email.length <= 254 ? email : "";
+}
+
+function getQaEmailAllowlist() {
+  const raw = String(process.env.NOVALURE_QA_EMAIL_ALLOWLIST ?? "").trim();
+  if (!raw) return null;
+
+  const entries = raw.split(/[\s,;]+/).filter(Boolean);
+  if (!entries.length || entries.length > MAX_QA_RECIPIENTS) return null;
+
+  const normalized = entries.map(normalizeEmail);
+  if (normalized.some((email) => !email)) return null;
+
+  return new Set(normalized);
+}
+
+function maskEmail(email: string) {
+  const [local, domain] = email.split("@");
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+function recipientHash(workspaceId: string, email: string) {
+  return createHash("sha256").update(`${workspaceId}:${email}`).digest("hex");
+}
+
+function buildQaIdempotencyKey(input: {
+  body: string;
+  kind: string;
+  recipient: string;
+  subject: string;
+  workspaceId: string;
+}) {
+  const window = Math.floor(Date.now() / QA_IDEMPOTENCY_WINDOW_MS);
+  const digest = createHash("sha256")
+    .update([input.workspaceId, input.recipient, input.kind, input.subject, input.body, window].join("\u0000"))
+    .digest("hex");
+
+  return `meeting-qa-test:${digest}`;
+}
 
 function resolveTokens(value: string, tokens: Record<string, string>) {
   return Object.entries(tokens).reduce(
@@ -53,77 +101,97 @@ export async function POST(request: Request) {
 
   let body: NotificationInput;
   try {
-    body = await request.json();
+    const parsed = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+    body = parsed as NotificationInput;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const to = String(body.to ?? "").trim();
-  const tokens = body.tokens ?? {};
-  const subject = resolveTokens(String(body.subject ?? "").trim(), tokens);
-  const title = resolveTokens(String(body.title ?? subject).trim(), tokens);
-  const resolvedBody = resolveTokens(String(body.body ?? "").trim(), tokens);
+  if (body.kind !== undefined && !["confirmation", "reminder", "follow_up"].includes(body.kind)) {
+    return NextResponse.json({ error: "Invalid notification kind" }, { status: 400 });
+  }
 
-  if (!to || !subject || !resolvedBody) {
+  const to = normalizeEmail(body.to);
+  const tokens = body.tokens;
+  if (
+    tokens !== undefined &&
+    (typeof tokens !== "object" || tokens === null || Array.isArray(tokens) || Object.keys(tokens).length > 30)
+  ) {
+    return NextResponse.json({ error: "Invalid notification tokens" }, { status: 400 });
+  }
+  const normalizedTokens = Object.fromEntries(
+    Object.entries(tokens ?? {}).filter(
+      ([token, replacement]) =>
+        token.length > 0 && token.length <= 100 && typeof replacement === "string" && replacement.length <= 500,
+    ),
+  );
+  if (Object.keys(normalizedTokens).length !== Object.keys(tokens ?? {}).length) {
+    return NextResponse.json({ error: "Invalid notification tokens" }, { status: 400 });
+  }
+
+  const kind = body.kind === "reminder" || body.kind === "follow_up" ? body.kind : "confirmation";
+  const subject = resolveTokens(String(body.subject ?? "").trim(), normalizedTokens);
+  const title = resolveTokens(String(body.title ?? subject).trim(), normalizedTokens);
+  const resolvedBody = resolveTokens(String(body.body ?? "").trim(), normalizedTokens);
+
+  if (
+    !to ||
+    !subject ||
+    !resolvedBody ||
+    subject.length > MAX_SUBJECT_LENGTH ||
+    title.length > MAX_SUBJECT_LENGTH ||
+    resolvedBody.length > MAX_BODY_LENGTH
+  ) {
     return NextResponse.json({ error: "Recipient, subject and body are required" }, { status: 400 });
   }
 
-  const provider = getNewsletterProviderStatus();
-  const consentDecision = await evaluateOutboundConsent({
-    channel: "E-Mail",
-    email: to,
-    metadata: {
-      kind: body.kind ?? "confirmation",
-      source: "meeting_notification",
-      subject,
-    },
-    purpose: "salesFollowUp",
-    session: auth.session,
-  });
-
-  if (!consentDecision.allowed) {
-    const sendId = await insertNewsletterSend({
-      session: auth.session,
-      provider: provider.provider,
-      providerMessageId: null,
-      toEmail: to,
-      subject,
-      status: "suppressed",
-      error: consentDecision.reason,
-      metadata: {
-        consentDecision,
-        kind: body.kind ?? "confirmation",
-        providerConfigured: provider.configured,
-        source: "meeting_notification",
-      },
-      sentAt: null,
-    });
-
-    await writeAuditLog({
-      session: auth.session,
-      action: "meeting_notification.consent_blocked",
-      entityType: "newsletter_send",
-      entityId: sendId,
-      after: { consentDecision, status: "suppressed", to },
-    });
-
-    return NextResponse.json({
-      consentDecision,
-      ok: false,
-      provider,
-      send: {
-        error: consentDecision.reason,
-        id: sendId,
-        messageId: null,
-        provider: provider.provider,
-        status: "suppressed",
-      },
-    }, { status: 409 });
+  const qaAllowlist = getQaEmailAllowlist();
+  if (!qaAllowlist) {
+    return NextResponse.json(
+      { error: "QA email allowlist is not configured", external: false, ok: false },
+      { status: 503 },
+    );
+  }
+  if (!qaAllowlist.has(to)) {
+    return NextResponse.json(
+      { error: "Recipient is not approved for external QA email", external: false, ok: false },
+      { status: 403 },
+    );
   }
 
+  const provider = getNewsletterProviderStatus();
+  if (!provider.configured || !provider.external) {
+    return NextResponse.json(
+      {
+        error: provider.reason ?? "External email provider is not ready",
+        external: false,
+        ok: false,
+        provider: { configured: provider.configured, external: provider.external, provider: provider.provider },
+        send: { error: provider.reason, messageId: null, provider: provider.provider, status: "failed" },
+      },
+      { status: 503 },
+    );
+  }
+  if (!hasDatabaseUrl() || !isUuid(auth.session.workspaceId)) {
+    return NextResponse.json(
+      { error: "Notification audit persistence is unavailable", external: false, ok: false },
+      { status: 503 },
+    );
+  }
+
+  const qaRecipientHash = recipientHash(auth.session.workspaceId, to);
   const result = await sendNewsletterEmail({
     html: textToEmailHtml({ body: resolvedBody, title }),
-    idempotencyKey: body.idempotencyKey,
+    idempotencyKey: buildQaIdempotencyKey({
+      body: resolvedBody,
+      kind,
+      recipient: to,
+      subject,
+      workspaceId: auth.session.workspaceId,
+    }),
     subject,
     to,
   });
@@ -137,10 +205,10 @@ export async function POST(request: Request) {
     status: result.status,
     error: result.error ?? null,
     metadata: {
-      consentDecision,
-      kind: body.kind ?? "confirmation",
+      kind,
       providerConfigured: provider.configured,
-      source: "meeting_notification",
+      qaRecipientHash,
+      source: "meeting_notification_qa_test",
     },
     sentAt: result.status === "sent" ? new Date().toISOString() : null,
   });
@@ -151,25 +219,30 @@ export async function POST(request: Request) {
     entityType: "newsletter_send",
     entityId: sendId,
     after: {
-      kind: body.kind ?? "confirmation",
+      external: result.status === "sent",
+      kind,
       provider: result.provider,
+      recipientHash: qaRecipientHash,
       status: result.status,
-      to,
     },
   });
 
   return NextResponse.json(
     {
-      ok: result.status !== "failed",
-      provider,
+      external: result.status === "sent",
+      ok: result.status === "sent",
+      provider: { configured: provider.configured, external: provider.external, provider: provider.provider },
+      recipient: maskEmail(to),
+      recorded: Boolean(sendId),
       send: {
         error: result.error ?? null,
+        errorCode: result.errorCode ?? null,
         id: sendId,
         messageId: result.messageId ?? null,
         provider: result.provider,
         status: result.status,
       },
     },
-    { status: result.status === "failed" ? 502 : 200 },
+    { status: result.status === "sent" ? 200 : 502 },
   );
 }

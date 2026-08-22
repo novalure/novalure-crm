@@ -11,6 +11,12 @@ import {
   consumePublicSubmissionRateLimits,
 } from "@/lib/db/public-submission-abuse-repository";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
+import {
+  normalizeBookingCorrelationId,
+  publicBookingCreationLaunchEnabled,
+  publicBookingCreationLaunchOffCode,
+  resolveBookingCorrelationId,
+} from "@/lib/meetings/booking-lifecycle";
 import { buildPublicMeetingPath } from "@/lib/public-routing";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
 import {
@@ -99,6 +105,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!publicBookingCreationLaunchEnabled) {
+    return NextResponse.json(
+      { error: publicBookingCreationLaunchOffCode, persisted: false },
+      {
+        headers: { "cache-control": "private, no-store" },
+        status: 503,
+      },
+    );
+  }
+
+  let correlationId = resolveBookingCorrelationId(request.headers.get("x-correlation-id"));
+  const respond = (response: NextResponse) => {
+    response.headers.set("x-correlation-id", correlationId);
+    return response;
+  };
   let parsed: Awaited<ReturnType<typeof readBoundedPublicSubmissionFormData>>;
   try {
     parsed = await readBoundedPublicSubmissionFormData(request, bookingSubmissionBodyLimits);
@@ -107,7 +128,7 @@ export async function POST(request: Request) {
     const reason = error instanceof PublicSubmissionRequestError
       ? error.code
       : "temporarily_unavailable";
-    return bookingFailureResponse({ reason, requestUrl: request.url });
+    return respond(bookingFailureResponse({ reason, requestUrl: request.url }));
   }
 
   const formData = parsed.formData;
@@ -122,11 +143,11 @@ export async function POST(request: Request) {
     ? await getPublicMeetingPageSettings({ slug, workspacePublicKey }).catch(() => null)
     : null;
   if (!page?.id || !page.workspaceId) {
-    return bookingFailureResponse({
+    return respond(bookingFailureResponse({
       redirectUrl,
       reason: "meeting_page_not_found",
       requestUrl: request.url,
-    });
+    }));
   }
 
   const scope = buildPublicSubmissionScope({
@@ -143,11 +164,11 @@ export async function POST(request: Request) {
       scope,
     });
     if (!proofValidation.ok) {
-      return bookingFailureResponse({
+      return respond(bookingFailureResponse({
         redirectUrl,
         reason: proofValidation.reason,
         requestUrl: request.url,
-      });
+      }));
     }
     hashes = createPublicSubmissionIdempotencyHashes({
       action: publicSubmissionActions.booking,
@@ -155,38 +176,42 @@ export async function POST(request: Request) {
       requestFingerprint: parsed.requestFingerprint,
       scope,
     });
+    correlationId =
+      normalizeBookingCorrelationId(request.headers.get("x-correlation-id")) ??
+      `booking-${hashes.idempotencyHash}`;
   } catch {
-    return bookingFailureResponse({
+    return respond(bookingFailureResponse({
       redirectUrl,
       reason: "temporarily_unavailable",
       requestUrl: request.url,
-    });
+    }));
   }
 
   let claim: Awaited<ReturnType<typeof claimPublicSubmissionIdempotency>>;
   try {
     claim = await claimPublicSubmissionIdempotency(hashes);
   } catch {
-    return unavailableResponse();
+    return respond(unavailableResponse());
   }
-  if (claim.state === "replay") return responseFromSnapshot(claim.response);
+  if (claim.state === "replay") return respond(responseFromSnapshot(claim.response));
   if (claim.state === "processing") {
-    return bookingFailureResponse({ redirectUrl, reason: "submission_in_progress", requestUrl: request.url });
+    return respond(bookingFailureResponse({ redirectUrl, reason: "submission_in_progress", requestUrl: request.url }));
   }
   if (claim.state === "conflict") {
-    return bookingFailureResponse({ redirectUrl, reason: "submission_replay_conflict", requestUrl: request.url });
+    return respond(bookingFailureResponse({ redirectUrl, reason: "submission_replay_conflict", requestUrl: request.url }));
   }
 
   const complete = async (response: PublicSubmissionResponseSnapshot) => {
     try {
       await completePublicSubmissionIdempotency({
         idempotencyHash: hashes.idempotencyHash,
+        leaseVersion: claim.leaseVersion,
         requestHash: hashes.requestHash,
         response,
       });
-      return responseFromSnapshot(response);
+      return respond(responseFromSnapshot(response));
     } catch {
-      return unavailableResponse();
+      return respond(unavailableResponse());
     }
   };
 
@@ -227,6 +252,7 @@ export async function POST(request: Request) {
   try {
     const result = await createMeetingBookingWithNotifications({
       calendarProvider: resolveCalendarProvider(formData),
+      correlationId,
       contactEmail: getFormValue(formData, "email"),
       contactName: getFormValue(formData, "name"),
       contactNote: getFormValue(formData, "note"),
@@ -269,7 +295,12 @@ export async function POST(request: Request) {
 }
 
 function normalizeBookingFailureReason(reason?: string) {
-  if (reason === "slot_unavailable" || reason === "calendar_sync_failed") return reason;
+  if (
+    reason === "slot_unavailable" ||
+    reason === "calendar_sync_failed" ||
+    reason === "calendar_provider_unavailable" ||
+    reason === "action_recovery_required"
+  ) return reason;
   if (reason === "meeting_page_ambiguous" || reason === "meeting_page_not_found") return reason;
   return "temporarily_unavailable";
 }

@@ -99,6 +99,13 @@ export function resolvePublicLanguage(input: Parameters<typeof resolvePublicSite
 }
 
 export function withPublicLanguage(href: string, language: PublicLanguageCode) {
-  const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}lang=${language}`;
+  const hashIndex = href.indexOf("#");
+  const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
+  const hrefWithoutHash = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+  const queryIndex = hrefWithoutHash.indexOf("?");
+  const path = queryIndex >= 0 ? hrefWithoutHash.slice(0, queryIndex) : hrefWithoutHash;
+  const query = queryIndex >= 0 ? hrefWithoutHash.slice(queryIndex + 1) : "";
+  const searchParams = new URLSearchParams(query);
+  searchParams.set("lang", language);
+  return `${path}?${searchParams.toString()}${hash}`;
 }

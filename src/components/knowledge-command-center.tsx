@@ -16,7 +16,6 @@ type PreparedKnowledgeSource = {
   status: "Import bereit" | "Review offen" | "Vector bereit";
   chunks: number;
   embeddedChunks: number;
-  gaps: number;
 };
 
 type PersistedKnowledgeSource = {
@@ -43,43 +42,35 @@ function buildImportTypes(text: KnowledgeCommandCenterText): Array<{
   }));
 }
 
-function parseCoverage(value: string) {
-  return Number(value.replace("%", "")) || 0;
-}
-
-function estimateChunks(value: string) {
-  return Math.max(1, Math.ceil(value.length / 700));
-}
-
-function statusForApproval(approval: PreparedKnowledgeSource["approval"]) {
-  if (approval === "Freigegeben") return "Vector bereit";
-  if (approval === "Nur intern") return "Import bereit";
-  return "Review offen";
+function normalizeSourceType(value: string): KnowledgeImportType {
+  return value === "faq" ||
+    value === "file" ||
+    value === "url" ||
+    value === "call" ||
+    value === "social"
+    ? value
+    : "text";
 }
 
 function sourceFromPersisted(source: PersistedKnowledgeSource): PreparedKnowledgeSource {
-  const embeddedChunks = Number(source.embeddedChunkCount) || 0;
-  const chunks = Math.max(1, Number(source.chunkCount) || embeddedChunks || 1);
+  const chunks = Math.max(0, Number(source.chunkCount) || 0);
+  const embeddedChunks = Math.min(chunks, Math.max(0, Number(source.embeddedChunkCount) || 0));
   const approved = embeddedChunks > 0 || source.status === "Vector bereit" || source.status === "vector_ready";
 
   return {
     id: source.id,
-    type: source.sourceType || "text",
+    type: normalizeSourceType(source.sourceType),
     title: source.title,
     location: source.location ?? "",
     approval: approved ? "Freigegeben" : "Zu prüfen",
     status: approved ? "Vector bereit" : "Review offen",
     chunks,
     embeddedChunks,
-    gaps: approved ? 0 : 1,
   };
 }
 
 export function KnowledgeCommandCenter({
-  items,
   language,
-  projectLabel,
-  projects,
 }: {
   items: KnowledgeItem[];
   language: LanguageCode;
@@ -87,6 +78,25 @@ export function KnowledgeCommandCenter({
   projects: Project[];
 }) {
   const text = getKnowledgeCommandCenterCopy(language);
+  const stateText = language === "de"
+    ? {
+        database: "Quelle: Knowledge API / Datenbank",
+        empty: "Für diesen Workspace sind keine persistierten Wissensquellen vorhanden.",
+        importError: "Die Wissensquelle konnte nicht persistiert werden. Es wurde kein lokaler Ersatz angelegt.",
+        loading: "Wissensquellen werden aus der Datenbank geladen …",
+        loadError: "Wissensquellen konnten nicht geladen werden. Es werden keine Demo- oder Schätzwerte angezeigt.",
+        required: "Titel und Quelle beziehungsweise Inhalt sind erforderlich.",
+        retry: "Erneut laden",
+      }
+    : {
+        database: "Source: Knowledge API / database",
+        empty: "This workspace has no persisted knowledge sources.",
+        importError: "The knowledge source could not be persisted. No local replacement was created.",
+        loading: "Loading knowledge sources from the database …",
+        loadError: "Knowledge sources could not be loaded. No demo or estimated values are being shown.",
+        required: "Title and source or content are required.",
+        retry: "Retry",
+      };
   const importTypes = useMemo(() => buildImportTypes(text), [text]);
   const [selectedType, setSelectedType] = useState<KnowledgeImportType>("text");
   const [title, setTitle] = useState("");
@@ -95,66 +105,36 @@ export function KnowledgeCommandCenter({
   const [context, setContext] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [persistedSources, setPersistedSources] = useState<PreparedKnowledgeSource[]>([]);
-  const [preparedSources, setPreparedSources] = useState<PreparedKnowledgeSource[]>([
-    {
-      id: "prepared_call",
-      type: "call",
-      title: text.preparedCallTitle,
-      location: text.preparedCallLocation,
-      approval: "Zu prüfen",
-      status: "Review offen",
-      chunks: 24,
-      embeddedChunks: 0,
-      gaps: 3,
-    },
-    {
-      id: "prepared_url",
-      type: "url",
-      title: text.preparedUrlTitle,
-      location: "https://novalure.eu/projekte",
-      approval: "Freigegeben",
-      status: "Vector bereit",
-      chunks: 38,
-      embeddedChunks: 38,
-      gaps: 1,
-    },
-  ]);
-
-  const existingSources = useMemo(
-    () =>
-      items.map<PreparedKnowledgeSource>((item) => {
-        const chunks = Math.max(1, item.items * 3);
-        const approved = item.status === "approved";
-
-        return {
-          id: item.id,
-          type: item.name.toLowerCase().includes("expose") ? "file" : "faq",
-          title: item.name,
-          location: projects.find((project) => project.id === item.projectId)?.name ?? projectLabel,
-          approval: approved ? "Freigegeben" : "Zu prüfen",
-          status: approved ? "Vector bereit" : "Review offen",
-          chunks,
-          embeddedChunks: approved ? Math.round((chunks * parseCoverage(item.coverage)) / 100) : 0,
-          gaps: approved ? 0 : Math.max(1, Math.round((100 - parseCoverage(item.coverage)) / 8)),
-        };
-      }),
-    [items, projectLabel, projects],
-  );
+  const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [importError, setImportError] = useState("");
 
   useEffect(() => {
     let active = true;
 
     async function loadPersistedSources() {
+      setLoadStatus("loading");
+      setPersistedSources([]);
       try {
-        const response = await csrfFetch("/api/bots/knowledge?limit=25");
-        if (!response.ok) return;
+        const response = await csrfFetch("/api/bots/knowledge?limit=50", { cache: "no-store" });
+        if (!response.ok) throw new Error("Knowledge API unavailable");
 
-        const data = (await response.json()) as { sources?: PersistedKnowledgeSource[] };
-        if (!active || !Array.isArray(data.sources)) return;
+        const data = (await response.json()) as {
+          source?: string;
+          sources?: PersistedKnowledgeSource[];
+        };
+        if (!active) return;
+        if (data.source !== "database" || !Array.isArray(data.sources)) {
+          throw new Error("Knowledge API returned a non-database payload");
+        }
 
         setPersistedSources(data.sources.map(sourceFromPersisted));
+        setLoadStatus("ready");
       } catch {
-        // Keep the local planner usable if the live API is unavailable.
+        if (active) {
+          setPersistedSources([]);
+          setLoadStatus("error");
+        }
       }
     }
 
@@ -163,45 +143,33 @@ export function KnowledgeCommandCenter({
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadAttempt]);
 
-  const sources = useMemo(
-    () => [...persistedSources, ...preparedSources, ...existingSources],
-    [existingSources, persistedSources, preparedSources],
-  );
+  const sources = persistedSources;
   const totals = useMemo(() => {
     const chunks = sources.reduce((sum, source) => sum + source.chunks, 0);
     const embedded = sources.reduce((sum, source) => sum + source.embeddedChunks, 0);
     const reviews = sources.filter((source) => source.status === "Review offen").length;
-    const gaps = sources.reduce((sum, source) => sum + source.gaps, 0);
 
     return {
       chunks,
       embedded,
       reviews,
-      gaps,
       coverage: chunks ? Math.round((embedded / chunks) * 100) : 0,
     };
   }, [sources]);
 
   async function prepareSource() {
-    const sourceTitle = title.trim() || `${importTypes.find((item) => item.id === selectedType)?.label} ${text.fallbackSourceTitle}`;
-    const sourceContent = content.trim() || context.trim() || text.fallbackSourceContent;
-    const chunks = estimateChunks(sourceContent);
-    const status = statusForApproval(approval);
-    const fallbackSource: PreparedKnowledgeSource = {
-      id: `prepared_${new Date().getTime()}`,
-      type: selectedType,
-      title: sourceTitle,
-      location: context.trim() || sourceContent.slice(0, 90),
-      approval,
-      status,
-      chunks,
-      embeddedChunks: status === "Vector bereit" ? chunks : 0,
-      gaps: status === "Vector bereit" ? 0 : 1,
-    };
+    const sourceTitle = title.trim();
+    const sourceContent = content.trim() || context.trim();
+    if (!sourceTitle || !sourceContent) {
+      setImportError(stateText.required);
+      return;
+    }
 
+    setImportError("");
     setIsSyncing(true);
+    let persisted = false;
 
     try {
       const response = await csrfFetch("/api/bots/knowledge", {
@@ -216,51 +184,24 @@ export function KnowledgeCommandCenter({
       });
       const result = (await response.json()) as {
         sourceId?: string;
-        status?: string;
-        chunkCount?: number;
-        embeddedChunkCount?: number;
+        persisted?: boolean;
       };
 
-      if (!response.ok) {
+      if (!response.ok || result.persisted !== true || !result.sourceId) {
         throw new Error("Knowledge source import failed");
       }
-
-      const savedSource: PreparedKnowledgeSource = {
-        ...fallbackSource,
-        id: result.sourceId ?? fallbackSource.id,
-        status: result.status === "synced" ? "Vector bereit" : fallbackSource.status,
-        chunks: result.chunkCount ?? fallbackSource.chunks,
-        embeddedChunks: result.embeddedChunkCount ?? fallbackSource.embeddedChunks,
-        gaps: result.status === "synced" ? 0 : fallbackSource.gaps,
-      };
-
-      setPersistedSources((current) => [
-        savedSource,
-        ...current.filter((source) => source.id !== savedSource.id),
-      ]);
+      persisted = true;
+      setLoadAttempt((current) => current + 1);
     } catch {
-      setPreparedSources((current) => [fallbackSource, ...current]);
+      setImportError(stateText.importError);
     } finally {
       setIsSyncing(false);
-      setTitle("");
-      setContent("");
-      setContext("");
+      if (persisted) {
+        setTitle("");
+        setContent("");
+        setContext("");
+      }
     }
-  }
-
-  function simulateIndexing() {
-    setPreparedSources((current) =>
-      current.map((source) =>
-        source.approval === "Freigegeben"
-          ? {
-              ...source,
-              status: "Vector bereit",
-              embeddedChunks: source.chunks,
-              gaps: Math.max(0, source.gaps - 1),
-            }
-          : source,
-      ),
-    );
   }
 
   return (
@@ -275,13 +216,19 @@ export function KnowledgeCommandCenter({
             <p className="mt-2 max-w-4xl break-words text-sm leading-6 text-stone-600">
               {text.description}
             </p>
+            <p
+              className="mt-3 inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900"
+              data-knowledge-provenance="database"
+            >
+              {stateText.database}
+            </p>
           </div>
           <div className="grid min-w-[320px] gap-2 sm:grid-cols-4 xl:max-w-xl">
             {[
-              [text.metrics.sources, sources.length],
-              [text.metrics.chunks, totals.chunks],
-              [text.metrics.vector, `${totals.coverage}%`],
-              [text.metrics.review, totals.reviews],
+              [text.metrics.sources, loadStatus === "ready" ? sources.length : "—"],
+              [text.metrics.chunks, loadStatus === "ready" ? totals.chunks : "—"],
+              [text.metrics.vector, loadStatus === "ready" ? `${totals.coverage}%` : "—"],
+              [text.metrics.review, loadStatus === "ready" ? totals.reviews : "—"],
             ].map(([label, value]) => (
               <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
@@ -293,6 +240,34 @@ export function KnowledgeCommandCenter({
           </div>
         </div>
       </article>
+
+      {loadStatus === "loading" ? (
+        <div
+          aria-live="polite"
+          className="rounded-lg border border-stone-200 bg-white p-4 text-sm font-semibold text-stone-600"
+          data-knowledge-loading-state="true"
+          role="status"
+        >
+          {stateText.loading}
+        </div>
+      ) : null}
+
+      {loadStatus === "error" ? (
+        <div
+          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-950"
+          data-knowledge-error-state="true"
+          role="alert"
+        >
+          <p className="font-semibold">{stateText.loadError}</p>
+          <button
+            className="mt-3 rounded-md border border-red-300 bg-white px-4 py-2 font-semibold"
+            onClick={() => setLoadAttempt((current) => current + 1)}
+            type="button"
+          >
+            {stateText.retry}
+          </button>
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <article className="rounded-lg border border-stone-200 bg-white p-5">
@@ -344,6 +319,7 @@ export function KnowledgeCommandCenter({
               {text.titleLabel}
               <input
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                maxLength={160}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder={text.titlePlaceholder}
                 value={title}
@@ -353,6 +329,7 @@ export function KnowledgeCommandCenter({
               {text.sourceLabel}
               <textarea
                 className="min-h-28 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                maxLength={32_000}
                 onChange={(event) => setContent(event.target.value)}
                 placeholder={text.sourcePlaceholder}
                 value={content}
@@ -377,6 +354,7 @@ export function KnowledgeCommandCenter({
                 {text.contextLabel}
                 <input
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                  maxLength={32_000}
                   onChange={(event) => setContext(event.target.value)}
                   placeholder={text.contextPlaceholder}
                   value={context}
@@ -387,20 +365,22 @@ export function KnowledgeCommandCenter({
               <button
                 aria-busy={isSyncing}
                 className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isSyncing}
+                disabled={isSyncing || loadStatus !== "ready"}
                 onClick={prepareSource}
                 type="button"
               >
                 {text.prepare}
               </button>
-              <button
-                className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
-                onClick={simulateIndexing}
-                type="button"
-              >
-                {text.simulateIndexing}
-              </button>
             </div>
+            {importError ? (
+              <p
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-950"
+                data-knowledge-import-error="true"
+                role="alert"
+              >
+                {importError}
+              </p>
+            ) : null}
           </div>
         </article>
 
@@ -413,7 +393,7 @@ export function KnowledgeCommandCenter({
               </p>
             </div>
             <span className="rounded-md bg-white/10 px-3 py-2 text-xs font-semibold">
-              {totals.gaps} {text.knowledgeGaps}
+              {stateText.database}
             </span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-5">
@@ -446,11 +426,19 @@ export function KnowledgeCommandCenter({
             </p>
           </div>
           <span className="rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-            {totals.embedded} {text.embeddedChunks}
+            {loadStatus === "ready" ? totals.embedded : "—"} {text.embeddedChunks}
           </span>
         </div>
         <div className="mt-4 grid gap-3">
-          {sources.map((source) => (
+          {loadStatus === "ready" && sources.length === 0 ? (
+            <div
+              className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-sm font-semibold text-stone-600"
+              data-knowledge-empty-state="true"
+            >
+              {stateText.empty}
+            </div>
+          ) : null}
+          {loadStatus === "ready" ? sources.map((source) => (
             <div
               className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 lg:grid-cols-[1fr_120px_120px_120px]"
               key={source.id}
@@ -487,7 +475,7 @@ export function KnowledgeCommandCenter({
                 <p className="mt-1 text-sm font-semibold">{text.approvals[source.approval]}</p>
               </div>
             </div>
-          ))}
+          )) : null}
         </div>
       </article>
     </section>

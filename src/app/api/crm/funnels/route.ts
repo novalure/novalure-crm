@@ -41,23 +41,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing funnel" }, { status: 400 });
   }
 
+  const launchScopedFunnel = { ...funnel };
+  delete launchScopedFunnel.webhookUrl;
+
   const preflight = await runEditorPreflight({
     editorType: "funnel",
-    entityId: typeof funnel.id === "string" ? funnel.id : null,
-    payload: funnel,
-    projectId: typeof funnel.projectId === "string" ? funnel.projectId : null,
+    entityId: typeof launchScopedFunnel.id === "string" ? launchScopedFunnel.id : null,
+    payload: launchScopedFunnel,
+    projectId: typeof launchScopedFunnel.projectId === "string" ? launchScopedFunnel.projectId : null,
     session: auth.session,
   });
-  const targetStatus = typeof funnel.status === "string" ? funnel.status : "";
+  const targetStatus = typeof launchScopedFunnel.status === "string" ? launchScopedFunnel.status : "";
   if (preflight.status === "blocked" && targetStatus !== "entwurf" && targetStatus !== "draft") {
     return NextResponse.json({ error: "Funnel preflight blocked publish", preflight }, { status: 409 });
   }
 
-  const result = await upsertFunnelDraft({ funnel, session: auth.session, steps });
+  const result = await upsertFunnelDraft({ funnel: launchScopedFunnel, session: auth.session, steps });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getFunnelWriteStatus(result.reason) });
   }
 
-  return NextResponse.json({ persisted: true, preflight, ...result.data });
+  return NextResponse.json({
+    persisted: true,
+    preflight,
+    launchScope: { funnelWebhookDelivery: "off" },
+    ...result.data,
+  });
 }

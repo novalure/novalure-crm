@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { neon } from "@neondatabase/serverless";
 
 function required(name) {
@@ -82,6 +83,6 @@ export async function assertQaTarget() {
   return { databaseUrl, expectedBranchId, expectedDatabase, expectedHost, expectedProjectId, expectedRole, runPrefix };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await assertQaTarget();
 }

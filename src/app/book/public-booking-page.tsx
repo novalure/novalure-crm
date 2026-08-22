@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import {
   getPublicMeetingAvailability,
   getPublicMeetingBookingActionState,
   getPublicMeetingPageSettings,
 } from "@/lib/db/meeting-repositories";
-import { getLocale, getPublicBookingPageCopy, type LanguageCode } from "@/lib/i18n";
+import {
+  calendarCommandCenterCopy,
+  getLocale,
+  getPublicBookingPageCopy,
+  type LanguageCode,
+} from "@/lib/i18n";
+import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import {
+  publicBookingCreationLaunchEnabled,
+  publicBookingLifecycleMutationsLaunchEnabled,
+  resolveBookingCorrelationId,
+} from "@/lib/meetings/booking-lifecycle";
 import { buildPublicMeetingPath } from "@/lib/public-routing";
-import { resolvePublicLanguage } from "@/lib/public-language";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
 import {
   buildPublicSubmissionScope,
@@ -51,6 +62,46 @@ function getBookingTitle(slug: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+const germanOperationalLabelPattern =
+  /\b(?:beratung|besichtigung|bestaetigt|bestätigt|gebucht|erstgespräch|immobilie|prüfung|termin|verkauf)\b/i;
+
+function getLocalizedBookingTitle(input: {
+  configuredTitle?: string | null;
+  fallbackTitle: string;
+  language: LanguageCode;
+}) {
+  const configuredTitle = input.configuredTitle?.trim();
+  const fallbackTitle = input.fallbackTitle.trim();
+
+  if (input.language === "de") return configuredTitle || fallbackTitle;
+  if (configuredTitle && !germanOperationalLabelPattern.test(configuredTitle)) return configuredTitle;
+  if (fallbackTitle && !germanOperationalLabelPattern.test(fallbackTitle)) return fallbackTitle;
+  return getPublicBookingPageCopy(input.language).meeting;
+}
+
+function getLocalizedConfirmationTitle(
+  configuredTitle: string | undefined,
+  language: LanguageCode,
+  fallback: string,
+) {
+  const title = configuredTitle?.trim();
+  if (!title) return fallback;
+
+  for (const sourceLanguage of ["de", "en"] as const) {
+    const sourceTemplate = calendarCommandCenterCopy[sourceLanguage].meetingTemplates.find(
+      (template) => template.confirmationTitle === title,
+    );
+    if (!sourceTemplate) continue;
+
+    return calendarCommandCenterCopy[language].meetingTemplates.find(
+      (template) => template.id === sourceTemplate.id,
+    )?.confirmationTitle ?? fallback;
+  }
+
+  if (language === "en" && germanOperationalLabelPattern.test(title)) return fallback;
+  return title;
 }
 
 function getMeetingLabel(meeting: string, copy: ReturnType<typeof getPublicBookingPageCopy>) {
@@ -136,20 +187,34 @@ function buildDateHref(input: {
 export async function generatePublicBookingMetadata({
   searchParams,
   slug,
+  workspacePublicKey,
 }: BookingPageProps): Promise<Metadata> {
   const query = searchParams ? await searchParams : {};
   const requestHeaders = await headers();
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const copy = getPublicBookingPageCopy(language);
-
-  return {
+  const savedPage = await getPublicMeetingPageSettings({ slug, workspacePublicKey });
+  const fallbackTitle = getBookingTitle(slug) || copy.meeting;
+  const bookingTitle = getLocalizedBookingTitle({
+    configuredTitle: savedPage?.title,
+    fallbackTitle,
+    language,
+  });
+  const metadata = buildPublicPageMetadata({
     description: copy.metadataDescription,
-    title: copy.bookTitle(getBookingTitle(slug) || "Meeting"),
-  };
+    language,
+    path: buildPublicMeetingPath({ slug, workspacePublicKey }),
+    title: copy.bookTitle(bookingTitle),
+  });
+
+  if (!savedPage) {
+    return {
+      ...metadata,
+      robots: { follow: false, index: false },
+    };
+  }
+
+  return metadata;
 }
 
 export async function renderPublicBookingPage({
@@ -159,13 +224,10 @@ export async function renderPublicBookingPage({
 }: BookingPageProps) {
   const query = searchParams ? await searchParams : {};
   const requestHeaders = await headers();
-  const language = resolvePublicLanguage({
-    acceptLanguage: requestHeaders.get("accept-language"),
-    country: requestHeaders.get("x-vercel-ip-country"),
-    requestedLanguage: query.lang,
-  });
+  const language = resolvePublicPageLanguage(requestHeaders, query);
   const copy = getPublicBookingPageCopy(language);
   const savedPage = await getPublicMeetingPageSettings({ slug, workspacePublicKey });
+  if (!savedPage?.id || !savedPage.workspaceId) notFound();
   const savedCalendar = (savedPage?.calendarIntegrations ?? {}) as PublicMeetingCalendarConfig;
   const savedShare = (savedPage?.shareConfig ?? {}) as PublicMeetingShareConfig;
   const savedAutomation = (savedPage?.automation ?? {}) as PublicMeetingAutomation;
@@ -185,23 +247,36 @@ export async function renderPublicBookingPage({
   const token = getQueryValue(query.token);
   const cancelMode = getQueryValue(query.cancel) === "1";
   const rescheduleMode = getQueryValue(query.reschedule) === "1";
+  const creationLaunchOff =
+    !cancelMode && !rescheduleMode && !publicBookingCreationLaunchEnabled;
+  const lifecycleMutationLaunchOff =
+    (cancelMode || rescheduleMode) && !publicBookingLifecycleMutationsLaunchEnabled;
+  const publicBookingActionLaunchOff = creationLaunchOff || lifecycleMutationLaunchOff;
   const actionState =
-    bookingId && token
+    !lifecycleMutationLaunchOff && bookingId && token
       ? await getPublicMeetingBookingActionState({ bookingId, token })
       : null;
   const actionDate = actionState ? formatDateKey(actionState.startsAt) : undefined;
-  const availability = await getPublicMeetingAvailability({
-    date: requestedDate || (actionState ? actionDate : undefined),
-    slug,
-    workspacePublicKey,
-  });
+  const availability = publicBookingActionLaunchOff
+    ? null
+    : await getPublicMeetingAvailability({
+        date: requestedDate || (actionState ? actionDate : undefined),
+        locale: getLocale(language),
+        slug,
+        workspacePublicKey,
+      });
+  if (!publicBookingActionLaunchOff && !availability) notFound();
   const selectedDate = availability?.date ?? requestedDate ?? actionDate ?? new Date().toISOString().slice(0, 10);
   const selectedMonth = formatMonth(selectedDate, language, availability?.rules.timeZone);
   const availableSlots = availability?.slots.filter((slot) => slot.available) ?? [];
   const defaultSlot = availableSlots[0]?.time ?? "";
   const meetingLabel = getMeetingLabel(meeting, copy);
   const calendarLabel = getCalendarLabel(calendar, copy);
-  const bookingTitle = savedPage?.title || getBookingTitle(slug) || "Pipeline Audit";
+  const bookingTitle = getLocalizedBookingTitle({
+    configuredTitle: savedPage.title,
+    fallbackTitle: getBookingTitle(slug) || copy.meeting,
+    language,
+  });
   const pageTitle = cancelMode
     ? copy.cancelTitle(bookingTitle)
     : rescheduleMode
@@ -219,7 +294,7 @@ export async function renderPublicBookingPage({
     savedAutomation.reminderEnabled && Array.isArray(savedAutomation.reminders)
       ? savedAutomation.reminders.filter((reminder) => reminder.enabled !== false).length
       : 0;
-  const submissionProof = savedPage?.id && savedPage.workspaceId
+  const submissionProof = !publicBookingActionLaunchOff && savedPage?.id && savedPage.workspaceId
     ? createPublicSubmissionProof({
         action: publicSubmissionActions.booking,
         scope: buildPublicSubmissionScope({
@@ -229,9 +304,12 @@ export async function renderPublicBookingPage({
         }),
       })
     : null;
+  const lifecycleActionId = resolveBookingCorrelationId();
 
   return (
     <main
+      data-public-language={language}
+      lang={language}
       className={`novalure-public-runtime min-h-screen px-4 py-8 ${
         isDark ? "bg-slate-950 text-white" : "bg-slate-50 text-slate-950"
       }`}
@@ -267,7 +345,13 @@ export async function renderPublicBookingPage({
 
           {actionState ? (
             <div className="mt-6 rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-white">{actionState.title}</p>
+              <p className="font-semibold text-white">
+                {getLocalizedBookingTitle({
+                  configuredTitle: actionState.title,
+                  fallbackTitle: bookingTitle,
+                  language,
+                })}
+              </p>
               <p className="mt-1">{actionDateTime}</p>
               <p className="mt-1">{actionState.contactName}</p>
               <p className="mt-1 text-slate-300">{actionState.contactEmail}</p>
@@ -276,14 +360,31 @@ export async function renderPublicBookingPage({
         </div>
 
         <div className="grid gap-6 p-5 text-slate-950 sm:p-6 lg:p-8">
-          {cancelMode ? (
+          {publicBookingActionLaunchOff ? (
+            <div
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950"
+              data-booking-creation-launch-scope={creationLaunchOff ? "off" : undefined}
+              data-booking-lifecycle-launch-scope={lifecycleMutationLaunchOff ? "off" : undefined}
+              role="status"
+            >
+              {creationLaunchOff
+                ? copy.status.errors.public_booking_creation_launch_off
+                : copy.status.errors.public_action_launch_off}
+            </div>
+          ) : cancelMode ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {copy.selectedAppointment}
               </p>
               {actionState ? (
                 <div className="mt-3 grid gap-2 text-sm text-slate-800">
-                  <p className="text-lg font-semibold text-slate-950">{actionState.title}</p>
+                  <p className="text-lg font-semibold text-slate-950">
+                    {getLocalizedBookingTitle({
+                      configuredTitle: actionState.title,
+                      fallbackTitle: bookingTitle,
+                      language,
+                    })}
+                  </p>
                   <p>
                     <span className="font-semibold">{copy.appointment}</span> {actionDateTime}
                   </p>
@@ -348,7 +449,7 @@ export async function renderPublicBookingPage({
           </div>
           )}
 
-          {cancelMode ? (
+          {publicBookingActionLaunchOff ? null : cancelMode ? (
             <form
               action={`/api/meetings/bookings/${encodeURIComponent(bookingId)}/cancel`}
               className="rounded-xl border border-red-200 bg-red-50 p-4"
@@ -357,6 +458,7 @@ export async function renderPublicBookingPage({
               <input name="slug" type="hidden" value={slug} />
               <input name="workspace_public_key" type="hidden" value={workspacePublicKey} />
               <input name="lang" type="hidden" value={language} />
+              <input name="action_id" type="hidden" value={lifecycleActionId} />
               <input name="token" type="hidden" value={token} />
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">
                 {copy.cancel}
@@ -366,7 +468,13 @@ export async function renderPublicBookingPage({
               </h2>
               {actionState ? (
                 <div className="mt-4 rounded-lg border border-red-200 bg-white/70 p-3 text-sm text-red-950">
-                  <p className="font-semibold">{actionState.title}</p>
+                  <p className="font-semibold">
+                    {getLocalizedBookingTitle({
+                      configuredTitle: actionState.title,
+                      fallbackTitle: bookingTitle,
+                      language,
+                    })}
+                  </p>
                   <p className="mt-1">{actionDateTime}</p>
                   <p className="mt-1">{actionState.contactName}</p>
                 </div>
@@ -398,6 +506,7 @@ export async function renderPublicBookingPage({
               <input name="slug" type="hidden" value={slug} />
               <input name="workspace_public_key" type="hidden" value={workspacePublicKey} />
               <input name="lang" type="hidden" value={language} />
+              <input name="action_id" type="hidden" value={lifecycleActionId} />
               <input name="token" type="hidden" value={token} />
               <input name="selectedDate" type="hidden" value={selectedDate} />
               <div>
@@ -484,6 +593,7 @@ export async function renderPublicBookingPage({
                   >
                     Company
                     <input
+                      aria-label={language === "de" ? "Unternehmen" : "Company"}
                       autoComplete="off"
                       name={publicSubmissionControlFields.honeypot}
                       tabIndex={-1}
@@ -522,7 +632,9 @@ export async function renderPublicBookingPage({
                 </div>
                 {!defaultSlot ? (
                   <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                    {copy.noTimes}
+                    {availability?.error
+                      ? getStatusText(availability.error, copy)
+                      : copy.noTimes}
                   </p>
                 ) : null}
               </div>
@@ -592,6 +704,7 @@ export async function renderPublicBookingPage({
             </p>
           ) : null}
 
+          {!publicBookingActionLaunchOff ? (
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               {copy.afterBooking}
@@ -600,7 +713,11 @@ export async function renderPublicBookingPage({
               <span className="rounded-lg bg-slate-50 px-3 py-2">
                 {savedAutomation.confirmationEnabled === false
                   ? copy.noConfirmation
-                  : savedAutomation.confirmationTitle || copy.confirmationMail}
+                  : getLocalizedConfirmationTitle(
+                      savedAutomation.confirmationTitle,
+                      language,
+                      copy.confirmationMail,
+                    )}
               </span>
               <span className="rounded-lg bg-slate-50 px-3 py-2">
                 {activeReminderCount ? copy.reminderActive(String(activeReminderCount)) : copy.reminderOptional}
@@ -614,6 +731,7 @@ export async function renderPublicBookingPage({
               </span>
             </div>
           </div>
+          ) : null}
         </div>
       </section>
     </main>

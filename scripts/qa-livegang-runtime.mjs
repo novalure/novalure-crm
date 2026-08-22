@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 
 function loadEnv(path) {
@@ -232,7 +233,7 @@ async function testDateHandling(timestamp, projectId) {
   );
 }
 
-function buildQaForm(timestamp) {
+function buildQaForm(timestamp, ownerUserId) {
   const step = { description: "", id: "step_contact", title: "Kontakt" };
   return {
     actions: {
@@ -254,14 +255,14 @@ function buildQaForm(timestamp) {
       { crmField: "phone", id: "field_phone", label: "Telefon", placeholder: "+43", required: false, stepId: step.id, type: "phone" },
       { crmField: "message", id: "field_message", label: "Nachricht", placeholder: "Nachricht", required: true, stepId: step.id, type: "textarea" },
       { crmField: "privacy", helpText: "Datenschutz akzeptieren", id: "field_privacy", label: "Datenschutz", placeholder: "", required: true, stepId: step.id, type: "consent" },
-      { crmField: "marketing_consent", helpText: "Marketing akzeptieren", id: "field_marketing", label: "Marketing", placeholder: "", required: false, stepId: step.id, type: "consent" },
+      { crmField: "marketing_consent", helpText: "Marketing akzeptieren", id: "field_marketing", label: "Marketing", placeholder: "", required: false, stepId: step.id, type: "checkbox" },
     ],
     funnelId: "",
     id: `qa_public_form_${timestamp}`,
     lastSubmission: "",
     name: `QA Public Form ${timestamp}`,
-    ownerMode: "roundRobin",
-    ownerUserId: "",
+    ownerMode: "user",
+    ownerUserId,
     pipelineStage: "Lead Inbox",
     progressMode: "none",
     spamProtection: true,
@@ -276,16 +277,18 @@ function buildQaForm(timestamp) {
   };
 }
 
-async function testPublicForms(timestamp) {
-  const form = buildQaForm(timestamp);
+async function testPublicForms(timestamp, ownerUserId) {
+  const form = buildQaForm(timestamp, ownerUserId);
   const slug = `qa-public-form-${timestamp}`;
   const createResponse = await request("/api/forms", {
-    json: { form },
+    headers: { "Idempotency-Key": randomUUID() },
+    json: { expectedVersion: 0, form },
     method: "POST",
   });
   assert(createResponse.response.ok, "QA public form can be saved");
   createdForm = createResponse.json?.form;
   assert(createdForm?.id, "saved public form has a database id");
+  assert(Number.isInteger(createdForm?.version), "saved public form exposes its persistence version");
 
   const publicPage = await request(`/forms/${slug}`, { auth: false, redirect: "follow" });
   assert(publicPage.response.status === 200, "public form page loads without CRM cookie");
@@ -293,13 +296,13 @@ async function testPublicForms(timestamp) {
 
   const email = `qa-public-${timestamp}@example.test`;
   const validSubmit = new URLSearchParams({
-    email,
+    field_email: email,
+    field_marketing: "1",
+    field_message: "QA public form submit",
+    field_name: `QA Public Lead ${timestamp}`,
+    field_phone: `+43 677 ${String(timestamp).slice(-6)}`,
+    field_privacy: "1",
     form_slug: slug,
-    marketing_consent: "1",
-    message: "QA public form submit",
-    name: `QA Public Lead ${timestamp}`,
-    phone: `+43 677 ${String(timestamp).slice(-6)}`,
-    privacy: "1",
     return_to: `/forms/${slug}`,
     utm_source: "qa",
   });
@@ -321,10 +324,10 @@ async function testPublicForms(timestamp) {
   assert(core.tasks.some((task) => task.contactId === contact.id || task.leadId === lead.id), "public submit creates a task");
 
   const missingConsent = new URLSearchParams({
-    email: `qa-public-missing-consent-${timestamp}@example.test`,
+    field_email: `qa-public-missing-consent-${timestamp}@example.test`,
+    field_message: "Missing consent",
+    field_name: "Missing Consent",
     form_slug: slug,
-    message: "Missing consent",
-    name: "Missing Consent",
     return_to: `/forms/${slug}`,
   });
   const missingConsentPage = await request(`/forms/${slug}`, { auth: false, redirect: "follow" });
@@ -338,7 +341,7 @@ async function testPublicForms(timestamp) {
   assert(blockedConsent.response.status === 422, "public submit without privacy consent is blocked");
 
   const missingPage = await request("/forms/not-existing-livegang-form", { auth: false });
-  assert(missingPage.response.status === 200, "missing public form returns a non-submit page");
+  assert(missingPage.response.status === 404, "missing public form returns a non-indexable 404");
   assert(!missingPage.text.includes("data-novalure-runtime=\"form\""), "missing public form does not render a fake form");
   const missingSubmit = await request("/api/forms/submissions", {
     auth: false,
@@ -349,7 +352,16 @@ async function testPublicForms(timestamp) {
   assert(missingSubmit.response.status === 404, "unknown public form submit returns 404");
 
   createdForm.status = "fehler";
-  await request("/api/forms", { json: { form: createdForm }, method: "POST" });
+  const archiveResponse = await request("/api/forms", {
+    headers: { "Idempotency-Key": randomUUID() },
+    json: { expectedVersion: createdForm.version, form: createdForm },
+    method: "POST",
+  });
+  assert(
+    archiveResponse.response.ok && archiveResponse.json?.persisted === true,
+    "QA public form can be archived with a versioned idempotent write",
+  );
+  createdForm = archiveResponse.json.form;
   const archivedPage = await request(`/forms/${slug}`, { auth: false });
   assert(!archivedPage.text.includes("data-novalure-runtime=\"form\""), "archived QA form no longer renders as usable");
 }
@@ -470,10 +482,13 @@ async function main() {
   const core = await getCore();
   const projectId = core.projects?.[0]?.id;
   assert(projectId, "core exposes a project for QA");
+  const access = await request("/api/settings/access/users");
+  const ownerUserId = access.json?.users?.find((user) => user.status === "active")?.id;
+  assert(access.response.ok && ownerUserId, "QA workspace exposes an active fixed form owner");
 
   try {
     await testDateHandling(timestamp, projectId);
-    await testPublicForms(timestamp);
+    await testPublicForms(timestamp, ownerUserId);
     await testFunnelLive(timestamp, projectId);
   } finally {
     for (const contactId of createdContactIds) {

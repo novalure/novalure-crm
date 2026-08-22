@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   Contact,
   Deal,
@@ -19,6 +19,13 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import {
+  getInventoryValidationMessage,
+  parseEuroAmountToCents,
+  validateInventoryInput,
+  type InventoryValidationError,
+  type InventoryValidationField,
+} from "@/lib/inventory-validation";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 
@@ -90,7 +97,7 @@ type InventoryDraft = {
   floor: string;
   floors: string;
   name: string;
-  price: string;
+  priceEuros: string;
   projectId: string;
   rooms: string;
   unitNumber: string;
@@ -120,12 +127,16 @@ function Pill({ children, className }: { children: ReactNode; className: string 
   );
 }
 
-function parsePrice(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
+function FieldError({ id, message }: { id: string; message?: string }) {
+  return message ? (
+    <span className="text-xs font-semibold text-rose-800" id={id}>
+      {message}
+    </span>
+  ) : null;
+}
 
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
+function parsePrice(value: string) {
+  return parseEuroAmountToCents(value);
 }
 
 function parseBudgetText(value: string | undefined) {
@@ -309,13 +320,18 @@ export function UnitBoard({
     floor: "",
     floors: "",
     name: "",
-    price: "",
+    priceEuros: "",
     projectId: initialBoardProjectId !== "all" ? initialBoardProjectId : "",
     rooms: "",
     unitNumber: "",
   }));
   const [inventoryNotice, setInventoryNotice] = useState<WorkflowNotice | null>(null);
   const [inventorySaving, setInventorySaving] = useState(false);
+  const [inventoryFieldErrors, setInventoryFieldErrors] = useState<
+    Partial<Record<InventoryValidationField, string>>
+  >({});
+  const inventorySubmissionInFlight = useRef(false);
+  const inventoryOperationRef = useRef<{ fingerprint: string; id: string } | null>(null);
 
   const projectOptions = useMemo(
     () => projects,
@@ -492,6 +508,8 @@ export function UnitBoard({
     const projectId = projectFilter !== "all" ? projectFilter : "";
     const buildingId = buildings.find((building) => building.projectId === projectId)?.id ?? "";
     setInventoryNotice(null);
+    setInventoryFieldErrors({});
+    inventoryOperationRef.current = null;
     setInventoryMode(mode);
     setInventoryDraft((current) => ({
       ...current,
@@ -502,14 +520,54 @@ export function UnitBoard({
 
   function updateInventoryDraft<Key extends keyof InventoryDraft>(key: Key, value: InventoryDraft[Key]) {
     setInventoryDraft((current) => ({ ...current, [key]: value }));
+    setInventoryFieldErrors((current) => {
+      if (key === "address") return current;
+      const validationKey = key as InventoryValidationField;
+      if (!current[validationKey]) return current;
+      const next = { ...current };
+      delete next[validationKey];
+      return next;
+    });
   }
 
   async function submitInventory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canManage || !inventoryMode || !inventoryDraft.projectId) return;
+    if (!canManage || !inventoryMode || inventorySubmissionInFlight.current) return;
 
+    const validationErrors = validateInventoryInput(inventoryMode, inventoryDraft);
+    if (validationErrors.length > 0) {
+      const localizedErrors = Object.fromEntries(
+        validationErrors.map((error) => [
+          error.field,
+          getInventoryValidationMessage(error.code, language),
+        ]),
+      ) as Partial<Record<InventoryValidationField, string>>;
+      const firstError = validationErrors[0];
+      setInventoryFieldErrors(localizedErrors);
+      setInventoryNotice({
+        kind: "error",
+        message: getInventoryValidationMessage(firstError.code, language),
+      });
+      requestAnimationFrame(() => {
+        document.getElementById(`inventory-${firstError.field}`)?.focus();
+      });
+      return;
+    }
+
+    const fingerprint = JSON.stringify({ operation: inventoryMode, ...inventoryDraft });
+    if (inventoryOperationRef.current?.fingerprint !== fingerprint) {
+      const operationId = globalThis.crypto?.randomUUID?.();
+      if (!operationId) {
+        setInventoryNotice({ kind: "error", message: text.inventorySaveFailed });
+        return;
+      }
+      inventoryOperationRef.current = { fingerprint, id: operationId };
+    }
+
+    inventorySubmissionInFlight.current = true;
     setInventorySaving(true);
     setInventoryNotice(null);
+    setInventoryFieldErrors({});
 
     try {
       const response = await csrfFetch("/api/crm/units", {
@@ -517,16 +575,31 @@ export function UnitBoard({
           operation: inventoryMode,
           ...inventoryDraft,
         }),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": inventoryOperationRef.current.id,
+        },
         method: "POST",
       });
-      const data = await response.json().catch(() => ({ error: text.inventorySaveFailed }));
+      const data = await response.json().catch(() => ({ error: text.inventorySaveFailed })) as {
+        error?: string;
+        validation?: InventoryValidationError;
+      };
       if (!response.ok) {
+        if (data.validation) {
+          const message = getInventoryValidationMessage(data.validation.code, language);
+          setInventoryFieldErrors({ [data.validation.field]: message });
+          requestAnimationFrame(() => {
+            document.getElementById(`inventory-${data.validation?.field}`)?.focus();
+          });
+          throw new Error(message);
+        }
         throw new Error(typeof data.error === "string" ? data.error : text.inventorySaveFailed);
       }
 
       setInventoryNotice({ kind: "success", message: text.inventorySaved });
       setInventoryMode(null);
+      inventoryOperationRef.current = null;
       await onReservationChanged?.();
     } catch (error) {
       setInventoryNotice({
@@ -534,6 +607,7 @@ export function UnitBoard({
         message: error instanceof Error ? error.message : text.inventorySaveFailed,
       });
     } finally {
+      inventorySubmissionInFlight.current = false;
       setInventorySaving(false);
     }
   }
@@ -802,15 +876,17 @@ export function UnitBoard({
       ) : null}
 
       {inventoryNotice ? (
-        <Pill
-          className={
-            inventoryNotice.kind === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-              : "border-rose-200 bg-rose-50 text-rose-900"
-          }
-        >
-          {inventoryNotice.message}
-        </Pill>
+        <div aria-live="polite" role={inventoryNotice.kind === "error" ? "alert" : "status"}>
+          <Pill
+            className={
+              inventoryNotice.kind === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-rose-200 bg-rose-50 text-rose-900"
+            }
+          >
+            {inventoryNotice.message}
+          </Pill>
+        </div>
       ) : null}
 
       {inventoryMode && canManage ? (
@@ -818,11 +894,15 @@ export function UnitBoard({
           <h4 className="text-lg font-semibold text-slate-950">
             {inventoryMode === "building" ? text.createBuildingTitle : text.createUnitTitle}
           </h4>
-          <form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={submitInventory}>
+          <form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" noValidate onSubmit={submitInventory}>
             <label className="grid gap-1 text-sm font-semibold text-slate-800">
               {text.projectFilter}
               <select
+                aria-describedby={inventoryFieldErrors.projectId ? "inventory-projectId-error" : undefined}
+                aria-invalid={Boolean(inventoryFieldErrors.projectId) || undefined}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                id="inventory-projectId"
+                name="projectId"
                 onChange={(event) => updateInventoryDraft("projectId", event.target.value)}
                 required
                 value={inventoryDraft.projectId}
@@ -834,22 +914,30 @@ export function UnitBoard({
                   </option>
                 ))}
               </select>
+              <FieldError id="inventory-projectId-error" message={inventoryFieldErrors.projectId} />
             </label>
             {inventoryMode === "building" ? (
               <>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.buildingName}
                   <input
+                    aria-describedby={inventoryFieldErrors.name ? "inventory-name-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.name) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-name"
+                    name="name"
                     onChange={(event) => updateInventoryDraft("name", event.target.value)}
                     required
                     value={inventoryDraft.name}
                   />
+                  <FieldError id="inventory-name-error" message={inventoryFieldErrors.name} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800 xl:col-span-2">
                   {text.address}
                   <input
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-address"
+                    name="address"
                     onChange={(event) => updateInventoryDraft("address", event.target.value)}
                     value={inventoryDraft.address}
                   />
@@ -857,12 +945,17 @@ export function UnitBoard({
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.floors}
                   <input
+                    aria-describedby={inventoryFieldErrors.floors ? "inventory-floors-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.floors) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-floors"
                     min="0"
+                    name="floors"
                     onChange={(event) => updateInventoryDraft("floors", event.target.value)}
                     type="number"
                     value={inventoryDraft.floors}
                   />
+                  <FieldError id="inventory-floors-error" message={inventoryFieldErrors.floors} />
                 </label>
               </>
             ) : (
@@ -870,7 +963,11 @@ export function UnitBoard({
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.buildingFilter}
                   <select
+                    aria-describedby={inventoryFieldErrors.buildingId ? "inventory-buildingId-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.buildingId) || undefined}
                     className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-buildingId"
+                    name="buildingId"
                     onChange={(event) => updateInventoryDraft("buildingId", event.target.value)}
                     value={inventoryDraft.buildingId}
                   >
@@ -883,53 +980,82 @@ export function UnitBoard({
                         </option>
                       ))}
                   </select>
+                  <FieldError id="inventory-buildingId-error" message={inventoryFieldErrors.buildingId} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.unitNumber}
                   <input
+                    aria-describedby={inventoryFieldErrors.unitNumber ? "inventory-unitNumber-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.unitNumber) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-unitNumber"
+                    name="unitNumber"
                     onChange={(event) => updateInventoryDraft("unitNumber", event.target.value)}
                     required
                     value={inventoryDraft.unitNumber}
                   />
+                  <FieldError id="inventory-unitNumber-error" message={inventoryFieldErrors.unitNumber} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.floor}
                   <input
+                    aria-describedby={inventoryFieldErrors.floor ? "inventory-floor-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.floor) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-floor"
+                    name="floor"
                     onChange={(event) => updateInventoryDraft("floor", event.target.value)}
                     type="number"
                     value={inventoryDraft.floor}
                   />
+                  <FieldError id="inventory-floor-error" message={inventoryFieldErrors.floor} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.rooms}
                   <input
+                    aria-describedby={inventoryFieldErrors.rooms ? "inventory-rooms-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.rooms) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-rooms"
+                    name="rooms"
                     onChange={(event) => updateInventoryDraft("rooms", event.target.value)}
                     step="0.5"
                     type="number"
                     value={inventoryDraft.rooms}
                   />
+                  <FieldError id="inventory-rooms-error" message={inventoryFieldErrors.rooms} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
                   {text.area}
                   <input
+                    aria-describedby={inventoryFieldErrors.areaSqm ? "inventory-areaSqm-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.areaSqm) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
+                    id="inventory-areaSqm"
+                    name="areaSqm"
                     onChange={(event) => updateInventoryDraft("areaSqm", event.target.value)}
                     step="0.1"
                     type="number"
                     value={inventoryDraft.areaSqm}
                   />
+                  <FieldError id="inventory-areaSqm-error" message={inventoryFieldErrors.areaSqm} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold text-slate-800">
-                  {text.price}
+                  {text.priceEuros}
                   <input
+                    aria-describedby={inventoryFieldErrors.priceEuros ? "inventory-priceEuros-error" : undefined}
+                    aria-invalid={Boolean(inventoryFieldErrors.priceEuros) || undefined}
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
-                    onChange={(event) => updateInventoryDraft("price", event.target.value)}
+                    id="inventory-priceEuros"
+                    max="500000000"
+                    min="0"
+                    name="priceEuros"
+                    onChange={(event) => updateInventoryDraft("priceEuros", event.target.value)}
+                    step="0.01"
                     type="number"
-                    value={inventoryDraft.price}
+                    value={inventoryDraft.priceEuros}
                   />
+                  <FieldError id="inventory-priceEuros-error" message={inventoryFieldErrors.priceEuros} />
                 </label>
               </>
             )}

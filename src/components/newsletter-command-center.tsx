@@ -15,6 +15,8 @@ import type {
   WorkspaceUser,
 } from "@/lib/crm-types";
 import { getLocale, getNewsletterCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
+import { newsletterDeliveryLaunchEnabled } from "@/lib/newsletter-launch-scope";
+import { newsletterUnsubscribeUrlToken } from "@/lib/newsletter-unsubscribe-placeholder";
 import { MediaLibraryPicker } from "@/components/media-library-picker";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
@@ -170,8 +172,6 @@ type BlockLabelText = {
   spacerBlock: string;
   textBlock: string;
 };
-
-const newsletterUnsubscribeUrlToken = "{{NOVALURE_UNSUBSCRIBE_URL}}";
 
 function formatNumber(value: number, language: LanguageCode) {
   return new Intl.NumberFormat(getLocale(language)).format(value);
@@ -541,18 +541,7 @@ export function NewsletterCommandCenter({
   const newsletterOptIns = consents.filter(
     (consent) => consent.channel === "Newsletter" && consent.status === "Opt-in",
   );
-  const unsubscribePreviewParams = new URLSearchParams({
-    email: text.sampleRecipient,
-    lang: language,
-  });
-
-  if (selectedCampaign?.campaign.id) {
-    unsubscribePreviewParams.set("campaignId", selectedCampaign.campaign.id);
-  }
-
-  if (selectedCampaign?.campaign.workspaceId) {
-    unsubscribePreviewParams.set("workspaceId", selectedCampaign.campaign.workspaceId);
-  }
+  const unsubscribePreviewParams = new URLSearchParams({ lang: language, preview: "1" });
 
   const unsubscribePreviewHref = `/unsubscribe?${unsubscribePreviewParams.toString()}`;
   const currentSender = deliverability.find((item) => item.fromEmail === selectedDraft.fromEmail);
@@ -790,6 +779,10 @@ const liveNewsletterMessage =
       });
     }
   };
+
+  const newsletterDeliveryLaunchOffMessage = language === "de"
+    ? "Externer Newsletter-Versand ist bis zur Provider- und Outbox-Abnahme deaktiviert."
+    : "External newsletter delivery is disabled until provider and outbox acceptance is complete.";
 
   const addSnippet = (snippet: "project" | "viewing" | "seller" | "feedback") => {
     const snippets: Record<typeof snippet, NewsletterEditorBlock[]> = {
@@ -1444,18 +1437,27 @@ const liveNewsletterMessage =
               >
                 {text.sendStatus}: {liveNewsletterMessage}
               </p>
-              <button
-                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-                disabled={
-                  liveNewsletterAction.status === "running" ||
-                  !selectedCampaign ||
-                  !campaignRecipientEmails.length
-                }
-                onClick={sendSelectedNewsletterCampaign}
-                type="button"
-              >
-                {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
-              </button>
+              {newsletterDeliveryLaunchEnabled ? (
+                <button
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
+                  disabled={
+                    liveNewsletterAction.status === "running" ||
+                    !selectedCampaign ||
+                    !campaignRecipientEmails.length
+                  }
+                  onClick={sendSelectedNewsletterCampaign}
+                  type="button"
+                >
+                  {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
+                </button>
+              ) : (
+                <p
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                  data-newsletter-delivery-launch-scope="off"
+                >
+                  {newsletterDeliveryLaunchOffMessage}
+                </p>
+              )}
             </div>
           </div>
         </header>
@@ -1735,18 +1737,27 @@ const liveNewsletterMessage =
               {liveNewsletterMessage}
             </p>
           </div>
-          <button
-            className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-            disabled={
-              liveNewsletterAction.status === "running" ||
-              !selectedCampaign ||
-              !campaignRecipientEmails.length
-            }
-            onClick={sendSelectedNewsletterCampaign}
-            type="button"
-          >
-            {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
-          </button>
+          {newsletterDeliveryLaunchEnabled ? (
+            <button
+              className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
+              disabled={
+                liveNewsletterAction.status === "running" ||
+                !selectedCampaign ||
+                !campaignRecipientEmails.length
+              }
+              onClick={sendSelectedNewsletterCampaign}
+              type="button"
+            >
+              {liveNewsletterAction.status === "running" ? text.liveSendRunning : text.sendTestNewsletter}
+            </button>
+          ) : (
+            <p
+              className="max-w-sm rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+              data-newsletter-delivery-launch-scope="off"
+            >
+              {newsletterDeliveryLaunchOffMessage}
+            </p>
+          )}
         </div>
       </article>
 

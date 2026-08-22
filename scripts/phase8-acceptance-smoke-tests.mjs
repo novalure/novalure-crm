@@ -21,7 +21,7 @@ test("fallback CRM data uses relative operational dates for the critical demo fl
   assert.doesNotMatch(data, /expiresAt:\s*"2026-05/);
 });
 
-test("QA seed creates livegang data with relative persistence timing and clear demo separation", () => {
+test("QA seed is separated while the legacy root-deleting reset remains hard-disabled", () => {
   const seed = readText("scripts/qa-livegang-seed.mjs");
   const reset = readText("scripts/qa-livegang-reset.mjs");
 
@@ -32,7 +32,9 @@ test("QA seed creates livegang data with relative persistence timing and clear d
   assert.match(seed, /QA Novalure Internal Workspace/);
   assert.match(seed, /QA Bautr/);
   assert.match(seed, /QA Makler Workspace/);
-  assert.match(reset, /Delete deterministic QA Livegang workspaces\/users/);
+  assert.match(reset, /Legacy QA Livegang reset is disabled by DB-01/);
+  assert.match(reset, /POST \/api\/admin\/qa-reset/);
+  assert.doesNotMatch(reset, /@neondatabase\/serverless|delete from workspaces|delete from workspace_users/i);
 });
 
 test("all phase-level smoke tests are registered for repeatable acceptance", () => {
@@ -44,6 +46,34 @@ test("all phase-level smoke tests are registered for repeatable acceptance", () 
 
   assert.equal(typeof pkg.scripts["qa:livegang:api"], "string");
   assert.equal(typeof pkg.scripts["qa:livegang:reset"], "string");
+});
+
+test("Inventory writes have one Euro contract and persistent reset-safe replay ledgers", () => {
+  const component = readText("src/components/unit-board.tsx");
+  const route = readText("src/app/api/crm/units/route.ts");
+  const repository = readText("src/lib/db/property-inventory-repositories.ts");
+  const migration = readText("migrations/069_property_unit_idempotency.sql");
+  const schema = readText("src/lib/db/schema.ts");
+  const resetContract = readText("src/lib/qa-reset-contract.ts");
+
+  assert.match(component, /name="priceEuros"/);
+  assert.match(route, /priceEuros: input\.priceEuros/);
+  assert.match(route, /"price" in input \|\| "priceCents" in input/);
+  assert.match(repository, /parseEuroAmountToCents\(input\.priceEuros\)/);
+  assert.match(repository, /cross join property_building_idempotency operation/);
+  assert.match(repository, /insert into property_building_idempotency/);
+  assert.match(repository, /cross join property_unit_idempotency operation/);
+  assert.match(repository, /insert into property_unit_idempotency/);
+  assert.match(migration, /unique \(workspace_id, idempotency_key\)/);
+  assert.match(
+    migration,
+    /foreign key \(workspace_id, project_id, unit_id\)[\s\S]*references property_units\(workspace_id, project_id, id\)[\s\S]*on delete cascade/,
+  );
+  assert.match(migration, /create table if not exists property_building_idempotency/);
+  assert.match(schema, /"property_unit_idempotency"/);
+  assert.match(schema, /"property_building_idempotency"/);
+  assert.match(resetContract, /qaResetCascadeOwnedTables[\s\S]*"property_unit_idempotency"/);
+  assert.match(resetContract, /qaResetCascadeOwnedTables[\s\S]*"property_building_idempotency"/);
 });
 
 test("fresh-user onboarding tour has a persisted profile confirmation path", () => {

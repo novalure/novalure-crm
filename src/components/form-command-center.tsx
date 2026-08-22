@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormRuntimeClient } from "@/components/form-runtime-client";
 import type { CalendarEvent, Contact, Funnel, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
 import {
@@ -22,6 +22,7 @@ import {
   type WebsiteForm,
 } from "@/lib/form-types";
 import { getFormCommandCenterCopy, getLocale, type LanguageCode } from "@/lib/i18n";
+import { getPublicFormLaunchBlockReason, hasSupportedPublicConsentConfiguration, isMarketingConsentField, toPublicFormDto } from "@/lib/public-form-dto";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FormCommandCenterProps = {
@@ -427,101 +428,6 @@ function createTemplateParts(
   };
 }
 
-function createInitialForms(
-  users: WorkspaceUser[],
-  funnels: Funnel[],
-  copy: FormCommandCenterCopy,
-): WebsiteForm[] {
-  const ownerId = users[0]?.id ?? "";
-  const primaryFunnelId = funnels[0]?.id ?? "";
-  const consultation = createTemplateParts("consultation", copy);
-  const newsletter = createTemplateParts("newsletter", copy);
-  const support = createTemplateParts("support", copy);
-
-  const initialForms: WebsiteForm[] = [
-    {
-      actions: consultation.actions,
-      campaign: "Wohnpark Graz Launch",
-      conversionRate: 4.8,
-      crmTarget: consultation.crmTarget,
-      doubleOptIn: consultation.doubleOptIn,
-      fields: consultation.fields,
-      funnelId: primaryFunnelId,
-      id: "form_beratung_wohnpark",
-      lastSubmission: "2026-05-13T17:12:00+02:00",
-      name: "Wohnpark Graz Beratung",
-      ownerMode: "roundRobin",
-      ownerUserId: ownerId,
-      pipelineStage: "Lead Inbox",
-      progressMode: consultation.progressMode,
-      spamProtection: true,
-      status: "eingebaut",
-      steps: consultation.steps,
-      submissions: 42,
-      slug: "wohnpark-graz-beratung",
-      tags: "wohnpark, website, beratung",
-      template: consultation.template,
-      utmCapture: true,
-      variant: "embed",
-      visits: 875,
-    },
-    {
-      actions: newsletter.actions,
-      campaign: "Novalure Newsletter",
-      conversionRate: 7.2,
-      crmTarget: newsletter.crmTarget,
-      doubleOptIn: newsletter.doubleOptIn,
-      fields: newsletter.fields,
-      funnelId: funnels.find((funnel) => funnel.entryChannel === "Newsletter")?.id ?? primaryFunnelId,
-      id: "form_newsletter_optin",
-      lastSubmission: "2026-05-13T15:44:00+02:00",
-      name: "Newsletter Opt-in Website",
-      ownerMode: "user",
-      ownerUserId: ownerId,
-      pipelineStage: "Newsletter Segment",
-      progressMode: newsletter.progressMode,
-      spamProtection: true,
-      status: "aktiv",
-      steps: newsletter.steps,
-      submissions: 118,
-      slug: "newsletter-opt-in-website",
-      tags: "newsletter, optin",
-      template: newsletter.template,
-      utmCapture: true,
-      variant: "stickyBottom",
-      visits: 1638,
-    },
-    {
-      actions: support.actions,
-      campaign: "Support Anfrage",
-      conversionRate: 0,
-      crmTarget: support.crmTarget,
-      doubleOptIn: support.doubleOptIn,
-      fields: support.fields,
-      funnelId: primaryFunnelId,
-      id: "form_support_ticket",
-      lastSubmission: "",
-      name: "Support Ticket Formular",
-      ownerMode: "user",
-      ownerUserId: ownerId,
-      pipelineStage: "Support neu",
-      progressMode: support.progressMode,
-      spamProtection: false,
-      status: "entwurf",
-      steps: support.steps,
-      submissions: 0,
-      slug: "support-ticket-formular",
-      tags: "support, ticket",
-      template: support.template,
-      utmCapture: false,
-      variant: "standalone",
-      visits: 0,
-    },
-  ];
-
-  return initialForms.map((form) => ensureFormStructure(form, copy));
-}
-
 function createNewForm(
   users: WorkspaceUser[],
   funnels: Funnel[],
@@ -529,22 +435,39 @@ function createNewForm(
 ): WebsiteForm {
   const parts = createTemplateParts("consultation", copy);
   return {
-    ...createInitialForms(users, funnels, copy)[0],
     actions: parts.actions,
     campaign: copy.defaults.campaignNew,
     conversionRate: 0,
+    crmTarget: parts.crmTarget,
+    doubleOptIn: parts.doubleOptIn,
     fields: parts.fields,
+    funnelId: funnels[0]?.id ?? "",
     id: `form_new_${new Date().getTime()}`,
     lastSubmission: "",
     name: copy.defaults.newForm,
+    ownerMode: "user",
+    ownerUserId: users[0]?.id ?? "",
+    pipelineStage: "Lead Inbox",
     progressMode: parts.progressMode,
+    spamProtection: true,
     status: "entwurf",
     steps: parts.steps,
     submissions: 0,
+    slug: slugify(copy.defaults.newForm),
     tags: copy.defaults.tagsNew,
     template: parts.template,
+    utmCapture: true,
+    variant: "embed",
     visits: 0,
   };
+}
+
+function isPublicStatus(status: FormStatus) {
+  return status === "aktiv" || status === "eingebaut";
+}
+
+function isPersistedFormId(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function slugify(value: string) {
@@ -576,71 +499,110 @@ function formatPercent(value: number, language: LanguageCode) {
 }
 
 export function FormCommandCenter({
-  contacts,
   events,
   funnels,
   language,
-  leads,
   projectLabel,
-  projects,
-  tasks,
   users,
-  workspacePublicKey,
 }: FormCommandCenterProps) {
   const copy = getFormCommandCenterCopy(language);
+  const stateCopy = language === "de"
+    ? {
+        databaseError: "Formulare konnten nicht aus der Datenbank geladen werden. Es werden keine lokalen Ersatzdaten angezeigt.",
+        emptyDescription: "Die Datenbank enthält für diesen Workspace noch keine Formulare.",
+        loading: "Formulare werden aus der Datenbank geladen …",
+        localDraft: "Lokaler Entwurf – noch nicht gespeichert",
+        publicationMissing: "Keine öffentliche Freigabe: Das Formular ist nicht veröffentlicht oder nicht auflösbar.",
+        publicationReady: "Persistiert und über den öffentlichen Resolver erreichbar.",
+        publicationChecking: "Öffentliche Freigabe wird geprüft …",
+        retry: "Erneut laden",
+        saveConflict: "Speicherkonflikt: Das Formular wurde in einem anderen Tab geändert oder der öffentliche Slug ist bereits vergeben. Bitte neu laden.",
+        saveUnavailable: "Das Formular konnte nicht dauerhaft gespeichert werden. Der öffentliche Stand wurde nicht verändert; bitte erneut versuchen.",
+        unsaved: "Ungespeicherte Änderungen. Öffentliche Links verwenden weiterhin ausschließlich den zuletzt persistierten Stand.",
+      }
+    : {
+        databaseError: "Forms could not be loaded from the database. No local replacement data is being shown.",
+        emptyDescription: "The database does not contain forms for this workspace yet.",
+        loading: "Loading forms from the database …",
+        localDraft: "Local draft – not saved yet",
+        publicationMissing: "Not publicly available: the form is unpublished or cannot be resolved.",
+        publicationReady: "Persisted and available through the public resolver.",
+        publicationChecking: "Checking public availability …",
+        retry: "Retry",
+        saveConflict: "Save conflict: the form changed in another tab or the public slug is already in use. Reload before retrying.",
+        saveUnavailable: "The form could not be persisted. The public version was not changed; please retry.",
+        unsaved: "Unsaved changes. Public links continue to use only the last persisted version.",
+      };
   const variantLabels = copy.variants;
   const templateLabels = copy.templates;
   const targetLabels = copy.targets;
-  const fieldTypes = fieldTypeIds.map((id) => ({ id, label: copy.fieldTypes[id] }));
+  const fieldTypes = fieldTypeIds.map((id) => ({
+    disabled: id === "file",
+    id,
+    label: id === "file" ? `${copy.fieldTypes[id]} — ${copy.fields.fileUnavailable}` : copy.fieldTypes[id],
+  }));
   const platformInstructions = copy.platformInstructions;
-  const [forms, setForms] = useState<WebsiteForm[]>(() => createInitialForms(users, funnels, copy));
-  const [selectedFormId, setSelectedFormId] = useState("form_beratung_wohnpark");
+  const [forms, setForms] = useState<WebsiteForm[]>([]);
+  const [persistedForms, setPersistedForms] = useState<WebsiteForm[]>([]);
+  const [selectedFormId, setSelectedFormId] = useState("");
   const [activeTab, setActiveTab] = useState<FormTab>("overview");
   const [platform, setPlatform] = useState<Platform>("wordpress");
-  const [installStatus, setInstallStatus] = useState<"idle" | "detected" | "missing">("idle");
   const [submissionRows, setSubmissionRows] = useState<FormSubmissionSummary[]>([]);
-  const [persistenceSource, setPersistenceSource] = useState<"local" | "database" | "fallback">("local");
+  const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
   const [selectedFieldId, setSelectedFieldId] = useState("");
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
+  const [resolverStatus, setResolverStatus] = useState<"idle" | "checking" | "ready" | "missing">("idle");
+  const [resolverAttempt, setResolverAttempt] = useState(0);
+  const [resolvedPublicPath, setResolvedPublicPath] = useState("");
+  const saveInFlightRef = useRef(false);
+  const saveOperationRef = useRef<{ fingerprint: string; id: string } | null>(null);
   const selectedForm = forms.find((form) => form.id === selectedFormId) ?? forms[0];
+  const persistedSelectedForm = persistedForms.find((form) => form.id === selectedForm?.id);
   const selectedSteps = selectedForm?.steps?.length ? selectedForm.steps : [createContactStep()];
   const selectedFunnel = funnels.find((funnel) => funnel.id === selectedForm?.funnelId);
   const linkedMeeting = events.find((event) => event.projectId === selectedFunnel?.projectId);
-  const totalSubmissions = forms.reduce((sum, form) => sum + form.submissions, 0);
-  const totalVisits = forms.reduce((sum, form) => sum + form.visits, 0);
+  const totalSubmissions = persistedForms.reduce((sum, form) => sum + form.submissions, 0);
+  const totalVisits = persistedForms.reduce((sum, form) => sum + form.visits, 0);
   const averageConversion = totalVisits > 0 ? (totalSubmissions / totalVisits) * 100 : 0;
-  const readyForms = forms.filter((form) => form.status === "aktiv" || form.status === "eingebaut").length;
-  const relatedLeads = selectedFunnel ? leads.filter((lead) => lead.projectId === selectedFunnel.projectId) : leads.slice(0, 4);
-  const relatedTasks = selectedFunnel ? tasks.filter((task) => task.projectId === selectedFunnel.projectId) : tasks.slice(0, 3);
+  const readyForms = persistedForms.filter((form) => isPublicStatus(form.status)).length;
   const selectedSubmissionRows = selectedForm ? submissionRows.filter((row) => row.formId === selectedForm.id) : [];
   const selectedField =
     selectedForm?.fields.find((field) => field.id === selectedFieldId) ?? selectedForm?.fields[0];
   const selectedOwner = users.find((user) => user.id === selectedForm?.ownerUserId);
   const isFormEditorMode = activeTab === "builder";
+  const hasUnsavedChanges = Boolean(
+    selectedForm && (!persistedSelectedForm || JSON.stringify(selectedForm) !== JSON.stringify(persistedSelectedForm)),
+  );
   const backToFormsLabel = copy.backToForms;
   const formEditorLabel = copy.formEditor;
-  const selectedWorkspacePublicKey = selectedForm?.workspacePublicKey || workspacePublicKey || "";
-  const selectedFormSlug = selectedForm ? selectedForm.slug || slugify(selectedForm.name) : "";
-  const publicPath = selectedForm
-    ? selectedWorkspacePublicKey
-      ? `/forms/${encodeURIComponent(selectedWorkspacePublicKey)}/${encodeURIComponent(selectedFormSlug)}`
-      : `/forms/${encodeURIComponent(selectedFormSlug)}`
+  const publicationCandidate =
+    persistedSelectedForm &&
+    isPersistedFormId(persistedSelectedForm.id) &&
+    isPublicStatus(persistedSelectedForm.status) &&
+    !getPublicFormLaunchBlockReason(persistedSelectedForm) &&
+    persistedSelectedForm.workspacePublicKey?.trim() &&
+    persistedSelectedForm.slug.trim()
+      ? persistedSelectedForm
+      : null;
+  const publicationKey = publicationCandidate
+    ? `${publicationCandidate.workspacePublicKey}/${publicationCandidate.slug}`
     : "";
-  const publicFormKey =
-    selectedForm && selectedWorkspacePublicKey
-      ? `${selectedWorkspacePublicKey}/${selectedFormSlug}`
-      : selectedForm?.id || "";
-  const publicUrl =
-    selectedForm && typeof window === "undefined"
+  const publicPath = resolverStatus === "ready" ? resolvedPublicPath : "";
+  const publicFormKey = publicationKey || `preview/${selectedForm?.id ?? "draft"}`;
+  const publicUrl = publicPath
+    ? typeof window === "undefined"
       ? publicPath
-      : selectedForm
-        ? `${window.location.origin}${publicPath}`
-        : "";
-  const embedCode = selectedForm
-    ? `<script src="${typeof window === "undefined" ? "" : window.location.origin}/forms/embed?form=${selectedForm.id}&variant=${selectedForm.variant}&campaign=${encodeURIComponent(selectedForm.campaign)}"></script>`
+      : `${window.location.origin}${publicPath}`
     : "";
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicUrl)}`;
+  const embedCode = publicationCandidate && publicPath
+    ? `<script src="${typeof window === "undefined" ? "" : window.location.origin}/forms/embed?form=${encodeURIComponent(publicationKey)}&variant=${publicationCandidate.variant}&campaign=${encodeURIComponent(publicationCandidate.campaign)}"></script>`
+    : "";
+  const qrUrl = publicUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicUrl)}`
+    : "";
   const tabs: Array<{ id: FormTab; label: string }> = [
     { id: "overview", label: copy.tabs.overview },
     { id: "builder", label: copy.tabs.builder },
@@ -654,26 +616,33 @@ export function FormCommandCenter({
     let cancelled = false;
 
     async function loadPersistedForms() {
+      setLoadStatus("loading");
       try {
         const response = await csrfFetch("/api/forms", { cache: "no-store" });
         if (!response.ok) {
-          setPersistenceSource("fallback");
-          return;
+          throw new Error("Forms API unavailable");
         }
 
         const payload = (await response.json()) as FormsRuntimePayload;
         if (cancelled) return;
-
-        setSubmissionRows(payload.submissions ?? []);
-        setPersistenceSource(payload.source);
-
-        if (payload.forms.length) {
-          const normalizedForms = payload.forms.map((form) => ensureFormStructure(form, copy));
-          setForms(normalizedForms);
-          setSelectedFormId(normalizedForms[0].id);
+        if (payload.source !== "database" || !Array.isArray(payload.forms) || !Array.isArray(payload.submissions)) {
+          throw new Error("Forms API returned a non-database payload");
         }
+
+        const normalizedForms = payload.forms.map((form) => ensureFormStructure(form, copy));
+        setSubmissionRows(payload.submissions);
+        setPersistedForms(normalizedForms);
+        setForms(normalizedForms);
+        setSelectedFormId(normalizedForms[0]?.id ?? "");
+        setLoadStatus("ready");
       } catch {
-        if (!cancelled) setPersistenceSource("fallback");
+        if (!cancelled) {
+          setForms([]);
+          setPersistedForms([]);
+          setSubmissionRows([]);
+          setSelectedFormId("");
+          setLoadStatus("error");
+        }
       }
     }
 
@@ -682,7 +651,53 @@ export function FormCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [copy]);
+  }, [copy, loadAttempt]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function verifyPublicResolver() {
+      setResolvedPublicPath("");
+      if (!publicationCandidate || !publicationKey) {
+        setResolverStatus("idle");
+        return;
+      }
+
+      setResolverStatus("checking");
+      try {
+        const response = await csrfFetch(`/api/forms/resolve?form=${encodeURIComponent(publicationKey)}`, {
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as {
+          formId?: string;
+          publicPath?: string;
+          resolved?: boolean;
+        } | null;
+
+        if (
+          cancelled ||
+          !response.ok ||
+          payload?.resolved !== true ||
+          payload.formId !== publicationCandidate.id ||
+          !payload.publicPath
+        ) {
+          if (!cancelled) setResolverStatus("missing");
+          return;
+        }
+
+        setResolvedPublicPath(payload.publicPath);
+        setResolverStatus("ready");
+      } catch {
+        if (!cancelled) setResolverStatus("missing");
+      }
+    }
+
+    verifyPublicResolver();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicationCandidate, publicationKey, resolverAttempt]);
 
   useEffect(() => {
     if (!isFormEditorMode) return;
@@ -698,6 +713,7 @@ export function FormCommandCenter({
   function updateSelectedForm(patch: Partial<WebsiteForm>) {
     if (!selectedForm) return;
     setSaveStatus("idle");
+    setSaveError("");
     setForms((current) => current.map((form) => (form.id === selectedForm.id ? { ...form, ...patch } : form)));
   }
 
@@ -743,8 +759,9 @@ export function FormCommandCenter({
     setForms((current) => [form, ...current]);
     setSelectedFormId(form.id);
     setActiveTab("builder");
-    setInstallStatus("idle");
     setSaveStatus("idle");
+    setSaveError("");
+    saveOperationRef.current = null;
     setSelectedFieldId(form.fields[0]?.id ?? "");
   }
 
@@ -764,38 +781,121 @@ export function FormCommandCenter({
   }
 
   async function saveSelectedForm() {
-    if (!selectedForm) return;
+    if (!selectedForm || saveInFlightRef.current) return;
+    const fingerprint = JSON.stringify(selectedForm);
+    if (saveOperationRef.current?.fingerprint !== fingerprint) {
+      const operationId = globalThis.crypto?.randomUUID?.();
+      if (!operationId) {
+        setSaveError(stateCopy.saveUnavailable);
+        setSaveStatus("error");
+        return;
+      }
+      saveOperationRef.current = { fingerprint, id: operationId };
+    }
+
+    saveInFlightRef.current = true;
     setSaveStatus("saving");
+    setSaveError("");
 
     try {
       const response = await csrfFetch("/api/forms", {
-        body: JSON.stringify({ form: selectedForm }),
-        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expectedVersion: selectedForm.version ?? 0, form: selectedForm }),
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": saveOperationRef.current.id,
+        },
         method: "POST",
       });
+      const result = (await response.json().catch(() => null)) as {
+        code?: string;
+        form?: WebsiteForm;
+        persisted?: boolean;
+      } | null;
 
       if (!response.ok) {
+        setSaveError(result?.code === "FORM_SAVE_CONFLICT" ? stateCopy.saveConflict : stateCopy.saveUnavailable);
         setSaveStatus("error");
         return;
       }
 
-      const result = (await response.json()) as { form?: WebsiteForm; persisted?: boolean };
-      if (result.form) {
-        const normalizedForm = ensureFormStructure(result.form, copy);
-        setForms((current) => current.map((form) => (form.id === selectedForm.id ? normalizedForm : form)));
-        setSelectedFormId(normalizedForm.id);
+      if (result?.persisted !== true || !result.form || !isPersistedFormId(result.form.id)) {
+        setSaveError(stateCopy.saveUnavailable);
+        setSaveStatus("error");
+        return;
       }
-      setPersistenceSource("database");
+
+      const normalizedForm = ensureFormStructure(result.form, copy);
+      setForms((current) => current.map((form) => (form.id === selectedForm.id ? normalizedForm : form)));
+      setPersistedForms((current) => [
+        normalizedForm,
+        ...current.filter((form) => form.id !== selectedForm.id && form.id !== normalizedForm.id),
+      ]);
+      setSelectedFormId(normalizedForm.id);
+      saveOperationRef.current = null;
       setSaveStatus("saved");
     } catch {
+      setSaveError(stateCopy.saveUnavailable);
       setSaveStatus("error");
+    } finally {
+      saveInFlightRef.current = false;
     }
+  }
+
+  if (loadStatus === "loading") {
+    return (
+      <section
+        aria-live="polite"
+        className="rounded-lg border border-stone-200 bg-white p-5 text-sm font-semibold text-stone-600"
+        data-forms-loading-state="true"
+        role="status"
+      >
+        {stateCopy.loading}
+      </section>
+    );
+  }
+
+  if (loadStatus === "error") {
+    return (
+      <section
+        className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-950"
+        data-forms-error-state="true"
+        role="alert"
+      >
+        <p className="font-semibold">{stateCopy.databaseError}</p>
+        <button
+          className="mt-4 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-semibold"
+          onClick={() => setLoadAttempt((current) => current + 1)}
+          type="button"
+        >
+          {stateCopy.retry}
+        </button>
+      </section>
+    );
   }
 
   if (!selectedForm) {
     return (
-      <section className="rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
-        {copy.empty}
+      <section className="grid gap-4" data-forms-empty-state="true">
+        <article className="rounded-lg border border-stone-200 bg-white p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{projectLabel}</p>
+              <h3 className="mt-1 text-2xl font-semibold">{copy.overview.title}</h3>
+              <p className="mt-2 text-sm text-stone-600">{stateCopy.emptyDescription}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+                {copy.overview.databaseActive}
+              </span>
+              <button className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white" onClick={addForm} type="button">
+                {copy.overview.newForm}
+              </button>
+            </div>
+          </div>
+          <div className="mt-5 rounded-md border border-dashed border-stone-300 bg-stone-50 p-5 text-sm text-stone-600" role="status">
+            {copy.empty}
+          </div>
+        </article>
       </section>
     );
   }
@@ -842,14 +942,24 @@ export function FormCommandCenter({
               >
                 {copy.header.websiteInstall}
               </button>
-              <a
-                className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-                href={publicUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {copy.header.openPreview}
-              </a>
+              {publicUrl ? (
+                <a
+                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                  href={publicUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {copy.header.openPreview}
+                </a>
+              ) : (
+                <button
+                  className="rounded-md border border-stone-200 bg-stone-100 px-3 py-2 text-sm font-semibold text-stone-500"
+                  disabled
+                  type="button"
+                >
+                  {copy.header.openPreview}
+                </button>
+              )}
               <button
                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
                 disabled={saveStatus === "saving"}
@@ -864,6 +974,11 @@ export function FormCommandCenter({
               </button>
             </div>
           </div>
+          {hasUnsavedChanges ? (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950" role="status">
+              {stateCopy.unsaved}
+            </p>
+          ) : null}
         </header>
 
         <div className="grid min-h-0 flex-1 gap-3 overflow-hidden p-3 xl:grid-cols-[300px_minmax(360px,1fr)_380px]">
@@ -961,9 +1076,11 @@ export function FormCommandCenter({
             <div className="mt-5 grid grid-cols-2 gap-2">
               {fieldTypes.map((field) => (
                 <button
-                  className="rounded-md border border-stone-300 bg-white px-2 py-2 text-xs font-semibold hover:border-blue-300 hover:bg-blue-50"
+                  className="rounded-md border border-stone-300 bg-white px-2 py-2 text-xs font-semibold hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={field.disabled}
                   key={field.id}
                   onClick={() => addField(field.id)}
+                  title={field.disabled ? copy.fields.fileUnavailable : undefined}
                   type="button"
                 >
                   + {field.label}
@@ -1060,7 +1177,7 @@ export function FormCommandCenter({
                   ) : null}
                   <FormRuntimeClient
                     copy={copy.runtime}
-                    form={selectedForm}
+                    form={toPublicFormDto(selectedForm)}
                     mode="editor"
                     onFieldSelect={setSelectedFieldId}
                     previewOnly
@@ -1106,7 +1223,7 @@ export function FormCommandCenter({
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {copy.fields.type}
                   <select className="rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal" onChange={(event) => updateField(selectedField.id, { type: event.target.value as FormFieldType })} value={selectedField.type}>
-                    {fieldTypes.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}
+                    {fieldTypes.map((type) => <option disabled={type.disabled} key={type.id} value={type.id}>{type.label}</option>)}
                   </select>
                 </label>
                 {selectedField.type !== "hidden" ? (
@@ -1137,7 +1254,7 @@ export function FormCommandCenter({
                 </label>
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {selectedField.type === "hidden" ? copy.fields.hiddenValue : copy.fields.defaultValue}
-                  <input className="rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal" onChange={(event) => updateField(selectedField.id, { defaultValue: event.target.value })} value={selectedField.defaultValue} />
+                  <input className="rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal disabled:bg-stone-100" disabled={selectedField.type === "consent" || isMarketingConsentField(selectedField)} onChange={(event) => updateField(selectedField.id, { defaultValue: event.target.value })} value={selectedField.type === "consent" || isMarketingConsentField(selectedField) ? "" : selectedField.defaultValue} />
                 </label>
                 {isOptionFieldType(selectedField.type) ? (
                   <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
@@ -1163,6 +1280,9 @@ export function FormCommandCenter({
                 ) : null}
                 {selectedField.type === "file" ? (
                   <div className="grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-3">
+                    <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs font-semibold normal-case tracking-normal text-amber-950">
+                      {copy.fields.fileUnavailable}
+                    </p>
                     <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                       {copy.fields.fileAccept}
                       <input className="rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal" onChange={(event) => updateField(selectedField.id, { fileAccept: event.target.value })} value={selectedField.fileAccept} />
@@ -1184,6 +1304,9 @@ export function FormCommandCenter({
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {copy.fields.validationPattern}
                   <input className="rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal" onChange={(event) => updateField(selectedField.id, { validationPattern: event.target.value })} value={selectedField.validationPattern} />
+                  <span className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs font-semibold normal-case tracking-normal text-amber-950">
+                    {copy.fields.validationPatternUnavailable}
+                  </span>
                 </label>
                 <div className="grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-3">
                   <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
@@ -1286,12 +1409,8 @@ export function FormCommandCenter({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-md border px-3 py-2 text-xs font-semibold ${
-              persistenceSource === "database"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-amber-200 bg-amber-50 text-amber-900"
-            }`}>
-              {persistenceSource === "database" ? copy.overview.databaseActive : copy.overview.localPreview}
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+              {copy.overview.databaseActive}
             </span>
             <button
               className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
@@ -1304,7 +1423,7 @@ export function FormCommandCenter({
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           {[
-            [copy.overview.title, forms.length],
+            [copy.overview.title, persistedForms.length],
             [copy.overview.activeInstalled, readyForms],
             [copy.overview.submissions, totalSubmissions],
             [copy.overview.avgConversion, formatPercent(averageConversion, language)],
@@ -1327,6 +1446,12 @@ export function FormCommandCenter({
           </div>
           {forms.map((form) => {
             const isSelected = form.id === selectedForm.id;
+            const persistedForm = persistedForms.find((candidate) => candidate.id === form.id);
+            const displayedStatus = persistedForm?.status ?? "entwurf";
+            const displayedSubmissions = persistedForm?.submissions ?? 0;
+            const displayedConversion = persistedForm?.conversionRate ?? 0;
+            const displayedLastSubmission = persistedForm?.lastSubmission ?? "";
+            const isLocalDraft = !persistedForm;
             return (
               <button
                 aria-pressed={isSelected}
@@ -1338,7 +1463,6 @@ export function FormCommandCenter({
                 key={form.id}
                 onClick={() => {
                   setSelectedFormId(form.id);
-                  setInstallStatus("idle");
                 }}
                 type="button"
               >
@@ -1349,16 +1473,16 @@ export function FormCommandCenter({
                       {templateLabels[form.template]} · {variantLabels[form.variant]}
                     </span>
                   </span>
-                  <span className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${isSelected ? "border-white/15 bg-white/10 text-white" : statusStyles[form.status]}`}>
-                    {copy.builder.statusOptions[form.status]}
+                  <span className={`shrink-0 rounded-md border px-2 py-1 text-xs font-semibold ${isSelected ? "border-white/15 bg-white/10 text-white" : statusStyles[displayedStatus]}`}>
+                    {isLocalDraft ? stateCopy.localDraft : copy.builder.statusOptions[displayedStatus]}
                   </span>
                 </span>
                 <span className="mt-3 grid gap-2 text-xs">
                   <span className={`rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"}`}>
-                    {form.submissions} {copy.overview.submissions} · {formatPercent(form.conversionRate, language)}
+                    {displayedSubmissions} {copy.overview.submissions} · {formatPercent(displayedConversion, language)}
                   </span>
                   <span className={`rounded-md px-2 py-1 ${isSelected ? "bg-white/10 text-white" : "bg-blue-50 text-blue-900"}`}>
-                    {copy.overview.lastSubmission} {formatDateTime(form.lastSubmission, language, copy)}
+                    {copy.overview.lastSubmission} {formatDateTime(displayedLastSubmission, language, copy)}
                   </span>
                 </span>
               </button>
@@ -1379,7 +1503,7 @@ export function FormCommandCenter({
               />
               <p className="mt-1 break-words text-sm text-stone-600">
                 {targetLabels[selectedForm.crmTarget]} · {selectedForm.pipelineStage} ·{" "}
-                {selectedOwner?.name ?? copy.crm.roundRobin}
+                {selectedOwner?.name ?? copy.crm.roundRobinUnavailable}
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -1394,14 +1518,24 @@ export function FormCommandCenter({
                   </option>
                 ))}
               </select>
-              <a
-                className="rounded-md bg-slate-950 px-3 py-2 text-center text-sm font-semibold text-white"
-                href={publicUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {copy.overview.openLink}
-              </a>
+              {publicUrl ? (
+                <a
+                  className="rounded-md bg-slate-950 px-3 py-2 text-center text-sm font-semibold text-white"
+                  href={publicUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {copy.overview.openLink}
+                </a>
+              ) : (
+                <button
+                  className="rounded-md bg-stone-200 px-3 py-2 text-center text-sm font-semibold text-stone-500"
+                  disabled
+                  type="button"
+                >
+                  {copy.overview.openLink}
+                </button>
+              )}
               <button
                 className="rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white disabled:bg-blue-300"
                 disabled={saveStatus === "saving"}
@@ -1418,7 +1552,12 @@ export function FormCommandCenter({
           </div>
           {saveStatus === "error" ? (
             <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
-              {copy.overview.cannotSave}
+              {saveError || copy.overview.cannotSave}
+            </div>
+          ) : null}
+          {hasUnsavedChanges ? (
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950" role="status">
+              {stateCopy.unsaved}
             </div>
           ) : null}
 
@@ -1500,7 +1639,7 @@ export function FormCommandCenter({
                   ) : null}
                   <FormRuntimeClient
                     copy={copy.runtime}
-                    form={selectedForm}
+                    form={toPublicFormDto(selectedForm)}
                     mode="editor"
                     previewOnly
                     publicKey={publicFormKey}
@@ -1530,7 +1669,7 @@ export function FormCommandCenter({
                   <label className="grid gap-1 text-sm font-semibold">
                     {copy.crm.ownership}
                     <select className="rounded-md border border-stone-300 px-3 py-2 text-sm" onChange={(event) => updateSelectedForm({ ownerMode: event.target.value as WebsiteForm["ownerMode"] })} value={selectedForm.ownerMode}>
-                      <option value="roundRobin">{copy.crm.roundRobin}</option>
+                      <option disabled value="roundRobin">{copy.crm.roundRobinUnavailable}</option>
                       <option value="user">{copy.crm.fixedOwner}</option>
                     </select>
                   </label>
@@ -1598,38 +1737,59 @@ export function FormCommandCenter({
                     </div>
                   ))}
                 </div>
-                <button className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={() => setInstallStatus((current) => current === "detected" ? "missing" : "detected")} type="button">
+                <button
+                  className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400"
+                  disabled={!publicationCandidate || resolverStatus === "checking"}
+                  onClick={() => setResolverAttempt((current) => current + 1)}
+                  type="button"
+                >
                   {copy.embed.checkStatus}
                 </button>
-                <div className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold ${installStatus === "detected" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : installStatus === "missing" ? "border-red-200 bg-red-50 text-red-900" : "border-stone-200 bg-white text-stone-700"}`}>
-                  {installStatus === "detected"
-                    ? copy.embed.detected
-                    : installStatus === "missing"
-                      ? copy.embed.missing
-                      : copy.embed.idle}
+                <div
+                  className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold ${
+                    resolverStatus === "ready"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : resolverStatus === "missing"
+                        ? "border-red-200 bg-red-50 text-red-900"
+                        : "border-stone-200 bg-white text-stone-700"
+                  }`}
+                  data-form-resolver-status={resolverStatus}
+                  role={resolverStatus === "missing" ? "alert" : "status"}
+                >
+                  {resolverStatus === "ready"
+                    ? stateCopy.publicationReady
+                    : resolverStatus === "checking"
+                      ? stateCopy.publicationChecking
+                      : stateCopy.publicationMissing}
                 </div>
               </div>
-              <div className="grid gap-4">
-                <div className="rounded-lg border border-stone-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold">{copy.embed.embedCode}</p>
-                    <span className="rounded-md bg-stone-50 px-2 py-1 text-xs font-semibold">{variantLabels[selectedForm.variant]}</span>
-                  </div>
-                  <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-white">{embedCode}</pre>
-                </div>
-                <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+              {publicUrl ? (
+                <div className="grid gap-4" data-form-publication-controls="true">
                   <div className="rounded-lg border border-stone-200 bg-white p-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img alt={copy.embed.qrAlt} className="h-36 w-36 rounded-md border border-stone-200" src={qrUrl} />
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold">{copy.embed.embedCode}</p>
+                      <span className="rounded-md bg-stone-50 px-2 py-1 text-xs font-semibold">{variantLabels[publicationCandidate?.variant ?? selectedForm.variant]}</span>
+                    </div>
+                    <pre className="mt-3 max-h-40 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-white">{embedCode}</pre>
                   </div>
-                  <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
-                    <p className="font-semibold">{copy.embed.standaloneLink}</p>
-                    <p className="mt-2 break-all text-stone-600">{publicUrl}</p>
-                    <p className="mt-4 font-semibold">{copy.embed.hiddenFields}</p>
-                    <p className="mt-1 text-stone-600">{copy.embed.hiddenFieldList}</p>
+                  <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                    <div className="rounded-lg border border-stone-200 bg-white p-4">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img alt={copy.embed.qrAlt} className="h-36 w-36 rounded-md border border-stone-200" src={qrUrl} />
+                    </div>
+                    <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm">
+                      <p className="font-semibold">{copy.embed.standaloneLink}</p>
+                      <p className="mt-2 break-all text-stone-600">{publicUrl}</p>
+                      <p className="mt-4 font-semibold">{copy.embed.hiddenFields}</p>
+                      <p className="mt-1 text-stone-600">{copy.embed.hiddenFieldList}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-5 text-sm font-semibold text-stone-600">
+                  {stateCopy.publicationMissing}
+                </div>
+              )}
             </div>
           ) : null}
 
@@ -1672,9 +1832,14 @@ export function FormCommandCenter({
                     {copy.automation.doubleOptIn}
                   </label>
                   <label className="flex items-start gap-2 font-semibold">
-                    <input checked={selectedForm.fields.some((field) => field.type === "consent")} readOnly type="checkbox" />
+                    <input checked={hasSupportedPublicConsentConfiguration(selectedForm)} readOnly type="checkbox" />
                     {copy.automation.privacyCheckbox}
                   </label>
+                  {!hasSupportedPublicConsentConfiguration(selectedForm) ? (
+                    <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs font-semibold text-amber-950">
+                      {copy.fields.consentConfigurationUnavailable}
+                    </p>
+                  ) : null}
                   <label className="flex items-start gap-2 font-semibold">
                     <input checked={selectedForm.utmCapture} readOnly type="checkbox" />
                     {copy.automation.sourceStored}
@@ -1685,36 +1850,22 @@ export function FormCommandCenter({
           ) : null}
 
           {activeTab === "submissions" ? (
-            <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+            <div className="mt-5 grid gap-4">
               <div className="rounded-lg border border-stone-200 bg-white p-4">
                 <p className="text-sm font-semibold">{copy.submissionsPanel.latest}</p>
                 <div className="mt-3 grid gap-2">
-                  {(selectedSubmissionRows.length ? selectedSubmissionRows : relatedLeads.slice(0, 5)).map((item) => (
+                  {selectedSubmissionRows.map((item) => (
                     <div className="grid gap-2 rounded-md bg-stone-50 p-3 text-sm md:grid-cols-[minmax(0,1fr)_90px_minmax(140px,auto)]" key={item.id}>
-                      <span className="break-words font-semibold">{"contactName" in item ? item.contactName : item.intent}</span>
+                      <span className="break-words font-semibold">{item.contactName}</span>
                       <span>{copy.submissionsPanel.score} {item.score}</span>
                       <span className="break-words text-stone-600">{item.nextAction}</span>
                     </div>
                   ))}
-                  {!selectedSubmissionRows.length && !relatedLeads.length ? (
+                  {!selectedSubmissionRows.length ? (
                     <div className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
                       {copy.submissionsPanel.empty}
                     </div>
                   ) : null}
-                </div>
-              </div>
-              <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-                <p className="text-sm font-semibold">{copy.submissionsPanel.followUp}</p>
-                <div className="mt-3 grid gap-2 text-sm">
-                  <div className="rounded-md bg-white p-3">
-                    <span className="font-semibold">{copy.submissionsPanel.contacts}</span> {contacts.length}
-                  </div>
-                  <div className="rounded-md bg-white p-3">
-                    <span className="font-semibold">{copy.submissionsPanel.openTasks}</span> {relatedTasks.length}
-                  </div>
-                  <div className="rounded-md bg-white p-3">
-                    <span className="font-semibold">{copy.submissionsPanel.projects}</span> {projects.length}
-                  </div>
                 </div>
               </div>
             </div>

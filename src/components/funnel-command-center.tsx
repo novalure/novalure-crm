@@ -4,6 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { FunnelBlueprintDesigner } from "@/components/funnel-blueprint-designer";
 import { FunnelRenderer } from "@/components/funnel-renderer";
 import { buildFunnelBlueprint } from "@/lib/funnel-builder-adapter";
+import {
+  funnelMatchesView,
+  funnelMetricSemantics,
+  getFunnelLifetimeMetrics,
+  getFunnelViewCounts,
+  isExplicitFixtureDemoMode,
+  isPersistedFunnelId,
+  mergeFunnelRecordsById,
+  type FunnelCommandView as FunnelView,
+} from "@/lib/funnel-command-metrics";
+import { toPublicFunnelDto } from "@/lib/funnel-public-dto";
 import type { Funnel, FunnelStep, Lead, Project, WorkspaceUser } from "@/lib/crm-types";
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
 import {
@@ -13,7 +24,6 @@ import {
   getCrmProjectTypeLabel,
   getCrmSourceLabel,
   getCrmStatusLabel,
-  getCrmSystemTextLabel,
   getFunnelBookingProviderLabel,
   getFunnelCommandCenterCopy,
   getFunnelDestinationLabel,
@@ -35,7 +45,6 @@ type FunnelCommandCenterProps = {
   users: WorkspaceUser[];
 };
 
-type FunnelView = "all" | "active" | "optimize" | "blocked" | "bots";
 type BuilderTab =
   | "overview"
   | "editor"
@@ -138,6 +147,11 @@ type TrackingEvent = {
   ga: string;
   enabled: boolean;
 };
+type FunnelDataMode = "production" | "demo";
+type BlueprintLoadState =
+  | { status: "loading" }
+  | { status: "ready"; blueprint: FunnelBlueprint; blueprintOrigin: "persisted" | "database-draft" }
+  | { status: "missing" | "error" };
 type FunnelCommandCenterText = ReturnType<typeof getFunnelCommandCenterCopy>;
 
 const statusStyles = {
@@ -499,7 +513,6 @@ function createStep(funnel: EditableFunnel, index: number, text: FunnelCommandCe
 export function FunnelCommandCenter({
   funnels,
   language,
-  leads,
   projectLabel,
   projects,
   steps,
@@ -508,6 +521,7 @@ export function FunnelCommandCenter({
   const text = getFunnelCommandCenterCopy(language);
   const [activeView, setActiveView] = useState<FunnelView>("all");
   const [activeTab, setActiveTab] = useState<BuilderTab>("overview");
+  const [dataMode, setDataMode] = useState<FunnelDataMode>("production");
   const [searchTerm, setSearchTerm] = useState("");
   const [localFunnelIds, setLocalFunnelIds] = useState<string[]>([]);
   const [selectedFunnelId, setSelectedFunnelId] = useState(funnels[0]?.id ?? "");
@@ -536,14 +550,24 @@ export function FunnelCommandCenter({
   ]);
   const [notice, setNotice] = useState<string>(text.draftNotice);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [blueprintRefreshKey, setBlueprintRefreshKey] = useState(0);
+  const [blueprintStates, setBlueprintStates] = useState<Record<string, BlueprintLoadState>>({});
+  const baseFunnels = useMemo(
+    () => dataMode === "demo" ? funnels : funnels.filter((funnel) => isPersistedFunnelId(funnel.id)),
+    [dataMode, funnels],
+  );
+  const eligibleProjects = useMemo(
+    () => dataMode === "demo" ? projects : projects.filter((project) => isPersistedFunnelId(project.id) && isPersistedFunnelId(project.workspaceId)),
+    [dataMode, projects],
+  );
   const sourceFunnels = useMemo(
-    () => [
-      ...funnels,
-      ...localFunnelIds
+    () => mergeFunnelRecordsById(
+      baseFunnels,
+      localFunnelIds
         .map((id) => editedFunnels[id])
         .filter((funnel): funnel is EditableFunnel => Boolean(funnel)),
-    ],
-    [editedFunnels, funnels, localFunnelIds],
+    ),
+    [baseFunnels, editedFunnels, localFunnelIds],
   );
 
   const decoratedFunnels = useMemo(
@@ -564,14 +588,7 @@ export function FunnelCommandCenter({
 
   const filteredFunnels = decoratedFunnels.filter((item) => {
     const normalizedQuery = searchTerm.trim().toLowerCase();
-    const hasBotStep = item.steps.some((step) => step.botRuleId || step.type === "Bot");
-    const hasBlockedStep = item.steps.some((step) => step.status === "blockiert");
-    const matchesView =
-      activeView === "all" ||
-      (activeView === "active" && item.funnel.status === "aktiv") ||
-      (activeView === "optimize" && item.funnel.status === "optimieren") ||
-      (activeView === "blocked" && hasBlockedStep) ||
-      (activeView === "bots" && hasBotStep);
+    const matchesView = funnelMatchesView(item, activeView);
     const searchable = [
       item.funnel.name,
       item.funnel.goal,
@@ -595,7 +612,7 @@ export function FunnelCommandCenter({
     decoratedFunnels[0];
   const selectedSteps = selected ? editedSteps[selected.funnel.id] ?? [] : [];
   const selectedStep = selectedSteps.find((step) => step.id === selectedStepId) ?? selectedSteps[0];
-  const selectedBlueprint = selected
+  const editableBlueprint = selected
     ? buildFunnelBlueprint({
         funnel: selected.funnel,
         owner: selected.owner,
@@ -603,16 +620,30 @@ export function FunnelCommandCenter({
         steps: selectedSteps,
       })
     : null;
-  const selectedPreviewUrl = selectedBlueprint
+  const selectedBlueprintState = selected ? blueprintStates[selected.funnel.id] : undefined;
+  const selectedBlueprintOrigin = !selected
+    ? "missing"
+    : dataMode === "demo"
+      ? "demo"
+      : isPersistedFunnelId(selected.funnel.id)
+        ? selectedBlueprintState?.status === "ready"
+          ? "database"
+          : selectedBlueprintState?.status ?? "loading"
+        : "draft";
+  const selectedBlueprint = selectedBlueprintOrigin === "database" && selectedBlueprintState?.status === "ready"
+    ? selectedBlueprintState.blueprint
+    : selectedBlueprintOrigin === "demo" || selectedBlueprintOrigin === "draft"
+      ? editableBlueprint
+      : null;
+  const selectedPreviewUrl = selectedBlueprint && selectedBlueprintOrigin === "database"
     ? `/preview/${selectedBlueprint.id}?device=mobile&mode=test&lang=${language}&token=local`
     : "";
   const selectedReadiness = selectedBlueprint && selected ? getFunnelLiveReadiness(selectedBlueprint, selected.funnel) : null;
-  const totalVisits = decoratedFunnels.reduce((sum, item) => sum + item.funnel.visits, 0);
-  const totalLeads = decoratedFunnels.reduce((sum, item) => sum + item.funnel.leads, 0);
-  const avgConversion = totalVisits > 0 ? (totalLeads / totalVisits) * 100 : 0;
-  const blockedSteps = decoratedFunnels.flatMap((item) => item.steps).filter((step) => step.status === "blockiert");
-  const botSteps = decoratedFunnels.flatMap((item) => item.steps).filter((step) => step.botRuleId || step.type === "Bot");
-  const relatedLeads = selected ? leads.filter((lead) => lead.projectId === selected.funnel.projectId) : leads;
+  const selectedConversion = selected && selected.funnel.visits > 0
+    ? (selected.funnel.leads / selected.funnel.visits) * 100
+    : 0;
+  const lifetimeMetrics = getFunnelLifetimeMetrics(decoratedFunnels);
+  const viewCounts = getFunnelViewCounts(decoratedFunnels);
   const tabs: Array<{ id: BuilderTab; label: string }> = [
     { id: "overview", label: text.tabs.overview },
     { id: "editor", label: text.tabs.editor },
@@ -629,18 +660,93 @@ export function FunnelCommandCenter({
     { id: "preview", label: text.tabs.preview },
   ];
   const customerTabIds: BuilderTab[] = ["overview", "editor", "design", "steps", "logic", "handover", "preview"];
-  const primaryTabs = tabs.filter((tab) => customerTabIds.includes(tab.id));
+  const primaryTabs = tabs.filter((tab) => customerTabIds.includes(tab.id) && (dataMode !== "demo" || tab.id !== "design"));
   const advancedTabs = tabs.filter((tab) => !customerTabIds.includes(tab.id));
   const isDesignerMode = activeTab === "design";
+  const isImmersiveDesigner = isDesignerMode && selectedBlueprintOrigin === "database";
   const backToFunnelsLabel = language === "de" ? "Zurück zur Funnel-Liste" : "Back to funnel list";
   const editorModeLabel = language === "de" ? "Editor-Modus" : "Editor mode";
   const views: Array<{ id: FunnelView; label: string; count: number }> = [
-    { id: "all", label: text.all, count: decoratedFunnels.length },
-    { id: "active", label: text.active, count: decoratedFunnels.filter((item) => item.funnel.status === "aktiv").length },
-    { id: "optimize", label: text.optimize, count: decoratedFunnels.filter((item) => item.funnel.status === "optimieren").length },
-    { id: "blocked", label: text.blocked, count: blockedSteps.length },
-    { id: "bots", label: text.bots, count: botSteps.length },
+    { id: "all", label: text.all, count: viewCounts.all },
+    { id: "active", label: text.active, count: viewCounts.active },
+    { id: "optimize", label: text.optimize, count: viewCounts.optimize },
+    { id: "blocked", label: text.blocked, count: viewCounts.blocked },
+    { id: "bots", label: text.bots, count: viewCounts.bots },
   ];
+  const canCreateFunnel = eligibleProjects.length > 0;
+  const modeNotice = dataMode === "demo"
+    ? language === "de"
+      ? "Expliziter lokaler Demo-Modus: Fixture-Werte sind Beispieldaten, werden nicht als Produktionswahrheit gespeichert und können nicht veröffentlicht werden."
+      : "Explicit local demo mode: fixture values are sample data, are never stored as production truth, and cannot be published."
+    : language === "de"
+      ? "Produktivmodus: angezeigt werden nur persistierte Datenbank-Funnels. Fixture- oder Dateistore-Fallbacks sind deaktiviert."
+      : "Production mode: only persisted database funnels are shown. Fixture and file-store fallbacks are disabled.";
+  const metricDisclosure = dataMode === "demo"
+    ? language === "de"
+      ? "Quelle: lokale Demo-Fixtures · Scope: Demo-Funnels · Zeitraum: Fixture-Lifetime · Nenner: Summe Demo-Leads / Summe Demo-Besuche · keine Produktions-KPI."
+      : "Source: local demo fixtures · Scope: demo funnels · Period: fixture lifetime · Denominator: demo leads / demo visits · not a production KPI."
+    : language === "de"
+      ? `Quelle: ${funnelMetricSemantics.source} · Attribution: entry_channel, aggregiert über alle Kanäle · Scope: Funnels im aktuellen Workspace · Zeitraum: gespeicherte Lifetime-Counter, kein Zeitfilter · Nenner: ${funnelMetricSemantics.denominator} · Projekt-Leads und Test-Submissions ausgeschlossen.`
+      : `Source: ${funnelMetricSemantics.source} · Attribution: entry_channel, aggregated across all channels · Scope: funnels in the current workspace · Period: stored lifetime counters, no time filter · Denominator: ${funnelMetricSemantics.denominator} · project-wide CRM leads and test submissions excluded.`;
+  const testSubmissionNotice = language === "de"
+    ? "Test-Submissions sind nicht rückstandslos: Sie speichern einen Test-Datensatz sowie Audit- und Analytics-Ereignisse, erzeugen aber keine produktiven Kontakte oder Leads."
+    : "Test submissions are not residue-free: they store a test record plus audit and analytics events, but do not create production contacts or leads.";
+  const unavailableBlueprintNotice = language === "de"
+    ? "Kein persistierter Datenbank-Blueprint verfügbar. Vorschau, Designer und Veröffentlichung bleiben fail-closed."
+    : "No persisted database blueprint is available. Preview, designer, and publishing remain fail-closed.";
+
+  useEffect(() => {
+    const requestedMode = typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("funnelDataMode");
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setDataMode(isExplicitFixtureDemoMode({ nodeEnv: process.env.NODE_ENV, requestedMode }) ? "demo" : "production");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const funnelId = selected?.funnel.id;
+    if (dataMode !== "production" || !isPersistedFunnelId(funnelId)) return;
+
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setBlueprintStates((current) => ({ ...current, [funnelId]: { status: "loading" } }));
+    });
+
+    csrfFetch(`/api/funnels/${funnelId}/blueprint`)
+      .then(async (response) => {
+        if (!response.ok) return { status: response.status === 404 ? "missing" : "error" } as const;
+        const payload = await response.json() as {
+          blueprint?: FunnelBlueprint;
+          blueprintOrigin?: "persisted" | "database-draft";
+          source?: string;
+        };
+        if (!payload.blueprint || payload.source !== "database") return { status: "missing" } as const;
+        return {
+          status: "ready",
+          blueprint: payload.blueprint,
+          blueprintOrigin: payload.blueprintOrigin ?? "persisted",
+        } as const;
+      })
+      .then((state) => {
+        if (!active) return;
+        setBlueprintStates((current) => ({ ...current, [funnelId]: state }));
+      })
+      .catch(() => {
+        if (!active) return;
+        setBlueprintStates((current) => ({ ...current, [funnelId]: { status: "error" } }));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [blueprintRefreshKey, dataMode, selected?.funnel.id]);
 
   function updateSelectedFunnel(patch: Partial<EditableFunnel>) {
     if (!selected) return;
@@ -687,11 +793,13 @@ export function FunnelCommandCenter({
   }
 
   function createNewFunnel() {
-    const project = projects.find((item) => item.name === projectLabel) ?? projects[0];
+    const project = eligibleProjects.find((item) => item.name === projectLabel) ?? eligibleProjects[0];
     const owner = users[0];
-    const workspaceId = funnels[0]?.workspaceId ?? project?.workspaceId ?? "ws_novalure";
+    const workspaceId = dataMode === "demo"
+      ? baseFunnels[0]?.workspaceId ?? project?.workspaceId ?? "demo_workspace"
+      : project?.workspaceId;
 
-    if (!project) return;
+    if (!project || !workspaceId || (dataMode === "production" && !isPersistedFunnelId(workspaceId))) return;
 
     const funnel = createFunnel({ text, project, user: owner, workspaceId });
     const funnelSteps = createDefaultSteps(funnel, text);
@@ -738,6 +846,10 @@ export function FunnelCommandCenter({
 
   async function saveDraft() {
     if (!selected || draftSaving) return;
+    if (dataMode === "demo") {
+      setNotice(modeNotice);
+      return;
+    }
     const originalId = selected.funnel.id;
     setDraftSaving(true);
 
@@ -782,6 +894,7 @@ export function FunnelCommandCenter({
       ]);
       setSelectedFunnelId(persistedFunnel.id);
       setSelectedStepId(persistedSteps[0]?.id ?? "");
+      setBlueprintRefreshKey((current) => current + 1);
       pushMonitor(text.saved, text.savedDetail(persistedFunnel.name), "CRM");
       setNotice(text.savedNotice);
     } catch {
@@ -803,7 +916,7 @@ export function FunnelCommandCenter({
   }
 
   useEffect(() => {
-    if (!isDesignerMode) return;
+    if (!isImmersiveDesigner) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -811,17 +924,25 @@ export function FunnelCommandCenter({
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isDesignerMode]);
+  }, [isImmersiveDesigner]);
 
   if (!selected) {
     return (
-      <section className="rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
-        {text.noFunnels}
+      <section className="grid gap-3 rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600" data-funnel-data-mode={dataMode}>
+        <p>{text.noFunnels}</p>
+        <p className={`rounded-md px-3 py-2 font-semibold ${dataMode === "demo" ? "bg-amber-50 text-amber-950" : "bg-emerald-50 text-emerald-950"}`}>
+          {modeNotice}
+        </p>
+        {canCreateFunnel ? (
+          <button className="w-fit rounded-md bg-slate-950 px-4 py-3 font-semibold text-white" onClick={createNewFunnel} type="button">
+            {text.createFunnel}
+          </button>
+        ) : null}
       </section>
     );
   }
 
-  if (isDesignerMode && selectedBlueprint) {
+  if (isImmersiveDesigner && selectedBlueprint) {
     return (
       <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
@@ -856,7 +977,7 @@ export function FunnelCommandCenter({
               </button>
               <button
                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
-                disabled={draftSaving}
+                disabled={draftSaving || dataMode === "demo"}
                 onClick={() => void saveDraft()}
                 type="button"
               >
@@ -888,14 +1009,14 @@ export function FunnelCommandCenter({
     matomoSiteId: "${selected.funnel.matomoSiteId || "optional"}",
     consentMode: "${selected.funnel.consentMode}",
     leadDestination: "${selected.funnel.leadDestination}",
-    webhookUrl: "${selected.funnel.webhookUrl || "optional"}"
+    funnelWebhookDelivery: "launch-off"
   };
   // Events: PageView, ViewContent, Lead, Schedule, generate_lead
   // Browser Pixel und Server CAPI teilen sich eine Event-ID zur Deduplizierung.
 </script>`;
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-funnel-data-mode={dataMode}>
       <article className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -906,13 +1027,17 @@ export function FunnelCommandCenter({
             <p className="mt-2 max-w-3xl break-words text-sm text-stone-600">
               {text.description}
             </p>
+            <p className={`mt-3 rounded-md px-3 py-2 text-sm font-semibold ${dataMode === "demo" ? "bg-amber-50 text-amber-950" : "bg-emerald-50 text-emerald-950"}`}>
+              {modeNotice}
+            </p>
             <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
               {notice}
             </p>
           </div>
           <div className="grid min-w-0 gap-3 xl:min-w-[360px]">
             <button
-              className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+              className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+              disabled={!canCreateFunnel}
               onClick={createNewFunnel}
               type="button"
             >
@@ -920,10 +1045,10 @@ export function FunnelCommandCenter({
             </button>
             <div className="grid min-w-0 grid-cols-2 gap-2 text-sm 2xl:grid-cols-4">
               {[
-                { label: text.visits, value: formatNumber(totalVisits, language) },
-                { label: text.leads, value: formatNumber(totalLeads, language) },
-                { label: text.avgConversion, value: `${formatPercent(avgConversion, language)}%` },
-                { label: text.liveLeads, value: leads.length },
+                { label: text.visits, value: formatNumber(lifetimeMetrics.visits, language) },
+                { label: text.leads, value: formatNumber(lifetimeMetrics.leads, language) },
+                { label: text.avgConversion, value: `${formatPercent(lifetimeMetrics.conversionRate, language)}%` },
+                { label: language === "de" ? "Nenner" : "Denominator", value: formatNumber(lifetimeMetrics.denominator, language) },
               ].map((metric) => (
                 <div className="min-w-0 rounded-md bg-stone-50 p-3" key={metric.label}>
                   <p className="font-semibold">{metric.value}</p>
@@ -931,6 +1056,16 @@ export function FunnelCommandCenter({
                 </div>
               ))}
             </div>
+            <p
+              className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-600"
+              data-funnel-metric-attribution={funnelMetricSemantics.attribution}
+              data-funnel-metric-denominator={funnelMetricSemantics.denominator}
+              data-funnel-metric-period={funnelMetricSemantics.period}
+              data-funnel-metric-scope={funnelMetricSemantics.scope}
+              data-funnel-metric-source={funnelMetricSemantics.source}
+            >
+              {metricDisclosure}
+            </p>
           </div>
         </div>
       </article>
@@ -1028,7 +1163,7 @@ export function FunnelCommandCenter({
               </button>
               <button
                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
-                disabled={draftSaving}
+                disabled={draftSaving || dataMode === "demo"}
                 onClick={() => void saveDraft()}
                 type="button"
               >
@@ -1075,6 +1210,20 @@ export function FunnelCommandCenter({
             </details>
           </div>
 
+          {selectedBlueprintOrigin === "missing" || selectedBlueprintOrigin === "error" ? (
+            <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
+              {unavailableBlueprintNotice}
+            </p>
+          ) : selectedBlueprintOrigin === "loading" ? (
+            <p className="mt-4 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-700">
+              {language === "de" ? "Persistierter Datenbank-Blueprint wird geladen …" : "Loading persisted database blueprint…"}
+            </p>
+          ) : selectedBlueprintOrigin === "draft" ? (
+            <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
+              {language === "de" ? "Lokaler, noch nicht persistierter Entwurf. Zuerst speichern; Vorschau-Submissions und Veröffentlichung sind deaktiviert." : "Local, not-yet-persisted draft. Save it first; preview submissions and publishing are disabled."}
+            </p>
+          ) : null}
+
           {activeTab === "overview" ? (
             <div className="mt-5 grid gap-4 xl:grid-cols-3">
               {[
@@ -1084,7 +1233,7 @@ export function FunnelCommandCenter({
                 [text.overview.followUp, selected.funnel.followUp],
                 [text.visits, formatNumber(selected.funnel.visits, language)],
                 [text.leads, formatNumber(selected.funnel.leads, language)],
-                [text.conversion, `${formatPercent(selected.funnel.conversionRate, language)}%`],
+                [text.conversion, `${formatPercent(selectedConversion, language)}%`],
               ].map(([label, value]) => (
                 <div className="rounded-lg bg-stone-50 p-4" key={label}>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
@@ -1241,14 +1390,18 @@ export function FunnelCommandCenter({
           ) : null}
           {activeTab === "design" ? (
             <div className="mt-5 min-w-0">
-              {selectedBlueprint ? (
+              {selectedBlueprint && selectedBlueprintOrigin === "database" ? (
                 <FunnelBlueprintDesigner
                   initialBlueprint={selectedBlueprint}
                   key={selectedBlueprint.id}
                   language={language}
                   onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
                 />
-              ) : null}
+              ) : (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
+                  {selectedBlueprintOrigin === "demo" ? modeNotice : unavailableBlueprintNotice}
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -1359,7 +1512,10 @@ export function FunnelCommandCenter({
               <div className={`${cardClass} 2xl:col-span-2`}>
                 <p className="text-sm font-semibold">{text.tracking.serverTitle}</p>
                 <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-2">
-                  <label className={fieldLabelClass}>{text.tracking.webhook}<input className={inputClass} value={selected.funnel.webhookUrl} onChange={(event) => updateSelectedFunnel({ webhookUrl: event.target.value })} placeholder="https://hooks.crm.local/funnel-lead" /></label>
+                  <div className="min-w-0 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" data-funnel-webhook-launch-scope="off">
+                    <p className="font-semibold">{language === "de" ? "Funnel-Webhook: nicht im Launch-Scope" : "Funnel webhook: outside launch scope"}</p>
+                    <p className="mt-1 break-words">{language === "de" ? "Konfiguration und Auslieferung sind serverseitig deaktiviert, bis die Integration implementiert und abgenommen ist." : "Configuration and delivery are disabled server-side until the integration is implemented and accepted."}</p>
+                  </div>
                   <div className="min-w-0 rounded-md bg-stone-50 p-3 text-sm text-stone-700">
                     <p className="font-semibold text-stone-950">{text.tracking.dedupeTitle}</p>
                     <p className="mt-1 break-words">{text.tracking.dedupeText}</p>
@@ -1383,14 +1539,15 @@ export function FunnelCommandCenter({
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.visits}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.visits, language)}</p></div>
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.leads}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.leads, language)}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.conversion}</p><p className="mt-2 text-2xl font-semibold">{formatPercent(selected.funnel.conversionRate, language)}%</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.analytics.hotLeads}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(relatedLeads.filter((lead) => lead.score >= 80).length, language)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.conversion}</p><p className="mt-2 text-2xl font-semibold">{formatPercent(selectedConversion, language)}%</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{language === "de" ? "Nenner" : "Denominator"}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.visits, language)}</p></div>
               </div>
+              <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs font-semibold text-stone-600">{metricDisclosure}</p>
               <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
                 <div className="grid gap-3">
                   {selectedSteps.map((step) => (
                     <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={step.id}>
-                      <div className="flex items-center justify-between gap-3 text-sm"><p className="font-semibold">{step.name}</p><span>{formatNumber(step.visits - step.leads, language)} {text.analytics.dropOffs}</span></div>
+                      <div className="flex items-center justify-between gap-3 text-sm"><p className="font-semibold">{step.name}</p><span>{formatNumber(Math.max(0, step.visits - step.leads), language)} {text.analytics.dropOffs}</span></div>
                       <div className="mt-3 h-3 overflow-hidden rounded-full bg-stone-200"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${Math.max(4, Math.min(100, step.conversionRate))}%` }} /></div>
                       <p className="mt-2 break-words text-xs text-stone-600">{step.dropOffReason}</p>
                     </div>
@@ -1487,14 +1644,12 @@ export function FunnelCommandCenter({
                 </div>
               </div>
               <div className={`${cardClass} 2xl:col-span-2`}>
-                <p className="text-sm font-semibold">{text.handover.linkedLeads}</p>
-                <div className="mt-3 grid min-w-0 gap-2">
-                  {relatedLeads.map((lead) => (
-                    <div className="grid min-w-0 gap-2 rounded-md bg-stone-50 p-3 text-sm xl:grid-cols-[minmax(0,1fr)_96px_minmax(160px,auto)]" key={lead.id}>
-                      <span className="min-w-0 break-words font-semibold">{getCrmSystemTextLabel(lead.intent, language)}</span><span className="shrink-0">Score {lead.score}</span><span className="min-w-0 break-words">{getCrmSystemTextLabel(lead.nextAction, language)}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm font-semibold">{language === "de" ? "Funnel-attributierte Leads" : "Funnel-attributed leads"}</p>
+                <p className="mt-3 rounded-md bg-stone-50 p-3 text-sm text-stone-700">
+                  {language === "de"
+                    ? "Projekt-Leads werden hier nicht als Funnel-Leads ausgegeben. Eine Liste erscheint erst, wenn eine belastbare Funnel-ID-Attribution aus Submission-/Analytics-Daten vorliegt."
+                    : "Project leads are not presented as funnel leads. A list is shown only when reliable funnel-ID attribution from submission or analytics data is available."}
+                </p>
               </div>
             </div>
           ) : null}
@@ -1522,16 +1677,19 @@ export function FunnelCommandCenter({
 
           {activeTab === "preview" ? (
             <div className="mt-5 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4">
+              <div
+                aria-disabled={selectedBlueprintOrigin !== "database"}
+                className={`min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4 ${selectedBlueprintOrigin === "database" ? "" : "pointer-events-none opacity-70"}`}
+              >
                 {selectedBlueprint ? (
                   <FunnelRenderer
-                    blueprint={selectedBlueprint}
+                    blueprint={toPublicFunnelDto(selectedBlueprint)}
                     device={selected.funnel.mobileFirstMode ? "mobile" : "desktop"}
                     language={language}
                     mode="test"
                     onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
                   />
-                ) : null}
+                ) : <p className="text-sm font-semibold text-red-900">{unavailableBlueprintNotice}</p>}
               </div>
               <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4">
                 <p className="text-sm font-semibold">{text.preview.title}</p>
@@ -1548,9 +1706,14 @@ export function FunnelCommandCenter({
                     <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{text.preview.crmTarget}</span>
                     <span className="block break-words font-semibold">{getFunnelDestinationLabel(selected.funnel.leadDestination, language)} / {selected.funnel.crmStage}</span>
                   </div>
-                  <a className="block min-w-0 rounded-md bg-slate-950 px-3 py-2 text-center text-sm font-semibold text-white" href={selectedPreviewUrl} rel="noreferrer" target="_blank">
-                    {text.preview.openUrl}
-                  </a>
+                  <p className={`rounded-md px-3 py-2 text-xs font-semibold ${selectedBlueprintOrigin === "database" ? "bg-amber-50 text-amber-950" : "bg-stone-100 text-stone-700"}`}>
+                    {selectedBlueprintOrigin === "database" ? testSubmissionNotice : selectedBlueprintOrigin === "demo" ? modeNotice : unavailableBlueprintNotice}
+                  </p>
+                  {selectedPreviewUrl ? (
+                    <a className="block min-w-0 rounded-md bg-slate-950 px-3 py-2 text-center text-sm font-semibold text-white" href={selectedPreviewUrl} rel="noreferrer" target="_blank">
+                      {text.preview.openUrl}
+                    </a>
+                  ) : null}
                 </div>
               </div>
             </div>

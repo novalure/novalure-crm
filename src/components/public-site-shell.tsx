@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import Link from "next/link";
+import { CookieConsentButton } from "@/components/cookie-consent-button";
 import styles from "@/components/public-site-shell.module.css";
 import {
+  getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
   getPublicPageCopy,
   type LanguageCode,
@@ -56,17 +58,25 @@ export function PublicSiteShell({
   const copy = shellCopy[language];
   const pageCopy = getPublicPageCopy(language);
   const legalCopy = getLoginLegalFooterCopy(language);
+  const cookieConsentCopy = getCrmLandingPageCopy(language).cookieConsent;
   const homeHref = withPublicLanguage("/", language);
   const isLoginRoute = currentPath.startsWith("/login");
+  const hasStandaloneCookieConsent = currentPath === "/login";
   const resolvedLanguageHrefs = languageHrefs ?? {
     de: withPublicLanguage(currentPath, "de"),
     en: withPublicLanguage(currentPath, "en"),
   };
   const actionHref = isLoginRoute ? homeHref : withPublicLanguage("/login", language);
   const actionLabel = isLoginRoute ? copy.home : copy.login;
+  const cookieHref = withPublicLanguage("/cookies", language);
+  const privacyHref = withPublicLanguage("/privacy", language);
 
   return (
-    <div className={`${styles.page} ${figtree.variable} novalure-public-legacy`} lang={language}>
+    <div
+      className={`${styles.page} ${figtree.variable} novalure-public-legacy`}
+      data-public-language={language}
+      lang={language}
+    >
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link aria-label="Novalure CRM" className={styles.brand} href={homeHref}>
@@ -116,6 +126,13 @@ export function PublicSiteShell({
           </nav>
         </div>
       </footer>
+      {!hasStandaloneCookieConsent ? (
+        <CookieConsentButton
+          cookieHref={cookieHref}
+          copy={cookieConsentCopy}
+          privacyHref={privacyHref}
+        />
+      ) : null}
     </div>
   );
 }

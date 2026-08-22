@@ -6,6 +6,11 @@ import {
   createPropertyBuildingRecord,
   createPropertyUnitRecord,
 } from "@/lib/db/property-inventory-repositories";
+import {
+  getInventoryValidationMessage,
+  validateInventoryInput,
+  type InventoryOperation,
+} from "@/lib/inventory-validation";
 
 const propertyUnitStatuses: PropertyUnitStatus[] = ["available", "reserved", "sold", "blocked"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -87,7 +92,32 @@ export async function POST(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
-  const operation = typeof input.operation === "string" ? input.operation : "unit";
+  const operationValue = typeof input.operation === "string" ? input.operation : "unit";
+  if (operationValue !== "building" && operationValue !== "unit") {
+    return NextResponse.json({ error: "Invalid inventory operation" }, { status: 400 });
+  }
+  const operation: InventoryOperation = operationValue;
+  if (operation === "unit" && ("price" in input || "priceCents" in input)) {
+    return NextResponse.json(
+      { error: "Unit prices must be sent as priceEuros; price and priceCents are not accepted" },
+      { status: 400 },
+    );
+  }
+  const operationId = request.headers.get("idempotency-key")?.trim() ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {
+    return NextResponse.json({ error: "A valid idempotency key is required" }, { status: 400 });
+  }
+  const validationErrors = validateInventoryInput(operation, input, { requireUuidIds: true });
+  if (validationErrors.length > 0) {
+    const validation = validationErrors[0];
+    return NextResponse.json(
+      {
+        error: getInventoryValidationMessage(validation.code, "en"),
+        validation,
+      },
+      { status: 400 },
+    );
+  }
   const result =
     operation === "building"
       ? await createPropertyBuildingRecord({
@@ -95,6 +125,7 @@ export async function POST(request: Request) {
           completionDate: input.completionDate,
           floors: input.floors,
           name: input.name,
+          operationId,
           projectId: input.projectId,
           session: auth.session,
         })
@@ -102,8 +133,8 @@ export async function POST(request: Request) {
           areaSqm: input.areaSqm,
           buildingId: input.buildingId,
           floor: input.floor,
-          price: input.price,
-          priceCents: input.priceCents,
+          operationId,
+          priceEuros: input.priceEuros,
           projectId: input.projectId,
           rooms: input.rooms,
           session: auth.session,
@@ -112,7 +143,10 @@ export async function POST(request: Request) {
         });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 400 });
+    return NextResponse.json(
+      { error: result.reason },
+      { status: result.conflict ? 409 : 400 },
+    );
   }
 
   return NextResponse.json({ data: result.data, persisted: true });

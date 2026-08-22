@@ -1,9 +1,10 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 
 export const publicSubmissionActions = {
   booking: "meeting_booking",
   form: "website_form",
+  funnel: "funnel_submission",
 } as const;
 
 export const publicSubmissionControlFields = {
@@ -54,6 +55,10 @@ export type PublicSubmissionBodyLimits = {
   maxStringLength: number;
 };
 
+export type PublicSubmissionJsonBodyLimits = {
+  maxBodyBytes: number;
+};
+
 export const bookingSubmissionBodyLimits: PublicSubmissionBodyLimits = {
   allowedFileBytes: 0,
   allowedFiles: 0,
@@ -64,12 +69,16 @@ export const bookingSubmissionBodyLimits: PublicSubmissionBodyLimits = {
 };
 
 export const formSubmissionBodyLimits: PublicSubmissionBodyLimits = {
-  allowedFileBytes: 10 * 1024 * 1024,
-  allowedFiles: 5,
-  maxBodyBytes: 11 * 1024 * 1024,
+  allowedFileBytes: 0,
+  allowedFiles: 0,
+  maxBodyBytes: 256 * 1024,
   maxFieldNameLength: 128,
   maxFields: 96,
   maxStringLength: 8_192,
+};
+
+export const funnelSubmissionBodyLimits: PublicSubmissionJsonBodyLimits = {
+  maxBodyBytes: 64 * 1024,
 };
 
 export class PublicSubmissionRequestError extends Error {
@@ -97,7 +106,7 @@ export function assertPublicSubmissionAbuseConfiguration(
 
 export function buildPublicSubmissionScope(input: {
   resourceId: string;
-  resourceType: "form" | "meeting";
+  resourceType: "form" | "funnel" | "meeting";
   workspaceId: string;
 }) {
   const scope = `${input.resourceType}:${input.workspaceId}:${input.resourceId}`;
@@ -394,6 +403,109 @@ export async function readBoundedPublicSubmissionFormData(
   };
 }
 
+export async function createCanonicalPublicSubmissionFormDataFingerprint(input: {
+  excludeFields?: Iterable<string>;
+  formData: FormData;
+  secret?: string;
+}) {
+  const excluded = new Set(
+    input.excludeFields ?? Object.values(publicSubmissionControlFields),
+  );
+  const canonicalEntries: Array<Record<string, string | number>> = [];
+
+  for (const [name, value] of input.formData.entries()) {
+    if (excluded.has(name)) continue;
+    if (typeof value === "string") {
+      canonicalEntries.push({ kind: "text", name, value });
+      continue;
+    }
+
+    const bytes = new Uint8Array(await value.arrayBuffer());
+    canonicalEntries.push({
+      contentHash: createHash("sha256").update(bytes).digest("hex"),
+      kind: "file",
+      mediaType: value.type.trim().toLowerCase(),
+      name,
+      originalName: value.name,
+      size: bytes.byteLength,
+    });
+  }
+
+  canonicalEntries.sort((left, right) => {
+    const leftValue = JSON.stringify(left);
+    const rightValue = JSON.stringify(right);
+    return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+  });
+  return createPublicSubmissionOpaqueHash({
+    label: "canonical-form-data-v1",
+    secret: input.secret,
+    value: JSON.stringify(canonicalEntries),
+  });
+}
+
+export function createFunnelSubmissionDomainIdempotencyHash(input: {
+  intentId: string;
+  requestFingerprint: string;
+  scope: string;
+  secret?: string;
+}) {
+  return createPublicSubmissionOpaqueHash({
+    label: "funnel-submission-intent",
+    secret: input.secret,
+    value: `${input.scope}\n${input.intentId}\n${input.requestFingerprint}`,
+  });
+}
+
+export async function readBoundedPublicSubmissionJson(
+  request: Request,
+  limits: PublicSubmissionJsonBodyLimits,
+) {
+  const contentType = validateJsonContentType(request.headers.get("content-type"));
+  const contentEncoding = request.headers.get("content-encoding")?.trim().toLowerCase();
+  if (contentEncoding && contentEncoding !== "identity") {
+    throw new PublicSubmissionRequestError("unsupported_content_encoding", 415);
+  }
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const declaredBytes = Number(contentLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0) {
+      throw new PublicSubmissionRequestError("invalid_content_length", 400);
+    }
+    if (declaredBytes > limits.maxBodyBytes) {
+      throw new PublicSubmissionRequestError("submission_too_large", 413);
+    }
+  }
+
+  const bytes = await readBodyBytes(request, limits.maxBodyBytes);
+  if (!bytes.byteLength) {
+    throw new PublicSubmissionRequestError("submission_body_missing", 400);
+  }
+
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new PublicSubmissionRequestError("invalid_charset", 415);
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new PublicSubmissionRequestError("invalid_json", 400);
+  }
+
+  return {
+    contentType,
+    requestFingerprint: createPublicSubmissionOpaqueHash({
+      label: "request-body",
+      value: bytes,
+    }),
+    value,
+  };
+}
+
 export function validatePublicSubmissionFieldRules(
   formData: FormData,
   rules: PublicSubmissionFieldRule[],
@@ -569,6 +681,24 @@ function validateContentType(value: string | null) {
     if (!/^[0-9A-Za-z'()+_,.\/:=?-]{1,70}$/u.test(boundary)) {
       throw new PublicSubmissionRequestError("invalid_multipart_boundary", 400);
     }
+  }
+
+  return { mimeType, raw: value };
+}
+
+function validateJsonContentType(value: string | null) {
+  if (!value || value.length > 512) {
+    throw new PublicSubmissionRequestError("unsupported_content_type", 415);
+  }
+  const [rawMimeType] = value.split(";", 1);
+  const mimeType = rawMimeType.trim().toLowerCase();
+  if (mimeType !== "application/json") {
+    throw new PublicSubmissionRequestError("unsupported_content_type", 415);
+  }
+
+  const charset = /(?:^|;)\s*charset\s*=\s*"?([^;"\s]+)"?/iu.exec(value)?.[1]?.toLowerCase();
+  if (charset && charset !== "utf-8" && charset !== "utf8") {
+    throw new PublicSubmissionRequestError("invalid_charset", 415);
   }
 
   return { mimeType, raw: value };

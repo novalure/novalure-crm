@@ -10,11 +10,11 @@ import {
 } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
+import { newsletterDeliveryLaunchEnabled } from "@/lib/newsletter-launch-scope";
+import { replaceNewsletterUnsubscribeToken } from "@/lib/newsletter-unsubscribe-placeholder";
+import { createNewsletterUnsubscribeToken } from "@/lib/newsletter-unsubscribe-token";
 
 export const maxDuration = 60;
-
-const newsletterUnsubscribeUrlToken = "{{NOVALURE_UNSUBSCRIBE_URL}}";
-const resendUnsubscribeUrlToken = "{{{RESEND_UNSUBSCRIBE_URL}}}";
 
 async function readJson(request: Request) {
   try {
@@ -50,22 +50,20 @@ function buildNewsletterUnsubscribeUrl(input: {
   workspaceId: string;
 }) {
   const unsubscribeUrl = new URL("/unsubscribe", input.request.url);
-
-  unsubscribeUrl.searchParams.set("email", input.email);
-  unsubscribeUrl.searchParams.set("workspaceId", input.workspaceId);
   unsubscribeUrl.searchParams.set("lang", input.language);
-
-  if (input.campaignId) {
-    unsubscribeUrl.searchParams.set("campaignId", input.campaignId);
-  }
+  unsubscribeUrl.hash = new URLSearchParams({
+    token: createNewsletterUnsubscribeToken({
+      campaignId: input.campaignId,
+      email: input.email,
+      workspaceId: input.workspaceId,
+    }),
+  }).toString();
 
   return unsubscribeUrl.toString();
 }
 
 function withRecipientUnsubscribeUrl(html: string, unsubscribeUrl: string) {
-  return html
-    .replaceAll(newsletterUnsubscribeUrlToken, unsubscribeUrl)
-    .replaceAll(resendUnsubscribeUrlToken, unsubscribeUrl);
+  return replaceNewsletterUnsubscribeToken(html, unsubscribeUrl);
 }
 
 export async function GET(request: Request) {
@@ -113,6 +111,15 @@ export async function POST(request: Request) {
   const auth = await requirePermissionAndProductCapability(request, "newsletter:send", "newsletter:send");
 
   if (!auth.ok) return auth.response;
+  if (!newsletterDeliveryLaunchEnabled) {
+    return Response.json(
+      {
+        code: "NEWSLETTER_DELIVERY_LAUNCH_OFF",
+        error: "Newsletter delivery is not enabled for launch.",
+      },
+      { headers: { "cache-control": "private, no-store" }, status: 503 },
+    );
+  }
 
   const body = await readJson(request);
 
@@ -207,7 +214,6 @@ export async function POST(request: Request) {
         to: recipient,
         subject,
         html: withRecipientUnsubscribeUrl(html, unsubscribeUrl),
-        from: typeof input.from === "string" ? input.from : undefined,
         idempotencyKey:
           typeof input.idempotencyKey === "string"
             ? `${input.idempotencyKey}:${recipient}`
@@ -229,7 +235,7 @@ export async function POST(request: Request) {
           source: "api",
           externalStatus: result.status,
           providerConfigured: provider.configured,
-          unsubscribeUrl,
+          unsubscribeTokenVersion: "v1",
         },
         sentAt: result.status === "sent" ? new Date().toISOString() : null,
       });

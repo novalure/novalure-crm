@@ -146,6 +146,7 @@ export type WebsiteForm = {
   template: FormTemplate;
   utmCapture: boolean;
   variant: FormVariant;
+  version?: number;
   visits: number;
   workspacePublicKey?: string;
 };

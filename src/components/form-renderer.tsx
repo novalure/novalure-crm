@@ -1,5 +1,6 @@
 import type { ChangeEvent, FocusEvent, FormEvent, Ref } from "react";
-import type { FormField, FormStep, WebsiteForm } from "@/lib/form-types";
+import type { FormStep } from "@/lib/form-types";
+import type { PublicFormDto, PublicFormFieldDto } from "@/lib/public-form-dto";
 import {
   publicSubmissionControlFields,
   type PublicSubmissionProof,
@@ -73,12 +74,12 @@ type FormRendererProps = {
   copy?: FormRuntimeCopy;
   currentStepIndex?: number;
   errors?: Record<string, string>;
-  form: WebsiteForm;
+  form: PublicFormDto;
   formRef?: Ref<HTMLFormElement>;
   mode?: FormRendererMode;
-  onFieldBlur?: (field: FormField, event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
+  onFieldBlur?: (field: PublicFormFieldDto, event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   onFieldSelect?: (fieldId: string) => void;
-  onFieldValueChange?: (field: FormField, value: string | string[] | boolean) => void;
+  onFieldValueChange?: (field: PublicFormFieldDto, value: string | string[] | boolean) => void;
   onNext?: () => void;
   onPrevious?: () => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
@@ -95,23 +96,21 @@ type FormRendererProps = {
   visibleFieldIds?: Set<string>;
 };
 
-export function normalizeFormSteps(form: WebsiteForm): FormStep[] {
+export function normalizeFormSteps(form: Pick<PublicFormDto, "name" | "steps">): FormStep[] {
   const steps = form.steps?.filter((step) => step.id && step.title) ?? [];
   if (steps.length) return steps;
   return [{ description: "", id: "step_contact", title: form.name || "Formular" }];
 }
 
-export function getFieldName(field: FormField) {
-  if (field.type === "consent") return field.crmField || "privacy_consent";
-  return field.crmField || field.id;
+export function getFieldName(field: PublicFormFieldDto) {
+  return field.name;
 }
 
-export function getFieldDefaultValue(field: FormField) {
+export function getFieldDefaultValue(field: PublicFormFieldDto) {
   return field.defaultValue || "";
 }
 
-export function fieldBelongsToStep(field: FormField, step: FormStep, index: number) {
-  if (field.type === "hidden") return false;
+export function fieldBelongsToStep(field: PublicFormFieldDto, step: FormStep, index: number) {
   if (field.stepId) return field.stepId === step.id;
   return index === 0;
 }
@@ -143,7 +142,6 @@ export function FormRenderer({
   const steps = normalizeFormSteps(form);
   const safeStepIndex = Math.min(Math.max(currentStepIndex, 0), steps.length - 1);
   const progress = steps.length > 1 ? Math.round(((safeStepIndex + 1) / steps.length) * 100) : 100;
-  const hiddenFields = form.fields.filter((field) => field.type === "hidden");
   const isEditor = mode === "editor";
 
   return (
@@ -161,29 +159,16 @@ export function FormRenderer({
       <input name="form_slug" readOnly type="hidden" value={publicKey} />
       <input name="return_to" readOnly type="hidden" value={returnTo} />
       <input name="utm_source" readOnly type="hidden" value={source} />
-      <input name="utm_campaign" readOnly type="hidden" value={form.campaign} />
-      <input name="form_variant" readOnly type="hidden" value={form.variant} />
-      <input name="funnel_id" readOnly type="hidden" value={form.funnelId} />
       <input name="page_url" readOnly type="hidden" value={tracking?.pageUrl ?? ""} />
       <input name="referrer" readOnly type="hidden" value={tracking?.referrer ?? ""} />
       {submissionProof ? <PublicSubmissionProofInputs proof={submissionProof} /> : null}
-      {hiddenFields.map((field) => (
-        <input
-          data-field-id={field.id}
-          key={field.id}
-          name={getFieldName(field)}
-          readOnly
-          type="hidden"
-          value={getFieldDefaultValue(field)}
-        />
-      ))}
 
       <div className="novalure-card grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="novalure-eyebrow text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Novalure</p>
         <h2 className="novalure-title break-words text-2xl font-semibold text-slate-950">{form.name}</h2>
-        {form.actions.thankYouMessage ? (
+        {form.thankYouMessage ? (
           <p className="novalure-description break-words text-sm leading-6 text-slate-600">
-            {form.actions.thankYouMessage}
+            {form.thankYouMessage}
           </p>
         ) : null}
 
@@ -334,7 +319,7 @@ function RenderedField({
 }: {
   copy: FormRuntimeCopy;
   error?: string;
-  field: FormField;
+  field: PublicFormFieldDto;
   mode: FormRendererMode;
   onBlur?: FormRendererProps["onFieldBlur"];
   onFieldSelect?: (fieldId: string) => void;
@@ -353,16 +338,14 @@ function RenderedField({
     visible ? "" : "novalure-hidden hidden"
   }`;
   const commonData = {
-    "data-condition-field": field.conditionalFieldId || undefined,
-    "data-condition-value": field.conditionalValue || undefined,
+    "data-condition-field": field.visibleWhen?.fieldId,
+    "data-condition-value": field.visibleWhen?.value,
     "data-field-id": field.id,
     "data-field-type": field.type,
   };
   const selectField = () => onFieldSelect?.(field.id);
   const changeValue = (nextValue: string | string[] | boolean) => onValueChange?.(field, nextValue);
   const currentValue = value ?? getFieldDefaultValue(field);
-
-  if (field.type === "hidden") return null;
 
   return (
     <div className={fieldClass} onClick={selectField} {...commonData}>
@@ -381,6 +364,7 @@ function RenderedField({
         onBlur,
         onValueChange: changeValue,
         value: currentValue,
+        visible,
       })}
       {field.helpText ? (
         <span className="novalure-help text-xs font-medium text-slate-500" id={helpId}>
@@ -404,14 +388,16 @@ function renderControl({
   onBlur,
   onValueChange,
   value,
+  visible,
 }: {
   describedBy?: string;
-  field: FormField;
+  field: PublicFormFieldDto;
   mode: FormRendererMode;
   name: string;
   onBlur?: FormRendererProps["onFieldBlur"];
   onValueChange: (value: string | string[] | boolean) => void;
   value: string | string[] | boolean;
+  visible: boolean;
 }) {
   const baseInputClass = "novalure-control w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-medium";
   const controlledValue = typeof value === "string" ? value : "";
@@ -420,6 +406,7 @@ function renderControl({
     "aria-invalid": Boolean(describedBy?.includes("_error")) || undefined,
     className: baseInputClass,
     defaultValue: mode === "embed" ? getFieldDefaultValue(field) : undefined,
+    disabled: !visible,
     name,
     onBlur: (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => onBlur?.(field, event),
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -427,7 +414,7 @@ function renderControl({
       onValueChange(target.type === "checkbox" ? (target as HTMLInputElement).checked : target.value);
     },
     placeholder: field.placeholder,
-    required: field.required,
+    required: field.required && visible,
     value: mode === "embed" ? undefined : controlledValue,
   };
 
@@ -456,6 +443,7 @@ function renderControl({
               aria-describedby={describedBy}
               checked={mode === "embed" ? undefined : Array.isArray(value) ? value.includes(option) : value === option}
               defaultChecked={mode === "embed" ? (Array.isArray(value) ? value.includes(option) : value === option) : undefined}
+              disabled={!visible}
               name={name}
               onBlur={(event) => onBlur?.(field, event)}
               onChange={(event) => {
@@ -468,7 +456,7 @@ function renderControl({
                 }
                 onValueChange(option);
               }}
-              required={field.required && index === 0 && field.type !== "multiCheckbox"}
+              required={visible && field.required && index === 0 && field.type !== "multiCheckbox"}
               type={field.type === "multiCheckbox" ? "checkbox" : "radio"}
               value={option}
             />
@@ -486,32 +474,16 @@ function renderControl({
           aria-describedby={describedBy}
           defaultChecked={mode === "embed" ? Boolean(field.defaultValue) : undefined}
           checked={mode === "embed" ? undefined : Boolean(value)}
+          disabled={!visible}
           name={name}
           onBlur={(event) => onBlur?.(field, event)}
           onChange={(event) => onValueChange(event.currentTarget.checked)}
-          required={field.required}
+          required={field.required && visible}
           type="checkbox"
           value="1"
         />
         <span>{field.helpText || field.label}</span>
       </span>
-    );
-  }
-
-  if (field.type === "file") {
-    return (
-      <input
-        aria-describedby={describedBy}
-        className={baseInputClass}
-        data-file-max-mb={field.fileMaxMb || undefined}
-        accept={field.fileAccept || undefined}
-        multiple={field.multiple}
-        name={name}
-        onBlur={(event) => onBlur?.(field, event)}
-        onChange={() => onValueChange("")}
-        required={field.required}
-        type="file"
-      />
     );
   }
 

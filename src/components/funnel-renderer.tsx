@@ -3,24 +3,37 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   getDeviceValue,
-  type FunnelBlueprint,
   type FunnelDevice,
-  type FunnelElement,
-  type FunnelField,
-  type FunnelPage,
   type FunnelRenderMode,
-  type FunnelRule,
-  type FunnelRuleGroup,
 } from "@/lib/funnel-schema";
+import type {
+  PublicFunnelDto,
+  PublicFunnelElement,
+  PublicFunnelField,
+  PublicFunnelPage,
+  PublicFunnelRule,
+  PublicFunnelRuleGroup,
+} from "@/lib/funnel-public-dto";
+import { toSafeFunnelText } from "@/lib/funnel-safe-content";
+import {
+  buildFunnelSubmissionRequest,
+  clearFunnelSubmissionIntentId,
+  getOrCreateFunnelSubmissionIntentId,
+} from "@/lib/funnel-submission-request";
 import { getFunnelRendererCopy, type LanguageCode } from "@/lib/i18n";
+import {
+  publicSubmissionControlFields,
+  type PublicSubmissionProof,
+} from "@/lib/public-submission-contract";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FunnelRendererProps = {
-  blueprint: FunnelBlueprint;
+  blueprint: PublicFunnelDto;
   device?: FunnelDevice;
   language?: LanguageCode;
   mode?: FunnelRenderMode;
   onEvent?: (event: { label: string; detail: string; status: string }) => void;
+  submissionProof?: PublicSubmissionProof;
 };
 
 type FieldValue = string | string[] | boolean | number | null;
@@ -32,14 +45,14 @@ const deviceWidths: Record<FunnelDevice, string> = {
   mobile: "max-w-[390px]",
 };
 
-function fieldInitialValue(field: FunnelField): FieldValue {
+function fieldInitialValue(field: PublicFunnelField): FieldValue {
   if (field.type === "multiChoice") return [];
   if (field.type === "consent") return false;
   if (field.type === "number" || field.type === "slider" || field.type === "rating") return field.defaultValue ? Number(field.defaultValue) : null;
   return field.defaultValue ?? "";
 }
 
-function collectFields(blueprint: FunnelBlueprint) {
+function collectFields(blueprint: PublicFunnelDto) {
   return blueprint.pages.flatMap((page) =>
     page.sections.flatMap((section) =>
       section.rows.flatMap((row) =>
@@ -51,17 +64,16 @@ function collectFields(blueprint: FunnelBlueprint) {
   );
 }
 
-function buildInitialAnswers(blueprint: FunnelBlueprint) {
+function buildInitialAnswers(blueprint: PublicFunnelDto) {
   return Object.fromEntries(collectFields(blueprint).map((field) => [field.id, fieldInitialValue(field)]));
 }
 
-function buildAnswerLookup(fields: FunnelField[], answers: Record<string, FieldValue>) {
+function buildAnswerLookup(fields: PublicFunnelField[], answers: Record<string, FieldValue>) {
   const lookup = new Map<string, FieldValue>();
 
   fields.forEach((field) => {
     const value = answers[field.id];
     lookup.set(field.id, value);
-    lookup.set(field.crmField, value);
     lookup.set(field.label, value);
     lookup.set(field.label.toLowerCase(), value);
   });
@@ -76,14 +88,14 @@ function stringifyAnswer(value: FieldValue) {
   return String(value);
 }
 
-function resolveTokens(value: string | undefined, fields: FunnelField[], answers: Record<string, FieldValue>) {
+function resolveTokens(value: string | undefined, fields: PublicFunnelField[], answers: Record<string, FieldValue>) {
   if (!value) return value;
   const lookup = buildAnswerLookup(fields, answers);
 
   return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, token: string) => stringifyAnswer(lookup.get(token) ?? lookup.get(token.toLowerCase()) ?? ""));
 }
 
-function compareRule(rule: FunnelRule, lookup: Map<string, FieldValue>) {
+function compareRule(rule: PublicFunnelRule, lookup: Map<string, FieldValue>) {
   const value = lookup.get(rule.field) ?? lookup.get(rule.field.toLowerCase());
   const expected = rule.value;
   const valueText = Array.isArray(value) ? value.join(" ") : String(value ?? "");
@@ -98,7 +110,7 @@ function compareRule(rule: FunnelRule, lookup: Map<string, FieldValue>) {
   return true;
 }
 
-function evaluateRuleGroup(group: FunnelRuleGroup | undefined, fields: FunnelField[], answers: Record<string, FieldValue>): boolean {
+function evaluateRuleGroup(group: PublicFunnelRuleGroup | undefined, fields: PublicFunnelField[], answers: Record<string, FieldValue>): boolean {
   if (!group) return true;
   const lookup = buildAnswerLookup(fields, answers);
   const results = group.rules.map((rule) =>
@@ -108,11 +120,11 @@ function evaluateRuleGroup(group: FunnelRuleGroup | undefined, fields: FunnelFie
   return group.mode === "or" ? results.some(Boolean) : results.every(Boolean);
 }
 
-function elementCanRender(element: FunnelElement, device: FunnelDevice, fields: FunnelField[], answers: Record<string, FieldValue>) {
+function elementCanRender(element: PublicFunnelElement, device: FunnelDevice, fields: PublicFunnelField[], answers: Record<string, FieldValue>) {
   return isVisible(element, device) && evaluateRuleGroup(element.condition, fields, answers);
 }
 
-function pageHasVisibleContent(page: FunnelPage, device: FunnelDevice, fields: FunnelField[], answers: Record<string, FieldValue>) {
+function pageHasVisibleContent(page: PublicFunnelPage, device: FunnelDevice, fields: PublicFunnelField[], answers: Record<string, FieldValue>) {
   return page.sections.some((section) =>
     section.rows.some((row) =>
       row.columns.some((column) => column.elements.some((element) => elementCanRender(element, device, fields, answers))),
@@ -120,7 +132,7 @@ function pageHasVisibleContent(page: FunnelPage, device: FunnelDevice, fields: F
   );
 }
 
-function validateField(field: FunnelField, value: FieldValue, text: FunnelRendererText) {
+function validateField(field: PublicFunnelField, value: FieldValue, text: FunnelRendererText) {
   if (!field.required) return null;
   if (field.type === "consent" && value !== true) return field.errorMessage ?? text.requiredError;
   if (Array.isArray(value) && value.length === 0) return field.errorMessage ?? text.choiceRequiredError;
@@ -135,27 +147,17 @@ function validateField(field: FunnelField, value: FieldValue, text: FunnelRender
   return null;
 }
 
-function fieldIntent(field: FunnelField) {
-  return `${field.id} ${field.crmField} ${field.label}`.toLowerCase();
-}
-
-function buildConsentPayload(fields: FunnelField[], answers: Record<string, FieldValue>) {
+function buildConsentPayload(fields: PublicFunnelField[], answers: Record<string, FieldValue>) {
   const consentFields = fields.filter((field) => field.type === "consent");
   let analytics = false;
   let marketing = false;
   let privacy = false;
 
   consentFields.forEach((field) => {
-    if (answers[field.id] !== true && answers[field.crmField] !== true) return;
-
-    const intent = fieldIntent(field);
-    const isAnalytics = /(analytics|tracking|cookie|pixel|capi|utm|analyse)/i.test(intent);
-    const isMarketing = /(marketing|newsletter|whatsapp|instagram|outreach|werbung|kampagne)/i.test(intent);
-    const isPrivacy = /(privacy|datenschutz|dsgvo|gdpr|terms|einwilligung|consent)/i.test(intent);
-
-    analytics = analytics || isAnalytics;
-    marketing = marketing || isMarketing;
-    privacy = privacy || isPrivacy || (!isAnalytics && !isMarketing);
+    if (answers[field.id] !== true) return;
+    analytics = analytics || field.consentCategories?.analytics === true;
+    marketing = marketing || field.consentCategories?.marketing === true;
+    privacy = privacy || field.consentCategories?.privacy === true;
   });
 
   return { analytics, marketing, privacy };
@@ -169,23 +171,12 @@ function readUtmParams() {
   return Object.fromEntries(entries);
 }
 
-function isVisible(element: FunnelElement, device: FunnelDevice) {
+function isVisible(element: PublicFunnelElement, device: FunnelDevice) {
   return element.visibility?.[device] ?? true;
 }
 
-function formatDestination(destination: FunnelBlueprint["crmHandover"]["destination"], text: FunnelRendererText) {
-  if (destination === "pipeline") return text.destination.pipeline;
-  if (destination === "calendar") return text.destination.calendar;
-  if (destination === "newsletter") return text.destination.newsletter;
-  return text.destination.leadInbox;
-}
-
 function RichContent({ className, value }: { className?: string; value?: string }) {
-  const content = value ?? "";
-  if (content.includes("<")) {
-    return <span className={className} dangerouslySetInnerHTML={{ __html: content }} />;
-  }
-  return <span className={className}>{content}</span>;
+  return <span className={`whitespace-pre-line ${className ?? ""}`.trim()}>{toSafeFunnelText(value)}</span>;
 }
 
 function FieldControl({
@@ -196,7 +187,7 @@ function FieldControl({
   onChange,
 }: {
   copy: FunnelRendererText;
-  field: FunnelField;
+  field: PublicFunnelField;
   value: FieldValue;
   error?: string;
   onChange: (value: FieldValue) => void;
@@ -330,11 +321,22 @@ function FieldControl({
   );
 }
 
-export function FunnelRenderer({ blueprint, device = "mobile", language = "en", mode = "preview", onEvent }: FunnelRendererProps) {
+export function FunnelRenderer({
+  blueprint,
+  device = "mobile",
+  language = "en",
+  mode = "preview",
+  onEvent,
+  submissionProof,
+}: FunnelRendererProps) {
   const text = getFunnelRendererCopy(language);
+  const safeHtmlNotice = language === "de"
+    ? "Gespeichertes HTML wird aus Sicherheitsgründen nur als Klartext angezeigt; Code und Links werden nicht ausgeführt."
+    : "Stored HTML is shown as plain text for safety; code and links do not execute.";
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, FieldValue>>(() => buildInitialAnswers(blueprint));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [honeypot, setHoneypot] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const pages = blueprint.pages;
   const page = pages[Math.min(currentPageIndex, pages.length - 1)];
@@ -344,14 +346,14 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
   const spacing = getDeviceValue(blueprint.theme.spacing, device, 16);
 
   useEffect(() => {
-    if (blueprint.tracking.consentMode !== "active" || !runtimeConsent.analytics) return;
+    if (!blueprint.tracking.clientAnalyticsEnabled || !runtimeConsent.analytics) return;
     const win = window as typeof window & { dataLayer?: Array<Record<string, unknown>>; fbq?: (...args: unknown[]) => void };
     win.dataLayer = win.dataLayer ?? [];
-    win.dataLayer.push({ event: "funnel_renderer_loaded", funnelId: blueprint.id, projectId: blueprint.projectId });
-    if (blueprint.tracking.metaPixelId && typeof win.fbq === "function") {
+    win.dataLayer.push({ event: "funnel_renderer_loaded", funnelId: blueprint.id });
+    if (blueprint.tracking.metaPixelEnabled && typeof win.fbq === "function") {
       win.fbq("track", "PageView", { funnel_id: blueprint.id });
     }
-  }, [blueprint.id, blueprint.projectId, blueprint.tracking.consentMode, blueprint.tracking.metaPixelId, runtimeConsent.analytics]);
+  }, [blueprint.id, blueprint.tracking.clientAnalyticsEnabled, blueprint.tracking.metaPixelEnabled, runtimeConsent.analytics]);
 
   function emit(label: string, detail: string, status: string = mode) {
     onEvent?.({ label, detail, status });
@@ -365,20 +367,25 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     allFields.forEach((field) => {
       if (field.type !== "hidden") return;
       let value = field.defaultValue ?? "";
-      if (field.hiddenValueSource === "utm") value = params.get(field.crmField) ?? params.get(`utm_${field.crmField.replace(/^utm_/, "")}`) ?? value;
-      if (field.hiddenValueSource === "urlParam") value = params.get(field.crmField) ?? value;
-      if (field.hiddenValueSource === "system") value = field.crmField === "source_url" ? window.location.href : value;
+      if (field.hiddenValueSource === "utm" && field.publicQueryParameter) {
+        value = params.get(field.publicQueryParameter)
+          ?? params.get(`utm_${field.publicQueryParameter.replace(/^utm_/, "")}`)
+          ?? value;
+      }
+      if (field.hiddenValueSource === "urlParam" && field.publicQueryParameter) {
+        value = params.get(field.publicQueryParameter) ?? value;
+      }
+      if (field.captureSourceUrl) value = window.location.href;
       if (value) {
         next[field.id] = value;
-        next[field.crmField] = value;
       }
     });
 
     return next;
   }
 
-  function setFieldValue(field: FunnelField, value: FieldValue) {
-    setAnswers((current) => ({ ...current, [field.id]: value, [field.crmField]: value }));
+  function setFieldValue(field: PublicFunnelField, value: FieldValue) {
+    setAnswers((current) => ({ ...current, [field.id]: value }));
     setErrors((current) => {
       const next = { ...current };
       delete next[field.id];
@@ -411,28 +418,30 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     try {
       const consent = buildConsentPayload(allFields, runtimeAnswers);
       const apiFetch = testOnly ? csrfFetch : fetch;
-      const response = await apiFetch(`/api/funnels/${blueprint.id}/submissions`, {
-        body: JSON.stringify({
-          funnelId: blueprint.id,
-          mode: testOnly ? "test" : "live",
-          answers: runtimeAnswers,
-          visitor: {
-            id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
-            sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
-            userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
-          },
-          consent,
-          utm: readUtmParams(),
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
+      const submissionIntentId = testOnly ? undefined : getOrCreateFunnelSubmissionIntentId(blueprint.id);
+      const submissionRequest = buildFunnelSubmissionRequest({
+        answers: runtimeAnswers,
+        consent,
+        funnelId: blueprint.id,
+        honeypot,
+        intentId: submissionIntentId,
+        mode: testOnly ? "test" : "live",
+        proof: submissionProof,
+        utm: readUtmParams(),
+        visitor: {
+          id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
+          sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
+          userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
+        },
       });
+      const response = await apiFetch(submissionRequest.endpoint, submissionRequest.init);
       if (!response.ok) throw new Error("Submission failed");
-      const result = (await response.json()) as { leadPreview?: { destination?: string; score?: number } };
+      await response.json();
+      if (!testOnly) clearFunnelSubmissionIntentId(blueprint.id);
       setSubmitState("sent");
       emit(
         testOnly ? text.testLeadSent : text.leadSent,
-        `${blueprint.name} -> ${result.leadPreview?.destination ?? formatDestination(blueprint.crmHandover.destination, text)}`,
+        blueprint.name,
         testOnly ? "test" : "live",
       );
     } catch {
@@ -441,7 +450,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     }
   }
 
-  function renderElement(element: FunnelElement) {
+  function renderElement(element: PublicFunnelElement) {
     if (!elementCanRender(element, device, allFields, answers)) return null;
 
     if (element.type === "headline") {
@@ -487,15 +496,16 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     if (element.type === "video") {
       return (
         <div className="grid aspect-video min-w-0 place-items-center rounded-lg border border-stone-200 bg-slate-950 p-4 text-center text-sm font-semibold text-white">
-          {element.url ? text.videoEmbedded : text.videoPlaceholder}
+          {element.hasMedia ? text.videoEmbedded : text.videoPlaceholder}
         </div>
       );
     }
 
     if (element.type === "calendar") {
+      const content = toSafeFunnelText(resolveTokens(element.content, allFields, answers)) || text.bookAppointment;
       return (
         <div className="min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-          <p className="break-words text-sm font-semibold text-emerald-950">{resolveTokens(element.content, allFields, answers) ?? text.bookAppointment}</p>
+          <p className="whitespace-pre-line break-words text-sm font-semibold text-emerald-950">{content}</p>
           <button className="mt-3 w-full rounded-md border border-emerald-700 bg-white px-3 py-2 text-sm font-semibold text-emerald-900" type="button">
             {text.openCalendar}
           </button>
@@ -504,13 +514,19 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
     }
 
     if (element.type === "html") {
-      return <div className="min-w-0 overflow-auto rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm" dangerouslySetInnerHTML={{ __html: resolveTokens(element.content, allFields, answers) ?? "" }} />;
+      const content = toSafeFunnelText(resolveTokens(element.content, allFields, answers));
+      return (
+        <div className="min-w-0 overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-semibold">{safeHtmlNotice}</p>
+          <pre className="mt-3 whitespace-pre-wrap break-words font-mono text-xs text-slate-800">{content}</pre>
+        </div>
+      );
     }
 
     if (element.type === "choice") {
       return (
         <div className="grid min-w-0 gap-3">
-          <p className="break-words text-xl font-semibold text-slate-950">{resolveTokens(element.content, allFields, answers)}</p>
+          <p className="whitespace-pre-line break-words text-xl font-semibold text-slate-950">{toSafeFunnelText(resolveTokens(element.content, allFields, answers))}</p>
           <div className="grid min-w-0 gap-2">
             {(element.options ?? []).map((option) => (
               <button
@@ -518,8 +534,7 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
                 key={option}
                 onClick={() => {
                   emit(text.answerSelected, `${element.name}: ${option}`, "preview");
-                  const key = element.crmField ?? element.id;
-                  const nextAnswers = { ...answers, [key]: option, [element.id]: option };
+                  const nextAnswers = { ...answers, [element.id]: option };
                   setAnswers(nextAnswers);
                   goToNext(nextAnswers);
                 }}
@@ -542,11 +557,19 @@ export function FunnelRenderer({ blueprint, device = "mobile", language = "en", 
             void submit(mode !== "live");
           }}
         >
+          {mode === "live" ? (
+            <input
+              aria-hidden="true"
+              autoComplete="off"
+              className="pointer-events-none absolute -left-[10000px] h-px w-px opacity-0"
+              name={publicSubmissionControlFields.honeypot}
+              onChange={(event) => setHoneypot(event.target.value)}
+              tabIndex={-1}
+              value={honeypot}
+            />
+          ) : null}
           <div className="min-w-0">
-            <p className="break-words text-lg font-semibold text-slate-950">{resolveTokens(element.content ?? element.name, allFields, answers)}</p>
-            <p className="mt-1 break-words text-sm text-stone-600">
-              {text.target} {formatDestination(blueprint.crmHandover.destination, text)} / {blueprint.crmHandover.pipelineStage}
-            </p>
+            <p className="whitespace-pre-line break-words text-lg font-semibold text-slate-950">{toSafeFunnelText(resolveTokens(element.content ?? element.name, allFields, answers))}</p>
           </div>
           {(element.fields ?? []).map((field) => (
             <FieldControl

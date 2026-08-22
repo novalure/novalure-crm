@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Pool } from "@neondatabase/serverless";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
@@ -619,6 +619,6 @@ export async function runTenantHardeningInventory(argv = process.argv) {
   return result;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await runTenantHardeningInventory();
 }

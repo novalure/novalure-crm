@@ -2803,6 +2803,7 @@ export const unitBoardCopy = {
     unit: "Unit",
     status: "Status",
     price: "Price",
+    priceEuros: "Price (EUR)",
     area: "Area",
     rooms: "Rooms",
     floor: "Floor",
@@ -2944,6 +2945,7 @@ export const unitBoardCopy = {
     unit: "Einheit",
     status: "Status",
     price: "Preis",
+    priceEuros: "Preis (EUR)",
     area: "Fläche",
     rooms: "Zimmer",
     floor: "Etage",
@@ -9570,11 +9572,14 @@ export const formCommandCenterCopy = {
       defaultValue: "Default value",
       errorMessage: "Error message",
       validationPattern: "Validation pattern",
+      validationPatternUnavailable: "Custom patterns are not available for public forms until a linear-time validator is connected. Remove the pattern before publishing.",
       options: "Options, one per line",
       minValue: "Minimum",
       maxValue: "Maximum",
       fileAccept: "Allowed file types",
       fileMaxMb: "Max file size in MB",
+      fileUnavailable: "File upload is not available for public forms yet. Remove this field before publishing.",
+      consentConfigurationUnavailable: "Public forms require one unconditional required Privacy consent field. Marketing or analytics consent must use a separately classified checkbox.",
       multiple: "Allow multiple files",
       step: "Step",
       conditionField: "Conditional field",
@@ -9684,6 +9689,7 @@ export const formCommandCenterCopy = {
       pipelineStage: "Pipeline / stage",
       ownership: "Ownership",
       roundRobin: "Round robin",
+      roundRobinUnavailable: "Round robin (not available for public forms)",
       fixedOwner: "Fixed owner",
       owner: "Owner",
       tags: "Tags",
@@ -9706,7 +9712,7 @@ export const formCommandCenterCopy = {
       qrAlt: "QR code for form",
       standaloneLink: "Standalone link",
       hiddenFields: "Hidden fields",
-      hiddenFieldList: "utm_source, utm_campaign, page_url, referrer, form_variant, funnel_id",
+      hiddenFieldList: "utm_source, page_url, referrer",
       publicationOnly:
         "This variant is a publishing method. The embed code renders the right link, QR code or modal trigger.",
     },
@@ -9780,6 +9786,15 @@ export const formCommandCenterCopy = {
       unavailableDescription:
         "This form is not published or no longer exists. No data has been sent.",
       unavailableHint: "Please contact the project team directly.",
+      fileUploadUnavailableTitle: "File upload is not available yet",
+      fileUploadUnavailableDescription:
+        "This form contains a file field and is blocked until durable file storage is connected. No data has been sent.",
+      ownerUnavailableTitle: "Form temporarily unavailable",
+      ownerUnavailableDescription:
+        "This form does not have a supported fixed owner. No data has been sent.",
+      configurationUnavailableTitle: "Form configuration is not available publicly",
+      configurationUnavailableDescription:
+        "This form contains a validation or consent configuration that is not supported safely yet. No data has been sent.",
     },
   },
   de: {
@@ -9861,11 +9876,14 @@ export const formCommandCenterCopy = {
       defaultValue: "Standardwert",
       errorMessage: "Fehlermeldung",
       validationPattern: "Validierungsmuster",
+      validationPatternUnavailable: "Eigene Muster sind für öffentliche Formulare erst mit einem Linear-Time-Validator verfügbar. Entferne das Muster vor der Veröffentlichung.",
       options: "Optionen, eine pro Zeile",
       minValue: "Minimum",
       maxValue: "Maximum",
       fileAccept: "Erlaubte Dateitypen",
       fileMaxMb: "Max. Dateigröße in MB",
+      fileUnavailable: "Datei-Uploads sind für öffentliche Formulare noch nicht verfügbar. Entferne dieses Feld vor der Veröffentlichung.",
+      consentConfigurationUnavailable: "Öffentliche Formulare benötigen genau ein unbedingtes, verpflichtendes Datenschutzfeld. Marketing- oder Analyse-Einwilligungen müssen als separat klassifizierte Checkbox angelegt sein.",
       multiple: "Mehrere Dateien erlauben",
       step: "Schritt",
       conditionField: "Bedingtes Feld",
@@ -9975,6 +9993,7 @@ export const formCommandCenterCopy = {
       pipelineStage: "Pipeline / Stufe",
       ownership: "Zuständigkeit",
       roundRobin: "Round Robin",
+      roundRobinUnavailable: "Round Robin (für öffentliche Formulare nicht verfügbar)",
       fixedOwner: "Feste Zuständigkeit",
       owner: "Zuständig",
       tags: "Tags",
@@ -9997,7 +10016,7 @@ export const formCommandCenterCopy = {
       qrAlt: "QR-Code für Formular",
       standaloneLink: "Standalone-Link",
       hiddenFields: "Hidden Fields",
-      hiddenFieldList: "utm_source, utm_campaign, page_url, referrer, form_variant, funnel_id",
+      hiddenFieldList: "utm_source, page_url, referrer",
       publicationOnly:
         "Diese Variante ist ein Veröffentlichungsweg. Der Embed-Code rendert den passenden Link, QR-Code oder Modal-Button.",
     },
@@ -10071,6 +10090,15 @@ export const formCommandCenterCopy = {
       unavailableDescription:
         "Dieses Formular ist nicht veröffentlicht oder existiert nicht mehr. Es wurden keine Daten übermittelt.",
       unavailableHint: "Bitte kontaktieren Sie das Projektteam direkt.",
+      fileUploadUnavailableTitle: "Datei-Upload noch nicht verfügbar",
+      fileUploadUnavailableDescription:
+        "Dieses Formular enthält ein Dateifeld und bleibt gesperrt, bis eine dauerhafte Dateiablage angebunden ist. Es wurden keine Daten übermittelt.",
+      ownerUnavailableTitle: "Formular vorübergehend nicht verfügbar",
+      ownerUnavailableDescription:
+        "Dieses Formular hat keine unterstützte feste Zuständigkeit. Es wurden keine Daten übermittelt.",
+      configurationUnavailableTitle: "Formularkonfiguration öffentlich nicht verfügbar",
+      configurationUnavailableDescription:
+        "Dieses Formular enthält eine Validierungs- oder Einwilligungskonfiguration, die noch nicht sicher unterstützt wird. Es wurden keine Daten übermittelt.",
     },
   },
 } as const;
@@ -10168,6 +10196,14 @@ export const publicBookingPageCopy = {
         reschedule_deadline_passed: "This appointment can no longer be rescheduled.",
         cancel_reason_required: "Please enter a reason for cancellation.",
         calendar_sync_failed: "The calendar event could not be created automatically right now.",
+        calendar_provider_unavailable: "Calendar availability cannot be checked right now. Please try again later.",
+        action_in_progress: "This appointment change is already being processed.",
+        action_recovery_required: "The calendar change needs a safe retry. No further action was started.",
+        public_booking_creation_launch_off:
+          "New online bookings are temporarily unavailable while durable calendar reconciliation is being completed. Please contact the appointment owner.",
+        public_action_launch_off:
+          "Cancellation and rescheduling are temporarily unavailable while safe calendar reconciliation is being completed. Please contact the appointment owner.",
+        booking_cancelled: "This appointment has already been cancelled.",
         meeting_link_missing: "The meeting link could not be created automatically right now.",
         booking_not_found: "The secure booking link is no longer valid.",
         fallback: "The action could not be completed right now.",
@@ -10245,6 +10281,14 @@ export const publicBookingPageCopy = {
         reschedule_deadline_passed: "Dieser Termin kann nicht mehr verschoben werden.",
         cancel_reason_required: "Bitte geben Sie einen Grund für die Absage an.",
         calendar_sync_failed: "Der Kalendertermin konnte gerade nicht automatisch erstellt werden.",
+        calendar_provider_unavailable: "Die Kalenderverfügbarkeit kann gerade nicht geprüft werden. Bitte versuchen Sie es später erneut.",
+        action_in_progress: "Diese Terminänderung wird bereits verarbeitet.",
+        action_recovery_required: "Die Kalenderänderung benötigt einen sicheren Wiederholungsversuch. Es wurde keine weitere Aktion gestartet.",
+        public_booking_creation_launch_off:
+          "Neue Online-Buchungen sind vorübergehend nicht verfügbar, bis der dauerhafte Kalenderabgleich abgeschlossen ist. Bitte kontaktieren Sie den Terminverantwortlichen.",
+        public_action_launch_off:
+          "Absage und Verschiebung sind vorübergehend nicht verfügbar, bis der sichere Kalenderabgleich abgeschlossen ist. Bitte kontaktieren Sie den Terminverantwortlichen.",
+        booking_cancelled: "Dieser Termin wurde bereits abgesagt.",
         meeting_link_missing: "Der Terminlink konnte gerade nicht automatisch erstellt werden.",
         booking_not_found: "Der sichere Buchungslink ist nicht mehr gültig.",
         fallback: "Die Aktion konnte gerade nicht abgeschlossen werden.",

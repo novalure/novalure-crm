@@ -1,4 +1,5 @@
 import type { FunnelChannel, ID, LeadType } from "@/lib/crm-types";
+import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
 
 export const funnelSchemaVersion = 1;
 
@@ -267,6 +268,11 @@ export type FunnelSubmissionPayload = {
     analytics: boolean;
     marketing: boolean;
     privacy: boolean;
+  };
+  publicSubmission?: {
+    honeypot?: string;
+    intentId?: string;
+    proof?: PublicSubmissionProof;
   };
   utm?: Record<string, string>;
 };

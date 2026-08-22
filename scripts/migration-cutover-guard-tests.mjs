@@ -29,6 +29,10 @@ const [
   mediaContract,
   providerExpand,
   providerCutover,
+  unitIdempotencyExpand,
+  funnelSubmissionRecovery,
+  formsOwnerGuard,
+  formSubmissionAtomicity,
 ] = await Promise.all([
   readFile(new URL("../migrations/048_bot_webhook_integrity.sql", import.meta.url), "utf8"),
   readFile(new URL("../migrations/057_bot_webhook_legacy_index_cutover.sql", import.meta.url), "utf8"),
@@ -40,6 +44,22 @@ const [
   ),
   readFile(
     new URL("../migrations/065_notification_guard_search_path_hardening.sql", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../migrations/069_property_unit_idempotency.sql", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../migrations/070_funnel_submission_idempotency_recovery.sql", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../migrations/071_forms_owner_tenant_guard.sql", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../migrations/072_form_submission_atomicity.sql", import.meta.url),
     "utf8",
   ),
 ]);
@@ -323,12 +343,13 @@ test("migration plan tokens bind commit, connected target, ledger and checksums"
   );
 });
 
-test("060 and 061 remain manual even when alias handling is active", () => {
+test("060, 061 and DB-01 migration 068 remain manual even when alias handling is active", () => {
   const migrations = [
     migration("060_tenant_rls_pilot_prepare", "sha-060", { manualCutover: true }),
     migration("061_validate_and_activate_tenant_rls_pilot", "sha-061", {
       manualCutover: true,
     }),
+    migration("068_qa_batch_reset_safety", "sha-068", { manualCutover: true }),
   ];
 
   assert.deepEqual(createMigrationPlan({ ledgerRows: [], migrations, only: "" }), []);
@@ -367,6 +388,27 @@ test("060 and 061 remain manual even when alias handling is active", () => {
     }),
     [migrations[1]],
   );
+  assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [ledgerRow("060_tenant_rls_pilot_prepare", "sha-060")],
+      migrations,
+      only: "068_qa_batch_reset_safety",
+    }),
+    /required predecessor 061_validate_and_activate_tenant_rls_pilot is not checksummed in the ledger/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [
+        ledgerRow("060_tenant_rls_pilot_prepare", "sha-060"),
+        ledgerRow("061_validate_and_activate_tenant_rls_pilot", "sha-061"),
+      ],
+      migrations,
+      only: "068_qa_batch_reset_safety",
+    }),
+    [migrations[2]],
+  );
 });
 
 test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {
@@ -387,17 +429,80 @@ test("legacy-breaking release contracts are isolated from automatic expand migra
   assert.match(providerCutover, /leads_qualifying_requires_assignee_check[\s\S]*not valid/i);
 });
 
+test("Inventory idempotency migration is additive, DB-enforced and cleanup-compatible", () => {
+  assert.match(unitIdempotencyExpand, /create table if not exists property_unit_idempotency/);
+  assert.match(unitIdempotencyExpand, /unique \(workspace_id, idempotency_key\)/);
+  assert.match(
+    unitIdempotencyExpand,
+    /foreign key \(workspace_id, project_id, unit_id\)[\s\S]*references property_units\(workspace_id, project_id, id\)[\s\S]*on delete cascade/,
+  );
+  assert.match(unitIdempotencyExpand, /create table if not exists property_building_idempotency/);
+  assert.match(
+    unitIdempotencyExpand,
+    /foreign key \(workspace_id, project_id, building_id\)[\s\S]*references property_buildings\(workspace_id, project_id, id\)[\s\S]*on delete cascade/,
+  );
+  assert.match(unitIdempotencyExpand, /request_hash text not null/);
+  assert.match(unitIdempotencyExpand, /response jsonb not null/);
+  assert.match(unitIdempotencyExpand, /revoke all on table property_unit_idempotency from novalure_tenant_app/);
+  assert.match(unitIdempotencyExpand, /revoke all on table property_building_idempotency from novalure_tenant_app/);
+  assert.doesNotMatch(
+    unitIdempotencyExpand,
+    /grant select, insert on table property_unit_idempotency to novalure_tenant_app/,
+  );
+  assert.doesNotMatch(
+    unitIdempotencyExpand,
+    /grant select, insert on table property_building_idempotency to novalure_tenant_app/,
+  );
+  assert.doesNotMatch(unitIdempotencyExpand, /delete from|drop table|drop column/i);
+});
+
+test("Form owner migration validates the tenant-qualified relationship without silent repair", () => {
+  assert.match(formsOwnerGuard, /foreign key \(workspace_id, owner_user_id\)/);
+  assert.match(formsOwnerGuard, /references public\.workspace_users\(workspace_id, id\)/);
+  assert.match(formsOwnerGuard, /validate constraint forms_workspace_owner_fk/);
+  assert.doesNotMatch(formsOwnerGuard, /update public\.forms|delete from|drop table|drop column/i);
+});
+
+test("Funnel submission recovery adds only durable lease and idempotency guards", () => {
+  assert.match(funnelSubmissionRecovery, /lease_version bigint not null default 1/);
+  assert.match(funnelSubmissionRecovery, /funnel_submissions_workspace_idempotency_key_uidx/);
+  assert.match(funnelSubmissionRecovery, /where idempotency_key is not null/);
+  assert.doesNotMatch(funnelSubmissionRecovery, /delete from|drop table|drop column/i);
+});
+
+test("Form submission atomicity binds semantic replay and every relation to its tenant", () => {
+  assert.match(formSubmissionAtomicity, /add column if not exists idempotency_key text/);
+  assert.match(formSubmissionAtomicity, /form_submissions_workspace_idempotency_key_uidx/);
+  assert.match(formSubmissionAtomicity, /unique index[\s\S]*\(workspace_id, idempotency_key\)/i);
+  assert.match(formSubmissionAtomicity, /migration 070_funnel_submission_idempotency_recovery is required/);
+  assert.match(formSubmissionAtomicity, /migration 071_forms_owner_tenant_guard is required/);
+  assert.match(formSubmissionAtomicity, /or coalesce\(\([\s\S]*idempotency_key is not null[\s\S]*request_hash is not null[\s\S]*claim_lease_version is not null[\s\S]*response_payload is not null[\s\S]*\), false\)/);
+  assert.match(formSubmissionAtomicity, /response_payload->>'status' ~ '\^\[1-5\]\[0-9\]\{2\}\$'/);
+  for (const relation of ["project", "form", "funnel", "contact", "lead", "deal", "task"]) {
+    assert.match(
+      formSubmissionAtomicity,
+      new RegExp(`form_submissions_workspace_${relation}_fk`),
+    );
+  }
+  assert.doesNotMatch(formSubmissionAtomicity, /delete from|drop table|drop column/i);
+});
+
 test("explicit automatic migrations require their checksummed predecessors", () => {
   const migrations = [
     migration("049_property_inventory_tenant_guards", "sha-049"),
     migration("050_durable_job_leasing", "sha-050"),
     migration("052_validate_property_inventory_tenant_guards", "sha-052"),
     migration("053_oauth_state_integrity", "sha-053"),
+    migration("055_public_submission_abuse_guards", "sha-055"),
     migration("064_notification_provider_and_lead_assignee_integrity", "sha-064"),
     migration("065_notification_guard_search_path_hardening", "sha-065", {
       manualCutover: true,
     }),
     migration("066_oauth_state_workspace_user_guard", "sha-066"),
+    migration("069_property_unit_idempotency", "sha-069"),
+    migration("070_funnel_submission_idempotency_recovery", "sha-070"),
+    migration("071_forms_owner_tenant_guard", "sha-071"),
+    migration("072_form_submission_atomicity", "sha-072"),
   ];
 
   assert.throws(
@@ -445,6 +550,94 @@ test("explicit automatic migrations require their checksummed predecessors", () 
     /required predecessor 053_oauth_state_integrity/,
   );
   assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: [],
+      migrations,
+      only: "069_property_unit_idempotency",
+    }),
+    /required predecessor 049_property_inventory_tenant_guards/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      ledgerRows: [ledgerRow("049_property_inventory_tenant_guards", "sha-049")],
+      migrations,
+      only: "069_property_unit_idempotency",
+    }),
+    [migrations[8]],
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: [],
+      migrations,
+      only: "070_funnel_submission_idempotency_recovery",
+    }),
+    /required predecessor 055_public_submission_abuse_guards/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      ledgerRows: [ledgerRow("055_public_submission_abuse_guards", "sha-055")],
+      migrations,
+      only: "070_funnel_submission_idempotency_recovery",
+    }),
+    [migrations[9]],
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: [],
+      migrations,
+      only: "071_forms_owner_tenant_guard",
+    }),
+    /required predecessor 066_oauth_state_workspace_user_guard/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      ledgerRows: [
+        ledgerRow("053_oauth_state_integrity", "sha-053"),
+        ledgerRow("066_oauth_state_workspace_user_guard", "sha-066"),
+      ],
+      migrations,
+      only: "071_forms_owner_tenant_guard",
+    }),
+    [migrations[10]],
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: [
+        ledgerRow("053_oauth_state_integrity", "sha-053"),
+        ledgerRow("066_oauth_state_workspace_user_guard", "sha-066"),
+        ledgerRow("071_forms_owner_tenant_guard", "sha-071"),
+      ],
+      migrations,
+      only: "072_form_submission_atomicity",
+    }),
+    /required predecessor 070_funnel_submission_idempotency_recovery/,
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: [
+        ledgerRow("055_public_submission_abuse_guards", "sha-055"),
+        ledgerRow("070_funnel_submission_idempotency_recovery", "sha-070"),
+      ],
+      migrations,
+      only: "072_form_submission_atomicity",
+    }),
+    /required predecessor 071_forms_owner_tenant_guard/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      ledgerRows: [
+        ledgerRow("053_oauth_state_integrity", "sha-053"),
+        ledgerRow("055_public_submission_abuse_guards", "sha-055"),
+        ledgerRow("066_oauth_state_workspace_user_guard", "sha-066"),
+        ledgerRow("070_funnel_submission_idempotency_recovery", "sha-070"),
+        ledgerRow("071_forms_owner_tenant_guard", "sha-071"),
+      ],
+      migrations,
+      only: "072_form_submission_atomicity",
+    }),
+    [migrations[11]],
+  );
+  assert.throws(
     () => resolveMigrationLedgerState({
       ledgerRows: [ledgerRow("052_validate_property_inventory_tenant_guards", "sha-052")],
       migrations,
@@ -460,6 +653,11 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"061_validate_and_activate_tenant_rls_pilot"/);
   assert.match(runner, /"062_private_media_contract_cutover"/);
   assert.match(runner, /"065_notification_guard_search_path_hardening"/);
+  assert.match(runner, /"068_qa_batch_reset_safety"/);
+  assert.match(
+    runner,
+    /\["068_qa_batch_reset_safety", "061_validate_and_activate_tenant_rls_pilot"\]/,
+  );
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 

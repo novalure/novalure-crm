@@ -3,9 +3,17 @@ import type { BotEvaluationCaseResult, BotEvaluationRun } from "@/lib/crm-types"
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
+import { withTenantTransaction } from "@/lib/db/tenant-client";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
+import { resolveCanonicalFunnelSubmissionSemantics } from "@/lib/funnel-submission-validation";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
 import { hasProductCapability } from "@/lib/product-model";
+import {
+  buildPublicContactIdentityLocks,
+  normalizePublicContactEmail,
+  normalizePublicContactPhone,
+  publicContactIdentityLockNamespace,
+} from "@/lib/security/public-contact-identity";
 
 type IdRow = { id: string };
 
@@ -41,13 +49,6 @@ export type BotCrmSyncResult = {
   leadId: string | null;
   timelineItemId: string | null;
 };
-const legacyProjectNames: Record<string, string> = {
-  project_wohnpark_graz: "Wohnpark Graz",
-  project_investment_wien: "Investment Wien",
-  project_seller_linz: "Seller Leads Linz",
-  project_novalure_eu: "Novalure.eu",
-};
-
 export type PersistenceResult =
   | { persisted: true; ids: Record<string, string | null> }
   | { persisted: false; reason: string };
@@ -309,366 +310,848 @@ export async function createApprovalRequest(input: {
 
   return row?.id ?? null;
 }
+type FunnelSubmissionPersistenceRow = {
+  contactId: string;
+  dealId: string | null;
+  leadId: string | null;
+  submissionId: string;
+  taskId: string | null;
+  timelineItemId: string | null;
+};
+
+type FunnelContactIdentityRow = {
+  conflict: boolean;
+};
+
+export async function findPersistedFunnelSubmissionByIdempotency(input: {
+  databaseFunnelId: string;
+  submissionIdempotencyHash: string;
+  workspaceId: string;
+}): Promise<PersistenceResult> {
+  if (
+    !canPersist() ||
+    !isUuid(input.workspaceId) ||
+    !isUuid(input.databaseFunnelId) ||
+    !/^[a-f0-9]{64}$/u.test(input.submissionIdempotencyHash)
+  ) {
+    return { persisted: false, reason: "Invalid live funnel submission replay scope" };
+  }
+
+  const idempotencyKey = `funnel:${input.submissionIdempotencyHash}`;
+  const row = await queryOne<FunnelSubmissionPersistenceRow>(
+    `
+      select
+        submission.id as "submissionId",
+        submission.contact_id as "contactId",
+        submission.lead_id as "leadId",
+        (
+          select deal.id
+          from deals deal
+          where deal.workspace_id = submission.workspace_id
+            and deal.idempotency_key = $4
+          limit 1
+        ) as "dealId",
+        (
+          select task.id
+          from tasks task
+          where task.workspace_id = submission.workspace_id
+            and task.metadata->>'submissionIdempotencyHash' = $3
+          order by task.created_at asc
+          limit 1
+        ) as "taskId",
+        (
+          select timeline.id
+          from contact_timeline_items timeline
+          where timeline.workspace_id = submission.workspace_id
+            and timeline.metadata->>'submissionIdempotencyHash' = $3
+          order by timeline.occurred_at asc
+          limit 1
+        ) as "timelineItemId"
+      from funnel_submissions submission
+      where submission.workspace_id = $1::uuid
+        and submission.funnel_id = $2::uuid
+        and submission.idempotency_key = $4
+      limit 1
+    `,
+    [input.workspaceId, input.databaseFunnelId, input.submissionIdempotencyHash, idempotencyKey],
+  );
+
+  if (!row?.submissionId || !row.contactId) {
+    return { persisted: false, reason: "Live submission replay not found" };
+  }
+  return {
+    ids: {
+      contactId: row.contactId,
+      dealId: row.dealId,
+      leadId: row.leadId,
+      submissionId: row.submissionId,
+      taskId: row.taskId,
+      timelineItemId: row.timelineItemId,
+    },
+    persisted: true,
+  };
+}
 
 export async function persistFunnelSubmission(input: {
+  databaseFunnelId: string;
   session: AppSession;
   blueprint: FunnelBlueprint;
   payload: FunnelSubmissionPayload;
   score: number;
+  submissionIdempotencyHash: string;
 }): Promise<PersistenceResult> {
   if (!canPersist()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
-
-  const funnel = await getOrCreateSubmissionFunnel(input.session, input.blueprint);
-
-  if (!funnel) {
-    return { persisted: false, reason: "Funnel not found in database" };
+  if (
+    !isUuid(input.session.workspaceId) ||
+    !isUuid(input.session.userId) ||
+    !isUuid(input.databaseFunnelId) ||
+    !/^[a-f0-9]{64}$/u.test(input.submissionIdempotencyHash)
+  ) {
+    return { persisted: false, reason: "Invalid live funnel submission scope" };
   }
 
-  const contactName = getAnswerString(input.payload.answers, ["name", "full_name", "fullname", "contact_name"]) || "Funnel Lead";
-  const email = getAnswerString(input.payload.answers, ["email", "e_mail", "mail"]);
-  const phone = getAnswerString(input.payload.answers, ["phone", "telefon", "telephone"]);
-  const intent = getAnswerString(input.payload.answers, ["intent", "bedarf", "interest", "interesse"]) || input.blueprint.goal;
-  const budget = getAnswerString(input.payload.answers, ["budget", "price", "preis"]);
+  const semantics = resolveCanonicalFunnelSubmissionSemantics(input.blueprint, input.payload.answers);
+  const contactName = semantics.contactName || "Funnel Lead";
+  const email = semantics.email;
+  const phone = semantics.phone;
+  const intent = semantics.intent || input.blueprint.goal;
+  const budget = semantics.budget;
   const leadType = input.blueprint.audience;
-  const now = new Date().toISOString();
-  const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
   const hotStatus = input.score >= 70;
+  const consentLabel = input.payload.consent.marketing ? "Opt-in" : "Nur CRM";
+  const followUp = input.blueprint.crmHandover.followUp || "Review funnel lead";
+  const submissionIdempotencyKey = `funnel:${input.submissionIdempotencyHash}`;
+  const tracking = {
+    submissionIdempotencyHash: input.submissionIdempotencyHash,
+    utm: input.payload.utm ?? {},
+    visitor: input.payload.visitor,
+  };
+  const rawPayload = {
+    ...input.payload,
+    publicSubmission: undefined,
+    submissionIdempotencyHash: input.submissionIdempotencyHash,
+  };
 
-  const contact = email
-    ? await queryOne<IdRow>(
+  const normalizedEmail = normalizePublicContactEmail(email);
+  const normalizedPhone = normalizePublicContactPhone(phone);
+  const contactIdentityLocks = buildPublicContactIdentityLocks({
+    email,
+    fallback: input.submissionIdempotencyHash,
+    phone,
+  });
+  const row = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    async (transaction) => {
+      // Keep contact lookup and insert safe across Form and Funnel channels.
+      // Locks are acquired in separate READ COMMITTED statements so each
+      // following lookup sees records committed by the previous lock holder.
+      for (const contactIdentityLock of contactIdentityLocks) {
+        await transaction.execute(
+          `select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text, 0))`,
+          [input.session.workspaceId, publicContactIdentityLockNamespace, contactIdentityLock],
+        );
+      }
+      const [contactIdentity] = await transaction.query<FunnelContactIdentityRow>(
         `
-          insert into contacts (
-            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
+          with selected_funnel as (
+            select workspace_id, project_id
+            from funnels
+            where workspace_id = $1::uuid and id = $2::uuid
+          ),
+          matched_contacts as (
+            select
+              contact.id,
+              lower(btrim(contact.email)) as normalized_email,
+              regexp_replace(coalesce(contact.phone, ''), '[^0-9+]', '', 'g') as normalized_phone
+            from contacts contact
+            join selected_funnel funnel on funnel.workspace_id = contact.workspace_id
+            where contact.archived_at is null
+              and (contact.project_id = funnel.project_id or contact.project_id is null)
+              and (
+                ($3::text is not null and lower(btrim(contact.email)) = $3::text)
+                or ($4::text is not null and regexp_replace(coalesce(contact.phone, ''), '[^0-9+]', '', 'g') = $4::text)
+              )
+            for update of contact
           )
-          values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
-          on conflict do nothing
-          returning id
+          select
+            count(distinct id) > 1
+            or coalesce(bool_or(
+              (
+                $3::text is not null
+                and normalized_email = $3::text
+                and $4::text is not null
+                and nullif(normalized_phone, '') is not null
+                and normalized_phone <> $4::text
+              )
+              or (
+                $4::text is not null
+                and normalized_phone = $4::text
+                and $3::text is not null
+                and nullif(normalized_email, '') is not null
+                and normalized_email <> $3::text
+              )
+            ), false) as conflict
+          from matched_contacts
         `,
         [
           input.session.workspaceId,
-          funnel.projectId,
-          funnel.ownerUserId,
-          contactName,
-          leadType,
-          input.blueprint.entryChannel,
+          input.databaseFunnelId,
+          normalizedEmail || null,
+          normalizedPhone || null,
+        ],
+      );
+      if (contactIdentity?.conflict) return { identityConflict: true } as const;
+      return transaction.queryOne<FunnelSubmissionPersistenceRow>(
+    `
+      with selected_funnel as (
+        select
+          id,
+          workspace_id as "workspaceId",
+          project_id as "projectId",
+          owner_user_id as "ownerUserId",
+          name
+        from funnels
+        where workspace_id = $1::uuid
+          and id = $2::uuid
+          and project_id is not null
+          and status = 'aktiv'
+          and (
+            (
+              blueprint->>'schemaVersion' = '1'
+              and blueprint->>'status' = 'aktiv'
+              and jsonb_typeof(blueprint->'pages') = 'array'
+            )
+            or (
+              blueprint->'blueprint'->>'schemaVersion' = '1'
+              and blueprint->'blueprint'->>'status' = 'aktiv'
+              and jsonb_typeof(blueprint->'blueprint'->'pages') = 'array'
+            )
+          )
+        for update
+      ),
+      existing_submission as (
+        select
+          s.id as "submissionId",
+          s.contact_id as "contactId",
+          s.lead_id as "leadId"
+        from funnel_submissions s
+        join selected_funnel f
+          on f."workspaceId" = s.workspace_id
+         and f.id = s.funnel_id
+        where s.idempotency_key = $26
+        limit 1
+      ),
+      existing_contact as (
+        select c.id
+        from contacts c
+        join selected_funnel f on f."workspaceId" = c.workspace_id
+        where not exists (select 1 from existing_submission)
+          and (
+            ($27::text is not null and lower(btrim(c.email)) = $27::text)
+            or ($28::text is not null and regexp_replace(coalesce(c.phone, ''), '[^0-9+]', '', 'g') = $28::text)
+          )
+          and (c.project_id = f."projectId" or c.project_id is null)
+          and c.archived_at is null
+        order by (c.project_id = f."projectId") desc, c.created_at asc
+        limit 1
+        for update of c
+      ),
+      updated_contact as (
+        update contacts c
+        set
+          email = coalesce(nullif(btrim(c.email), ''), $8::text),
+          phone = coalesce(nullif(btrim(c.phone), ''), $9::text),
+          updated_at = now()
+        from existing_contact existing
+        where c.id = existing.id
+        returning c.id
+      ),
+      inserted_contact as (
+        insert into contacts (
+          workspace_id,
+          project_id,
+          owner_user_id,
+          name,
+          role,
+          source,
           intent,
-          input.payload.consent.marketing ? "Opt-in" : "Nur CRM",
+          consent_label,
           email,
           phone,
-          JSON.stringify({ visitor: input.payload.visitor, utm: input.payload.utm ?? {} }),
-        ],
-      )
-    : null;
-
-  const contactId =
-    contact?.id ??
-    (
-      await queryOne<IdRow>(
-        `
-          insert into contacts (
-            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
-          )
-          values ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          funnel.projectId,
-          funnel.ownerUserId,
-          contactName,
-          leadType,
-          input.blueprint.entryChannel,
-          intent,
-          input.payload.consent.marketing ? "Opt-in" : "Nur CRM",
-          email,
-          phone,
-          JSON.stringify({ visitor: input.payload.visitor, utm: input.payload.utm ?? {} }),
-        ],
-      )
-    )?.id;
-
-  const lead = input.blueprint.crmHandover.createLeadInboxEntry
-    ? await queryOne<IdRow>(
-        `
-          insert into leads (
-            workspace_id,
-            project_id,
-            contact_id,
-            assigned_to_user_id,
-            source,
-            type,
-            status,
-            score,
-            budget,
-            intent,
-            next_action,
-            received_at,
-            sla_due_at,
-            hot_status,
-            metadata
-          )
-          values (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz,
-            $13::timestamptz, $14, $15::jsonb
-          )
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          funnel.projectId,
-          contactId,
-          funnel.ownerUserId,
-          input.blueprint.entryChannel,
-          leadType,
-          hotStatus ? "Termin offen" : "Qualifizieren",
-          input.score,
+          metadata
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          f."ownerUserId",
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10::jsonb
+        from selected_funnel f
+        where not exists (select 1 from existing_submission)
+          and not exists (select 1 from existing_contact)
+        returning id
+      ),
+      chosen_contact as (
+        select "contactId" as id from existing_submission where "contactId" is not null
+        union all
+        select id from updated_contact
+        union all
+        select id from inserted_contact
+        limit 1
+      ),
+      inserted_lead as (
+        insert into leads (
+          workspace_id,
+          project_id,
+          contact_id,
+          assigned_to_user_id,
+          source,
+          type,
+          status,
+          score,
           budget,
           intent,
-          input.blueprint.crmHandover.followUp,
-          now,
-          slaDueAt,
-          hotStatus,
-          JSON.stringify({ answers: input.payload.answers, consent: input.payload.consent }),
-        ],
+          next_action,
+          received_at,
+          sla_due_at,
+          hot_status,
+          metadata,
+          idempotency_key
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          c.id,
+          f."ownerUserId",
+          $5,
+          $4,
+          case when $12::boolean then 'Termin offen' else 'Qualifizieren' end,
+          $13::integer,
+          $14,
+          $6,
+          $15,
+          now(),
+          now() + interval '4 hours',
+          $12::boolean,
+          jsonb_build_object(
+            'answers', $16::jsonb,
+            'consent', $17::jsonb,
+            'submissionIdempotencyHash', $24
+          ),
+          $26
+        from selected_funnel f
+        cross join chosen_contact c
+        where $11::boolean
+          and not exists (select 1 from existing_submission)
+        returning id
+      ),
+      inserted_submission as (
+        insert into funnel_submissions (
+          workspace_id,
+          project_id,
+          funnel_id,
+          contact_id,
+          lead_id,
+          mode,
+          score,
+          answers,
+          consent,
+          tracking,
+          raw_payload,
+          idempotency_key
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          f.id,
+          c.id,
+          (select id from inserted_lead limit 1),
+          'live',
+          $13::integer,
+          $16::jsonb,
+          $17::jsonb,
+          $18::jsonb,
+          $19::jsonb,
+          $26
+        from selected_funnel f
+        cross join chosen_contact c
+        where not exists (select 1 from existing_submission)
+        returning id
+      ),
+      inserted_deal as (
+        insert into deals (
+          workspace_id,
+          project_id,
+          contact_id,
+          owner_user_id,
+          lead_id,
+          name,
+          stage,
+          probability,
+          source,
+          next_action,
+          metadata,
+          idempotency_key
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          c.id,
+          f."ownerUserId",
+          (select id from inserted_lead limit 1),
+          $3 || ' - ' || f.name,
+          $21,
+          least(95, greatest(10, $13::integer)),
+          $5,
+          $15,
+          jsonb_build_object(
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24
+          ),
+          $26
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        where $20 = 'pipeline'
+        returning id
+      ),
+      inserted_privacy_consent as (
+        insert into consent_records (
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          status,
+          source,
+          metadata
+        )
+        select
+          f."workspaceId",
+          c.id,
+          f."projectId",
+          'Funnel',
+          'Opt-in',
+          f.name,
+          jsonb_build_object(
+            'consent', $17::jsonb,
+            'funnelId', f.id,
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24,
+            'submissionMode', 'live'
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        where $25::boolean
+        returning id
+      ),
+      inserted_marketing_consent as (
+        insert into consent_records (
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          status,
+          source,
+          metadata
+        )
+        select
+          f."workspaceId",
+          c.id,
+          f."projectId",
+          'Newsletter',
+          'Opt-in',
+          f.name,
+          jsonb_build_object(
+            'consent', $17::jsonb,
+            'funnelId', f.id,
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24,
+            'submissionMode', 'live'
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        where $23::boolean
+        returning id
+      ),
+      inserted_task as (
+        insert into tasks (
+          workspace_id,
+          project_id,
+          contact_id,
+          lead_id,
+          owner_user_id,
+          title,
+          due_at,
+          priority,
+          status,
+          metadata
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          c.id,
+          (select id from inserted_lead limit 1),
+          f."ownerUserId",
+          $15,
+          now() + interval '2 hours',
+          case when $12::boolean then 'Hoch' else 'Mittel' end,
+          'open',
+          jsonb_build_object(
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        where $22::boolean
+        returning id
+      ),
+      inserted_timeline as (
+        insert into contact_timeline_items (
+          workspace_id,
+          contact_id,
+          project_id,
+          channel,
+          title,
+          detail,
+          outcome,
+          metadata
+        )
+        select
+          f."workspaceId",
+          c.id,
+          f."projectId",
+          $5,
+          'Funnel submission',
+          $6 || ' · Score ' || $13::text,
+          case when $12::boolean then 'offen' else 'info' end,
+          jsonb_build_object(
+            'leadId', (select id from inserted_lead limit 1),
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        returning id
+      ),
+      updated_funnel as (
+        update funnels f
+        set
+          leads_count = f.leads_count + 1,
+          conversion_rate = case
+            when f.visits > 0
+              then round(((f.leads_count + 1)::numeric / f.visits::numeric) * 100, 2)
+            else f.conversion_rate
+          end,
+          updated_at = now()
+        from inserted_submission s
+        where f.id = $2::uuid
+          and f.workspace_id = $1::uuid
+        returning f.id
+      ),
+      inserted_audit as (
+        insert into audit_logs (
+          workspace_id,
+          project_id,
+          actor_user_id,
+          action,
+          entity_type,
+          entity_id,
+          before,
+          after
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          null,
+          'funnel.submission.persisted',
+          'funnel_submission',
+          s.id,
+          null,
+          jsonb_build_object(
+            'contactId', c.id,
+            'dealId', (select id from inserted_deal limit 1),
+            'leadId', (select id from inserted_lead limit 1),
+            'submissionIdempotencyHash', $24,
+            'taskId', (select id from inserted_task limit 1)
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        returning id
+      ),
+      inserted_funnel_analytics as (
+        insert into analytics_events (
+          workspace_id,
+          project_id,
+          entity_id,
+          entity_type,
+          user_id,
+          contact_id,
+          lead_id,
+          deal_id,
+          funnel_id,
+          event_type,
+          module,
+          source,
+          channel,
+          value_cents,
+          occurred_at,
+          metadata
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          s.id,
+          'funnel_submission',
+          null,
+          c.id,
+          (select id from inserted_lead limit 1),
+          (select id from inserted_deal limit 1),
+          f.id,
+          'funnel_submit',
+          'funnel',
+          $5,
+          $5,
+          0,
+          now(),
+          jsonb_build_object(
+            'analyticsVersion', 1,
+            'answers', $16::jsonb,
+            'consent', $17::jsonb,
+            'destination', $20,
+            'entityId', s.id,
+            'entityType', 'funnel_submission',
+            'mode', 'live',
+            'score', $13::integer,
+            'submissionIdempotencyHash', $24,
+            'tracking', $18::jsonb
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_submission s
+        returning id
+      ),
+      inserted_lead_analytics as (
+        insert into analytics_events (
+          workspace_id,
+          project_id,
+          entity_id,
+          entity_type,
+          user_id,
+          contact_id,
+          lead_id,
+          deal_id,
+          funnel_id,
+          event_type,
+          module,
+          source,
+          channel,
+          value_cents,
+          occurred_at,
+          metadata
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          l.id,
+          'lead',
+          null,
+          c.id,
+          l.id,
+          (select id from inserted_deal limit 1),
+          f.id,
+          'lead_created',
+          'lead_inbox',
+          $5,
+          $5,
+          0,
+          now(),
+          jsonb_build_object(
+            'analyticsVersion', 1,
+            'entityId', l.id,
+            'entityType', 'lead',
+            'score', $13::integer,
+            'slaHours', 4,
+            'status', case when $12::boolean then 'Termin offen' else 'Qualifizieren' end,
+            'submissionIdempotencyHash', $24,
+            'trigger', 'funnel_submit'
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_lead l
+        returning id
+      ),
+      inserted_speed_to_lead as (
+        insert into speed_to_lead_events (
+          workspace_id,
+          project_id,
+          lead_id,
+          contact_id,
+          owner_user_id,
+          state,
+          due_at,
+          first_response_at,
+          minutes_until_due,
+          notification_channel,
+          metadata
+        )
+        select
+          f."workspaceId",
+          f."projectId",
+          l.id,
+          c.id,
+          f."ownerUserId",
+          'covered',
+          now() + interval '4 hours',
+          null,
+          240,
+          'teams',
+          jsonb_build_object(
+            'score', $13::integer,
+            'source', $5,
+            'sourcePayload', 'funnel_submission',
+            'submissionId', s.id,
+            'submissionIdempotencyHash', $24,
+            'trigger', 'funnel_submit'
+          )
+        from selected_funnel f
+        cross join chosen_contact c
+        cross join inserted_lead l
+        cross join inserted_submission s
+        returning id
+      ),
+      existing_deal as (
+        select d.id
+        from deals d
+        join selected_funnel f on f."workspaceId" = d.workspace_id
+        where d.idempotency_key = $26
+        limit 1
+      ),
+      existing_task as (
+        select t.id
+        from tasks t
+        join selected_funnel f on f."workspaceId" = t.workspace_id
+        where t.metadata->>'submissionIdempotencyHash' = $24
+        order by t.created_at asc
+        limit 1
+      ),
+      existing_timeline as (
+        select timeline.id
+        from contact_timeline_items timeline
+        join selected_funnel f on f."workspaceId" = timeline.workspace_id
+        where timeline.metadata->>'submissionIdempotencyHash' = $24
+        order by timeline.occurred_at asc
+        limit 1
       )
-    : null;
-
-  const submission = await queryOne<IdRow>(
-    `
-      insert into funnel_submissions (
-        workspace_id, project_id, funnel_id, contact_id, lead_id, mode, score, answers, consent, tracking, raw_payload
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb)
-      returning id
+      select
+        s.id as "submissionId",
+        c.id as "contactId",
+        (select id from inserted_lead limit 1) as "leadId",
+        (select id from inserted_deal limit 1) as "dealId",
+        (select id from inserted_task limit 1) as "taskId",
+        (select id from inserted_timeline limit 1) as "timelineItemId"
+      from inserted_submission s
+      cross join chosen_contact c
+      cross join updated_funnel f
+      where (select count(*) from inserted_audit) = 1
+        and (select count(*) from inserted_funnel_analytics) = 1
+        and (
+          (select count(*) from inserted_lead) = 0
+          or (
+            (select count(*) from inserted_lead_analytics) = 1
+            and (select count(*) from inserted_speed_to_lead) = 1
+          )
+        )
+        and (
+          not $25::boolean
+          or (select count(*) from inserted_privacy_consent) = 1
+        )
+        and (
+          not $23::boolean
+          or (select count(*) from inserted_marketing_consent) = 1
+        )
+      union all
+      select
+        existing."submissionId",
+        existing."contactId",
+        existing."leadId",
+        (select id from existing_deal limit 1),
+        (select id from existing_task limit 1),
+        (select id from existing_timeline limit 1)
+      from existing_submission existing
+      where existing."contactId" is not null
     `,
     [
       input.session.workspaceId,
-      funnel.projectId,
-      funnel.id,
-      contactId,
-      lead?.id ?? null,
-      input.payload.mode,
-      input.score,
-      JSON.stringify(input.payload.answers),
-      JSON.stringify(input.payload.consent),
-      JSON.stringify({ utm: input.payload.utm ?? {}, visitor: input.payload.visitor }),
-      JSON.stringify(input.payload),
-    ],
-  );
-
-  const deal =
-    input.blueprint.crmHandover.destination === "pipeline"
-      ? await queryOne<IdRow>(
-          `
-            insert into deals (
-              workspace_id, project_id, contact_id, owner_user_id, lead_id, name, stage, probability, source, next_action, metadata
-            )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
-            returning id
-          `,
-          [
-            input.session.workspaceId,
-            funnel.projectId,
-            contactId,
-            funnel.ownerUserId,
-            lead?.id ?? null,
-            `${contactName} - ${funnel.name}`,
-            input.blueprint.crmHandover.pipelineStage || "Neuer Lead",
-            Math.min(95, Math.max(10, input.score)),
-            input.blueprint.entryChannel,
-            input.blueprint.crmHandover.followUp,
-            JSON.stringify({ submissionId: submission?.id }),
-          ],
-    )
-    : null;
-
-  if (contactId && input.payload.consent.privacy) {
-    await queryOne(
-      `
-        insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
-        values ($1, $2, $3, $4, $5, $6, $7::jsonb)
-        returning id
-      `,
-      [
-        input.session.workspaceId,
-        contactId,
-        funnel.projectId,
-        "Funnel",
-        "Opt-in",
-        funnel.name,
-        JSON.stringify({ funnelId: funnel.id, submissionMode: input.payload.mode, consent: input.payload.consent }),
-      ],
-    );
-  }
-
-  if (contactId && input.payload.consent.marketing) {
-    await queryOne(
-      `
-        insert into consent_records (workspace_id, contact_id, project_id, channel, status, source, metadata)
-        values ($1, $2, $3, $4, $5, $6, $7::jsonb)
-        returning id
-      `,
-      [
-        input.session.workspaceId,
-        contactId,
-        funnel.projectId,
-        "Newsletter",
-        "Opt-in",
-        funnel.name,
-        JSON.stringify({ funnelId: funnel.id, submissionMode: input.payload.mode, consent: input.payload.consent }),
-      ],
-    );
-  }
-
-  const task = input.blueprint.crmHandover.createTask
-    ? await queryOne<IdRow>(
-        `
-          insert into tasks (workspace_id, project_id, contact_id, lead_id, owner_user_id, title, due_at, priority, status, metadata)
-          values ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, 'open', $9::jsonb)
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          funnel.projectId,
-          contactId,
-          lead?.id ?? null,
-          funnel.ownerUserId,
-          input.blueprint.crmHandover.followUp || "Review funnel lead",
-          new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString(),
-          hotStatus ? "Hoch" : "Mittel",
-          JSON.stringify({ submissionId: submission?.id }),
-        ],
-      )
-    : null;
-
-  const timelineItem = contactId
-    ? await queryOne<IdRow>(
-        `
-          insert into contact_timeline_items (
-            workspace_id, contact_id, project_id, channel, title, detail, outcome, metadata
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          contactId,
-          funnel.projectId,
-          input.blueprint.entryChannel,
-          "Funnel submission",
-          `${intent} · Score ${input.score}`,
-          hotStatus ? "offen" : "info",
-          JSON.stringify({ submissionId: submission?.id, leadId: lead?.id ?? null }),
-        ],
-      )
-    : null;
-
-  await queryOne(
-    `
-      update funnels
-      set leads_count = leads_count + 1,
-          conversion_rate = case when visits > 0 then round(((leads_count + 1)::numeric / visits::numeric) * 100, 2) else conversion_rate end,
-          updated_at = now()
-      where id = $1
-      returning id
-    `,
-    [funnel.id],
-  );
-
-  await Promise.all([
-    writeAuditLog({
-      session: input.session,
-      action: "funnel.submission.persisted",
-      entityType: "funnel_submission",
-      entityId: submission?.id,
-      after: { contactId, leadId: lead?.id ?? null, dealId: deal?.id ?? null, taskId: task?.id ?? null },
-    }),
-    writeCrmAnalyticsEvent({
-      channel: input.blueprint.entryChannel,
-      contactId,
-      dealId: deal?.id ?? null,
-      entityId: submission?.id ?? null,
-      entityType: "funnel_submission",
-      eventType: "funnel_submit",
-      funnelId: funnel.id,
-      leadId: lead?.id ?? null,
-      metadata: {
-        answers: input.payload.answers,
-        consent: input.payload.consent,
-        destination: input.blueprint.crmHandover.destination,
-        mode: input.payload.mode,
-        score: input.score,
-        taskId: task?.id ?? null,
+      input.databaseFunnelId,
+      contactName,
+      leadType,
+      input.blueprint.entryChannel,
+      intent,
+      consentLabel,
+      email || null,
+      phone || null,
+      JSON.stringify({
+        submissionIdempotencyHash: input.submissionIdempotencyHash,
         utm: input.payload.utm ?? {},
         visitor: input.payload.visitor,
-      },
-      module: "funnel",
-      projectId: funnel.projectId,
-      source: input.blueprint.entryChannel,
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-    lead?.id
-      ? writeCrmAnalyticsEvent({
-          channel: input.blueprint.entryChannel,
-          contactId,
-          dealId: deal?.id ?? null,
-          entityId: lead.id,
-          entityType: "lead",
-          eventType: "lead_created",
-          funnelId: funnel.id,
-          leadId: lead.id,
-          metadata: {
-            score: input.score,
-            slaHours: 4,
-            status: hotStatus ? "Termin offen" : "Qualifizieren",
-            trigger: "funnel_submit",
-          },
-          module: "lead_inbox",
-          projectId: funnel.projectId,
-          source: input.blueprint.entryChannel,
-          userId: input.session.userId,
-          workspaceId: input.session.workspaceId,
-        })
-      : null,
-    lead?.id
-      ? recordSpeedToLeadEvent({
-          channel: input.blueprint.entryChannel,
-          contactId,
-          dueAt: slaDueAt,
-          leadId: lead.id,
-          metadata: {
-            score: input.score,
-            sourcePayload: "funnel_submission",
-            submissionId: submission?.id ?? null,
-            trigger: "funnel_submit",
-          },
-          ownerUserId: funnel.ownerUserId,
-          projectId: funnel.projectId,
-          source: input.blueprint.entryChannel,
-          state: "covered",
-          userId: input.session.userId,
-          workspaceId: input.session.workspaceId,
-        })
-      : null,
-  ]);
+      }),
+      input.blueprint.crmHandover.createLeadInboxEntry,
+      hotStatus,
+      input.score,
+      budget || null,
+      followUp,
+      JSON.stringify(input.payload.answers),
+      JSON.stringify(input.payload.consent),
+      JSON.stringify(tracking),
+      JSON.stringify(rawPayload),
+      input.blueprint.crmHandover.destination,
+      input.blueprint.crmHandover.pipelineStage || "Neuer Lead",
+      input.blueprint.crmHandover.createTask,
+      input.payload.consent.marketing,
+      input.submissionIdempotencyHash,
+      input.payload.consent.privacy,
+      submissionIdempotencyKey,
+      normalizedEmail || null,
+      normalizedPhone || null,
+        ],
+      );
+    },
+  );
+
+  if (row && "identityConflict" in row) {
+    return { persisted: false, reason: "Funnel contact identity conflict" };
+  }
+  if (!row?.submissionId || !row.contactId) {
+    return { persisted: false, reason: "Live submission could not be persisted atomically" };
+  }
 
   return {
     persisted: true,
     ids: {
-      submissionId: submission?.id ?? null,
-      contactId: contactId ?? null,
-      leadId: lead?.id ?? null,
-      dealId: deal?.id ?? null,
-      taskId: task?.id ?? null,
-      timelineItemId: timelineItem?.id ?? null,
+      submissionId: row.submissionId,
+      contactId: row.contactId,
+      leadId: row.leadId,
+      dealId: row.dealId,
+      taskId: row.taskId,
+      timelineItemId: row.timelineItemId,
     },
   };
 }
-
 export async function persistFunnelTestSubmission(input: {
+  databaseFunnelId: string;
   session: AppSession;
   blueprint: FunnelBlueprint;
   payload: FunnelSubmissionPayload;
@@ -678,7 +1161,7 @@ export async function persistFunnelTestSubmission(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const funnel = await getOrCreateSubmissionFunnel(input.session, input.blueprint);
+  const funnel = await findSubmissionFunnel(input.session, input.databaseFunnelId);
   if (!funnel) {
     return { persisted: false, reason: "Funnel not found in database" };
   }
@@ -702,6 +1185,10 @@ export async function persistFunnelTestSubmission(input: {
       JSON.stringify({ ...input.payload, mode: "test" }),
     ],
   );
+
+  if (!submission) {
+    return { persisted: false, reason: "Test submission could not be persisted" };
+  }
 
   await Promise.all([
     writeAuditLog({
@@ -746,8 +1233,10 @@ export async function persistFunnelTestSubmission(input: {
   };
 }
 
-async function getOrCreateSubmissionFunnel(session: AppSession, blueprint: FunnelBlueprint) {
-  const existing = await queryOne<FunnelRow>(
+async function findSubmissionFunnel(session: AppSession, databaseFunnelId: string) {
+  if (!isUuid(session.workspaceId) || !isUuid(databaseFunnelId)) return null;
+
+  return queryOne<FunnelRow>(
     `
       select
         id,
@@ -757,107 +1246,38 @@ async function getOrCreateSubmissionFunnel(session: AppSession, blueprint: Funne
         name
       from funnels
       where workspace_id = $1
-        and (
-          ($2::uuid is not null and id = $2::uuid)
-          or tracking->>'legacyId' = $3
-          or name = $4
-        )
-      order by updated_at desc
+        and id = $2::uuid
+        and project_id is not null
       limit 1
     `,
-    [session.workspaceId, isUuid(blueprint.id) ? blueprint.id : null, blueprint.id, blueprint.name],
-  );
-
-  if (existing) return existing;
-
-  const projectId = await resolveSubmissionProjectId(session.workspaceId, blueprint.projectId);
-  const ownerUserId = isUuid(session.userId) ? session.userId : null;
-  const status = blueprint.status === "aktiv" ? "aktiv" : blueprint.status === "optimieren" ? "optimieren" : "entwurf";
-
-  return queryOne<FunnelRow>(
-    `
-      insert into funnels (
-        workspace_id,
-        project_id,
-        owner_user_id,
-        name,
-        goal,
-        audience,
-        entry_channel,
-        status,
-        blueprint,
-        tracking
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
-      returning
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        owner_user_id as "ownerUserId",
-        name
-    `,
-    [
-      session.workspaceId,
-      projectId,
-      ownerUserId,
-      blueprint.name,
-      blueprint.goal,
-      blueprint.audience,
-      blueprint.entryChannel,
-      status,
-      JSON.stringify(blueprint),
-      JSON.stringify({
-        legacyId: blueprint.id,
-        legacyProjectId: blueprint.projectId,
-        consentMode: blueprint.tracking.consentMode,
-        createdFromSubmission: true,
-      }),
-    ],
+    [session.workspaceId, databaseFunnelId],
   );
 }
 
-async function resolveSubmissionProjectId(workspaceId: string, projectId: string) {
-  if (isUuid(projectId)) {
-    const existing = await queryOne<IdRow>(
-      `
-        select id
-        from projects
-        where id = $1 and workspace_id = $2
-        limit 1
-      `,
-      [projectId, workspaceId],
-    );
-
-    if (existing) return existing.id;
+export async function isKnowledgeProjectInWorkspace(input: {
+  projectId?: string | null;
+  session: AppSession;
+}) {
+  if (!input.projectId) return true;
+  if (
+    !canPersist() ||
+    !isUuid(input.session.workspaceId) ||
+    !isUuid(input.projectId)
+  ) {
+    return false;
   }
 
-  const legacyName = legacyProjectNames[projectId];
-  const project = legacyName
-    ? await queryOne<IdRow>(
-        `
-          select id
-          from projects
-          where workspace_id = $1 and name = $2
-          limit 1
-        `,
-        [workspaceId, legacyName],
-      )
-    : null;
-
-  if (project) return project.id;
-
-  const fallback = await queryOne<IdRow>(
+  const project = await queryOne<IdRow>(
     `
       select id
       from projects
-      where workspace_id = $1
-      order by created_at asc
+      where workspace_id = $1::uuid
+        and id = $2::uuid
       limit 1
     `,
-    [workspaceId],
+    [input.session.workspaceId, input.projectId],
   );
-
-  return fallback?.id ?? null;
+  return Boolean(project);
 }
 
 export async function insertKnowledgeSourceWithChunks(input: {
@@ -890,45 +1310,81 @@ export async function insertKnowledgeSourceWithChunks(input: {
   const countSql = addParam(params, input.chunks.length);
   const locationSql = addParam(params, input.location ?? null);
   const metadataSql = addParam(params, JSON.stringify(input.metadata ?? {}));
+  const chunksSql = addParam(
+    params,
+    JSON.stringify(
+      input.chunks.map((chunk) => ({
+        chunk_index: chunk.chunkIndex,
+        citation_title: chunk.citationTitle,
+        citation_url: chunk.citationUrl ?? null,
+        content: chunk.content,
+        embedding_model: chunk.embeddingModel ?? null,
+        embedding_text: chunk.embedding?.length ? `[${chunk.embedding.join(",")}]` : null,
+        metadata: { embedding: chunk.embedding ? "stored" : null, embeddingReady: Boolean(chunk.embedding) },
+        token_count: chunk.tokenCount,
+      })),
+    ),
+  );
 
   const source = await queryOne<IdRow>(
     `
-      insert into knowledge_sources (
-        workspace_id, project_id, name, source_type, status, item_count, location, metadata
+      with selected_project as (
+        select id
+        from projects
+        where workspace_id = $1::uuid
+          and id = ${projectSql}
+      ),
+      inserted_source as (
+        insert into knowledge_sources (
+          workspace_id, project_id, name, source_type, status, item_count, location, metadata
+        )
+        select
+          $1::uuid,
+          selected_project.id,
+          ${titleSql},
+          ${sourceTypeSql},
+          ${statusSql},
+          ${countSql},
+          ${locationSql},
+          ${metadataSql}::jsonb
+        from (values (true)) as request_guard(allowed)
+        left join selected_project on true
+        where ${projectSql} is null or selected_project.id is not null
+        returning id
+      ),
+      inserted_chunks as (
+        insert into knowledge_chunks (
+          source_id, chunk_index, content, citation_title, citation_url, embedding, token_count, embedding_model, metadata
+        )
+        select
+          inserted_source.id,
+          chunk.chunk_index,
+          chunk.content,
+          chunk.citation_title,
+          chunk.citation_url,
+          case when chunk.embedding_text is null then null else chunk.embedding_text::vector end,
+          chunk.token_count,
+          chunk.embedding_model,
+          chunk.metadata
+        from inserted_source
+        cross join lateral jsonb_to_recordset(${chunksSql}::jsonb) as chunk(
+          chunk_index integer,
+          content text,
+          citation_title text,
+          citation_url text,
+          embedding_text text,
+          token_count integer,
+          embedding_model text,
+          metadata jsonb
+        )
+        returning id
       )
-      values ($1, ${projectSql}, ${titleSql}, ${sourceTypeSql}, ${statusSql}, ${countSql}, ${locationSql}, ${metadataSql}::jsonb)
-      returning id
+      select id from inserted_source
     `,
     params,
   );
 
   if (!source) return null;
-
-  for (const chunk of input.chunks) {
-    const chunkParams: unknown[] = [source.id];
-    const indexSql = addParam(chunkParams, chunk.chunkIndex);
-    const contentSql = addParam(chunkParams, chunk.content);
-    const titleSql = addParam(chunkParams, chunk.citationTitle);
-    const urlSql = addParam(chunkParams, chunk.citationUrl ?? null);
-    const embeddingSql = chunk.embedding?.length ? `${addParam(chunkParams, `[${chunk.embedding.join(",")}]`)}::vector` : "null";
-    const tokenSql = addParam(chunkParams, chunk.tokenCount);
-    const modelSql = addParam(chunkParams, chunk.embeddingModel ?? null);
-    const metadataSql = addParam(
-      chunkParams,
-      JSON.stringify({ embeddingReady: Boolean(chunk.embedding), embedding: chunk.embedding ? "stored" : null }),
-    );
-
-    await queryOne(
-      `
-        insert into knowledge_chunks (
-          source_id, chunk_index, content, citation_title, citation_url, embedding, token_count, embedding_model, metadata
-        )
-        values ($1, ${indexSql}, ${contentSql}, ${titleSql}, ${urlSql}, ${embeddingSql}, ${tokenSql}, ${modelSql}, ${metadataSql}::jsonb)
-        returning id
-      `,
-      chunkParams,
-    );
-  }
 
   await writeAuditLog({
     session: input.session,
@@ -1280,7 +1736,6 @@ export async function getOrCreateBotConversation(input: {
 
   return row?.id ?? null;
 }
-
 export async function listBotConversations(input: {
   session: AppSession;
   limit?: number;
@@ -1660,7 +2115,6 @@ export async function linkBotConversationToCrmEntities(input: {
 
   return row?.id ?? null;
 }
-
 export async function updateBotConversationStatus(input: {
   session: AppSession;
   conversationId?: string | null;
@@ -2256,7 +2710,6 @@ export async function insertBotToolCall(input: {
 
   return row?.id ?? null;
 }
-
 export async function insertBotDocumentSend(input: {
   session: AppSession;
   botId?: string | null;
@@ -2777,121 +3230,127 @@ export async function listNewsletterSends(input: {
 
 export async function recordNewsletterUnsubscribe(input: {
   campaignId?: string | null;
-  email?: string | null;
-  metadata?: unknown;
-  source?: string | null;
-  workspaceId?: string | null;
+  email: string;
+  tokenId: string;
+  workspaceId: string;
 }) {
   const email = normalizeEmailForStorage(input.email);
 
-  if (!canPersist() || !isUuid(input.workspaceId) || !email) {
+  if (
+    !canPersist() ||
+    !isUuid(input.workspaceId) ||
+    !email ||
+    !/^[A-Za-z0-9_-]{32}$/u.test(input.tokenId)
+  ) {
     return {
       contactIds: [] as string[],
       persisted: false,
-      reason: !email ? "invalid_email" : "database_unavailable",
+      reason: !canPersist() ? "database_unavailable" : "invalid_request",
       suppressionId: null as string | null,
     };
   }
 
   const campaignId = isUuid(input.campaignId) ? input.campaignId : null;
-  const source = cleanString(input.source) || "Newsletter-Abmeldelink";
-  const metadata = JSON.stringify(input.metadata ?? {});
-  let suppressionId: string | null = null;
-
-  try {
-    const existing = await queryOne<IdRow>(
-      `
-        select id
-        from newsletter_suppressions
-        where workspace_id = $1 and lower(email) = lower($2)
-        limit 1
-      `,
-      [input.workspaceId, email],
-    );
-
-    const row = existing
-      ? await queryOne<IdRow>(
-          `
-            update newsletter_suppressions
-            set
-              campaign_id = coalesce($3::uuid, campaign_id),
-              reason = 'unsubscribe',
-              source = $4,
-              metadata = metadata || $5::jsonb,
-              captured_at = now()
-            where id = $1 and workspace_id = $2
-            returning id
-          `,
-          [existing.id, input.workspaceId, campaignId, source, metadata],
-        )
-      : await queryOne<IdRow>(
-          `
-            insert into newsletter_suppressions (
-              workspace_id, campaign_id, email, reason, source, metadata
-            )
-            values ($1, $2::uuid, $3, 'unsubscribe', $4, $5::jsonb)
-            returning id
-          `,
-          [input.workspaceId, campaignId, email, source, metadata],
-        );
-
-    suppressionId = row?.id ?? null;
-  } catch {
-    suppressionId = null;
-  }
-
-  const contacts = await queryRows<{ id: string; projectId: string | null }>(
+  const result = await queryOne<{
+    contactIds: string[];
+    suppressionId: string;
+  }>(
     `
-      select id, project_id as "projectId"
-      from contacts
-      where workspace_id = $1 and lower(email) = lower($2)
-      limit 50
+      with lock_scope as (
+        select pg_advisory_xact_lock(hashtextextended($1::text || ':' || lower($2), 0))
+      ), valid_campaign as (
+        select id
+        from newsletter_campaigns
+        where workspace_id = $1 and id = $3::uuid
+        limit 1
+      ), upserted_suppression as (
+        insert into newsletter_suppressions (
+          workspace_id, campaign_id, email, reason, source, metadata
+        )
+        select
+          $1,
+          (select id from valid_campaign),
+          $2,
+          'unsubscribe',
+          'signed_newsletter_unsubscribe',
+          jsonb_build_object('unsubscribeTokenId', $4::text)
+        from lock_scope
+        on conflict (workspace_id, lower(email)) do update
+        set
+          campaign_id = coalesce(excluded.campaign_id, newsletter_suppressions.campaign_id),
+          reason = 'unsubscribe',
+          source = excluded.source,
+          metadata = newsletter_suppressions.metadata || excluded.metadata,
+          captured_at = case
+            when newsletter_suppressions.metadata->>'unsubscribeTokenId' = $4 then newsletter_suppressions.captured_at
+            else now()
+          end
+        returning id
+      ), matched_contacts as (
+        select c.id, c.project_id as "projectId"
+        from contacts c
+        cross join lock_scope
+        where c.workspace_id = $1 and lower(c.email) = lower($2)
+        limit 50
+      ), latest_consent as (
+        select
+          matched_contacts.id as "contactId",
+          latest.status
+        from matched_contacts
+        left join lateral (
+          select cr.status
+          from consent_records cr
+          where cr.workspace_id = $1
+            and cr.contact_id = matched_contacts.id
+            and cr.channel = 'Newsletter'
+          order by cr.captured_at desc, cr.id desc
+          limit 1
+        ) latest on true
+      ), updated_contacts as (
+        update contacts c
+        set consent_label = 'Abgemeldet', updated_at = now()
+        from matched_contacts
+        where c.id = matched_contacts.id
+          and c.workspace_id = $1
+          and c.consent_label is distinct from 'Abgemeldet'
+        returning c.id
+      ), inserted_consents as (
+        insert into consent_records (
+          workspace_id, contact_id, project_id, channel, status, source, metadata
+        )
+        select
+          $1,
+          matched_contacts.id,
+          matched_contacts."projectId",
+          'Newsletter',
+          'Abgemeldet',
+          'signed_newsletter_unsubscribe',
+          jsonb_build_object(
+            'campaignId', (select id from valid_campaign),
+            'trigger', 'confirmed_unsubscribe',
+            'unsubscribeTokenId', $4::text
+          )
+        from matched_contacts
+        left join latest_consent on latest_consent."contactId" = matched_contacts.id
+        where coalesce(latest_consent.status, '') !~* '(abgemeldet|opt.?out|unsubscribe|unsubscribed)'
+        returning contact_id
+      )
+      select
+        upserted_suppression.id as "suppressionId",
+        coalesce(
+          (select array_agg(matched_contacts.id order by matched_contacts.id) from matched_contacts),
+          array[]::uuid[]
+        ) as "contactIds"
+      from upserted_suppression
     `,
-    [input.workspaceId, email],
+    [input.workspaceId, email, campaignId, input.tokenId],
   );
 
-  if (contacts.length) {
-    await queryOne(
-      `
-        update contacts
-        set consent_label = 'Abgemeldet', updated_at = now()
-        where workspace_id = $1 and lower(email) = lower($2)
-        returning id
-      `,
-      [input.workspaceId, email],
-    );
-
-    await Promise.all(
-      contacts.map((contact) =>
-        queryOne(
-          `
-            insert into consent_records (
-              workspace_id, contact_id, project_id, channel, status, source, metadata
-            )
-            values ($1, $2, $3, 'Newsletter', 'Abgemeldet', $4, $5::jsonb)
-            returning id
-          `,
-          [
-            input.workspaceId,
-            contact.id,
-            contact.projectId,
-            source,
-            JSON.stringify({
-              campaignId,
-              email,
-              trigger: "one_click_unsubscribe",
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
   return {
-    contactIds: contacts.map((contact) => contact.id),
-    persisted: Boolean(suppressionId || contacts.length),
-    reason: null,
-    suppressionId,
+    contactIds: result?.contactIds ?? [],
+    persisted: Boolean(result?.suppressionId),
+    reason: result ? null : "database_unavailable",
+    suppressionId: result?.suppressionId ?? null,
   };
 }
 
@@ -3074,16 +3533,4 @@ export async function insertCallInsight(input: {
   );
 
   return row?.id ?? null;
-}
-
-function getAnswerString(answers: FunnelSubmissionPayload["answers"], keys: string[]) {
-  const normalized = new Map(Object.entries(answers).map(([key, value]) => [key.toLowerCase(), value]));
-
-  for (const key of keys) {
-    const value = normalized.get(key.toLowerCase());
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number") return String(value);
-  }
-
-  return "";
 }

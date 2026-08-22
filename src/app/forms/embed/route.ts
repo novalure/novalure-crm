@@ -10,6 +10,11 @@ import {
 } from "@/lib/form-types";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
 import {
+  getPublicFormLaunchBlockReason,
+  toPublicFormDto,
+  type PublicFormLaunchBlockReason,
+} from "@/lib/public-form-dto";
+import {
   buildPublicSubmissionScope,
   createPublicSubmissionProof,
   publicSubmissionActions,
@@ -19,18 +24,38 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const formKey = url.searchParams.get("form") ?? "novalure-form";
   const copy = getFormCommandCenterCopy("de");
-  const persisted = await getPublicWebsiteFormByKey(formKey).catch(() => null);
+  let persisted: Awaited<ReturnType<typeof getPublicWebsiteFormByKey>>;
+  try {
+    persisted = await getPublicWebsiteFormByKey(formKey);
+  } catch {
+    const variant = normalizeRequestedVariant(url.searchParams.get("variant"), "embed");
+    return createEmbedScript({
+      formId: formKey,
+      html: renderUnavailableEmbedHtml(copy.publicPage),
+      status: 503,
+      variant,
+    });
+  }
   if (!persisted?.form) {
     const variant = normalizeRequestedVariant(url.searchParams.get("variant"), "embed");
     return createEmbedScript({
       formId: formKey,
       html: renderUnavailableEmbedHtml(copy.publicPage),
+      status: 404,
       variant,
     });
   }
 
   const form = persisted.form;
   const variant = normalizeRequestedVariant(url.searchParams.get("variant"), form.variant);
+  const launchBlockReason = getPublicFormLaunchBlockReason(form, persisted.ownerActive);
+  if (launchBlockReason) {
+    return createEmbedScript({
+      formId: formKey,
+      html: renderUnavailableEmbedHtml(copy.publicPage, launchBlockReason),
+      variant,
+    });
+  }
   const origin = url.origin;
   const publicKey = form.id || formKey;
   const publicUrl = `${origin}${persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`}`;
@@ -46,7 +71,7 @@ export async function GET(request: Request) {
   const formHtml = renderStaticFormHtml({
     action: `${origin}/api/forms/submissions`,
     copy: runtimeCopy,
-    form: { ...form, variant },
+    form: toPublicFormDto(form),
     publicKey,
     returnTo: persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`,
     source: "website",
@@ -70,10 +95,12 @@ export async function GET(request: Request) {
 function createEmbedScript({
   formId,
   html,
+  status = 200,
   variant,
 }: {
   formId: string;
   html: string;
+  status?: number;
   variant: FormVariant;
 }) {
   const script = `
@@ -133,6 +160,13 @@ function createEmbedScript({
         var visible = !controller || !expected || getFieldValue(controller).split(",").indexOf(expected) >= 0 || getFieldValue(controller) === expected;
         field.classList.toggle("novalure-hidden", !visible);
         field.toggleAttribute("hidden", !visible);
+        Array.prototype.slice.call(field.querySelectorAll("input, textarea, select")).forEach(function (control) {
+          if (!control.hasAttribute("data-novalure-required")) {
+            control.setAttribute("data-novalure-required", control.required ? "true" : "false");
+          }
+          control.disabled = !visible;
+          control.required = visible && control.getAttribute("data-novalure-required") === "true";
+        });
       });
     }
 
@@ -145,31 +179,48 @@ function createEmbedScript({
       });
       var previous = form.querySelector("[data-action='previous']");
       if (previous) previous.disabled = currentStep === 0;
+      var next = form.querySelector("[data-action='next']");
+      var submit = form.querySelector("[data-action='submit']");
+      var onLastStep = currentStep === steps.length - 1;
+      if (next) {
+        next.classList.toggle("novalure-hidden", onLastStep);
+        next.toggleAttribute("hidden", onLastStep);
+      }
+      if (submit) {
+        submit.classList.toggle("novalure-hidden", !onLastStep);
+        submit.toggleAttribute("hidden", !onLastStep);
+      }
       updateConditionalFields();
     }
 
-    function visibleRequiredControls(step) {
+    function visibleStepControls(step) {
       return Array.prototype.slice.call(step.querySelectorAll("input, textarea, select")).filter(function (control) {
-        return control.required && !control.closest(".novalure-hidden") && control.type !== "hidden";
+        var field = control.closest("[data-field-id]");
+        var conditionallyHidden = field && (field.hidden || field.classList.contains("novalure-hidden"));
+        return !control.disabled && control.type !== "hidden" && !conditionallyHidden && control.willValidate;
       });
     }
 
-    function validateStep(step) {
-      var valid = true;
-      visibleRequiredControls(step).forEach(function (control) {
+    function validateStep(step, shouldReport) {
+      var firstInvalid = null;
+      var invalidFields = [];
+      var fields = Array.prototype.slice.call(step.querySelectorAll("[data-field-id]"));
+      visibleStepControls(step).forEach(function (control) {
         var field = control.closest("[data-field-id]");
-        var groupName = control.name;
-        var missing = control.type === "checkbox" || control.type === "radio"
-          ? !form.querySelector("input[name='" + cssEscape(groupName) + "']:checked")
-          : !control.value;
-        if (missing) {
-          valid = false;
-          if (field) field.classList.add("border", "border-red-400", "bg-red-50");
-        } else if (field) {
+        if (!control.checkValidity()) {
+          if (!firstInvalid) firstInvalid = control;
+          if (field && invalidFields.indexOf(field) < 0) invalidFields.push(field);
+        }
+      });
+      fields.forEach(function (field) {
+        if (invalidFields.indexOf(field) >= 0) {
+          field.classList.add("border", "border-red-400", "bg-red-50");
+        } else {
           field.classList.remove("border", "border-red-400", "bg-red-50");
         }
       });
-      return valid;
+      if (shouldReport && firstInvalid) firstInvalid.reportValidity();
+      return !firstInvalid;
     }
 
     function cssEscape(value) {
@@ -183,7 +234,7 @@ function createEmbedScript({
     var previous = form.querySelector("[data-action='previous']");
     if (next) {
       next.addEventListener("click", function () {
-        if (!steps[currentStep] || validateStep(steps[currentStep])) setStep(currentStep + 1);
+        if (!steps[currentStep] || validateStep(steps[currentStep], true)) setStep(currentStep + 1);
       });
     }
     if (previous) {
@@ -192,13 +243,15 @@ function createEmbedScript({
       });
     }
     form.addEventListener("submit", function (event) {
+      updateConditionalFields();
       var firstInvalid = -1;
       steps.forEach(function (step, index) {
-        if (!validateStep(step) && firstInvalid < 0) firstInvalid = index;
+        if (!validateStep(step, false) && firstInvalid < 0) firstInvalid = index;
       });
       if (firstInvalid >= 0) {
         event.preventDefault();
         setStep(firstInvalid);
+        validateStep(steps[firstInvalid], true);
       }
     });
     setStep(0);
@@ -210,11 +263,29 @@ function createEmbedScript({
       "cache-control": "private, no-store",
       "content-type": "application/javascript; charset=utf-8",
     },
+    status,
   });
 }
 
-function renderUnavailableEmbedHtml(copy: ReturnType<typeof getFormCommandCenterCopy>["publicPage"]) {
-  return `<style>${embeddedFormStyles}${embedShellStyles}</style><div class="novalure-embed novalure-publication"><p>${escapeHtml(copy.unavailableTitle)}</p><p>${escapeHtml(copy.unavailableDescription)}</p><p>${escapeHtml(copy.unavailableHint)}</p></div>`;
+function renderUnavailableEmbedHtml(
+  copy: ReturnType<typeof getFormCommandCenterCopy>["publicPage"],
+  reason?: PublicFormLaunchBlockReason,
+) {
+  const title = reason === "form_file_upload_unavailable"
+    ? copy.fileUploadUnavailableTitle
+    : reason === "form_custom_pattern_unavailable" || reason === "form_consent_configuration_unavailable"
+      ? copy.configurationUnavailableTitle
+    : reason === "form_round_robin_unavailable"
+      ? copy.ownerUnavailableTitle
+      : copy.unavailableTitle;
+  const description = reason === "form_file_upload_unavailable"
+    ? copy.fileUploadUnavailableDescription
+    : reason === "form_custom_pattern_unavailable" || reason === "form_consent_configuration_unavailable"
+      ? copy.configurationUnavailableDescription
+    : reason === "form_round_robin_unavailable"
+      ? copy.ownerUnavailableDescription
+      : copy.unavailableDescription;
+  return `<style>${embeddedFormStyles}${embedShellStyles}</style><div class="novalure-embed novalure-publication"><p>${escapeHtml(title)}</p><p>${escapeHtml(description)}</p><p>${escapeHtml(copy.unavailableHint)}</p></div>`;
 }
 
 function renderEmbedHtml({

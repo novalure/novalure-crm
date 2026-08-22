@@ -2,8 +2,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import {
   hasSupportedWebhookContentEncoding,
   isJsonWebhookContentType,
@@ -72,6 +74,24 @@ test("CI pins the exact Node runtime and fails closed for QA targets", async () 
   assert.match(workflow, /group:\s*novalure-shared-qa[\s\S]*cancel-in-progress:\s*false/);
   assert.match(guard, /neon\.branch_id/);
   assert.match(guard, /-pooler\./);
+
+  const childEnvironment = { ...process.env };
+  for (const key of [
+    "NOVALURE_QA_DATABASE_URL",
+    "NOVALURE_QA_DATABASE_HOST",
+    "NOVALURE_QA_PROJECT_ID",
+    "NOVALURE_QA_BRANCH_ID",
+    "NOVALURE_QA_DATABASE_NAME",
+    "NOVALURE_QA_DATABASE_ROLE",
+    "NOVALURE_QA_RUN_PREFIX",
+  ]) delete childEnvironment[key];
+  const guardResult = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("./qa-target-guard.mjs", import.meta.url))],
+    { encoding: "utf8", env: childEnvironment },
+  );
+  assert.notEqual(guardResult.status, 0);
+  assert.match(guardResult.stderr, /NOVALURE_QA_DATABASE_URL is required/);
 });
 
 test("database infrastructure targets are lazy, explicit and fail closed", () => {

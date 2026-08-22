@@ -5,18 +5,17 @@ import {
   FormRenderer,
   fallbackFormRuntimeCopy,
   getFieldDefaultValue,
-  getFieldName,
   normalizeFormSteps,
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
-import type { FormField, WebsiteForm } from "@/lib/form-types";
+import type { PublicFormDto, PublicFormFieldDto } from "@/lib/public-form-dto";
 import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
 
 type FormRuntimeClientProps = {
   action?: string;
   className?: string;
   copy?: Partial<FormRuntimeCopy>;
-  form: WebsiteForm;
+  form: PublicFormDto;
   mode?: "editor" | "public";
   onFieldSelect?: (fieldId: string) => void;
   previewOnly?: boolean;
@@ -31,7 +30,7 @@ export function FormRuntimeClient({
   form,
   ...props
 }: FormRuntimeClientProps) {
-  const formKey = `${form.id}:${form.fields.map((field) => field.id).join("|")}`;
+  const formKey = `${form.name}:${form.fields.map((field) => field.id).join("|")}`;
 
   return <FormRuntimeClientRuntime key={formKey} form={form} {...props} />;
 }
@@ -71,7 +70,7 @@ function FormRuntimeClientRuntime({
     syncTrackingFields(formRef.current);
   }, []);
 
-  function updateValue(field: FormField, value: string | string[] | boolean) {
+  function updateValue(field: PublicFormFieldDto, value: string | string[] | boolean) {
     setValues((current) => ({ ...current, [field.id]: value }));
     if (errors[field.id]) {
       const message = validateField(field, value, formRef.current, runtimeCopy);
@@ -129,7 +128,7 @@ function FormRuntimeClientRuntime({
     }
   }
 
-  function handleBlur(field: FormField, event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  function handleBlur(field: PublicFormFieldDto, event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
     if (previewOnly) return;
     const value = event.currentTarget.type === "checkbox"
       ? (event.currentTarget as HTMLInputElement).checked
@@ -170,7 +169,7 @@ function FormRuntimeClientRuntime({
   );
 }
 
-function initialValue(field: FormField) {
+function initialValue(field: PublicFormFieldDto) {
   if (field.type === "checkbox" || field.type === "consent") return Boolean(field.defaultValue);
   if (field.type === "multiCheckbox") return field.defaultValue ? field.defaultValue.split(",").map((item) => item.trim()) : [];
   return getFieldDefaultValue(field);
@@ -188,37 +187,26 @@ function setHiddenInputValue(formElement: HTMLFormElement, name: string, value: 
 }
 
 function isFieldVisible(
-  field: FormField,
+  field: PublicFormFieldDto,
   values: Record<string, string | string[] | boolean>,
-  fields: FormField[],
+  fields: PublicFormFieldDto[],
 ) {
-  if (!field.conditionalFieldId || !field.conditionalValue) return true;
-  const controller = fields.find((item) => item.id === field.conditionalFieldId || getFieldName(item) === field.conditionalFieldId);
-  const value = controller ? values[controller.id] : values[field.conditionalFieldId];
-  if (Array.isArray(value)) return value.includes(field.conditionalValue);
-  if (typeof value === "boolean") return field.conditionalValue === String(value);
-  return String(value ?? "") === field.conditionalValue;
+  if (!field.visibleWhen) return true;
+  const controller = fields.find((item) => item.id === field.visibleWhen?.fieldId);
+  const value = controller ? values[controller.id] : values[field.visibleWhen.fieldId];
+  if (Array.isArray(value)) return value.includes(field.visibleWhen.value);
+  if (typeof value === "boolean") return field.visibleWhen.value === String(value);
+  return String(value ?? "") === field.visibleWhen.value;
 }
 
 function validateField(
-  field: FormField,
+  field: PublicFormFieldDto,
   rawValue: string | string[] | boolean | undefined,
   formElement: HTMLFormElement | null,
   copy: FormRuntimeCopy,
 ) {
-  if (field.type === "hidden") return "";
   const label = field.label || "Field";
   const requiredMessage = field.errorMessage || `${label} ist erforderlich.`;
-
-  if (field.type === "file") {
-    const input = formElement?.querySelector<HTMLInputElement>(`input[name="${CSS.escape(getFieldName(field))}"]`);
-    const files = Array.from(input?.files ?? []);
-    if (field.required && !files.length) return requiredMessage;
-    if (field.fileMaxMb && files.some((file) => file.size > field.fileMaxMb * 1024 * 1024)) {
-      return field.errorMessage || copy.fileTooLarge.replace("{label}", label);
-    }
-    return "";
-  }
 
   const value = Array.isArray(rawValue) ? rawValue.join(",") : typeof rawValue === "boolean" ? (rawValue ? "1" : "") : String(rawValue ?? "");
   if (field.required && !value.trim()) return requiredMessage;

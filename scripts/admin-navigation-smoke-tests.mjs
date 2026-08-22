@@ -64,6 +64,9 @@ test("audit log is read-only, workspace-bound, filtered and paginated", () => {
 test("system and governance panels distinguish code evidence from operational gates", () => {
   assert.match(systemPanel, /\/api\/system\/database/);
   assert.match(systemPanel, /Restore, Tenant-Isolation, Providerkonfiguration/);
-  assert.match(governancePanel, /Code-erzwungen/);
+  assert.match(governancePanel, /Im Code implementiert/);
+  assert.match(governancePanel, /QA-Nachweis ausstehend/);
+  assert.match(governancePanel, /data-governance-runtime-evidence="unavailable"/);
+  assert.doesNotMatch(governancePanel, /QA-verifiziert|emerald-/);
   assert.match(governancePanel, /Betrieblich offen/);
 });

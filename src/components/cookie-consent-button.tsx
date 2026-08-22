@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 type CookieConsentChoice = "necessary" | "all" | "custom";
 
@@ -115,6 +115,13 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
   const [isOpen, setIsOpen] = useState(false);
   const [marketingSelected, setMarketingSelected] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const dialogRef = useRef<HTMLElement>(null);
+  const preferencesRef = useRef<HTMLFieldSetElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const idPrefix = useId();
+  const titleId = `${idPrefix}-title`;
+  const descriptionId = `${idPrefix}-description`;
 
   useEffect(() => {
     let isActive = true;
@@ -135,6 +142,54 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
     };
   }, []);
 
+  useEffect(() => {
+    function applyStoredConsent(nextConsent: CookieConsentRecord | null) {
+      if (!nextConsent) return;
+      setConsent(nextConsent);
+      setAnalyticsSelected(nextConsent.analytics);
+      setMarketingSelected(nextConsent.marketing);
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === storageKey) applyStoredConsent(parseConsent(event.newValue));
+    }
+
+    function handleConsentEvent(event: Event) {
+      const detail = event instanceof CustomEvent ? event.detail : null;
+      applyStoredConsent(parseConsent(detail ? JSON.stringify(detail) : null));
+    }
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("novalure-cookie-consent", handleConsentEvent);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("novalure-cookie-consent", handleConsentEvent);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!previousFocusRef.current?.isConnected) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    }
+    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      const previousFocus = previousFocusRef.current;
+      if (previousFocus?.isConnected) previousFocus.focus();
+      previousFocusRef.current = null;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!showPreferences) return;
+    const frame = requestAnimationFrame(() => preferencesRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [showPreferences]);
+
   if (!isMounted) return null;
 
   function choose(choice: CookieConsentChoice) {
@@ -144,6 +199,13 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
     });
     persistConsent(nextConsent);
     setConsent(nextConsent);
+    setAnnouncement(
+      nextConsent.choice === "all"
+        ? copy.savedAll
+        : nextConsent.choice === "custom"
+          ? copy.savedCustom
+          : copy.savedNecessary,
+    );
     setIsOpen(false);
     setShowPreferences(false);
   }
@@ -152,6 +214,46 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
     setAnalyticsSelected(consent?.analytics ?? false);
     setMarketingSelected(consent?.marketing ?? false);
     setShowPreferences(true);
+  }
+
+  function openConsentDialog(event: MouseEvent<HTMLButtonElement>) {
+    previousFocusRef.current = event.currentTarget;
+    setIsOpen(true);
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && consent) {
+      event.preventDefault();
+      setIsOpen(false);
+      setShowPreferences(false);
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+
+    if (!focusable.length) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && (activeElement === first || activeElement === dialogRef.current)) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   const statusText =
@@ -164,11 +266,16 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
 
   return (
     <>
-      {consent && !isOpen ? (
+      <p aria-live="polite" className="sr-only" role="status">
+        {announcement}
+      </p>
+      {consent ? (
         <button
+          aria-expanded={isOpen}
           aria-haspopup="dialog"
-          className="fixed bottom-4 left-4 z-[70] inline-flex min-h-10 items-center justify-center rounded-md border border-[#cdd4ce] bg-white px-3 py-2 text-xs font-semibold text-[#111614] shadow-lg transition hover:border-[#111614] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
-          onClick={() => setIsOpen(true)}
+          className="fixed bottom-4 left-4 z-[70] inline-flex min-h-11 items-center justify-center rounded-md border border-[#cdd4ce] bg-white px-3 py-2 text-xs font-semibold text-[#111614] shadow-lg transition hover:border-[#111614] focus:outline-none focus:ring-2 focus:ring-[#111614] focus:ring-offset-2"
+          hidden={isOpen}
+          onClick={openConsentDialog}
           type="button"
         >
           {copy.manageButton}
@@ -184,18 +291,23 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
           }
         >
           <section
-            aria-label={copy.title}
+            aria-describedby={descriptionId}
+            aria-labelledby={titleId}
             className={
               loginPlacement
                 ? "mx-auto max-h-[48svh] w-full overflow-y-auto rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:max-h-[calc(100svh-2rem)] sm:p-5"
                 : "mx-auto max-w-4xl rounded-lg border border-[#d8ddd7] bg-white p-4 text-[#111614] shadow-2xl sm:p-5"
             }
+            onKeyDown={handleDialogKeyDown}
+            ref={dialogRef}
+            aria-modal="true"
             role="dialog"
+            tabIndex={-1}
           >
             <div className={loginPlacement ? "grid gap-4" : "grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"}>
               <div>
-                <p className="text-sm font-semibold uppercase text-[#277258]">{copy.title}</p>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-[#50645b]">{copy.description}</p>
+                <p className="text-sm font-semibold uppercase text-[#277258]" id={titleId}>{copy.title}</p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-[#50645b]" id={descriptionId}>{copy.description}</p>
                 {consent ? <p className="mt-2 text-xs font-semibold text-[#277258]">{statusText}</p> : null}
                 <div className={loginPlacement ? "mt-4 hidden gap-2 sm:grid sm:grid-cols-2" : "mt-4 grid gap-2 sm:grid-cols-2"}>
                   <div className="rounded-md border border-[#d8ddd7] bg-[#f8f7f1] p-3">
@@ -208,7 +320,7 @@ export function CookieConsentButton({ cookieHref, copy, placement = "default", p
                   </div>
                 </div>
                 {showPreferences ? (
-                  <fieldset className="mt-4 rounded-md border border-[#d8ddd7] bg-white p-3">
+                  <fieldset className="mt-4 rounded-md border border-[#d8ddd7] bg-white p-3" ref={preferencesRef} tabIndex={-1}>
                     <legend className="text-sm font-semibold text-[#111614]">{copy.preferencesTitle}</legend>
                     <p className="mt-1 text-xs leading-5 text-[#50645b]">{copy.preferencesDescription}</p>
                     <div className="mt-3 grid gap-2">

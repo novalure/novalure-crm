@@ -22,6 +22,14 @@ import {
   syncGoogleCalendarEvent,
   updateGoogleCalendarEvent,
 } from "@/lib/integrations/google-calendar";
+import {
+  bookingCreationLaunchEnabled,
+  bookingCreationLaunchOffCode,
+  normalizeBookingCorrelationId,
+  publicBookingLifecycleMutationsLaunchEnabled,
+  resolveBookingCorrelationId,
+  zonedDateTimeToUtc,
+} from "@/lib/meetings/booking-lifecycle";
 import { escapeHtmlText } from "@/lib/security/public-submission-abuse";
 
 export type MeetingPageSettings = {
@@ -372,6 +380,7 @@ type MeetingAutomationConfig = {
 type CreateMeetingBookingResult = {
   autoConfirmed?: boolean;
   bookingId?: string | null;
+  correlationId?: string | null;
   confirmationStatus?: string | null;
   finalConfirmationJobId?: string | null;
   jobsQueued?: number;
@@ -400,6 +409,7 @@ type CountRow = {
 
 export type MeetingBookingInput = {
   calendarProvider: string;
+  correlationId?: string;
   contactEmail: string;
   contactName: string;
   contactNote?: string;
@@ -492,6 +502,7 @@ export type PublicMeetingAvailability = {
     rollingWeeks: number;
     timeZone: string;
   };
+  error?: "calendar_provider_unavailable";
   slots: Array<{
     available: boolean;
     reason?: string;
@@ -630,30 +641,7 @@ function getDateKey(value: Date, timeZone = "Europe/Vienna") {
 }
 
 function zonedTimeToUtc(dateKey: string, time: string, timeZone = "Europe/Vienna") {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const [hour, minute] = time.split(":").map(Number);
-  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
-  const parts = new Intl.DateTimeFormat("en-US", {
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    month: "2-digit",
-    second: "2-digit",
-    timeZone,
-    year: "numeric",
-  }).formatToParts(utcGuess);
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const zonedAsUtc = Date.UTC(
-    Number(lookup.year),
-    Number(lookup.month) - 1,
-    Number(lookup.day),
-    Number(lookup.hour),
-    Number(lookup.minute),
-    Number(lookup.second),
-  );
-
-  return new Date(utcGuess.getTime() - (zonedAsUtc - utcGuess.getTime()));
+  return zonedDateTimeToUtc({ date: dateKey, time, timeZone });
 }
 
 function getWeekday(dateKey: string) {
@@ -706,11 +694,7 @@ function getReminderOffsetMinutes(reminder: MeetingReminderConfig) {
 }
 
 function parseBookingStart(selectedDate: string, slot: string, timeZone = "Europe/Vienna") {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) return null;
-  if (!/^\d{2}:\d{2}$/.test(slot)) return null;
-
-  const start = zonedTimeToUtc(selectedDate, slot, timeZone);
-  return Number.isNaN(start.getTime()) ? null : start;
+  return zonedTimeToUtc(selectedDate, slot, timeZone);
 }
 
 function formatMeetingDate(value: Date) {
@@ -876,6 +860,8 @@ function getFinalConfirmationTokens(input: {
 async function queueMeetingNotificationJob(input: {
   body: string;
   bookingId: string;
+  correlationId?: string;
+  idempotencyKey?: string;
   kind: "confirmation" | "reminder" | "follow_up";
   meetingPageId: string;
   recipientEmail: string;
@@ -916,8 +902,12 @@ async function queueMeetingNotificationJob(input: {
       input.subject,
       input.title,
       input.body,
-      JSON.stringify(input.tokens),
-      `meeting-notification:${input.bookingId}:${input.kind}:${input.scheduledFor.toISOString()}`,
+      JSON.stringify({
+        ...input.tokens,
+        ...(input.correlationId ? { "{{novalure.correlationId}}": input.correlationId } : {}),
+      }),
+      input.idempotencyKey ||
+        `meeting-notification:${input.correlationId || input.bookingId}:${input.kind}:${input.scheduledFor.toISOString()}`,
     ],
   );
 
@@ -964,24 +954,32 @@ async function listExternalBusyTimes(input: {
   timeZone: string;
   workspaceId: string;
 }) {
-  if (input.calendarProvider === "google") {
-    return listGoogleBusyTimes({
-      timeMax: input.timeMax,
-      timeMin: input.timeMin,
-      timeZone: input.timeZone,
-      workspaceId: input.workspaceId,
-    }).catch(() => []);
-  }
+  try {
+    if (input.calendarProvider === "google") {
+      return {
+        ranges: await listGoogleBusyTimes({
+          timeMax: input.timeMax,
+          timeMin: input.timeMin,
+          timeZone: input.timeZone,
+          workspaceId: input.workspaceId,
+        }),
+      };
+    }
 
-  if (input.calendarProvider !== "microsoft") {
-    return [];
-  }
+    if (input.calendarProvider === "microsoft") {
+      return {
+        ranges: await listMicrosoftBusyTimes({
+          timeMax: input.timeMax,
+          timeMin: input.timeMin,
+          workspaceId: input.workspaceId,
+        }),
+      };
+    }
 
-  return listMicrosoftBusyTimes({
-    timeMax: input.timeMax,
-    timeMin: input.timeMin,
-    workspaceId: input.workspaceId,
-  }).catch(() => []);
+    return { ranges: [] };
+  } catch {
+    return { error: "calendar_provider_unavailable" as const, ranges: [] };
+  }
 }
 
 function getCalendarProviderFromPage(page: MeetingPageSettings) {
@@ -1000,6 +998,7 @@ function getMeetingPublicPath(page: Pick<MeetingPageSettings, "slug" | "workspac
 async function getMeetingAvailabilityForPage(
   page: MeetingPageSettings | null,
   date?: string,
+  locale = "de-AT",
 ): Promise<PublicMeetingAvailability | null> {
   if (!page?.id || !page.workspaceId) return null;
 
@@ -1017,7 +1016,7 @@ async function getMeetingAvailabilityForPage(
     return {
       available: hasWindow,
       date: dateKey,
-      label: new Intl.DateTimeFormat("de-AT", {
+      label: new Intl.DateTimeFormat(locale, {
         day: "2-digit",
         month: "2-digit",
         weekday: "short",
@@ -1032,9 +1031,10 @@ async function getMeetingAvailabilityForPage(
     todayKey;
   const windows = rules.weeklyHours.filter((window) => window.day === getWeekday(selectedDate));
   const dayStart = zonedTimeToUtc(selectedDate, "00:00", rules.timeZone);
+  if (!dayStart) return null;
   const dayEnd = addMinutes(dayStart, 24 * 60);
   const calendarProvider = getCalendarProviderFromPage(page);
-  const [databaseBusy, externalBusy] = await Promise.all([
+  const [databaseBusy, externalAvailability] = await Promise.all([
     listDatabaseBusyTimes({
       meetingPageId: page.id,
       timeMax: dayEnd.toISOString(),
@@ -1053,7 +1053,7 @@ async function getMeetingAvailabilityForPage(
       end: new Date(normalizeDateInput(busy.endsAt)),
       start: new Date(normalizeDateInput(busy.startsAt)),
     })),
-    ...externalBusy.map((busy) => ({
+    ...externalAvailability.ranges.map((busy) => ({
       end: new Date(busy.end),
       start: new Date(busy.start),
     })),
@@ -1071,8 +1071,13 @@ async function getMeetingAvailabilityForPage(
     ) {
       const time = timeFromMinutes(minutes);
       const slotStart = zonedTimeToUtc(selectedDate, time, rules.timeZone);
+      if (!slotStart) {
+        result.push({ available: false, reason: "invalid_local_time", time });
+        continue;
+      }
       const slotEnd = addMinutes(slotStart, rules.durationMinutes);
       const tooSoon = slotStart.getTime() < minStart.getTime();
+      const providerUnavailable = Boolean(externalAvailability.error);
       const busy = busyRanges.some((busyRange) =>
         overlaps(
           slotStart,
@@ -1083,8 +1088,14 @@ async function getMeetingAvailabilityForPage(
       );
 
       result.push({
-        available: !tooSoon && !busy,
-        reason: tooSoon ? "too_soon" : busy ? "busy" : undefined,
+        available: !providerUnavailable && !tooSoon && !busy,
+        reason: providerUnavailable
+          ? "calendar_provider_unavailable"
+          : tooSoon
+            ? "too_soon"
+            : busy
+              ? "busy"
+              : undefined,
         time,
       });
     }
@@ -1103,23 +1114,26 @@ async function getMeetingAvailabilityForPage(
       rollingWeeks: rules.rollingWeeks,
       timeZone: rules.timeZone,
     },
+    error: externalAvailability.error,
     slots,
   };
 }
 
 export async function getPublicMeetingAvailability(input: PublicSlugLookup & {
   date?: string;
+  locale?: string;
 }): Promise<PublicMeetingAvailability | null> {
-  return getMeetingAvailabilityForPage(await getPublicMeetingPageSettings(input), input.date);
+  return getMeetingAvailabilityForPage(await getPublicMeetingPageSettings(input), input.date, input.locale);
 }
 
 export async function getWorkspaceMeetingAvailability(input: {
   date?: string;
+  locale?: string;
   session: AppSession;
   slug: string;
 }): Promise<PublicMeetingAvailability | null> {
   const page = await getMeetingPageSettings({ session: input.session, slug: input.slug });
-  return getMeetingAvailabilityForPage(page, input.date);
+  return getMeetingAvailabilityForPage(page, input.date, input.locale);
 }
 
 async function resolveMeetingPageForBooking(
@@ -1158,6 +1172,10 @@ async function resolveMeetingPageForBooking(
 export async function createMeetingBookingWithNotifications(
   input: MeetingBookingInput,
 ): Promise<CreateMeetingBookingResult> {
+  if (!bookingCreationLaunchEnabled) {
+    return { persisted: false, reason: bookingCreationLaunchOffCode };
+  }
+
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
@@ -1170,6 +1188,7 @@ export async function createMeetingBookingWithNotifications(
 
   const contactName = input.contactName.trim();
   const contactEmail = input.contactEmail.trim().toLowerCase();
+  const correlationId = resolveBookingCorrelationId(input.correlationId);
   const availability = await getMeetingAvailabilityForPage(page, input.selectedDate);
   const startsAt = parseBookingStart(
     input.selectedDate,
@@ -1181,6 +1200,9 @@ export async function createMeetingBookingWithNotifications(
   }
 
   const selectedSlot = availability?.slots.find((slot) => slot.time === input.slot);
+  if (availability?.error) {
+    return { correlationId, persisted: false, reason: availability.error };
+  }
   if (!availability || availability.date !== input.selectedDate || !selectedSlot?.available) {
     return { persisted: false, reason: "slot_unavailable" };
   }
@@ -1192,6 +1214,20 @@ export async function createMeetingBookingWithNotifications(
 
   const bookingRow = await queryOne<IdRow>(
     `
+      with slot_lock as (
+        select pg_advisory_xact_lock(hashtextextended($2::text, 0))
+      ), available_slot as (
+        select 1
+        from slot_lock
+        where not exists (
+          select 1
+          from meeting_bookings existing
+          where existing.meeting_page_id = $2
+            and existing.status in ('requested', 'confirmed', 'rescheduled')
+            and existing.starts_at < $9::timestamptz + make_interval(mins => $14::int)
+            and existing.ends_at > $8::timestamptz - make_interval(mins => $14::int)
+        )
+      )
         insert into meeting_bookings (
           workspace_id,
           meeting_page_id,
@@ -1207,7 +1243,9 @@ export async function createMeetingBookingWithNotifications(
           source,
           metadata
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+        select $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb
+        from available_slot
+        on conflict do nothing
         returning id
       `,
     [
@@ -1226,9 +1264,12 @@ export async function createMeetingBookingWithNotifications(
       JSON.stringify({
         allowCancel: Boolean(automation.allowCancel),
         allowReschedule: Boolean(automation.allowReschedule),
+        correlationId,
         publicToken,
         requestUrl: input.requestUrl,
+        timeZone: availability.rules.timeZone,
       }),
+      availability.rules.bufferMinutes,
     ],
   ).catch((error) => {
     if (error instanceof Error && /duplicate|unique/i.test(error.message)) return null;
@@ -1243,6 +1284,7 @@ export async function createMeetingBookingWithNotifications(
     return {
       autoConfirmed: false,
       bookingId: bookingRow.id,
+      correlationId,
       confirmationStatus: "qa_suppressed",
       jobsQueued: 0,
       onlineMeetingUrl: null,
@@ -1270,7 +1312,9 @@ export async function createMeetingBookingWithNotifications(
   });
   const confirmation = await confirmMeetingBooking({
     bookingId: bookingRow.id,
+    correlationId,
     requestUrl: input.requestUrl,
+    rollbackOnFailure: true,
     session: publicSession,
   });
 
@@ -1278,6 +1322,7 @@ export async function createMeetingBookingWithNotifications(
     return {
       autoConfirmed: false,
       bookingId: bookingRow.id,
+      correlationId,
       confirmationStatus: confirmation.status ?? null,
       persisted: false,
       reason: "calendar_sync_failed",
@@ -1347,6 +1392,7 @@ export async function createMeetingBookingWithNotifications(
           reminder.body ||
           "Hallo {{contact.firstName}},\n\nkurze Erinnerung an {{meeting.title}} um {{meeting.time}}.\n\nLink: {{meeting.link}}",
         bookingId: bookingRow.id,
+        correlationId,
         kind: "reminder",
         meetingPageId: page.id,
         recipientEmail: contactEmail,
@@ -1367,6 +1413,7 @@ export async function createMeetingBookingWithNotifications(
       body:
         "Hallo {{contact.firstName}},\n\nvielen Dank für den Termin. Wir melden uns mit den nächsten Schritten.",
       bookingId: bookingRow.id,
+      correlationId,
       kind: "follow_up",
       meetingPageId: page.id,
       recipientEmail: contactEmail,
@@ -1382,6 +1429,7 @@ export async function createMeetingBookingWithNotifications(
   return {
     autoConfirmed: true,
     bookingId: bookingRow.id,
+    correlationId,
     confirmationStatus: confirmation.status ?? null,
     finalConfirmationJobId: confirmation.finalConfirmationJobId ?? null,
     jobsQueued,
@@ -1601,6 +1649,9 @@ async function syncExternalCalendarForPublicAction(input: {
   const metadata = getBookingMetadata(input.booking.metadata);
   const eventId = getExternalCalendarEventId(metadata);
   const provider = getExternalCalendarProvider(input.booking);
+  const timeZone = typeof metadata.timeZone === "string" && metadata.timeZone.trim()
+    ? metadata.timeZone.trim()
+    : "UTC";
 
   if (!eventId || !provider) {
     return {
@@ -1624,6 +1675,7 @@ async function syncExternalCalendarForPublicAction(input: {
             location: getCalendarLocation(input.booking.meetingProvider),
             startsAt: input.startsAt ?? normalizeDateInput(input.booking.startsAt),
             subject: input.booking.title,
+            timeZone,
             workspaceId: input.booking.workspaceId,
           })
       : input.action === "cancel"
@@ -1690,19 +1742,33 @@ export async function getPublicMeetingBookingActionState(input: {
 
 export async function cancelPublicMeetingBooking(input: {
   bookingId: string;
+  correlationId?: string;
   reason?: string;
   requestUrl: string;
   token: string;
 }): Promise<{
   booking?: PublicMeetingBookingActionState;
+  correlationId?: string;
   error?: string;
   notificationJobId?: string | null;
   ok: boolean;
 }> {
+  if (!publicBookingLifecycleMutationsLaunchEnabled) {
+    return { error: "public_action_launch_off", ok: false };
+  }
+
   const booking = await getPublicMeetingBookingByToken(input);
   if (!booking) return { error: "booking_not_found", ok: false };
+  const metadata = getBookingMetadata(booking.metadata);
+  const previousAction = getBookingLifecycleAction(metadata);
+  const correlationId = resolveBookingCorrelationId(input.correlationId);
   if (booking.status === "cancelled") {
-    return { booking: toPublicMeetingBookingActionState(booking), notificationJobId: null, ok: true };
+    return {
+      booking: toPublicMeetingBookingActionState(booking),
+      correlationId: previousAction?.correlationId ?? correlationId,
+      notificationJobId: null,
+      ok: true,
+    };
   }
 
   const automation = asAutomation(booking.automation);
@@ -1713,19 +1779,34 @@ export async function cancelPublicMeetingBooking(input: {
     return { error: "cancel_deadline_passed", ok: false };
   }
 
-  const metadata = getBookingMetadata(booking.metadata);
+  const claimed = await claimPublicMeetingBookingAction({
+    bookingId: booking.id,
+    correlationId,
+    kind: "cancel",
+    publicToken: input.token,
+  });
+  if (!claimed) return { correlationId, error: "action_in_progress", ok: false };
+
   const externalSync = await syncExternalCalendarForPublicAction({
     action: "cancel",
     booking,
   });
 
   if (externalSync.status === "failed") {
-    return { error: "calendar_sync_failed", ok: false };
+    await finishPublicMeetingBookingAction({
+      bookingId: booking.id,
+      correlationId,
+      error: "calendar_sync_failed",
+      kind: "cancel",
+      status: "failed",
+    });
+    return { correlationId, error: "calendar_sync_failed", ok: false };
   }
 
   const actionMetadata = {
     cancelReason: input.reason?.trim() || null,
     cancelledAt: new Date().toISOString(),
+    correlationId,
     externalCalendarAction: {
       action: "cancel",
       error: externalSync.error ?? null,
@@ -1733,22 +1814,36 @@ export async function cancelPublicMeetingBooking(input: {
       provider: externalSync.provider,
       status: externalSync.status,
     },
+    lifecycleAction: {
+      completedAt: new Date().toISOString(),
+      correlationId,
+      error: null,
+      kind: "cancel",
+      status: "succeeded",
+    },
   };
 
-  await queryOne<IdRow>(
+  const cancelledBooking = await queryOne<IdRow>(
     `
       update meeting_bookings
       set status = 'cancelled',
           metadata = metadata || $2::jsonb,
           updated_at = now()
       where id = $1
+        and metadata#>>'{lifecycleAction,correlationId}' = $3
+        and metadata#>>'{lifecycleAction,kind}' = 'cancel'
+        and metadata#>>'{lifecycleAction,status}' = 'processing'
       returning id
     `,
     [
       booking.id,
       JSON.stringify(actionMetadata),
+      correlationId,
     ],
   );
+  if (!cancelledBooking?.id) {
+    return { correlationId, error: "action_recovery_required", ok: false };
+  }
   await updateLocalCalendarEventForPublicAction({
     calendarEventId: metadata.calendarEventId,
     metadata: actionMetadata,
@@ -1793,6 +1888,8 @@ export async function cancelPublicMeetingBooking(input: {
       body:
         "Hallo {{contact.firstName}},\n\nIhr Termin {{meeting.title}} wurde abgesagt.\n\nTermin: {{meeting.date}} um {{meeting.time}}\nOrt: {{meeting.location}}",
       bookingId: booking.id,
+      correlationId,
+      idempotencyKey: `meeting-notification:${correlationId}:confirmation:cancelled`,
       kind: "confirmation",
       meetingPageId: booking.meetingPageId,
       recipientEmail: booking.contactEmail,
@@ -1806,6 +1903,7 @@ export async function cancelPublicMeetingBooking(input: {
 
   return {
     booking: { ...toPublicMeetingBookingActionState(booking), status: "cancelled" },
+    correlationId,
     notificationJobId,
     ok: true,
   };
@@ -1813,29 +1911,59 @@ export async function cancelPublicMeetingBooking(input: {
 
 export async function reschedulePublicMeetingBooking(input: {
   bookingId: string;
+  correlationId?: string;
   requestUrl: string;
   selectedDate: string;
   slot: string;
   token: string;
 }): Promise<{
   booking?: PublicMeetingBookingActionState;
+  correlationId?: string;
   error?: string;
   notificationJobId?: string | null;
   ok: boolean;
 }> {
+  if (!publicBookingLifecycleMutationsLaunchEnabled) {
+    return { error: "public_action_launch_off", ok: false };
+  }
+
   const booking = await getPublicMeetingBookingByToken(input);
   if (!booking) return { error: "booking_not_found", ok: false };
-  if (!booking.pageSlug) return { error: "meeting_page_missing", ok: false };
+  if (!booking.pageSlug || !booking.meetingPageId) return { error: "meeting_page_missing", ok: false };
+  const metadata = getBookingMetadata(booking.metadata);
+  const correlationId = resolveBookingCorrelationId(input.correlationId);
+  const previousAction = getBookingLifecycleAction(metadata);
+  if (
+    previousAction?.correlationId === correlationId &&
+    previousAction.kind === "reschedule" &&
+    previousAction.status === "succeeded"
+  ) {
+    return {
+      booking: toPublicMeetingBookingActionState(booking),
+      correlationId,
+      notificationJobId: null,
+      ok: true,
+    };
+  }
+  if (booking.status === "cancelled") return { correlationId, error: "booking_cancelled", ok: false };
 
   const automation = asAutomation(booking.automation);
   if (!actionAllowed({ action: "reschedule", automation, startsAt: booking.startsAt })) {
     return { error: "reschedule_deadline_passed", ok: false };
   }
 
+  const claimed = await claimPublicMeetingBookingAction({
+    bookingId: booking.id,
+    correlationId,
+    kind: "reschedule",
+    publicToken: input.token,
+  });
+  if (!claimed) return { correlationId, error: "action_in_progress", ok: false };
+
   const page: MeetingPageSettings = {
     automation: booking.automation,
     calendarIntegrations: booking.calendarIntegrations,
-    id: booking.meetingPageId ?? undefined,
+    id: booking.meetingPageId,
     shareConfig: {},
     slug: booking.pageSlug,
     title: booking.pageTitle || booking.title,
@@ -1849,8 +1977,25 @@ export async function reschedulePublicMeetingBooking(input: {
     input.slot,
     availability?.rules.timeZone,
   );
+  if (availability?.error) {
+    await finishPublicMeetingBookingAction({
+      bookingId: booking.id,
+      correlationId,
+      error: availability.error,
+      kind: "reschedule",
+      status: "failed",
+    });
+    return { correlationId, error: availability.error, ok: false };
+  }
   if (!availability || !selectedSlot?.available || !startsAt) {
-    return { error: "slot_unavailable", ok: false };
+    await finishPublicMeetingBookingAction({
+      bookingId: booking.id,
+      correlationId,
+      error: "slot_unavailable",
+      kind: "reschedule",
+      status: "failed",
+    });
+    return { correlationId, error: "slot_unavailable", ok: false };
   }
   const endsAt = addMinutes(startsAt, availability.rules.durationMinutes);
   const origin = getRequestOrigin(input.requestUrl);
@@ -1865,7 +2010,6 @@ export async function reschedulePublicMeetingBooking(input: {
     selectedDate: startsAt,
     slot: input.slot,
   });
-  const metadata = getBookingMetadata(booking.metadata);
   const externalSync = await syncExternalCalendarForPublicAction({
     action: "reschedule",
     body: [
@@ -1878,7 +2022,14 @@ export async function reschedulePublicMeetingBooking(input: {
   });
 
   if (externalSync.status === "failed") {
-    return { error: "calendar_sync_failed", ok: false };
+    await finishPublicMeetingBookingAction({
+      bookingId: booking.id,
+      correlationId,
+      error: "calendar_sync_failed",
+      kind: "reschedule",
+      status: "failed",
+    });
+    return { correlationId, error: "calendar_sync_failed", ok: false };
   }
 
   const actionMetadata = {
@@ -1890,28 +2041,78 @@ export async function reschedulePublicMeetingBooking(input: {
       status: externalSync.status,
       webLink: externalSync.webLink ?? null,
     },
+    correlationId,
+    lifecycleAction: {
+      completedAt: new Date().toISOString(),
+      correlationId,
+      error: null,
+      kind: "reschedule",
+      status: "succeeded",
+    },
     previousStartsAt: normalizeDateInput(booking.startsAt),
     rescheduledAt: new Date().toISOString(),
   };
 
-  await queryOne<IdRow>(
+  const rescheduledBooking = await queryOne<IdRow>(
     `
-      update meeting_bookings
-      set status = 'rescheduled',
-          starts_at = $2,
-          ends_at = $3,
-          metadata = metadata || $4::jsonb,
-          updated_at = now()
-      where id = $1
-      returning id
+      with slot_lock as (
+        select pg_advisory_xact_lock(hashtextextended($5::text, 0))
+      ), updated as (
+        update meeting_bookings target
+        set status = 'rescheduled',
+            starts_at = $2,
+            ends_at = $3,
+            metadata = target.metadata || $4::jsonb,
+            updated_at = now()
+        from slot_lock
+        where target.id = $1
+          and target.metadata#>>'{lifecycleAction,correlationId}' = $7
+          and target.metadata#>>'{lifecycleAction,kind}' = 'reschedule'
+          and target.metadata#>>'{lifecycleAction,status}' = 'processing'
+          and not exists (
+            select 1
+            from meeting_bookings existing
+            where existing.meeting_page_id = $5
+              and existing.id <> target.id
+              and existing.status in ('requested', 'confirmed', 'rescheduled')
+              and existing.starts_at < $3::timestamptz + make_interval(mins => $6::int)
+              and existing.ends_at > $2::timestamptz - make_interval(mins => $6::int)
+          )
+        returning target.id
+      )
+      select id from updated
     `,
     [
       booking.id,
       startsAt.toISOString(),
       endsAt.toISOString(),
       JSON.stringify(actionMetadata),
+      booking.meetingPageId,
+      availability.rules.bufferMinutes,
+      correlationId,
     ],
   );
+  if (!rescheduledBooking?.id) {
+    const rollback = await syncExternalCalendarForPublicAction({
+      action: "reschedule",
+      booking,
+      endsAt: normalizeDateInput(booking.endsAt),
+      startsAt: normalizeDateInput(booking.startsAt),
+    });
+    const recoveryRequired = rollback.status === "failed";
+    await finishPublicMeetingBookingAction({
+      bookingId: booking.id,
+      correlationId,
+      error: recoveryRequired ? "action_recovery_required" : "slot_unavailable",
+      kind: "reschedule",
+      status: "failed",
+    });
+    return {
+      correlationId,
+      error: recoveryRequired ? "action_recovery_required" : "slot_unavailable",
+      ok: false,
+    };
+  }
   await updateLocalCalendarEventForPublicAction({
     calendarEventId: metadata.calendarEventId,
     endsAt: endsAt.toISOString(),
@@ -1940,6 +2141,8 @@ export async function reschedulePublicMeetingBooking(input: {
       body:
         "Hallo {{contact.firstName}},\n\nIhr Termin wurde verschoben.\n\nNeuer Termin: {{meeting.date}} um {{meeting.time}}\nOrt: {{meeting.location}}\nLink: {{meeting.link}}\n\nTermin erneut verschieben: {{meeting.rescheduleLink}}\nTermin absagen: {{meeting.cancelLink}}",
       bookingId: booking.id,
+      correlationId,
+      idempotencyKey: `meeting-notification:${correlationId}:confirmation:rescheduled`,
       kind: "confirmation",
       meetingPageId: booking.meetingPageId,
       recipientEmail: booking.contactEmail,
@@ -1958,6 +2161,7 @@ export async function reschedulePublicMeetingBooking(input: {
       startsAt,
       status: "rescheduled",
     },
+    correlationId,
     notificationJobId,
     ok: true,
   };
@@ -2003,6 +2207,84 @@ function getBookingMetadata(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? { ...(value as Record<string, unknown>) } : {};
 }
 
+function getBookingLifecycleAction(metadata: Record<string, unknown>) {
+  const value = metadata.lifecycleAction;
+  if (!value || typeof value !== "object") return null;
+  const action = value as Record<string, unknown>;
+  const correlationId = normalizeBookingCorrelationId(
+    typeof action.correlationId === "string" ? action.correlationId : null,
+  );
+  const kind = action.kind === "cancel" || action.kind === "reschedule" ? action.kind : null;
+  const status =
+    action.status === "failed" || action.status === "processing" || action.status === "succeeded"
+      ? action.status
+      : null;
+
+  return correlationId && kind && status ? { correlationId, kind, status } : null;
+}
+
+async function claimPublicMeetingBookingAction(input: {
+  bookingId: string;
+  correlationId: string;
+  kind: "cancel" | "reschedule";
+  publicToken: string;
+}) {
+  const row = await queryOne<IdRow>(
+    `
+      update meeting_bookings
+      set metadata = metadata || jsonb_build_object(
+            'lifecycleAction',
+            jsonb_build_object(
+              'correlationId', $3,
+              'kind', $4,
+              'startedAt', now(),
+              'status', 'processing'
+            )
+          ),
+          updated_at = now()
+      where id = $1
+        and metadata->>'publicToken' = $2
+        and status <> 'cancelled'
+        and coalesce(metadata#>>'{lifecycleAction,status}', '') <> 'processing'
+      returning id
+    `,
+    [input.bookingId, input.publicToken, input.correlationId, input.kind],
+  );
+
+  return Boolean(row?.id);
+}
+
+async function finishPublicMeetingBookingAction(input: {
+  bookingId: string;
+  correlationId: string;
+  error?: string;
+  kind: "cancel" | "reschedule";
+  status: "failed" | "succeeded";
+}) {
+  return queryOne<IdRow>(
+    `
+      update meeting_bookings
+      set metadata = metadata || jsonb_build_object(
+            'lifecycleAction',
+            jsonb_build_object(
+              'completedAt', now(),
+              'correlationId', $2,
+              'error', $5,
+              'kind', $3,
+              'status', $4
+            )
+          ),
+          updated_at = now()
+      where id = $1
+        and metadata#>>'{lifecycleAction,correlationId}' = $2
+        and metadata#>>'{lifecycleAction,kind}' = $3
+        and metadata#>>'{lifecycleAction,status}' = 'processing'
+      returning id
+    `,
+    [input.bookingId, input.correlationId, input.kind, input.status, input.error ?? null],
+  );
+}
+
 function getCalendarLocation(meetingProvider: string) {
   if (meetingProvider === "google-meet") return "Google Meet";
   if (meetingProvider === "phone") return "Telefon";
@@ -2020,22 +2302,40 @@ async function insertCalendarEventForBooking(input: {
 }) {
   const row = await queryOne<IdRow>(
     `
-      insert into calendar_events (
-        workspace_id,
-        project_id,
-        contact_id,
-        owner_user_id,
-        title,
-        starts_at,
-        ends_at,
-        location,
-        status,
-        preparation,
-        outcome_goal,
-        metadata
+      with event_lock as (
+        select pg_advisory_xact_lock(hashtextextended($12::text, 0))
+      ), inserted as (
+        insert into calendar_events (
+          workspace_id,
+          project_id,
+          contact_id,
+          owner_user_id,
+          title,
+          starts_at,
+          ends_at,
+          location,
+          status,
+          preparation,
+          outcome_goal,
+          metadata
+        )
+        select $1, $2, $3, $4, $5, $6, $7, $8, 'bestätigt', $9::jsonb, $10, $11::jsonb
+        from event_lock
+        where not exists (
+          select 1
+          from calendar_events existing
+          where existing.workspace_id = $1
+            and existing.metadata->>'bookingId' = $12
+        )
+        returning id
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, 'bestätigt', $9::jsonb, $10, $11::jsonb)
-      returning id
+      select id from inserted
+      union all
+      select existing.id
+      from calendar_events existing
+      where existing.workspace_id = $1
+        and existing.metadata->>'bookingId' = $12
+      limit 1
     `,
     [
       input.booking.workspaceId,
@@ -2053,6 +2353,7 @@ async function insertCalendarEventForBooking(input: {
       ]),
         `Termin mit ${input.booking.contactName} bestätigen und nächste Schritte klären.`,
       JSON.stringify(input.metadata),
+      input.booking.id,
     ],
   );
 
@@ -2077,11 +2378,14 @@ async function updateCalendarEventAfterSync(input: {
 
 export async function confirmMeetingBooking(input: {
   bookingId: string;
+  correlationId?: string;
   requestUrl?: string;
+  rollbackOnFailure?: boolean;
   session: AppSession;
 }): Promise<{
   bookingId?: string;
   calendarEventId?: string | null;
+  correlationId?: string;
   error?: string | null;
   finalConfirmationJobId?: string | null;
   finalConfirmationQueued?: boolean;
@@ -2141,10 +2445,40 @@ export async function confirmMeetingBooking(input: {
   if (!booking) return { error: "Booking not found", ok: false };
 
   const metadata = getBookingMetadata(booking.metadata);
+  const correlationId =
+    normalizeBookingCorrelationId(
+      typeof metadata.correlationId === "string" ? metadata.correlationId : null,
+    ) ?? resolveBookingCorrelationId(input.correlationId);
+  const timeZone = typeof metadata.timeZone === "string" && metadata.timeZone.trim()
+    ? metadata.timeZone.trim()
+    : "UTC";
   let calendarEventId =
     typeof metadata.calendarEventId === "string" && isUuid(metadata.calendarEventId)
       ? metadata.calendarEventId
       : null;
+  const existingOnlineMeetingUrl =
+    typeof metadata.onlineMeetingUrl === "string" && metadata.onlineMeetingUrl.trim()
+      ? metadata.onlineMeetingUrl.trim()
+      : null;
+  if (
+    booking.status === "confirmed" &&
+    (!expectsOnlineMeetingLink(booking.meetingProvider) || existingOnlineMeetingUrl)
+  ) {
+    return {
+      bookingId: booking.id,
+      calendarEventId,
+      correlationId,
+      finalConfirmationJobId:
+        typeof metadata.finalConfirmationJobId === "string" ? metadata.finalConfirmationJobId : null,
+      finalConfirmationQueued: false,
+      ok: true,
+      onlineMeetingUrl: existingOnlineMeetingUrl,
+      provider: typeof metadata.provider === "string" ? metadata.provider : null,
+      status: typeof metadata.syncStatus === "string" ? metadata.syncStatus : "confirmed",
+      syncId: null,
+      webLink: typeof metadata.webLink === "string" ? metadata.webLink : null,
+    };
+  }
 
   if (!calendarEventId) {
     calendarEventId = await insertCalendarEventForBooking({
@@ -2152,6 +2486,7 @@ export async function confirmMeetingBooking(input: {
       metadata: {
         bookingId: booking.id,
         calendarProvider: booking.calendarProvider,
+        correlationId,
         contactEmail: booking.contactEmail,
         meetingProvider: booking.meetingProvider,
         source: "meeting_booking",
@@ -2172,6 +2507,7 @@ export async function confirmMeetingBooking(input: {
           `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
           booking.contactNote ? `<p>${escapeHtmlText(booking.contactNote)}</p>` : "",
         ].join(""),
+        correlationId,
         createOnlineMeeting: booking.meetingProvider === "microsoft-teams",
         endsAt: normalizeDateInput(booking.endsAt),
         location: getCalendarLocation(booking.meetingProvider),
@@ -2186,11 +2522,13 @@ export async function confirmMeetingBooking(input: {
             `<p>Termin aus Novalure CRM Buchungsseite.</p>`,
             booking.contactNote ? `<p>${escapeHtmlText(booking.contactNote)}</p>` : "",
           ].join(""),
+          correlationId,
           createOnlineMeeting: booking.meetingProvider === "google-meet",
           endsAt: normalizeDateInput(booking.endsAt),
           location: getCalendarLocation(booking.meetingProvider),
           startsAt: normalizeDateInput(booking.startsAt),
           subject: booking.title,
+          timeZone,
           workspaceId: booking.workspaceId,
         })
       : {
@@ -2202,19 +2540,16 @@ export async function confirmMeetingBooking(input: {
           webLink: null,
         };
   const missingOnlineMeetingUrl =
-    syncResult.status === "synced" &&
     expectsOnlineMeetingLink(booking.meetingProvider) &&
     !syncResult.onlineMeetingUrl;
   const syncStatus: "failed" | "pending" | "synced" = missingOnlineMeetingUrl
     ? "failed"
     : syncResult.status;
-  const syncError = missingOnlineMeetingUrl
-    ? `${getMeetingLocation(booking.meetingProvider)} konnte keinen Meeting-Link erstellen.`
-    : syncResult.error ?? null;
 
   const mergedMetadata = {
     ...metadata,
     calendarEventId,
+    correlationId,
     externalCalendarId: syncResult.eventId ?? null,
     onlineMeetingUrl: syncResult.onlineMeetingUrl ?? null,
     provider: syncResult.provider,
@@ -2235,11 +2570,11 @@ export async function confirmMeetingBooking(input: {
 
   const syncId = await insertCalendarSyncEvent({
     calendarEventId,
-    error: syncError,
+    error: syncStatus === "failed" ? "calendar_sync_failed" : null,
     operation: "confirm_meeting_booking",
     payload: {
       bookingId: booking.id,
-      contactEmail: booking.contactEmail,
+      correlationId,
       onlineMeetingUrl: syncResult.onlineMeetingUrl ?? null,
       providerEventId: syncResult.eventId ?? null,
       webLink: syncResult.webLink ?? null,
@@ -2251,10 +2586,28 @@ export async function confirmMeetingBooking(input: {
   });
 
   if (syncStatus === "failed") {
+    let providerCleanupStatus: "failed" | "not_required" | "synced" = "not_required";
+    if (input.rollbackOnFailure && syncResult.eventId) {
+      const cleanup = shouldUseGoogle
+        ? await deleteGoogleCalendarEvent({
+            eventId: syncResult.eventId,
+            workspaceId: booking.workspaceId,
+          })
+        : shouldUseMicrosoft
+          ? await deleteMicrosoftCalendarEvent({
+              eventId: syncResult.eventId,
+              workspaceId: booking.workspaceId,
+            })
+          : null;
+      providerCleanupStatus = cleanup?.status === "synced" ? "synced" : "failed";
+    }
+    const rollbackSucceeded = providerCleanupStatus !== "failed";
     await queryOne<IdRow>(
       `
         update meeting_bookings
-        set metadata = metadata || $2::jsonb, updated_at = now()
+        set status = case when $3::boolean then 'cancelled' else status end,
+            metadata = metadata || $2::jsonb,
+            updated_at = now()
         where id = $1
         returning id
       `,
@@ -2262,15 +2615,30 @@ export async function confirmMeetingBooking(input: {
         booking.id,
         JSON.stringify({
           ...mergedMetadata,
-          syncError: syncError ?? "Calendar sync failed",
+          providerCleanupStatus,
+          recoveryState: rollbackSucceeded ? "rolled_back" : "provider_cleanup_required",
+          syncError: "calendar_sync_failed",
         }),
+        Boolean(input.rollbackOnFailure && rollbackSucceeded),
       ],
     );
+    if (input.rollbackOnFailure && rollbackSucceeded) {
+      await updateLocalCalendarEventForPublicAction({
+        calendarEventId,
+        metadata: {
+          correlationId,
+          recoveryState: "rolled_back",
+          syncError: "calendar_sync_failed",
+        },
+        status: "abgesagt",
+      });
+    }
 
     return {
       bookingId: booking.id,
       calendarEventId,
-      error: syncError ?? "Calendar sync failed",
+      correlationId,
+      error: rollbackSucceeded ? "calendar_sync_failed" : "action_recovery_required",
       finalConfirmationJobId: null,
       finalConfirmationQueued: false,
       ok: false,
@@ -2301,12 +2669,14 @@ export async function confirmMeetingBooking(input: {
     finalConfirmationJobId = await queueMeetingNotificationJob({
       body: finalBody,
       bookingId: booking.id,
+      correlationId,
+      idempotencyKey: `meeting-notification:${correlationId}:confirmation:confirmed`,
       kind: "confirmation",
       meetingPageId: booking.meetingPageId,
       recipientEmail: booking.contactEmail,
       scheduledFor: new Date(),
-    subject: automation.confirmationSubject || "Ihr Termin ist bestätigt: {{meeting.title}}",
-    title: automation.confirmationTitle || "Termin bestätigt",
+      subject: automation.confirmationSubject || "Ihr Termin ist bestätigt: {{meeting.title}}",
+      title: automation.confirmationTitle || "Termin bestätigt",
       tokens: getFinalConfirmationTokens({
         booking,
         onlineMeetingUrl: syncResult.onlineMeetingUrl,
@@ -2338,6 +2708,7 @@ export async function confirmMeetingBooking(input: {
     after: {
       bookingId: booking.id,
       calendarEventId,
+      correlationId,
       finalConfirmationJobId,
       finalConfirmationQueued: Boolean(finalConfirmationJobId),
       provider: syncResult.provider,
@@ -2351,6 +2722,7 @@ export async function confirmMeetingBooking(input: {
   return {
     bookingId: booking.id,
     calendarEventId,
+    correlationId,
     finalConfirmationJobId,
     finalConfirmationQueued: Boolean(finalConfirmationJobId),
     ok: true,

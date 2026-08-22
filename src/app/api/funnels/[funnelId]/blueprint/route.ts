@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requirePermissionAndProductCapability } from "@/lib/auth/session";
-import { findFunnelBlueprint } from "@/lib/funnel-builder-adapter";
-import { funnelSteps, funnels, projects, users } from "@/lib/crm-source";
+import {
+  FunnelLivePreflightError,
+  runFunnelLivePreflight,
+} from "@/lib/funnel-live-preflight";
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
 import { getStoredFunnel, restoreStoredFunnelVersion, saveStoredFunnel } from "@/lib/funnel-store";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
@@ -10,48 +12,30 @@ type RouteContext = {
   params: Promise<{ funnelId: string }>;
 };
 
-function runFunnelPreflight(blueprint: FunnelBlueprint) {
-  const fields = blueprint.pages.flatMap((page) =>
-    page.sections.flatMap((section) =>
-      section.rows.flatMap((row) =>
-        row.columns.flatMap((column) =>
-          column.elements.flatMap((element) => element.type === "form" ? element.fields ?? [] : []),
-        ),
-      ),
-    ),
-  );
-  const blockers: string[] = [];
-
-  if (!blueprint.name.trim()) blockers.push("name_missing");
-  if (!blueprint.projectId.trim()) blockers.push("project_missing");
-  if (fields.length === 0) blockers.push("contact_form_missing");
-  if (!fields.some((field) => {
-    const searchable = [field.type, field.crmField, field.label, field.helpText]
-      .map((value) => String(value ?? "").toLowerCase())
-      .join(" ");
-    return searchable.includes("privacy") || searchable.includes("datenschutz") || searchable.includes("consent") || searchable.includes("dsgvo") || searchable.includes("gdpr");
-  })) blockers.push("privacy_consent_missing");
-  if (!blueprint.crmHandover.destination.trim()) blockers.push("crm_handover_missing");
-  if (fields.some((field) => field.required && !field.label.trim())) blockers.push("required_field_label_missing");
-
-  return { blockers: Array.from(new Set(blockers)), ok: blockers.length === 0 };
-}
-
 export async function GET(_request: Request, context: RouteContext) {
+  const auth = await requirePermissionAndProductCapability(_request, "funnels:write", "funnels:publish");
+  if (!auth.ok) return auth.response;
+
   const text = getApiSystemCopy(resolveRequestLanguage(_request));
   const { funnelId } = await context.params;
-  const stored = await getStoredFunnel(funnelId);
-  const fallback = findFunnelBlueprint(funnelId, { funnels, projects, steps: funnelSteps, users });
+  let stored;
 
-  if (!stored && !fallback) {
+  try {
+    stored = await getStoredFunnel(funnelId, auth.session.workspaceId);
+  } catch {
+    return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
+  }
+
+  if (!stored) {
     return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
   }
 
   return NextResponse.json({
-    blueprint: stored?.blueprint ?? fallback,
-    versions: stored?.versions ?? [],
-    updatedAt: stored?.updatedAt ?? null,
-    source: stored?.source ?? "crm-data",
+    blueprint: stored.blueprint,
+    blueprintOrigin: stored.blueprintOrigin,
+    versions: stored.versions,
+    updatedAt: stored.updatedAt,
+    source: "database",
   });
 }
 
@@ -70,7 +54,18 @@ export async function PUT(request: Request, context: RouteContext) {
   }
 
   if (body.restoreVersionId) {
-    const restored = await restoreStoredFunnelVersion(funnelId, body.restoreVersionId);
+    let restored;
+    try {
+      restored = await restoreStoredFunnelVersion(funnelId, body.restoreVersionId, auth.session);
+    } catch (error) {
+      if (error instanceof FunnelLivePreflightError) {
+        return NextResponse.json(
+          { error: error.message, preflight: error.preflight },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
+    }
     if (!restored) return NextResponse.json({ error: text.versionNotFound }, { status: 404 });
     return NextResponse.json(restored);
   }
@@ -79,11 +74,32 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json({ error: text.invalidBlueprint }, { status: 400 });
   }
 
-  const preflight = runFunnelPreflight(body.blueprint);
+  const preflight = runFunnelLivePreflight(body.blueprint);
   if (body.blueprint.status === "aktiv" && !preflight.ok) {
     return NextResponse.json({ error: "Funnel preflight blocked publish", preflight }, { status: 409 });
   }
 
-  const saved = await saveStoredFunnel(body.blueprint, body.label, auth.session);
+  let existing;
+  try {
+    existing = await getStoredFunnel(funnelId, auth.session.workspaceId);
+  } catch {
+    return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
+  }
+  if (!existing) return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
+
+  let saved;
+  try {
+    saved = await saveStoredFunnel(body.blueprint, body.label, auth.session);
+  } catch (error) {
+    if (error instanceof FunnelLivePreflightError) {
+      return NextResponse.json(
+        { error: error.message, preflight: error.preflight },
+        { status: 409 },
+      );
+    }
+    const reason = error instanceof Error ? error.message : "Funnel blueprint could not be saved";
+    const status = reason.includes("not found") ? 404 : 503;
+    return NextResponse.json({ error: reason }, { status });
+  }
   return NextResponse.json({ ...saved, preflight });
 }
