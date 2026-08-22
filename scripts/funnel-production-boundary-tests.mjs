@@ -79,12 +79,15 @@ test("persisted and just-saved funnel records are de-duplicated by ID", () => {
 
 test("blueprint API is authenticated, database-only, and fail-closed", async () => {
   const route = await source("src/app/api/funnels/[funnelId]/blueprint/route.ts");
+  const responseDto = await source("src/lib/funnel-store-response.ts");
 
   assert.doesNotMatch(route, /@\/lib\/crm-source/);
   assert.doesNotMatch(route, /findFunnelBlueprint/);
   assert.match(route, /requirePermissionAndProductCapability\(_request, "funnels:write", "funnels:publish"\)/);
   assert.match(route, /getStoredFunnel\(funnelId, auth\.session\.workspaceId\)/);
-  assert.match(route, /source: "database"/);
+  assert.match(route, /toFunnelBlueprintResponse\(stored\)/);
+  assert.match(responseDto, /source: stored\.source/);
+  assert.doesNotMatch(responseDto, /^\s*(?:tracking|publishToken|publicToken):/mu);
   assert.match(route, /if \(!stored\).*funnelNotFound/s);
   assert.match(route, /status: 503/);
 });

@@ -846,6 +846,7 @@ export type Funnel = {
   id: ID;
   workspaceId: ID;
   projectId: ID;
+  blueprintRevision?: number;
   name: string;
   goal: string;
   audience: LeadType;
@@ -855,6 +856,7 @@ export type Funnel = {
   leads: number;
   conversionRate: number;
   ownerUserId?: ID;
+  updatedAt?: string;
 };
 
 export type FunnelStep = {

@@ -136,12 +136,12 @@ test("route derives readiness from explicit issues and the panel reads currentVe
 
 test("system diagnostics stay restricted to the two explicit administrator product roles", () => {
   const route = readProjectFile("src/app/api/system/database/route.ts");
+  const policy = readProjectFile("src/lib/launch-scope.ts");
 
-  assert.match(
-    route,
-    /session\.productRole === "platform_admin" \|\| session\.productRole === "novalureAdmin"/,
-  );
-  assert.doesNotMatch(route, /hasProductCapability\([^\n]+"novalure:internal"/);
+  assert.match(route, /evaluateLaunchScope\("systemDatabaseDiagnostics", session\)\.allowed/);
+  assert.match(policy, /internalProductRoles = Object\.freeze\(\["platform_admin", "novalureAdmin"\]\)/);
+  assert.match(policy, /systemDatabaseDiagnostics:[\s\S]*allowedProductRoles: internalProductRoles/);
+  assert.match(policy, /requiredProductPermissions: Object\.freeze\(\["novalure:internal"\]\)/);
 });
 
 test("governance inventory cannot render a static QA green state as runtime evidence", () => {

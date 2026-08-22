@@ -9,6 +9,7 @@ import ts from "typescript";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const nodeRequire = createRequire(import.meta.url);
+let publicFunnelPublicationAllowed = true;
 
 function readProjectFile(path) {
   return readFileSync(join(rootDir, path), "utf8");
@@ -31,6 +32,11 @@ function loadBoundaryExports() {
     require(specifier) {
       if (specifier === "server-only") return {};
       if (specifier === "node:crypto") return nodeRequire(specifier);
+      if (specifier === "@/lib/launch-scope") {
+        return {
+          evaluateLaunchScope: () => ({ allowed: publicFunnelPublicationAllowed }),
+        };
+      }
       throw new Error(`Unexpected runtime import in ${path}: ${specifier}`);
     },
   };
@@ -84,6 +90,17 @@ test("live funnel access requires an exact token and a persisted active database
   );
 });
 
+test("live funnel access fails closed when publication is launch-off", () => {
+  const fixture = publishedFixture();
+  publicFunnelPublicationAllowed = false;
+  try {
+    assert.equal(isStoredFunnelPubliclyLive(fixture), false);
+    assert.equal(canUsePublicLiveFunnel({ ...fixture, token: "stored-token" }), false);
+  } finally {
+    publicFunnelPublicationAllowed = true;
+  }
+});
+
 test("stored publish token is authoritative over blueprint copies", () => {
   const fixture = publishedFixture();
   assert.equal(getStoredFunnelPublishToken(fixture.stored.tracking), "stored-token");
@@ -104,8 +121,9 @@ test("blueprint writes cannot mass-assign the server-managed publish token", () 
 
   assert.match(store, /delete tracking\.publicToken/);
   assert.match(store, /delete tracking\.publishToken/);
-  assert.match(store, /cleanString\(serverTracking\.publishToken\)/);
-  assert.doesNotMatch(store, /cleanString\(existingTracking\.publishToken\)/);
+  assert.match(store, /findFunnelDatabaseRowInTransaction[\s\S]*for update of f/);
+  assert.match(store, /tracking = tracking \|\| \$11::jsonb/);
+  assert.doesNotMatch(store, /serverTracking|existingTracking|createPublicToken/);
   assert.doesNotMatch(access, /blueprintTracking\.(?:publicToken|publishToken)/);
 });
 

@@ -21,11 +21,14 @@ import {
 import {
   buildPublicSubmissionScope,
   createFunnelSubmissionDomainIdempotencyHash,
+  createFunnelSubmissionReplayRequestFingerprint,
+  createPublicSubmissionIdempotencyHashes,
   createPublicSubmissionProof,
   funnelSubmissionBodyLimits,
   publicSubmissionActions,
   PublicSubmissionRequestError,
   readBoundedPublicSubmissionJson,
+  refreshPublicSubmissionProof,
   verifyPublicSubmissionProof,
 } from "../src/lib/security/public-submission-abuse.ts";
 
@@ -396,22 +399,95 @@ test("actual renderer request carries proof and never forwards the publish token
   assert.equal(Object.keys(request.init.headers).some((key) => /token/i.test(key)), false);
 });
 
-test("commit-before-completion recovers the same domain submission after a refreshed proof", async () => {
-  const scope = buildPublicSubmissionScope({ resourceId: funnelId, resourceType: "funnel", workspaceId });
-  const firstProof = createPublicSubmissionProof({ action: publicSubmissionActions.funnel, scope, secret });
-  const refreshedProof = createPublicSubmissionProof({ action: publicSubmissionActions.funnel, scope, secret });
+test("commit-before-completion recovers the same domain submission after proof refresh and publication rotation", async () => {
+  const firstProofScope = buildPublicSubmissionScope({
+    resourceId: `${funnelId}:publication:7`,
+    resourceType: "funnel",
+    workspaceId,
+  });
+  const rotatedProofScope = buildPublicSubmissionScope({
+    resourceId: `${funnelId}:publication:8`,
+    resourceType: "funnel",
+    workspaceId,
+  });
+  const stableDomainScope = buildPublicSubmissionScope({ resourceId: funnelId, resourceType: "funnel", workspaceId });
+  const firstProof = createPublicSubmissionProof({ action: publicSubmissionActions.funnel, scope: firstProofScope, secret });
+  const refreshed = refreshPublicSubmissionProof({
+    action: publicSubmissionActions.funnel,
+    nowSeconds: firstProof.expiresAt + 60,
+    proof: firstProof,
+    scope: firstProofScope,
+    secret,
+  });
+  assert.equal(refreshed.ok, true);
+  if (!refreshed.ok) return;
+  const refreshedProof = refreshed.proof;
+  const rotatedProof = createPublicSubmissionProof({
+    action: publicSubmissionActions.funnel,
+    scope: rotatedProofScope,
+    secret,
+  });
+  const semanticFingerprint = "same-canonical-payload";
+  const replayFingerprint = createFunnelSubmissionReplayRequestFingerprint({
+    intentId: submissionIntentId,
+    requestFingerprint: semanticFingerprint,
+    secret,
+  });
   const firstHash = createFunnelSubmissionDomainIdempotencyHash({
     intentId: submissionIntentId,
-    requestFingerprint: "same-canonical-payload",
-    scope,
+    requestFingerprint: semanticFingerprint,
+    scope: stableDomainScope,
     secret,
   });
   const refreshedHash = createFunnelSubmissionDomainIdempotencyHash({
     intentId: submissionIntentId,
-    requestFingerprint: "same-canonical-payload",
-    scope,
+    requestFingerprint: semanticFingerprint,
+    scope: stableDomainScope,
     secret,
   });
+  const rotatedHash = createFunnelSubmissionDomainIdempotencyHash({
+    intentId: submissionIntentId,
+    requestFingerprint: semanticFingerprint,
+    scope: stableDomainScope,
+    secret,
+  });
+  const firstOuterHashes = createPublicSubmissionIdempotencyHashes({
+    action: publicSubmissionActions.funnel,
+    idempotencyKey: firstProof.idempotencyKey,
+    requestFingerprint: replayFingerprint,
+    scope: firstProofScope,
+    secret,
+  });
+  const refreshedOuterHashes = createPublicSubmissionIdempotencyHashes({
+    action: publicSubmissionActions.funnel,
+    idempotencyKey: refreshedProof.idempotencyKey,
+    requestFingerprint: replayFingerprint,
+    scope: firstProofScope,
+    secret,
+  });
+  const rotatedOuterHashes = createPublicSubmissionIdempotencyHashes({
+    action: publicSubmissionActions.funnel,
+    idempotencyKey: rotatedProof.idempotencyKey,
+    requestFingerprint: replayFingerprint,
+    scope: rotatedProofScope,
+    secret,
+  });
+  const firstRawRequest = await readBoundedPublicSubmissionJson(
+    new Request("https://crm.example/api/funnels/submit", {
+      body: JSON.stringify({ intentId: submissionIntentId, proof: firstProof }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+    funnelSubmissionBodyLimits,
+  );
+  const refreshedRawRequest = await readBoundedPublicSubmissionJson(
+    new Request("https://crm.example/api/funnels/submit", {
+      body: JSON.stringify({ intentId: submissionIntentId, proof: refreshedProof }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+    funnelSubmissionBodyLimits,
+  );
   const committed = new Map();
 
   async function persistWithInjectedCompletionFailure(proof, failAfterCommit) {
@@ -425,8 +501,15 @@ test("commit-before-completion recovers the same domain submission after a refre
 
   await assert.rejects(persistWithInjectedCompletionFailure(firstProof, true), /injected_completion_failure/);
   const replay = await persistWithInjectedCompletionFailure(refreshedProof, false);
+  const postRotationReplay = await persistWithInjectedCompletionFailure(rotatedProof, false);
+  assert.equal(firstProof.idempotencyKey, refreshedProof.idempotencyKey);
+  assert.notEqual(firstRawRequest.requestFingerprint, refreshedRawRequest.requestFingerprint);
+  assert.deepEqual(firstOuterHashes, refreshedOuterHashes);
+  assert.notDeepEqual(firstOuterHashes, rotatedOuterHashes);
   assert.equal(firstHash, refreshedHash);
+  assert.equal(firstHash, rotatedHash);
   assert.deepEqual(replay, { contactId: "contact-1", submissionId: "submission-1" });
+  assert.deepEqual(postRotationReplay, replay);
   assert.equal(committed.size, 1);
 });
 
@@ -458,12 +541,24 @@ test("route orders abuse controls before the single atomic and recoverable CRM w
   assert.match(blueprintRoute, /restoreStoredFunnelVersion[\s\S]*FunnelLivePreflightError/);
   assert.match(funnelStore, /assertFunnelLivePreflight\(blueprint\)[\s\S]*saveStoredFunnelToDatabase/);
   assert.match(route, /getFunnelSubmissionIdentifier\(blueprint, payload/);
-  assert.ok(route.lastIndexOf("claimPublicSubmissionIdempotency") < route.lastIndexOf("consumePublicSubmissionRateLimits"));
-  assert.ok(route.lastIndexOf("consumePublicSubmissionRateLimits") < route.lastIndexOf("persistFunnelSubmission({"));
+  const replayRead = route.indexOf("await readPublicSubmissionIdempotency");
+  const rateLimit = route.indexOf("await consumePublicSubmissionRateLimits");
+  const honeypot = route.indexOf("cleanString(payload.publicSubmission?.honeypot)");
+  const durableClaim = route.indexOf("claim = await claimPublicSubmissionIdempotency");
+  const persistence = route.lastIndexOf("persistFunnelSubmission({");
+  assert.ok(replayRead >= 0 && replayRead < rateLimit);
+  assert.ok(rateLimit < honeypot && honeypot < durableClaim);
+  assert.ok(durableClaim < persistence);
+  assert.doesNotMatch(route.slice(rateLimit, durableClaim), /completePublicSubmissionIdempotency/);
   assert.match(route, /completePublicSubmissionIdempotency/);
   assert.match(route, /submissionIdempotencyHash: domainIdempotencyHash/);
+  assert.match(route, /const stableDomainScope = buildPublicSubmissionScope/);
+  assert.match(route, /scope: stableDomainScope/);
+  assert.match(route, /createFunnelSubmissionReplayRequestFingerprint/);
+  assert.doesNotMatch(route, /requestFingerprint: parsed\.requestFingerprint/);
   assert.match(route, /claim\.state === "processing"[\s\S]*findPersistedFunnelSubmissionByIdempotency/);
-  assert.match(route, /leaseVersion: claim\.leaseVersion/);
+  assert.match(route, /const completeLease = async \(leaseVersion: number[\s\S]*leaseVersion,/);
+  assert.match(route, /completeLease\(claim\.leaseVersion, snapshot\)/);
   assert.doesNotMatch(route, /getRequestToken|x-novalure-funnel-token|x-funnel-token/u);
   assert.match(preview, /action: publicSubmissionActions\.funnel/);
   assert.match(preview, /resourceType: "funnel"/);
@@ -523,6 +618,7 @@ test("route orders abuse controls before the single atomic and recoverable CRM w
   assert.doesNotMatch(claimRepository, /leaseVersion\?: number/);
   assert.match(claimRepository, /value: publicSubmissionActions\.funnel/);
   assert.match(route, /allowLeaseReclaim: true/);
+  assert.match(route, /error: "funnel_publication_stale"[\s\S]*reloadRequired: true/);
   assert.match(migration, /funnel_submissions_workspace_idempotency_key_uidx/);
   assert.match(migration, /lease_version bigint not null default 1/);
   assert.match(runner, /\["070_funnel_submission_idempotency_recovery", "055_public_submission_abuse_guards"\]/);

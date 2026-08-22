@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/auth/session";
 import { getBotPrompt, runBotChat } from "@/lib/bots/chat-runtime";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import { listBotConversations, listBotMessages } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { getModelProviderStatus } from "@/lib/integrations/model-provider";
@@ -55,6 +56,12 @@ export async function POST(request: Request) {
   const auth = await requirePermission(request, "bots:run");
 
   if (!auth.ok) return auth.response;
+  if (
+    !auth.session.permissions.includes("crm:write") ||
+    !canViewAllWorkspaceContacts(auth.session)
+  ) {
+    return Response.json({ error: "bot_crm_write_permission_required" }, { status: 403 });
+  }
 
   const body = await readJson(request);
 

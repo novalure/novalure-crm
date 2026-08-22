@@ -4,16 +4,23 @@ import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
   consumePublicSubmissionRateLimits,
+  readPublicSubmissionIdempotency,
 } from "@/lib/db/public-submission-abuse-repository";
 import {
   findPersistedFunnelSubmissionByIdempotency,
+  funnelPublicationRevisionConflictReason,
   persistFunnelSubmission,
   persistFunnelTestSubmission,
 } from "@/lib/db/runtime-repositories";
-import { isStoredFunnelPubliclyLive } from "@/lib/funnel-public-access";
+import {
+  getStoredFunnelPublicationRevision,
+  getStoredFunnelSubmissionScopeResourceId,
+  isStoredFunnelPubliclyLive,
+} from "@/lib/funnel-public-access";
 import { runFunnelLivePreflight } from "@/lib/funnel-live-preflight";
 import { getStoredFunnel } from "@/lib/funnel-store";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
+import { sanitizeFunnelSubmissionForPersistence } from "@/lib/funnel-submission-security";
 import {
   canonicalizeFunnelSubmissionPayload,
   FunnelSubmissionValidationError,
@@ -21,10 +28,12 @@ import {
   scoreCanonicalFunnelAnswers,
 } from "@/lib/funnel-submission-validation";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { getProductRoleCapabilities } from "@/lib/product-model";
 import {
   buildPublicSubmissionScope,
   createFunnelSubmissionDomainIdempotencyHash,
+  createFunnelSubmissionReplayRequestFingerprint,
   createPublicSubmissionIdempotencyHashes,
   createPublicSubmissionOpaqueHash,
   createPublicSubmissionRateLimitPolicies,
@@ -264,6 +273,18 @@ function failureSnapshot(reason: string, status: number): PublicSubmissionRespon
   return { body: { error: reason, persisted: false }, kind: "json", status };
 }
 
+function staleFunnelPublicationSnapshot(): PublicSubmissionResponseSnapshot {
+  return {
+    body: {
+      error: "funnel_publication_stale",
+      persisted: false,
+      reloadRequired: true,
+    },
+    kind: "json",
+    status: 409,
+  };
+}
+
 function unavailableResponse() {
   const response = responseFromSnapshot(failureSnapshot("temporarily_unavailable", 503));
   response.headers.set("retry-after", "5");
@@ -330,6 +351,10 @@ function createSuccessSnapshot(input: {
 }
 
 export async function POST(request: Request, context: RouteContext) {
+  const launchScope = evaluateLaunchScope("publicFunnelSubmission");
+  if (!launchScope.allowed) {
+    return responseFromSnapshot(failureSnapshot(launchScope.code, 503));
+  }
   const text = getApiSystemCopy(resolveRequestLanguage(request));
   const { funnelId } = await context.params;
 
@@ -360,6 +385,7 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const blueprint = stored.blueprint;
+  const expectedPublicationRevision = getStoredFunnelPublicationRevision(stored.tracking);
   if (payload.mode === "live") {
     if (!isStoredFunnelPubliclyLive({ blueprint, stored })) {
       return responseFromSnapshot(failureSnapshot("funnel_not_published", 403));
@@ -371,6 +397,10 @@ export async function POST(request: Request, context: RouteContext) {
   }
   try {
     payload = canonicalizeFunnelSubmissionPayload(blueprint, payload);
+    payload = sanitizeFunnelSubmissionForPersistence({
+      payload,
+      storedTracking: stored.tracking,
+    });
   } catch (error) {
     const reason = error instanceof FunnelSubmissionValidationError
       ? error.code
@@ -407,6 +437,14 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const scope = buildPublicSubmissionScope({
+    resourceId: getStoredFunnelSubmissionScopeResourceId({
+      funnelId: stored.funnelId,
+      storedTracking: stored.tracking,
+    }),
+    resourceType: "funnel",
+    workspaceId: stored.workspaceId,
+  });
+  const stableDomainScope = buildPublicSubmissionScope({
     resourceId: stored.funnelId,
     resourceType: "funnel",
     workspaceId: stored.workspaceId,
@@ -423,21 +461,93 @@ export async function POST(request: Request, context: RouteContext) {
     if (!proofValidation.ok) {
       return responseFromSnapshot(failureSnapshot(proofValidation.reason, 400));
     }
+    const domainRequestFingerprint = getFunnelSubmissionDomainRequestFingerprint(payload);
     hashes = createPublicSubmissionIdempotencyHashes({
       action: publicSubmissionActions.funnel,
       idempotencyKey: proofValidation.proof.idempotencyKey,
-      requestFingerprint: parsed.requestFingerprint,
+      requestFingerprint: createFunnelSubmissionReplayRequestFingerprint({
+        intentId: payload.publicSubmission?.intentId ?? "",
+        requestFingerprint: domainRequestFingerprint,
+      }),
       scope,
     });
     domainIdempotencyHash = createFunnelSubmissionDomainIdempotencyHash({
       intentId: payload.publicSubmission?.intentId ?? "",
-      requestFingerprint: getFunnelSubmissionDomainRequestFingerprint(payload),
-      scope,
+      requestFingerprint: domainRequestFingerprint,
+      scope: stableDomainScope,
     });
   } catch {
     return unavailableResponse();
   }
 
+  const completeLease = async (leaseVersion: number, snapshot: PublicSubmissionResponseSnapshot) => {
+    try {
+      await completePublicSubmissionIdempotency({
+        idempotencyHash: hashes.idempotencyHash,
+        leaseVersion,
+        requestHash: hashes.requestHash,
+        response: snapshot,
+      });
+      return responseFromSnapshot(snapshot);
+    } catch {
+      return unavailableResponse();
+    }
+  };
+
+  let priorClaim: Awaited<ReturnType<typeof readPublicSubmissionIdempotency>>;
+  try {
+    priorClaim = await readPublicSubmissionIdempotency(hashes);
+  } catch {
+    return unavailableResponse();
+  }
+  if (priorClaim.state === "replay") return responseFromSnapshot(priorClaim.response);
+  if (priorClaim.state === "conflict") {
+    return responseFromSnapshot(failureSnapshot("submission_replay_conflict", 409));
+  }
+
+  if (priorClaim.state === "processing") {
+    try {
+      const recovered = await findPersistedFunnelSubmissionByIdempotency({
+        databaseFunnelId: stored.funnelId,
+        submissionIdempotencyHash: domainIdempotencyHash,
+        workspaceId: stored.workspaceId,
+      });
+      if (recovered.persisted) {
+        return completeLease(
+          priorClaim.leaseVersion,
+          createSuccessSnapshot({ blueprint, funnelId, mode: payload.mode, persistence: recovered, score }),
+        );
+      }
+    } catch {
+      return unavailableResponse();
+    }
+    return responseFromSnapshot(failureSnapshot("submission_in_progress", 409));
+  }
+
+  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
+  if (!clientIp) return responseFromSnapshot(failureSnapshot("temporarily_unavailable", 503));
+
+  try {
+    const rateLimit = await consumePublicSubmissionRateLimits({
+      policies: createPublicSubmissionRateLimitPolicies({
+        action: publicSubmissionActions.funnel,
+        clientIp,
+        identifier: getFunnelSubmissionIdentifier(blueprint, payload, proofValidation.proof.idempotencyKey),
+        scope,
+      }),
+    });
+    if (!rateLimit.allowed) return responseFromSnapshot(failureSnapshot("rate_limited", 429));
+  } catch {
+    return unavailableResponse();
+  }
+
+  if (cleanString(payload.publicSubmission?.honeypot)) {
+    return responseFromSnapshot(failureSnapshot("submission_rejected", 400));
+  }
+
+  // Allocate or reclaim durable replay state only after the request has
+  // consumed the bounded abuse controls. The atomic claim closes the race
+  // between the read-only replay lookup above and this point.
   let claim: Awaited<ReturnType<typeof claimPublicSubmissionIdempotency>>;
   try {
     claim = await claimPublicSubmissionIdempotency({
@@ -451,21 +561,6 @@ export async function POST(request: Request, context: RouteContext) {
   if (claim.state === "conflict") {
     return responseFromSnapshot(failureSnapshot("submission_replay_conflict", 409));
   }
-
-  const complete = async (snapshot: PublicSubmissionResponseSnapshot) => {
-    try {
-      await completePublicSubmissionIdempotency({
-        idempotencyHash: hashes.idempotencyHash,
-        leaseVersion: claim.leaseVersion,
-        requestHash: hashes.requestHash,
-        response: snapshot,
-      });
-      return responseFromSnapshot(snapshot);
-    } catch {
-      return unavailableResponse();
-    }
-  };
-
   if (claim.state === "processing") {
     try {
       const recovered = await findPersistedFunnelSubmissionByIdempotency({
@@ -474,7 +569,10 @@ export async function POST(request: Request, context: RouteContext) {
         workspaceId: stored.workspaceId,
       });
       if (recovered.persisted) {
-        return complete(createSuccessSnapshot({ blueprint, funnelId, mode: payload.mode, persistence: recovered, score }));
+        return completeLease(
+          claim.leaseVersion,
+          createSuccessSnapshot({ blueprint, funnelId, mode: payload.mode, persistence: recovered, score }),
+        );
       }
     } catch {
       return unavailableResponse();
@@ -482,26 +580,7 @@ export async function POST(request: Request, context: RouteContext) {
     return responseFromSnapshot(failureSnapshot("submission_in_progress", 409));
   }
 
-  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-  if (!clientIp) return complete(failureSnapshot("temporarily_unavailable", 503));
-
-  try {
-    const rateLimit = await consumePublicSubmissionRateLimits({
-      policies: createPublicSubmissionRateLimitPolicies({
-        action: publicSubmissionActions.funnel,
-        clientIp,
-        identifier: getFunnelSubmissionIdentifier(blueprint, payload, proofValidation.proof.idempotencyKey),
-        scope,
-      }),
-    });
-    if (!rateLimit.allowed) return complete(failureSnapshot("rate_limited", 429));
-  } catch {
-    return complete(failureSnapshot("temporarily_unavailable", 503));
-  }
-
-  if (cleanString(payload.publicSubmission?.honeypot)) {
-    return complete(failureSnapshot("submission_rejected", 400));
-  }
+  const complete = (snapshot: PublicSubmissionResponseSnapshot) => completeLease(claim.leaseVersion, snapshot);
 
   const persistablePayload: FunnelSubmissionPayload = { ...payload };
   delete persistablePayload.publicSubmission;
@@ -509,12 +588,19 @@ export async function POST(request: Request, context: RouteContext) {
     const persistence = await persistFunnelSubmission({
       blueprint,
       databaseFunnelId: stored.funnelId,
+      expectedPublicationRevision,
       payload: persistablePayload,
       score,
       session,
       submissionIdempotencyHash: domainIdempotencyHash,
     });
     if (!persistence.persisted) {
+      if (persistence.reason === funnelPublicationRevisionConflictReason) {
+        // Rotation won the funnel row lock after this request's proof was
+        // verified. Do not finalize the old-revision abuse lease: no domain
+        // side effects committed and a refreshed proof must use the new scope.
+        return responseFromSnapshot(staleFunnelPublicationSnapshot());
+      }
       const status = persistence.reason.includes("not found") ? 404 : 503;
       return complete(failureSnapshot(persistence.reason, status));
     }

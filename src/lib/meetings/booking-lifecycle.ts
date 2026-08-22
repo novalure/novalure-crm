@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 /**
  * Public booking writes must remain disabled until provider and local
@@ -6,11 +7,11 @@ import { createHash, randomUUID } from "node:crypto";
  * Constants checked in routes, repositories and UI keep this boundary explicit
  * and fail-closed instead of depending on mutable environment configuration.
  */
-export const bookingCreationLaunchEnabled = false;
+export const bookingCreationLaunchEnabled = isLaunchSurfaceEnabled("publicBookingCreation");
 export const bookingCreationLaunchOffCode = "BOOKING_CREATION_LAUNCH_OFF";
 export const publicBookingCreationLaunchEnabled = bookingCreationLaunchEnabled;
 export const publicBookingCreationLaunchOffCode = bookingCreationLaunchOffCode;
-export const publicBookingLifecycleMutationsLaunchEnabled = false;
+export const publicBookingLifecycleMutationsLaunchEnabled = isLaunchSurfaceEnabled("publicBookingLifecycle");
 export const publicBookingLifecycleLaunchOffCode = "PUBLIC_BOOKING_LIFECYCLE_LAUNCH_OFF";
 
 const correlationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;

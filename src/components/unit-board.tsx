@@ -28,6 +28,7 @@ import {
 } from "@/lib/inventory-validation";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 type UnitBoardProps = {
   buildings: PropertyBuilding[];
@@ -118,6 +119,9 @@ const reservationStyles: Record<PropertyReservation["status"], string> = {
 };
 
 const workflowActions: ReservationWorkflowAction[] = ["create", "extend", "expire", "convert"];
+const reservationRelationshipSyncLaunchEnabled = isLaunchSurfaceEnabled(
+  "propertyReservationRelationshipSync",
+);
 
 function Pill({ children, className }: { children: ReactNode; className: string }) {
   return (
@@ -461,6 +465,7 @@ export function UnitBoard({
   const milestoneOptions = Object.entries(text.contractMilestoneLabels);
   const canSaveWorkflow = Boolean(
     canManage &&
+      reservationRelationshipSyncLaunchEnabled &&
       workflowDraft &&
       selectedView &&
       workflowDraft.contactId &&
@@ -485,7 +490,7 @@ export function UnitBoard({
   }
 
   function openWorkflow(view: UnitBoardView, action: ReservationWorkflowAction) {
-    if (!canManage) return;
+    if (!canManage || !reservationRelationshipSyncLaunchEnabled) return;
     const reservation = view.reservation;
     setWorkflowNotice(null);
     setWorkflowDraft({
@@ -887,6 +892,18 @@ export function UnitBoard({
             {inventoryNotice.message}
           </Pill>
         </div>
+      ) : null}
+
+      {canManage && !reservationRelationshipSyncLaunchEnabled ? (
+        <p
+          className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+          data-unit-relationship-launch-scope="off"
+          role="status"
+        >
+          {language === "de"
+            ? "Reservierungsänderungen bleiben gesperrt, bis Unit-Status, Käuferzuordnung und Deal-Synchronisierung fachlich freigegeben sind. Inventarpflege bleibt verfügbar."
+            : "Reservation changes remain disabled until unit status, buyer assignment, and deal synchronization are approved. Inventory maintenance remains available."}
+        </p>
       ) : null}
 
       {inventoryMode && canManage ? (
@@ -1569,7 +1586,7 @@ export function UnitBoard({
                       <div className="flex w-56 min-w-0 flex-col gap-2">
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canManage || unit.status !== "available" || hasActiveReservation}
+                          disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || unit.status !== "available" || hasActiveReservation}
                           onClick={() => openWorkflow(view, "create")}
                           type="button"
                         >
@@ -1577,7 +1594,7 @@ export function UnitBoard({
                         </button>
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canManage || !hasActiveReservation}
+                          disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || !hasActiveReservation}
                           onClick={() => openWorkflow(view, "extend")}
                           type="button"
                         >
@@ -1586,7 +1603,7 @@ export function UnitBoard({
                         <div className="grid gap-2">
                           <button
                             className="min-h-11 whitespace-normal break-words rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!canManage || !hasActiveReservation}
+                            disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || !hasActiveReservation}
                             onClick={() => openWorkflow(view, "expire")}
                             type="button"
                           >
@@ -1594,7 +1611,7 @@ export function UnitBoard({
                           </button>
                           <button
                             className="min-h-11 whitespace-normal break-words rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!canManage || !hasActiveReservation}
+                            disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || !hasActiveReservation}
                             onClick={() => openWorkflow(view, "convert")}
                             type="button"
                           >

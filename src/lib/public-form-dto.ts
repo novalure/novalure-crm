@@ -5,6 +5,7 @@ import type {
   FormStep,
   WebsiteForm,
 } from "@/lib/form-types";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 const privacyConsentFields = new Set(["privacy", "privacy_consent"]);
 const marketingConsentFields = new Set(["marketing_consent", "newsletter_consent"]);
@@ -98,15 +99,26 @@ export function getPublicFormLaunchBlockReason(
   form: WebsiteForm,
   ownerActive = true,
 ): PublicFormLaunchBlockReason | null {
-  if (form.ownerMode !== "user") return "form_round_robin_unavailable";
+  if (form.ownerMode !== "user" && !isLaunchSurfaceEnabled("publicFormRoundRobin")) {
+    return "form_round_robin_unavailable";
+  }
   if (!ownerActive) return "form_owner_unavailable";
-  if (form.fields.some((field) => Boolean(field.validationPattern.trim()))) {
+  if (
+    !isLaunchSurfaceEnabled("publicFormCustomPattern") &&
+    form.fields.some((field) => Boolean(field.validationPattern.trim()))
+  ) {
     return "form_custom_pattern_unavailable";
   }
-  if (!hasSupportedPublicConsentConfiguration(form)) {
+  if (
+    !isLaunchSurfaceEnabled("publicFormAdvancedConsent") &&
+    !hasSupportedPublicConsentConfiguration(form)
+  ) {
     return "form_consent_configuration_unavailable";
   }
-  if (form.fields.some((field) => field.type === "file")) {
+  if (
+    !isLaunchSurfaceEnabled("publicFormFileUpload") &&
+    form.fields.some((field) => field.type === "file")
+  ) {
     return "form_file_upload_unavailable";
   }
   return null;

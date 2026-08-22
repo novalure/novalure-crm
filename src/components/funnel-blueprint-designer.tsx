@@ -14,6 +14,7 @@ type FunnelBlueprintDesignerProps = {
   language?: LanguageCode;
   onEvent?: (event: { label: string; detail: string; status: string }) => void;
   variant?: "embedded" | "immersive";
+  visitMetricsAvailable?: boolean;
 };
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -206,7 +207,13 @@ function insertToken(value: string | undefined, token: string) {
   return `${value ?? ""}${value ? " " : ""}${token}`;
 }
 
-export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onEvent, variant = "embedded" }: FunnelBlueprintDesignerProps) {
+export function FunnelBlueprintDesigner({
+  initialBlueprint,
+  language = "en",
+  onEvent,
+  variant = "embedded",
+  visitMetricsAvailable = false,
+}: FunnelBlueprintDesignerProps) {
   const text = getFunnelDesignerCopy(language);
   const locale = getLocale(language);
   const isImmersive = variant === "immersive";
@@ -221,21 +228,30 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   const [past, setPast] = useState<FunnelBlueprint[]>([]);
   const [future, setFuture] = useState<FunnelBlueprint[]>([]);
   const [versions, setVersions] = useState<FunnelVersion[]>([]);
+  const [expectedBlueprintRevision, setExpectedBlueprintRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [mediaDraft, setMediaDraft] = useState({ name: "", url: "", folder: text.defaultFolder, type: "image" as FunnelMediaAsset["type"] });
   const elements = useMemo(() => collectElements(blueprint), [blueprint]);
   const selectedElement = findElement(blueprint, selectedElementId) ?? elements[0]?.element ?? null;
-  const abRows = useMemo(() => calculateAbTestResults(blueprint.variants), [blueprint.variants]);
+  const abRows = useMemo(
+    () => visitMetricsAvailable ? calculateAbTestResults(blueprint.variants) : [],
+    [blueprint.variants, visitMetricsAvailable],
+  );
   const trackingSnippet = useMemo(() => createTrackingSnippet(blueprint), [blueprint]);
 
   useEffect(() => {
     let active = true;
     csrfFetch(`/api/funnels/${initialBlueprint.id}/blueprint`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { blueprint?: FunnelBlueprint; versions?: FunnelVersion[] } | null) => {
+      .then((payload: { blueprint?: FunnelBlueprint; blueprintRevision?: number; versions?: FunnelVersion[] } | null) => {
         if (!active || !payload?.blueprint) return;
         setBlueprint(payload.blueprint);
         setVersions(payload.versions ?? []);
+        setExpectedBlueprintRevision(
+          Number.isSafeInteger(payload.blueprintRevision) && (payload.blueprintRevision ?? -1) >= 0
+            ? payload.blueprintRevision ?? null
+            : null,
+        );
         setSelectedPageId(payload.blueprint.pages[0]?.id ?? "");
         setSelectedElementId(firstElementId(payload.blueprint));
       })
@@ -274,16 +290,25 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
   }
 
   async function saveBlueprint() {
+    if (expectedBlueprintRevision === null) {
+      setSaveState("error");
+      return;
+    }
     setSaveState("saving");
     try {
       const response = await csrfFetch(`/api/funnels/${blueprint.id}/blueprint`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ blueprint, label: "Designer-Version" }),
+        body: JSON.stringify({ blueprint, expectedBlueprintRevision, label: "Designer-Version" }),
       });
       if (!response.ok) throw new Error("Save failed");
-      const payload = (await response.json()) as { versions?: FunnelVersion[] };
+      const payload = (await response.json()) as { blueprintRevision?: number; versions?: FunnelVersion[] };
       setVersions(payload.versions ?? []);
+      setExpectedBlueprintRevision(
+        Number.isSafeInteger(payload.blueprintRevision) && (payload.blueprintRevision ?? -1) >= 0
+          ? payload.blueprintRevision ?? null
+          : null,
+      );
       setSaveState("saved");
       onEvent?.({ label: text.savedEvent, detail: text.savedDetail, status: "CRM" });
     } catch {
@@ -562,7 +587,7 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
         <div className="flex flex-wrap gap-2">
           <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={!past.length} onClick={undo} type="button">{text.undo}</button>
           <button className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50" disabled={!future.length} onClick={redo} type="button">{text.redo}</button>
-          <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={saveBlueprint} type="button">{saveState === "saving" ? text.saving : text.save}</button>
+          <button className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" disabled={saveState === "saving" || expectedBlueprintRevision === null} onClick={saveBlueprint} type="button">{saveState === "saving" ? text.saving : text.save}</button>
         </div>
       </div>
 
@@ -800,15 +825,24 @@ export function FunnelBlueprintDesigner({ initialBlueprint, language = "en", onE
       <details className="rounded-lg border border-stone-200 bg-white p-4">
         <summary className="cursor-pointer text-sm font-semibold text-slate-900">{text.advanced}</summary>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <div className="rounded-lg border border-stone-200 bg-white p-4">
+        <div
+          className="rounded-lg border border-stone-200 bg-white p-4"
+          data-funnel-ab-metrics-available={visitMetricsAvailable ? "true" : "false"}
+        >
           <p className="text-sm font-semibold">{text.abResults}</p>
           <div className="mt-3 grid gap-2 text-sm">
-            {abRows.map((row) => (
+            {visitMetricsAvailable ? abRows.map((row) => (
               <div className="grid gap-1 rounded-md bg-stone-50 p-3" key={row.id}>
                 <div className="flex justify-between gap-3"><span className="font-semibold">{row.name}</span><span>{(row.conversionRate * 100).toFixed(1)}%</span></div>
                 <p className="break-words text-xs text-stone-600">{row.visits} {text.visits} / {row.conversions} {text.leads} / {text.lift} {row.liftAgainstControl.toFixed(1)}% / {row.confidenceLabel}{row.isWinner ? ` / ${text.winner}` : ""}</p>
               </div>
-            ))}
+            )) : (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-950">
+                {language === "de"
+                  ? "A/B-Besuche, Conversion, Lift und Konfidenz sind nicht verfügbar, solange Public-Funnel-Visit-Tracking LAUNCH-OFF ist."
+                  : "A/B visits, conversion, lift, and confidence are unavailable while Public Funnel visit tracking is LAUNCH-OFF."}
+              </p>
+            )}
           </div>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-4">

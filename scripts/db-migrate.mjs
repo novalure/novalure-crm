@@ -40,6 +40,7 @@ const manualCutoverVersions = new Set([
   "062_private_media_contract_cutover",
   "065_notification_guard_search_path_hardening",
   "068_qa_batch_reset_safety",
+  "074_validate_launch_tenant_relation_guards",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -49,13 +50,23 @@ const migrationDependencies = new Map([
   ["064_notification_provider_and_lead_assignee_integrity", "050_durable_job_leasing"],
   ["065_notification_guard_search_path_hardening", "064_notification_provider_and_lead_assignee_integrity"],
   ["066_oauth_state_workspace_user_guard", "053_oauth_state_integrity"],
-  ["068_qa_batch_reset_safety", "061_validate_and_activate_tenant_rls_pilot"],
+  ["068_qa_batch_reset_safety", "060_tenant_rls_pilot_prepare"],
   ["069_property_unit_idempotency", "049_property_inventory_tenant_guards"],
   ["070_funnel_submission_idempotency_recovery", "055_public_submission_abuse_guards"],
   ["071_forms_owner_tenant_guard", "066_oauth_state_workspace_user_guard"],
   ["072_form_submission_atomicity", [
     "070_funnel_submission_idempotency_recovery",
     "071_forms_owner_tenant_guard",
+  ]],
+  ["073_launch_tenant_relation_guards", "072_form_submission_atomicity"],
+  ["074_validate_launch_tenant_relation_guards", "073_launch_tenant_relation_guards"],
+  ["075_public_funnel_visit_truth", [
+    "074_validate_launch_tenant_relation_guards",
+    "060_tenant_rls_pilot_prepare",
+  ]],
+  ["076_bot_webhook_durable_processing", [
+    "075_public_funnel_visit_truth",
+    "057_bot_webhook_legacy_index_cutover",
   ]],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
@@ -390,6 +401,7 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
   const runnable = migrations.filter((migration) => !migration.rollback);
   const migrationsByNumber = new Map();
   const appliedVersions = new Set();
+  const checksummedVersions = new Set();
   const aliases = [];
 
   for (const migration of runnable) {
@@ -409,6 +421,7 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
       );
     }
     appliedVersions.add(migration.version);
+    if (canonicalRow.checksum === migration.checksum) checksummedVersions.add(migration.version);
   }
 
   for (const [number, candidates] of migrationsByNumber) {
@@ -460,6 +473,7 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
 
     const migration = checksumMatches[0];
     appliedVersions.add(migration.version);
+    checksummedVersions.add(migration.version);
     aliases.push({
       aliasVersion,
       checksum: aliasRow.checksum,
@@ -469,14 +483,14 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
 
   for (const [version] of migrationDependencies) {
     for (const requiredVersion of requiredMigrationVersions(version)) {
-      if (!appliedVersions.has(version) || appliedVersions.has(requiredVersion)) continue;
+      if (!appliedVersions.has(version) || checksummedVersions.has(requiredVersion)) continue;
       throw new Error(
-        `Invalid migration ledger: ${version} is applied without required predecessor ${requiredVersion}`,
+        `Invalid migration ledger: ${version} is applied without required predecessor ${requiredVersion} carrying its exact checksum`,
       );
     }
   }
 
-  return { aliases, appliedVersions };
+  return { aliases, appliedVersions, checksummedVersions };
 }
 
 function checkedMigrationLedgerState(args) {
@@ -508,7 +522,7 @@ function numberCollisions(ledgerRows, migrations, aliases) {
 }
 
 export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations, only }) {
-  const { appliedVersions } = resolveMigrationLedgerState({ ledgerRows, migrations });
+  const { appliedVersions, checksummedVersions } = resolveMigrationLedgerState({ ledgerRows, migrations });
   const hasBaseline = appliedVersions.has(baselineVersion);
   const runnable = migrations.filter((migration) => !migration.rollback);
 
@@ -522,7 +536,7 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
       );
     }
     const missingRequiredMigrations = requiredMigrationVersions(migration.version)
-      .filter((requiredMigration) => !appliedVersions.has(requiredMigration));
+      .filter((requiredMigration) => !checksummedVersions.has(requiredMigration));
     if (missingRequiredMigrations.length) {
       throw new Error(
         `Refusing migration ${migration.version}: required predecessor ${missingRequiredMigrations.join(", ")} is not checksummed in the ledger`,
@@ -531,13 +545,27 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
     return appliedVersions.has(migration.version) ? [] : [migration];
   }
 
-  return runnable.filter((migration) => {
+  const plan = runnable.filter((migration) => {
     if (migration.manualCutover) return false;
     if (appliedVersions.has(migration.version)) return false;
     if (hasBaseline && migration.number < baselineNumber) return false;
     if (!hasBaseline && migration.number < baselineNumber) return false;
     return true;
   });
+
+  const availableVersions = new Set(checksummedVersions);
+  for (const migration of plan) {
+    const missingRequiredMigrations = requiredMigrationVersions(migration.version)
+      .filter((requiredMigration) => !availableVersions.has(requiredMigration));
+    if (missingRequiredMigrations.length) {
+      throw new Error(
+        `Refusing migration ${migration.version}: required predecessor ${missingRequiredMigrations.join(", ")} is neither checksummed in the ledger nor ordered earlier in this plan`,
+      );
+    }
+    availableVersions.add(migration.version);
+  }
+
+  return plan;
 }
 
 function plannedMigrations(args) {

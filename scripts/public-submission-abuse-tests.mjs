@@ -17,8 +17,10 @@ import {
   normalizePublicSubmissionIdentifier,
   publicSubmissionActions,
   publicSubmissionControlFields,
+  publicSubmissionProofRefreshGraceSeconds,
   PublicSubmissionRequestError,
   readBoundedPublicSubmissionFormData,
+  refreshPublicSubmissionProof,
   shouldSuppressPublicSubmissionExternalEffects,
   validatePublicSubmissionFieldRules,
   verifyPublicSubmissionProof,
@@ -90,6 +92,58 @@ test("submission proof is short-lived and bound to action, scope and random idem
       secret,
     }),
     { ok: false, reason: "submission_proof_expired" },
+  );
+});
+
+test("a long-session refresh verifies the old proof and preserves its idempotency key", () => {
+  const scope = buildPublicSubmissionScope({ resourceId, resourceType: "form", workspaceId });
+  const original = createPublicSubmissionProof({
+    action: publicSubmissionActions.form,
+    nowSeconds,
+    scope,
+    secret,
+  });
+  const refreshAt = original.expiresAt + 60 * 60;
+  const refreshed = refreshPublicSubmissionProof({
+    action: publicSubmissionActions.form,
+    nowSeconds: refreshAt,
+    proof: original,
+    scope,
+    secret,
+  });
+
+  assert.equal(refreshed.ok, true);
+  assert.equal(refreshed.proof.idempotencyKey, original.idempotencyKey);
+  assert.equal(refreshed.proof.issuedAt, refreshAt);
+  assert.equal(
+    verifyPublicSubmissionProof({
+      action: publicSubmissionActions.form,
+      nowSeconds: refreshAt + 1,
+      proof: refreshed.proof,
+      scope,
+      secret,
+    }).ok,
+    true,
+  );
+  assert.deepEqual(
+    refreshPublicSubmissionProof({
+      action: publicSubmissionActions.form,
+      nowSeconds: original.expiresAt + publicSubmissionProofRefreshGraceSeconds + 1,
+      proof: original,
+      scope,
+      secret,
+    }),
+    { ok: false, reason: "submission_proof_refresh_expired" },
+  );
+  assert.equal(
+    refreshPublicSubmissionProof({
+      action: publicSubmissionActions.form,
+      nowSeconds: refreshAt,
+      proof: { ...original, signature: `x${original.signature.slice(1)}` },
+      scope,
+      secret,
+    }).ok,
+    false,
   );
 });
 
@@ -231,7 +285,7 @@ test("QA/preview mode suppresses external effects and HTML escaping neutralizes 
   assert.doesNotMatch(escaped, /<|>|"|'/u);
 });
 
-test("source and migration preserve atomic claim/rate/slot concurrency ordering", async () => {
+test("source and migration preserve replay, bounded-rate, claim and slot concurrency ordering", async () => {
   const [bookingRoute, formRoute, repository, migration, slotMigration, meetingRepository, instrumentation] = await Promise.all([
     readFile(new URL("../src/app/api/meetings/bookings/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app/api/forms/submissions/route.ts", import.meta.url), "utf8"),
@@ -246,10 +300,14 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
     bookingRoute.indexOf("await claimPublicSubmissionIdempotency") <
       bookingRoute.indexOf("await createMeetingBookingWithNotifications"),
   );
-  assert.ok(
-    formRoute.indexOf("await claimPublicSubmissionIdempotency") <
-      formRoute.indexOf("await persistWebsiteFormSubmission"),
-  );
+  const formReplayRead = formRoute.indexOf("await readPublicSubmissionIdempotency");
+  const formRateLimit = formRoute.indexOf("await consumePublicSubmissionRateLimits");
+  const formHoneypot = formRoute.indexOf("hasPublicSubmissionHoneypotValue(formData)");
+  const formClaim = formRoute.indexOf("claim = await claimPublicSubmissionIdempotency");
+  const formPersist = formRoute.indexOf("await persistWebsiteFormSubmission");
+  assert.ok(formReplayRead >= 0 && formReplayRead < formRateLimit);
+  assert.ok(formRateLimit < formHoneypot && formHoneypot < formClaim);
+  assert.ok(formClaim < formPersist);
   assert.doesNotMatch(bookingRoute, /allowLeaseReclaim/u);
   assert.match(formRoute, /allowLeaseReclaim: true/u);
   assert.match(bookingRoute, /leaseVersion: claim\.leaseVersion/u);
@@ -260,8 +318,27 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
   assert.match(repository, /value: publicSubmissionActions\.funnel/u);
   assert.match(repository, /on conflict \(idempotency_hash\) do nothing/);
   assert.match(repository, /existing\.request_hash <> \$4/);
+  assert.match(repository, /export async function readPublicSubmissionIdempotency/);
+  assert.match(repository, /existing\.expires_at <= now\(\)[\s\S]*then 'expired'/);
+  assert.match(repository, /expired_idempotency[\s\S]*limit 64[\s\S]*for update skip locked/);
+  assert.match(repository, /delete from public_submission_idempotency expired/);
+  assert.match(repository, /expired_rate_limits[\s\S]*limit 64[\s\S]*for update skip locked/);
+  assert.match(repository, /delete from public_submission_rate_limits expired/);
   assert.match(repository, /on conflict \(key_hash, bucket_started_at\) do update/);
   assert.match(repository, /request_count\s*< least/);
+  assert.match(repository, /Duplicate public submission rate-limit policy/);
+  assert.match(repository, /const policies = \[\.\.\.input\.policies\]\.sort/);
+  const transactionStart = repository.indexOf("return withDatabaseTransaction");
+  const acquiredLocks = repository.indexOf("pg_advisory_xact_lock");
+  const capacity = repository.indexOf("capacity as materialized");
+  const consumed = repository.indexOf("consumed as (");
+  assert.ok(transactionStart >= 0 && transactionStart < acquiredLocks);
+  assert.ok(acquiredLocks < capacity && capacity < consumed);
+  assert.match(repository, /const lockKeys = policies[\s\S]*BigInt\(left\)[\s\S]*BigInt\(right\)/);
+  assert.match(repository, /for \(const lockKey of lockKeys\)[\s\S]*transaction\.execute\([\s\S]*pg_advisory_xact_lock/);
+  assert.match(repository, /cross join capacity[\s\S]*where capacity\.allowed/);
+  assert.match(repository, /coalesce\(existing_request_count, 0\)[\s\S]*< least/);
+  assert.match(repository, /Public submission rate limiter atomicity conflict/);
   assert.match(migration, /idempotency_hash text primary key/);
   assert.match(migration, /primary key \(key_hash, bucket_started_at\)/);
   assert.match(migration, /request_hash text not null/);
@@ -279,12 +356,14 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
   assert.match(instrumentation, /assertPublicSubmissionAbuseConfiguration\(\)/);
 });
 
-test("all three public renderers carry the same proof and honeypot contract", async () => {
-  const [bookingPage, formRenderer, staticRenderer, embedRoute, contract] = await Promise.all([
+test("all public renderers carry the proof contract and forms refresh safely for long sessions", async () => {
+  const [bookingPage, formRenderer, formRuntime, staticRenderer, embedRoute, refreshRoute, contract] = await Promise.all([
     readFile(new URL("../src/app/book/public-booking-page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/components/form-renderer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/form-runtime-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/components/form-renderer-static.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app/forms/embed/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/app/api/forms/submission-proof/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/lib/public-submission-contract.ts", import.meta.url), "utf8"),
   ]);
 
@@ -297,5 +376,15 @@ test("all three public renderers carry the same proof and honeypot contract", as
   assert.match(formRenderer, /publicSubmissionControlFields\.honeypot/);
   assert.match(staticRenderer, /submissionProof\.signature/);
   assert.match(staticRenderer, /publicSubmissionControlFields\.honeypot/);
+  assert.match(staticRenderer, /data-novalure-proof-refresh-url/);
   assert.match(embedRoute, /"cache-control": "private, no-store"/);
+  assert.match(embedRoute, /scheduleProofRefresh\(\)/);
+  assert.match(embedRoute, /proof\.idempotencyKey !== expectedIdempotencyKey/);
+  assert.match(formRuntime, /proof\.idempotencyKey !== currentProof\.idempotencyKey/);
+  assert.match(formRuntime, /formElement\.requestSubmit\(\)/);
+  assert.match(refreshRoute, /getPublicFormLaunchBlockReason/);
+  assert.match(refreshRoute, /refreshPublicSubmissionProof/);
+  assert.ok(refreshRoute.indexOf("getPublicWebsiteFormByKey(formKey)") < refreshRoute.indexOf("refreshPublicSubmissionProof({"));
+  assert.match(refreshRoute, /"Access-Control-Allow-Origin": "\*"/);
+  assert.match(refreshRoute, /"Cache-Control": "private, no-store"/);
 });

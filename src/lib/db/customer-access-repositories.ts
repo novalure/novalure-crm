@@ -758,6 +758,7 @@ export async function inviteWorkspaceUser(input: {
   const delivery = await sendNewsletterEmail({
     html: emailCopy.html,
     idempotencyKey: `workspace-invite:${created.tokenId}`,
+    purpose: "workspace_invitation",
     subject: emailCopy.subject,
     to: email,
   });

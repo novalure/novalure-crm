@@ -3,6 +3,11 @@ import fs from "node:fs";
 import { createHmac } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
+console.error(
+  "Legacy QA Livegang API is disabled: it cannot prove atomic qa_batch_objects registration or cleanup closure. Use npm run qa:two-tenant:execute.",
+);
+process.exit(1);
+
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 
 function loadEnv(path) {

@@ -1,5 +1,6 @@
 import { expireOverduePropertyReservations } from "@/lib/db/reservation-repositories";
 import { areQueueWorkersPaused, createCronRun, isCronAuthorized } from "@/lib/cron/runtime";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const maxDuration = 60;
 
@@ -12,6 +13,13 @@ function getLimit(request: Request) {
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return Response.json(
+      { code: launchScope.code, error: "Property reservation synchronization is outside launch scope", ok: false },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
   }
   const run = createCronRun({ route: "property-reservations" });
   if (areQueueWorkersPaused()) {

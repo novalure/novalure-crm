@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 const EMAIL_PATTERN = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
 const PROVIDER_TIMEOUT_MS = 12_000;
@@ -7,6 +8,7 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 export type NewsletterEmailErrorCode =
   | "configuration"
   | "invalid_input"
+  | "launch_off"
   | "provider_auth"
   | "provider_rate_limit"
   | "provider_rejected"
@@ -28,6 +30,33 @@ export type NewsletterProviderStatus = {
   from: string;
   reason: string | null;
 };
+
+export type EmailDeliveryPurpose =
+  | "bot_document"
+  | "meeting_notification"
+  | "meeting_qa_test"
+  | "newsletter"
+  | "password_reset"
+  | "workspace_invitation";
+
+/**
+ * Account-access mail is deliberately a separate transactional contract. All
+ * customer-facing provider effects must pass their signed launch surface even
+ * when a caller reaches this adapter without its route/repository guard.
+ */
+export function isEmailDeliveryPurposeLaunchEnabled(purpose: unknown) {
+  if (purpose === "password_reset" || purpose === "workspace_invitation") return true;
+  if (purpose === "newsletter") return evaluateLaunchScope("newsletterDelivery").allowed;
+  if (
+    purpose === "bot_document" ||
+    purpose === "meeting_notification" ||
+    purpose === "meeting_qa_test"
+  ) {
+    return evaluateLaunchScope("customerCommunicationProviderMutation").allowed;
+  }
+
+  return false;
+}
 
 function normalizeMailbox(value: string | undefined) {
   const mailbox = String(value ?? "").trim().toLowerCase();
@@ -99,10 +128,20 @@ export async function sendNewsletterEmail(input: {
   to: string;
   subject: string;
   html: string;
+  purpose: EmailDeliveryPurpose;
   from?: string;
   idempotencyKey?: string;
   replyTo?: string;
 }): Promise<NewsletterEmailResult> {
+  if (!isEmailDeliveryPurposeLaunchEnabled(input.purpose)) {
+    return {
+      provider: "resend",
+      status: "failed",
+      error: "Email delivery is disabled by launch policy",
+      errorCode: "launch_off",
+    };
+  }
+
   const providerStatus = getNewsletterProviderStatus();
   const apiKey = normalizeApiKey(process.env.RESEND_API_KEY);
 

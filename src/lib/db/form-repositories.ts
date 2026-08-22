@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
@@ -39,6 +40,25 @@ import type {
 } from "@/lib/form-types";
 
 type IdRow = { id: string };
+
+function canonicalizeFormSaveValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeFormSaveValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, nested]) => nested !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalizeFormSaveValue(nested)]),
+    );
+  }
+  return value;
+}
+
+function hashFormSaveRequest(value: unknown) {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalizeFormSaveValue(value)))
+    .digest("hex");
+}
 
 type FormRow = {
   id: string;
@@ -325,7 +345,7 @@ export async function upsertWebsiteForm(input: {
       reason: "The selected form owner is not an active member of this workspace",
     };
   }
-  const slug = slugify(form.slug || form.name) || `formular-${Date.now()}`;
+  const slug = slugify(form.slug || form.name) || `formular-${input.operationId}`;
   const tags = parseTags(form.tags);
   const settings = {
     doubleOptIn: form.doubleOptIn,
@@ -335,14 +355,46 @@ export async function upsertWebsiteForm(input: {
     steps: form.steps,
     utmCapture: form.utmCapture,
   };
+  const saveRequestHash = hashFormSaveRequest({
+    actions: form.actions,
+    campaign: form.campaign,
+    crmTarget: form.crmTarget,
+    expectedVersion: input.expectedVersion,
+    fields: form.fields,
+    funnelId: funnel?.id ?? null,
+    mode: existingId ? "update" : "insert",
+    name: form.name,
+    ownerMode: form.ownerMode,
+    ownerUserId,
+    pipelineStage: form.pipelineStage,
+    projectId,
+    settings,
+    slug,
+    status: form.status,
+    tags,
+    template: form.template,
+    variant: form.variant,
+    ...(existingId
+      ? {}
+      : {
+          conversionRate: form.conversionRate,
+          lastSubmission: form.lastSubmission || null,
+          submissions: form.submissions,
+          visits: form.visits,
+        }),
+  });
   const insertSettings = {
     ...settings,
     lastSaveOperationId: input.operationId,
+    lastSaveRequestHash: saveRequestHash,
     version: 1,
   };
 
-  const row = existingId
-    ? await queryOne<FormRow>(
+  const row = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    async (transaction) => {
+      const savedRow = existingId
+    ? await transaction.queryOne<FormRow>(
         `
           with previous as materialized (
             select id as previous_id, settings as previous_settings
@@ -369,8 +421,10 @@ export async function upsertWebsiteForm(input: {
             actions = $17::jsonb,
             settings = settings || $18::jsonb || jsonb_build_object(
               'lastSaveOperationId', $19::text,
+              'lastSaveRequestHash', $21::text,
               'version', case
                 when settings->>'lastSaveOperationId' = $19::text
+                  and settings->>'lastSaveRequestHash' = $21::text
                   then coalesce((settings->>'version')::integer, 1)
                 else coalesce((settings->>'version')::integer, 1) + 1
               end
@@ -379,7 +433,10 @@ export async function upsertWebsiteForm(input: {
           from previous
           where forms.workspace_id = $1 and forms.id = previous.previous_id
             and (
-              previous.previous_settings->>'lastSaveOperationId' = $19::text
+              (
+                previous.previous_settings->>'lastSaveOperationId' = $19::text
+                and previous.previous_settings->>'lastSaveRequestHash' = $21::text
+              )
               or coalesce((previous.previous_settings->>'version')::integer, 1) = $20::integer
             )
             and not exists (
@@ -413,7 +470,10 @@ export async function upsertWebsiteForm(input: {
             conversion_rate as "conversionRate",
             last_submission_at as "lastSubmission",
             (select public_key from workspaces where id = forms.workspace_id) as "workspacePublicKey",
-            (previous.previous_settings->>'lastSaveOperationId' is distinct from $19::text) as "writeApplied"
+            (
+              previous.previous_settings->>'lastSaveOperationId' is distinct from $19::text
+              or previous.previous_settings->>'lastSaveRequestHash' is distinct from $21::text
+            ) as "writeApplied"
         `,
         [
           input.session.workspaceId,
@@ -436,9 +496,10 @@ export async function upsertWebsiteForm(input: {
           JSON.stringify(settings),
           input.operationId,
           input.expectedVersion,
+          saveRequestHash,
         ],
       )
-    : await queryOne<FormRow>(
+    : await transaction.queryOne<FormRow>(
         `
           insert into forms (
             workspace_id,
@@ -471,6 +532,7 @@ export async function upsertWebsiteForm(input: {
           on conflict (workspace_id, slug) do update
           set updated_at = forms.updated_at
           where forms.settings->>'lastSaveOperationId' = excluded.settings->>'lastSaveOperationId'
+            and forms.settings->>'lastSaveRequestHash' = excluded.settings->>'lastSaveRequestHash'
           returning
             id,
             workspace_id as "workspaceId",
@@ -522,6 +584,21 @@ export async function upsertWebsiteForm(input: {
         ],
       );
 
+      if (savedRow?.writeApplied) {
+        await writeAuditLog({
+          session: input.session,
+          action: existingId ? "form.updated" : "form.created",
+          entityType: "form",
+          entityId: savedRow.id,
+          after: { formId: savedRow.id, name: savedRow.name, status: savedRow.status },
+          transaction,
+        });
+      }
+
+      return savedRow;
+    },
+  );
+
   if (!row) {
     return {
       code: "FORM_SAVE_CONFLICT",
@@ -529,16 +606,6 @@ export async function upsertWebsiteForm(input: {
       persisted: false,
       reason: "The form changed in another tab or its public slug is already in use. Reload before retrying.",
     };
-  }
-
-  if (row.writeApplied) {
-    await writeAuditLog({
-      session: input.session,
-      action: existingId ? "form.updated" : "form.created",
-      entityType: "form",
-      entityId: row.id,
-      after: { formId: row.id, name: row.name, status: row.status },
-    });
   }
 
   return { form: toWebsiteForm(row), persisted: true };
@@ -825,6 +892,7 @@ export async function persistWebsiteFormSubmission(input: {
          and funnel.project_id is not distinct from form.project_id
         where form.workspace_id = $1::uuid
           and form.id = $2::uuid
+          and coalesce((form.settings->>'version')::integer, 1) = $38::integer
           and form.status in ('aktiv', 'eingebaut')
           and form.owner_mode = 'user'
           and form.owner_user_id = $35::uuid
@@ -1721,12 +1789,21 @@ export async function persistWebsiteFormSubmission(input: {
       lookup.ownerUserId,
       emailIdentity.normalizedValue || null,
       phoneIdentity.normalizedValue || null,
+      form.version,
     ],
       );
     },
   );
 
   if (!row) {
+    const current = await getPublicWebsiteFormByKey(input.formKey);
+    if (
+      current?.id === lookup.id &&
+      current.workspaceId === lookup.workspaceId &&
+      current.form.version !== form.version
+    ) {
+      return { form: current.form, persisted: false, reason: "submission_proof_stale" };
+    }
     return { form, persisted: false, reason: "atomic_submission_scope_unavailable" };
   }
   if (row.persistenceState === "conflict") {

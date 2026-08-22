@@ -7,6 +7,7 @@ import type {
 } from "@/lib/property-department";
 import { executeQuery, queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
 
 type RepositoryWriteResult<T> =
@@ -77,6 +78,22 @@ type SellerListingRow = {
 type IdRow = { id: string };
 type ListingProjectRow = { projectId: string | null };
 type CountRow = { count: number | string };
+type ProjectScopedEntityRow = { id: string; projectId: string | null };
+type LeadScopedEntityRow = ProjectScopedEntityRow & { contactId: string | null };
+type FormScopedEntityRow = ProjectScopedEntityRow & { funnelId: string | null };
+
+type ResolvedPropertyInquiryIds = {
+  contactId: string | null;
+  formId: string | null;
+  funnelId: string | null;
+  leadId: string | null;
+  ownerUserId: string | null;
+  projectId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+};
+
+class PropertyInquiryValidationError extends Error {}
 
 const allowedRegions = new Set([
   "Wien",
@@ -1045,119 +1062,438 @@ export async function updatePropertyPriceVisibility(input: {
   return { data: { id: row.id }, persisted: true };
 }
 
+function strictOptionalInquiryId(value: unknown, label: string, allowListingPrefix = false) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new PropertyInquiryValidationError(`Invalid or unavailable ${label} id`);
+  }
+  const candidate = value.trim();
+  const normalized = allowListingPrefix ? candidate.replace(/^listing:/, "") : candidate;
+  if (!isUuid(normalized)) {
+    throw new PropertyInquiryValidationError(`Invalid or unavailable ${label} id`);
+  }
+  return normalized;
+}
+
+function resolveRequestedInquiryId(input: {
+  allowListingPrefix?: boolean;
+  inquiryValue: unknown;
+  label: string;
+  routeValue: unknown;
+}) {
+  const inquiryId = strictOptionalInquiryId(input.inquiryValue, input.label, input.allowListingPrefix);
+  const routeId = strictOptionalInquiryId(input.routeValue, input.label, input.allowListingPrefix);
+  if (inquiryId && routeId && inquiryId !== routeId) {
+    throw new PropertyInquiryValidationError(`Invalid or inconsistent ${input.label} relationship`);
+  }
+  return routeId ?? inquiryId;
+}
+
+async function requireTenantEntity<Row extends IdRow>(input: {
+  id: string | null;
+  label: string;
+  params: readonly unknown[];
+  query: string;
+  transaction: TenantTransaction;
+}) {
+  if (!input.id) return null;
+  const row = await input.transaction.queryOne<Row>(input.query, input.params);
+  if (!row) {
+    throw new PropertyInquiryValidationError(`Invalid or unavailable ${input.label} id`);
+  }
+  return row;
+}
+
+async function resolvePropertyInquiryIds(input: {
+  inquiry: PropertyInquiryRouteInput;
+  route: PropertyInquiryRouteResult;
+  transaction: TenantTransaction;
+  workspaceId: string;
+}): Promise<ResolvedPropertyInquiryIds> {
+  const requested = {
+    contactId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.contactId,
+      label: "contact",
+      routeValue: input.route.contactId,
+    }),
+    formId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.formId,
+      label: "form",
+      routeValue: input.route.formId,
+    }),
+    funnelId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.funnelId,
+      label: "funnel",
+      routeValue: input.route.funnelId,
+    }),
+    leadId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.leadId,
+      label: "lead",
+      routeValue: input.route.leadId,
+    }),
+    ownerUserId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.ownerUserId,
+      label: "owner",
+      routeValue: input.route.ownerUserId,
+    }),
+    projectId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.projectId,
+      label: "project",
+      routeValue: input.route.projectId,
+    }),
+    propertyId: resolveRequestedInquiryId({
+      allowListingPrefix: true,
+      inquiryValue: input.inquiry.propertyId,
+      label: "property",
+      routeValue: input.route.propertyId,
+    }),
+    unitId: resolveRequestedInquiryId({
+      inquiryValue: input.inquiry.unitId,
+      label: "unit",
+      routeValue: input.route.unitId,
+    }),
+  };
+
+  const project = await requireTenantEntity<IdRow>({
+    id: requested.projectId,
+    label: "project",
+    params: [input.workspaceId, requested.projectId],
+    query: `
+      select id
+      from projects
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const property = await requireTenantEntity<ProjectScopedEntityRow>({
+    id: requested.propertyId,
+    label: "property",
+    params: [input.workspaceId, requested.propertyId],
+    query: `
+      select id, project_id as "projectId"
+      from seller_listings
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const unit = await requireTenantEntity<ProjectScopedEntityRow>({
+    id: requested.unitId,
+    label: "unit",
+    params: [input.workspaceId, requested.unitId],
+    query: `
+      select id, project_id as "projectId"
+      from property_units
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const contact = await requireTenantEntity<ProjectScopedEntityRow>({
+    id: requested.contactId,
+    label: "contact",
+    params: [input.workspaceId, requested.contactId],
+    query: `
+      select id, project_id as "projectId"
+      from contacts
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const lead = await requireTenantEntity<LeadScopedEntityRow>({
+    id: requested.leadId,
+    label: "lead",
+    params: [input.workspaceId, requested.leadId],
+    query: `
+      select id, project_id as "projectId", contact_id as "contactId"
+      from leads
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const owner = await requireTenantEntity<IdRow>({
+    id: requested.ownerUserId,
+    label: "owner",
+    params: [input.workspaceId, requested.ownerUserId],
+    query: `
+      select id
+      from workspace_users
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'active'
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const funnel = await requireTenantEntity<ProjectScopedEntityRow>({
+    id: requested.funnelId,
+    label: "funnel",
+    params: [input.workspaceId, requested.funnelId],
+    query: `
+      select id, project_id as "projectId"
+      from funnels
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+  const form = await requireTenantEntity<FormScopedEntityRow>({
+    id: requested.formId,
+    label: "form",
+    params: [input.workspaceId, requested.formId],
+    query: `
+      select id, project_id as "projectId", funnel_id as "funnelId"
+      from forms
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+    `,
+    transaction: input.transaction,
+  });
+
+  if (lead?.contactId && requested.contactId && lead.contactId !== requested.contactId) {
+    throw new PropertyInquiryValidationError("Invalid or inconsistent lead contact relationship");
+  }
+  if (form?.funnelId && requested.funnelId && form.funnelId !== requested.funnelId) {
+    throw new PropertyInquiryValidationError("Invalid or inconsistent form funnel relationship");
+  }
+
+  const relatedProjectIds = [...new Set([
+    requested.projectId,
+    property?.projectId,
+    unit?.projectId,
+    contact?.projectId,
+    lead?.projectId,
+    funnel?.projectId,
+    form?.projectId,
+  ].filter((value): value is string => Boolean(value)))];
+  if (relatedProjectIds.length > 1) {
+    throw new PropertyInquiryValidationError("Invalid or inconsistent inquiry project relationship");
+  }
+  const projectId = relatedProjectIds[0] ?? null;
+  if (projectId && (!project || project.id !== projectId)) {
+    await requireTenantEntity<IdRow>({
+      id: projectId,
+      label: "project",
+      params: [input.workspaceId, projectId],
+      query: `
+        select id
+        from projects
+        where workspace_id = $1::uuid
+          and id = $2::uuid
+        limit 1
+      `,
+      transaction: input.transaction,
+    });
+  }
+
+  return {
+    contactId: contact?.id ?? null,
+    formId: form?.id ?? null,
+    funnelId: funnel?.id ?? null,
+    leadId: lead?.id ?? null,
+    ownerUserId: owner?.id ?? null,
+    projectId,
+    propertyId: property?.id ?? null,
+    unitId: unit?.id ?? null,
+  };
+}
+
+function buildPropertyInquiryMetadata(inquiry: PropertyInquiryRouteInput, warnings: string[]) {
+  const safeInquiry: Record<string, string | number> = {};
+  for (const field of ["campaign", "contactEmail", "contactPhone", "leadType", "location", "sourceChannel", "useCase"] as const) {
+    const value = inquiry[field];
+    if (typeof value === "string" && value.trim()) safeInquiry[field] = value.trim().slice(0, 500);
+  }
+  for (const field of ["areaSqm", "budgetFrom", "budgetTo", "rooms"] as const) {
+    const value = inquiry[field];
+    if (typeof value === "number" && Number.isFinite(value)) safeInquiry[field] = value;
+  }
+  return {
+    inquiry: safeInquiry,
+    warnings: warnings.filter((warning) => typeof warning === "string").map((warning) => warning.slice(0, 500)).slice(0, 20),
+  };
+}
+
 export async function persistPropertyInquiryRoute(input: {
   inquiry: PropertyInquiryRouteInput;
   route: PropertyInquiryRouteResult;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ id: string; route: PropertyInquiryRouteResult; status: string }>> {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
+  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.session.userId)) {
     return { persisted: false, reason: "Database persistence is not configured" };
   }
 
-  const existing = input.route.duplicateKey
-    ? await queryOne<IdRow>(
-        `
-          select id
-          from property_inquiries
-          where workspace_id = $1
-            and duplicate_group_key = $2
-          limit 1
-        `,
-        [input.session.workspaceId, input.route.duplicateKey],
-      )
-    : null;
-  const status = existing ? "duplicate" : "routed";
-  const propertyId = normalizeEntityId(input.route.propertyId);
-  const unitId = nullableUuid(input.route.unitId);
-  const projectId = nullableUuid(input.route.projectId);
-  const contactId = nullableUuid(input.route.contactId);
-  const leadId = nullableUuid(input.route.leadId);
-  const ownerUserId = nullableUuid(input.route.ownerUserId);
-  const funnelId = nullableUuid(input.route.funnelId);
-  const formId = nullableUuid(input.route.formId);
-  const row = await queryOne<IdRow>(
-    `
-      insert into property_inquiries (
-        workspace_id,
-        project_id,
-        property_id,
-        unit_id,
-        contact_id,
-        lead_id,
-        source_channel,
-        campaign,
-        funnel_id,
-        form_id,
-        owner_user_id,
-        routing_reason,
-        confidence_score,
-        duplicate_group_key,
-        status,
-        metadata
-      )
-      values (
-        $1,
-        $2::uuid,
-        $3::uuid,
-        $4::uuid,
-        $5::uuid,
-        $6::uuid,
-        $7,
-        nullif($8, ''),
-        $9::uuid,
-        $10::uuid,
-        $11::uuid,
-        $12,
-        $13::numeric,
-        $14,
-        $15,
-        $16::jsonb
-      )
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      projectId,
-      propertyId,
-      unitId,
-      contactId,
-      leadId,
-      input.route.sourceChannel,
-      input.route.campaign ?? "",
-      funnelId,
-      formId,
-      ownerUserId,
-      input.route.routingReason,
-      input.route.confidenceScore,
-      input.route.duplicateKey,
-      status,
-      JSON.stringify({ inquiry: input.inquiry, warnings: input.route.warnings }),
-    ],
-  );
+  let persisted: { id: string; projectId: string | null; route: PropertyInquiryRouteResult; status: string };
+  try {
+    persisted = await withTenantTransaction(
+      { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+      async (transaction) => {
+        const ids = await resolvePropertyInquiryIds({
+          inquiry: input.inquiry,
+          route: input.route,
+          transaction,
+          workspaceId: input.session.workspaceId,
+        });
+        const canonicalRoute: PropertyInquiryRouteResult = {
+          ...input.route,
+          contactId: ids.contactId ?? undefined,
+          formId: ids.formId ?? undefined,
+          funnelId: ids.funnelId ?? undefined,
+          leadId: ids.leadId ?? undefined,
+          ownerUserId: ids.ownerUserId ?? undefined,
+          projectId: ids.projectId ?? undefined,
+          propertyId: ids.propertyId ? `listing:${ids.propertyId}` : undefined,
+          unitId: ids.unitId ?? undefined,
+          workspaceId: input.session.workspaceId,
+        };
+        const duplicateKey = cleanString(canonicalRoute.duplicateKey).slice(0, 512);
+        if (duplicateKey) {
+          await transaction.execute(
+            `select pg_advisory_xact_lock(hashtextextended($1::text || ':property_inquiry:' || $2::text, 0))`,
+            [input.session.workspaceId, duplicateKey],
+          );
+        }
+        const existing = duplicateKey
+          ? await transaction.queryOne<IdRow>(
+              `
+                select id
+                from property_inquiries
+                where workspace_id = $1::uuid
+                  and duplicate_group_key = $2
+                limit 1
+              `,
+              [input.session.workspaceId, duplicateKey],
+            )
+          : null;
+        const status = existing ? "duplicate" : "routed";
+        const row = await transaction.queryOne<IdRow>(
+          `
+            insert into property_inquiries (
+              workspace_id,
+              project_id,
+              property_id,
+              unit_id,
+              contact_id,
+              lead_id,
+              source_channel,
+              campaign,
+              funnel_id,
+              form_id,
+              owner_user_id,
+              routing_reason,
+              confidence_score,
+              duplicate_group_key,
+              status,
+              metadata
+            )
+            values (
+              $1,
+              $2::uuid,
+              $3::uuid,
+              $4::uuid,
+              $5::uuid,
+              $6::uuid,
+              $7,
+              nullif($8, ''),
+              $9::uuid,
+              $10::uuid,
+              $11::uuid,
+              $12,
+              $13::numeric,
+              $14,
+              $15,
+              $16::jsonb
+            )
+            returning id
+          `,
+          [
+            input.session.workspaceId,
+            ids.projectId,
+            ids.propertyId,
+            ids.unitId,
+            ids.contactId,
+            ids.leadId,
+            cleanString(canonicalRoute.sourceChannel) || "Manual",
+            cleanString(canonicalRoute.campaign),
+            ids.funnelId,
+            ids.formId,
+            ids.ownerUserId,
+            cleanString(canonicalRoute.routingReason),
+            Number.isFinite(canonicalRoute.confidenceScore) ? canonicalRoute.confidenceScore : 0,
+            duplicateKey,
+            status,
+            JSON.stringify(buildPropertyInquiryMetadata(input.inquiry, canonicalRoute.warnings)),
+          ],
+        );
+        if (!row) throw new Error("Inquiry route could not be saved");
 
-  if (!row) return { persisted: false, reason: "Inquiry route could not be saved" };
+        const activityPersisted = await writePropertyActivityEvent({
+          contactId: ids.contactId,
+          detail: canonicalRoute.routingReason,
+          eventType: "property_inquiry.routed",
+          leadId: ids.leadId,
+          projectId: ids.projectId,
+          propertyId: ids.propertyId,
+          session: input.session,
+          title: status === "duplicate" ? "Anfrage als Duplikat erkannt" : "Anfrage zugeordnet",
+          transaction,
+          unitId: ids.unitId,
+        });
+        if (!activityPersisted) throw new Error("Inquiry activity could not be saved");
 
-  await writePropertyActivityEvent({
-    contactId,
-    detail: input.route.routingReason,
-    eventType: "property_inquiry.routed",
-    leadId,
-    projectId,
-    propertyId,
-    session: input.session,
-    title: status === "duplicate" ? "Anfrage als Duplikat erkannt" : "Anfrage zugeordnet",
-    unitId,
-  });
-  await writeAuditLog({
-    action: "property_inquiry.routed",
-    after: { inquiryId: row.id, route: input.route, status },
-    entityId: row.id,
-    entityType: "property_inquiry",
-    projectId,
-    session: input.session,
-  });
+        const audit = await transaction.queryOne<IdRow>(
+          `
+            insert into audit_logs (
+              workspace_id,
+              project_id,
+              actor_user_id,
+              action,
+              entity_type,
+              entity_id,
+              before,
+              after
+            )
+            values ($1, $2::uuid, $3::uuid, $4, $5, $6::uuid, null, $7::jsonb)
+            returning id
+          `,
+          [
+            input.session.workspaceId,
+            ids.projectId,
+            input.session.userId,
+            "property_inquiry.routed",
+            "property_inquiry",
+            row.id,
+            JSON.stringify({ inquiryId: row.id, route: canonicalRoute, status }),
+          ],
+        );
+        if (!audit) throw new Error("Inquiry audit could not be saved");
 
-  return { data: { id: row.id, route: input.route, status }, persisted: true };
+        return { id: row.id, projectId: ids.projectId, route: canonicalRoute, status };
+      },
+    );
+  } catch (error) {
+    return {
+      persisted: false,
+      reason: error instanceof PropertyInquiryValidationError
+        ? error.message
+        : "Inquiry route could not be saved",
+    };
+  }
+
+  return {
+    data: { id: persisted.id, route: persisted.route, status: persisted.status },
+    persisted: true,
+  };
 }
 
 export async function recordPropertyPreflightRun(input: {
@@ -1382,42 +1718,46 @@ async function writePropertyActivityEvent(input: {
   propertyId?: string | null;
   session: AppSession;
   title: string;
+  transaction?: TenantTransaction;
   unitId?: string | null;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) return;
+  if (!canPersist() || !isUuid(input.session.workspaceId)) return false;
 
-  await queryOne<IdRow>(
-    `
-      insert into property_activity_events (
-        workspace_id,
-        project_id,
-        property_id,
-        unit_id,
-        contact_id,
-        lead_id,
-        actor_user_id,
-        event_type,
-        title,
-        detail,
-        metadata
-      )
-      values ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8, $9, $10, $11::jsonb)
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      nullableUuid(input.projectId),
-      nullableUuid(input.propertyId),
-      nullableUuid(input.unitId),
-      nullableUuid(input.contactId),
-      nullableUuid(input.leadId),
-      nullableUuid(input.session.userId),
-      input.eventType,
-      input.title,
-      input.detail,
-      JSON.stringify({ source: "property_department" }),
-    ],
-  );
+  const query = `
+    insert into property_activity_events (
+      workspace_id,
+      project_id,
+      property_id,
+      unit_id,
+      contact_id,
+      lead_id,
+      actor_user_id,
+      event_type,
+      title,
+      detail,
+      metadata
+    )
+    values ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8, $9, $10, $11::jsonb)
+    returning id
+  `;
+  const params = [
+    input.session.workspaceId,
+    nullableUuid(input.projectId),
+    nullableUuid(input.propertyId),
+    nullableUuid(input.unitId),
+    nullableUuid(input.contactId),
+    nullableUuid(input.leadId),
+    nullableUuid(input.session.userId),
+    input.eventType,
+    input.title,
+    input.detail,
+    JSON.stringify({ source: "property_department" }),
+  ];
+  const row = input.transaction
+    ? await input.transaction.queryOne<IdRow>(query, params)
+    : await queryOne<IdRow>(query, params);
+
+  return Boolean(row);
 }
 
 function listingDefaultUnitNumber(listingId: string) {

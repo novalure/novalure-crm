@@ -8,12 +8,15 @@ import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
   consumePublicSubmissionRateLimits,
+  readPublicSubmissionIdempotency,
 } from "@/lib/db/public-submission-abuse-repository";
 import type { WebsiteForm } from "@/lib/form-types";
 import { publicSubmissionControlFields } from "@/lib/public-submission-contract";
 import { getPublicFormLaunchBlockReason } from "@/lib/public-form-dto";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   buildPublicSubmissionScope,
+  buildVersionedPublicSubmissionResourceId,
   createCanonicalPublicSubmissionFormDataFingerprint,
   createPublicSubmissionIdempotencyHashes,
   createPublicSubmissionRateLimitPolicies,
@@ -39,6 +42,14 @@ function getString(formData: FormData, key: string) {
 }
 
 export async function POST(request: Request) {
+  const launchScope = evaluateLaunchScope("publicFormSubmission");
+  if (!launchScope.allowed) {
+    return Response.json(
+      { error: "public_form_submission_launch_off", persisted: false },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   let parsed: Awaited<ReturnType<typeof readBoundedPublicSubmissionFormData>>;
   try {
     parsed = await readBoundedPublicSubmissionFormData(request, formSubmissionBodyLimits);
@@ -132,7 +143,10 @@ export async function POST(request: Request) {
   }
 
   const scope = buildPublicSubmissionScope({
-    resourceId: lookup.id,
+    resourceId: buildVersionedPublicSubmissionResourceId({
+      resourceId: lookup.id,
+      version: lookup.form.version,
+    }),
     resourceType: "form",
     workspaceId: lookup.workspaceId,
   });
@@ -169,6 +183,82 @@ export async function POST(request: Request) {
     return unavailableResponse();
   }
 
+  let priorClaim: Awaited<ReturnType<typeof readPublicSubmissionIdempotency>>;
+  try {
+    priorClaim = await readPublicSubmissionIdempotency(hashes);
+  } catch {
+    return unavailableResponse();
+  }
+  if (priorClaim.state === "replay") return responseFromSnapshot(priorClaim.response);
+  if (priorClaim.state === "processing" || priorClaim.state === "conflict") {
+    return responseFromSnapshot(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: priorClaim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict",
+        request,
+        returnTo,
+        source,
+        status: 409,
+      }),
+    );
+  }
+
+  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
+  if (!clientIp) {
+    return responseFromSnapshot(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: "temporarily_unavailable",
+        request,
+        returnTo,
+        source,
+        status: 503,
+      }),
+    );
+  }
+
+  try {
+    const identifier = getPublicFormIdentifier(lookup.form, formData, proofValidation.proof.idempotencyKey);
+    const rateLimit = await consumePublicSubmissionRateLimits({
+      policies: createPublicSubmissionRateLimitPolicies({
+        action: publicSubmissionActions.form,
+        clientIp,
+        identifier,
+        scope,
+      }),
+    });
+    if (!rateLimit.allowed) {
+      return responseFromSnapshot(
+        createPublicFormFailureSnapshot({
+          formSlug,
+          reason: "rate_limited",
+          request,
+          returnTo,
+          source,
+          status: 429,
+        }),
+      );
+    }
+  } catch {
+    return unavailableResponse();
+  }
+
+  if (hasPublicSubmissionHoneypotValue(formData)) {
+    return responseFromSnapshot(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: "submission_rejected",
+        request,
+        returnTo,
+        source,
+        status: 400,
+      }),
+    );
+  }
+
+  // Only submissions that passed the bounded abuse controls may allocate or
+  // reclaim durable idempotency storage. The claim itself remains atomic so a
+  // race after the read-only replay check still fails closed.
   let claim: Awaited<ReturnType<typeof claimPublicSubmissionIdempotency>>;
   try {
     claim = await claimPublicSubmissionIdempotency({
@@ -205,68 +295,6 @@ export async function POST(request: Request) {
       return unavailableResponse();
     }
   };
-
-  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-  if (!clientIp) {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "temporarily_unavailable",
-        request,
-        returnTo,
-        source,
-        status: 503,
-      }),
-    );
-  }
-
-  try {
-    const identifier = getPublicFormIdentifier(lookup.form, formData, proofValidation.proof.idempotencyKey);
-    const rateLimit = await consumePublicSubmissionRateLimits({
-      policies: createPublicSubmissionRateLimitPolicies({
-        action: publicSubmissionActions.form,
-        clientIp,
-        identifier,
-        scope,
-      }),
-    });
-    if (!rateLimit.allowed) {
-      return complete(
-        createPublicFormFailureSnapshot({
-          formSlug,
-          reason: "rate_limited",
-          request,
-          returnTo,
-          source,
-          status: 429,
-        }),
-      );
-    }
-  } catch {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "temporarily_unavailable",
-        request,
-        returnTo,
-        source,
-        status: 503,
-      }),
-    );
-  }
-
-  if (hasPublicSubmissionHoneypotValue(formData)) {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "submission_rejected",
-        request,
-        returnTo,
-        source,
-        status: 400,
-      }),
-    );
-  }
 
   stripPublicSubmissionControlFields(formData);
   try {
@@ -505,6 +533,7 @@ function normalizePublicFormReason(reason: string) {
 }
 
 function getPersistenceFailureStatus(reason: string) {
+  if (reason === "submission_proof_stale") return 409;
   if (reason === "submission_replay_conflict") return 409;
   if (reason === "contact_identity_conflict") return 409;
   if (reason === "Form not found") return 404;

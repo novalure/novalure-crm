@@ -557,6 +557,7 @@ type PropertyDocumentRow = {
 
 type FunnelRow = {
   audience: Funnel["audience"];
+  blueprintRevision: number | string;
   conversionRate: number | string;
   entryChannel: Funnel["entryChannel"];
   goal: string;
@@ -566,6 +567,7 @@ type FunnelRow = {
   ownerUserId: string | null;
   projectId: string | null;
   status: Funnel["status"];
+  updatedAt: string | Date;
   visits: number | string;
   workspaceId: string;
 };
@@ -2552,7 +2554,16 @@ export async function loadFunnels(workspaceId: string): Promise<Funnel[]> {
       status,
       visits,
       leads_count as leads,
-      conversion_rate as "conversionRate"
+      conversion_rate as "conversionRate",
+      coalesce(
+        case
+          when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+            then (tracking->>'blueprintRevision')::bigint
+          else null
+        end,
+        0
+      ) as "blueprintRevision",
+      updated_at as "updatedAt"
     from funnels
     where workspace_id = $1
     order by updated_at desc
@@ -2563,6 +2574,7 @@ export async function loadFunnels(workspaceId: string): Promise<Funnel[]> {
 
   return rows.map((row) => ({
     audience: row.audience,
+    blueprintRevision: Number(row.blueprintRevision ?? 0),
     conversionRate: Number(row.conversionRate ?? 0),
     entryChannel: row.entryChannel,
     goal: row.goal,
@@ -2572,6 +2584,7 @@ export async function loadFunnels(workspaceId: string): Promise<Funnel[]> {
     ownerUserId: row.ownerUserId ?? undefined,
     projectId: row.projectId ?? "",
     status: row.status,
+    updatedAt: toIso(row.updatedAt),
     visits: Number(row.visits ?? 0),
     workspaceId: row.workspaceId,
   }));

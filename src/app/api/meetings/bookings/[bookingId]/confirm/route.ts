@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermissionAndProductCapability } from "@/lib/auth/session";
 import { confirmMeetingBooking } from "@/lib/db/meeting-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
 import { resolveBookingCorrelationId } from "@/lib/meetings/booking-lifecycle";
 
@@ -13,6 +14,14 @@ export const maxDuration = 60;
 export async function POST(request: Request, context: RouteContext) {
   const auth = await requirePermissionAndProductCapability(request, "calendar:sync", "calendar:manage");
   if (!auth.ok) return auth.response;
+
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "calendar_provider_mutation_launch_off", ok: false },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
 
   const { bookingId } = await context.params;
   const correlationId = resolveBookingCorrelationId(request.headers.get("x-correlation-id"));

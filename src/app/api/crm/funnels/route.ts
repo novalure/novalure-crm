@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermissionAndProductCapability } from "@/lib/auth/session";
 import { upsertFunnelDraft } from "@/lib/db/crm-write-repositories";
 import { runEditorPreflight } from "@/lib/db/editor-preflight-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 async function readJson(request: Request) {
   try {
@@ -13,6 +14,7 @@ async function readJson(request: Request) {
 
 function getFunnelWriteStatus(reason: string) {
   const normalizedReason = reason.toLowerCase();
+  if (normalizedReason.includes("conflict")) return 409;
   if (
     reason.includes("not available in this workspace") ||
     normalizedReason.includes("permission") ||
@@ -25,6 +27,10 @@ function getFunnelWriteStatus(reason: string) {
 }
 
 export async function POST(request: Request) {
+  const publicationScope = evaluateLaunchScope("publicFunnelPublication");
+  if (!publicationScope.allowed) {
+    return NextResponse.json({ error: publicationScope.code }, { status: 403 });
+  }
   const auth = await requirePermissionAndProductCapability(request, "crm:write", "funnels:publish");
   if (!auth.ok) return auth.response;
 
@@ -42,7 +48,8 @@ export async function POST(request: Request) {
   }
 
   const launchScopedFunnel = { ...funnel };
-  delete launchScopedFunnel.webhookUrl;
+  const webhookScope = evaluateLaunchScope("funnelWebhookDelivery");
+  if (!webhookScope.allowed) delete launchScopedFunnel.webhookUrl;
 
   const preflight = await runEditorPreflight({
     editorType: "funnel",
@@ -65,7 +72,10 @@ export async function POST(request: Request) {
   return NextResponse.json({
     persisted: true,
     preflight,
-    launchScope: { funnelWebhookDelivery: "off" },
+    launchScope: {
+      funnelWebhookDelivery: webhookScope.allowed ? "on" : "off",
+      policyDecision: webhookScope.decision,
+    },
     ...result.data,
   });
 }

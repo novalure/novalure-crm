@@ -7,6 +7,7 @@ export type QaResetMode = (typeof qaResetModes)[number];
 export type QaResetRequest = Readonly<{
   batchId: string;
   confirmation: string | null;
+  expectedPlanDigest: string | null;
   mode: QaResetMode;
   workspaceId: string;
 }>;
@@ -27,6 +28,8 @@ export type QaResetContractErrorCode =
   | "unexpected_field"
   | "execution_not_enabled"
   | "invalid_confirmation"
+  | "invalid_plan_digest"
+  | "plan_digest_required"
   | "qa_allowlist_not_configured"
   | "qa_allowlist_too_small"
   | "qa_production_allowlist_overlap"
@@ -44,8 +47,9 @@ export class QaResetContractError extends Error {
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const planDigestPattern = /^[0-9a-f]{64}$/i;
 
-const requestFields = new Set(["batchId", "confirmation", "mode", "workspaceId"]);
+const requestFields = new Set(["batchId", "confirmation", "expectedPlanDigest", "mode", "workspaceId"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -77,10 +81,19 @@ export function parseQaResetRequest(value: unknown): QaResetRequest {
   if (value.confirmation !== undefined && value.confirmation !== null && typeof value.confirmation !== "string") {
     throw new QaResetContractError("invalid_confirmation", "QA reset confirmation must be a string");
   }
+  if (
+    value.expectedPlanDigest !== undefined &&
+    value.expectedPlanDigest !== null &&
+    (typeof value.expectedPlanDigest !== "string" || !planDigestPattern.test(value.expectedPlanDigest.trim()))
+  ) {
+    throw new QaResetContractError("invalid_plan_digest", "QA reset plan digest must be a SHA-256 hex digest");
+  }
 
   return {
     batchId: requiredUuid(value.batchId, "invalid_batch_id"),
     confirmation: typeof value.confirmation === "string" ? value.confirmation : null,
+    expectedPlanDigest:
+      typeof value.expectedPlanDigest === "string" ? value.expectedPlanDigest.trim().toLowerCase() : null,
     mode,
     workspaceId: requiredUuid(value.workspaceId, "invalid_workspace_id"),
   };
@@ -153,6 +166,16 @@ export function assertQaResetExecutionAuthorized(
   if (request.confirmation !== qaResetConfirmation(request)) {
     throw new QaResetContractError("invalid_confirmation", "QA reset confirmation does not match workspace and batch");
   }
+  if (!request.expectedPlanDigest) {
+    throw new QaResetContractError(
+      "plan_digest_required",
+      "QA reset execution requires the exact plan digest returned by a preceding dry-run",
+    );
+  }
+}
+
+export function isQaResetPlanDigest(value: unknown): value is string {
+  return typeof value === "string" && planDigestPattern.test(value);
 }
 
 /**
@@ -270,6 +293,7 @@ export type QaResetDatabaseTable = (typeof qaResetDatabaseTables)[number];
 export const qaResetCascadeOwnedTables = [
   "property_building_idempotency",
   "property_unit_idempotency",
+  "public_funnel_visit_events",
 ] as const;
 
 export type QaResetCascadeOwnedTable = (typeof qaResetCascadeOwnedTables)[number];

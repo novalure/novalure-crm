@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { upsertDealRecord } from "@/lib/db/crm-write-repositories";
+import {
+  qaBatchRuntimeErrorResponse,
+  qaBatchSuccessHeaders,
+  readQaBatchMutationHeader,
+} from "@/lib/qa-batch-runtime";
 
 async function readJson(request: Request) {
   try {
@@ -20,6 +25,7 @@ function getDealWriteStatus(reason: string) {
     normalizedReason.includes("historical")
   ) return 403;
   if (reason.includes("not found")) return 404;
+  if (normalizedReason.includes("conflict")) return 409;
   if (
     reason.includes("required") ||
     reason.includes("Invalid") ||
@@ -56,6 +62,13 @@ export async function POST(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
   if (!auth.ok) return auth.response;
 
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
+
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
@@ -68,28 +81,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: idempotencyKey.reason }, { status: getDealWriteStatus(idempotencyKey.reason) });
   }
 
-  const result = await upsertDealRecord({
-    allowHistoricalCloseDate:
-      input.historicalImport === true &&
-      auth.session.productPermissions.includes("novalure:internal"),
-    deal,
-    idempotencyKey: idempotencyKey.value,
-    reason: typeof input.reason === "string" ? input.reason : undefined,
-    reasonCategory: input.reasonCategory,
-    reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
-    session: auth.session,
-  });
+  let result;
+  try {
+    result = await upsertDealRecord({
+      allowHistoricalCloseDate:
+        input.historicalImport === true &&
+        auth.session.productPermissions.includes("novalure:internal"),
+      deal,
+      idempotencyKey: idempotencyKey.value,
+      qaBatchId: qaBatchId ?? undefined,
+      reason: typeof input.reason === "string" ? input.reason : undefined,
+      reasonCategory: input.reasonCategory,
+      reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
+      session: auth.session,
+    });
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Deal could not be saved" }, { status: 503 });
+  }
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getDealWriteStatus(result.reason) });
   }
 
-  return NextResponse.json({ deal: result.data, persisted: true });
+  return NextResponse.json(
+    { deal: result.data, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }
 
 export async function PATCH(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -98,21 +127,30 @@ export async function PATCH(request: Request) {
 
   const input = body as Record<string, unknown>;
   const deal = typeof input.deal === "object" && input.deal ? input.deal as Record<string, unknown> : input;
-  const result = await upsertDealRecord({
-    allowHistoricalCloseDate:
-      input.historicalImport === true &&
-      auth.session.productPermissions.includes("novalure:internal"),
-    deal: withDealIdFromRequest(request, deal),
-    reason: typeof input.reason === "string" ? input.reason : undefined,
-    reasonCategory: input.reasonCategory,
-    reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
-    requireExisting: true,
-    session: auth.session,
-  });
+  let result;
+  try {
+    result = await upsertDealRecord({
+      allowHistoricalCloseDate:
+        input.historicalImport === true &&
+        auth.session.productPermissions.includes("novalure:internal"),
+      deal: withDealIdFromRequest(request, deal),
+      qaBatchId: qaBatchId ?? undefined,
+      reason: typeof input.reason === "string" ? input.reason : undefined,
+      reasonCategory: input.reasonCategory,
+      reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
+      requireExisting: true,
+      session: auth.session,
+    });
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Deal could not be saved" }, { status: 503 });
+  }
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getDealWriteStatus(result.reason) });
   }
 
-  return NextResponse.json({ deal: result.data, persisted: true });
+  return NextResponse.json(
+    { deal: result.data, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }

@@ -18,6 +18,17 @@ export const publicSubmissionControlFields = {
 export type PublicSubmissionAction =
   (typeof publicSubmissionActions)[keyof typeof publicSubmissionActions];
 
+export function buildVersionedPublicSubmissionResourceId(input: {
+  resourceId: string;
+  version: number | undefined;
+}) {
+  const suppliedVersion = input.version;
+  const version = typeof suppliedVersion === "number" && Number.isSafeInteger(suppliedVersion) && suppliedVersion > 0
+    ? suppliedVersion
+    : 1;
+  return `${input.resourceId}:version:${version}`;
+}
+
 export type PublicSubmissionProof = {
   expiresAt: number;
   idempotencyKey: string;
@@ -26,6 +37,7 @@ export type PublicSubmissionProof = {
 };
 
 export const publicSubmissionProofTtlSeconds = 15 * 60;
+export const publicSubmissionProofRefreshGraceSeconds = 24 * 60 * 60;
 
 export type PublicSubmissionResponseSnapshot =
   | {
@@ -219,6 +231,50 @@ export function verifyPublicSubmissionProof(input: {
   }
 
   return { ok: true, proof };
+}
+
+export function refreshPublicSubmissionProof(input: {
+  action: PublicSubmissionAction;
+  nowSeconds?: number;
+  proof: PublicSubmissionProof | null;
+  scope: string;
+  secret?: string;
+}):
+  | { ok: true; proof: PublicSubmissionProof }
+  | { ok: false; reason: "submission_proof_invalid" | "submission_proof_missing" | "submission_proof_refresh_expired" } {
+  const proof = input.proof;
+  if (!proof) return { ok: false, reason: "submission_proof_missing" };
+
+  const nowSeconds = input.nowSeconds ?? Math.floor(Date.now() / 1_000);
+  const signatureValidation = verifyPublicSubmissionProof({
+    action: input.action,
+    nowSeconds: Math.min(nowSeconds, proof.expiresAt),
+    proof,
+    scope: input.scope,
+    secret: input.secret,
+  });
+  if (!signatureValidation.ok) {
+    return {
+      ok: false,
+      reason: signatureValidation.reason === "submission_proof_missing"
+        ? "submission_proof_missing"
+        : "submission_proof_invalid",
+    };
+  }
+  if (proof.expiresAt + publicSubmissionProofRefreshGraceSeconds < nowSeconds) {
+    return { ok: false, reason: "submission_proof_refresh_expired" };
+  }
+
+  return {
+    ok: true,
+    proof: createPublicSubmissionProof({
+      action: input.action,
+      idempotencyKey: proof.idempotencyKey,
+      nowSeconds,
+      scope: input.scope,
+      secret: input.secret,
+    }),
+  };
 }
 
 export function createPublicSubmissionOpaqueHash(input: {
@@ -456,6 +512,18 @@ export function createFunnelSubmissionDomainIdempotencyHash(input: {
   });
 }
 
+export function createFunnelSubmissionReplayRequestFingerprint(input: {
+  intentId: string;
+  requestFingerprint: string;
+  secret?: string;
+}) {
+  return createPublicSubmissionOpaqueHash({
+    label: "funnel-submission-replay-request",
+    secret: input.secret,
+    value: `${input.intentId}\n${input.requestFingerprint}`,
+  });
+}
+
 export async function readBoundedPublicSubmissionJson(
   request: Request,
   limits: PublicSubmissionJsonBodyLimits,
@@ -629,7 +697,7 @@ function assertProofInput(input: {
   if (!/^[A-Za-z0-9_-]{32,128}$/u.test(input.idempotencyKey)) {
     throw new Error("Invalid public submission idempotency key");
   }
-  if (!Number.isInteger(input.issuedAt) || !Number.isInteger(input.expiresAt)) {
+  if (!Number.isSafeInteger(input.issuedAt) || !Number.isSafeInteger(input.expiresAt)) {
     throw new Error("Invalid public submission proof timestamp");
   }
   if (!input.scope || input.scope.length > 256 || /[\r\n\u0000]/u.test(input.scope)) {

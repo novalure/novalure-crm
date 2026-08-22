@@ -97,6 +97,7 @@ export async function POST(request: Request) {
         inboundMode: connector.inboundMode,
         metadata: {
           connectedBy: auth.session.email,
+          connectedByUserId: auth.session.userId,
           connectedAt: new Date().toISOString(),
           customerOwnedAccount: true,
         },

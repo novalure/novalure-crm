@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getDeviceValue,
   type FunnelDevice,
@@ -20,9 +20,15 @@ import {
   clearFunnelSubmissionIntentId,
   getOrCreateFunnelSubmissionIntentId,
 } from "@/lib/funnel-submission-request";
+import {
+  getOrCreatePublicFunnelVisitId,
+  isFunnelPublicationStaleResponse,
+} from "@/lib/funnel-runtime-contract";
 import { getFunnelRendererCopy, type LanguageCode } from "@/lib/i18n";
 import {
+  parsePublicSubmissionProof,
   publicSubmissionControlFields,
+  publicSubmissionProofRefreshLeadSeconds,
   type PublicSubmissionProof,
 } from "@/lib/public-submission-contract";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -33,7 +39,9 @@ type FunnelRendererProps = {
   language?: LanguageCode;
   mode?: FunnelRenderMode;
   onEvent?: (event: { label: string; detail: string; status: string }) => void;
+  publicationRevision?: number;
   submissionProof?: PublicSubmissionProof;
+  visitTrackingEnabled?: boolean;
 };
 
 type FieldValue = string | string[] | boolean | number | null;
@@ -327,7 +335,9 @@ export function FunnelRenderer({
   language = "en",
   mode = "preview",
   onEvent,
+  publicationRevision,
   submissionProof,
+  visitTrackingEnabled = false,
 }: FunnelRendererProps) {
   const text = getFunnelRendererCopy(language);
   const safeHtmlNotice = language === "de"
@@ -337,13 +347,169 @@ export function FunnelRenderer({
   const [answers, setAnswers] = useState<Record<string, FieldValue>>(() => buildInitialAnswers(blueprint));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [honeypot, setHoneypot] = useState("");
+  const [activeSubmissionProof, setActiveSubmissionProof] = useState(submissionProof);
+  const [reloadRequired, setReloadRequired] = useState(false);
+  const [runtimeError, setRuntimeError] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const proofRefreshPromiseRef = useRef<Promise<PublicSubmissionProof> | null>(null);
+  const submissionProofRef = useRef<PublicSubmissionProof | undefined>(submissionProof);
+  const visitRecordedRef = useRef<string | null>(null);
   const pages = blueprint.pages;
   const page = pages[Math.min(currentPageIndex, pages.length - 1)];
   const allFields = useMemo(() => collectFields(blueprint), [blueprint]);
   const runtimeConsent = useMemo(() => buildConsentPayload(allFields, answers), [allFields, answers]);
   const accent = blueprint.theme.colors.accent;
   const spacing = getDeviceValue(blueprint.theme.spacing, device, 16);
+  const proofRefreshFailedCopy = language === "de"
+    ? "Die sichere Sitzung konnte nicht erneuert werden. Bitte laden Sie die Seite neu."
+    : "The secure session could not be renewed. Please reload the page.";
+  const publicationStaleCopy = language === "de"
+    ? "Dieser Funnel wurde inzwischen aktualisiert. Bitte laden Sie die Seite neu, bevor Sie fortfahren."
+    : "This funnel has been updated. Please reload the page before continuing.";
+
+  const markPublicationStale = useCallback(() => {
+    setReloadRequired(true);
+    setRuntimeError(publicationStaleCopy);
+  }, [publicationStaleCopy]);
+
+  const installSubmissionProof = useCallback((proof: PublicSubmissionProof) => {
+    submissionProofRef.current = proof;
+    setActiveSubmissionProof(proof);
+    setRuntimeError("");
+  }, []);
+
+  const refreshSubmissionProof = useCallback(async () => {
+    const currentProof = submissionProofRef.current;
+    if (
+      mode !== "live" ||
+      !currentProof ||
+      !Number.isSafeInteger(publicationRevision) ||
+      Number(publicationRevision) < 0
+    ) {
+      throw new Error("submission_proof_missing");
+    }
+    if (proofRefreshPromiseRef.current) return proofRefreshPromiseRef.current;
+
+    const refreshPromise = (async () => {
+      const response = await fetch(
+        `/api/funnels/${encodeURIComponent(blueprint.id)}/submission-proof`,
+        {
+          body: JSON.stringify({ proof: currentProof, publicationRevision }),
+          cache: "no-store",
+          credentials: "omit",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          referrerPolicy: "no-referrer",
+        },
+      );
+      const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+      if (isFunnelPublicationStaleResponse(payload)) {
+        markPublicationStale();
+        throw new Error("funnel_publication_stale");
+      }
+      const proof = parsePublicSubmissionProof(payload?.proof);
+      if (
+        !response.ok ||
+        !proof ||
+        proof.idempotencyKey !== currentProof.idempotencyKey ||
+        payload?.publicationRevision !== publicationRevision
+      ) {
+        throw new Error("submission_proof_refresh_failed");
+      }
+      installSubmissionProof(proof);
+      return proof;
+    })();
+
+    proofRefreshPromiseRef.current = refreshPromise;
+    try {
+      return await refreshPromise;
+    } finally {
+      if (proofRefreshPromiseRef.current === refreshPromise) {
+        proofRefreshPromiseRef.current = null;
+      }
+    }
+  }, [blueprint.id, installSubmissionProof, markPublicationStale, mode, publicationRevision]);
+
+  useEffect(() => {
+    if (mode !== "live" || reloadRequired || !activeSubmissionProof) return;
+    const refreshAt =
+      (activeSubmissionProof.expiresAt - publicSubmissionProofRefreshLeadSeconds) * 1_000;
+    const delay = Math.max(0, Math.min(2_147_483_647, refreshAt - Date.now()));
+    const timer = window.setTimeout(() => {
+      void refreshSubmissionProof().catch((error: unknown) => {
+        if (!(error instanceof Error) || error.message !== "funnel_publication_stale") {
+          setRuntimeError(proofRefreshFailedCopy);
+        }
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [activeSubmissionProof, mode, proofRefreshFailedCopy, refreshSubmissionProof, reloadRequired]);
+
+  useEffect(() => {
+    if (
+      mode !== "live" ||
+      !visitTrackingEnabled ||
+      !runtimeConsent.analytics ||
+      reloadRequired ||
+      !activeSubmissionProof ||
+      !Number.isSafeInteger(publicationRevision) ||
+      Number(publicationRevision) < 0
+    ) {
+      return;
+    }
+    const visitKey = `${blueprint.id}:publication:${publicationRevision}`;
+    if (visitRecordedRef.current === visitKey) return;
+    const visitId = getOrCreatePublicFunnelVisitId(blueprint.id, Number(publicationRevision));
+    let cancelled = false;
+
+    const sendVisit = async (proof: PublicSubmissionProof, allowExpiredRefresh: boolean): Promise<void> => {
+      const response = await fetch(`/api/funnels/${encodeURIComponent(blueprint.id)}/visits`, {
+        body: JSON.stringify({ proof, publicationRevision, visitId }),
+        cache: "no-store",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        referrerPolicy: "no-referrer",
+      });
+      const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+      if (isFunnelPublicationStaleResponse(payload)) {
+        if (!cancelled) markPublicationStale();
+        return;
+      }
+      if (
+        !response.ok &&
+        allowExpiredRefresh &&
+        payload?.error === "submission_proof_expired"
+      ) {
+        const refreshedProof = await refreshSubmissionProof();
+        return sendVisit(refreshedProof, false);
+      }
+      if (response.ok && payload?.ok === true && !cancelled) {
+        visitRecordedRef.current = visitKey;
+      }
+    };
+
+    void sendVisit(activeSubmissionProof, true).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSubmissionProof,
+    blueprint.id,
+    markPublicationStale,
+    mode,
+    publicationRevision,
+    refreshSubmissionProof,
+    reloadRequired,
+    runtimeConsent.analytics,
+    visitTrackingEnabled,
+  ]);
 
   useEffect(() => {
     if (!blueprint.tracking.clientAnalyticsEnabled || !runtimeConsent.analytics) return;
@@ -419,33 +585,69 @@ export function FunnelRenderer({
       const consent = buildConsentPayload(allFields, runtimeAnswers);
       const apiFetch = testOnly ? csrfFetch : fetch;
       const submissionIntentId = testOnly ? undefined : getOrCreateFunnelSubmissionIntentId(blueprint.id);
-      const submissionRequest = buildFunnelSubmissionRequest({
-        answers: runtimeAnswers,
-        consent,
-        funnelId: blueprint.id,
-        honeypot,
-        intentId: submissionIntentId,
-        mode: testOnly ? "test" : "live",
-        proof: submissionProof,
-        utm: readUtmParams(),
-        visitor: {
-          id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
-          sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
-          userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
-        },
-      });
-      const response = await apiFetch(submissionRequest.endpoint, submissionRequest.init);
-      if (!response.ok) throw new Error("Submission failed");
-      await response.json();
+      const utm = readUtmParams();
+      const visitor = {
+        id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
+        sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
+        userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
+      };
+
+      const sendAttempt = async (
+        proof: PublicSubmissionProof | undefined,
+        allowExpiredProofRetry: boolean,
+      ): Promise<void> => {
+        if (!testOnly && !proof) throw new Error("submission_proof_missing");
+        const submissionRequest = buildFunnelSubmissionRequest({
+          answers: runtimeAnswers,
+          consent,
+          funnelId: blueprint.id,
+          honeypot,
+          intentId: submissionIntentId,
+          mode: testOnly ? "test" : "live",
+          proof,
+          utm,
+          visitor,
+        });
+        const response = await apiFetch(submissionRequest.endpoint, submissionRequest.init);
+        const responsePayload = await response.json().catch(() => null) as Record<string, unknown> | null;
+        if (!testOnly && isFunnelPublicationStaleResponse(responsePayload)) {
+          markPublicationStale();
+          throw new Error("funnel_publication_stale");
+        }
+        if (response.ok) return;
+
+        if (
+          !testOnly &&
+          allowExpiredProofRetry &&
+          responsePayload?.error === "submission_proof_expired"
+        ) {
+          const refreshedProof = await refreshSubmissionProof();
+          return sendAttempt(refreshedProof, false);
+        }
+
+        // A rotation between refresh and submit invalidates the old signature.
+        // Refresh is used only to classify the current publication; unlike the
+        // explicit expiry branch above, an invalid proof is never auto-retried.
+        if (!testOnly && responsePayload?.error === "submission_proof_invalid") {
+          await refreshSubmissionProof();
+        }
+        throw new Error("submission_failed");
+      };
+
+      await sendAttempt(testOnly ? undefined : submissionProofRef.current, true);
       if (!testOnly) clearFunnelSubmissionIntentId(blueprint.id);
       setSubmitState("sent");
+      setRuntimeError("");
       emit(
         testOnly ? text.testLeadSent : text.leadSent,
         blueprint.name,
         testOnly ? "test" : "live",
       );
-    } catch {
+    } catch (error) {
       setSubmitState("error");
+      if (!(error instanceof Error) || error.message !== "funnel_publication_stale") {
+        setRuntimeError((current) => current || proofRefreshFailedCopy);
+      }
       emit(text.submissionError, text.submissionErrorDetail, "error");
     }
   }
@@ -469,7 +671,7 @@ export function FunnelRenderer({
     if (element.type === "image") {
       return element.url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt={element.alt ?? element.name} className="max-h-80 w-full rounded-lg object-cover" loading="lazy" src={element.url} />
+        <img alt={element.alt ?? element.name} className="max-h-80 w-full rounded-lg object-cover" loading="lazy" referrerPolicy="no-referrer" src={element.url} />
       ) : (
         <div className="grid aspect-video min-w-0 place-items-center rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm font-semibold text-stone-600">
           {text.imagePlaceholder}
@@ -583,7 +785,7 @@ export function FunnelRenderer({
           ))}
           <button
             className="w-full rounded-md px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-            disabled={submitState === "sending"}
+            disabled={submitState === "sending" || reloadRequired}
             style={{ backgroundColor: accent, borderRadius: blueprint.theme.radii.button }}
             type="submit"
           >
@@ -604,6 +806,25 @@ export function FunnelRenderer({
 
   return (
     <div className={`mx-auto w-full ${deviceWidths[device]} min-w-0`} data-funnel-mode={mode}>
+      {runtimeError ? (
+        <div
+          aria-live="assertive"
+          className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900"
+          data-funnel-runtime-error={reloadRequired ? "publication-stale" : "proof-refresh"}
+          role="alert"
+        >
+          <p>{runtimeError}</p>
+          {reloadRequired ? (
+            <button
+              className="mt-3 rounded-md border border-red-700 bg-white px-3 py-2 text-sm font-semibold text-red-900"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              {language === "de" ? "Seite neu laden" : "Reload page"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div
         className="min-w-0 rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm"
         style={{ backgroundColor: blueprint.theme.colors.background, color: blueprint.theme.colors.text }}

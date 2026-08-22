@@ -15,6 +15,7 @@ export type FormRuntimeCopy = {
   invalidPhone: string;
   invalidUrl: string;
   next: string;
+  proofRefreshFailed: string;
   required: string;
   step: string;
   submit: string;
@@ -30,6 +31,7 @@ export const fallbackFormRuntimeCopy: FormRuntimeCopy = {
   invalidPhone: "Bitte geben Sie eine gültige Telefonnummer ein.",
   invalidUrl: "Bitte geben Sie eine gültige URL ein.",
   next: "Weiter",
+  proofRefreshFailed: "Die sichere Formularsitzung konnte nicht erneuert werden. Bitte versuchen Sie es erneut.",
   required: "Pflichtfeld",
   step: "Schritt",
   submit: "Absenden",
@@ -85,8 +87,10 @@ type FormRendererProps = {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   publicKey: string;
   returnTo: string;
+  runtimeError?: string;
   selectedFieldId?: string;
   source?: string;
+  submissionPending?: boolean;
   submissionProof?: PublicSubmissionProof;
   tracking?: {
     pageUrl?: string;
@@ -132,8 +136,10 @@ export function FormRenderer({
   onSubmit,
   publicKey,
   returnTo,
+  runtimeError,
   selectedFieldId,
   source = "website",
+  submissionPending = false,
   submissionProof,
   tracking,
   values = {},
@@ -188,6 +194,17 @@ export function FormRenderer({
         {Object.keys(errors).length ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-900">
             {copy.validationTitle}
+          </div>
+        ) : null}
+
+        {runtimeError ? (
+          <div
+            aria-live="polite"
+            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-900"
+            data-novalure-runtime-error="proof-refresh"
+            role="alert"
+          >
+            {runtimeError}
           </div>
         ) : null}
 
@@ -254,6 +271,7 @@ export function FormRenderer({
           ) : (
             <button
               className="novalure-button rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+              disabled={submissionPending}
               type="submit"
             >
               {copy.submit}

@@ -55,10 +55,17 @@ test("forms APIs fail closed and resolver verifies tenant-owned persisted public
   assert.match(repository, /select public_key as \\"publicKey\\" from workspaces where id = \$1 limit 1/);
   assert.match(repository, /A workspace public key is required before publishing a form/);
   assert.match(repository, /lastSaveOperationId/);
+  assert.match(repository, /lastSaveRequestHash/);
+  assert.match(repository, /hashFormSaveRequest/);
   assert.match(repository, /coalesce\(\(previous\.previous_settings->>'version'\)::integer, 1\) = \$20::integer/);
   assert.match(repository, /on conflict \(workspace_id, slug\) do update/);
   assert.match(repository, /previous\.previous_settings->>'lastSaveOperationId' is distinct from \$19/);
-  assert.match(repository, /if \(row\.writeApplied\)/);
+  assert.match(repository, /if \(savedRow\?\.writeApplied\)/);
+  const formSaveTransaction = repository.indexOf("const row = await withTenantTransaction(");
+  const formSaveAudit = repository.indexOf("await writeAuditLog({", formSaveTransaction);
+  const formSaveReturn = repository.indexOf("return savedRow;", formSaveTransaction);
+  assert.ok(formSaveTransaction >= 0 && formSaveTransaction < formSaveAudit && formSaveAudit < formSaveReturn);
+  assert.match(repository.slice(formSaveAudit, formSaveReturn), /transaction,/);
   assert.match(repository, /resolveActiveWorkspaceOwner\([\s\S]*input\.session\.workspaceId/);
   assert.match(repository, /where workspace_id = \$1::uuid[\s\S]*and id = \$2::uuid[\s\S]*and status = 'active'/);
   assert.match(repository, /form\.ownerMode !== "user"[\s\S]*FORM_OWNER_MODE_UNAVAILABLE/);

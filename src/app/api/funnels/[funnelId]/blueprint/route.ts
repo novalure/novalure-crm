@@ -6,7 +6,9 @@ import {
 } from "@/lib/funnel-live-preflight";
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
 import { getStoredFunnel, restoreStoredFunnelVersion, saveStoredFunnel } from "@/lib/funnel-store";
+import { toFunnelBlueprintResponse } from "@/lib/funnel-store-response";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type RouteContext = {
   params: Promise<{ funnelId: string }>;
@@ -30,33 +32,55 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
   }
 
-  return NextResponse.json({
-    blueprint: stored.blueprint,
-    blueprintOrigin: stored.blueprintOrigin,
-    versions: stored.versions,
-    updatedAt: stored.updatedAt,
-    source: "database",
-  });
+  return NextResponse.json(toFunnelBlueprintResponse(stored));
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+  const launchScope = evaluateLaunchScope("publicFunnelPublication");
+  if (!launchScope.allowed) {
+    return NextResponse.json({ error: launchScope.code }, { status: 403 });
+  }
   const auth = await requirePermissionAndProductCapability(request, "funnels:write", "funnels:publish");
   if (!auth.ok) return auth.response;
 
   const text = getApiSystemCopy(resolveRequestLanguage(request));
   const { funnelId } = await context.params;
-  let body: { blueprint?: FunnelBlueprint; label?: string; restoreVersionId?: string };
+  let body: {
+    blueprint?: FunnelBlueprint;
+    expectedBlueprintRevision?: number;
+    label?: string;
+    restoreVersionId?: string;
+  };
 
   try {
-    body = (await request.json()) as { blueprint?: FunnelBlueprint; label?: string; restoreVersionId?: string };
+    body = (await request.json()) as {
+      blueprint?: FunnelBlueprint;
+      expectedBlueprintRevision?: number;
+      label?: string;
+      restoreVersionId?: string;
+    };
   } catch {
     return NextResponse.json({ error: text.invalidJson }, { status: 400 });
+  }
+
+  const expectedBlueprintRevision = body.expectedBlueprintRevision;
+  if (
+    typeof expectedBlueprintRevision !== "number" ||
+    !Number.isSafeInteger(expectedBlueprintRevision) ||
+    expectedBlueprintRevision < 0
+  ) {
+    return NextResponse.json({ error: "A valid expected funnel content revision is required" }, { status: 400 });
   }
 
   if (body.restoreVersionId) {
     let restored;
     try {
-      restored = await restoreStoredFunnelVersion(funnelId, body.restoreVersionId, auth.session);
+      restored = await restoreStoredFunnelVersion(
+        funnelId,
+        body.restoreVersionId,
+        auth.session,
+        expectedBlueprintRevision,
+      );
     } catch (error) {
       if (error instanceof FunnelLivePreflightError) {
         return NextResponse.json(
@@ -64,10 +88,14 @@ export async function PUT(request: Request, context: RouteContext) {
           { status: 409 },
         );
       }
-      return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
+      const reason = error instanceof Error ? error.message : "Funnel database is unavailable";
+      return NextResponse.json(
+        { error: reason },
+        { status: reason.toLowerCase().includes("conflict") ? 409 : 503 },
+      );
     }
     if (!restored) return NextResponse.json({ error: text.versionNotFound }, { status: 404 });
-    return NextResponse.json(restored);
+    return NextResponse.json(toFunnelBlueprintResponse(restored));
   }
 
   if (!body.blueprint || body.blueprint.id !== funnelId) {
@@ -89,7 +117,12 @@ export async function PUT(request: Request, context: RouteContext) {
 
   let saved;
   try {
-    saved = await saveStoredFunnel(body.blueprint, body.label, auth.session);
+    saved = await saveStoredFunnel(
+      body.blueprint,
+      body.label,
+      auth.session,
+      expectedBlueprintRevision,
+    );
   } catch (error) {
     if (error instanceof FunnelLivePreflightError) {
       return NextResponse.json(
@@ -98,8 +131,15 @@ export async function PUT(request: Request, context: RouteContext) {
       );
     }
     const reason = error instanceof Error ? error.message : "Funnel blueprint could not be saved";
-    const status = reason.includes("not found") ? 404 : 503;
+    const status = reason.toLowerCase().includes("conflict")
+      ? 409
+      : reason.includes("not found")
+        ? 404
+        : 503;
     return NextResponse.json({ error: reason }, { status });
   }
-  return NextResponse.json({ ...saved, preflight });
+  return NextResponse.json({
+    ...toFunnelBlueprintResponse(saved),
+    preflight,
+  });
 }

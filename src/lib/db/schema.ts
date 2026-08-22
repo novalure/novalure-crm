@@ -57,6 +57,7 @@ export const crmTables = [
   "funnels",
   "funnel_steps",
   "funnel_submissions",
+  "public_funnel_visit_events",
   "forms",
   "form_submissions",
   "conversations",

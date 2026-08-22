@@ -116,30 +116,29 @@ const knowledgeRequiredPattern =
   /\b(preis|price|kosten|cost|rendite|yield|einheit|unit|verfügbar|verfuegbar|available|expose|expos[eé]|dokument|pdf|unterlage|broschüre|broschuere|brochure|grundriss|floor\s*plan|finanzierung|financing|vertrag|contract|termin|besichtigung|appointment|booking|meeting)\b/i;
 
 export function getBotRuntimeControls(input?: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): BotRuntimeControls {
-  const killSwitch =
-    readBoolean(input?.killSwitch) ??
-    readBoolean(input?.notAus) ??
-    readBoolean(env.NOVALURE_BOT_KILL_SWITCH) ??
-    readBoolean(env.NOVALURE_BOT_NOT_AUS) ??
-    readBoolean(env.NOVALURE_BOT_DISABLED) ??
-    false;
-  const testMode =
-    readBoolean(input?.testMode) ??
-    readBoolean(input?.dryRun) ??
-    readBoolean(env.NOVALURE_BOT_TEST_MODE) ??
-    readBoolean(env.NOVALURE_BOT_DRY_RUN) ??
-    false;
-  const requireHumanApproval =
-    readBoolean(input?.requireHumanApproval) ??
-    readBoolean(env.NOVALURE_BOT_REQUIRE_HUMAN_APPROVAL) ??
-    false;
+  const killSwitch = anyControlEnabled(
+    input?.killSwitch,
+    input?.notAus,
+    env.NOVALURE_BOT_KILL_SWITCH,
+    env.NOVALURE_BOT_NOT_AUS,
+    env.NOVALURE_BOT_DISABLED,
+  );
+  const testMode = anyControlEnabled(
+    input?.testMode,
+    input?.dryRun,
+    env.NOVALURE_BOT_TEST_MODE,
+    env.NOVALURE_BOT_DRY_RUN,
+  );
+  const requireHumanApproval = anyControlEnabled(
+    input?.requireHumanApproval,
+    env.NOVALURE_BOT_REQUIRE_HUMAN_APPROVAL,
+  );
   const strictKnowledge =
-    readBoolean(input?.strictKnowledge) ??
-    readBoolean(env.NOVALURE_BOT_STRICT_KNOWLEDGE) ??
-    true;
+    (readBoolean(env.NOVALURE_BOT_STRICT_KNOWLEDGE) ?? true) ||
+    readBoolean(input?.strictKnowledge) === true;
 
   return {
-    disabledReason: killSwitch ? "NOVALURE_BOT_KILL_SWITCH or NOVALURE_BOT_NOT_AUS is active" : null,
+    disabledReason: killSwitch ? "Bot kill switch is active" : null,
     killSwitch,
     requireHumanApproval,
     strictKnowledge,
@@ -170,6 +169,10 @@ export function readBoolean(value: unknown) {
   if (falseValues.has(normalized)) return false;
 
   return undefined;
+}
+
+function anyControlEnabled(...values: unknown[]) {
+  return values.some((value) => readBoolean(value) === true);
 }
 
 export function findForbiddenStatements(value: string): BotPolicyViolation[] {

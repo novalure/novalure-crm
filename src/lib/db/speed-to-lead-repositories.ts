@@ -1,5 +1,6 @@
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
+import type { TenantTransaction } from "@/lib/db/tenant-client";
 
 type IdRow = { id: string };
 type SpeedToLeadState = "covered" | "dueSoon" | "overdue";
@@ -43,6 +44,7 @@ export async function recordSpeedToLeadEvent(input: {
   state?: SpeedToLeadState | string | null;
   userId?: string | null;
   workspaceId?: string | null;
+  transaction?: TenantTransaction;
 }) {
   if (!hasDatabaseUrl() || !isUuid(input.workspaceId)) return null;
 
@@ -57,8 +59,7 @@ export async function recordSpeedToLeadEvent(input: {
 
   let speedEventId: string | null = null;
   try {
-    const row = await queryOne<IdRow>(
-      `
+    const sql = `
         insert into speed_to_lead_events (
           workspace_id,
           project_id,
@@ -74,23 +75,26 @@ export async function recordSpeedToLeadEvent(input: {
         )
         values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::timestamptz, $8::timestamptz, $9, $10, $11::jsonb)
         returning id
-      `,
-      [
-        input.workspaceId,
-        isUuid(input.projectId) ? input.projectId : null,
-        isUuid(input.leadId) ? input.leadId : null,
-        isUuid(input.contactId) ? input.contactId : null,
-        isUuid(input.ownerUserId) ? input.ownerUserId : null,
-        state,
-        dueAt,
-        firstResponseAt,
-        minutesUntil(dueAt),
-        input.notificationChannel || "teams",
-        JSON.stringify(metadata),
-      ],
-    );
+      `;
+    const params = [
+      input.workspaceId,
+      isUuid(input.projectId) ? input.projectId : null,
+      isUuid(input.leadId) ? input.leadId : null,
+      isUuid(input.contactId) ? input.contactId : null,
+      isUuid(input.ownerUserId) ? input.ownerUserId : null,
+      state,
+      dueAt,
+      firstResponseAt,
+      minutesUntil(dueAt),
+      input.notificationChannel || "teams",
+      JSON.stringify(metadata),
+    ];
+    const row = input.transaction
+      ? await input.transaction.queryOne<IdRow>(sql, params)
+      : await queryOne<IdRow>(sql, params);
     speedEventId = row?.id ?? null;
-  } catch {
+  } catch (error) {
+    if (input.transaction) throw error;
     return null;
   }
 
@@ -114,6 +118,7 @@ export async function recordSpeedToLeadEvent(input: {
       source: input.source,
       userId: input.userId,
       workspaceId: input.workspaceId,
+      transaction: input.transaction,
     });
   }
 

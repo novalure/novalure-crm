@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { mutateUnitReservation, type ReservationWorkflowAction } from "@/lib/db/reservation-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 async function readJson(request: Request) {
   try {
@@ -32,6 +33,14 @@ function parseOptionalNumber(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "Reservation relationship synchronization is outside launch scope" },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   const auth = await resolveWorkspaceScopedSession(request, {
     permission: "crm:write",
     capability: "reservations:write",

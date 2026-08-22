@@ -18,9 +18,12 @@ async function loadLifecycleHelpers() {
     fileName: path,
   }).outputText;
   const cjsModule = { exports: {} };
+  const lifecycleRequire = (specifier) => specifier === "@/lib/launch-scope"
+    ? { isLaunchSurfaceEnabled: () => false }
+    : require(specifier);
   vm.runInNewContext(
     output,
-    { Date, Intl, Object, Set, exports: cjsModule.exports, module: cjsModule, require },
+    { Date, Intl, Object, Set, exports: cjsModule.exports, module: cjsModule, require: lifecycleRequire },
     { filename: path },
   );
   return cjsModule.exports;
@@ -96,8 +99,9 @@ test("reschedule and cancel use a claimed state transition and idempotent provid
 });
 
 test("public create, cancel and reschedule are fail-closed until a durable reconciliation saga exists", async () => {
-  const [lifecycle, repository, createRoute, cancelRoute, rescheduleRoute, bookingPage, copy] = await Promise.all([
+  const [lifecycle, launchScope, repository, createRoute, cancelRoute, rescheduleRoute, bookingPage, copy] = await Promise.all([
     source("src/lib/meetings/booking-lifecycle.ts"),
+    source("src/lib/launch-scope.ts"),
     source("src/lib/db/meeting-repositories.ts"),
     source("src/app/api/meetings/bookings/route.ts"),
     source("src/app/api/meetings/bookings/[bookingId]/cancel/route.ts"),
@@ -106,11 +110,13 @@ test("public create, cancel and reschedule are fail-closed until a durable recon
     source("src/lib/i18n.ts"),
   ]);
 
-  assert.match(lifecycle, /bookingCreationLaunchEnabled = false/);
+  assert.match(lifecycle, /bookingCreationLaunchEnabled = isLaunchSurfaceEnabled\("publicBookingCreation"\)/);
   assert.match(lifecycle, /publicBookingCreationLaunchEnabled = bookingCreationLaunchEnabled/);
   assert.match(lifecycle, /BOOKING_CREATION_LAUNCH_OFF/);
-  assert.match(lifecycle, /publicBookingLifecycleMutationsLaunchEnabled = false/);
+  assert.match(lifecycle, /publicBookingLifecycleMutationsLaunchEnabled = isLaunchSurfaceEnabled\("publicBookingLifecycle"\)/);
   assert.match(lifecycle, /PUBLIC_BOOKING_LIFECYCLE_LAUNCH_OFF/);
+  assert.match(launchScope, /publicBookingCreation:[\s\S]*decision: launchScopeDecisions\.off/);
+  assert.match(launchScope, /publicBookingLifecycle:[\s\S]*decision: launchScopeDecisions\.off/);
   const createGuard = createRoute.indexOf("if (!publicBookingCreationLaunchEnabled)");
   assert.ok(createGuard >= 0);
   assert.ok(createGuard < createRoute.indexOf("readBoundedPublicSubmissionFormData(request"));

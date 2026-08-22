@@ -8,6 +8,7 @@ import {
   parseEuroAmountToCents,
   validateInventoryInput,
 } from "@/lib/inventory-validation";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -264,6 +265,10 @@ export async function createPropertyUnitRecord(input: {
   const status = unitStatuses.includes(input.status as PropertyUnit["status"])
     ? input.status as PropertyUnit["status"]
     : "available";
+  const relationshipScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!relationshipScope.allowed && status !== "available") {
+    return { persisted: false, reason: relationshipScope.code };
+  }
   const floor = toNumber(input.floor, 0);
   const rooms = toNumber(input.rooms, 0);
   const areaSqm = toNumber(input.areaSqm, 0);
@@ -348,7 +353,7 @@ export async function createPropertyUnitRecord(input: {
           rooms = excluded.rooms,
           area_sqm = excluded.area_sqm,
           price_cents = excluded.price_cents,
-          status = excluded.status,
+          status = case when $13::boolean then excluded.status else property_units.status end,
           metadata = property_units.metadata || excluded.metadata,
           updated_at = now()
         where property_units.workspace_id = excluded.workspace_id
@@ -422,6 +427,7 @@ export async function createPropertyUnitRecord(input: {
           JSON.stringify({ source: "unit_board", updatedByUserId: input.session.userId }),
           input.operationId,
           requestHash,
+          relationshipScope.allowed,
         ],
       );
       if (operation?.writeApplied) {

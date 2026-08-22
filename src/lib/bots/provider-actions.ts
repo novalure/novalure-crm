@@ -1,5 +1,10 @@
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
 import type { BotChannelAccountCredentials } from "@/lib/db/runtime-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
+import { getBotRuntimeControls } from "@/lib/bots/policy";
+
+export const botProviderDeliveryLaunchOffCode = "bot_provider_delivery_launch_off";
+const botRuntimeControlActiveCode = "bot_runtime_control_active";
 
 export type BotDocumentDeliveryResult = {
   deliveryMode: "email" | "whatsapp";
@@ -478,6 +483,27 @@ async function sendMetaMessagingText(
 }
 
 export async function sendBotDocument(input: SendBotDocumentInput): Promise<BotDocumentDeliveryResult> {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return {
+      deliveryMode: wantsWhatsApp(input.channel) ? "whatsapp" : "email",
+      error: botProviderDeliveryLaunchOffCode,
+      provider: "mock",
+      recipient: input.recipientEmail?.trim() || normalizePhone(input.recipientPhone) || null,
+      status: "failed",
+    };
+  }
+
+  const runtimeControls = getBotRuntimeControls();
+  if (runtimeControls.killSwitch || runtimeControls.testMode || runtimeControls.requireHumanApproval) {
+    return {
+      deliveryMode: wantsWhatsApp(input.channel) ? "whatsapp" : "email",
+      error: botRuntimeControlActiveCode,
+      provider: "mock",
+      recipient: input.recipientEmail?.trim() || normalizePhone(input.recipientPhone) || null,
+      status: "failed",
+    };
+  }
+
   if (wantsWhatsApp(input.channel) && input.recipientPhone) {
     return sendWhatsAppDocument(input);
   }
@@ -498,6 +524,7 @@ export async function sendBotDocument(input: SendBotDocumentInput): Promise<BotD
   const result = await sendNewsletterEmail({
     html: email.html,
     idempotencyKey: input.idempotencyKey,
+    purpose: "bot_document",
     subject: email.subject,
     to: input.recipientEmail.trim(),
   });
@@ -513,6 +540,42 @@ export async function sendBotDocument(input: SendBotDocumentInput): Promise<BotD
 }
 
 export async function sendBotChannelReply(input: SendBotChannelReplyInput): Promise<BotChannelReplyDeliveryResult> {
+  // Meta Graph messaging endpoints do not accept input.idempotencyKey. The
+  // caller must durably fence the provider attempt and treat an interrupted or
+  // failed attempt as delivery-uncertain instead of blindly resending it.
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return {
+      deliveryMode: wantsWhatsApp(input.channel)
+        ? "whatsapp"
+        : wantsInstagram(input.channel)
+          ? "instagram"
+          : wantsMessenger(input.channel)
+            ? "messenger"
+            : "mock",
+      error: botProviderDeliveryLaunchOffCode,
+      provider: "mock",
+      recipient: input.recipientPhone?.trim() || null,
+      status: "blocked",
+    };
+  }
+
+  const runtimeControls = getBotRuntimeControls();
+  if (runtimeControls.killSwitch || runtimeControls.testMode || runtimeControls.requireHumanApproval) {
+    return {
+      deliveryMode: wantsWhatsApp(input.channel)
+        ? "whatsapp"
+        : wantsInstagram(input.channel)
+          ? "instagram"
+          : wantsMessenger(input.channel)
+            ? "messenger"
+            : "mock",
+      error: botRuntimeControlActiveCode,
+      provider: "mock",
+      recipient: input.recipientPhone?.trim() || null,
+      status: "blocked",
+    };
+  }
+
   if (wantsWhatsApp(input.channel)) {
     return sendWhatsAppText(input);
   }

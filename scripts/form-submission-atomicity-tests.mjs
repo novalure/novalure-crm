@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 import {
   createCanonicalPublicSubmissionFormDataFingerprint,
   formSubmissionBodyLimits,
@@ -11,11 +12,6 @@ import {
 } from "../src/lib/security/public-submission-abuse.ts";
 import { validatePublicFormFieldValue } from "../src/lib/form-submission-validation.ts";
 import { isTruthyPublicConsentValue } from "../src/lib/form-consent.ts";
-import {
-  getPublicFormLaunchBlockReason,
-  hasSupportedPublicConsentConfiguration,
-  toPublicFormDto,
-} from "../src/lib/public-form-dto.ts";
 
 const secret = "qa-form-atomicity-secret-with-at-least-32-bytes";
 process.env.NOVALURE_ABUSE_SECRET = secret;
@@ -23,6 +19,29 @@ process.env.NOVALURE_ABUSE_SECRET = secret;
 async function read(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
+
+async function importPublicFormDto() {
+  const source = await read("src/lib/public-form-dto.ts");
+  const launchScopeUrl = new URL("../src/lib/launch-scope.ts", import.meta.url).href;
+  const compiled = ts.transpileModule(
+    source.replace('from "@/lib/launch-scope"', `from ${JSON.stringify(launchScopeUrl)}`),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
+      fileName: "public-form-dto.ts",
+    },
+  ).outputText;
+
+  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+}
+
+const {
+  getPublicFormLaunchBlockReason,
+  hasSupportedPublicConsentConfiguration,
+  toPublicFormDto,
+} = await importPublicFormDto();
 
 function semanticFormData({ email = "atomic@example.test", proof = "proof-a" } = {}) {
   const formData = new FormData();
@@ -73,6 +92,7 @@ test("public Form route uses semantic request hashing and atomically completed s
 
   assert.match(route, /createCanonicalPublicSubmissionFormDataFingerprint\(\{[\s\S]*formData/);
   assert.match(route, /requestFingerprint: semanticRequestFingerprint/);
+  assert.match(route, /readPublicSubmissionIdempotency\(hashes\)/);
   assert.match(route, /allowLeaseReclaim: true/);
   assert.match(route, /leaseVersion: claim\.leaseVersion/);
   assert.match(route, /successResponse: createPublicFormSuccessSnapshot/);
@@ -83,6 +103,13 @@ test("public Form route uses semantic request hashing and atomically completed s
     route,
     /if \(persistence\.persisted\) \{[\s\S]{0,300}completePublicSubmissionIdempotency/,
   );
+  const replayRead = route.indexOf("await readPublicSubmissionIdempotency");
+  const rateLimit = route.indexOf("await consumePublicSubmissionRateLimits");
+  const honeypot = route.indexOf("hasPublicSubmissionHoneypotValue(formData)");
+  const durableClaim = route.indexOf("claim = await claimPublicSubmissionIdempotency");
+  assert.ok(replayRead >= 0 && replayRead < rateLimit);
+  assert.ok(rateLimit < honeypot && honeypot < durableClaim);
+  assert.doesNotMatch(route.slice(rateLimit, durableClaim), /completePublicSubmissionIdempotency/);
 });
 
 test("the complete Form domain graph and claim fence live in one PostgreSQL statement", async () => {

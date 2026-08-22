@@ -12,6 +12,7 @@ import {
 } from "@/lib/public-form-dto";
 import {
   buildPublicSubmissionScope,
+  buildVersionedPublicSubmissionResourceId,
   createPublicSubmissionProof,
   publicSubmissionActions,
 } from "@/lib/security/public-submission-abuse";
@@ -83,7 +84,10 @@ export async function renderPublicFormPage({
   const submissionProof = createPublicSubmissionProof({
     action: publicSubmissionActions.form,
     scope: buildPublicSubmissionScope({
-      resourceId: persisted.id,
+      resourceId: buildVersionedPublicSubmissionResourceId({
+        resourceId: persisted.id,
+        version: form.version,
+      }),
       resourceType: "form",
       workspaceId: persisted.workspaceId,
     }),

@@ -15,7 +15,12 @@ import {
   type PublicFormLaunchBlockReason,
 } from "@/lib/public-form-dto";
 import {
+  publicSubmissionControlFields,
+  publicSubmissionProofRefreshLeadSeconds,
+} from "@/lib/public-submission-contract";
+import {
   buildPublicSubmissionScope,
+  buildVersionedPublicSubmissionResourceId,
   createPublicSubmissionProof,
   publicSubmissionActions,
 } from "@/lib/security/public-submission-abuse";
@@ -63,7 +68,10 @@ export async function GET(request: Request) {
   const submissionProof = createPublicSubmissionProof({
     action: publicSubmissionActions.form,
     scope: buildPublicSubmissionScope({
-      resourceId: persisted.id,
+      resourceId: buildVersionedPublicSubmissionResourceId({
+        resourceId: persisted.id,
+        version: form.version,
+      }),
       resourceType: "form",
       workspaceId: persisted.workspaceId,
     }),
@@ -72,6 +80,7 @@ export async function GET(request: Request) {
     action: `${origin}/api/forms/submissions`,
     copy: runtimeCopy,
     form: toPublicFormDto(form),
+    proofRefreshUrl: `${origin}/api/forms/submission-proof`,
     publicKey,
     returnTo: persisted.publicPath ?? `/forms/${encodeURIComponent(publicKey)}`,
     source: "website",
@@ -108,6 +117,8 @@ function createEmbedScript({
   var currentScript = document.currentScript;
   var formId = ${JSON.stringify(formId)};
   var variant = ${JSON.stringify(variant)};
+  var proofFields = ${JSON.stringify(publicSubmissionControlFields)};
+  var proofRefreshLeadSeconds = ${publicSubmissionProofRefreshLeadSeconds};
   var host = currentScript && currentScript.parentElement ? currentScript.parentElement : document.body;
   var container = document.createElement("div");
   container.setAttribute("data-novalure-form", formId);
@@ -137,10 +148,90 @@ function createEmbedScript({
     setHiddenValue(form, "referrer", document.referrer || "");
     var steps = Array.prototype.slice.call(form.querySelectorAll("[data-step-index]"));
     var currentStep = 0;
+    var proofRefreshPromise = null;
+    var proofRefreshTimer = null;
 
     function setHiddenValue(formElement, name, value) {
       var input = formElement.querySelector("input[name='" + name + "']");
       if (input) input.value = value;
+    }
+
+    function getHiddenValue(formElement, name) {
+      var input = formElement.querySelector("input[name='" + name + "']");
+      return input ? input.value : "";
+    }
+
+    function setProofRefreshError(visible) {
+      var error = form.querySelector("[data-novalure-proof-refresh-error]");
+      if (error) error.toggleAttribute("hidden", !visible);
+    }
+
+    function proofNeedsRefresh() {
+      var expiresAt = Number(getHiddenValue(form, proofFields.expiresAt));
+      return !Number.isFinite(expiresAt) ||
+        expiresAt - proofRefreshLeadSeconds <= Math.floor(Date.now() / 1000);
+    }
+
+    function scheduleProofRefresh() {
+      if (proofRefreshTimer) window.clearTimeout(proofRefreshTimer);
+      var expiresAt = Number(getHiddenValue(form, proofFields.expiresAt));
+      if (!Number.isFinite(expiresAt)) return;
+      var refreshAt = (expiresAt - proofRefreshLeadSeconds) * 1000;
+      var delay = Math.max(0, Math.min(2147483647, refreshAt - Date.now()));
+      proofRefreshTimer = window.setTimeout(function () {
+        refreshProof().catch(function () {});
+      }, delay);
+    }
+
+    function installProof(proof, expectedIdempotencyKey) {
+      if (!proof || typeof proof !== "object" ||
+        proof.idempotencyKey !== expectedIdempotencyKey ||
+        !Number.isSafeInteger(proof.issuedAt) ||
+        !Number.isSafeInteger(proof.expiresAt) ||
+        typeof proof.signature !== "string") {
+        throw new Error("submission_proof_refresh_invalid");
+      }
+      setHiddenValue(form, proofFields.idempotencyKey, proof.idempotencyKey);
+      setHiddenValue(form, proofFields.issuedAt, String(proof.issuedAt));
+      setHiddenValue(form, proofFields.expiresAt, String(proof.expiresAt));
+      setHiddenValue(form, proofFields.proof, proof.signature);
+      setProofRefreshError(false);
+      scheduleProofRefresh();
+      return proof;
+    }
+
+    function refreshProof() {
+      if (proofRefreshPromise) return proofRefreshPromise;
+      var refreshUrl = form.getAttribute("data-novalure-proof-refresh-url");
+      var idempotencyKey = getHiddenValue(form, proofFields.idempotencyKey);
+      if (!refreshUrl || !idempotencyKey) {
+        return Promise.reject(new Error("submission_proof_refresh_unavailable"));
+      }
+      var body = new URLSearchParams();
+      body.set("form", formId);
+      body.set(proofFields.idempotencyKey, idempotencyKey);
+      body.set(proofFields.issuedAt, getHiddenValue(form, proofFields.issuedAt));
+      body.set(proofFields.expiresAt, getHiddenValue(form, proofFields.expiresAt));
+      body.set(proofFields.proof, getHiddenValue(form, proofFields.proof));
+      proofRefreshPromise = fetch(refreshUrl, {
+        body: body,
+        cache: "no-store",
+        credentials: "omit",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        },
+        method: "POST",
+        mode: "cors"
+      }).then(function (response) {
+        if (!response.ok) throw new Error("submission_proof_refresh_failed");
+        return response.json();
+      }).then(function (payload) {
+        return installProof(payload && payload.proof, idempotencyKey);
+      }).finally(function () {
+        proofRefreshPromise = null;
+      });
+      return proofRefreshPromise;
     }
 
     function getFieldValue(fieldId) {
@@ -252,9 +343,19 @@ function createEmbedScript({
         event.preventDefault();
         setStep(firstInvalid);
         validateStep(steps[firstInvalid], true);
+        return;
       }
+      if (!proofNeedsRefresh()) return;
+      event.preventDefault();
+      setProofRefreshError(false);
+      refreshProof().then(function () {
+        form.requestSubmit();
+      }).catch(function () {
+        setProofRefreshError(true);
+      });
     });
     setStep(0);
+    scheduleProofRefresh();
   }
 })();`;
 

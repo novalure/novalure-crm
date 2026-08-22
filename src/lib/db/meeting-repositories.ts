@@ -30,6 +30,7 @@ import {
   resolveBookingCorrelationId,
   zonedDateTimeToUtc,
 } from "@/lib/meetings/booking-lifecycle";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { escapeHtmlText } from "@/lib/security/public-submission-abuse";
 
 export type MeetingPageSettings = {
@@ -871,6 +872,8 @@ async function queueMeetingNotificationJob(input: {
   tokens: Record<string, string>;
   workspaceId: string;
 }) {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) return null;
+
   const row = await queryOne<IdRow>(
     `
       insert into meeting_notification_jobs (
@@ -2171,6 +2174,9 @@ export async function retryMeetingNotificationJob(input: {
   notificationId: string;
   session: AppSession;
 }): Promise<{ error?: string; jobId?: string; ok: boolean }> {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return { error: "customer_communication_provider_launch_off", ok: false };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.notificationId)) {
     return { error: "invalid_notification", ok: false };
   }
@@ -2396,6 +2402,11 @@ export async function confirmMeetingBooking(input: {
   syncId?: string | null;
   webLink?: string | null;
 }> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return { error: "calendar_provider_mutation_launch_off", ok: false, status: launchScope.code };
+  }
+
   if (!hasDatabaseUrl()) return { error: "DATABASE_URL is not configured", ok: false };
   if (!isUuid(input.session.workspaceId) || !isUuid(input.bookingId)) {
     return { error: "Invalid booking", ok: false };
@@ -2793,6 +2804,7 @@ export async function claimMeetingNotificationJob(input: {
   id: string;
   leaseOwner: string;
 }): Promise<MeetingNotificationJob | null> {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) return null;
   if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
 
   const row = await queryOne<MeetingNotificationJobRow>(
@@ -2849,6 +2861,7 @@ export async function markMeetingNotificationJobSent(input: {
   messageId?: string | null;
   provider: string;
 }) {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) return;
   if (!hasDatabaseUrl() || !isUuid(input.id)) return;
 
   await queryOne<IdRow>(

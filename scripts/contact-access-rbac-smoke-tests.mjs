@@ -63,7 +63,10 @@ test("contact writes persist and enforce owner assignment", () => {
   const repo = readText("src/lib/db/crm-write-repositories.ts");
   const commandCenter = readText("src/components/contact-command-center.tsx");
 
-  assert.match(route, /permission: "crm:read"/);
+  assert.equal(
+    route.match(/resolveWorkspaceScopedSession\(request, \{ permission: "crm:write" \}\)/g)?.length,
+    2,
+  );
   assert.match(repo, /canWriteContacts\(input\.session\)/);
   assert.match(repo, /canAssignContactOwner\(input\.session\)/);
   assert.match(repo, /Contact can only be changed by the assigned owner/);

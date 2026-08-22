@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { archiveContactRecord, upsertContactRecord } from "@/lib/db/crm-write-repositories";
+import {
+  qaBatchRuntimeErrorResponse,
+  qaBatchSuccessHeaders,
+  readQaBatchMutationHeader,
+} from "@/lib/qa-batch-runtime";
 
 async function readJson(request: Request) {
   try {
@@ -12,6 +17,8 @@ async function readJson(request: Request) {
 
 function getWriteErrorStatus(reason: string) {
   const normalizedReason = reason.toLowerCase();
+
+  if (normalizedReason.includes("conflict")) return 409;
 
   if (
     reason.includes("required") ||
@@ -55,8 +62,15 @@ function withContactIdFromRequest(request: Request, contact: Record<string, unkn
 }
 
 export async function POST(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -65,18 +79,33 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
-  const result = await upsertContactRecord({ contact, session: auth.session });
+  let result;
+  try {
+    result = await upsertContactRecord({ contact, qaBatchId: qaBatchId ?? undefined, session: auth.session });
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Contact could not be saved" }, { status: 503 });
+  }
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
   }
 
-  return NextResponse.json({ contact: result.data, persisted: true });
+  return NextResponse.json(
+    { contact: result.data, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }
 
 export async function PATCH(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -85,35 +114,60 @@ export async function PATCH(request: Request) {
 
   const input = body as Record<string, unknown>;
   if (input.action === "archive") {
-    const result = await archiveContactRecord({
-      contactId: getContactIdFromRequest(request, input),
-      session: auth.session,
-    });
+    let result;
+    try {
+      result = await archiveContactRecord({
+        contactId: getContactIdFromRequest(request, input),
+        qaBatchId: qaBatchId ?? undefined,
+        session: auth.session,
+      });
+    } catch (error) {
+      return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Contact could not be archived" }, { status: 503 });
+    }
 
     if (!result.persisted) {
       return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
     }
 
-    return NextResponse.json({ archived: true, contactId: result.data.id, persisted: true });
+    return NextResponse.json(
+      { archived: true, contactId: result.data.id, persisted: true },
+      { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+    );
   }
 
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
-  const result = await upsertContactRecord({
-    contact: withContactIdFromRequest(request, contact),
-    requireExisting: true,
-    session: auth.session,
-  });
+  let result;
+  try {
+    result = await upsertContactRecord({
+      contact: withContactIdFromRequest(request, contact),
+      qaBatchId: qaBatchId ?? undefined,
+      requireExisting: true,
+      session: auth.session,
+    });
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Contact could not be saved" }, { status: 503 });
+  }
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
   }
 
-  return NextResponse.json({ contact: result.data, persisted: true });
+  return NextResponse.json(
+    { contact: result.data, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }
 
 export async function DELETE(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "settings:manage" });
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   let body: Record<string, unknown> | null = null;
   if (request.headers.get("content-type")?.includes("application/json")) {
@@ -124,14 +178,23 @@ export async function DELETE(request: Request) {
     body = payload as Record<string, unknown>;
   }
 
-  const result = await archiveContactRecord({
-    contactId: getContactIdFromRequest(request, body),
-    session: auth.session,
-  });
+  let result;
+  try {
+    result = await archiveContactRecord({
+      contactId: getContactIdFromRequest(request, body),
+      qaBatchId: qaBatchId ?? undefined,
+      session: auth.session,
+    });
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? NextResponse.json({ error: "Contact could not be archived" }, { status: 503 });
+  }
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
   }
 
-  return NextResponse.json({ archived: true, contactId: result.data.id, persisted: true });
+  return NextResponse.json(
+    { archived: true, contactId: result.data.id, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }

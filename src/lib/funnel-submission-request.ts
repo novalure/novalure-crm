@@ -1,5 +1,8 @@
 import type { FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
+import { sanitizeFunnelSubmissionSourceUrl } from "./funnel-submission-url.js";
+
+export { sanitizeFunnelSubmissionSourceUrl } from "./funnel-submission-url.js";
 
 export function buildFunnelSubmissionRequest(input: {
   answers: FunnelSubmissionPayload["answers"];
@@ -32,8 +35,11 @@ export function buildFunnelSubmissionRequest(input: {
     endpoint: `/api/funnels/${encodeURIComponent(input.funnelId)}/submissions`,
     init: {
       body: JSON.stringify(payload),
+      cache: "no-store",
+      credentials: "omit",
       headers: { "content-type": "application/json" },
       method: "POST",
+      referrerPolicy: "no-referrer",
     } satisfies RequestInit,
   };
 }
@@ -58,24 +64,5 @@ export function clearFunnelSubmissionIntentId(funnelId: string) {
     window.sessionStorage.removeItem(`novalure:funnel-submission-intent:${funnelId}`);
   } catch {
     // A successful submission remains durable even when browser storage is unavailable.
-  }
-}
-
-function sanitizeFunnelSubmissionSourceUrl(value: string | undefined) {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    for (const key of Array.from(url.searchParams.keys())) {
-      const normalized = key.toLowerCase().replace(/[^a-z]/gu, "");
-      if (normalized === "token" || normalized === "publishtoken" || normalized === "publictoken") {
-        url.searchParams.delete(key);
-      }
-    }
-    url.hash = "";
-    url.password = "";
-    url.username = "";
-    return url.toString();
-  } catch {
-    return undefined;
   }
 }

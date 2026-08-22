@@ -149,9 +149,42 @@ test("write routes require server-side technical permission and product access g
     assert.match(route, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "pipeline:write" \}\)/);
   }
 
-  assert.match(contactsRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:read" \}\)/);
+  const contactWriteGuards = contactsRoute.match(
+    /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write" \}\)/g,
+  ) ?? [];
+  assert.equal(contactWriteGuards.length, 2, "contact POST and PATCH both require crm:write");
   assert.match(contactsRoute, /upsertContactRecord/);
   assert.match(tasksRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "workspace:operate" \}\)/);
   assert.match(newsletterRoute, /requirePermissionAndProductCapability\(request, "newsletter:send", "newsletter:send"\)/);
   assert.match(newsletterRoute, /evaluateOutboundConsent/);
+});
+
+test("read-only assistants are rejected before every contact mutation repository call", () => {
+  const contactsRoute = readText("src/app/api/crm/contacts/route.ts");
+  const permissions = readText("src/lib/auth/permissions.ts");
+  const assistantPermissions = permissions.match(/assistant:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const agentPermissions = permissions.match(/agent:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const adminPermissions = permissions.match(/admin:\s*\[([\s\S]*?)\],\s*agent:/)?.[1] ?? "";
+
+  assert.doesNotMatch(assistantPermissions, /crm:write/);
+  assert.match(agentPermissions, /crm:write/);
+  assert.match(adminPermissions, /crm:write/);
+
+  const post = contactsRoute.slice(
+    contactsRoute.indexOf("export async function POST"),
+    contactsRoute.indexOf("export async function PATCH"),
+  );
+  const patch = contactsRoute.slice(
+    contactsRoute.indexOf("export async function PATCH"),
+    contactsRoute.indexOf("export async function DELETE"),
+  );
+  for (const [name, handler] of [["POST", post], ["PATCH", patch]]) {
+    const guard = handler.indexOf('permission: "crm:write"');
+    const rejection = handler.indexOf("if (!auth.ok) return auth.response");
+    assert.ok(guard >= 0 && guard < rejection, `${name} requires crm:write before rejecting`);
+    for (const repositoryCall of ["upsertContactRecord({", "archiveContactRecord({"]) {
+      const call = handler.indexOf(repositoryCall);
+      if (call >= 0) assert.ok(rejection < call, `${name} rejects before ${repositoryCall}`);
+    }
+  }
 });

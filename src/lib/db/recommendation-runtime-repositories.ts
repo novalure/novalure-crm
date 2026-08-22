@@ -12,6 +12,7 @@ import { upsertTaskRecord } from "@/lib/db/crm-write-repositories";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { queueTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type IdRow = { id: string };
 type CountRow = { count: number | string };
@@ -1025,6 +1026,11 @@ export async function upsertViewingSlot(input: {
   status?: string | null;
   unitId?: string | null;
 }) {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return { persisted: false as const, reason: launchScope.code };
+  }
+
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false as const, reason: "DATABASE_URL is not configured" };
   }
@@ -1223,6 +1229,11 @@ export async function upsertOfferMilestone(input: {
   status?: string | null;
   unitId?: string | null;
 }) {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return { persisted: false as const, reason: launchScope.code };
+  }
+
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false as const, reason: "DATABASE_URL is not configured" };
   }
@@ -2573,6 +2584,11 @@ async function completeInventoryOperationalProof(input: {
   projectId?: string | null;
   session: AppSession;
 }) {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    throw new Error(launchScope.code);
+  }
+
   const projectId = normalizeUuid(input.projectId);
   const projects = await queryRows<ProjectOperationalRow>(
     `
@@ -3346,6 +3362,11 @@ export async function runAnalysisBotRecommendationCompletion(input: {
   projectId?: string | null;
   session: AppSession;
 }) {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return { persisted: false as const, reason: launchScope.code };
+  }
+
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false as const, reason: "DATABASE_URL is not configured" };
   }

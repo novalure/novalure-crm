@@ -10,6 +10,7 @@ import {
   getMicrosoftCalendarProviderStatus,
   syncMicrosoftCalendarEvent,
 } from "@/lib/integrations/microsoft-calendar";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const maxDuration = 60;
 
@@ -39,17 +40,16 @@ export async function GET(request: Request) {
     limit: getLimit(url),
     status: url.searchParams.get("status"),
   });
-  const providerConnection = await upsertProviderConnection({
-    session: auth.session,
-    provider: "microsoft-365",
-    status: provider.configured ? "connected" : "not_configured",
+  const providerConnection = {
     accountLabel: provider.accountLabel,
-    scopes: provider.scopes,
     config: {
-      mode: provider.mode,
       external: provider.external,
+      mode: provider.mode,
     },
-  });
+    provider: "microsoft-365",
+    scopes: provider.scopes,
+    status: provider.configured ? "connected" : "not_configured",
+  } as const;
 
   return Response.json({
     source: "database",
@@ -71,6 +71,22 @@ export async function POST(request: Request) {
   const auth = await requirePermissionAndProductCapability(request, "calendar:sync", "calendar:manage");
 
   if (!auth.ok) return auth.response;
+
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+
+  if (!launchScope.allowed) {
+    return Response.json(
+      {
+        code: launchScope.code,
+        decision: launchScope.decision,
+        error: "calendar_provider_mutation_launch_off",
+      },
+      {
+        headers: { "Cache-Control": "private, no-store" },
+        status: 503,
+      },
+    );
+  }
 
   const body = await readJson(request);
 

@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import type { TenantTransaction } from "@/lib/db/tenant-client";
 
 export const crmAnalyticsEventTypes = [
   "lead_created",
@@ -83,6 +84,7 @@ export async function writeCrmAnalyticsEvent(input: {
   userId?: string | null;
   valueCents?: number | string | null;
   workspaceId?: string | null;
+  transaction?: TenantTransaction;
 }) {
   if (!hasDatabaseUrl() || !isUuid(input.workspaceId)) return null;
 
@@ -97,8 +99,7 @@ export async function writeCrmAnalyticsEvent(input: {
   const valueCents = normalizeInteger(input.valueCents);
 
   try {
-    const row = await queryOne<IdRow>(
-      `
+    const sql = `
         insert into analytics_events (
           workspace_id,
           project_id,
@@ -136,34 +137,40 @@ export async function writeCrmAnalyticsEvent(input: {
           $16::jsonb
         )
         returning id
-      `,
-      [
-        input.workspaceId,
-        normalizeUuid(input.projectId),
-        entityId,
-        entityType || null,
-        normalizeUuid(input.userId),
-        normalizeUuid(input.contactId),
-        normalizeUuid(input.leadId),
-        normalizeUuid(input.dealId),
-        normalizeUuid(input.funnelId),
-        eventType,
-        eventModule || null,
-        cleanString(input.source) || null,
-        cleanString(input.channel) || null,
-        valueCents,
-        occurredAt,
-        JSON.stringify({
-          ...metadata,
-          analyticsVersion: 1,
-          entityId: entityId ?? metadata.entityId ?? null,
-          entityType: entityType || metadata.entityType || null,
-        }),
-      ],
-    );
+      `;
+    const params = [
+      input.workspaceId,
+      normalizeUuid(input.projectId),
+      entityId,
+      entityType || null,
+      normalizeUuid(input.userId),
+      normalizeUuid(input.contactId),
+      normalizeUuid(input.leadId),
+      normalizeUuid(input.dealId),
+      normalizeUuid(input.funnelId),
+      eventType,
+      eventModule || null,
+      cleanString(input.source) || null,
+      cleanString(input.channel) || null,
+      valueCents,
+      occurredAt,
+      JSON.stringify({
+        ...metadata,
+        analyticsVersion: 1,
+        entityId: entityId ?? metadata.entityId ?? null,
+        entityType: entityType || metadata.entityType || null,
+      }),
+    ];
+    const row = input.transaction
+      ? await input.transaction.queryOne<IdRow>(sql, params)
+      : await queryOne<IdRow>(
+          sql,
+          params,
+        );
 
     return row?.id ?? null;
-  } catch {
+  } catch (error) {
+    if (input.transaction) throw error;
     return null;
   }
 }

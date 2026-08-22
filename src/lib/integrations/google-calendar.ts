@@ -1,4 +1,9 @@
-import { getCalendarAccessToken } from "@/lib/integrations/calendar-connections";
+import {
+  calendarProviderReadUnavailableCode,
+  getCalendarAccessToken,
+  getCalendarReadAccessToken,
+} from "@/lib/integrations/calendar-connections";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { createProviderEventKey } from "@/lib/meetings/booking-lifecycle";
 
 export type GoogleCalendarResult = {
@@ -61,6 +66,15 @@ export async function syncGoogleCalendarEvent(input: {
   timeZone?: string;
   workspaceId: string;
 }): Promise<GoogleCalendarResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const accessToken = await getCalendarAccessToken({
     provider: "google",
     workspaceId: input.workspaceId,
@@ -177,11 +191,11 @@ export async function listGoogleBusyTimes(input: {
   timeZone?: string;
   workspaceId: string;
 }): Promise<BusyTimeRange[]> {
-  const accessToken = await getCalendarAccessToken({
+  const accessToken = await getCalendarReadAccessToken({
     provider: "google",
     workspaceId: input.workspaceId,
   });
-  if (!accessToken) throw new Error("Google calendar is not connected");
+  if (!accessToken) throw new Error(calendarProviderReadUnavailableCode);
 
   const response = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     body: JSON.stringify({
@@ -214,6 +228,16 @@ export async function updateGoogleCalendarEvent(input: {
   timeZone?: string;
   workspaceId: string;
 }): Promise<GoogleCalendarMutationResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      eventId: input.eventId,
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const accessToken = await getCalendarAccessToken({
     provider: "google",
     workspaceId: input.workspaceId,
@@ -284,6 +308,16 @@ export async function deleteGoogleCalendarEvent(input: {
   eventId: string;
   workspaceId: string;
 }): Promise<GoogleCalendarMutationResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      eventId: input.eventId,
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const accessToken = await getCalendarAccessToken({
     provider: "google",
     workspaceId: input.workspaceId,

@@ -4,11 +4,16 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { FunnelRenderer } from "@/components/funnel-renderer";
 import { getSessionFromHeaders } from "@/lib/auth/session";
-import { canUsePublicLiveFunnel } from "@/lib/funnel-public-access";
+import {
+  canUsePublicLiveFunnel,
+  getStoredFunnelPublicationRevision,
+  getStoredFunnelSubmissionScopeResourceId,
+} from "@/lib/funnel-public-access";
 import { toPublicFunnelDto } from "@/lib/funnel-public-dto";
 import { getStoredFunnel, type StoredFunnel } from "@/lib/funnel-store";
 import type { FunnelDevice } from "@/lib/funnel-schema";
 import { getFunnelDeviceLabel, getFunnelPreviewCopy, resolveLanguage } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { hasProductCapability } from "@/lib/product-model";
 import {
   buildPublicSubmissionScope,
@@ -17,6 +22,7 @@ import {
 } from "@/lib/security/public-submission-abuse";
 
 export const metadata: Metadata = {
+  referrer: "no-referrer",
   robots: { follow: false, index: false },
 };
 
@@ -47,6 +53,9 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
     }
     stored = await getStoredFunnel(funnelId, session.workspaceId);
   } else {
+    // Fail closed before the public request can read funnel data or receive a
+    // submission proof when publication is disabled during a launch incident.
+    if (!evaluateLaunchScope("publicFunnelPublication").allowed) notFound();
     stored = await getStoredFunnel(funnelId);
     if (!stored || !canUsePublicLiveFunnel({ blueprint: stored.blueprint, stored, token: query.token })) {
       notFound();
@@ -65,7 +74,10 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
     ? createPublicSubmissionProof({
         action: publicSubmissionActions.funnel,
         scope: buildPublicSubmissionScope({
-          resourceId: stored.funnelId,
+          resourceId: getStoredFunnelSubmissionScopeResourceId({
+            funnelId: stored.funnelId,
+            storedTracking: stored.tracking,
+          }),
           resourceType: "funnel",
           workspaceId: stored.workspaceId,
         }),
@@ -106,9 +118,12 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
       <FunnelRenderer
         blueprint={publicFunnel}
         device={device}
+        key={`${publicFunnel.id}:publication:${mode === "live" ? getStoredFunnelPublicationRevision(stored?.tracking) : "test"}`}
         language={language}
         mode={mode}
+        publicationRevision={mode === "live" ? getStoredFunnelPublicationRevision(stored?.tracking) : undefined}
         submissionProof={submissionProof}
+        visitTrackingEnabled={mode === "live" && evaluateLaunchScope("publicFunnelVisit").allowed}
       />
     </main>
   );

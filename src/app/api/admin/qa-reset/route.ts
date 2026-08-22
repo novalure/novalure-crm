@@ -12,6 +12,7 @@ import {
   type QaResetRequest,
 } from "@/lib/qa-reset-contract";
 import { enforceCsrfForSession } from "@/lib/security/csrf";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,10 @@ export async function POST(request: Request) {
   const csrf = await enforceCsrfForSession(request, session);
   if (!csrf.ok) return csrf.response;
 
+  if (!evaluateLaunchScope("qaReset", session).allowed) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
   if (!canAdministerQaReset(session)) {
     return json({ error: "Forbidden" }, 403);
   }
@@ -92,6 +97,7 @@ export async function POST(request: Request) {
       actorId: session.userId,
       allowlistedWorkspaceIds,
       batchId: parsedRequest.batchId,
+      expectedPlanDigest: parsedRequest.expectedPlanDigest,
       mode: parsedRequest.mode,
       workspaceId: parsedRequest.workspaceId,
     });
@@ -118,9 +124,11 @@ export async function POST(request: Request) {
         (error.code === "qa_allowlist_not_configured" ||
           error.code === "qa_allowlist_too_small" ||
           error.code === "qa_production_allowlist_overlap");
+      const planConflict =
+        error instanceof QaResetGuardError && error.code === "plan_digest_mismatch";
       return json(
         { code: error.code, error: configurationError ? "QA reset is not safely configured" : "QA reset rejected" },
-        configurationError ? 503 : 403,
+        configurationError ? 503 : planConflict ? 409 : 403,
       );
     }
 

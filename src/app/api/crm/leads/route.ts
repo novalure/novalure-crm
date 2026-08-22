@@ -19,6 +19,7 @@ function getLeadWriteStatus(reason: string) {
     normalizedReason.includes("only be changed")
   ) return 403;
   if (reason.includes("not found")) return 404;
+  if (normalizedReason.includes("conflict")) return 409;
   if (
     reason.includes("required") ||
     reason.includes("Invalid") ||

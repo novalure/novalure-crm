@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { hasDatabaseUrl } from "@/lib/db/client";
 import { insertNewsletterSend, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type NotificationInput = {
   body?: string;
@@ -96,6 +97,13 @@ function textToEmailHtml(input: { body: string; title: string }) {
 }
 
 export async function POST(request: Request) {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return NextResponse.json(
+      { error: "customer_communication_provider_launch_off", external: false, ok: false },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   const auth = await requirePermission(request, "newsletter:send");
   if (!auth.ok) return auth.response;
 
@@ -192,12 +200,14 @@ export async function POST(request: Request) {
       subject,
       workspaceId: auth.session.workspaceId,
     }),
+    purpose: "meeting_qa_test",
     subject,
     to,
   });
 
   const sendId = await insertNewsletterSend({
     session: auth.session,
+    deliveryPurpose: "meeting_qa_test",
     provider: result.provider,
     providerMessageId: result.messageId ?? null,
     toEmail: to,

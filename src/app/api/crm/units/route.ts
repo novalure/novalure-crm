@@ -11,6 +11,7 @@ import {
   validateInventoryInput,
   type InventoryOperation,
 } from "@/lib/inventory-validation";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 const propertyUnitStatuses: PropertyUnitStatus[] = ["available", "reserved", "sold", "blocked"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -97,6 +98,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid inventory operation" }, { status: 400 });
   }
   const operation: InventoryOperation = operationValue;
+  const requestedStatus = typeof input.status === "string" ? input.status.trim() : "";
+  if (operation === "unit" && requestedStatus && requestedStatus !== "available") {
+    const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+    if (!launchScope.allowed) {
+      return NextResponse.json(
+        { code: launchScope.code, error: "property_relationship_mutation_launch_off", persisted: false },
+        { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+      );
+    }
+  }
   if (operation === "unit" && ("price" in input || "priceCents" in input)) {
     return NextResponse.json(
       { error: "Unit prices must be sent as priceEuros; price and priceCents are not accepted" },

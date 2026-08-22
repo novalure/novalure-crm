@@ -177,6 +177,7 @@ export async function POST(request: Request) {
           session: auth.session,
           campaignId,
           contactId: consentDecision.contactId ?? (typeof input.contactId === "string" ? input.contactId : null),
+          deliveryPurpose: "newsletter",
           provider: provider.provider,
           providerMessageId: null,
           toEmail: recipient,
@@ -214,6 +215,7 @@ export async function POST(request: Request) {
         to: recipient,
         subject,
         html: withRecipientUnsubscribeUrl(html, unsubscribeUrl),
+        purpose: "newsletter",
         idempotencyKey:
           typeof input.idempotencyKey === "string"
             ? `${input.idempotencyKey}:${recipient}`
@@ -224,6 +226,7 @@ export async function POST(request: Request) {
         session: auth.session,
         campaignId,
         contactId: consentDecision.contactId ?? (typeof input.contactId === "string" ? input.contactId : null),
+        deliveryPurpose: "newsletter",
         provider: result.provider,
         providerMessageId: result.messageId ?? null,
         toEmail: recipient,

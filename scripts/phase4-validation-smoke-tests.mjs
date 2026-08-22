@@ -19,13 +19,15 @@ test("CRM write repositories validate core negative inputs server-side", () => {
   assert.match(repo, /validateEmailInput\(input\.contact\.email\)/);
 });
 
-test("contact writes reject duplicate active email addresses", () => {
+test("contact writes serialize and reject duplicate active email or phone identities", () => {
   const repo = readText("src/lib/db/crm-write-repositories.ts");
 
   assert.match(repo, /Duplicate contact email/);
-  assert.match(repo, /lower\(email\) = lower\(\$2\)/);
+  assert.match(repo, /pg_advisory_xact_lock/);
+  assert.match(repo, /lower\(btrim\(email\)\) = \$2::text/);
+  assert.match(repo, /regexp_replace\(coalesce\(phone, ''\), '\[\^0-9\+\]', '', 'g'\) = \$3::text/);
   assert.match(repo, /archived_at is null/);
-  assert.match(repo, /id <> \$3::uuid/);
+  assert.match(repo, /id <> \$4::uuid/);
 });
 
 test("CRM API routes map validation failures to non-silent client errors", () => {

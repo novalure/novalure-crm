@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { canArchiveCrmObject } from "@/lib/auth/delete-permissions";
 import type {
@@ -22,6 +23,7 @@ import {
   canViewAllWorkspaceContacts,
   canWriteContacts,
 } from "@/lib/contact-access";
+import { resolveContactIdentityMutation } from "@/lib/contact-identity-mutation";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { syncBrokerEntityForLead } from "@/lib/db/broker-entity-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
@@ -29,8 +31,23 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { queueDealStageChangeGoogleNotification } from "@/lib/db/google-notification-repositories";
 import { ensureProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
+import {
+  assertQaBatchForMutation,
+  assertQaBatchOwnsObject,
+  registerQaBatchObjects,
+  registerQaBatchObjectsWithOwnershipGuard,
+} from "@/lib/db/qa-batch-registration-repository";
+import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
+import type { QaBatchRegistrationStatus } from "@/lib/qa-batch-runtime";
+import {
+  buildPublicContactIdentityLocks,
+  normalizePublicContactEmail,
+  normalizePublicContactPhone,
+  publicContactIdentityLockNamespace,
+} from "@/lib/security/public-contact-identity";
 import {
   isNovalureGrowthLeadSource,
   isNovalureGrowthWorkspace,
@@ -41,6 +58,16 @@ import {
 } from "@/lib/product-model";
 
 type IdRow = { id: string };
+
+function queryOneForWrite<Row extends Record<string, unknown>>(
+  transaction: TenantTransaction | undefined,
+  sql: string,
+  params: readonly unknown[],
+) {
+  return transaction
+    ? transaction.queryOne<Row>(sql, params)
+    : queryOne<Row>(sql, [...params]);
+}
 
 type CountRow = { count: number | string };
 
@@ -72,6 +99,7 @@ type DealRow = {
   riskLevel: Deal["riskLevel"];
   source: LeadSource;
   stage: DealStage;
+  updatedAt: string | Date;
   valueCents: number | string;
   wasInserted?: boolean;
   workspaceId: string;
@@ -130,6 +158,7 @@ type ContactRow = {
   projectId: string | null;
   role: Contact["role"];
   source: Contact["source"];
+  updatedAt: string | Date;
   workspaceId: string;
 };
 
@@ -157,6 +186,7 @@ type LeadRow = {
   source: Lead["source"];
   status: Lead["status"];
   type: Lead["type"];
+  updatedAt: string | Date;
   wasInserted?: boolean;
   workspaceId: string;
 };
@@ -178,6 +208,7 @@ type TaskRow = {
 
 type FunnelRow = {
   audience: Funnel["audience"];
+  blueprintRevision: number | string;
   conversionRate: number | string;
   entryChannel: Funnel["entryChannel"];
   goal: string;
@@ -187,6 +218,7 @@ type FunnelRow = {
   ownerUserId: string | null;
   projectId: string | null;
   status: Funnel["status"];
+  updatedAt: string | Date;
   visits: number | string;
   workspaceId: string;
 };
@@ -247,7 +279,7 @@ export type DashboardViewRecord = {
 };
 
 export type RepositoryWriteResult<T> =
-  | { data: T; persisted: true }
+  | { data: T; persisted: true; qaBatchRegistration?: QaBatchRegistrationStatus }
   | { persisted: false; reason: string };
 
 export type CrmNoteRecord = {
@@ -636,6 +668,7 @@ export async function upsertDealRecord(input: {
   allowHistoricalCloseDate?: boolean;
   deal: Partial<Deal>;
   idempotencyKey?: string;
+  qaBatchId?: string;
   requireExisting?: boolean;
   reason?: string;
   reasonCategory?: unknown;
@@ -715,6 +748,11 @@ export async function upsertDealRecord(input: {
   const idempotencyKey = cleanString(input.idempotencyKey) || null;
   const source = cleanString(input.deal.source) || existing?.source || contact?.source || "Manual";
   const name = cleanString(input.deal.name) || existing?.name || (contact ? `${contact.name} Deal` : "");
+  const organizationId = normalizeWriteProjectId(input.deal.organizationId) ?? existing?.organizationId ?? null;
+  const leadId = normalizeWriteProjectId(input.deal.leadId) ?? existing?.leadId ?? null;
+  const expectedCloseDate = normalizeDateOnly(input.deal.expectedCloseDate) || normalizeDateOnly(existing?.expectedCloseDate) || null;
+  const nextAction = cleanString(input.deal.nextAction) || existing?.nextAction || "Deal nächsten Schritt planen";
+  const legacyId = cleanString(input.deal.id) || null;
 
   if (!name || (!existing && !contactId)) {
     return { persisted: false, reason: "Deal name and contact are required" };
@@ -753,10 +791,47 @@ export async function upsertDealRecord(input: {
     }
   }
 
-  const row = existing
-    ? await queryOne<DealRow>(
+  const idempotencyRequestHash = !existing && idempotencyKey
+    ? hashSemanticWriteRequest({
+        closeState: closeState.data,
+        contactId,
+        expectedCloseDate,
+        historyReason: cleanString(input.reason) || null,
+        leadId,
+        legacyId,
+        name,
+        nextAction,
+        organizationId,
+        ownerUserId,
+        probability,
+        projectId,
+        riskLevel,
+        source,
+        stage,
+        valueCents,
+      })
+    : null;
+
+  const persistDeal = async (transaction: TenantTransaction) => {
+    if (input.qaBatchId) {
+      await assertQaBatchForMutation(transaction, {
+        batchId: input.qaBatchId,
+        workspaceId: input.session.workspaceId,
+      });
+      if (existing) {
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: input.qaBatchId,
+          object: { id: existing.id, type: "deals" },
+          workspaceId: input.session.workspaceId,
+        });
+      }
+    }
+
+    const row = existing
+    ? await queryOneForWrite<DealRow>(
+        transaction,
         `${dealUpdateSql}
-        where id = $1 and workspace_id = $2
+        where id = $1 and workspace_id = $2 and updated_at = $21::timestamptz
         returning
           id,
           workspace_id as "workspaceId",
@@ -776,31 +851,34 @@ export async function upsertDealRecord(input: {
           closed_at as "closedAt",
           risk_level as "riskLevel",
           source,
-          next_action as "nextAction"`,
+          next_action as "nextAction",
+          updated_at as "updatedAt"`,
         [
           existing.id,
           input.session.workspaceId,
           projectId,
           contactId,
-          normalizeWriteProjectId(input.deal.organizationId) ?? existing.organizationId,
+          organizationId,
           ownerUserId,
-          normalizeWriteProjectId(input.deal.leadId) ?? existing.leadId,
+          leadId,
           name,
           stage,
           valueCents,
           probability,
-          normalizeDateOnly(input.deal.expectedCloseDate) || normalizeDateOnly(existing.expectedCloseDate) || null,
+          expectedCloseDate,
           riskLevel,
           source,
-          cleanString(input.deal.nextAction) || existing.nextAction,
+          nextAction,
           JSON.stringify({ updatedFrom: "crm_pipeline", updatedByUserId: input.session.userId }),
           closeState.data.lostReasonCategory,
           closeState.data.lostReasonDetail,
           closeState.data.lostAt,
           closeState.data.closedAt,
+          existing.updatedAt,
         ],
       )
-    : await queryOne<DealRow>(
+    : await queryOneForWrite<DealRow>(
+        transaction,
         `
           insert into deals (
             workspace_id,
@@ -849,6 +927,7 @@ export async function upsertDealRecord(input: {
           on conflict (workspace_id, idempotency_key) where idempotency_key is not null
           do update set
             idempotency_key = deals.idempotency_key
+          where deals.metadata->>'idempotencyRequestHash' = $21
           returning
             id,
             workspace_id as "workspaceId",
@@ -869,92 +948,147 @@ export async function upsertDealRecord(input: {
             risk_level as "riskLevel",
             source,
             next_action as "nextAction",
+            updated_at as "updatedAt",
             (xmax = 0) as "wasInserted"
         `,
         [
           input.session.workspaceId,
           projectId,
           contactId,
-          normalizeWriteProjectId(input.deal.organizationId),
+          organizationId,
           ownerUserId,
-          normalizeWriteProjectId(input.deal.leadId),
+          leadId,
           name,
           stage,
           valueCents,
           probability,
-          normalizeDateOnly(input.deal.expectedCloseDate) || null,
+          expectedCloseDate,
           closeState.data.lostReasonCategory,
           closeState.data.lostReasonDetail,
           closeState.data.lostAt,
           closeState.data.closedAt,
           riskLevel,
           source,
-          cleanString(input.deal.nextAction) || "Deal nächsten Schritt planen",
-          JSON.stringify({ createdFrom: "crm_pipeline", legacyId: input.deal.id ?? null }),
+          nextAction,
+          JSON.stringify({
+            createdFrom: "crm_pipeline",
+            idempotencyRequestHash,
+            legacyId,
+          }),
           idempotencyKey,
+          idempotencyRequestHash,
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Deal could not be saved" };
+    if (!row) return null;
+
+    const idempotentReplay = !existing && row.wasInserted === false;
+    let history: DealStageHistoryEntry | null = null;
+
+    if (!idempotentReplay && (stageChanged || !existing)) {
+      history = await insertDealStageHistory({
+        dealId: row.id,
+        fromStage: existing?.stage ?? null,
+        projectId: row.projectId,
+        reason: input.reason,
+        reasonCategory: closeState.data.lostReasonCategory,
+        reasonDetail: closeState.data.lostReasonDetail,
+        session: input.session,
+        toStage: row.stage,
+        transaction,
+      });
+      if (!history) {
+        throw new Error("Deal stage history could not be saved");
+      }
+    }
+
+    const qaBatchRegistration = input.qaBatchId
+      ? await registerQaBatchObjectsWithOwnershipGuard(transaction, {
+          actorId: input.session.userId,
+          batchId: input.qaBatchId,
+          objects: [
+            { id: row.id, type: "deals" },
+            ...(history ? [{ id: history.id, type: "deal_stage_history" as const }] : []),
+          ],
+          preExistingObjects: existing || idempotentReplay
+            ? [{ id: row.id, type: "deals" }]
+            : [],
+          workspaceId: input.session.workspaceId,
+        })
+      : undefined;
+
+    if (!idempotentReplay) {
+      const savedDeal = toDeal(row);
+      await Promise.all([
+        writeAuditLog({
+          action: existing ? "deal.updated" : "deal.created",
+          after: savedDeal,
+          before: existing ? toDeal(existing) : null,
+          dealId: row.id,
+          entityId: row.id,
+          entityType: "deal",
+          projectId: row.projectId,
+          session: input.session,
+          transaction,
+        }),
+        recordAnalyticsEvent({
+          dealId: row.id,
+          entityId: row.id,
+          entityType: "deal",
+          eventType: stageChanged ? "deal_stage_changed" : existing ? "deal_updated" : "deal_created",
+          metadata: {
+            fromStage: existing?.stage ?? null,
+            reason: input.reason ?? null,
+            reasonCategory: closeState.data.lostReasonCategory,
+            stage: row.stage,
+          },
+          module: "pipeline",
+          projectId: row.projectId,
+          session: input.session,
+          source: row.source,
+          transaction,
+          valueCents,
+        }),
+        stageChanged || !existing
+          ? recordDealOutcomeAnalyticsEvent({
+              deal: row,
+              fromStage: existing?.stage ?? null,
+              reason: input.reason,
+              session: input.session,
+              transaction,
+              valueCents,
+            })
+          : null,
+      ]);
+    }
+
+    return { idempotentReplay, qaBatchRegistration, row };
+  };
+
+  const persistedDeal = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    persistDeal,
+  );
+
+  const row = persistedDeal?.row ?? null;
+  if (!row) {
+    return {
+      persisted: false,
+      reason: !existing && idempotencyKey
+        ? "Idempotency-Key conflicts with a different deal request"
+        : existing
+          ? "Concurrent deal update conflict"
+        : "Deal could not be saved",
+    };
+  }
 
   const savedDeal = toDeal(row);
-  const idempotentReplay = !existing && row.wasInserted === false;
 
-  if (!idempotentReplay && (stageChanged || !existing)) {
-    await insertDealStageHistory({
-      dealId: row.id,
-      fromStage: existing?.stage ?? null,
-      projectId: row.projectId,
-      reason: input.reason,
-      reasonCategory: closeState.data.lostReasonCategory,
-      reasonDetail: closeState.data.lostReasonDetail,
-      session: input.session,
-      toStage: row.stage,
-    });
-  }
-
-  if (!idempotentReplay) {
-    await Promise.all([
-      writeAuditLog({
-        action: existing ? "deal.updated" : "deal.created",
-        after: savedDeal,
-        before: existing ? toDeal(existing) : null,
-        dealId: row.id,
-        entityId: row.id,
-        entityType: "deal",
-        projectId: row.projectId,
-        session: input.session,
-      }),
-      recordAnalyticsEvent({
-        dealId: row.id,
-        entityId: row.id,
-        entityType: "deal",
-        eventType: stageChanged ? "deal_stage_changed" : existing ? "deal_updated" : "deal_created",
-        metadata: {
-          fromStage: existing?.stage ?? null,
-          reason: input.reason ?? null,
-          reasonCategory: closeState.data.lostReasonCategory,
-          stage: row.stage,
-        },
-        module: "pipeline",
-        projectId: row.projectId,
-        session: input.session,
-        source: row.source,
-        valueCents,
-      }),
-      stageChanged || !existing
-        ? recordDealOutcomeAnalyticsEvent({
-            deal: row,
-            fromStage: existing?.stage ?? null,
-            reason: input.reason,
-            session: input.session,
-            valueCents,
-          })
-        : null,
-    ]);
-  }
-
-  return { data: savedDeal, persisted: true };
+  return {
+    data: savedDeal,
+    persisted: true,
+    qaBatchRegistration: persistedDeal?.qaBatchRegistration,
+  };
 }
 
 export async function listDealStageHistory(input: {
@@ -1259,7 +1393,7 @@ export async function upsertTaskRecord(input: {
             status = $10,
             metadata = coalesce(metadata, '{}'::jsonb) || $11::jsonb,
             updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and updated_at = $26::timestamptz
           returning
             id,
             workspace_id as "workspaceId",
@@ -1957,9 +2091,11 @@ export async function upsertLeadRecord(input: {
   }
   const score = clampNumber(input.lead.score ?? existing?.score ?? 0, 0, 100);
   const idempotencyKey = cleanString(input.idempotencyKey) || null;
-  const receivedAt = cleanDateInput(input.lead.receivedAt) || toIso(existing?.receivedAt ?? null) || new Date().toISOString();
+  const requestedReceivedAt = cleanDateInput(input.lead.receivedAt) || null;
+  const requestedSlaDueAt = cleanDateInput(input.lead.slaDueAt) || null;
+  const receivedAt = requestedReceivedAt || toIso(existing?.receivedAt ?? null) || new Date().toISOString();
   const slaDueAt =
-    cleanDateInput(input.lead.slaDueAt) ||
+    requestedSlaDueAt ||
     toIso(existing?.slaDueAt ?? null) ||
     new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const manualFirstResponseAt = cleanDateInput(input.lead.lastContactAt);
@@ -1982,6 +2118,15 @@ export async function upsertLeadRecord(input: {
   const source = (explicitSource || existing?.source || contact?.source || "Manual") as Lead["source"];
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
+  const budget = cleanString(input.lead.budget) || existing?.budget || "";
+  const region = cleanString(input.lead.region) || existing?.region || "";
+  const objectType = cleanString(input.lead.objectType) || existing?.objectType || "";
+  const rooms = input.lead.rooms ?? existing?.rooms ?? null;
+  const areaSqm = input.lead.areaSqm ?? existing?.areaSqm ?? null;
+  const buyerProfile = input.lead.buyerProfile ?? existing?.buyerProfile ?? {};
+  const sellerProfile = input.lead.sellerProfile ?? existing?.sellerProfile ?? {};
+  const investorProfile = input.lead.investorProfile ?? existing?.investorProfile ?? {};
+  const legacyId = cleanString(input.lead.id) || null;
 
   const writeAccess = await assertRecordWriteAccess({
     entityLabel: "Lead",
@@ -1992,8 +2137,37 @@ export async function upsertLeadRecord(input: {
   });
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
-  const row = existing
-    ? await queryOne<LeadRow>(
+  const idempotencyRequestHash = !existing && idempotencyKey
+    ? hashSemanticWriteRequest({
+        areaSqm,
+        budget,
+        buyerProfile,
+        contactId,
+        hotStatus,
+        intent,
+        investorProfile,
+        lastContactAt,
+        legacyId,
+        nextAction,
+        nextContactAt,
+        objectType,
+        ownerUserId,
+        projectId,
+        receivedAt: requestedReceivedAt,
+        region,
+        rooms,
+        score,
+        sellerProfile,
+        slaDueAt: requestedSlaDueAt,
+        source,
+        status,
+        type,
+      })
+    : null;
+
+  const persistLead = async (transaction: TenantTransaction) => {
+    const row = existing
+    ? await transaction.queryOne<LeadRow>(
         `
           update leads
           set
@@ -2021,7 +2195,7 @@ export async function upsertLeadRecord(input: {
             investor_profile = $24::jsonb,
             metadata = metadata || $25::jsonb,
             updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and updated_at = $26::timestamptz
           returning ${leadReturningSql}
         `,
         [
@@ -2034,25 +2208,26 @@ export async function upsertLeadRecord(input: {
           type,
           status,
           score,
-          cleanString(input.lead.budget) || existing.budget || "",
+          budget,
           intent,
           nextAction,
           receivedAt,
           slaDueAt,
           lastContactAt,
           nextContactAt,
-          cleanString(input.lead.region) || existing.region || "",
-          cleanString(input.lead.objectType) || existing.objectType || "",
-          input.lead.rooms ?? existing.rooms ?? null,
-          input.lead.areaSqm ?? existing.areaSqm ?? null,
+          region,
+          objectType,
+          rooms,
+          areaSqm,
           hotStatus,
-          JSON.stringify(input.lead.buyerProfile ?? existing.buyerProfile ?? {}),
-          JSON.stringify(input.lead.sellerProfile ?? existing.sellerProfile ?? {}),
-          JSON.stringify(input.lead.investorProfile ?? existing.investorProfile ?? {}),
+          JSON.stringify(buyerProfile),
+          JSON.stringify(sellerProfile),
+          JSON.stringify(investorProfile),
           JSON.stringify({ updatedByUserId: input.session.userId }),
+          existing.updatedAt,
         ],
       )
-    : await queryOne<LeadRow>(
+    : await transaction.queryOne<LeadRow>(
         `
           insert into leads (
             workspace_id,
@@ -2111,6 +2286,7 @@ export async function upsertLeadRecord(input: {
           on conflict (workspace_id, idempotency_key) where idempotency_key is not null
           do update set
             idempotency_key = leads.idempotency_key
+          where leads.metadata->>'idempotencyRequestHash' = $26
           returning ${leadReturningSql}, (xmax = 0) as "wasInserted"
         `,
         [
@@ -2122,34 +2298,39 @@ export async function upsertLeadRecord(input: {
           type,
           status,
           score,
-          cleanString(input.lead.budget),
+          budget,
           intent,
           nextAction,
           receivedAt,
           slaDueAt,
-          cleanDateInput(input.lead.lastContactAt) || null,
-          cleanDateInput(input.lead.nextContactAt) || null,
-          cleanString(input.lead.region),
-          cleanString(input.lead.objectType),
-          input.lead.rooms ?? null,
-          input.lead.areaSqm ?? null,
+          manualFirstResponseAt || null,
+          nextContactAt,
+          region,
+          objectType,
+          rooms,
+          areaSqm,
           hotStatus,
-          JSON.stringify(input.lead.buyerProfile ?? {}),
-          JSON.stringify(input.lead.sellerProfile ?? {}),
-          JSON.stringify(input.lead.investorProfile ?? {}),
-          JSON.stringify({ createdFrom: "crm_lead_inbox", legacyId: input.lead.id ?? null }),
+          JSON.stringify(buyerProfile),
+          JSON.stringify(sellerProfile),
+          JSON.stringify(investorProfile),
+          JSON.stringify({
+            createdFrom: "crm_lead_inbox",
+            idempotencyRequestHash,
+            legacyId,
+          }),
           idempotencyKey,
+          idempotencyRequestHash,
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Lead could not be saved" };
+    if (!row) return null;
 
-  const savedLead = toLead(row);
-  const idempotentReplay = !existing && row.wasInserted === false;
-  const leadWasInserted = !existing && !idempotentReplay;
+    const savedLead = toLead(row);
+    const idempotentReplay = !existing && row.wasInserted === false;
+    const leadWasInserted = !existing && !idempotentReplay;
 
-  if (!idempotentReplay) {
-    await Promise.all([
+    if (!idempotentReplay) {
+      await Promise.all([
       writeAuditLog({
         action: existing ? "lead.updated" : "lead.created",
         after: savedLead,
@@ -2158,6 +2339,7 @@ export async function upsertLeadRecord(input: {
         entityType: "lead",
         projectId: row.projectId,
         session: input.session,
+        transaction,
       }),
       recordAnalyticsEvent({
         contactId: row.contactId,
@@ -2170,6 +2352,7 @@ export async function upsertLeadRecord(input: {
         projectId: row.projectId,
         session: input.session,
         source: row.source,
+        transaction,
       }),
       leadWasInserted
         ? recordSpeedToLeadEvent({
@@ -2189,6 +2372,7 @@ export async function upsertLeadRecord(input: {
             state: "covered",
             userId: input.session.userId,
             workspaceId: input.session.workspaceId,
+            transaction,
           })
         : null,
       existing && manualFirstResponseAt
@@ -2209,6 +2393,7 @@ export async function upsertLeadRecord(input: {
               source: row.source,
               userId: input.session.userId,
               workspaceId: input.session.workspaceId,
+              transaction,
             }),
             recordSpeedToLeadEvent({
               channel: row.source,
@@ -2225,11 +2410,33 @@ export async function upsertLeadRecord(input: {
               state: "covered",
               userId: input.session.userId,
               workspaceId: input.session.workspaceId,
+              transaction,
             }),
           ])
         : null,
-    ]);
+      ]);
+    }
+
+    return { idempotentReplay, row, savedLead };
+  };
+
+  const persistedLead = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    persistLead,
+  );
+
+  if (!persistedLead) {
+    return {
+      persisted: false,
+      reason: !existing && idempotencyKey
+        ? "Idempotency-Key conflicts with a different lead request"
+        : existing
+          ? "Concurrent lead update conflict"
+        : "Lead could not be saved",
+    };
   }
+
+  const { idempotentReplay, savedLead } = persistedLead;
 
   if (!idempotentReplay) {
     await syncBrokerEntityForLead({ lead: savedLead, session: input.session });
@@ -2240,6 +2447,7 @@ export async function upsertLeadRecord(input: {
 
 export async function upsertContactRecord(input: {
   contact: Partial<Contact>;
+  qaBatchId?: string;
   requireExisting?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Contact>> {
@@ -2277,25 +2485,15 @@ export async function upsertContactRecord(input: {
   if ((input.requireExisting || isUuid(input.contact.id)) && !existing) {
     return { persisted: false, reason: "Contact not found" };
   }
-  const normalizedEmail = cleanString(input.contact.email);
-  if (normalizedEmail) {
-    const duplicate = await queryOne<IdRow>(
-      `
-        select id
-        from contacts
-        where workspace_id = $1
-          and archived_at is null
-          and lower(email) = lower($2)
-          and ($3::uuid is null or id <> $3::uuid)
-        limit 1
-      `,
-      [input.session.workspaceId, normalizedEmail, existing?.id ?? null],
-    );
-
-    if (duplicate) {
-      return { persisted: false, reason: "Duplicate contact email" };
-    }
-  }
+  // PATCH is sparse: omitted identity fields retain their persisted values.
+  // An explicitly supplied empty/null value is the deliberate clear signal.
+  const { email, phone } = resolveContactIdentityMutation({
+    currentEmail: existing?.email,
+    currentPhone: existing?.phone,
+    patch: input.contact,
+  });
+  const normalizedEmail = normalizePublicContactEmail(email);
+  const normalizedPhone = normalizePublicContactPhone(phone);
 
   const resolvedProject = await resolveContactProjectId({
     existingProjectId: existing?.projectId ?? null,
@@ -2332,12 +2530,79 @@ export async function upsertContactRecord(input: {
   });
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
-  const name = cleanString(input.contact.name) || existing?.name || cleanString(input.contact.email) || cleanString(input.contact.phone);
+  const name = cleanString(input.contact.name) || existing?.name || email || phone;
 
   if (!name) return { persisted: false, reason: "Contact name, email or phone is required" };
 
-  const row = existing
-    ? await queryOne<ContactRow>(
+  const persistContact = async (transaction: TenantTransaction) => {
+    const identityLocks = [...new Set([
+      ...(normalizedEmail || normalizedPhone
+        ? buildPublicContactIdentityLocks({
+            email: normalizedEmail,
+            fallback: existing?.id ?? input.session.userId,
+            phone: normalizedPhone,
+          })
+        : []),
+      ...(existing?.email || existing?.phone
+        ? buildPublicContactIdentityLocks({
+            email: existing.email,
+            fallback: existing.id,
+            phone: existing.phone,
+          })
+        : []),
+    ])].sort();
+    for (const identityLock of identityLocks) {
+      // This is intentionally identical to the public Form/Funnel lock. Manual
+      // CRM and public writes therefore cannot race on either identity channel.
+      await transaction.execute(
+        "select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text, 0))",
+        [input.session.workspaceId, publicContactIdentityLockNamespace, identityLock],
+      );
+    }
+    if (normalizedEmail || normalizedPhone) {
+      const duplicate = await transaction.queryOne<IdRow>(
+        `
+          select id
+          from contacts
+          where workspace_id = $1::uuid
+            and archived_at is null
+            and (
+              ($2::text is not null and lower(btrim(email)) = $2::text)
+              or (
+                $3::text is not null
+                and regexp_replace(coalesce(phone, ''), '[^0-9+]', '', 'g') = $3::text
+              )
+            )
+            and ($4::uuid is null or id <> $4::uuid)
+          limit 1
+        `,
+        [
+          input.session.workspaceId,
+          normalizedEmail || null,
+          normalizedPhone || null,
+          existing?.id ?? null,
+        ],
+      );
+      if (duplicate) return { duplicate: true as const };
+    }
+
+    if (input.qaBatchId) {
+      await assertQaBatchForMutation(transaction, {
+        batchId: input.qaBatchId,
+        workspaceId: input.session.workspaceId,
+      });
+      if (existing) {
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: input.qaBatchId,
+          object: { id: existing.id, type: "contacts" },
+          workspaceId: input.session.workspaceId,
+        });
+      }
+    }
+
+    const row = existing
+      ? await queryOneForWrite<ContactRow>(
+          transaction,
         `
           update contacts c
           set
@@ -2354,6 +2619,8 @@ export async function upsertContactRecord(input: {
             metadata = metadata || $13::jsonb,
             updated_at = now()
           where c.id = $1 and c.workspace_id = $2
+            and c.archived_at is null
+            and c.updated_at = $14::timestamptz
           returning
             c.id,
             c.workspace_id as "workspaceId",
@@ -2367,7 +2634,8 @@ export async function upsertContactRecord(input: {
             c.consent_label as consent,
             c.email,
             c.phone,
-            (select name from projects p where p.id = c.project_id) as project
+            (select name from projects p where p.id = c.project_id) as project,
+            c.updated_at as "updatedAt"
         `,
         [
           existing.id,
@@ -2380,12 +2648,14 @@ export async function upsertContactRecord(input: {
           input.contact.source ?? existing.source,
           cleanString(input.contact.intent) || existing.intent,
           cleanString(input.contact.consent) || existing.consent,
-          cleanString(input.contact.email),
-          cleanString(input.contact.phone),
+          email,
+          phone,
           JSON.stringify({ updatedFrom: "crm_contacts", updatedByUserId: input.session.userId }),
+          existing.updatedAt,
         ],
-      )
-    : await queryOne<ContactRow>(
+        )
+      : await queryOneForWrite<ContactRow>(
+          transaction,
         `
           insert into contacts (
             workspace_id,
@@ -2415,7 +2685,8 @@ export async function upsertContactRecord(input: {
             consent_label as consent,
             email,
             phone,
-            (select name from projects p where p.id = contacts.project_id) as project
+            (select name from projects p where p.id = contacts.project_id) as project,
+            updated_at as "updatedAt"
         `,
         [
           input.session.workspaceId,
@@ -2427,47 +2698,86 @@ export async function upsertContactRecord(input: {
           input.contact.source ?? "Manual",
           cleanString(input.contact.intent) || "Manuell erfasst",
           cleanString(input.contact.consent) || "Nur CRM",
-          cleanString(input.contact.email),
-          cleanString(input.contact.phone),
+          email,
+          phone,
           JSON.stringify({ createdByUserId: input.session.userId, createdFrom: "crm_contacts", legacyId: input.contact.id ?? null }),
         ],
-      );
+        );
 
-  if (!row) return { persisted: false, reason: "Contact could not be saved" };
+    if (!row) return { duplicate: false as const, qaBatchRegistration: undefined, row: null };
 
-  await upsertConsentFromContact({
-    contact: row,
-    existingConsent: existing?.consent,
-    session: input.session,
-  });
-
-  await Promise.all([
-    writeAuditLog({
-      action: existing ? "contact.updated" : "contact.created",
-      after: toContact(row),
-      before: existing ? toContact(existing) : null,
-      entityId: row.id,
-      entityType: "contact",
+    const consent = await upsertConsentFromContact({
+      contact: row,
+      existingConsent: existing?.consent,
       session: input.session,
-    }),
-    recordAnalyticsEvent({
-      contactId: row.id,
-      entityId: row.id,
-      entityType: "contact",
-      eventType: existing ? "contact_updated" : "contact_created",
-      metadata: { consent: row.consent, source: row.source },
-      module: "contact",
-      projectId: row.projectId,
-      session: input.session,
-      source: row.source,
-    }),
-  ]);
+      transaction,
+    });
+    const qaBatchRegistration = input.qaBatchId
+      ? await registerQaBatchObjects(transaction, {
+          actorId: input.session.userId,
+          batchId: input.qaBatchId,
+          objects: [
+            { id: row.id, type: "contacts" },
+            ...(consent ? [{ id: consent.id, type: "consent_records" as const }] : []),
+          ],
+          workspaceId: input.session.workspaceId,
+        })
+      : undefined;
 
-  return { data: toContact(row), persisted: true };
+    await Promise.all([
+      writeAuditLog({
+        action: existing ? "contact.updated" : "contact.created",
+        after: toContact(row),
+        before: existing ? toContact(existing) : null,
+        entityId: row.id,
+        entityType: "contact",
+        session: input.session,
+        transaction,
+      }),
+      recordAnalyticsEvent({
+        contactId: row.id,
+        entityId: row.id,
+        entityType: "contact",
+        eventType: existing ? "contact_updated" : "contact_created",
+        metadata: { consent: row.consent, source: row.source },
+        module: "contact",
+        projectId: row.projectId,
+        session: input.session,
+        source: row.source,
+        transaction,
+      }),
+    ]);
+    return { duplicate: false as const, qaBatchRegistration, row };
+  };
+
+  const persistedContact = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    persistContact,
+  );
+
+  if (persistedContact.duplicate) {
+    return { persisted: false, reason: "Duplicate contact email" };
+  }
+
+  const row = persistedContact.row;
+
+  if (!row) {
+    return {
+      persisted: false,
+      reason: existing ? "Concurrent contact update conflict" : "Contact could not be saved",
+    };
+  }
+
+  return {
+    data: toContact(row),
+    persisted: true,
+    qaBatchRegistration: persistedContact?.qaBatchRegistration,
+  };
 }
 
 export async function archiveContactRecord(input: {
   contactId: string;
+  qaBatchId?: string;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ id: string }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -2494,51 +2804,103 @@ export async function archiveContactRecord(input: {
     return { persisted: false, reason: "Contact not found" };
   }
 
-  const row = await queryOne<IdRow>(
-    `
-      update contacts
-      set
-        archived_at = now(),
-        archived_by_user_id = $3::uuid,
-        metadata = metadata || $4::jsonb,
-        updated_at = now()
-      where id = $1 and workspace_id = $2 and archived_at is null
-      returning id
-    `,
-    [
-      existing.id,
-      input.session.workspaceId,
-      normalizeWriteProjectId(input.session.userId),
-      JSON.stringify({ archivedByUserId: input.session.userId, archivedFrom: "crm_contacts" }),
-    ],
+  const persistArchive = async (transaction: TenantTransaction) => {
+    const identityLocks = existing.email || existing.phone
+      ? buildPublicContactIdentityLocks({
+          email: existing.email,
+          fallback: existing.id,
+          phone: existing.phone,
+        })
+      : [];
+    for (const identityLock of identityLocks) {
+      await transaction.execute(
+        "select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text, 0))",
+        [input.session.workspaceId, publicContactIdentityLockNamespace, identityLock],
+      );
+    }
+
+    if (input.qaBatchId) {
+      await assertQaBatchForMutation(transaction, {
+        batchId: input.qaBatchId,
+        workspaceId: input.session.workspaceId,
+      });
+      await assertQaBatchOwnsObject(transaction, {
+        batchId: input.qaBatchId,
+        object: { id: existing.id, type: "contacts" },
+        workspaceId: input.session.workspaceId,
+      });
+    }
+    const row = await transaction.queryOne<{ archivedAt: string | Date; id: string }>(
+      `
+        update contacts
+        set
+          archived_at = now(),
+          archived_by_user_id = $3::uuid,
+          metadata = metadata || $4::jsonb,
+          updated_at = now()
+        where id = $1 and workspace_id = $2
+          and archived_at is null
+          and updated_at = $5::timestamptz
+        returning id, archived_at as "archivedAt"
+      `,
+      [
+        existing.id,
+        input.session.workspaceId,
+        normalizeWriteProjectId(input.session.userId),
+        JSON.stringify({ archivedByUserId: input.session.userId, archivedFrom: "crm_contacts" }),
+        existing.updatedAt,
+      ],
+    );
+    if (!row) return null;
+    const qaBatchRegistration = input.qaBatchId
+      ? await registerQaBatchObjects(transaction, {
+          actorId: input.session.userId,
+          batchId: input.qaBatchId,
+          objects: [{ id: row.id, type: "contacts" }],
+          workspaceId: input.session.workspaceId,
+        })
+      : undefined;
+
+    await Promise.all([
+      writeAuditLog({
+        action: "contact.archived",
+        after: { archivedAt: toIso(row.archivedAt), contactId: row.id },
+        before: toContact(existing),
+        entityId: row.id,
+        entityType: "contact",
+        projectId: existing.projectId,
+        session: input.session,
+        transaction,
+      }),
+      recordAnalyticsEvent({
+        contactId: row.id,
+        entityId: row.id,
+        entityType: "contact",
+        eventType: "contact_archived",
+        metadata: { source: existing.source },
+        module: "contact",
+        projectId: existing.projectId,
+        session: input.session,
+        source: existing.source,
+        transaction,
+      }),
+    ]);
+    return { qaBatchRegistration, row };
+  };
+
+  const persistedArchive = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    persistArchive,
   );
+  const row = persistedArchive?.row ?? null;
 
-  if (!row) return { persisted: false, reason: "Contact could not be archived" };
+  if (!row) return { persisted: false, reason: "Concurrent contact archive conflict" };
 
-  await Promise.all([
-    writeAuditLog({
-      action: "contact.archived",
-      after: { archivedAt: new Date().toISOString(), contactId: row.id },
-      before: toContact(existing),
-      entityId: row.id,
-      entityType: "contact",
-      projectId: existing.projectId,
-      session: input.session,
-    }),
-    recordAnalyticsEvent({
-      contactId: row.id,
-      entityId: row.id,
-      entityType: "contact",
-      eventType: "contact_archived",
-      metadata: { source: existing.source },
-      module: "contact",
-      projectId: existing.projectId,
-      session: input.session,
-      source: existing.source,
-    }),
-  ]);
-
-  return { data: { id: row.id }, persisted: true };
+  return {
+    data: { id: row.id },
+    persisted: true,
+    qaBatchRegistration: persistedArchive?.qaBatchRegistration,
+  };
 }
 
 export async function upsertFunnelDraft(input: {
@@ -2546,36 +2908,167 @@ export async function upsertFunnelDraft(input: {
   session: AppSession;
   steps: Array<Partial<FunnelStep> & Record<string, unknown>>;
 }): Promise<RepositoryWriteResult<{ funnel: Funnel; stepIds: string[] }>> {
+  if (!evaluateLaunchScope("publicFunnelPublication").allowed) {
+    return { persisted: false, reason: "Public funnel publication is launch-off" };
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const existingId = await resolveFunnelId(input.session.workspaceId, input.funnel.id);
-  const resolvedProject = await resolveWorkspaceProjectIdForWrite({
-    fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
-    requestedProjectId: input.funnel.projectId,
-    workspaceId: input.session.workspaceId,
-  });
-  if (!resolvedProject.ok) return { persisted: false, reason: resolvedProject.reason };
-  const projectId = resolvedProject.projectId;
-  const ownerUserId = normalizeWriteProjectId(input.funnel.ownerUserId) ?? normalizeWriteProjectId(input.session.userId);
-  const name = cleanString(input.funnel.name) || "CRM Funnel";
-  const blueprint = {
-    funnel: input.funnel,
-    schemaVersion: 1,
-    steps: input.steps,
-    updatedAt: new Date().toISOString(),
-    updatedByUserId: input.session.userId,
-  };
-  const tracking = {
-    consentMode: cleanString(input.funnel.consentMode),
-    gaMeasurementId: cleanString(input.funnel.gaMeasurementId),
-    gtmId: cleanString(input.funnel.gtmId),
-    legacyId: isUuid(input.funnel.id) ? undefined : input.funnel.id,
-    metaPixelId: cleanString(input.funnel.metaPixelId),
-  };
-  const row = existingId
-    ? await queryOne<FunnelRow>(
+  const requestedFunnelId = cleanString(input.funnel.id);
+  const persisted = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    async (transaction) => {
+      if (requestedFunnelId) {
+        await transaction.execute(
+          "select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))",
+          [input.session.workspaceId, `funnel-draft:${requestedFunnelId}`],
+        );
+      }
+
+      let existing = isUuid(requestedFunnelId)
+        ? await transaction.queryOne<{ blueprintRevision: number | string; id: string; ownerUserId: string | null; projectId: string | null }>(
+            `
+              select
+                id,
+                owner_user_id as "ownerUserId",
+                project_id as "projectId",
+                coalesce(
+                  case
+                    when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                      then (tracking->>'blueprintRevision')::bigint
+                    else null
+                  end,
+                  0
+                ) as "blueprintRevision"
+              from funnels
+              where workspace_id = $1::uuid and id = $2::uuid
+              for update
+            `,
+            [input.session.workspaceId, requestedFunnelId],
+          )
+        : null;
+      if (!existing && requestedFunnelId) {
+        existing = await transaction.queryOne<{ blueprintRevision: number | string; id: string; ownerUserId: string | null; projectId: string | null }>(
+          `
+            select
+              id,
+              owner_user_id as "ownerUserId",
+              project_id as "projectId",
+              coalesce(
+                case
+                  when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                    then (tracking->>'blueprintRevision')::bigint
+                  else null
+                end,
+                0
+              ) as "blueprintRevision"
+            from funnels
+            where workspace_id = $1::uuid and tracking->>'legacyId' = $2
+            order by updated_at desc, id
+            limit 1
+            for update
+          `,
+          [input.session.workspaceId, requestedFunnelId],
+        );
+      }
+
+      if (existing) {
+        const expectedBlueprintRevision = input.funnel.blueprintRevision;
+        const currentBlueprintRevision = Number(existing.blueprintRevision);
+        if (
+          !Number.isSafeInteger(expectedBlueprintRevision) ||
+          (expectedBlueprintRevision ?? -1) < 0 ||
+          !Number.isSafeInteger(currentBlueprintRevision) ||
+          expectedBlueprintRevision !== currentBlueprintRevision
+        ) {
+          return { ok: false as const, reason: "Concurrent funnel update conflict" };
+        }
+      }
+
+      const requestedProjectId = cleanString(input.funnel.projectId);
+      let projectId = requestedProjectId || existing?.projectId || null;
+      if (!projectId) {
+        projectId = (await transaction.queryOne<IdRow>(
+          "select id from projects where workspace_id = $1::uuid order by created_at asc, id limit 1",
+          [input.session.workspaceId],
+        ))?.id ?? null;
+      }
+      if (!isUuid(projectId)) {
+        return { ok: false as const, reason: "Valid project is required" };
+      }
+      const project = await transaction.queryOne<IdRow>(
+        "select id from projects where workspace_id = $1::uuid and id = $2::uuid limit 1",
+        [input.session.workspaceId, projectId],
+      );
+      if (!project) {
+        return { ok: false as const, reason: "Project is not available in this workspace" };
+      }
+
+      const ownerUserId = cleanString(input.funnel.ownerUserId) || existing?.ownerUserId || input.session.userId;
+      if (!isUuid(ownerUserId)) {
+        return { ok: false as const, reason: "Valid owner is required" };
+      }
+      const owner = await transaction.queryOne<IdRow>(
+        `
+          select id
+          from workspace_users
+          where workspace_id = $1::uuid and id = $2::uuid and status = 'active'
+          limit 1
+        `,
+        [input.session.workspaceId, ownerUserId],
+      );
+      if (!owner) {
+        return { ok: false as const, reason: "Active funnel owner is required in this workspace" };
+      }
+
+      const requestedBotIds = input.steps
+        .map((step) => cleanString(step.botRuleId))
+        .filter(Boolean);
+      if (requestedBotIds.some((id) => !isUuid(id))) {
+        return { ok: false as const, reason: "Invalid funnel bot id" };
+      }
+      const uniqueBotIds = [...new Set(requestedBotIds)];
+      const botRows = uniqueBotIds.length
+        ? await transaction.query<IdRow>(
+            "select id from bots where workspace_id = $1::uuid and id = any($2::uuid[])",
+            [input.session.workspaceId, uniqueBotIds],
+          )
+        : [];
+      const allowedBotIds = new Set(botRows.map((row) => row.id));
+      if (uniqueBotIds.some((id) => !allowedBotIds.has(id))) {
+        return { ok: false as const, reason: "Funnel bot is not available in this workspace" };
+      }
+
+      const safeSteps = input.steps.map((step) => ({
+        ...step,
+        botRuleId: cleanString(step.botRuleId) || undefined,
+        projectId,
+        workspaceId: input.session.workspaceId,
+      }));
+      const safeFunnel = {
+        ...input.funnel,
+        id: existing?.id ?? (requestedFunnelId || undefined),
+        ownerUserId,
+        projectId,
+        workspaceId: input.session.workspaceId,
+      };
+      const name = cleanString(input.funnel.name) || "CRM Funnel";
+      const blueprint = {
+        funnel: safeFunnel,
+        schemaVersion: 1,
+        steps: safeSteps,
+        updatedByUserId: input.session.userId,
+      };
+      const tracking = {
+        consentMode: cleanString(input.funnel.consentMode),
+        gaMeasurementId: cleanString(input.funnel.gaMeasurementId),
+        gtmId: cleanString(input.funnel.gtmId),
+        legacyId: existing ? undefined : requestedFunnelId || undefined,
+        metaPixelId: cleanString(input.funnel.metaPixelId),
+      };
+      const row = existing
+        ? await transaction.queryOne<FunnelRow>(
         `
           update funnels
           set
@@ -2586,11 +3079,27 @@ export async function upsertFunnelDraft(input: {
             audience = $7,
             entry_channel = $8,
             status = $9,
-            visits = $10,
-            leads_count = $11,
-            conversion_rate = $12,
-            blueprint = $13::jsonb,
-            tracking = (tracking - 'webhookUrl') || $14::jsonb,
+            blueprint = $10::jsonb,
+            tracking = (tracking - 'webhookUrl') || $11::jsonb || jsonb_build_object(
+              'blueprintRevision',
+              coalesce(
+                case
+                  when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                    then (tracking->>'blueprintRevision')::bigint
+                  else null
+                end,
+                0
+              ) + 1,
+              'publicationRevision',
+              coalesce(
+                case
+                  when jsonb_typeof(tracking->'publicationRevision') = 'number'
+                    then (tracking->>'publicationRevision')::bigint
+                  else null
+                end,
+                0
+              ) + 1
+            ),
             updated_at = now()
           where id = $1 and workspace_id = $2
           returning
@@ -2605,10 +3114,19 @@ export async function upsertFunnelDraft(input: {
             status,
             visits,
             leads_count as leads,
-            conversion_rate as "conversionRate"
+            conversion_rate as "conversionRate",
+            coalesce(
+              case
+                when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                  then (tracking->>'blueprintRevision')::bigint
+                else null
+              end,
+              0
+            ) as "blueprintRevision",
+            updated_at as "updatedAt"
         `,
         [
-          existingId,
+          existing.id,
           input.session.workspaceId,
           projectId,
           ownerUserId,
@@ -2617,14 +3135,11 @@ export async function upsertFunnelDraft(input: {
           cleanString(input.funnel.audience) || "Käufer",
           cleanString(input.funnel.entryChannel) || "Website",
           cleanString(input.funnel.status) || "entwurf",
-          Number(input.funnel.visits ?? 0),
-          Number(input.funnel.leads ?? 0),
-          Number(input.funnel.conversionRate ?? 0),
           JSON.stringify(blueprint),
           JSON.stringify(tracking),
         ],
       )
-    : await queryOne<FunnelRow>(
+    : await transaction.queryOne<FunnelRow>(
         `
           insert into funnels (
             workspace_id,
@@ -2654,7 +3169,16 @@ export async function upsertFunnelDraft(input: {
             status,
             visits,
             leads_count as leads,
-            conversion_rate as "conversionRate"
+            conversion_rate as "conversionRate",
+            coalesce(
+              case
+                when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                  then (tracking->>'blueprintRevision')::bigint
+                else null
+              end,
+              0
+            ) as "blueprintRevision",
+            updated_at as "updatedAt"
         `,
         [
           input.session.workspaceId,
@@ -2669,20 +3193,20 @@ export async function upsertFunnelDraft(input: {
           Number(input.funnel.leads ?? 0),
           Number(input.funnel.conversionRate ?? 0),
           JSON.stringify(blueprint),
-          JSON.stringify(tracking),
+          JSON.stringify({ ...tracking, blueprintRevision: 1, publicationRevision: 0 }),
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Funnel could not be saved" };
+      if (!row) return { ok: false as const, reason: "Funnel could not be saved" };
 
-  await queryOne<IdRow>("delete from funnel_steps where funnel_id = $1 and workspace_id = $2 returning id", [
-    row.id,
-    input.session.workspaceId,
-  ]);
+      await transaction.execute(
+        "delete from funnel_steps where funnel_id = $1::uuid and workspace_id = $2::uuid",
+        [row.id, input.session.workspaceId],
+      );
 
-  const stepIds: string[] = [];
-  for (const [index, step] of input.steps.entries()) {
-    const inserted = await queryOne<IdRow>(
+      const stepIds: string[] = [];
+      for (const [index, step] of safeSteps.entries()) {
+        const inserted = await transaction.queryOne<IdRow>(
       `
         insert into funnel_steps (
           workspace_id,
@@ -2716,34 +3240,50 @@ export async function upsertFunnelDraft(input: {
         Number(step.conversionRate ?? 0),
         cleanString(step.dropOffReason),
         cleanString(step.nextOptimization),
-        normalizeWriteProjectId(step.botRuleId),
-        JSON.stringify({ ...step, legacyId: step.id ?? null }),
+        cleanString(step.botRuleId) || null,
+        JSON.stringify({
+          ...step,
+          funnelId: row.id,
+          legacyId: cleanString(step.id) || null,
+          projectId: row.projectId,
+          workspaceId: input.session.workspaceId,
+        }),
       ],
     );
 
-    if (inserted?.id) stepIds.push(inserted.id);
-  }
+        if (!inserted?.id) throw new Error("Funnel step could not be saved");
+        stepIds.push(inserted.id);
+      }
 
-  await Promise.all([
-    writeAuditLog({
-      action: existingId ? "funnel.updated" : "funnel.created",
-      after: { funnelId: row.id, projectId: row.projectId, steps: stepIds.length },
-      entityId: row.id,
-      entityType: "funnel",
-      session: input.session,
-    }),
-    recordAnalyticsEvent({
-      entityId: row.id,
-      entityType: "funnel",
-      eventType: existingId ? "funnel_updated" : "funnel_created",
-      funnelId: row.id,
-      metadata: { status: row.status, steps: stepIds.length },
-      module: "funnel",
-      projectId: row.projectId,
-      session: input.session,
-      source: "crm_funnel_builder",
-    }),
-  ]);
+      await Promise.all([
+        writeAuditLog({
+          action: existing ? "funnel.updated" : "funnel.created",
+          after: { funnelId: row.id, projectId: row.projectId, steps: stepIds.length },
+          entityId: row.id,
+          entityType: "funnel",
+          session: input.session,
+          transaction,
+        }),
+        recordAnalyticsEvent({
+          entityId: row.id,
+          entityType: "funnel",
+          eventType: existing ? "funnel_updated" : "funnel_created",
+          funnelId: row.id,
+          metadata: { status: row.status, steps: stepIds.length },
+          module: "funnel",
+          projectId: row.projectId,
+          session: input.session,
+          source: "crm_funnel_builder",
+          transaction,
+        }),
+      ]);
+
+      return { existingId: existing?.id ?? null, ok: true as const, row, stepIds };
+    },
+  );
+
+  if (!persisted.ok) return { persisted: false, reason: persisted.reason };
+  const { row, stepIds } = persisted;
 
   return { data: { funnel: toFunnel(row), stepIds }, persisted: true };
 }
@@ -3387,25 +3927,6 @@ async function resolveDashboardViewId(input: {
   return row?.id ?? null;
 }
 
-async function resolveFunnelId(workspaceId: string, id: unknown) {
-  if (typeof id !== "string") return null;
-
-  if (isUuid(id)) {
-    const row = await queryOne<IdRow>(
-      "select id from funnels where workspace_id = $1 and id = $2 limit 1",
-      [workspaceId, id],
-    );
-    if (row) return row.id;
-  }
-
-  const legacy = await queryOne<IdRow>(
-    "select id from funnels where workspace_id = $1 and tracking->>'legacyId' = $2 limit 1",
-    [workspaceId, id],
-  );
-
-  return legacy?.id ?? null;
-}
-
 async function resolveBotId(workspaceId: string, id: unknown) {
   if (typeof id !== "string") return null;
 
@@ -3580,8 +4101,10 @@ async function insertDealStageHistory(input: {
   reasonDetail?: string | null;
   session: AppSession;
   toStage: string;
+  transaction?: TenantTransaction;
 }) {
-  const row = await queryOne<DealStageHistoryRow>(
+  const row = await queryOneForWrite<DealStageHistoryRow>(
+    input.transaction,
     `
       insert into deal_stage_history (
         workspace_id,
@@ -3631,11 +4154,13 @@ async function upsertConsentFromContact(input: {
   contact: ContactRow;
   existingConsent?: string | null;
   session: AppSession;
+  transaction?: TenantTransaction;
 }) {
   const status = cleanString(input.contact.consent);
-  if (!status || status === input.existingConsent) return;
+  if (!status || status === input.existingConsent) return null;
 
-  await queryOne<IdRow>(
+  return queryOneForWrite<IdRow>(
+    input.transaction,
     `
       insert into consent_records (
         workspace_id,
@@ -3674,6 +4199,7 @@ async function recordAnalyticsEvent(input: {
   projectId?: string | null;
   session: AppSession;
   source?: string | null;
+  transaction?: TenantTransaction;
   valueCents?: number;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
@@ -3700,6 +4226,7 @@ async function recordAnalyticsEvent(input: {
     userId: input.session.userId,
     valueCents: input.valueCents ?? 0,
     workspaceId: input.session.workspaceId,
+    transaction: input.transaction,
   });
 }
 
@@ -3708,6 +4235,7 @@ async function recordDealOutcomeAnalyticsEvent(input: {
   fromStage: string | null;
   reason?: string;
   session: AppSession;
+  transaction?: TenantTransaction;
   valueCents: number;
 }) {
   const eventType = input.deal.stage === "Gewonnen"
@@ -3735,6 +4263,7 @@ async function recordDealOutcomeAnalyticsEvent(input: {
     projectId: input.deal.projectId,
     session: input.session,
     source: input.deal.source,
+    transaction: input.transaction,
     valueCents: input.valueCents,
   });
 }
@@ -3788,7 +4317,8 @@ const contactSelectSql = `
     c.consent_label as consent,
     c.email,
     c.phone,
-    p.name as project
+    p.name as project,
+    c.updated_at as "updatedAt"
   from contacts c
   left join projects p on p.id = c.project_id and p.workspace_id = c.workspace_id
 `;
@@ -3817,7 +4347,8 @@ const leadReturningSql = `
   hot_status as "hotStatus",
   buyer_profile as "buyerProfile",
   seller_profile as "sellerProfile",
-  investor_profile as "investorProfile"
+  investor_profile as "investorProfile",
+  updated_at as "updatedAt"
 `;
 
 const leadSelectSql = `
@@ -3845,7 +4376,8 @@ const dealSelectSql = `
     d.closed_at as "closedAt",
     d.risk_level as "riskLevel",
     d.source,
-    d.next_action as "nextAction"
+    d.next_action as "nextAction",
+    d.updated_at as "updatedAt"
   from deals d
 `;
 
@@ -4097,6 +4629,7 @@ function toCalendarEventRecord(row: CalendarEventWriteRow): CalendarEvent {
 function toFunnel(row: FunnelRow): Funnel {
   return {
     audience: row.audience,
+    blueprintRevision: Number(row.blueprintRevision ?? 0),
     conversionRate: Number(row.conversionRate ?? 0),
     entryChannel: row.entryChannel,
     goal: row.goal,
@@ -4106,6 +4639,7 @@ function toFunnel(row: FunnelRow): Funnel {
     ownerUserId: row.ownerUserId ?? undefined,
     projectId: row.projectId ?? "",
     status: row.status,
+    updatedAt: toIso(row.updatedAt),
     visits: Number(row.visits ?? 0),
     workspaceId: row.workspaceId,
   };
@@ -4113,6 +4647,25 @@ function toFunnel(row: FunnelRow): Funnel {
 
 function cleanString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function canonicalizeSemanticWriteValue(value: unknown): unknown {
+  if (value === undefined) return null;
+  if (Array.isArray(value)) return value.map(canonicalizeSemanticWriteValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalizeSemanticWriteValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function hashSemanticWriteRequest(value: Record<string, unknown>) {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalizeSemanticWriteValue(value)))
+    .digest("hex");
 }
 
 function normalizeDealStageForWrite(value: unknown): DealStage | null {

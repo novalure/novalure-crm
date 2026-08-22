@@ -16,6 +16,7 @@ import {
   revokeWorkspaceMediaShare,
 } from "@/lib/media-store";
 import { processDueMeetingNotifications } from "@/lib/meetings/notification-runner";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const maxDuration = 30;
 
@@ -339,7 +340,6 @@ export async function POST(request: Request) {
   const type = typeof input.type === "string" ? input.type : "";
   const action = typeof input.action === "string" ? input.action : "";
   const controls = getBotRuntimeControls(input);
-  const manualActionControls = { ...controls, requireHumanApproval: false };
 
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Invalid action id" }, { status: 400 });
@@ -419,6 +419,13 @@ export async function POST(request: Request) {
   }
 
   if (type === "document_send" && action === "mark_sent") {
+    if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+      return NextResponse.json(
+        { error: "bot_provider_delivery_launch_off" },
+        { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+      );
+    }
+
     const existingDocumentSend = await queryOne<BotDocumentSendRow>(
       `${getDocumentSendSelect(`
         where bds.id = $1
@@ -459,7 +466,7 @@ export async function POST(request: Request) {
     const customerData = getCustomerData(existingDocumentSend.metadata);
     const decision = evaluateBotAction({
       action: "document_send",
-      controls: manualActionControls,
+      controls,
       document: {
         approved: true,
         publicUrl: prospectivePublicUrl,
@@ -704,6 +711,7 @@ export async function POST(request: Request) {
         session: auth.session,
         campaignId: null,
         contactId: null,
+        deliveryPurpose: "bot_document",
         provider: delivery.provider,
         providerMessageId: delivery.messageId ?? null,
         toEmail: delivery.recipient,
@@ -749,6 +757,16 @@ export async function POST(request: Request) {
   }
 
   if (type === "meeting_booking" && (action === "confirm" || action === "cancel")) {
+    if (action === "confirm") {
+      const launchScope = evaluateLaunchScope("calendarProviderMutation");
+      if (!launchScope.allowed) {
+        return NextResponse.json(
+          { code: launchScope.code, error: "calendar_provider_mutation_launch_off", ok: false },
+          { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+        );
+      }
+    }
+
     let providerResult: unknown = null;
     const existingMeetingBooking = await queryOne<BotMeetingBookingRow>(
       `${getMeetingBookingSelect(`
@@ -767,7 +785,7 @@ export async function POST(request: Request) {
     if (action === "confirm") {
       const decision = evaluateBotAction({
         action: "meeting_book",
-        controls: manualActionControls,
+        controls,
         meeting: {
           contactEmail: existingMeetingBooking.contactEmail,
           contactName: existingMeetingBooking.contactName,

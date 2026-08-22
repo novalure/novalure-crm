@@ -5,6 +5,7 @@ import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { changeDealStageRecord, upsertTaskRecord } from "@/lib/db/crm-write-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { queueTeamsNotification } from "@/lib/db/teams-notification-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type ReservationWorkflowAction = "create" | "extend" | "expire" | "convert";
 
@@ -399,6 +400,15 @@ export async function expireOverduePropertyReservations(input: {
   source?: string;
   workspaceId?: string | null;
 } = {}): Promise<ExpireOverduePropertyReservationsResult> {
+  if (!evaluateLaunchScope("propertyReservationRelationshipSync").allowed) {
+    return {
+      checkedAt: new Date().toISOString(),
+      expiredReservations: [],
+      releasedUnits: [],
+      skippedUnits: 0,
+    };
+  }
+
   if (!canPersist()) {
     return {
       checkedAt: new Date().toISOString(),
@@ -992,6 +1002,11 @@ export async function mutateUnitReservation({
   session: AppSession;
   input: ReservationWorkflowInput;
 }): Promise<ReservationWorkflowResult> {
+  const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+  if (!launchScope.allowed) {
+    return { persisted: false, reason: launchScope.code };
+  }
+
   if (!canPersist()) {
     return { persisted: false, reason: "DATABASE_URL is not configured." };
   }

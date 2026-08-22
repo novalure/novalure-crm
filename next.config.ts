@@ -25,6 +25,11 @@ const protectedPageHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
 ] as const;
 
+const publicCapabilityPageHeaders = [
+  { key: "Cache-Control", value: "private, no-store, max-age=0" },
+  { key: "Referrer-Policy", value: "no-referrer" },
+] as const;
+
 const visualQaContentHeaders = [
   {
     key: "Content-Security-Policy",
@@ -60,6 +65,10 @@ const nextConfig: NextConfig = {
       {
         headers: [...protectedPageHeaders],
         source: "/login/:path*",
+      },
+      {
+        headers: [...publicCapabilityPageHeaders],
+        source: "/preview/:path*",
       },
       {
         headers: [...visualQaContentHeaders],

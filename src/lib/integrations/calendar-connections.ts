@@ -14,8 +14,15 @@ import {
   parseSignedOAuthState,
   type CalendarOAuthProvider,
 } from "@/lib/integrations/calendar-oauth-state";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type { CalendarOAuthProvider } from "@/lib/integrations/calendar-oauth-state";
+
+export const calendarProviderReadUnavailableCode = "calendar_provider_read_unavailable";
+export const calendarProviderCredentialRefreshLaunchOffCode =
+  "calendar_provider_credential_refresh_launch_off";
+
+const calendarAccessTokenMinimumValidityMs = 30_000;
 
 export type CalendarConnectionStatus = {
   accountLabel: string | null;
@@ -484,12 +491,11 @@ export async function getCalendarAccessToken(input: {
   if (!row || row.status !== "connected") return null;
 
   const config = asConfig(row.config);
-  const expiresAt = row.expiresAt ? new Date(row.expiresAt).getTime() : 0;
-  const accessToken = decryptToken(config.accessToken);
+  const accessToken = getUsableStoredCalendarAccessToken(row, config);
+  if (accessToken) return accessToken;
 
-  if (accessToken && expiresAt > Date.now() + 5 * 60_000) {
-    return accessToken;
-  }
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) return null;
 
   const refreshed = await refreshCalendarAccessToken({
     config,
@@ -500,11 +506,42 @@ export async function getCalendarAccessToken(input: {
   return refreshed.accessToken;
 }
 
+/**
+ * Availability is a read path. It may read a still-valid workspace token, but
+ * it must never turn an HTTP GET into a credential refresh or token write.
+ */
+export async function getCalendarReadAccessToken(input: {
+  provider: CalendarOAuthProvider;
+  workspaceId: string;
+}) {
+  const row = await getProviderConnection(input.workspaceId, input.provider);
+  if (!row || row.status !== "connected") return null;
+
+  return getUsableStoredCalendarAccessToken(row, asConfig(row.config));
+}
+
+function getUsableStoredCalendarAccessToken(
+  row: Pick<ProviderConnectionRow, "expiresAt">,
+  config: Record<string, unknown>,
+) {
+  const expiresAt = row.expiresAt ? new Date(row.expiresAt).getTime() : 0;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + calendarAccessTokenMinimumValidityMs) {
+    return null;
+  }
+
+  return decryptToken(config.accessToken);
+}
+
 async function refreshCalendarAccessToken(input: {
   config: Record<string, unknown>;
   provider: CalendarOAuthProvider;
   workspaceId: string;
 }) {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    throw new Error(calendarProviderCredentialRefreshLaunchOffCode);
+  }
+
   const refreshToken = decryptToken(input.config.refreshToken);
   if (!refreshToken) throw new Error(`${input.provider} refresh token is missing`);
 
@@ -519,6 +556,11 @@ async function refreshCalendarAccessToken(input: {
     refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : input.config.refreshToken,
     tokenType: token.token_type || input.config.tokenType || "Bearer",
   };
+
+  const persistenceScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!persistenceScope.allowed) {
+    throw new Error(calendarProviderCredentialRefreshLaunchOffCode);
+  }
 
   await executeQuery(
     `

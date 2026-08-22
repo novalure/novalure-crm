@@ -10,6 +10,7 @@ import {
   type FunnelTheme,
   type FunnelTrackingConfig,
 } from "@/lib/funnel-schema";
+import { resolveFunnelStepScore } from "@/lib/funnel-step-score";
 
 export type FunnelDraft = Funnel & {
   brandPreset?: string;
@@ -175,7 +176,7 @@ function buildStepElement(step: FunnelStepDraft, index: number): FunnelElement {
     name: step.name,
     content: step.question ?? step.name,
     options,
-    score: step.score ?? Math.max(10, Math.round(step.conversionRate * 3)),
+    score: resolveFunnelStepScore(step.score),
     required: step.required ?? true,
     crmField: step.crmField ?? normalizeFieldName(step.name),
     analyticsEvent: step.analyticsEvent ?? (index === 0 ? "funnel_start" : "step_view"),

@@ -5,6 +5,7 @@ import {
 } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { syncGoogleCalendarEvent } from "@/lib/integrations/google-calendar";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const maxDuration = 60;
 
@@ -22,6 +23,22 @@ export async function POST(request: Request) {
   const auth = await requirePermissionAndProductCapability(request, "calendar:sync", "calendar:manage");
 
   if (!auth.ok) return auth.response;
+
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+
+  if (!launchScope.allowed) {
+    return Response.json(
+      {
+        code: launchScope.code,
+        decision: launchScope.decision,
+        error: "calendar_provider_mutation_launch_off",
+      },
+      {
+        headers: { "Cache-Control": "private, no-store" },
+        status: 503,
+      },
+    );
+  }
 
   const body = await readJson(request);
 

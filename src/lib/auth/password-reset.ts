@@ -276,6 +276,7 @@ export async function requestPasswordReset(input: {
         to: identity.displayEmail,
         subject: emailContent.subject,
         html: emailContent.html,
+        purpose: "password_reset",
         idempotencyKey: `password-reset:${created.id}`,
       });
       await writeAuthAuditEvent({

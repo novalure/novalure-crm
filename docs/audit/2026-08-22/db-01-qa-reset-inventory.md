@@ -1,7 +1,7 @@
 # DB-01 — QA-Tenant- und Reset-Inventur
 
 Stand: 22.08.2026
-Scope: ausschließlich Repository-/Migrationsartefakte; keine DB-, Vercel-, Provider- oder Netzwerkmutation ausgeführt.
+Scope: Repository-/Migrationsartefakte, isolierter Preview-Neon-Migrations-/Restore-Drill, Preview-Schema-Cutover und sichere Zwei-Tenant-/Identity-/Batch-Provisionierung; keine Production-Datenbank-, Provider-Send- oder Kalender-Mutation.
 
 ## Ausgangszustand
 
@@ -21,7 +21,7 @@ Scope: ausschließlich Repository-/Migrationsartefakte; keine DB-, Vercel-, Prov
   - Trigger verweigert Batch-Erstellung für jeden Workspace ohne `is_qa = true`;
   - RLS und Minimalgrants für die drei Ledger;
   - Projekt-/Deal-UUIDs in `audit_logs` bleiben unveränderliche Snapshots; nur die kollidierenden Live-FKs werden entfernt, Spalten und Indizes bleiben bestehen.
-  - der zentrale Migrationsrunner führt 068 niemals automatisch aus; sie ist ein Manual-Cutover mit zwingender, checksummierter 061-Vorbedingung und benötigt `--only=068_qa_batch_reset_safety --allow-manual-cutover` erst nach den dokumentierten Freigaben.
+  - der zentrale Migrationsrunner führt 068 niemals automatisch aus; sie ist ein Manual-Cutover mit zwingender, checksummierter 060-Vorbedingung (sichere NOLOGIN-Tenant-Rolle) und benötigt `--only=068_qa_batch_reset_safety --allow-manual-cutover` erst nach den dokumentierten Freigaben. Die separate Migration 061 aktiviert erst später den Kern-CRM-RLS-Pilot und ist keine Voraussetzung für das QA-Ledger.
 - `POST /api/admin/qa-reset`:
   - akzeptiert keine frei parametrisierte Tabelle und keine anderen HTTP-Mutationen;
   - benötigt eine persistierte Cookie-Session, technische Rolle `owner`, Produktrolle `platform_admin`, App-Permission `settings:manage` sowie Produkt-Capabilities `novalure:internal` und `settings:manage`;
@@ -29,7 +29,7 @@ Scope: ausschließlich Repository-/Migrationsartefakte; keine DB-, Vercel-, Prov
   - akzeptiert nur Workspace-IDs aus der serverseitigen `NOVALURE_QA_RESET_WORKSPACE_IDS`-Allowlist; mindestens zwei IDs sind Pflicht;
   - verweigert jede Überschneidung mit `NOVALURE_PRODUCTION_WORKSPACE_IDS`;
   - führt ohne Modus immer `dry_run` aus;
-  - `execute` benötigt zusätzlich `NOVALURE_QA_RESET_EXECUTION_ENABLED=true` und die exakte Confirmation `RESET QA BATCH <workspaceId> <batchId>`;
+  - `execute` benötigt zusätzlich `NOVALURE_QA_RESET_EXECUTION_ENABLED=true`, die exakte Confirmation `RESET QA BATCH <workspaceId> <batchId>` sowie `expectedPlanDigest` mit dem exakten SHA-256-Plandigest aus dem unmittelbar vorherigen blockerfreien `dry_run`;
   - Antwort und Audit sind `private, no-store` und enthalten keine Secrets.
 - Repository:
   - eine tenantgebundene Transaktion für Plan, Graphprüfung, Löschung und Audit;
@@ -42,6 +42,9 @@ Scope: ausschließlich Repository-/Migrationsartefakte; keine DB-, Vercel-, Prov
   - Blob-/Providerressourcen und Tabellen mit möglichen externen Side Effects blockieren Execute, solange kein verifizierter Adapter/Reconciliation-Nachweis vorhanden ist;
   - Löschcount-Abweichung wirft innerhalb derselben Transaktion und rollt alles einschließlich Erfolgsaudit zurück.
 - Der alte Direktlöschpfad `scripts/qa-livegang-reset.mjs` ist hart deaktiviert und öffnet keine Datenbank mehr.
+- Der alte `scripts/qa-livegang-api.mjs`-Schreibpfad ist ebenfalls hart deaktiviert. `test:e2e` und `qa:livegang:api` zeigen jetzt auf den neuen Zwei-Tenant-Harness; dieser verlangt vor dem ersten CRM-Write einen SHA-gebundenen Runtime-Proof für atomare Batchregistrierung und ist bis dahin fail-closed.
+- Rollen-/CRUD-/Cross-Tenant-/Reload-/Concurrency-/Cleanup-Matrix, Zielvertrag und geheimnisfreies Evidence-Schema stehen in [`two-tenant-live-e2e-runbook.md`](./two-tenant-live-e2e-runbook.md).
+- `scripts/qa-batch-lock-order-live.mjs` stellt den unabhängigen echten PostgreSQL-Barriere-Nachweis bereit. Der Default ist ein netzwerkfreier Plan; der bestätigungspflichtige Preview-Lauf verwendet zwei getrennte `novalure_app`-Sessions und ausschließlich `BEGIN`, feste `SET LOCAL`-Werte, `SELECT`-/Lock-Statements, genau das feste `UPDATE workspaces SET is_qa=false` für den QA-Flag-Race-Nachweis und `ROLLBACK`; das Update wird immer zurückgerollt.
 
 ## Explizit aufbewahrte Evidenz
 
@@ -49,26 +52,34 @@ Die versionierte Liste steht in `qaResetRetainedTables`. Dazu gehören insbesond
 
 ## Noch nicht erfüllt / harte Restgrenzen
 
-1. Migration 068 wurde nicht gegen eine Datenbank ausgeführt oder in Preview/Production angewendet.
-2. Tenant A und Tenant B samt Rollen-/Produktrollenmatrix wurden nicht provisioniert; bestehende Tenants wurden nicht als QA markiert.
-3. Objekt-Creator registrieren neue IDs noch nicht automatisch in `qa_batch_objects`. Vor einem echten E2E muss jeder Create-/Join-/Historien-/Submission-/Job-/Blob-/Providerpfad den unveränderlichen Batchkontext propagieren oder durch einen kontrollierten Harness atomar registriert werden.
+1. Migration 068 wurde im isolierten Drill und anschließend auf Preview-Main angewandt; Production blieb unverändert. Der technische Migrations-/Restore-Drill ist bestanden; die funktionale QA-Batch-Dry-run-/Execute-/Null-Rest-Ausführung ist noch nicht erfolgt.
+2. Tenant A und Tenant B wurden mit je fünf Rollen-/Produktrollen-Mitgliedschaften, insgesamt neun Auth-Identitäten, zehn MFA-fähigen Mitgliedschaften und je einem leeren Batch provisioniert. Beide Workspaces sind `is_qa=true`; es wurden noch keine CRM-Geschäftsobjekte erzeugt.
+3. Contact- und Deal-Creator registrieren den Hauptdatensatz sowie Consent bzw. Stage-History atomar in `qa_batch_objects`, sobald der explizite Preview-QA-Vertrag aktiv ist. `/api/admin/qa-batch-capability` bestätigt denselben Kandidaten-SHA erst nach Prüfung von Cookie-Session, Launch-Scope/RBAC, Allowlist, `workspaces.is_qa` und Ledger-Verfügbarkeit. PATCH/Archiv dürfen nur bereits batchzugehörige Hauptobjekte ändern.
+   Reset und Registrierung verwenden denselben exklusiven Transaction-Advisory-Lock. Nach einem append-only Execute-Audit ist der Batch endgültig versiegelt; parallel wartende und spätere Registrierungen werden vor jedem Geschäftswrite abgewiesen.
+   Die lokale Simulation beider Startreihenfolgen ist grün. Der neue Live-Barrierenharness und sein vollständig zurückgerollter Contract sind vorhanden; sein echtes `--execute` gegen den isolierten Preview-Batch wurde in diesem Code-Delta bewusst nicht ausgeführt und bleibt ein Pflichtgate.
 4. Blob- und Provider-Cleanup-Adapter fehlen. Deshalb verweigert der Executor entsprechende Batches absichtlich.
-5. Die FK-Graphprüfung wurde nur statisch/mit Contracttests geprüft, nicht gegen das tatsächlich migrierte Preview-Schema und zwei reale QA-Tenants.
-6. Die bereits vorhandene RLS-Aktivierung ist nur für Pilot-Tabellen belegt. Zwei-Tenant-IDOR/Graph-Closure über alle Reset-Zieltabellen bleibt ein separates SEC-01-/Preview-Gate.
-7. `is_qa`-Provisionierung, Batch-Erstellung und Ledger-Registrierung brauchen einen gesondert genehmigten, zielgeprüften Ablauf. Es existiert absichtlich keine globale Admin-Delete-Funktion.
-8. Jede Preview-Mutation bleibt vor ENV-01 verboten; Production-Migration und Production-Reset benötigen jeweils explizite Freigabe, Backup, Dry-run und Rollbackplan.
+5. Migrationen 068–072 wurden auf Preview-Main verifiziert; 057 + 073–076 wurden auf dem isolierten Evidence-Branch per Apply/Restore/Reapply geprüft. Eine tatsächliche Batch-Closure-FK-Graphprüfung mit erzeugten CRM-Objekten fehlt.
+6. RLS ist für die drei QA-Ledger aktiv. Die separate Kern-CRM-Pilotaktivierung 061 ist absichtlich noch nicht angewandt, bis `novalure_app`-Runtimeverbindung, Rollenmitgliedschaft und immutable Deployment-Attestation zusammen belegt sind. Zwei-Tenant-IDOR/Graph-Closure bleibt ein separates SEC-01-/Preview-Gate.
+7. Die initiale `is_qa`-/Identity-/Batch-Provisionierung ist abgeschlossen. Nach jedem versiegelten Lauf muss ein neuer, gesondert genehmigter und zielgeprüfter Batch provisioniert werden. Es existiert absichtlich keine globale Admin-Delete-Funktion.
+8. Weitere Preview-Runtime-Mutationen bleiben bis zur vollständigen Preview-ENV-, Tenant- und Batch-Konfiguration gesperrt. Production-Migration und Production-Reset benötigen jeweils explizite Freigabe, Backup, Dry-run und Rollbackplan.
 9. Weitere bestehende QA-Harnesses enthalten eigene direkte Workspace-/User-Cleanups (`e2e-object-creation-tests`, Contact Access, Deal-/Lead-Idempotency, Phase-2/3, Preview-Login-Fixture, Persistence Diagnostics, Property-Pagination, Product-Role-Invite, Public-Slug-Routing und Reservation-Stage-Resolver). Sie wurden in diesem begrenzten Paket nicht pauschal umgeschrieben. Vor Ausführung brauchen sie weiterhin ihren Zielguard plus ENV-01 und müssen für die finale DB-01-Abnahme auf Batch-Ledger/Graph-Reset konsolidiert oder serverseitig deaktiviert werden.
-10. Der bestehende `livegang-e2e`-Workflow ruft den nun absichtlich deaktivierten Legacy-Reset auf. Der Workflow bleibt dadurch fail-closed, bis QA-Tenants/Batchregistrierung vorhanden sind und seine Cleanup-Schritte authentifiziert auf den neuen Dry-run-/Execute-Vertrag umgestellt wurden.
+10. Der `livegang-e2e`-Workflow ruft `npm run test:e2e` und damit den neuen Zwei-Tenant-Harness auf; die beiden Aufrufe des deaktivierten Legacy-Resets wurden entfernt. Der Harness bindet seinen Cleanup an den authentifizierten Dry-run-/Execute-/Plan-Digest-Vertrag.
 
-DB-01 ist damit code-seitig gehärtet, aber nicht abgenommen. Der Status bleibt `NICHT AUSGEFÜHRT`, bis Migration, zwei Tenantmatrizen, vollständige Registrierung, externe Adapter, Negativläufe, Dry-run/Execute-Parität und Null-Rückstands-Reconciliation in isolierter QA bestanden sind.
+DB-01 ist code- und Preview-schema-seitig gehärtet, aber noch nicht vollständig abgenommen. Der Status ist `TEILWEISE AUSGEFÜHRT`, bis beide Live-Tenantmatrizen, vollständige Registrierung, externe Adapter, Negativläufe, Dry-run/Execute-Parität und Null-Rückstands-Reconciliation in isolierter QA bestanden sind.
 
 ## Lokale Evidenz
 
 | Command | Ergebnis |
 |---|---|
 | `npm.cmd run typecheck` | PASS |
-| `npm.cmd run test:unit` | PASS, 232/232 |
-| `node --test scripts/qa-reset-safety-tests.mjs` | PASS, 14/14 |
-| `node --test scripts/qa-reset-safety-tests.mjs scripts/auth-security-tests.mjs scripts/csrf-security-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs` | PASS, 72/72 |
+| `npm.cmd run test:unit` | PASS, 240/240 Basissuite plus 251/251 Remediation = 491/491 |
+| `node --test scripts/qa-reset-safety-tests.mjs` | PASS, 27/27 inklusive beider Lock-Startreihenfolgen |
+| `node --test scripts/qa-reset-safety-tests.mjs scripts/auth-security-tests.mjs scripts/csrf-security-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs` | PASS, 90/90 |
 | `npx.cmd eslint src/lib/qa-reset-contract.ts src/lib/db/qa-reset-repository.ts src/app/api/admin/qa-reset/route.ts scripts/qa-reset-safety-tests.mjs scripts/qa-livegang-reset.mjs scripts/db-migrate.mjs scripts/migration-cutover-guard-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs --max-warnings=0` | PASS |
 | `git diff --check` | PASS; nur bestehende CRLF-Hinweise |
+| `node --test scripts/qa-two-tenant-matrix-tests.mjs` | PASS; Config-Deny-Targets, Rollenmatrix, Evidence-Redaction und Legacy-Disable |
+| `node --test scripts/qa-batch-registration-tests.mjs` | PASS, 8/8; Runtime-, Ownership-, Replay-, Atomaritäts- und Execute-Seal-Vertrag einschließlich unregistriertem Deal-Replay sowie parallelen Idempotency-Kollisionen mit null Ledgerzeilen |
+| `node --test scripts/qa-batch-lock-order-live-tests.mjs` | PASS, 7/7; Production-/Target-Deny, rollback-only SQL einschließlich genau eines QA-Flag-Updates, zwei Sessions, Reset-/Mutation- und QA-Flag-Races in beiden Startreihenfolgen, redigierter Fehlerpfad und offline Default |
+| `npm.cmd run qa:batch-lock-order:execute -- --workspace-id <uuid> --batch-id <uuid> --actor-id <uuid>` | NICHT AUSGEFÜHRT; echter isolierter Preview-Barrierennachweis bleibt Pflichtgate |
+| isolierter Preview-Neon-Drill | PASS; 060 und 068–072 angewandt, migrierten Zustand preserviert, Drill-Branch auf Elternzustand zurückgesetzt |
+| isolierter 057+073–076-Evidence-Drill | PASS; 5/5 Checksummen, 19/19 Tenant-FKs, 0/19 Anti-Joins, 21/21 Artefakte; Restore-Abwesenheitsprüfung und identischer Reapply bestanden |

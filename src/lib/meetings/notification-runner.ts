@@ -6,6 +6,7 @@ import {
   renderMeetingNotificationTemplate,
 } from "@/lib/db/meeting-repositories";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   classifyDeliveryError,
   createLeaseOwner,
@@ -52,13 +53,15 @@ function textToEmailHtml(input: { body: string; title: string }) {
 export async function processDueMeetingNotifications(
   input: { jobIds?: string[]; limit?: number; shouldContinue?: () => boolean } = {},
 ): Promise<ProcessResult> {
+  const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) return result;
+
   const requestedJobIds = [...new Set(input.jobIds ?? [])].slice(0, MAX_NOTIFICATION_BATCH);
   const requestedLimit = Math.trunc(input.limit ?? MAX_NOTIFICATION_BATCH);
   const limit = Math.max(1, Math.min(MAX_NOTIFICATION_BATCH, requestedLimit || MAX_NOTIFICATION_BATCH));
   const jobRefs = requestedJobIds.length
     ? requestedJobIds.map((id) => ({ id }))
     : await listDueMeetingNotificationJobs(limit);
-  const result: ProcessResult = { checked: 0, failed: 0, sent: 0 };
 
   for (const jobRef of jobRefs) {
     if (input.shouldContinue && !input.shouldContinue()) break;
@@ -79,6 +82,7 @@ export async function processDueMeetingNotifications(
       emailResult = await sendNewsletterEmail({
         html: textToEmailHtml(rendered),
         idempotencyKey: `meeting-notification-${job.id}`,
+        purpose: "meeting_notification",
         subject: rendered.subject,
         to: job.recipientEmail,
       });

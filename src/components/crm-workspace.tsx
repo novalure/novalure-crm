@@ -84,6 +84,7 @@ import type {
   WorkspaceRole,
 } from "@/lib/crm-types";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 import {
   createWorkspaceProductContext,
   isWorkspaceModuleEnabled,
@@ -153,7 +154,7 @@ type HeaderActionModal = "import" | "project" | null;
 
 type ImportSource = "hubspot" | "csv" | "contacts" | "meetings";
 
-const importLaunchEnabled = false;
+const importLaunchEnabled = isLaunchSurfaceEnabled("importReview");
 
 type ProjectWizardDraft = {
   calendarProvider: CalendarProviderChoice;

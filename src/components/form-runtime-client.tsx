@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent } from "react";
 import {
   FormRenderer,
   fallbackFormRuntimeCopy,
@@ -9,7 +9,12 @@ import {
   type FormRuntimeCopy,
 } from "@/components/form-renderer";
 import type { PublicFormDto, PublicFormFieldDto } from "@/lib/public-form-dto";
-import type { PublicSubmissionProof } from "@/lib/public-submission-contract";
+import {
+  parsePublicSubmissionProof,
+  publicSubmissionControlFields,
+  publicSubmissionProofRefreshLeadSeconds,
+  type PublicSubmissionProof,
+} from "@/lib/public-submission-contract";
 
 type FormRuntimeClientProps = {
   action?: string;
@@ -30,7 +35,7 @@ export function FormRuntimeClient({
   form,
   ...props
 }: FormRuntimeClientProps) {
-  const formKey = `${form.name}:${form.fields.map((field) => field.id).join("|")}`;
+  const formKey = `${form.name}:${form.fields.map((field) => field.id).join("|")}:${props.submissionProof?.signature ?? "no-proof"}`;
 
   return <FormRuntimeClientRuntime key={formKey} form={form} {...props} />;
 }
@@ -51,12 +56,67 @@ function FormRuntimeClientRuntime({
 }: FormRuntimeClientProps) {
   const runtimeCopy = { ...fallbackFormRuntimeCopy, ...copy };
   const formRef = useRef<HTMLFormElement>(null);
+  const proofRefreshPromiseRef = useRef<Promise<PublicSubmissionProof> | null>(null);
+  const proofRefreshSubmitPendingRef = useRef(false);
+  const submissionProofRef = useRef<PublicSubmissionProof | undefined>(submissionProof);
   const steps = useMemo(() => normalizeFormSteps(form), [form]);
+  const [activeSubmissionProof, setActiveSubmissionProof] = useState(submissionProof);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [proofRefreshError, setProofRefreshError] = useState("");
+  const [proofRefreshPending, setProofRefreshPending] = useState(false);
   const [values, setValues] = useState<Record<string, string | string[] | boolean>>(() =>
     Object.fromEntries(form.fields.map((field) => [field.id, initialValue(field)])),
   );
+
+  const installSubmissionProof = useCallback((proof: PublicSubmissionProof) => {
+    submissionProofRef.current = proof;
+    setActiveSubmissionProof(proof);
+    syncPublicSubmissionProofFields(formRef.current, proof);
+    setProofRefreshError("");
+  }, []);
+
+  const refreshSubmissionProof = useCallback(async () => {
+    const currentProof = submissionProofRef.current;
+    if (!currentProof) throw new Error("submission_proof_missing");
+    if (proofRefreshPromiseRef.current) return proofRefreshPromiseRef.current;
+
+    const refreshPromise = (async () => {
+      const body = new URLSearchParams({
+        form: publicKey,
+        [publicSubmissionControlFields.expiresAt]: String(currentProof.expiresAt),
+        [publicSubmissionControlFields.idempotencyKey]: currentProof.idempotencyKey,
+        [publicSubmissionControlFields.issuedAt]: String(currentProof.issuedAt),
+        [publicSubmissionControlFields.proof]: currentProof.signature,
+      });
+      const response = await fetch("/api/forms/submission-proof", {
+        body,
+        cache: "no-store",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null) as { proof?: unknown } | null;
+      const proof = parsePublicSubmissionProof(payload?.proof);
+      if (!response.ok || !proof || proof.idempotencyKey !== currentProof.idempotencyKey) {
+        throw new Error("submission_proof_refresh_failed");
+      }
+      installSubmissionProof(proof);
+      return proof;
+    })();
+
+    proofRefreshPromiseRef.current = refreshPromise;
+    try {
+      return await refreshPromise;
+    } finally {
+      if (proofRefreshPromiseRef.current === refreshPromise) {
+        proofRefreshPromiseRef.current = null;
+      }
+    }
+  }, [installSubmissionProof, publicKey]);
 
   const visibleFieldIds = useMemo(() => {
     const visible = new Set<string>();
@@ -69,6 +129,17 @@ function FormRuntimeClientRuntime({
   useEffect(() => {
     syncTrackingFields(formRef.current);
   }, []);
+
+  useEffect(() => {
+    if (mode !== "public" || previewOnly || !activeSubmissionProof) return;
+    const refreshAt =
+      (activeSubmissionProof.expiresAt - publicSubmissionProofRefreshLeadSeconds) * 1_000;
+    const delay = Math.max(0, Math.min(2_147_483_647, refreshAt - Date.now()));
+    const timer = window.setTimeout(() => {
+      void refreshSubmissionProof().catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [activeSubmissionProof, mode, previewOnly, refreshSubmissionProof]);
 
   function updateValue(field: PublicFormFieldDto, value: string | string[] | boolean) {
     setValues((current) => ({ ...current, [field.id]: value }));
@@ -125,7 +196,36 @@ function FormRuntimeClientRuntime({
     syncTrackingFields(formRef.current);
     if (previewOnly || !validateAllVisibleFields()) {
       event.preventDefault();
+      return;
     }
+    if (mode !== "public") return;
+
+    const proof = submissionProofRef.current;
+    if (!proof) {
+      event.preventDefault();
+      setProofRefreshError(runtimeCopy.proofRefreshFailed);
+      return;
+    }
+    if (!shouldRefreshSubmissionProof(proof)) return;
+
+    event.preventDefault();
+    if (proofRefreshSubmitPendingRef.current) return;
+    proofRefreshSubmitPendingRef.current = true;
+    setProofRefreshPending(true);
+    setProofRefreshError("");
+    const formElement = event.currentTarget;
+    void refreshSubmissionProof().then(
+      () => {
+        proofRefreshSubmitPendingRef.current = false;
+        setProofRefreshPending(false);
+        if (formElement.isConnected) formElement.requestSubmit();
+      },
+      () => {
+        proofRefreshSubmitPendingRef.current = false;
+        setProofRefreshPending(false);
+        setProofRefreshError(runtimeCopy.proofRefreshFailed);
+      },
+    );
   }
 
   function handleBlur(field: PublicFormFieldDto, event: FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
@@ -160,9 +260,11 @@ function FormRuntimeClientRuntime({
       onSubmit={handleSubmit}
       publicKey={publicKey}
       returnTo={returnTo}
+      runtimeError={proofRefreshError}
       selectedFieldId={selectedFieldId}
       source={source}
-      submissionProof={submissionProof}
+      submissionPending={proofRefreshPending}
+      submissionProof={activeSubmissionProof}
       values={values}
       visibleFieldIds={visibleFieldIds}
     />
@@ -184,6 +286,28 @@ function syncTrackingFields(formElement: HTMLFormElement | null) {
 function setHiddenInputValue(formElement: HTMLFormElement, name: string, value: string) {
   const input = formElement.querySelector<HTMLInputElement>(`input[name="${name}"]`);
   if (input) input.value = value;
+}
+
+function syncPublicSubmissionProofFields(
+  formElement: HTMLFormElement | null,
+  proof: PublicSubmissionProof,
+) {
+  if (!formElement) return;
+  setHiddenInputValue(
+    formElement,
+    publicSubmissionControlFields.idempotencyKey,
+    proof.idempotencyKey,
+  );
+  setHiddenInputValue(formElement, publicSubmissionControlFields.issuedAt, String(proof.issuedAt));
+  setHiddenInputValue(formElement, publicSubmissionControlFields.expiresAt, String(proof.expiresAt));
+  setHiddenInputValue(formElement, publicSubmissionControlFields.proof, proof.signature);
+}
+
+function shouldRefreshSubmissionProof(
+  proof: PublicSubmissionProof,
+  nowSeconds = Math.floor(Date.now() / 1_000),
+) {
+  return proof.expiresAt - publicSubmissionProofRefreshLeadSeconds <= nowSeconds;
 }
 
 function isFieldVisible(

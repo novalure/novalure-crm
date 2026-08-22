@@ -86,6 +86,18 @@ export type NormalizedBotMessage = {
   text: string;
 };
 
+type IncomingBotMessageInput = {
+  accountRef?: unknown;
+  channel?: unknown;
+  contactRef?: unknown;
+  eventType?: unknown;
+  name?: unknown;
+  externalMessageId?: unknown;
+  payload?: unknown;
+  phone?: unknown;
+  text?: unknown;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -94,12 +106,18 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function firstRecord(value: unknown) {
-  return Array.isArray(value) && isRecord(value[0]) ? value[0] : null;
+function records(value: unknown) {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
-function firstString(value: unknown) {
-  return Array.isArray(value) && typeof value[0] === "string" && value[0].trim() ? value[0].trim() : null;
+function strings(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(getString).filter((entry): entry is string => Boolean(entry))
+    : [];
+}
+
+function firstRecord(value: unknown) {
+  return records(value)[0] ?? null;
 }
 
 function toIsoTimestamp(value: unknown) {
@@ -162,27 +180,22 @@ function getMetaMessagingEventText(event: Record<string, unknown>) {
   return getString(postback?.title) ?? getString(postback?.payload) ?? "";
 }
 
-function normalizeMetaWhatsAppValue(value: Record<string, unknown>): NormalizedBotMessage | null {
-  const message = firstRecord(value.messages);
-  const status = firstRecord(value.statuses);
+function normalizeMetaWhatsAppValue(value: Record<string, unknown>): NormalizedBotMessage[] {
   const metadata = isRecord(value.metadata) ? value.metadata : {};
-  const contact = firstRecord(value.contacts);
-  const profile = contact && isRecord(contact.profile) ? contact.profile : {};
-  const phone =
-    getString(message?.from) ??
-    getString(status?.recipient_id) ??
-    getString(contact?.wa_id);
-  const timestamp = getString(message?.timestamp) ?? getString(status?.timestamp);
   const accountRef = getString(metadata.phone_number_id);
-  const receivedAt = timestamp && Number.isFinite(Number(timestamp))
-    ? new Date(Number(timestamp) * 1000).toISOString()
-    : new Date().toISOString();
+  if (!accountRef) return [];
 
-  if (message) {
+  const contacts = records(value.contacts);
+  const messages = records(value.messages).flatMap((message): NormalizedBotMessage[] => {
     const externalMessageId = getString(message.id);
-    if (!accountRef || !externalMessageId) return null;
+    if (!externalMessageId) return [];
 
-    return {
+    const messagePhone = getString(message.from);
+    const contact = contacts.find((candidate) => getString(candidate.wa_id) === messagePhone) ?? contacts[0] ?? null;
+    const profile = contact && isRecord(contact.profile) ? contact.profile : {};
+    const phone = messagePhone ?? getString(contact?.wa_id);
+
+    return [{
       accountRef,
       channel: "WhatsApp",
       contactRef: phone ?? "anonymous",
@@ -190,50 +203,56 @@ function normalizeMetaWhatsAppValue(value: Record<string, unknown>): NormalizedB
       eventType: "message",
       externalMessageId,
       phone,
-      receivedAt,
+      receivedAt: toIsoTimestamp(message.timestamp),
       text: getMetaMessageText(message),
-    };
-  }
+    }];
+  });
 
-  if (status) {
-    const externalMessageId = getString(status.id);
-    if (!accountRef || !externalMessageId) return null;
+  const statuses = records(value.statuses).flatMap((status): NormalizedBotMessage[] => {
+    const providerMessageId = getString(status.id);
+    if (!providerMessageId) return [];
+    const eventType = getString(status.status) ?? "status";
+    const timestamp = getString(status.timestamp);
+    const phone = getString(status.recipient_id);
 
-    return {
+    return [{
       accountRef,
       channel: "WhatsApp",
       contactRef: phone ?? "anonymous",
       customerName: null,
-      eventType: getString(status.status) ?? "status",
-      externalMessageId,
+      eventType,
+      // Status callbacks reuse the outbound provider message id as they move
+      // through sent/delivered/read. The event kind and provider timestamp are
+      // part of the durable identity so those distinct callbacks cannot fight
+      // over the inbound-message claim.
+      externalMessageId: `meta-wa-status:${providerMessageId}:${eventType}:${timestamp ?? "unknown"}`,
       phone,
-      receivedAt,
+      receivedAt: toIsoTimestamp(timestamp),
       text: "",
-    };
-  }
+    }];
+  });
 
-  return null;
+  return [...messages, ...statuses];
 }
 
-function normalizeMetaWhatsAppMessage(input: Record<string, unknown>): NormalizedBotMessage | null {
+function normalizeMetaWhatsAppMessages(input: Record<string, unknown>): NormalizedBotMessage[] {
   if (input.field === "messages" && isRecord(input.value)) {
     return normalizeMetaWhatsAppValue(input.value);
   }
 
-  if (!Array.isArray(input.entry)) return null;
+  if (!Array.isArray(input.entry)) return [];
 
+  const normalized: NormalizedBotMessage[] = [];
   for (const entry of input.entry) {
     if (!isRecord(entry) || !Array.isArray(entry.changes)) continue;
 
     for (const change of entry.changes) {
       if (!isRecord(change) || !isRecord(change.value)) continue;
-
-      const normalized = normalizeMetaWhatsAppValue(change.value);
-      if (normalized) return normalized;
+      normalized.push(...normalizeMetaWhatsAppValue(change.value));
     }
   }
 
-  return null;
+  return normalized;
 }
 
 function normalizeMetaMessagingChannel(input: Record<string, unknown>) {
@@ -259,14 +278,14 @@ function normalizeMetaMessagingEvent(
   const read = isRecord(event.read) ? event.read : null;
   const senderId = getString(sender.id);
   const recipientId = getString(recipient.id) ?? getString(entry.id);
+  const timestamp = typeof event.timestamp === "number" ? String(event.timestamp) : getString(event.timestamp);
+  const messageId = getString(message?.mid);
+  const postbackId = getString(postback?.mid);
+  const deliveryMessageIds = Array.from(new Set(strings(delivery?.mids))).sort();
+  const deliveryWatermark = getString(delivery?.watermark);
+  const readWatermark = getString(read?.watermark);
 
-  const externalMessageId =
-    getString(message?.mid) ??
-    getString(postback?.mid) ??
-    firstString(delivery?.mids) ??
-    getString(read?.watermark);
-
-  if (!channel || !senderId || !recipientId || !externalMessageId) return null;
+  if (!channel || !senderId || !recipientId) return null;
   const eventType = message
     ? "message"
     : postback
@@ -276,6 +295,16 @@ function normalizeMetaMessagingEvent(
         : read
           ? "read"
           : "event";
+  const externalMessageId = messageId
+    ?? (postback
+      ? postbackId ?? `meta-postback:${senderId}:${timestamp ?? "unknown"}:${getString(postback.payload) ?? "event"}`
+      : delivery
+        ? `meta-delivery:${deliveryMessageIds.join(",") || "none"}:${deliveryWatermark ?? timestamp ?? "unknown"}`
+        : read
+          ? `meta-read:${readWatermark ?? "unknown"}:${timestamp ?? "unknown"}`
+          : null);
+
+  if (!externalMessageId) return null;
 
   return {
     accountRef: recipientId,
@@ -290,38 +319,32 @@ function normalizeMetaMessagingEvent(
   };
 }
 
-function normalizeMetaMessagingMessage(input: Record<string, unknown>): NormalizedBotMessage | null {
-  if (!normalizeMetaMessagingChannel(input) || !Array.isArray(input.entry)) return null;
+function normalizeMetaMessagingMessages(input: Record<string, unknown>): NormalizedBotMessage[] {
+  if (!normalizeMetaMessagingChannel(input) || !Array.isArray(input.entry)) return [];
 
+  const normalized: NormalizedBotMessage[] = [];
   for (const entry of input.entry) {
     if (!isRecord(entry) || !Array.isArray(entry.messaging)) continue;
 
     for (const event of entry.messaging) {
       if (!isRecord(event)) continue;
 
-      const normalized = normalizeMetaMessagingEvent(input, event, entry);
-      if (normalized) return normalized;
+      const message = normalizeMetaMessagingEvent(input, event, entry);
+      if (message) normalized.push(message);
     }
   }
 
-  return null;
+  return normalized;
 }
 
-export function normalizeIncomingBotMessage(input: {
-  accountRef?: unknown;
-  channel?: unknown;
-  contactRef?: unknown;
-  eventType?: unknown;
-  name?: unknown;
-  externalMessageId?: unknown;
-  payload?: unknown;
-  phone?: unknown;
-  text?: unknown;
-}): NormalizedBotMessage | null {
+export function normalizeIncomingBotMessages(input: IncomingBotMessageInput): NormalizedBotMessage[] {
   const metaPayload = input as Record<string, unknown>;
-  const metaMessage = normalizeMetaWhatsAppMessage(metaPayload) ?? normalizeMetaMessagingMessage(metaPayload);
+  const metaMessages = [
+    ...normalizeMetaWhatsAppMessages(metaPayload),
+    ...normalizeMetaMessagingMessages(metaPayload),
+  ];
 
-  if (metaMessage) return metaMessage;
+  if (metaMessages.length) return metaMessages;
 
   const payload = isRecord(input.payload)
     ? input.payload
@@ -332,9 +355,9 @@ export function normalizeIncomingBotMessage(input: {
   const contactRef = getString(input.contactRef) ?? accountRef;
   const externalMessageId = getString(input.externalMessageId);
 
-  if (!accountRef || !channel || !contactRef || !externalMessageId) return null;
+  if (!accountRef || !channel || !contactRef || !externalMessageId) return [];
 
-  return {
+  return [{
     accountRef,
     channel,
     contactRef,
@@ -344,5 +367,10 @@ export function normalizeIncomingBotMessage(input: {
     phone: getString(input.phone) ?? getString(payload.phone),
     receivedAt: new Date().toISOString(),
     text: typeof input.text === "string" ? input.text : typeof payloadText === "string" ? payloadText : "",
-  };
+  }];
+}
+
+/** @deprecated Use normalizeIncomingBotMessages for webhook request bodies. */
+export function normalizeIncomingBotMessage(input: IncomingBotMessageInput): NormalizedBotMessage | null {
+  return normalizeIncomingBotMessages(input)[0] ?? null;
 }

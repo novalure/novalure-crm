@@ -15,6 +15,7 @@ export function renderStaticFormHtml({
   action,
   copy,
   form,
+  proofRefreshUrl,
   publicKey,
   returnTo,
   source,
@@ -23,6 +24,7 @@ export function renderStaticFormHtml({
   action: string;
   copy: FormRuntimeCopy;
   form: PublicFormDto;
+  proofRefreshUrl: string;
   publicKey: string;
   returnTo: string;
   source: string;
@@ -55,7 +57,7 @@ export function renderStaticFormHtml({
     : "";
   const submitButton = `<button class="novalure-button${steps.length > 1 ? " novalure-hidden" : ""}" data-action="submit"${steps.length > 1 ? " hidden" : ""} type="submit">${escapeHtml(copy.submit)}</button>`;
 
-  return `<form action="${escapeHtml(action)}" class="novalure-runtime" data-novalure-runtime="form" enctype="multipart/form-data" method="post" novalidate>
+  return `<form action="${escapeHtml(action)}" class="novalure-runtime" data-novalure-proof-refresh-url="${escapeHtml(proofRefreshUrl)}" data-novalure-runtime="form" enctype="multipart/form-data" method="post" novalidate>
 <input name="form_id" type="hidden" value="${escapeHtml(publicKey)}">
 <input name="form_slug" type="hidden" value="${escapeHtml(publicKey)}">
 <input name="return_to" type="hidden" value="${escapeHtml(returnTo)}">
@@ -72,6 +74,7 @@ export function renderStaticFormHtml({
 <h2 class="novalure-title">${escapeHtml(form.name)}</h2>
 ${form.thankYouMessage ? `<p class="novalure-description">${escapeHtml(form.thankYouMessage)}</p>` : ""}
 ${progressHtml}
+<p aria-live="polite" class="novalure-error" data-novalure-proof-refresh-error hidden role="alert">${escapeHtml(copy.proofRefreshFailed)}</p>
 ${visibleFields}
 <div class="novalure-actions">${previousButton}${nextButton}${submitButton}</div>
 </div>

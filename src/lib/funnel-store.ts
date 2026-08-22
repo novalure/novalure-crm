@@ -1,14 +1,22 @@
-import { randomBytes } from "node:crypto";
+import "server-only";
+
 import type { AppSession } from "@/lib/auth/session";
 import type { Funnel } from "@/lib/crm-types";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
+import {
+  withTenantTransaction,
+  type TenantTransaction,
+} from "@/lib/db/tenant-client";
+import { writeAuditLog } from "@/lib/db/runtime-repositories";
 import { buildFunnelBlueprint, type FunnelDraft, type FunnelStepDraft } from "@/lib/funnel-builder-adapter";
 import { assertFunnelLivePreflight } from "@/lib/funnel-live-preflight";
 import { funnelSchemaVersion, type FunnelBlueprint, type FunnelVersion } from "@/lib/funnel-schema";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type StoredFunnel = {
   blueprint: FunnelBlueprint;
   blueprintOrigin: "persisted" | "database-draft";
+  blueprintRevision: number;
   funnelId?: string;
   ownerUserId?: string | null;
   projectId?: string | null;
@@ -52,6 +60,8 @@ function stripClientManagedTrackingSecrets(value: unknown) {
   const tracking = { ...asObject(value) };
   delete tracking.publicToken;
   delete tracking.publishToken;
+  delete tracking.publicationRevision;
+  delete tracking.publicationRotationRequestHash;
   return tracking;
 }
 
@@ -66,8 +76,10 @@ function cleanString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
-function createPublicToken() {
-  return randomBytes(24).toString("base64url");
+function readBlueprintRevision(value: unknown) {
+  const candidate = asObject(value).blueprintRevision;
+  const revision = typeof candidate === "number" ? candidate : Number(candidate);
+  return Number.isSafeInteger(revision) && revision >= 0 ? revision : 0;
 }
 
 function toIso(value: string | Date | null | undefined) {
@@ -138,6 +150,7 @@ function toStoredFunnel(row: FunnelStoreRow): StoredFunnel | null {
   return {
     blueprint,
     blueprintOrigin: persistedBlueprint ? "persisted" : "database-draft",
+    blueprintRevision: readBlueprintRevision(row.tracking),
     funnelId: row.id,
     ownerUserId: row.ownerUserId,
     projectId: row.projectId,
@@ -145,7 +158,10 @@ function toStoredFunnel(row: FunnelStoreRow): StoredFunnel | null {
     status: row.status,
     tracking: asObject(row.tracking),
     versions,
-    updatedAt: cleanString(envelope.updatedAt) || toIso(row.updatedAt),
+    // The relational row timestamp is the one and only optimistic-lock token.
+    // Envelope timestamps may come from older CRM/editor payloads and are not
+    // guaranteed to equal PostgreSQL's authoritative updated_at value.
+    updatedAt: toIso(row.updatedAt),
     workspaceId: row.workspaceId,
     workspaceName: row.workspaceName ?? undefined,
   };
@@ -183,16 +199,51 @@ async function findFunnelDatabaseRow(funnelId: string, workspaceId?: string | nu
   );
 }
 
+async function findFunnelDatabaseRowInTransaction(
+  transaction: TenantTransaction,
+  funnelId: string,
+  workspaceId: string,
+) {
+  return transaction.queryOne<FunnelStoreRow>(
+    `
+      select
+        f.id,
+        f.workspace_id as "workspaceId",
+        w.name as "workspaceName",
+        f.project_id as "projectId",
+        f.owner_user_id as "ownerUserId",
+        f.name,
+        f.goal,
+        f.audience,
+        f.entry_channel as "entryChannel",
+        f.status,
+        f.blueprint,
+        f.tracking,
+        f.updated_at as "updatedAt"
+      from funnels f
+      join workspaces w on w.id = f.workspace_id
+      where f.id = $1::uuid
+        and f.workspace_id = $2::uuid
+      for update of f
+    `,
+    [funnelId, workspaceId],
+  );
+}
+
 async function findFunnelRow(funnelId: string, workspaceId?: string | null) {
   const row = await findFunnelDatabaseRow(funnelId, workspaceId);
 
   return row ? toStoredFunnel(row) : null;
 }
 
-async function resolveProjectId(workspaceId: string, projectId: string | undefined | null) {
+async function resolveProjectIdInTransaction(
+  transaction: TenantTransaction,
+  workspaceId: string,
+  projectId: string | undefined | null,
+) {
   if (!isUuid(projectId)) return null;
 
-  const existing = await queryOne<{ id: string }>(
+  const existing = await transaction.queryOne<{ id: string }>(
     `
       select id
       from projects
@@ -205,55 +256,75 @@ async function resolveProjectId(workspaceId: string, projectId: string | undefin
   return existing?.id ?? null;
 }
 
-async function saveStoredFunnelToDatabase(blueprint: FunnelBlueprint, label: string, session?: AppSession) {
+async function saveStoredFunnelToDatabase(
+  blueprint: FunnelBlueprint,
+  label: string,
+  session: AppSession | undefined,
+  expectedBlueprintRevision: number,
+  auditAction: "funnel.blueprint_saved" | "funnel.version_restored",
+) {
+  if (!evaluateLaunchScope("publicFunnelPublication").allowed) {
+    throw new Error("Public funnel publication is launch-off");
+  }
   if (!hasDatabaseUrl()) throw new Error("Funnel database is not configured");
 
   const workspaceId = isUuid(session?.workspaceId) ? session.workspaceId : isUuid(blueprint.workspaceId) ? blueprint.workspaceId : null;
   if (!workspaceId) throw new Error("Funnel workspace is required");
+  if (!isUuid(session?.userId)) throw new Error("Authenticated funnel actor is required");
 
-  const now = new Date().toISOString();
-  const existingRow = await findFunnelDatabaseRow(blueprint.id, workspaceId);
-  if (!existingRow) throw new Error("Funnel not found in database");
-  const existing = existingRow ? toStoredFunnel(existingRow) : null;
-  const projectId = await resolveProjectId(workspaceId, blueprint.projectId);
-  if (!projectId) throw new Error("Funnel project not found in database");
-  const ownerUserId = isUuid(session?.userId) ? session.userId : existing?.ownerUserId ?? null;
-  const safeBlueprint = sanitizeFunnelBlueprintTracking(blueprint);
-  const normalizedBlueprint: FunnelBlueprint = {
-    ...safeBlueprint,
-    projectId: projectId ?? safeBlueprint.projectId,
-    workspaceId,
-  };
-  const nextVersion: FunnelVersion = {
-    id: `${blueprint.id}_version_${new Date().getTime()}`,
-    label,
-    createdAt: now,
-    blueprint: normalizedBlueprint,
-  };
-  const versions = [nextVersion, ...(existing?.versions ?? [])].slice(0, 25);
-  const serverTracking = asObject(existingRow.tracking);
-  const clientTracking = stripClientManagedTrackingSecrets(safeBlueprint.tracking);
-  const publicToken =
-    cleanString(serverTracking.publishToken) ||
-    cleanString(serverTracking.publicToken) ||
-    createPublicToken();
-  const tracking = {
-    ...serverTracking,
-    ...clientTracking,
-    consentMode: safeBlueprint.tracking.consentMode,
-    publicToken,
-    publishToken: publicToken,
-  };
-  const envelope = {
-    blueprint: normalizedBlueprint,
-    schemaVersion: funnelSchemaVersion,
-    updatedAt: now,
-    updatedByUserId: session?.userId ?? null,
-    versions,
-  };
-  const status = safeBlueprint.status === "aktiv" || safeBlueprint.status === "optimieren" ? safeBlueprint.status : "entwurf";
-  const existingId = existing?.funnelId ?? existingRow.id;
-  const row = await queryOne<FunnelStoreRow>(
+  return withTenantTransaction(
+    { actorId: session.userId, workspaceId },
+    async (transaction) => {
+      // The funnel row is locked before deriving any state. Publication credentials
+      // remain database-authoritative and are never copied into a normal save payload.
+      const existingRow = await findFunnelDatabaseRowInTransaction(
+        transaction,
+        blueprint.id,
+        workspaceId,
+      );
+      if (!existingRow) throw new Error("Funnel not found in database");
+      if (
+        !Number.isSafeInteger(expectedBlueprintRevision) ||
+        expectedBlueprintRevision < 0 ||
+        expectedBlueprintRevision !== readBlueprintRevision(existingRow.tracking)
+      ) {
+        throw new Error("Concurrent funnel blueprint update conflict");
+      }
+      const existing = toStoredFunnel(existingRow);
+      const projectId = await resolveProjectIdInTransaction(
+        transaction,
+        workspaceId,
+        blueprint.projectId,
+      );
+      if (!projectId) throw new Error("Funnel project not found in database");
+
+      const now = new Date().toISOString();
+      const safeBlueprint = sanitizeFunnelBlueprintTracking(blueprint);
+      const normalizedBlueprint: FunnelBlueprint = {
+        ...safeBlueprint,
+        projectId,
+        workspaceId,
+      };
+      const nextVersion: FunnelVersion = {
+        id: `${blueprint.id}_version_${new Date().getTime()}`,
+        label,
+        createdAt: now,
+        blueprint: normalizedBlueprint,
+      };
+      const versions = [nextVersion, ...(existing?.versions ?? [])].slice(0, 25);
+      const clientTracking = stripClientManagedTrackingSecrets(safeBlueprint.tracking);
+      const tracking = {
+        ...clientTracking,
+        consentMode: safeBlueprint.tracking.consentMode,
+      };
+      const envelope = {
+        blueprint: normalizedBlueprint,
+        schemaVersion: funnelSchemaVersion,
+        updatedByUserId: session.userId,
+        versions,
+      };
+      const status = safeBlueprint.status === "aktiv" || safeBlueprint.status === "optimieren" ? safeBlueprint.status : "entwurf";
+      const row = await transaction.queryOne<FunnelStoreRow>(
         `
           update funnels
           set
@@ -265,7 +336,26 @@ async function saveStoredFunnelToDatabase(blueprint: FunnelBlueprint, label: str
             entry_channel = $8,
             status = $9,
             blueprint = $10::jsonb,
-            tracking = tracking || $11::jsonb,
+            tracking = tracking || $11::jsonb || jsonb_build_object(
+              'blueprintRevision',
+              coalesce(
+                case
+                  when jsonb_typeof(tracking->'blueprintRevision') = 'number'
+                    then (tracking->>'blueprintRevision')::bigint
+                  else null
+                end,
+                0
+              ) + 1,
+              'publicationRevision',
+              coalesce(
+                case
+                  when jsonb_typeof(tracking->'publicationRevision') = 'number'
+                    then (tracking->>'publicationRevision')::bigint
+                  else null
+                end,
+                0
+              ) + 1
+            ),
             updated_at = now()
           where id = $1::uuid and workspace_id = $2::uuid
           returning
@@ -284,10 +374,10 @@ async function saveStoredFunnelToDatabase(blueprint: FunnelBlueprint, label: str
             updated_at as "updatedAt"
         `,
         [
-          existingId,
+          existingRow.id,
           workspaceId,
           projectId,
-          ownerUserId,
+          session.userId,
           safeBlueprint.name,
           safeBlueprint.goal,
           safeBlueprint.audience,
@@ -298,7 +388,29 @@ async function saveStoredFunnelToDatabase(blueprint: FunnelBlueprint, label: str
         ],
       );
 
-  return row ? toStoredFunnel(row) : null;
+      const stored = row ? toStoredFunnel(row) : null;
+      if (!stored) throw new Error("Funnel blueprint update failed");
+      await writeAuditLog({
+        action: auditAction,
+        after: {
+          blueprintRevision: stored.blueprintRevision,
+          projectId: stored.projectId ?? null,
+          status: stored.status ?? null,
+        },
+        before: {
+          blueprintRevision: existing?.blueprintRevision ?? readBlueprintRevision(existingRow.tracking),
+          projectId: existingRow.projectId,
+          status: existingRow.status,
+        },
+        entityId: stored.funnelId,
+        entityType: "funnel",
+        projectId: stored.projectId,
+        session,
+        transaction,
+      });
+      return stored;
+    },
+  );
 }
 
 export async function getStoredFunnel(funnelId: string, workspaceId?: string | null) {
@@ -306,18 +418,41 @@ export async function getStoredFunnel(funnelId: string, workspaceId?: string | n
   return findFunnelRow(funnelId, workspaceId);
 }
 
-export async function saveStoredFunnel(blueprint: FunnelBlueprint, label = "Designer-Speicherung", session?: AppSession) {
+export async function saveStoredFunnel(
+  blueprint: FunnelBlueprint,
+  label: string | undefined,
+  session: AppSession | undefined,
+  expectedBlueprintRevision: number,
+  auditAction: "funnel.blueprint_saved" | "funnel.version_restored" = "funnel.blueprint_saved",
+) {
   assertFunnelLivePreflight(blueprint);
-  const stored = await saveStoredFunnelToDatabase(blueprint, label, session);
+  const stored = await saveStoredFunnelToDatabase(
+    blueprint,
+    label ?? "Designer-Speicherung",
+    session,
+    expectedBlueprintRevision,
+    auditAction,
+  );
   if (!stored) throw new Error("Funnel blueprint could not be saved");
   return stored;
 }
 
-export async function restoreStoredFunnelVersion(funnelId: string, versionId: string, session: AppSession) {
+export async function restoreStoredFunnelVersion(
+  funnelId: string,
+  versionId: string,
+  session: AppSession,
+  expectedBlueprintRevision: number,
+) {
   const databaseStored = await getStoredFunnel(funnelId, session.workspaceId);
   const databaseVersion = databaseStored?.versions.find((item) => item.id === versionId);
   if (databaseStored && databaseVersion) {
-    return saveStoredFunnel(databaseVersion.blueprint, `Restore ${databaseVersion.label}`, session);
+    return saveStoredFunnel(
+      databaseVersion.blueprint,
+      `Restore ${databaseVersion.label}`,
+      session,
+      expectedBlueprintRevision,
+      "funnel.version_restored",
+    );
   }
   return null;
 }

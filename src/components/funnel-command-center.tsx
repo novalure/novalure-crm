@@ -33,6 +33,7 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type FunnelCommandCenterProps = {
@@ -359,7 +360,7 @@ function normalizeStep(step: FunnelStep, index: number, text: FunnelCommandCente
       inferredType === "Kontaktformular"
         ? ["Name", "E-Mail", "Telefon"]
         : ["Ja, passt", "Noch unsicher", "Nicht relevant"],
-    score: Math.max(10, Math.round(step.conversionRate * 3)),
+    score: 10,
     required: true,
     crmField: step.name.toLowerCase().replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, ""),
     condition: text.defaults.conditionQualified,
@@ -522,6 +523,8 @@ export function FunnelCommandCenter({
   const [activeView, setActiveView] = useState<FunnelView>("all");
   const [activeTab, setActiveTab] = useState<BuilderTab>("overview");
   const [dataMode, setDataMode] = useState<FunnelDataMode>("production");
+  const publicVisitMetricsAvailable = dataMode === "demo" || evaluateLaunchScope("publicFunnelVisit").allowed;
+  const unavailableMetricValue = language === "de" ? "Nicht verfügbar" : "Unavailable";
   const [searchTerm, setSearchTerm] = useState("");
   const [localFunnelIds, setLocalFunnelIds] = useState<string[]>([]);
   const [selectedFunnelId, setSelectedFunnelId] = useState(funnels[0]?.id ?? "");
@@ -577,11 +580,7 @@ export function FunnelCommandCenter({
         const project = projects.find((item) => item.id === editable.projectId);
         const owner = editable.ownerUserId ? users.find((item) => item.id === editable.ownerUserId) : undefined;
         const funnelSteps = editedSteps[editable.id] ?? [];
-        const bottleneck = funnelSteps
-          .filter((step) => step.status === "prüfen" || step.status === "blockiert")
-          .sort((a, b) => a.conversionRate - b.conversionRate)[0];
-
-        return { funnel: editable, project, owner, steps: funnelSteps, bottleneck };
+        return { funnel: editable, project, owner, steps: funnelSteps };
       }),
     [editedFunnels, editedSteps, projects, sourceFunnels, text, users],
   );
@@ -597,7 +596,9 @@ export function FunnelCommandCenter({
       item.funnel.status,
       item.project?.name,
       item.owner?.name,
-      item.steps.map((step) => `${step.name} ${step.dropOffReason} ${step.nextOptimization}`).join(" "),
+      item.steps.map((step) => publicVisitMetricsAvailable
+        ? `${step.name} ${step.dropOffReason} ${step.nextOptimization}`
+        : step.name).join(" "),
     ]
       .filter(Boolean)
       .join(" ")
@@ -639,7 +640,7 @@ export function FunnelCommandCenter({
     ? `/preview/${selectedBlueprint.id}?device=mobile&mode=test&lang=${language}&token=local`
     : "";
   const selectedReadiness = selectedBlueprint && selected ? getFunnelLiveReadiness(selectedBlueprint, selected.funnel) : null;
-  const selectedConversion = selected && selected.funnel.visits > 0
+  const selectedConversion = publicVisitMetricsAvailable && selected && selected.funnel.visits > 0
     ? (selected.funnel.leads / selected.funnel.visits) * 100
     : 0;
   const lifetimeMetrics = getFunnelLifetimeMetrics(decoratedFunnels);
@@ -685,6 +686,10 @@ export function FunnelCommandCenter({
     ? language === "de"
       ? "Quelle: lokale Demo-Fixtures · Scope: Demo-Funnels · Zeitraum: Fixture-Lifetime · Nenner: Summe Demo-Leads / Summe Demo-Besuche · keine Produktions-KPI."
       : "Source: local demo fixtures · Scope: demo funnels · Period: fixture lifetime · Denominator: demo leads / demo visits · not a production KPI."
+    : !publicVisitMetricsAvailable
+      ? language === "de"
+        ? "Public-Funnel-Visit-Tracking ist LAUNCH-OFF. Besuche, Nenner, Conversion und besuchsbasierte Optimierung sind nicht verfügbar; die Lead-Anzahl bleibt eine separate Domain-Kennzahl. Aktivierung erfordert eine signierte gemeinsame Consent-Kohorte und einen überwachten Löschlauf."
+        : "Public Funnel visit tracking is LAUNCH-OFF. Visits, denominator, conversion and visit-based optimization are unavailable; lead count remains a separate domain metric. Activation requires one signed consent cohort and an independently monitored deletion job."
     : language === "de"
       ? `Quelle: ${funnelMetricSemantics.source} · Attribution: entry_channel, aggregiert über alle Kanäle · Scope: Funnels im aktuellen Workspace · Zeitraum: gespeicherte Lifetime-Counter, kein Zeitfilter · Nenner: ${funnelMetricSemantics.denominator} · Projekt-Leads und Test-Submissions ausgeschlossen.`
       : `Source: ${funnelMetricSemantics.source} · Attribution: entry_channel, aggregated across all channels · Scope: funnels in the current workspace · Period: stored lifetime counters, no time filter · Denominator: ${funnelMetricSemantics.denominator} · project-wide CRM leads and test submissions excluded.`;
@@ -993,6 +998,7 @@ export function FunnelCommandCenter({
             language={language}
             onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
             variant="immersive"
+            visitMetricsAvailable={publicVisitMetricsAvailable}
           />
         </div>
       </section>
@@ -1045,10 +1051,10 @@ export function FunnelCommandCenter({
             </button>
             <div className="grid min-w-0 grid-cols-2 gap-2 text-sm 2xl:grid-cols-4">
               {[
-                { label: text.visits, value: formatNumber(lifetimeMetrics.visits, language) },
+                { label: text.visits, value: publicVisitMetricsAvailable ? formatNumber(lifetimeMetrics.visits, language) : unavailableMetricValue },
                 { label: text.leads, value: formatNumber(lifetimeMetrics.leads, language) },
-                { label: text.avgConversion, value: `${formatPercent(lifetimeMetrics.conversionRate, language)}%` },
-                { label: language === "de" ? "Nenner" : "Denominator", value: formatNumber(lifetimeMetrics.denominator, language) },
+                { label: text.avgConversion, value: publicVisitMetricsAvailable ? `${formatPercent(lifetimeMetrics.conversionRate, language)}%` : unavailableMetricValue },
+                { label: language === "de" ? "Nenner" : "Denominator", value: publicVisitMetricsAvailable ? formatNumber(lifetimeMetrics.denominator, language) : unavailableMetricValue },
               ].map((metric) => (
                 <div className="min-w-0 rounded-md bg-stone-50 p-3" key={metric.label}>
                   <p className="font-semibold">{metric.value}</p>
@@ -1057,7 +1063,8 @@ export function FunnelCommandCenter({
               ))}
             </div>
             <p
-              className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-600"
+              className={`rounded-md border px-3 py-2 text-xs font-semibold ${publicVisitMetricsAvailable ? "border-stone-200 bg-stone-50 text-stone-600" : "border-amber-200 bg-amber-50 text-amber-950"}`}
+              data-funnel-metric-available={publicVisitMetricsAvailable ? "true" : "false"}
               data-funnel-metric-attribution={funnelMetricSemantics.attribution}
               data-funnel-metric-denominator={funnelMetricSemantics.denominator}
               data-funnel-metric-period={funnelMetricSemantics.period}
@@ -1132,10 +1139,10 @@ export function FunnelCommandCenter({
                       {getCrmSourceLabel(item.funnel.entryChannel, language)}
                     </span>
                     <span className={`min-w-0 rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"}`}>
-                      {formatNumber(item.funnel.visits, language)} {text.visits} · {formatNumber(item.funnel.leads, language)} {text.leads}
+                      {publicVisitMetricsAvailable ? `${formatNumber(item.funnel.visits, language)} ${text.visits} · ` : `${text.visits}: ${unavailableMetricValue} · `}{formatNumber(item.funnel.leads, language)} {text.leads}
                     </span>
                     <span className={`min-w-0 rounded-md px-2 py-1 font-semibold ${isSelected ? "bg-emerald-300/20 text-emerald-100" : "bg-emerald-50 text-emerald-800"}`}>
-                      {formatPercent(item.funnel.conversionRate, language)}% {text.conversion}
+                      {publicVisitMetricsAvailable ? `${formatPercent(item.funnel.conversionRate, language)}%` : unavailableMetricValue} {text.conversion}
                     </span>
                   </span>
                 </button>
@@ -1231,9 +1238,9 @@ export function FunnelCommandCenter({
                 [text.overview.leadTarget, getFunnelDestinationLabel(selected.funnel.leadDestination, language)],
                 [text.overview.crmStage, selected.funnel.crmStage],
                 [text.overview.followUp, selected.funnel.followUp],
-                [text.visits, formatNumber(selected.funnel.visits, language)],
+                [text.visits, publicVisitMetricsAvailable ? formatNumber(selected.funnel.visits, language) : unavailableMetricValue],
                 [text.leads, formatNumber(selected.funnel.leads, language)],
-                [text.conversion, `${formatPercent(selectedConversion, language)}%`],
+                [text.conversion, publicVisitMetricsAvailable ? `${formatPercent(selectedConversion, language)}%` : unavailableMetricValue],
               ].map(([label, value]) => (
                 <div className="rounded-lg bg-stone-50 p-4" key={label}>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{label}</p>
@@ -1396,6 +1403,7 @@ export function FunnelCommandCenter({
                   key={selectedBlueprint.id}
                   language={language}
                   onEvent={(event) => pushMonitor(event.label, event.detail, event.status)}
+                  visitMetricsAvailable={publicVisitMetricsAvailable}
                 />
               ) : (
                 <p className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
@@ -1417,7 +1425,7 @@ export function FunnelCommandCenter({
                   >
                     <span className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">{text.stepsPanel.step} {index + 1}</span>
                     <span className="mt-1 block break-words text-sm font-semibold">{step.name}</span>
-                    <span className="mt-2 block break-words text-xs opacity-70">{getFunnelStepTypeLabel(step.type, language)} · {text.stepsPanel.score} {step.score} · {step.conversionRate}%</span>
+                    <span className="mt-2 block break-words text-xs opacity-70">{getFunnelStepTypeLabel(step.type, language)} · {text.stepsPanel.score} {step.score}{publicVisitMetricsAvailable ? ` · ${step.conversionRate}%` : ""}</span>
                   </button>
                 ))}
               </div>
@@ -1537,13 +1545,13 @@ export function FunnelCommandCenter({
           {activeTab === "analytics" ? (
             <div className="mt-5 grid gap-4">
               <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.visits}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.visits, language)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.visits}</p><p className="mt-2 text-2xl font-semibold">{publicVisitMetricsAvailable ? formatNumber(selected.funnel.visits, language) : unavailableMetricValue}</p></div>
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.leads}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.leads, language)}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.conversion}</p><p className="mt-2 text-2xl font-semibold">{formatPercent(selectedConversion, language)}%</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{language === "de" ? "Nenner" : "Denominator"}</p><p className="mt-2 text-2xl font-semibold">{formatNumber(selected.funnel.visits, language)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{text.conversion}</p><p className="mt-2 text-2xl font-semibold">{publicVisitMetricsAvailable ? `${formatPercent(selectedConversion, language)}%` : unavailableMetricValue}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-4"><p className="text-xs uppercase tracking-[0.16em] text-stone-500">{language === "de" ? "Nenner" : "Denominator"}</p><p className="mt-2 text-2xl font-semibold">{publicVisitMetricsAvailable ? formatNumber(selected.funnel.visits, language) : unavailableMetricValue}</p></div>
               </div>
-              <p className="rounded-md border border-stone-200 bg-stone-50 p-3 text-xs font-semibold text-stone-600">{metricDisclosure}</p>
-              <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
+              <p className={`rounded-md border p-3 text-xs font-semibold ${publicVisitMetricsAvailable ? "border-stone-200 bg-stone-50 text-stone-600" : "border-amber-200 bg-amber-50 text-amber-950"}`}>{metricDisclosure}</p>
+              {publicVisitMetricsAvailable ? <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
                 <div className="grid gap-3">
                   {selectedSteps.map((step) => (
                     <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={step.id}>
@@ -1562,7 +1570,7 @@ export function FunnelCommandCenter({
                     <p className="mt-1">{text.analytics.nextOptimizationText}</p>
                   </div>
                 </div>
-              </div>
+              </div> : null}
             </div>
           ) : null}
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { hasProductCapability } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   createConversionAnalyticsSnapshot,
   createDataQualityCleanupAction,
@@ -70,6 +71,20 @@ export async function POST(request: Request) {
   const operation = getOptionalString(body.operation);
   if (!operation) {
     return NextResponse.json({ error: "Operation is required" }, { status: 400 });
+  }
+
+  if (
+    operation === "viewing_slot" ||
+    operation === "offer_milestone" ||
+    operation === "complete_analysis_recommendations"
+  ) {
+    const launchScope = evaluateLaunchScope("propertyReservationRelationshipSync");
+    if (!launchScope.allowed) {
+      return NextResponse.json(
+        { code: launchScope.code, error: "property_relationship_mutation_launch_off", persisted: false },
+        { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+      );
+    }
   }
 
   if (

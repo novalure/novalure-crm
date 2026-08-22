@@ -36,6 +36,7 @@ import {
 import type { LanguageCode } from "@/lib/i18n";
 import { embedText } from "@/lib/integrations/embeddings";
 import { generateModelReply, getModelProviderStatus } from "@/lib/integrations/model-provider";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   botDocumentAttemptShareTtlSeconds,
   botDocumentMediaShareTtlSeconds,
@@ -714,7 +715,12 @@ async function recordDocumentDelivery(input: {
   payload: Record<string, unknown>;
   requestUrl?: string;
   session: AppSession;
+  webhookEventId?: string | null;
 }) {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return { delivery: null, documentSendId: null, status: "blocked" };
+  }
+
   const recipient = getDocumentRecipient({ customerData: input.customerData, payload: input.payload });
   const initialStatus = input.decision.mode === "test" ? "test" : input.decision.allowed ? "queued" : "blocked";
   const documentSendId = await insertBotDocumentSend({
@@ -734,6 +740,7 @@ async function recordDocumentDelivery(input: {
     },
     sentAt: null,
     status: initialStatus,
+    webhookEventId: input.webhookEventId,
   });
 
   if (!input.decision.allowed || input.decision.mode === "test") {
@@ -909,6 +916,7 @@ async function recordDocumentDelivery(input: {
       session: input.session,
       campaignId: null,
       contactId: input.contactId,
+      deliveryPurpose: "bot_document",
       error: delivery.error ? "provider_delivery_failed" : null,
       metadata: {
         botDocumentSendId: documentSendId,
@@ -954,6 +962,7 @@ export async function runBotChat(input: {
   const explicitContactId = typeof payload.contactId === "string" ? payload.contactId : null;
   const explicitLeadId = typeof payload.leadId === "string" ? payload.leadId : null;
   const channel = typeof payload.channel === "string" ? payload.channel : "api";
+  const webhookEventId = typeof payload.webhookEventId === "string" ? payload.webhookEventId : null;
   const customerFacing = payload.customerFacing !== false && isCustomerFacingChannel(channel);
   const promptViolations = findBotPromptViolations(prompt);
   const extractedEmail = extractEmailFromText(prompt);
@@ -995,7 +1004,7 @@ export async function runBotChat(input: {
           projectId,
           prompt,
           score: leadScore,
-          webhookEventId: typeof payload.webhookEventId === "string" ? payload.webhookEventId : null,
+          webhookEventId,
         })
       : null;
   const contactId = explicitContactId ?? crmSync?.contactId ?? null;
@@ -1022,16 +1031,20 @@ export async function runBotChat(input: {
       model,
       projectId,
       title: conversationTitle,
+      webhookEventId,
     })) ?? (typeof payload.conversationId === "string" ? payload.conversationId : crypto.randomUUID());
 
   if (crmSync || explicitContactId || explicitLeadId) {
-    await linkBotConversationToCrmEntities({
+    const linkedConversationId = await linkBotConversationToCrmEntities({
       session,
       conversationId,
       contactId,
       leadId,
       sync: crmSync,
     });
+    if (!linkedConversationId) {
+      throw new Error("Bot CRM links are not available in this workspace");
+    }
   }
 
   await insertBotMessage({
@@ -1052,6 +1065,7 @@ export async function runBotChat(input: {
     },
     model,
     role: "user",
+    webhookEventId,
   });
 
   const history = await listBotMessages({ session, conversationId, limit: 16 });
@@ -1315,6 +1329,7 @@ export async function runBotChat(input: {
     output: knowledge,
     riskLevel: "low",
     toolName: "search_approved_knowledge",
+    webhookEventId,
   });
   const qualificationToolCallId = await insertBotToolCall({
     session,
@@ -1324,6 +1339,7 @@ export async function runBotChat(input: {
     output: qualification,
     riskLevel: "medium",
     toolName: "qualify_lead",
+    webhookEventId,
   });
   const customerDataToolCallId = await insertBotToolCall({
     session,
@@ -1337,6 +1353,7 @@ export async function runBotChat(input: {
     },
     riskLevel: "medium",
     toolName: "capture_customer_data",
+    webhookEventId,
   });
   const meetingToolCallId = meetingSlots
     ? await insertBotToolCall({
@@ -1355,6 +1372,7 @@ export async function runBotChat(input: {
         riskLevel: "medium",
         status: meetingPrepareDecision?.allowed === false ? "failed" : "completed",
         toolName: "find_meeting_slots",
+        webhookEventId,
       })
     : null;
   const recordedDocumentDelivery = documentDecision
@@ -1371,6 +1389,7 @@ export async function runBotChat(input: {
         payload,
         requestUrl: input.requestUrl,
         session,
+        webhookEventId,
       })
     : null;
   const persistedRecordedDocumentDelivery = recordedDocumentDelivery?.delivery
@@ -1392,6 +1411,7 @@ export async function runBotChat(input: {
         riskLevel: "high",
         status: documentDecision?.allowed === false ? "failed" : "completed",
         toolName: "send_document",
+        webhookEventId,
       })
     : null;
   const requestedActions = {
@@ -1451,6 +1471,7 @@ export async function runBotChat(input: {
           language === "de"
             ? "Manuelle Bot-Kontrolle ist per Umgebungswert aktiv"
             : "Manual bot control is enabled by environment",
+        webhookEventId,
       })
     : null;
   const runSummary = {
@@ -1472,31 +1493,6 @@ export async function runBotChat(input: {
           slug: meetingPayload.slug,
         }
       : null;
-
-  await insertBotMessage({
-    session,
-    conversationId,
-    content: finalReplyText,
-    metadata: {
-      autonomy: {
-        controls,
-        customerFacing,
-        decisions: policyDecisions,
-        documentDelivery: persistedRecordedDocumentDelivery,
-        meetingBooking,
-        promptViolations,
-        replyBlocked: safeReply.blocked,
-      },
-      botRunSummary: runSummary,
-      external: modelReply.external,
-      pendingMeeting: pendingMeetingForNextReply,
-      provider: modelReply.provider,
-      reason: modelReply.reason ?? null,
-      requestedActions,
-    },
-    model: modelReply.model,
-    role: "assistant",
-  });
 
   if (requiresHumanHandoff) {
     await updateBotConversationStatus({
@@ -1537,6 +1533,37 @@ export async function runBotChat(input: {
     },
     entityId: conversationId,
     entityType: "bot_conversation",
+    webhookEventId,
+  });
+
+  // For webhook runs this assistant row is the durable recovery marker. Keep
+  // it last: insertBotMessage commits the marker atomically with first-response
+  // analytics/speed-to-lead, after the preceding idempotent effects finished.
+  await insertBotMessage({
+    session,
+    conversationId,
+    content: finalReplyText,
+    metadata: {
+      autonomy: {
+        controls,
+        customerFacing,
+        decisions: policyDecisions,
+        documentDelivery: persistedRecordedDocumentDelivery,
+        meetingBooking,
+        promptViolations,
+        replyBlocked: safeReply.blocked,
+      },
+      botRunSummary: runSummary,
+      external: modelReply.external,
+      pendingMeeting: pendingMeetingForNextReply,
+      provider: modelReply.provider,
+      reason: modelReply.reason ?? null,
+      requestedActions,
+      webhookEventId,
+    },
+    model: modelReply.model,
+    role: "assistant",
+    webhookEventId,
   });
 
   return {

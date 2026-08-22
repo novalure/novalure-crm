@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import {
   isQaResetCascadeOwnedTable,
   isQaResetDatabaseTable,
+  isQaResetPlanDigest,
   isQaResetRetainedTable,
   isUuid,
   qaResetCascadeOwnedTables,
@@ -14,9 +15,11 @@ import {
   withTenantTransaction,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
+import { hasExecutedQaBatchAudit, lockQaBatchFence } from "@/lib/db/qa-batch-fence";
 
 const maximumBatchObjects = 20_000;
 const identifierPattern = /^[a-z][a-z0-9_]{0,62}$/;
+const planDigestDomain = "novalure.qa-reset-plan.v1";
 const providerSideEffectTables = new Set<QaResetDatabaseTable>([
   "bot_document_sends",
   "calendar_sync_events",
@@ -117,8 +120,12 @@ export type QaResetResult = Readonly<{
 
 export class QaResetGuardError extends Error {
   readonly code:
+    | "batch_already_executed"
     | "batch_not_found"
     | "invalid_actor"
+    | "plan_digest_invalid"
+    | "plan_digest_mismatch"
+    | "plan_digest_required"
     | "workspace_not_allowlisted"
     | "workspace_not_found"
     | "workspace_not_qa";
@@ -194,8 +201,16 @@ function groupLedgerRows(rows: readonly QaBatchObjectRow[]) {
   return { blockers, databaseTargets, externalTargets: [...externalTargets.values()] };
 }
 
-function directWorkspaceScopeSql(table: QaResetDatabaseTable, operation: "delete" | "select") {
+function directWorkspaceScopeSql(
+  table: QaResetDatabaseTable,
+  operation: "delete" | "select",
+  options: { lockTarget?: boolean } = {},
+) {
   const tableName = quoteIdentifier(table);
+  // PostgreSQL FK checks take a KEY SHARE lock on the referenced row. UPDATE is
+  // intentionally stronger so a new child reference cannot pass the closure check
+  // and commit before this reset transaction deletes its registered parent.
+  const targetLock = options.lockTarget ? "for update of target" : "";
   if (table === "knowledge_chunks") {
     if (operation === "select") {
       return `
@@ -205,6 +220,7 @@ function directWorkspaceScopeSql(table: QaResetDatabaseTable, operation: "delete
         where target.id = any($1::uuid[])
           and scope.workspace_id = $2::uuid
         order by target.id
+        ${targetLock}
       `;
     }
     return `
@@ -224,6 +240,7 @@ function directWorkspaceScopeSql(table: QaResetDatabaseTable, operation: "delete
       where target.id = any($1::uuid[])
         and target.workspace_id::text = $2::text
       order by target.id
+      ${targetLock}
     `;
   }
   return `
@@ -239,11 +256,13 @@ async function verifyRegisteredTargets(
   workspaceId: string,
   groupedTargets: ReadonlyMap<QaResetDatabaseTable, Set<string>>,
   blockers: QaResetBlocker[],
+  options: { lockTargets: boolean },
 ) {
-  for (const [table, idSet] of groupedTargets) {
+  const targets = [...groupedTargets.entries()].sort(([left], [right]) => left.localeCompare(right));
+  for (const [table, idSet] of targets) {
     const ids = [...idSet].sort();
     const rows = await transaction.query<{ id: string }>(
-      directWorkspaceScopeSql(table, "select"),
+      directWorkspaceScopeSql(table, "select", { lockTarget: options.lockTargets }),
       [ids, workspaceId],
     );
     const found = new Set(rows.map((row) => row.id.toLowerCase()));
@@ -443,6 +462,7 @@ async function verifyReferentialClosure(
 function deterministicPlan(input: Omit<QaResetPlan, "digest">): QaResetPlan {
   const serialized = JSON.stringify({
     batchId: input.batchId,
+    batchMarker: input.batchMarker,
     blockers: input.blockers,
     deletionOrder: input.deletionOrder,
     externalTargets: input.externalTargets,
@@ -451,13 +471,39 @@ function deterministicPlan(input: Omit<QaResetPlan, "digest">): QaResetPlan {
   });
   return {
     ...input,
-    digest: createHash("sha256").update(serialized).digest("hex"),
+    digest: createHash("sha256")
+      .update(planDigestDomain)
+      .update("\0")
+      .update(serialized)
+      .digest("hex"),
   };
+}
+
+function assertExpectedPlanDigest(expectedPlanDigest: string | null | undefined, actualPlanDigest: string) {
+  if (!expectedPlanDigest) {
+    throw new QaResetGuardError(
+      "plan_digest_required",
+      "QA reset execution requires the exact plan digest returned by a preceding dry-run",
+    );
+  }
+  if (!isQaResetPlanDigest(expectedPlanDigest)) {
+    throw new QaResetGuardError("plan_digest_invalid", "QA reset expected plan digest is invalid");
+  }
+
+  const expected = Buffer.from(expectedPlanDigest, "hex");
+  const actual = Buffer.from(actualPlanDigest, "hex");
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    throw new QaResetGuardError(
+      "plan_digest_mismatch",
+      "QA reset plan changed after dry-run; repeat the dry-run before execution",
+    );
+  }
 }
 
 async function createPlan(
   transaction: TenantTransaction,
   input: { batch: QaBatchRow; ledgerRows: readonly QaBatchObjectRow[]; workspaceId: string },
+  options: { lockTargets: boolean },
 ) {
   const grouped = groupLedgerRows(input.ledgerRows);
   const blockers = [...grouped.blockers];
@@ -481,7 +527,13 @@ async function createPlan(
     }
   }
 
-  await verifyRegisteredTargets(transaction, input.workspaceId, grouped.databaseTargets, blockers);
+  await verifyRegisteredTargets(
+    transaction,
+    input.workspaceId,
+    grouped.databaseTargets,
+    blockers,
+    options,
+  );
   const targetTables = [...grouped.databaseTargets.keys()].sort();
   const edges = await loadForeignKeys(transaction, targetTables);
   await verifyReferentialClosure(transaction, input.workspaceId, grouped.databaseTargets, edges, blockers);
@@ -582,6 +634,7 @@ export async function runQaBatchResetInTransaction(
     actorId: string;
     allowlistedWorkspaceIds: ReadonlySet<string>;
     batchId: string;
+    expectedPlanDigest?: string | null;
     mode: QaResetMode;
     workspaceId: string;
   },
@@ -590,6 +643,19 @@ export async function runQaBatchResetInTransaction(
   if (!input.allowlistedWorkspaceIds.has(input.workspaceId)) {
     throw new QaResetGuardError("workspace_not_allowlisted", "QA reset workspace is not server-allowlisted");
   }
+  if (input.mode === "execute") {
+    if (!input.expectedPlanDigest) {
+      throw new QaResetGuardError(
+        "plan_digest_required",
+        "QA reset execution requires the exact plan digest returned by a preceding dry-run",
+      );
+    }
+    if (!isQaResetPlanDigest(input.expectedPlanDigest)) {
+      throw new QaResetGuardError("plan_digest_invalid", "QA reset expected plan digest is invalid");
+    }
+  }
+
+  await lockQaBatchFence(transaction, input.batchId);
 
   const workspace = await transaction.queryOne<QaWorkspaceRow>(
     `select id, is_qa as "isQa" from workspaces where id = $1::uuid for update`,
@@ -609,6 +675,9 @@ export async function runQaBatchResetInTransaction(
     [input.batchId, input.workspaceId],
   );
   if (!batch) throw new QaResetGuardError("batch_not_found", "QA batch is not registered for this workspace");
+  if (await hasExecutedQaBatchAudit(transaction, input)) {
+    throw new QaResetGuardError("batch_already_executed", "QA batch was already executed and is permanently sealed");
+  }
 
   const ledgerRows = await transaction.query<QaBatchObjectRow>(
     `
@@ -624,7 +693,42 @@ export async function runQaBatchResetInTransaction(
     `,
     [input.batchId, input.workspaceId, maximumBatchObjects + 1],
   );
-  const plan = await createPlan(transaction, { batch, ledgerRows, workspaceId: input.workspaceId });
+  let plan = await createPlan(
+    transaction,
+    { batch, ledgerRows, workspaceId: input.workspaceId },
+    { lockTargets: false },
+  );
+  if (input.mode === "dry_run") {
+    if (plan.blockers.length > 0) {
+      const deletedCounts = {};
+      const auditEventId = await writeResetAudit(transaction, {
+        actorId: input.actorId,
+        deletedCounts,
+        mode: input.mode,
+        outcome: "blocked",
+        plan,
+      });
+      return { auditEventId, deletedCounts, mode: input.mode, outcome: "blocked", plan };
+    }
+    const deletedCounts = {};
+    const auditEventId = await writeResetAudit(transaction, {
+      actorId: input.actorId,
+      deletedCounts,
+      mode: input.mode,
+      outcome: "dry_run",
+      plan,
+    });
+    return { auditEventId, deletedCounts, mode: input.mode, outcome: "dry_run", plan };
+  }
+
+  // Rebuild the plan after locking every exact target. The locks remain held by
+  // this transaction, making this closure result stable through executePlan.
+  plan = await createPlan(
+    transaction,
+    { batch, ledgerRows, workspaceId: input.workspaceId },
+    { lockTargets: true },
+  );
+  assertExpectedPlanDigest(input.expectedPlanDigest, plan.digest);
   if (plan.blockers.length > 0) {
     const deletedCounts = {};
     const auditEventId = await writeResetAudit(transaction, {
@@ -635,18 +739,6 @@ export async function runQaBatchResetInTransaction(
       plan,
     });
     return { auditEventId, deletedCounts, mode: input.mode, outcome: "blocked", plan };
-  }
-
-  if (input.mode === "dry_run") {
-    const deletedCounts = {};
-    const auditEventId = await writeResetAudit(transaction, {
-      actorId: input.actorId,
-      deletedCounts,
-      mode: input.mode,
-      outcome: "dry_run",
-      plan,
-    });
-    return { auditEventId, deletedCounts, mode: input.mode, outcome: "dry_run", plan };
   }
 
   const deletedCounts = await executePlan(transaction, plan);
@@ -664,6 +756,7 @@ export async function runQaBatchReset(input: {
   actorId: string;
   allowlistedWorkspaceIds: ReadonlySet<string>;
   batchId: string;
+  expectedPlanDigest?: string | null;
   mode: QaResetMode;
   workspaceId: string;
 }) {

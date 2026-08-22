@@ -907,6 +907,10 @@ async function deleteStoredFile(asset: MediaAsset) {
 }
 
 function privateBlobToken() {
+  if (process.env.VERCEL_ENV?.trim().toLowerCase() === "preview") {
+    return process.env.NOVALURE_PREVIEW_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() || "";
+  }
+
   return (
     process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() ||
     process.env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() ||
@@ -915,6 +919,10 @@ function privateBlobToken() {
 }
 
 function publicBlobToken() {
+  if (process.env.VERCEL_ENV?.trim().toLowerCase() === "preview") {
+    return process.env.NOVALURE_PREVIEW_PUBLIC_BLOB_READ_WRITE_TOKEN?.trim() || "";
+  }
+
   return (
     process.env.NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN?.trim() ||
     process.env.BLOB_READ_WRITE_TOKEN?.trim() ||

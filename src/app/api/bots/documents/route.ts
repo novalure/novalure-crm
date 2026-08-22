@@ -22,6 +22,7 @@ import {
   revokeWorkspaceMediaShare,
   serializeMediaAsset,
 } from "@/lib/media-store";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 const privateJsonHeaders = { "cache-control": "private, no-store" };
 
@@ -195,6 +196,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!evaluateLaunchScope("customerCommunicationProviderMutation").allowed) {
+    return NextResponse.json(
+      { error: "bot_provider_delivery_launch_off" },
+      { headers: privateJsonHeaders, status: 503 },
+    );
+  }
+
   const auth = await requirePermission(request, "bots:run");
   if (!auth.ok) return auth.response;
 
@@ -485,6 +493,7 @@ export async function POST(request: Request) {
       session: auth.session,
       campaignId: null,
       contactId: getString(input.contactId),
+      deliveryPurpose: "bot_document",
       error: delivery.error ? "provider_delivery_failed" : null,
       metadata: {
         botDocumentSendId: documentSendId,

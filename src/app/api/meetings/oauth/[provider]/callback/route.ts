@@ -8,6 +8,7 @@ import {
   upsertCalendarOAuthConnection,
   type CalendarOAuthProvider,
 } from "@/lib/integrations/calendar-connections";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
 
 type RouteContext = {
@@ -22,6 +23,14 @@ function getProvider(value: string): CalendarOAuthProvider | null {
 export async function GET(request: Request, context: RouteContext) {
   const auth = await requirePermissionAndProductCapability(request, "calendar:sync", "calendar:manage");
   if (!auth.ok) return auth.response;
+
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "calendar_provider_mutation_launch_off", ok: false },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
 
   const { provider: providerParam } = await context.params;
   const provider = getProvider(providerParam);

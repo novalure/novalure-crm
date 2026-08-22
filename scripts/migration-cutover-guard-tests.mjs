@@ -391,23 +391,29 @@ test("060, 061 and DB-01 migration 068 remain manual even when alias handling is
   assert.throws(
     () => createMigrationPlan({
       allowManualCutover: true,
-      ledgerRows: [ledgerRow("060_tenant_rls_pilot_prepare", "sha-060")],
+      ledgerRows: [],
       migrations,
       only: "068_qa_batch_reset_safety",
     }),
-    /required predecessor 061_validate_and_activate_tenant_rls_pilot is not checksummed in the ledger/,
+    /required predecessor 060_tenant_rls_pilot_prepare is not checksummed in the ledger/,
   );
   assert.deepEqual(
     createMigrationPlan({
       allowManualCutover: true,
-      ledgerRows: [
-        ledgerRow("060_tenant_rls_pilot_prepare", "sha-060"),
-        ledgerRow("061_validate_and_activate_tenant_rls_pilot", "sha-061"),
-      ],
+      ledgerRows: [ledgerRow("060_tenant_rls_pilot_prepare", "sha-060")],
       migrations,
       only: "068_qa_batch_reset_safety",
     }),
     [migrations[2]],
+  );
+  assert.doesNotThrow(() =>
+    resolveMigrationLedgerState({
+      ledgerRows: [
+        ledgerRow("060_tenant_rls_pilot_prepare", "sha-060"),
+        ledgerRow("068_qa_batch_reset_safety", "sha-068"),
+      ],
+      migrations,
+    }),
   );
 });
 
@@ -503,6 +509,11 @@ test("explicit automatic migrations require their checksummed predecessors", () 
     migration("070_funnel_submission_idempotency_recovery", "sha-070"),
     migration("071_forms_owner_tenant_guard", "sha-071"),
     migration("072_form_submission_atomicity", "sha-072"),
+    migration("060_tenant_rls_pilot_prepare", "sha-060", { manualCutover: true }),
+    migration("073_launch_tenant_relation_guards", "sha-073"),
+    migration("074_validate_launch_tenant_relation_guards", "sha-074", { manualCutover: true }),
+    migration("075_public_funnel_visit_truth", "sha-075"),
+    migration("076_bot_webhook_durable_processing", "sha-076"),
   ];
 
   assert.throws(
@@ -637,6 +648,35 @@ test("explicit automatic migrations require their checksummed predecessors", () 
     }),
     [migrations[11]],
   );
+  const launchLedgerWithoutTenantRole = [
+    ledgerRow("053_oauth_state_integrity", "sha-053"),
+    ledgerRow("055_public_submission_abuse_guards", "sha-055"),
+    ledgerRow("066_oauth_state_workspace_user_guard", "sha-066"),
+    ledgerRow("070_funnel_submission_idempotency_recovery", "sha-070"),
+    ledgerRow("071_forms_owner_tenant_guard", "sha-071"),
+    ledgerRow("072_form_submission_atomicity", "sha-072"),
+    ledgerRow("073_launch_tenant_relation_guards", "sha-073"),
+    ledgerRow("074_validate_launch_tenant_relation_guards", "sha-074"),
+  ];
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: launchLedgerWithoutTenantRole,
+      migrations,
+      only: "075_public_funnel_visit_truth",
+    }),
+    /required predecessor 060_tenant_rls_pilot_prepare/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      ledgerRows: [
+        ...launchLedgerWithoutTenantRole,
+        ledgerRow("060_tenant_rls_pilot_prepare", "sha-060"),
+      ],
+      migrations,
+      only: "075_public_funnel_visit_truth",
+    }),
+    [migrations[15]],
+  );
   assert.throws(
     () => resolveMigrationLedgerState({
       ledgerRows: [ledgerRow("052_validate_property_inventory_tenant_guards", "sha-052")],
@@ -656,7 +696,15 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"068_qa_batch_reset_safety"/);
   assert.match(
     runner,
-    /\["068_qa_batch_reset_safety", "061_validate_and_activate_tenant_rls_pilot"\]/,
+    /\["068_qa_batch_reset_safety", "060_tenant_rls_pilot_prepare"\]/,
+  );
+  assert.match(
+    runner,
+    /\["075_public_funnel_visit_truth", \[[\s\S]*"074_validate_launch_tenant_relation_guards"[\s\S]*"060_tenant_rls_pilot_prepare"/,
+  );
+  assert.match(
+    runner,
+    /\["076_bot_webhook_durable_processing", \[[\s\S]*"075_public_funnel_visit_truth"[\s\S]*"057_bot_webhook_legacy_index_cutover"/,
   );
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });

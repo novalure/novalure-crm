@@ -1,4 +1,9 @@
-import { getCalendarAccessToken } from "@/lib/integrations/calendar-connections";
+import {
+  calendarProviderReadUnavailableCode,
+  getCalendarAccessToken,
+  getCalendarReadAccessToken,
+} from "@/lib/integrations/calendar-connections";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type MicrosoftCalendarResult = {
   provider: "microsoft-365" | "mock";
@@ -103,9 +108,14 @@ export function getMicrosoftCalendarProviderStatus(): MicrosoftCalendarProviderS
   };
 }
 
-async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
+async function getGraphToken(
+  workspaceId?: string,
+  options: { allowRefresh?: boolean } = {},
+): Promise<GraphToken | null> {
   if (workspaceId) {
-    const token = await getCalendarAccessToken({ provider: "microsoft", workspaceId }).catch(() => null);
+    const token = await (
+      options.allowRefresh ? getCalendarAccessToken : getCalendarReadAccessToken
+    )({ provider: "microsoft", workspaceId }).catch(() => null);
 
     if (token) {
       return {
@@ -114,6 +124,10 @@ async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
         token,
       };
     }
+
+    // A workspace-scoped request must never fall through to application-wide
+    // credentials or another calendar user.
+    return null;
   }
 
   const directToken = envValue("MICROSOFT_GRAPH_ACCESS_TOKEN");
@@ -172,6 +186,15 @@ export async function syncMicrosoftCalendarEvent(input: {
   attendees?: string[];
   workspaceId?: string;
 }): Promise<MicrosoftCalendarResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
   if (!providerStatus.configured && !input.workspaceId) {
@@ -183,7 +206,7 @@ export async function syncMicrosoftCalendarEvent(input: {
   }
 
   try {
-    const graph = await getGraphToken(input.workspaceId);
+    const graph = await getGraphToken(input.workspaceId, { allowRefresh: true });
 
     if (!graph) {
       return {
@@ -277,10 +300,10 @@ export async function syncMicrosoftCalendarEvent(input: {
 export async function listMicrosoftBusyTimes(input: {
   timeMax: string;
   timeMin: string;
-  workspaceId?: string;
+  workspaceId: string;
 }): Promise<Array<{ end: string; start: string }>> {
   const graph = await getGraphToken(input.workspaceId);
-  if (!graph) throw new Error("Microsoft calendar is not connected");
+  if (!graph) throw new Error(calendarProviderReadUnavailableCode);
 
   const url = new URL(graph.calendarViewEndpoint);
   url.searchParams.set("startDateTime", input.timeMin);
@@ -322,6 +345,16 @@ export async function updateMicrosoftCalendarEvent(input: {
   subject: string;
   workspaceId?: string;
 }): Promise<MicrosoftCalendarMutationResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      eventId: input.eventId,
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
   if (!providerStatus.configured && !input.workspaceId) {
@@ -333,7 +366,7 @@ export async function updateMicrosoftCalendarEvent(input: {
   }
 
   try {
-    const graph = await getGraphToken(input.workspaceId);
+    const graph = await getGraphToken(input.workspaceId, { allowRefresh: true });
 
     if (!graph) {
       return {
@@ -406,6 +439,16 @@ export async function deleteMicrosoftCalendarEvent(input: {
   eventId: string;
   workspaceId?: string;
 }): Promise<MicrosoftCalendarMutationResult> {
+  const launchScope = evaluateLaunchScope("calendarProviderMutation");
+  if (!launchScope.allowed) {
+    return {
+      error: "calendar_provider_mutation_launch_off",
+      eventId: input.eventId,
+      provider: "mock",
+      status: "failed",
+    };
+  }
+
   const providerStatus = getMicrosoftCalendarProviderStatus();
 
   if (!providerStatus.configured && !input.workspaceId) {
@@ -417,7 +460,7 @@ export async function deleteMicrosoftCalendarEvent(input: {
   }
 
   try {
-    const graph = await getGraphToken(input.workspaceId);
+    const graph = await getGraphToken(input.workspaceId, { allowRefresh: true });
 
     if (!graph) {
       return {

@@ -11,9 +11,9 @@ Finale Remediation-SHA: wird nach dem Dokument-Freeze im Handoff ausgewiesen.
 Dieses Ledger trennt strikt zwischen:
 
 - belegten Code-, Contract- und lokalen Buildtests;
-- read-only erhobener Live-/Vercel-Evidenz;
-- nicht ausgeführten Preview-, Provider-, Datenbank- und Production-Prüfungen;
-- produktiven Änderungen, die ohne ausdrückliche Freigabe nicht vorgenommen wurden.
+- read-only erhobener Live-/Vercel-/Neon-Evidenz sowie separat ausgewiesenen, nicht produktiven Infrastrukturänderungen;
+- nicht ausgeführten Preview-Runtime-, Provider-, Zwei-Tenant- und Production-Prüfungen;
+- produktiven Daten-, Schema- und Deploymentänderungen, die nicht vorgenommen wurden. Auf Vercel wurden ausschließlich Preview-Blob-Ressourcen neu angelegt und bestehende Resource-Connections enger auf Production/Preview begrenzt. Preview-Main enthält weiterhin 060 sowie 068–072. Auf dem temporären Evidence-Branch wurde zusätzlich der Cutover 057 + 073–076 vollständig angewandt, geprüft, vom Parent wiederhergestellt und identisch erneut angewandt; Production blieb unverändert.
 
 Ein Gate ist nur dann als <strong>PASS / BESTANDEN</strong> markiert, wenn der im Master-Prompt geforderte Nachweis für den geprüften Scope vorliegt. Ein vorhandener Unit- oder Contract-Test schließt kein Gate, das zusätzlich einen echten Preview-, Provider-, Zwei-Tenant-, Browser-, Cleanup- oder Production-Nachweis fordert. <strong>NOT RUN / NICHT AUSGEFÜHRT</strong> zählt gemäß Master-Prompt als nicht bestanden.
 
@@ -38,7 +38,7 @@ Aktuelle Gesamtentscheidung: <strong>NO-GO</strong>.
 ### Explizite Launch-Off-Grenzen
 
 - Outbound-Funnel-Webhooks sind explizit LAUNCH-OFF: Konfiguration wird in der Oberfläche verborgen, vom API-Contract entfernt und beim Speichern aus persistierten Daten entfernt.
-- Import ist in Desktop-, Mobile- und Quick-Action-Oberflächen explizit LAUNCH-OFF. Im geprüften Codebestand existiert kein entsprechender Server-Importendpunkt; eine zentrale serverseitige Launch-Scope-Policy fehlt weiterhin.
+- Import ist in Desktop-, Mobile- und Quick-Action-Oberflächen explizit LAUNCH-OFF. Im geprüften Codebestand existiert kein entsprechender Server-Importendpunkt. Eine versionierte, fail-closed Launch-Scope-Policy liegt inzwischen als nicht signierter Kandidat vor und wird für die remediated Surfaces verwendet; die vollständige Inventarabdeckung, Signaturen und deployte Negativmatrix fehlen weiterhin.
 - Newsletter-Versand ist in API und UI explizit LAUNCH-OFF; der API-Pfad beendet vor Providerzugriff mit 503/no-store.
 - Öffentliche Booking-Erstellung, -Stornierung und -Umbuchung sind in Route und UI explizit LAUNCH-OFF. Zusätzlich beendet auch das Erstellungsrepository vor DB-/Providerzugriff fail-closed.
 
@@ -48,7 +48,7 @@ Aktuelle Gesamtentscheidung: <strong>NO-GO</strong>.
 - Abmeldeinformationen werden als opaker AES-GCM-Token im URL-Fragment übertragen.
 - Bestätigung erfolgt über einen expliziten Same-Origin-POST auf <code>/unsubscribe/confirm</code>.
 - Suppression, Kontaktstatus und Consent werden workspace-gebunden atomar aktualisiert; die Antwort enthält keine PII.
-- Die Resend-Produktionsgrenze verlangt exakten Key und From-Wert, besitzt keinen Mock-/Fallback-Pfad, unterstützt eine QA-Allowlist und redigierte Fehler sowie Timeout-, Idempotenz- und Größenbegrenzungen.
+- Die Resend-Produktionsgrenze verlangt exakten Key und From-Wert, besitzt keinen Mock-/Fallback-Pfad und erzwingt einen expliziten Delivery-Purpose. Passwortreset und Workspace-Einladung bleiben getrennte Account-Access-Verträge; Newsletter sowie Meeting-, Bot-, Dokument- und QA-Testversand werden vor Provider- und Send-State durch die jeweilige zentrale Launch-Regel blockiert. Unbekannte Zwecke schlagen fail-closed fehl; der Meeting-QA-Pfad verlangt zusätzlich eine QA-Allowlist.
 - Alte unsichere Abmeldelinks werden absichtlich nicht akzeptiert.
 - Die Newsletter-Send-Oberfläche und der Send-Endpunkt sind unabhängig von vorhandenen Resend-Werten hart inaktiv; eine spätere Aktivierung benötigt eine neue Product-/Providerabnahme.
 
@@ -73,6 +73,8 @@ Aktuelle Gesamtentscheidung: <strong>NO-GO</strong>.
 - Der Legacy-Reset ist deaktiviert.
 - Migration <code>068</code> wurde nicht auf Production angewendet.
 - Der Windows-Entrypoint des QA-Target-Guards verweigert ohne freigegebenen QA-Fingerprint mit Exit 1; ein Shell-/Entrypoint-Bypass ist geschlossen.
+- Die zentrale, unveränderliche Launch-Scope-Policy (`2026-08-22.7`, `PENDING_SIGNATURE`) enthält 25 Regeln und erzwingt unbekannte bzw. nicht freigegebene Surfaces fail-closed. Sie umfasst unter anderem Customer-Communication-Providerwrites, Funnel-Token-Cutover/-Rotation, Public-Form-Submission/-Proof-Refresh, Calendar-Mutationen, Bot-Channel-Inbound, Reservation-Relationship-Sync, QA und Systemdiagnostik; sie ist noch keine signierte Vollmatrix aller Produktflächen.
+- Ein deterministischer Zwei-Tenant-QA-Harness samt Konfigurations-, Target-, Rollen-, Batch-, Secret-Evidence- und Cleanup-Guards ist vorhanden. Zwei isolierte `is_qa=true`-Tenants mit insgesamt neun Auth-Identitäten, zehn MFA-fähigen Mitgliedschaften und zwei leeren Batches sind provisioniert. Der Harness wurde noch nicht gegen ein SHA-identisches Preview-Deployment ausgeführt.
 
 ### Validierung, Navigation, Security, Consent und i18n
 
@@ -86,40 +88,43 @@ Aktuelle Gesamtentscheidung: <strong>NO-GO</strong>.
 
 ## 3. Automatisierte Test- und Build-Evidenz
 
-Die folgenden Ergebnisse wurden im sauberen Worktree erhoben. Sie belegen den lokalen Codezustand, ersetzen aber keine noch fehlenden Preview-/Production-E2E-Nachweise. Unit 358/358, gezielte Kernpfade, ESLint, Typecheck, Security Audit, Diff-Check und Production-Build sind auf dem final revalidierten Codezustand grün; die lokale Abschluss-SHA wird nach dem Dokument-Freeze im Handoff ausgewiesen.
+Der vollständige lokale Kandidat einschließlich Preview-Blob-Isolation, zentraler Scope-Policy, Form-Proof-Refresh, atomarer QA-Batchregistrierung, Zwei-Tenant-Harness und PostgreSQL-Migrationsparser wurde nach dem Delta erneut geprüft. Diese Evidenz ersetzt weiterhin keine fehlenden Preview-/Production-E2E-Nachweise; die lokale Abschluss-SHA wird nach dem Dokument-Freeze im Handoff ausgewiesen.
 
 | Command/Suite | Ergebnis | Einordnung |
 |---|---:|---|
 | <code>npm ci</code> | Exit 0 | reproduzierbare Installation im lokalen Worktree |
-| <code>npm run ci:toolchain</code> | fehlgeschlagen | lokal Node 24.18.0/npm 11.16.0, Repo-Pin Node 24.14.0; lokaler Release-Nachweis daher nicht exakt |
-| <code>npm run lint</code> | Exit 0 | vollständiges ESLint auf final revalidiertem Codezustand |
-| <code>npm run typecheck</code> | Exit 0 | final revalidierter Codezustand |
-| <code>npm run test:unit</code> | 358/358 | 238/238 Basissuite plus 120/120 Go-Live-Remediation, zwei Runner |
+| <code>npm run ci:toolchain</code> | Exit 0 | mit temporär isolierter, exakt gepinnter Laufzeit Node 24.14.0/npm 11.9.0 verifiziert |
+| <code>npm run lint</code> | Exit 0 | vollständiges ESLint auf aktuellem Delta |
+| <code>npm run typecheck</code> | Exit 0 | aktueller Delta-Stand |
+| <code>npm run test:unit</code> | 491/491 | 240/240 Basissuite plus 251/251 Go-Live-Remediation, zwei Runner; unter Node 24.14.0/npm 11.9.0 wiederholt |
 | Funnel-Zielsuites | Deep-DTO 4/4; finaler Consent-/Alias-/Publish-Preflight-Zielstand 29/29; früherer breiter P1-Handoff 99/99 | Deep-Redaction, Minimalresponse, Atomizität, Abuse/Lease, Fresh Snapshot und einheitlicher Publish-/Restore-/Runtime-Preflight lokal belegt |
 | Unit-/Building-Zielsuites | 44/44 | nach Tenant-Transaction-/Fresh-Snapshot-Fix |
 | Knowledge-Zielsuite | 6/6 | nach External-Provider-Fail-Closed-Fix |
 | Form-Zielsuite | 12/12; unabhängiges Reviewer-Zielbündel 39/39 | DTO/Minimalresponse, Atomizität/Replay, Identity, Consent und Launch-off-Grenzen nach letzter Consent-Nachschärfung belegt |
 | Forms + Knowledge + Public Abuse | 26/26 | finaler Freeze nach bounded Admin-JSON, Knowledge-Log-Redaction und Public-Abuse-Nachschärfungen |
 | Migration-Guards im Forms-Handoff | 20/20 | Migrationen 069–072/Dependencies und Safety-Contracts im Zielstand |
-| <code>npm run test:go-live-remediation</code> | 120/120 | nach letzter Forms-Consent-Nachschärfung |
+| <code>npm run test:go-live-remediation</code> | 251/251 | aktueller Delta-Stand einschließlich Scope, Providergrenzen, Proof-Refresh/Visits, Funnel-Token-CAS, durable Webhooks, Blob, QA-Batch-Ownership, Zwei-Tenant-Vertrag und Migrationsparser |
 | finale gezielte Kernpfade | 40/40 | unabhängiger Abschlussreview |
 | finale Migration/Unit/Newsletter-Zielgruppe | 39/39 | einschließlich Migration-Teil 20/20 |
-| Booking-Zielsuites | gezielt grün | Create/Cancel/Reschedule Launch-off in API, Repository und UI; im Remediation-Lauf 120/120 enthalten |
+| Booking-Zielsuites | gezielt grün | Create/Cancel/Reschedule Launch-off in API, Repository und UI; im aktuellen Remediation-Lauf 251/251 enthalten |
 | <code>npm run test:integration</code> | 15/15 bestanden | lokaler Integrationstest |
 | <code>npm run test:i18n</code> | 10/10 bestanden | lokaler i18n-Test |
 | <code>npm run test:company-profile-settings</code> | 7/7 bestanden | lokaler Settings-Test |
 | <code>npm run test:contact-access</code> | 4/4 bestanden | lokaler Contact-Access-Test |
 | <code>npm run test:property-department</code> | 18/18 bestanden | lokaler Property-Test |
 | Production-Security-Suite | bestanden, 0 Vulnerabilities | lokaler automatisierter Security-Nachweis |
-| <code>npm run build</code> | Exit 0 | finaler Next-Production-Build grün; 82 Seiten plus dynamische Routen |
+| <code>npm run build</code> | Exit 0 | aktueller Next-Production-Build grün; 84 generierte Seiten, einschließlich QA-Capability und Form-Proof-Refresh |
 | <code>git diff --check</code> | Exit 0 | keine Whitespace-/Patch-Formalfehler |
 | <code>npm run release:verify-vercel-env</code> | nicht erfolgreich | lokaler Lauf verlangt <code>VERCEL_TOKEN</code>; Live-Metadaten wurden separat read-only geprüft |
 
-Der final revalidierte Codezustand ist für Unit 358/358, ESLint, Typecheck, Security Audit, gezielte Kernpfade, Diff-Check und Production-Build grün. Ältere Werte wie 314/314, 315/315 oder Booking 5/5 sind supersediert. Die lokale Abschluss-SHA wird nach dem Dokument-Freeze im Handoff ausgewiesen.
+Der aktuelle Delta-Stand ist für Unit 491/491 (240/240 Basis plus 251/251 Remediation), Integration 15/15 und i18n 10/10 grün. Unter der exakt gepinnten Ziel-Toolchain Node 24.14.0/npm 11.9.0 sind Toolchain-Check, vollständiges ESLint, Typecheck, Security Audit mit 0 Vulnerabilities, <code>git diff --check</code> und der Next-Production-Build mit 84 generierten Seiten bestanden. Der Remediation-Verbund wurde nach dem letzten Scope-/Dokument-Delta nochmals mit 251/251 bestätigt. Ältere Zähler sind supersediert; die unveränderliche Kandidaten-SHA entsteht mit dem anschließenden Commit-Freeze und wird im Deployment-Nachweis festgehalten.
 
 Neue, über <code>test:go-live-remediation</code> in <code>test:unit</code> eingebundene Suites:
 
 - <code>booking-lifecycle-remediation-tests.mjs</code>
+- <code>bot-crm-atomicity-tests.mjs</code>
+- <code>bot-webhook-durability-tests.mjs</code>
+- <code>calendar-readonly-credential-tests.mjs</code>
 - <code>content-security-policy-tests.mjs</code>
 - <code>cookie-consent-accessibility-tests.mjs</code>
 - <code>deal-create-ux-regression-tests.mjs</code>
@@ -129,20 +134,31 @@ Neue, über <code>test:go-live-remediation</code> in <code>test:unit</code> eing
 - <code>funnel-production-boundary-tests.mjs</code>
 - <code>funnel-public-access-tests.mjs</code>
 - <code>funnel-public-dto-security-tests.mjs</code>
+- <code>funnel-publish-token-rotation-tests.mjs</code>
+- <code>funnel-runtime-proof-visit-tests.mjs</code>
 - <code>funnel-safe-content-tests.mjs</code>
 - <code>funnel-submission-abuse-remediation-tests.mjs</code>
 - <code>inventory-validation-regression-tests.mjs</code>
 - <code>launch-scope-fail-closed-tests.mjs</code>
+- <code>launch-tenant-relation-guard-tests.mjs</code>
 - <code>navigation-profile-invariant-tests.mjs</code>
 - <code>newsletter-unsubscribe-security-tests.mjs</code>
+- <code>postgres-statement-splitter-tests.mjs</code>
+- <code>preview-blob-isolation-tests.mjs</code>
+- <code>property-inquiry-routing-security-tests.mjs</code>
 - <code>public-booking-i18n-remediation-tests.mjs</code>
+- <code>qa-batch-lock-order-live-tests.mjs</code>
+- <code>qa-batch-registration-tests.mjs</code>
 - <code>qa-reset-safety-tests.mjs</code>
+- <code>qa-two-tenant-matrix-tests.mjs</code>
+- <code>qa-two-tenant-provision-tests.mjs</code>
 - <code>readonly-audit-safety-tests.mjs</code>
 - <code>system-releases-contract-tests.mjs</code>
+- <code>transaction-concurrency-remediation-tests.mjs</code>
 
-Damit sind derzeit 20 Remediation-Suites in <code>test:go-live-remediation</code> verdrahtet; die finale aggregierte Zahl wird erst nach dem stabilen Gesamtlauf eingetragen.
+Damit sind 34 Remediation-Suites in <code>test:go-live-remediation</code> verdrahtet und 251/251 Tests bestanden. Provisionierung und Code-/Contract-Evidenz ersetzen noch keinen ausgeführten Runtime-/Cleanup-E2E-Nachweis auf dem SHA-identischen Preview-Kandidaten.
 
-## 4. Live-/Vercel-Evidenz, ausschließlich read-only
+## 4. Live-Baseline- und Vercel-Preview-Ressourcenevidenz
 
 | Gegenstand | Evidenz | Bewertung |
 |---|---|---|
@@ -152,8 +168,10 @@ Damit sind derzeit 20 Remediation-Suites in <code>test:go-live-remediation</code
 | Source-SHA | <code>77b751d6568487193e9151c7b16545649cfacde7</code> | entsprach beim Prüfstart dem damaligen Main-/Live-Stand |
 | Logs | 24-Stunden-Read-only-Prüfung ohne Fehler/5xx | kein kontrollierter Fehler-/Trace- oder Alarmtest |
 | frühere CI | grün | gilt für Baseline-SHA, nicht für den noch nicht deployten Remediation-Kandidaten |
-| Vercel CLI | über <code>npx --yes vercel@latest</code>, Version 59.4.0 nutzbar | globale Installation fehlt; <code>npm i -g vercel</code> wird stark empfohlen, um <code>vercel env pull</code>, <code>vercel deploy</code> und <code>vercel logs</code> direkt nutzen zu können. Das Fehlen der globalen CLI ist selbst kein Releaseblocker |
+| Vercel CLI | Version 59.4.0 über <code>npx</code> aufgelöst, Netzwerkzugriff endete jedoch mit <code>fetch failed</code> | derzeit nicht operativ nutzbar; globale Installation mit <code>npm i -g vercel</code> wird stark empfohlen, um <code>vercel env pull</code>, <code>vercel deploy</code> und <code>vercel logs</code> direkt nutzen zu können. In-App-Vercel und Vercel-MCP waren erreichbar |
 | Marketplace | Neon vorhanden, Resend nicht installiert | MAIL-01 offen |
+| Preview Blob | neue private und öffentliche Preview-Stores in FRA1, jeweils ausschließlich mit Preview verbunden | Ressourcen-/Connection-Trennung umgesetzt; deployter Upload-/Read-/Delete-E2E fehlt |
+| bestehende Blob-Verbindungen | alter Private Store nur Production; alter Public Store Production+Development, Preview entfernt | verhindert Preview-Fallback auf die bisherigen Stores auf Connection-Ebene |
 
 Es wurde kein Remediation-Preview und kein Remediation-Production-Kandidat deployt. Daher dürfen Baseline-Deployment und Baseline-Logs nicht als Evidenz für den geänderten Code verwendet werden.
 
@@ -164,7 +182,8 @@ Es wurden nur nicht reversible Secret-Werte ausschließende Fingerprints bzw. Ke
 | Ziel | Production | Preview | Ergebnis |
 |---|---|---|---|
 | Datenbank | <code>sha256:36e38778071baa281fe6</code> | <code>sha256:b8d9af25b0eeccdf276e</code> | verschieden |
-| Private Blob | <code>sha256:7c024de0f594165110e9</code> | <code>sha256:7c024de0f594165110e9</code> | identisch, Gate-Fehler |
+| Private Blob | bestehender Private Store, Connection Production-only | eigener neuer Preview-Private-Store, Connection Preview-only | auf Ressourcen-/Connection-Ebene getrennt; Runtime-E2E offen |
+| Public Blob | bestehender Public Store, Connection Production+Development | eigener neuer Preview-Public-Store, Connection Preview-only | auf Ressourcen-/Connection-Ebene getrennt; Runtime-E2E offen |
 | Queue | Ziel nicht eindeutig belegt | Ziel nicht eindeutig belegt | Gate-Fehler |
 | Provider | Ziel/Scope nicht eindeutig getrennt | Ziel/Scope nicht eindeutig getrennt | Gate-Fehler |
 
@@ -173,15 +192,15 @@ Zusätzliche Env-Metadaten:
 - <code>RESEND_FORM</code> ist vorhanden; <code>RESEND_FROM</code> fehlt.
 - <code>NOVALURE_EMAIL_FROM</code> ist in Production vorhanden.
 - Provider-Key-Metadaten umfassen Preview und Production; eine sichere Trennung wurde nicht nachgewiesen.
-- Private-Blob-Konfiguration umfasst Preview und Production und zeigt auf denselben Fingerprint.
+- Der Kandidat liest in `VERCEL_ENV=preview` ausschließlich die neuen Preview-Tokenvariablen und fällt bei fehlendem Preview-Token leer/fail-closed aus; ein Rückfall auf Production-Blob-Token ist per Contract-Test ausgeschlossen.
 
-Konsequenz: ENV-01 ist <strong>FAIL / FEHLER</strong>. Deshalb wurden weder Preview-Seed noch Preview-CRUD, Upload, Provider-Smoke oder Reset ausgeführt.
+Konsequenz: Die frühere Blob-Kollision ist auf Ressourcen-, Connection- und Codeebene remediated. ENV-01 bleibt dennoch <strong>FAIL / FEHLER</strong>, weil Queue-/Providertrennung sowie ein SHA-identischer Preview-Runtime-/Uploadnachweis fehlen. Die sichere QA-Tenant-/Batch-Provisionierung ist erfolgt; Preview-CRM-CRUD, Upload, Provider-Smoke und Reset wurden weiterhin nicht ausgeführt.
 
 ## 6. Produktionsschema und Migration-Ledger, read-only
 
 ### 6.1 Historischer Production-Audit
 
-Dieser Audit wurde vor den Kandidatenmigrationen 069–072 erhoben und darf nicht als Schemaaudit des aktuellen Worktrees ausgegeben werden.
+Dieser Audit wurde vor den Kandidatenmigrationen 069–076 erhoben und darf nicht als Schemaaudit des aktuellen Worktrees ausgegeben werden.
 
 | Prüfung | Historisches Production-Ergebnis |
 |---|---|
@@ -197,12 +216,24 @@ Dieser Audit wurde vor den Kandidatenmigrationen 069–072 erhoben und darf nich
 
 | Prüfung | Kandidatenstand |
 |---|---|
-| erwartete Tabellen laut <code>src/lib/db/schema.ts</code> | 117 |
-| neue, nicht angewendete Kandidatenmigrationen | <code>068</code> QA-Reset, <code>069</code> Unit-/Building-Idempotenz, <code>070</code> Funnel-Recovery, <code>071</code> Forms-Owner-Tenant-Guard, <code>072</code> Form-Submission-Atomizität |
-| zusätzliche Tabellen gegenüber dem 115er Auditstand | <code>property_unit_idempotency</code>, <code>property_building_idempotency</code> aus Migration 069 |
-| auf Production angewendet | keine der Migrationen 068–072 |
+| erwartete CRM-Tabellen laut <code>src/lib/db/schema.ts</code> | 118; <code>bot_channel_webhook_envelopes</code> liegt bewusst außerhalb <code>crmTables</code> |
+| Kandidatenmigrationen | <code>068</code>–<code>076</code> einschließlich des manuellen Vor-Cutovers <code>057</code> |
+| zusätzliche tatsächliche Tabellen gegenüber dem 115er Auditstand | mindestens <code>property_unit_idempotency</code>, <code>property_building_idempotency</code>, <code>public_funnel_visit_events</code> und <code>bot_channel_webhook_envelopes</code>; damit mindestens 119 tatsächliche Tabellen |
+| isolierte Preview-Zustände | Preview-Main: <code>060</code> + <code>068</code>–<code>072</code>; Evidence-Branch: <code>057</code> + <code>073</code>–<code>076</code> mit Apply/Restore/Reapply und 21/21 Artefakten |
+| auf Production angewendet | keine der Migrationen 057, 068–076 |
 
-Es erfolgte keine Migration und kein Schema-Write. Die kontrollierte Kette bis 072 darf erst nach Backup, Dry-run, geprüftem Rollback, Restore-Nachweis und ausdrücklicher DBA-/Release-Freigabe angewendet werden.
+Es erfolgte kein Production-Schema-Write. Preview-Main enthält weiterhin 060 und 068–072. Der zusätzliche Evidence-Drill für 057 + 073–076 ist durch den unveränderlichen Pre-073-Snapshot, Apply, Katalogprüfung, Restore, Abwesenheitsprüfung und identischen Reapply abgesichert. Eine spätere Production-Anwendung bleibt bis zu DBA-/Release-Freigabe, Production-Backup und bestätigtem Rollbackziel gesperrt; 061 bleibt zusätzlich bis zum App-Rollen-Cutover gesperrt.
+
+### 6.3 Isolierter Preview-/Migration- und Restore-Drill
+
+- Ausgangsziel war ausschließlich das getrennte Neon-Projekt `novalure-crm-tenant-isolation-test`, Preview-Main `br-lucky-heart-alrm9dlw`; Production wurde weder adressiert noch verändert.
+- Auf dem inzwischen supersedierten Drill-Branch `go-live-f5c8c8a-drill-20260822` wurden 060 sowie 068–072 mit dem versionierten PostgreSQL-Statement-Splitter transaktional angewandt und strukturell verifiziert. Der Branch wurde nach Erhalt der neueren Snapshots und Evidence gelöscht, um das Neon-Branchlimit für den finalen Restore-Drill freizugeben.
+- Der migrierte Zustand wurde als `go-live-f5c8c8a-postmigration-proof-20260822` (`br-royal-hat-al9sbbbl`) erhalten. Danach wurde `br-dawn-base-alycxxsv` per `reset_from_parent` auf den unmigrierten Elternzustand zurückgesetzt; dort waren 072 und die QA-Grenze anschließend wieder abwesend. Damit ist der funktionale Restore-/Rollback-Drill belegt.
+- Vor dem Preview-Cutover wurde zusätzlich Snapshot `go-live-preview-main-precutover-20260822` (`br-round-haze-aljmj73e`) erstellt. Danach wurden 060 sowie 068–072 auf Preview-Main in einer Transaktion angewandt und Ledger/QA-Tabellen/Constraints verifiziert. Anschließend wurden zwei isolierte `is_qa=true`-Workspaces mit insgesamt zehn MFA-fähigen Mitgliedschaften und je einem leeren Batch provisioniert; CRM-Geschäftsobjekte wurden noch nicht erzeugt.
+- Vor 073 wurde Snapshot `go-live-preview-main-pre073-20260822` (`br-square-bird-alpv01dg`) erstellt. Auf Evidence-Branch `go-live-final-evidence-20260822-v2` (`br-spring-math-aljuzher`) wurde 057 + 073–076 zunächst angewandt. Das Gate bestätigte 5/5 exakte lokale Checksummen, 19/19 validierte, deferrable und initial deferred Tenant-FKs, 0/19 Anti-Join-Verstöße sowie 21/21 Artefakte für Visit-Truth und durable Webhook-Verarbeitung. Danach wurde der Branch ohne Preserve auf Preview-Main zurückgesetzt; alle fünf Ledgerzeilen, 19 Constraints und beide neuen Tabellen waren wieder abwesend, der Legacy-Webhook-Index wieder vorhanden. Der identische Reapply bestand anschließend dasselbe Gate erneut.
+- Der Connector darf die App-Rolle nicht per `SET ROLE` impersonieren. Katalogseitig ist belegt: `novalure_app` besitzt keine direkten SELECT/INSERT/UPDATE/DELETE-Rechte auf der globalen Envelope-Tabelle, aber EXECUTE auf die validierende SECURITY-DEFINER-RPC; der tatsächliche App-Login-RPC-Probe bleibt Bestandteil des SHA-identischen Preview-E2E.
+- Migration 061 wurde absichtlich nicht angewandt: Die sichere Gruppe `novalure_tenant_app` ist vorhanden, aber App-Verbindung, direkte Mitgliedschaft und immutable Deployment-Attestation sind noch nicht als gemeinsam wirksamer Cutover belegt. RLS auf den fünf Pilot-Tabellen bleibt daher aus.
+- RPO/RTO-Zielwerte, Recovery-Reconciliation und formale DBA-/Release-Signatur bleiben offen; der technische Restore-Drill selbst ist nicht mehr offen.
 
 ## 7. Verbindliche Gate-Matrix
 
@@ -210,15 +241,15 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 
 | Test-ID | Status | Präziser Nachweis bzw. Grund |
 |---|---|---|
-| REL-01 | FAIL / FEHLER | finaler Codezustand für Unit 358/358, ESLint, Typecheck, Security Audit, gezielte Kernpfade und Production-Build grün; exakter Node-Pin verfehlt, lokale Abschluss-SHA folgt im Handoff, kein deployter Kandidat und keine SHA-/Deployment-/Alias-Parität |
-| REL-02 | FAIL / FEHLER | historischer Production-Audit <code>ok: false</code> bei 112/115 Tabellen und Ledger 067; Kandidat erwartet 117 Tabellen und Migrationen 068–072, ohne Production-Anwendung |
-| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | kein Restore-Drill, kein privater-Blob-End-to-End, kein Queue-/Cron-SLO und keine signierte Ops-Evidenz |
+| REL-01 | FAIL / FEHLER | lokaler Freeze unter Node 24.14.0/npm 11.9.0 für Toolchain, Unit 491/491, Remediation 251/251, Integration 15/15, i18n 10/10, vollständiges ESLint, Typecheck, Security Audit, Diff-Check und Production-Build mit 84 Seiten grün; die Kandidaten-SHA entsteht mit dem Commit-Freeze, ein SHA-identisch deployter Kandidat sowie Deployment-/Alias-Parität fehlen weiterhin |
+| REL-02 | FAIL / FEHLER | historischer Production-Audit <code>ok: false</code> bei 112/115 Tabellen und Ledger 067; Preview-Kandidat erwartet nach 075/076 mindestens 119 Tabellen und Migrationen 068–076 einschließlich manuellem Cutover 057, ohne Production-Anwendung |
+| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | isolierter Neon-Migrations-/Restore-Drill bestanden, Pre-Cutover-Snapshot vorhanden und Preview-Main bis 072 migriert; RPO/RTO/Reconciliation, 061-App-Rollen-Cutover, privater-Blob-End-to-End, Queue-/Cron-SLO und signierte Ops-Evidenz fehlen |
 | REL-04 | NOT RUN / NICHT AUSGEFÜHRT | fünf Unternehmensprofilblocker sowie Legal-/Ops-Abnahme nicht belegt |
-| SCOPE-01 | FAIL / FEHLER | Inventar vorhanden und einzelne Flächen fail-closed; vollständige signierte ON/OFF/INTERNAL-Matrix und zentrale serverseitige Durchsetzung fehlen |
-| ENV-01 | FAIL / FEHLER | Private Blob identisch; Queue- und Providerziele unklar |
+| SCOPE-01 | FAIL / FEHLER | versionierte zentrale Policy für die remediated Surfaces vorhanden und unbekannte Surfaces fail-closed; vollständige signierte ON/OFF/INTERNAL-Matrix, Vollabdeckung und deployte Negativmatrix fehlen |
+| ENV-01 | FAIL / FEHLER | Preview-Blob auf Ressourcen-/Connection-/Codeebene getrennt; Queue-/Providerziele und deployter Runtime-E2E weiterhin unklar |
 | DATA-01 | PASS / BESTANDEN | Forms, Knowledge und Funnel verwenden DB-only-Wahrheit; automatisierte Produktionswahrheits-/Fallback-Negativtests grün |
 | DATA-02 | NOT RUN / NICHT AUSGEFÜHRT | kein vollständiger UI/API/DB-Drei-Wege-Abgleich für alle Launch-KPIs |
-| CRUD-01 | FAIL / FEHLER | QA-Reset-Tabellen/Migration fehlen in Production; keine zwei QA-Tenants und kein Reset-E2E |
+| CRUD-01 | FAIL / FEHLER | Migration 068 ist auf isoliertem Preview angewandt; zwei reale `is_qa`-Tenants, zehn MFA-fähige Mitgliedschaften, zwei leere Batches und der atomare Rollen-/Batch-/Cleanup-Harness sind vorhanden. Branchgebundene Runtime-ENV, Capability-Preflight und Matrix-/Reset-E2E fehlen |
 | CRUD-02 | NOT RUN / NICHT AUSGEFÜHRT | vollständige CRM-Kernkette Create→Reload→Update→Relation→Filter→Cleanup nicht in isolierter QA-Umgebung ausgeführt |
 | CRUD-03 | NOT RUN / NICHT AUSGEFÜHRT | einzelne Idempotenz-/Validierungsfixes getestet, aber keine vollständige Doppelklick-/Zwei-Tab-/Offline-/Retry-Matrix |
 | FORM-01 | NOT RUN / NICHT AUSGEFÜHRT | Resolver-/Persistenz-Code gehärtet, aber kein Adminstatus/DB/Canonical/Embed-E2E auf einem Kandidaten |
@@ -241,41 +272,41 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 | A11Y-02 | NOT RUN / NICHT AUSGEFÜHRT | Consent-Fokusfix lokal gezielt geprüft; vollständige Drawer-/Inert-/Touch-/Overflow-Matrix bei 320/375/390/430 px fehlt |
 | SEC-02 | NOT RUN / NICHT AUSGEFÜHRT | CSP, Consent, Unsubscribe und Public-Token-Grenzen automatisiert gehärtet; vollständige Header/Cookie/CORS/private-Media/DE-EN-Tastaturmatrix fehlt |
 | FILE-01 | NOT RUN / NICHT AUSGEFÜHRT | kein PDF/JPG/PNG/DOCX-, MIME-, Übergröße-, Rechte-, Download-, Delete- und Cleanup-E2E |
-| ADV-01 | NOT RUN / NICHT AUSGEFÜHRT | Funnel DB-only, Deep-DTO, Minimalresponse, atomarer DML-CTE und shared Email-/Phone-Identity-Fresh-Snapshot-Serialisierung über Form/Funnel lokal getestet; Publish-Token-Rotation und vollständiger Publish-/Analytics-/KPI-E2E fehlen |
+| ADV-01 | NOT RUN / NICHT AUSGEFÜHRT | Funnel DB-only, Deep-DTO, Minimalresponse, atomarer DML-CTE, shared Identity-Serialisierung sowie tenantatomare Publish-Token-Rotation mit Revision-CAS, Idempotenz, Response-Redaction und Secret-Sanitization lokal getestet; realer Production-Cutover und vollständiger Publish-/Analytics-/KPI-E2E fehlen |
 | ADV-02 | NOT RUN / NICHT AUSGEFÜHRT | Knowledge Source/Chunk atomar und DB-only; approved/search ohne externen Embedding-Provider fail-closed; UI/API/DB-Semantik und Bot-Nachweis fehlen |
 | ADV-03 | NOT RUN / NICHT AUSGEFÜHRT | Gesprächs-/Kanal-Scope nicht vollständig fachlich und technisch abgenommen |
 | ADV-04 | NOT RUN / NICHT AUSGEFÜHRT | Customer/User/Grant-Semantik und 0-versus-4-Abgleich fehlen |
 | ADV-05 | NOT RUN / NICHT AUSGEFÜHRT | Consent/Suppression/Unsubscribe-Code gehärtet; Newsletter-Send explizit Launch-off; exakt ein später freigegebener QA-Versand und Provider-/Cleanup-Evidenz fehlen |
 | ADV-06 | NOT RUN / NICHT AUSGEFÜHRT | kein Detect/Resolve/Ignore/Merge-E2E ausschließlich auf QA-Daten |
 | ADV-07 | NOT RUN / NICHT AUSGEFÜHRT | keine vollständige QA-Sandbox-/Approval-/Side-Effect-Matrix für Bots und Automation |
-| ADV-08 | NOT RUN / NICHT AUSGEFÜHRT | Funnel-Webhooks und Import explizit LAUNCH-OFF; übrige OAuth-/Sync-/Notification-/Reservation-/Token-Lifecycle-Flächen nicht vollständig klassifiziert/abgenommen |
+| ADV-08 | NOT RUN / NICHT AUSGEFÜHRT | Funnel-Webhooks, Import, Calendar-Provider-/OAuth-Mutationen, Customer-Communication-Providerwrites, Reservation-Sync und Funnel-Tokenflächen sind zentral fail-closed klassifiziert; vollständige signierte Gesamtmatrix und deployte Negativtests fehlen |
 | SEARCH-01 | NOT RUN / NICHT AUSGEFÜHRT | kein vollständiger Suche/Umlaut/Filter/Sortierung/Pagination/QA-Export-Abgleich |
 | PROP-01 | NOT RUN / NICHT AUSGEFÜHRT | Property-Tests 18/18 grün; fachliche Pflichtinhalte/Dokumente/Publish-Blocker nicht vollständig abgenommen |
 | OBS-01 | NOT RUN / NICHT AUSGEFÜHRT | 24h Baseline-Logs ohne Fehler/5xx; kein kontrollierter Fehler bis Vercel/Provider und keine PII-/Secret-Prüfung auf Kandidatenlogs |
 | OBS-02 | NOT RUN / NICHT AUSGEFÜHRT | keine getesteten Monitore/Alarme und kein vereinbarter Beobachtungsnachweis |
 | PERF-01 | NOT RUN / NICHT AUSGEFÜHRT | kein Kandidaten-Lighthouse und keine p75-LCP/INP/CLS-Messung gegen vereinbarte Budgets |
 | PROD-01 | NOT RUN / NICHT AUSGEFÜHRT | Remediation-Code nicht deployt; kein SHA-identischer Kandidat unter kanonischem Alias und kein kontrollierter Production-Smoke |
-| CLEAN-01 | NOT RUN / NICHT AUSGEFÜHRT | keine QA-Writes durchgeführt, daher kein Batch und kein Cleanup nötig; verbindlicher Vorher/Nachher-Reconciliation-Lauf fehlt dennoch |
+| CLEAN-01 | NOT RUN / NICHT AUSGEFÜHRT | sichere Tenant-/Identity-/Batch-Provisionierung ausgeführt; noch keine CRM-Geschäftsobjekt-Writes, kein Batch-Dry-run/Execute und kein Null-Rückstands-Cleanup. Zwei leere Batches sind vorhanden |
 
 ## 8. Befund → Fix → Test/Evidenz → Reststatus
 
 | Befund | Umgesetzter Fix | Test/Evidenz | Reststatus |
 |---|---|---|---|
-| Fixture-/Fallback-Risiko bei Forms/Knowledge/Funnel | DB-only-Repositories und fail-closed Resolver; Knowledge approved/search nur mit externem Provider | zielgerichtete Forms-/Knowledge-/Funnel-Suites und Unit 358/358 | DATA-01 für den Code-Contract bestanden; deployed E2E weiterhin offen |
+| Fixture-/Fallback-Risiko bei Forms/Knowledge/Funnel | DB-only-Repositories und fail-closed Resolver; Knowledge approved/search nur mit externem Provider | zielgerichtete Forms-/Knowledge-/Funnel-Suites und Unit 491/491 | DATA-01 für den Code-Contract bestanden; deployed E2E weiterhin offen |
 | Public Funnel überträgt internen Blueprint/Diagnostik | Deep-Allowlist-DTO; Public Proof statt Publish-Token im Browser/POST; minimale Live-Response ohne interne IDs; DB-Fehler bleiben 5xx | Funnel-Public-DTO-Security 4/4 und Funnel-Zielsuites | Kandidatencode geschlossen; externer Publish-Token muss vor GO rotiert werden; deployed E2E offen |
 | Funnel-Submit konnte Teilwrites, parallele Kontaktduplikate oder Consent-/Alias-Drift erzeugen | atomarer Domain-/Claim-CTE; lease-gefencete Replayresponse; shared Form/Funnel-Email-/Phone-Identity-Advisory-Locks in Tenant-TX; kanonische Consent-/Identity-Aliasse; gemeinsamer Publish-/Restore-/Runtime-Preflight | Funnel-Abuse-/Migration-/Boundary-/Preflight-Zielsuites, finaler Freeze 29/29 | Kandidatencode geschlossen; echtes DB-Concurrency-/Zwei-Tenant-E2E offen |
 | Funnel-Webhooks ohne freigegebenen Scope | Konfiguration/API/Persistenz/Adapter explizit LAUNCH-OFF | Funnel-Production-Boundary-Test | Teil von SCOPE-01; Gesamtgate offen |
-| Import sichtbar, aber nicht freigegeben | Entry Points ausgeblendet; kein Server-Importendpunkt vorhanden | Launch-Scope-Fail-Closed-Test | zentrale Policy und Gesamtinventar-Sign-off fehlen |
+| Import sichtbar, aber nicht freigegeben | Entry Points ausgeblendet; kein Server-Importendpunkt vorhanden; `importReview` zentral `LAUNCH-OFF` | Launch-Scope-Fail-Closed-Test | Signatur und deployte Negativverifikation fehlen |
 | Unsicherer Unsubscribe-GET/PII-Link | opaker Fragmenttoken, expliziter POST, atomare Suppression/Consent-Aktualisierung | Newsletter-Unsubscribe-Security 7/7 | alter Link absichtlich ungültig; Provider-/QA-Versand offen |
 | Newsletter-Versand ohne freigegebene Providerabnahme | API vor Providerzugriff 503/no-store Launch-off; UI-Sendaktionen verborgen | Newsletter-/E-Mail-/Launch-Scope-Zielsuites | Product-/Providerfreigabe und genau ein QA-Send offen |
 | Booking-Race-/Lifecycle-Risiken ohne abgeschlossene Providerabnahme | öffentliche Create-/Cancel-/Reschedule-Route, Repository und UI hart Launch-off vor Body/DB/Provider; Legacy-Resolver propagiert DB-Ausfälle statt sie als 404 zu maskieren | Booking-/i18n-/Launch-Scope-Zielsuites sowie finaler P2-Recheck | Product-/Providerfreigabe und vollständiges QA-Lifecycle-E2E vor Launch-on offen |
-| Unit-/Building-Doppelwrites bei Parallelität | semantische Idempotenz-Ledger; separate Advisory-Lock-Anweisung innerhalb Tenant-TX; atomarer Domain-/Ledger-/Auditwrite | 44/44 Unit-/Migration-/Reset-Zielsuites | Migration 069 und echtes DB-Concurrency-E2E offen |
-| Form-Submit-Teilwrites/instabile Retries/Infoleak | lease-gefenceter atomarer Domain-/Minimalresponse-CTE; semantischer Multipart-Fingerprint; Public-Allowlist-DTO; Owner-Tenant-Guard; shared Identity-Locks/Conflict-Schutz; authentifiziertes Admin-JSON streamingbegrenzt auf 256 KiB | Forms 12/12, Reviewer-Bündel 39/39, Migration 20/20, Remediation 120/120, finaler Forms/Knowledge/Public-Abuse-Freeze 26/26 | Kandidatencode geschlossen; deploytes Submit-/Cleanup-E2E offen |
+| Unit-/Building-Doppelwrites bei Parallelität | semantische Idempotenz-Ledger; separate Advisory-Lock-Anweisung innerhalb Tenant-TX; atomarer Domain-/Ledger-/Auditwrite | 44/44 Unit-/Migration-/Reset-Zielsuites; Migration 069 auf isoliertem Preview angewandt | echtes DB-Concurrency-E2E offen |
+| Form-Submit-Teilwrites/instabile Retries/Infoleak | lease-gefenceter atomarer Domain-/Minimalresponse-CTE; semantischer Multipart-Fingerprint; Public-Allowlist-DTO; Owner-Tenant-Guard; shared Identity-Locks/Conflict-Schutz; authentifiziertes Admin-JSON streamingbegrenzt auf 256 KiB | Forms 12/12, Reviewer-Bündel 39/39, Migration 20/20, Remediation 251/251, Migrationen 071/072 auf isoliertem Preview | Kandidatencode geschlossen; deploytes Submit-/Cleanup-E2E offen |
 | File-/RoundRobin-/Custom-Pattern-/unsichere Consent-Formen wirkten public-fähig | Admin-Save/UI, Public Page, Embed und API durchgängig fail-closed; feste Consent-Truthy-Allowlist, Privacy/Marketing getrennt und nicht vorselektiert; Analytics/unclassified off | Forms 12/12 und Reviewer-Bündel 39/39 | Kandidatencode geschlossen; spätere Aktivierung benötigt eigene sichere Implementierung und E2E-Abnahme |
-| E-Mail-Fallback-/Leak-Risiko | exakter Resend-Contract, keine Mock-Fallbacks, Allowlist, redigierte Fehler | Email-Production-Boundary-Test | Resend/Domain/From/QA-Mailbox nicht live validiert |
+| E-Mail-Fallback-/Leak-Risiko | expliziter Resend-Purpose, keine Mock-Fallbacks, redigierte Fehler; Newsletter und Customer-Communication vor Provider-/Send-State OFF, unbekannte Zwecke fail-closed; Account-Access-Mail getrennt | Email-Production-Boundary- und Launch-Scope-Tests | Resend/Domain/From/QA-Mailbox nicht live validiert |
 | Falsch-grünes Release-/Governance-UI | reale Contract-Diagnostik, statische Verifikation entfernt | System-Releases-Contract-Test | Production-Schema ist tatsächlich rot |
 | Zu breite Systemdiagnostikrolle | exakt Platform Admin bzw. novalureAdmin | Contract-/Role-Test | vollständige RBAC-Matrix offen |
-| Gefährlicher QA-Reset | Audit/Allowlist/Dry-run/CSRF/FK-Closure; Legacy deaktiviert | QA-Reset-Safety-Test | Migration 068 und echter QA-Reset nicht ausgeführt |
+| Gefährlicher QA-Reset | Audit/Allowlist/Dry-run/CSRF/FK-Closure; atomare Contact-/Consent-/Deal-/History-Batchregistrierung; Ownership-Guard gegen Idempotency-Kollisionen; Legacy deaktiviert | QA-Reset- und QA-Batch-Tests einschließlich paralleler Baseline-Kollision; Migration 068 und zwei Tenants auf isoliertem Preview | echter Runtime-Dry-run/Execute/Null-Rest-Reset nicht ausgeführt |
 | Deal-/Inventory-Doppel- oder Silent-No-op-Risiko | gemeinsame Validierung, Idempotenz, sichtbare Fehler, Doppelklickguard | Deal-UX- und Inventory-Regressionstests | vollständige Browser-/Parallel-Tab-Matrix offen |
 | Profilnavigation verliert Analysezustand | <code>#analysis</code>-Invariant | Navigation-Profile-Invariant-Test | UX-02 bestanden |
 | Schwache CSP-/Framing-Grenze | Nonce, strict-dynamic, Frame-Restriktionen, Fallback-CSP | CSP-Test | vollständiger Kandidaten-Header-/Embed-E2E offen |
@@ -284,12 +315,12 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 
 ### 8.1 Unabhängiger Abschlussreview
 
-Ergebnis für den lokalen Kandidatencode: **0 offene P0, 0 offene P1**. Es wurden keine weiteren kritischen Security-, Tenant-, Datenintegritäts- oder Buildbefunde gefunden. Dieses Ergebnis schließt ausschließlich den statisch/lokal geprüften Code-Contract; die externen und E2E-Releasegates aus Abschnitt 9 bleiben unverändert offen.
+Der aktuelle Stand enthält zusätzlich Policy 2026-08-22.7, monotone Bot-/Providerkontrollen, durable Inbound-Webhook-Verarbeitung, Funnel-Revision-CAS/Secret-Sanitization sowie Deal-/QA-Batch-Ownership-Härtung. Die unabhängige Schlussprüfung weist `0 P0/0 P1` aus; die externen und E2E-Releasegates aus Abschnitt 9 bleiben davon unabhängig offen.
 
 Verbleibende P2-/Formalgate-Hinweise:
 
-- Public-Submission-Proofs besitzen 15 Minuten TTL ohne Refreshflow für lange Form-/Funnel-Sessions.
-- Die fachliche Kopplung von Unit-Status zu Buyer-/Deal-Beziehungen ist serverseitig nicht vollständig erzwungen.
+- Für Public Forms und Public Funnels liegen scope-/publikationsgebundene, idempotency-key-erhaltende Proof-Refresh-Flows als Kandidatencode vor; offen bleibt der deployte Browser-/Expiry-/Replay-Nachweis für lange Sessions.
+- Die Unit-/Buyer-/Deal-Beziehung ist über <code>propertyReservationRelationshipSync</code> in UI, API, Cron und Repository zentral <code>LAUNCH-OFF</code>. Vor einem späteren ON fehlen fachliche Signatur, atomare Implementierung/Outbox und E2E.
 
 Diese Punkte sind nicht als akzeptierter Nach-Go-Live-Backlog freigegeben; Owner, Termin, Ablaufdatum und Risikoakzeptanz fehlen.
 
@@ -297,36 +328,36 @@ Zusätzlicher P3-Härtungshinweis: Der shared bounded-JSON-Reader berechnet im F
 
 ## 9. Verbleibende externe, fachliche und operative Blocker
 
-1. Preview muss nachweislich getrennte DB-, private-Blob-, Queue- und Providerziele erhalten. Der gemeinsame Blob-Fingerprint und unklare Queue-/Providerziele blockieren jeden Preview-Write.
-2. Die vollständige, versionierte und fachlich signierte Launch-Scope-Matrix ON/OFF/INTERNAL samt zentraler serverseitiger Durchsetzung fehlt.
+1. Preview besitzt getrennte DB- und Blob-Ressourcen/Connections; Queue- und Providerziele sowie der SHA-identische Runtime-/Uploadnachweis fehlen weiterhin und blockieren den vollständigen ENV-01-Abschluss.
+2. Eine versionierte zentrale technische Launch-Scope-Policy ist vorhanden; vollständige fachliche ON/OFF/INTERNAL-Signaturen, Vollabdeckung und deployte Negativmatrix fehlen.
 3. Unternehmensprofil, rechtliche DE/EN-Inhalte, Legal-Sign-off, ES-Entscheidung und verbindliche KPI-Definitionen fehlen.
-4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; der Kandidat erwartet 117 Tabellen und die kontrollierte Kette 068–072.
-5. Backup, Restore-Drill, RPO/RTO, Rollbackziel und DBA-/Releasefreigabe fehlen.
+4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; Preview-Main ist kontrolliert bis 072 migriert, Production hingegen unverändert.
+5. Der technische Preview-Backup-/Restore-Drill ist bestanden. Offen bleiben 061-App-Rollen-Cutover, formale RPO/RTO- und Reconciliation-Abnahme, Production-Backup/Rollbackziel sowie DBA-/Releasefreigabe.
 6. Resend-Integration, Domain/From/Key, eigene QA-Mailbox und genau ein echter allowlisteter Versand sind nicht validiert.
 7. Eigener QA-Kalender und kompletter Booking-Lifecycle einschließlich Providerstatus und Cleanup sind nicht validiert; die öffentlichen Write-Pfade bleiben deshalb Launch-off.
-8. Zwei QA-Tenants und echte Rollen für vollständige CRM-CRUD-, RBAC-, IDOR-, Auth-, Datei-, Newsletter-, Data-Hygiene-, Bot-, OAuth- und Integrations-E2Es fehlen.
+8. Zwei QA-Tenants und echte Rollen sind provisioniert; die vollständigen CRM-CRUD-, RBAC-, IDOR-, Auth-, Datei-, Newsletter-, Data-Hygiene-, Bot-, OAuth- und Integrations-E2Es auf einem SHA-identischen Preview fehlen.
 9. Cron-/Queue-SLO, Recovery, Monitore und getestete Alarme fehlen.
-10. Exakter lokaler Node-Pin 24.14.0 bzw. ein SHA-identischer CI-Nachweis ist offen.
+10. Der lokale Toolchain-Nachweis Node 24.14.0/npm 11.9.0 ist bestanden; offen bleibt der SHA-identische CI-/Deployment-Nachweis.
 11. Es gibt keinen deployten Remediation-Preview-/Production-Kandidaten, keine Kandidaten-Screenshots, kein vollständiges Axe-/Screenreader- und Mobile-Set und keine Lighthouse-/Web-Vitals-Evidenz.
 12. Production-Beobachtungsfenster von 60 Minuten, 24 Stunden und sieben Tagen wurden für den Remediation-Kandidaten nicht begonnen.
 13. Der bislang im öffentlichen Live-Funnel verwendete Publish-Token muss vor GO rotiert, die alte Capability widerrufen und die neue Capability kontrolliert verteilt werden. Diese externe Rotation wurde nicht ausgeführt.
 
 ## 10. Bewusst nicht ausgeführte Aktionen
 
-Aufgrund von ENV-01, fehlenden Freigaben und fehlender QA-Isolation wurden folgende Aktionen nicht ausgeführt:
+Aufgrund von ENV-01, fehlenden Freigaben und fehlender SHA-identischer Preview-Runtime-Konfiguration wurden folgende Aktionen nicht ausgeführt:
 
 - keine Änderung von Vercel-Production-Env-Variablen;
 - keine Providerdomain-, Key-, From-, Mailbox- oder Kalenderänderung;
-- keine Production- oder Preview-Migration;
-- kein Production- oder Preview-Seed;
+- keine Production-Migration; Preview-Main enthält 060 und 068–072, der isolierte Evidence-Branch zusätzlich den bestandenen Restore-/Reapply-Drill für 057 + 073–076; 061 blieb gesperrt;
+- kein CRM-Geschäftsobjekt-Seed; ausschließlich die sichere QA-Tenant-/Identity-/Batch-Provisionierung wurde ausgeführt;
 - kein Preview-/Production-CRUD und kein Upload;
 - kein echter Provider-Mailversand und kein Kalendereintrag;
-- kein produktiver QA-Write;
+- kein QA-CRM-Geschäftsobjekt-Write;
 - kein Cleanup/Reset in Production;
 - keine historische Retry-/Recovery-Aktion;
 - kein Deployment, keine Promotion, keine Aliasumschaltung und keine öffentliche Feature-Freischaltung;
-- keine Blob-, Queue- oder Providerobjekte erzeugt;
-- keine operative Testdatenbereinigung erforderlich; QA-Batch-ID: keine.
+- keine Blob-Dateiobjekte, Queue-Nachrichten oder Provider-Sends erzeugt; angelegt wurden ausschließlich die zwei leeren Preview-Blob-Stores sowie Drill-, Preserve- und Pre-Cutover-Snapshot-Branches im isolierten Neon-Projekt;
+- keine operative Testdatenbereinigung erforderlich; zwei leere QA-Batches sind vorhanden.
 
 Damit wurden durch diesen Prüfstand weder Production-Daten noch Providerzustände verändert.
 
@@ -337,9 +368,9 @@ Vor Ausführung sind mindestens die jeweils genannten Freigaben und Sicherungen 
 | Aktion | Vorbedingung |
 |---|---|
 | Vercel-Production-Env ändern | schriftliche Release-/Ops-Freigabe, dokumentierter Vorherstand und Rollback |
-| Preview-Ziele neu provisionieren/verbinden | freigegebene getrennte Ressourcen und erneuter fingerprintbasierter ENV-01-Nachweis |
+| weitere Preview-Ziele provisionieren/verbinden oder bestehende ändern | freigegebene getrennte Ressourcen und erneuter fingerprintbasierter ENV-01-Nachweis |
 | Providerdomain/Key/From ändern | Product/Ops/Provider-Freigabe, Domainverifikation, Secret-Rotation und Rollback |
-| Produktionsmigrationen bis einschließlich Kandidatenstand 072 | Backup, Dry-run, geprüfter Rollback, erfolgreicher Restore-Drill, DBA-/Releasefreigabe |
+| Produktionsmigrationen bis einschließlich Kandidatenstand 076, einschließlich manuellem Vor-Cutover 057; 061 bleibt separater App-Rollen-Cutover | Backup, Dry-run, geprüfter Rollback, erfolgreicher Restore-Drill, DBA-/Releasefreigabe |
 | Funnel-Publish-Token rotieren | Security-/Ops-Freigabe, kontrollierte Verteilung, Widerruf der alten Capability, Audit und Negativtest der alten URL |
 | Production-Deploy oder Promotion | alle Pflichtgates grün, exakte SHA/Lockfile/Env-Buildinput-Evidenz und Rollbackziel |
 | produktiver QA-Write | allowlisteter QA-Workspace, genehmigter Batch, Monitoring und Reset-/Reconciliation-Plan |
@@ -351,11 +382,11 @@ Vor Ausführung sind mindestens die jeweils genannten Freigaben und Sicherungen 
 ## 12. Nächste kontrollierte Reihenfolge
 
 1. Launch-Scope, Legal, Unternehmensprofil, ES und KPI-Definitionen fachlich signieren.
-2. Getrennte Preview-Ressourcen für Blob, Queue und Provider bereitstellen und ENV-01 erneut read-only nachweisen.
-3. Backup-/Restore-/Rollback-Verfahren abnehmen; Schema-Diff und manuelle Migrationen bis zum freigegebenen Kandidatenstand 072 mit DBA kontrolliert schließen.
-4. Zwei QA-Tenants, Rollen, QA-Mailbox und QA-Kalender ausschließlich nach bestandenem ENV-01 anlegen.
-5. Den bislang öffentlichen Funnel-Publish-Token kontrolliert rotieren und die alte Capability widerrufen.
-6. Exakten Remediation-Kandidaten mit gepinntem Toolchain-Build als Preview deployen.
+2. Die vorhandene DB-/Blob-Trennung per SHA-identischem Preview-Runtime-Test nachweisen, getrennte Queue-/Providerziele schließen und ENV-01 erneut bewerten.
+3. Den bestandenen Evidence-Drill formal abnehmen und <code>057</code> + <code>073</code>–<code>076</code> nach finalem Commit und Pre-Cutover-Snapshot auf Preview-Main anwenden; den echten <code>novalure_app</code>-RPC-/Grant-Probe ausführen. 061 erst nach SHA-identischem Deployment, sicherer App-Verbindung, Rollenmitgliedschaft und Deployment-Attestation ausführen. RPO/RTO, Schema-Diff und Reconciliation mit DBA signieren.
+4. Branchgebundene Preview-ENV setzen und den exakt gepinnten Kandidaten-SHA einmal deployen.
+5. Danach Barrieredrill und Zwei-Tenant-Harness einschließlich Dry-run/Execute/Null-Rest-Cleanup ausführen.
+6. Den bislang öffentlichen Funnel-Publish-Token kontrolliert rotieren und die alte Capability widerrufen.
 7. Vollständige Gate-Matrix einschließlich Zwei-Tenant-, Provider-, File-, A11y-, Mobile-, Performance- und Cleanup-E2Es ausführen.
 8. Erst danach einen geschützten Production-Kandidaten genehmigen, smoke-testen, bereinigen und beobachten.
 9. Alias-/Feature-Freischaltung nur als separate, ausdrücklich genehmigte Aktion.

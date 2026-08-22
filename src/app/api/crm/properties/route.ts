@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
-import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
-import { loadPaginatedPropertyAssets } from "@/lib/db/crm-loaders";
+import {
+  loadPaginatedPropertyAssets,
+  loadPropertyReservations,
+  loadPropertyUnits,
+} from "@/lib/db/crm-loaders";
 import {
   attachPropertyDocument,
   attachPropertyMedia,
@@ -62,10 +65,6 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function asArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value as T[] : [];
-}
-
 function parseIntegerParam(value: string | null, fallback: number, min: number, max: number) {
   if (!value?.trim()) return fallback;
   const parsed = Number(value);
@@ -87,6 +86,75 @@ function parseStatus(value: string | null) {
 function parseIdempotencyKey(request: Request) {
   const value = request.headers.get("idempotency-key")?.trim() ?? "";
   return /^[A-Za-z0-9._:-]{16,160}$/.test(value) ? value : null;
+}
+
+const propertyInquiryIdFields = [
+  "projectId",
+  "propertyId",
+  "unitId",
+  "contactId",
+  "leadId",
+  "ownerUserId",
+  "funnelId",
+  "formId",
+] as const;
+
+function normalizeInquiryId(field: typeof propertyInquiryIdFields[number], value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  const normalized = field === "propertyId" ? candidate.replace(/^listing:/, "") : candidate;
+  if (!uuidPattern.test(normalized)) return null;
+  return field === "propertyId" && candidate.startsWith("listing:") ? `listing:${normalized}` : normalized;
+}
+
+function parsePropertyInquiry(payload: Record<string, unknown>, workspaceId: string) {
+  const inquiry: Record<string, unknown> = {
+    ...payload,
+    sourceChannel: typeof payload.sourceChannel === "string" && payload.sourceChannel.trim()
+      ? payload.sourceChannel.trim()
+      : "Manual",
+    workspaceId,
+  };
+
+  for (const field of propertyInquiryIdFields) {
+    const value = normalizeInquiryId(field, payload[field]);
+    if (value === null) return { error: `Invalid ${field}` } as const;
+    if (value === undefined) delete inquiry[field];
+    else inquiry[field] = value;
+  }
+
+  return { inquiry: inquiry as PropertyInquiryRouteInput } as const;
+}
+
+async function loadCanonicalPropertyInquiryCandidates(workspaceId: string) {
+  const [firstPage, units, reservations] = await Promise.all([
+    loadPaginatedPropertyAssets(workspaceId, { limit: 200, offset: 0 }),
+    loadPropertyUnits(workspaceId),
+    loadPropertyReservations(workspaceId),
+  ]);
+  const assets = [...firstPage.assets];
+  let nextOffset = firstPage.pagination.nextOffset;
+  const loadedOffsets = new Set<number>([0]);
+
+  while (firstPage.pagination.hasMore && nextOffset !== null && !loadedOffsets.has(nextOffset)) {
+    loadedOffsets.add(nextOffset);
+    const page = await loadPaginatedPropertyAssets(workspaceId, { limit: 200, offset: nextOffset });
+    assets.push(...page.assets);
+    nextOffset = page.pagination.nextOffset;
+    if (!page.pagination.hasMore) break;
+  }
+
+  return {
+    assets: assets.filter((asset) => (
+      asset.workspaceId === workspaceId &&
+      asset.kind === "property" &&
+      Boolean(asset.sellerListingId) &&
+      asset.id === `listing:${asset.sellerListingId}`
+    )),
+    reservations: reservations.filter((reservation) => reservation.workspaceId === workspaceId),
+    units: units.filter((unit) => unit.workspaceId === workspaceId),
+  };
 }
 
 export async function GET(request: Request) {
@@ -143,15 +211,13 @@ export async function POST(request: Request) {
   const operation = typeof input.operation === "string" ? input.operation : "create_property";
 
   if (operation === "route_inquiry") {
-    const inquiry = {
-      ...asObject(input.inquiry),
-      workspaceId: session.workspaceId,
-    } as PropertyInquiryRouteInput;
-    const route = routePropertyInquiry(inquiry, {
-      assets: asArray<PropertyAssetSummary>(input.assets),
-      reservations: asArray<PropertyReservation>(input.reservations),
-      units: asArray<PropertyUnit>(input.units),
-    });
+    const parsed = parsePropertyInquiry(asObject(input.inquiry), session.workspaceId);
+    if ("error" in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const inquiry = parsed.inquiry;
+    const candidates = await loadCanonicalPropertyInquiryCandidates(session.workspaceId);
+    const route = routePropertyInquiry(inquiry, candidates);
 
     if (!canPersistRouting(session)) {
       return NextResponse.json({
@@ -163,10 +229,13 @@ export async function POST(request: Request) {
 
     const result = await persistPropertyInquiryRoute({ inquiry, route, session });
     if (!result.persisted) {
-      return NextResponse.json({ persisted: false, reason: result.reason, route });
+      return NextResponse.json(
+        { persisted: false, reason: result.reason, route },
+        { status: getWriteStatus(result.reason) },
+      );
     }
 
-    return NextResponse.json({ data: result.data, persisted: true, route });
+    return NextResponse.json({ data: result.data, persisted: true, route: result.data.route });
   }
 
   if (operation === "run_preflight") {

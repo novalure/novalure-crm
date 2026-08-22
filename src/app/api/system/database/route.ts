@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/auth/session";
 import { queryRows } from "@/lib/db/client";
 import { crmTables, getDatabaseStatus } from "@/lib/db/schema";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type TableStatusRow = {
   exists: boolean;
@@ -47,7 +48,7 @@ export type SystemDatabaseDiagnostics = {
 
 function canViewSystemDiagnostics(session: Awaited<ReturnType<typeof getRequestSession>>) {
   if (!session) return false;
-  return session.productRole === "platform_admin" || session.productRole === "novalureAdmin";
+  return evaluateLaunchScope("systemDatabaseDiagnostics", session).allowed;
 }
 
 export async function GET(request: Request) {

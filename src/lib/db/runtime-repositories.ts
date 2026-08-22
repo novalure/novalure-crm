@@ -1,12 +1,24 @@
+import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
+import {
+  botWebhookActorProductRoles,
+  isEligibleBotWebhookActor,
+} from "@/lib/bots/webhook-actor";
+import {
+  botWebhookLeaseSeconds,
+  botWebhookRateWindowMinutes,
+  evaluateBotWebhookBudget,
+} from "@/lib/bots/webhook-processing";
 import type { BotEvaluationCaseResult, BotEvaluationRun } from "@/lib/crm-types";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
-import { withTenantTransaction } from "@/lib/db/tenant-client";
+import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import { resolveCanonicalFunnelSubmissionSemantics } from "@/lib/funnel-submission-validation";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { hasProductCapability } from "@/lib/product-model";
 import {
   buildPublicContactIdentityLocks,
@@ -52,6 +64,9 @@ export type BotCrmSyncResult = {
 export type PersistenceResult =
   | { persisted: true; ids: Record<string, string | null> }
   | { persisted: false; reason: string };
+
+export const funnelPublicationRevisionConflictReason =
+  "Funnel publication revision changed";
 
 export function canPersist() {
   return hasDatabaseUrl();
@@ -185,6 +200,8 @@ export async function writeAuditLog(input: {
   dealId?: string | null;
   before?: unknown;
   after?: unknown;
+  transaction?: TenantTransaction;
+  webhookEventId?: string | null;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return;
 
@@ -197,9 +214,9 @@ export async function writeAuditLog(input: {
   const entityIdSql = addUuidParam(params, input.entityId);
   const beforeSql = addParam(params, JSON.stringify(input.before ?? null));
   const afterSql = addParam(params, JSON.stringify(withManagedServiceAuditContext(input)));
+  const webhookEventSql = addUuidParam(params, input.webhookEventId);
 
-  await queryOne(
-    `
+  const query = `
       insert into audit_logs (
         workspace_id,
         project_id,
@@ -209,7 +226,8 @@ export async function writeAuditLog(input: {
         entity_type,
         entity_id,
         before,
-        after
+        after,
+        webhook_event_id
       )
       values (
         $1,
@@ -220,12 +238,21 @@ export async function writeAuditLog(input: {
         ${entityTypeSql},
         ${entityIdSql},
         ${beforeSql}::jsonb,
-        ${afterSql}::jsonb
+        ${afterSql}::jsonb,
+        ${webhookEventSql}
       )
+      on conflict (workspace_id, webhook_event_id, action)
+        where webhook_event_id is not null
+        do nothing
       returning id
-    `,
-    params,
-  );
+    `;
+
+  await (input.transaction
+    ? input.transaction.queryOne(query, params)
+    : queryOne(
+        query,
+        params,
+      ));
 }
 
 function withManagedServiceAuditContext(input: {
@@ -267,6 +294,7 @@ export async function createApprovalRequest(input: {
   action: string;
   summary: string;
   payload: unknown;
+  webhookEventId?: string | null;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return null;
@@ -280,6 +308,7 @@ export async function createApprovalRequest(input: {
   const actionSql = addParam(params, input.action);
   const summarySql = addParam(params, input.summary);
   const payloadSql = addParam(params, JSON.stringify(input.payload ?? {}));
+  const webhookEventSql = addUuidParam(params, input.webhookEventId);
 
   const row = await queryOne<IdRow>(
     `
@@ -291,7 +320,8 @@ export async function createApprovalRequest(input: {
         entity_id,
         action,
         summary,
-        payload
+        payload,
+        webhook_event_id
       )
       values (
         $1,
@@ -301,19 +331,39 @@ export async function createApprovalRequest(input: {
         ${entityIdSql},
         ${actionSql},
         ${summarySql},
-        ${payloadSql}::jsonb
+        ${payloadSql}::jsonb,
+        ${webhookEventSql}
       )
+      on conflict (workspace_id, webhook_event_id, action)
+        where webhook_event_id is not null
+        do nothing
       returning id
     `,
     params,
   );
 
-  return row?.id ?? null;
+  if (row?.id) return row.id;
+  if (!isUuid(input.webhookEventId)) return null;
+
+  const existing = await queryOne<IdRow>(
+    `
+      select id
+      from approval_requests
+      where workspace_id = $1::uuid
+        and webhook_event_id = $2::uuid
+        and action = $3
+      limit 1
+    `,
+    [input.session.workspaceId, input.webhookEventId, input.action],
+  );
+
+  return existing?.id ?? null;
 }
 type FunnelSubmissionPersistenceRow = {
-  contactId: string;
+  contactId: string | null;
   dealId: string | null;
   leadId: string | null;
+  publicationRevisionMatched?: boolean;
   submissionId: string;
   taskId: string | null;
   timelineItemId: string | null;
@@ -394,12 +444,16 @@ export async function findPersistedFunnelSubmissionByIdempotency(input: {
 
 export async function persistFunnelSubmission(input: {
   databaseFunnelId: string;
+  expectedPublicationRevision: number;
   session: AppSession;
   blueprint: FunnelBlueprint;
   payload: FunnelSubmissionPayload;
   score: number;
   submissionIdempotencyHash: string;
 }): Promise<PersistenceResult> {
+  if (!evaluateLaunchScope("publicFunnelSubmission").allowed) {
+    return { persisted: false, reason: "Public funnel submission is launch-off" };
+  }
   if (!canPersist()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
@@ -407,6 +461,8 @@ export async function persistFunnelSubmission(input: {
     !isUuid(input.session.workspaceId) ||
     !isUuid(input.session.userId) ||
     !isUuid(input.databaseFunnelId) ||
+    !Number.isSafeInteger(input.expectedPublicationRevision) ||
+    input.expectedPublicationRevision < 0 ||
     !/^[a-f0-9]{64}$/u.test(input.submissionIdempotencyHash)
   ) {
     return { persisted: false, reason: "Invalid live funnel submission scope" };
@@ -453,6 +509,7 @@ export async function persistFunnelSubmission(input: {
           [input.session.workspaceId, publicContactIdentityLockNamespace, contactIdentityLock],
         );
       }
+
       const [contactIdentity] = await transaction.query<FunnelContactIdentityRow>(
         `
           with selected_funnel as (
@@ -505,13 +562,21 @@ export async function persistFunnelSubmission(input: {
       if (contactIdentity?.conflict) return { identityConflict: true } as const;
       return transaction.queryOne<FunnelSubmissionPersistenceRow>(
     `
-      with selected_funnel as (
+      with locked_funnel as (
         select
           id,
           workspace_id as "workspaceId",
           project_id as "projectId",
           owner_user_id as "ownerUserId",
-          name
+          name,
+          coalesce(
+            case
+              when jsonb_typeof(tracking->'publicationRevision') = 'number'
+                then (tracking->>'publicationRevision')::numeric
+              else null
+            end,
+            0
+          ) = $29::numeric as "publicationRevisionMatched"
         from funnels
         where workspace_id = $1::uuid
           and id = $2::uuid
@@ -528,8 +593,13 @@ export async function persistFunnelSubmission(input: {
               and blueprint->'blueprint'->>'status' = 'aktiv'
               and jsonb_typeof(blueprint->'blueprint'->'pages') = 'array'
             )
-          )
+        )
         for update
+      ),
+      selected_funnel as (
+        select id, "workspaceId", "projectId", "ownerUserId", name
+        from locked_funnel
+        where "publicationRevisionMatched"
       ),
       existing_submission as (
         select
@@ -1061,7 +1131,8 @@ export async function persistFunnelSubmission(input: {
         (select id from inserted_lead limit 1) as "leadId",
         (select id from inserted_deal limit 1) as "dealId",
         (select id from inserted_task limit 1) as "taskId",
-        (select id from inserted_timeline limit 1) as "timelineItemId"
+        (select id from inserted_timeline limit 1) as "timelineItemId",
+        true as "publicationRevisionMatched"
       from inserted_submission s
       cross join chosen_contact c
       cross join updated_funnel f
@@ -1089,9 +1160,21 @@ export async function persistFunnelSubmission(input: {
         existing."leadId",
         (select id from existing_deal limit 1),
         (select id from existing_task limit 1),
-        (select id from existing_timeline limit 1)
+        (select id from existing_timeline limit 1),
+        true
       from existing_submission existing
       where existing."contactId" is not null
+      union all
+      select
+        null::uuid,
+        null::uuid,
+        null::uuid,
+        null::uuid,
+        null::uuid,
+        null::uuid,
+        false
+      from locked_funnel
+      where not "publicationRevisionMatched"
     `,
     [
       input.session.workspaceId,
@@ -1126,6 +1209,7 @@ export async function persistFunnelSubmission(input: {
       submissionIdempotencyKey,
       normalizedEmail || null,
       normalizedPhone || null,
+      input.expectedPublicationRevision,
         ],
       );
     },
@@ -1133,6 +1217,9 @@ export async function persistFunnelSubmission(input: {
 
   if (row && "identityConflict" in row) {
     return { persisted: false, reason: "Funnel contact identity conflict" };
+  }
+  if (row?.publicationRevisionMatched === false) {
+    return { persisted: false, reason: funnelPublicationRevisionConflictReason };
   }
   if (!row?.submissionId || !row.contactId) {
     return { persisted: false, reason: "Live submission could not be persisted atomically" };
@@ -1696,8 +1783,23 @@ export async function getOrCreateBotConversation(input: {
   language: string;
   model: string;
   metadata?: unknown;
+  webhookEventId?: string | null;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
+
+  if (isUuid(input.webhookEventId)) {
+    const webhookConversation = await queryOne<IdRow>(
+      `
+        select id
+        from bot_conversations
+        where workspace_id = $1::uuid
+          and webhook_event_id = $2::uuid
+        limit 1
+      `,
+      [input.session.workspaceId, input.webhookEventId],
+    );
+    if (webhookConversation) return webhookConversation.id;
+  }
 
   if (isUuid(input.conversationId)) {
     const existing = await queryOne<IdRow>(
@@ -1722,19 +1824,51 @@ export async function getOrCreateBotConversation(input: {
   const languageSql = addParam(params, input.language);
   const modelSql = addParam(params, input.model);
   const metadataSql = addParam(params, JSON.stringify(input.metadata ?? {}));
+  const webhookEventSql = addUuidParam(params, input.webhookEventId);
 
   const row = await queryOne<IdRow>(
     `
       insert into bot_conversations (
-        workspace_id, project_id, bot_id, contact_id, lead_id, title, language, model, metadata
+        workspace_id, project_id, bot_id, contact_id, lead_id, title, language, model, metadata,
+        webhook_event_id
       )
-      values ($1, ${projectSql}, ${botSql}, ${contactSql}, ${leadSql}, ${titleSql}, ${languageSql}, ${modelSql}, ${metadataSql}::jsonb)
+      select $1, ${projectSql}, ${botSql}, ${contactSql}, ${leadSql}, ${titleSql}, ${languageSql}, ${modelSql}, ${metadataSql}::jsonb,
+        ${webhookEventSql}
+      where (${projectSql} is null or exists (
+          select 1 from projects where workspace_id = $1 and id = ${projectSql}
+        ))
+        and (${botSql} is null or exists (
+          select 1 from bots where workspace_id = $1 and id = ${botSql}
+        ))
+        and (${contactSql} is null or exists (
+          select 1 from contacts where workspace_id = $1 and id = ${contactSql} and archived_at is null
+        ))
+        and (${leadSql} is null or exists (
+          select 1 from leads where workspace_id = $1 and id = ${leadSql}
+        ))
+      on conflict (workspace_id, webhook_event_id)
+        where webhook_event_id is not null
+        do nothing
       returning id
     `,
     params,
   );
 
-  return row?.id ?? null;
+  if (row?.id) return row.id;
+  if (!isUuid(input.webhookEventId)) return null;
+
+  const existing = await queryOne<IdRow>(
+    `
+      select id
+      from bot_conversations
+      where workspace_id = $1::uuid
+        and webhook_event_id = $2::uuid
+      limit 1
+    `,
+    [input.session.workspaceId, input.webhookEventId],
+  );
+
+  return existing?.id ?? null;
 }
 export async function listBotConversations(input: {
   session: AppSession;
@@ -1834,13 +1968,23 @@ export async function upsertBotCrmEntities(input: {
   score?: number | null;
   webhookEventId?: string | null;
 }): Promise<BotCrmSyncResult | null> {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
+  if (
+    !canPersist() ||
+    !isUuid(input.session.workspaceId) ||
+    !isUuid(input.session.userId) ||
+    !input.session.permissions.includes("crm:write") ||
+    !canViewAllWorkspaceContacts(input.session)
+  ) return null;
+
+  const requestedProjectId = cleanString(input.projectId);
+  if (requestedProjectId && !isUuid(requestedProjectId)) return null;
 
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
-  const email = cleanString(input.customerData?.email) || extractEmail(input.prompt);
+  const email = normalizeEmailForStorage(input.customerData?.email || extractEmail(input.prompt));
   const phone = formatPhoneForCrm(input.customerData?.phone || input.contactRef || extractPhone(input.prompt));
-  const phoneMatch = normalizePhoneForMatch(phone);
+  const normalizedEmail = normalizePublicContactEmail(email);
+  const normalizedPhone = normalizePublicContactPhone(phone);
   const extractedName = cleanString(input.customerData?.name) || extractName(input.prompt);
   const name = extractedName || (phone ? "WhatsApp " + phone : "WhatsApp Kontakt");
   const leadType = normalizeLeadType(input.prompt);
@@ -1850,239 +1994,452 @@ export async function upsertBotCrmEntities(input: {
   const hotStatus = score >= 70;
   const intent = input.prompt.slice(0, 260);
   const nextAction = cleanString(input.nextAction) || (hotStatus ? "Lead prüfen und Termin vorbereiten" : "Antwort prüfen und Lead qualifizieren");
-  const ownerUserId = isUuid(input.session.userId) ? input.session.userId : null;
+  const ownerUserId = input.session.userId;
+  const contactRef = cleanString(input.contactRef);
   const metadata = {
     bot: {
       channel: source,
-      contactRef: input.contactRef ?? null,
+      contactRef: contactRef || null,
       externalMessageId: input.externalMessageId ?? null,
       lastMessageAt: now,
       webhookEventId: input.webhookEventId ?? null,
     },
     preferredChannel: input.customerData?.preferredChannel ?? source,
   };
-
-  const existingContact = await queryOne<IdRow>(
-    `
-      select id
-      from contacts
-      where workspace_id = $1
-        and (
-          ($2::text <> '' and lower(email) = lower($2))
-          or ($3::text <> '' and regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') = $3)
-          or ($4::text <> '' and metadata->'bot'->>'contactRef' = $4)
-        )
-      order by updated_at desc
-      limit 1
-    `,
-    [input.session.workspaceId, email, phoneMatch, input.contactRef ?? ""],
-  );
-
-  const contact = existingContact
-    ? await queryOne<IdRow>(
-        `
-          update contacts
-          set owner_user_id = coalesce(owner_user_id, $3::uuid),
-              project_id = coalesce($4::uuid, project_id),
-              name = coalesce(nullif($5, ''), name),
-              role = $6,
-              source = $7,
-              intent = $8,
-              consent_label = $9,
-              email = coalesce(nullif($10, ''), email),
-              phone = coalesce(nullif($11, ''), phone),
-              metadata = metadata || $12::jsonb,
-              updated_at = now()
-          where workspace_id = $1 and id = $2
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          existingContact.id,
-          ownerUserId,
-          isUuid(input.projectId) ? input.projectId : null,
-          name,
-          leadType,
-          source,
-          intent,
-          consentLabel,
-          email,
-          phone,
-          JSON.stringify(metadata),
-        ],
-      )
-    : await queryOne<IdRow>(
-        `
-          insert into contacts (
-            workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
-          )
-          values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          isUuid(input.projectId) ? input.projectId : null,
-          ownerUserId,
-          name,
-          leadType,
-          source,
-          intent,
-          consentLabel,
-          email,
-          phone,
-          JSON.stringify(metadata),
-        ],
-      );
-  const contactId = contact?.id ?? existingContact?.id ?? null;
-
-  if (!contactId) return null;
-
-  const existingLead = await queryOne<IdRow>(
-    `
-      select id
-      from leads
-      where workspace_id = $1
-        and contact_id = $2
-        and source = $3
-      order by updated_at desc
-      limit 1
-    `,
-    [input.session.workspaceId, contactId, source],
-  );
   const leadMetadata = {
     bot: metadata.bot,
     lastCustomerMessage: input.prompt,
   };
-  const lead = existingLead
-    ? await queryOne<IdRow>(
+  const contactIdentityLocks = [...new Set([
+    ...buildPublicContactIdentityLocks({
+      email,
+      fallback:
+        contactRef ||
+        cleanString(input.externalMessageId) ||
+        cleanString(input.webhookEventId) ||
+        `${source}:${name}`,
+      phone,
+    }),
+    ...(contactRef ? [`bot-ref:${contactRef}`] : []),
+  ])].sort();
+
+  return withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    async (transaction) => {
+      const actor = await transaction.queryOne<IdRow>(
         `
-          update leads
-          set project_id = coalesce($3::uuid, project_id),
-              type = $4,
-              status = case when status in ('Neu', 'Qualifizieren', 'Termin offen') then $5 else status end,
-              score = greatest(score, $6),
-              intent = $7,
-              next_action = $8,
-              last_contact_at = now(),
-              next_contact_at = coalesce(next_contact_at, now() + interval '4 hours'),
-              hot_status = hot_status or $9,
-              metadata = metadata || $10::jsonb,
-              updated_at = now()
-          where workspace_id = $1 and id = $2
-          returning id
+          select id
+          from workspace_users
+          where workspace_id = $1::uuid
+            and id = $2::uuid
+            and status = 'active'
+          for share
+        `,
+        [input.session.workspaceId, ownerUserId],
+      );
+      if (!actor) return null;
+
+      if (requestedProjectId) {
+        const project = await transaction.queryOne<IdRow>(
+          `
+            select id
+            from projects
+            where workspace_id = $1::uuid
+              and id = $2::uuid
+            for share
+          `,
+          [input.session.workspaceId, requestedProjectId],
+        );
+        if (!project) return null;
+      }
+
+      for (const contactIdentityLock of contactIdentityLocks) {
+        // Bot, Form, Funnel and manual CRM writes must serialize on the same
+        // workspace-scoped identity keys before observing contact state.
+        await transaction.execute(
+          "select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text, 0))",
+          [input.session.workspaceId, publicContactIdentityLockNamespace, contactIdentityLock],
+        );
+      }
+
+      if (isUuid(input.webhookEventId)) {
+        const replay = await transaction.queryOne<{
+          contactId: string;
+          leadId: string | null;
+          timelineItemId: string;
+        }>(
+          `
+            select
+              timeline.contact_id as "contactId",
+              lead.id as "leadId",
+              timeline.id as "timelineItemId"
+            from contact_timeline_items timeline
+            left join leads lead
+              on lead.workspace_id = timeline.workspace_id
+              and lead.id::text = timeline.metadata->>'leadId'
+            where timeline.workspace_id = $1::uuid
+              and timeline.webhook_event_id = $2::uuid
+            limit 1
+            for update of timeline
+          `,
+          [input.session.workspaceId, input.webhookEventId],
+        );
+        if (replay) {
+          return {
+            contactCreated: false,
+            contactId: replay.contactId,
+            leadCreated: false,
+            leadId: replay.leadId,
+            timelineItemId: replay.timelineItemId,
+          };
+        }
+      }
+
+      type BotContactRow = IdRow & {
+        email: string | null;
+        phone: string | null;
+        projectId: string | null;
+      };
+      const contactMatches = await transaction.query<BotContactRow>(
+        `
+          select
+            id,
+            email,
+            phone,
+            project_id as "projectId"
+          from contacts
+          where workspace_id = $1::uuid
+            and archived_at is null
+            and (
+              ($2::text is not null and lower(btrim(email)) = $2::text)
+              or (
+                $3::text is not null
+                and regexp_replace(coalesce(phone, ''), '[^0-9+]', '', 'g') = $3::text
+              )
+              or ($4::text is not null and metadata->'bot'->>'contactRef' = $4::text)
+            )
+          order by updated_at desc
+          limit 2
+          for update
         `,
         [
           input.session.workspaceId,
-          existingLead.id,
-          isUuid(input.projectId) ? input.projectId : null,
-          leadType,
-          statusFromScore(score),
-          score,
-          intent,
-          nextAction,
-          hotStatus,
-          JSON.stringify(leadMetadata),
-        ],
-      )
-    : await queryOne<IdRow>(
-        `
-          insert into leads (
-            workspace_id, project_id, contact_id, source, type, status, score, intent, next_action,
-            received_at, sla_due_at, last_contact_at, next_contact_at, hot_status, metadata
-          )
-          values (
-            $1, $2::uuid, $3, $4, $5, $6, $7, $8, $9,
-            $10::timestamptz, $11::timestamptz, $10::timestamptz, $11::timestamptz, $12, $13::jsonb
-          )
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          isUuid(input.projectId) ? input.projectId : null,
-          contactId,
-          source,
-          leadType,
-          statusFromScore(score),
-          score,
-          intent,
-          nextAction,
-          now,
-          slaDueAt,
-          hotStatus,
-          JSON.stringify(leadMetadata),
+          normalizedEmail || null,
+          normalizedPhone || null,
+          contactRef || null,
         ],
       );
-  const timeline = await queryOne<IdRow>(
-    `
-      insert into contact_timeline_items (
-        workspace_id, contact_id, project_id, channel, title, detail, outcome, metadata
-      )
-      values ($1, $2, $3::uuid, $4, $5, $6, 'info', $7::jsonb)
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      contactId,
-      isUuid(input.projectId) ? input.projectId : null,
-      source,
-      source + " Bot-Nachricht",
-      input.prompt.slice(0, 600),
-      JSON.stringify({ bot: metadata.bot, leadId: lead?.id ?? existingLead?.id ?? null }),
-    ],
-  );
-  const leadId = lead?.id ?? existingLead?.id ?? null;
+      // A single bot payload must never merge two contacts when its email,
+      // phone or channel reference resolve to different tenant records.
+      if (contactMatches.length > 1) return null;
+      const existingContact = contactMatches[0] ?? null;
+      const existingNormalizedEmail = normalizePublicContactEmail(existingContact?.email);
+      const existingNormalizedPhone = normalizePublicContactPhone(existingContact?.phone);
+      const contactIdentityConflict = Boolean(
+        existingContact && (
+          (
+            normalizedEmail &&
+            existingNormalizedEmail &&
+            normalizedEmail !== existingNormalizedEmail
+          ) ||
+          (
+            normalizedPhone &&
+            existingNormalizedPhone &&
+            normalizedPhone !== existingNormalizedPhone
+          )
+        ),
+      );
+      // A contactRef, email or phone match may enrich a missing identity, but
+      // it must never replace an already established non-empty identity.
+      if (contactIdentityConflict) return null;
 
-  if (!existingLead && leadId) {
-    await Promise.all([
-      writeCrmAnalyticsEvent({
-        channel: source,
-        contactId,
-        entityId: leadId,
-        entityType: "lead",
-        eventType: "lead_created",
-        leadId,
-        metadata: {
-          contactCreated: !existingContact,
-          externalMessageId: input.externalMessageId ?? null,
+      const contact = existingContact
+        ? await transaction.queryOne<BotContactRow>(
+            `
+              update contacts
+              set owner_user_id = coalesce(owner_user_id, $3::uuid),
+                  project_id = coalesce($4::uuid, project_id),
+                  name = coalesce(nullif($5, ''), name),
+                  role = $6,
+                  source = $7,
+                  intent = $8,
+                  consent_label = $9,
+                  email = coalesce(nullif($10, ''), email),
+                  phone = coalesce(nullif($11, ''), phone),
+                  metadata = metadata || $12::jsonb,
+                  updated_at = now()
+              where workspace_id = $1::uuid
+                and id = $2::uuid
+                and archived_at is null
+              returning id, email, phone, project_id as "projectId"
+            `,
+            [
+              input.session.workspaceId,
+              existingContact.id,
+              ownerUserId,
+              requestedProjectId || null,
+              name,
+              leadType,
+              source,
+              intent,
+              consentLabel,
+              email,
+              phone,
+              JSON.stringify(metadata),
+            ],
+          )
+        : await transaction.queryOne<BotContactRow>(
+            `
+              insert into contacts (
+                workspace_id, project_id, owner_user_id, name, role, source, intent, consent_label, email, phone, metadata
+              )
+              values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, nullif($9, ''), nullif($10, ''), $11::jsonb)
+              returning id, email, phone, project_id as "projectId"
+            `,
+            [
+              input.session.workspaceId,
+              requestedProjectId || null,
+              ownerUserId,
+              name,
+              leadType,
+              source,
+              intent,
+              consentLabel,
+              email,
+              phone,
+              JSON.stringify(metadata),
+            ],
+          );
+      if (!contact) throw new Error("Bot CRM contact could not be persisted");
+
+      type BotLeadRow = IdRow & { projectId: string | null };
+      const existingLead = await transaction.queryOne<BotLeadRow>(
+        `
+          select id, project_id as "projectId"
+          from leads
+          where workspace_id = $1::uuid
+            and contact_id = $2::uuid
+            and source = $3
+          order by updated_at desc
+          limit 1
+          for update
+        `,
+        [input.session.workspaceId, contact.id, source],
+      );
+      const lead = existingLead
+        ? await transaction.queryOne<BotLeadRow>(
+            `
+              update leads
+              set project_id = coalesce($3::uuid, project_id),
+                  type = $4,
+                  status = case when status in ('Neu', 'Qualifizieren', 'Termin offen') then $5 else status end,
+                  score = greatest(score, $6),
+                  intent = $7,
+                  next_action = $8,
+                  last_contact_at = now(),
+                  next_contact_at = coalesce(next_contact_at, now() + interval '4 hours'),
+                  hot_status = hot_status or $9,
+                  metadata = metadata || $10::jsonb,
+                  updated_at = now()
+              where workspace_id = $1::uuid and id = $2::uuid
+              returning id, project_id as "projectId"
+            `,
+            [
+              input.session.workspaceId,
+              existingLead.id,
+              requestedProjectId || null,
+              leadType,
+              statusFromScore(score),
+              score,
+              intent,
+              nextAction,
+              hotStatus,
+              JSON.stringify(leadMetadata),
+            ],
+          )
+        : await transaction.queryOne<BotLeadRow>(
+            `
+              insert into leads (
+                workspace_id, project_id, contact_id, source, type, status, score, intent, next_action,
+                received_at, sla_due_at, last_contact_at, next_contact_at, hot_status, metadata
+              )
+              values (
+                $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9,
+                $10::timestamptz, $11::timestamptz, $10::timestamptz, $11::timestamptz, $12, $13::jsonb
+              )
+              returning id, project_id as "projectId"
+            `,
+            [
+              input.session.workspaceId,
+              requestedProjectId || contact.projectId,
+              contact.id,
+              source,
+              leadType,
+              statusFromScore(score),
+              score,
+              intent,
+              nextAction,
+              now,
+              slaDueAt,
+              hotStatus,
+              JSON.stringify(leadMetadata),
+            ],
+          );
+      if (!lead) throw new Error("Bot CRM lead could not be persisted");
+
+      const effectiveProjectId = lead.projectId ?? contact.projectId ?? null;
+      const timeline = await transaction.queryOne<IdRow>(
+        `
+          insert into contact_timeline_items (
+            workspace_id, contact_id, project_id, channel, title, detail, outcome, metadata,
+            webhook_event_id
+          )
+          values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'info', $7::jsonb, $8::uuid)
+          on conflict (workspace_id, webhook_event_id)
+            where webhook_event_id is not null
+            do nothing
+          returning id
+        `,
+        [
+          input.session.workspaceId,
+          contact.id,
+          effectiveProjectId,
+          source,
+          source + " Bot-Nachricht",
+          input.prompt.slice(0, 600),
+          JSON.stringify({ bot: metadata.bot, leadId: lead.id }),
+          isUuid(input.webhookEventId) ? input.webhookEventId : null,
+        ],
+      );
+      if (!timeline && isUuid(input.webhookEventId)) {
+        const replay = await transaction.queryOne<{
+          contactId: string;
+          leadId: string | null;
+          timelineItemId: string;
+        }>(
+          `
+            select
+              timeline.contact_id as "contactId",
+              lead.id as "leadId",
+              timeline.id as "timelineItemId"
+            from contact_timeline_items timeline
+            left join leads lead
+              on lead.workspace_id = timeline.workspace_id
+              and lead.id::text = timeline.metadata->>'leadId'
+            where timeline.workspace_id = $1::uuid
+              and timeline.webhook_event_id = $2::uuid
+            limit 1
+          `,
+          [input.session.workspaceId, input.webhookEventId],
+        );
+        if (replay) {
+          return {
+            contactCreated: false,
+            contactId: replay.contactId,
+            leadCreated: false,
+            leadId: replay.leadId,
+            timelineItemId: replay.timelineItemId,
+          };
+        }
+      }
+      if (!timeline) throw new Error("Bot CRM timeline item could not be persisted");
+
+      await writeAuditLog({
+        action: existingContact ? "bot.contact.updated" : "bot.contact.created",
+        after: {
+          channel: source,
+          contactId: contact.id,
+          leadId: lead.id,
+          trigger: "bot_message",
+        },
+        before: existingContact
+          ? { contactId: existingContact.id, projectId: existingContact.projectId }
+          : null,
+        entityId: contact.id,
+        entityType: "contact",
+        projectId: effectiveProjectId,
+        session: input.session,
+        transaction,
+        webhookEventId: input.webhookEventId,
+      });
+      await writeAuditLog({
+        action: existingLead ? "bot.lead.updated" : "bot.lead.created",
+        after: {
+          channel: source,
+          contactId: contact.id,
+          leadId: lead.id,
           score,
           status: statusFromScore(score),
           trigger: "bot_message",
-          webhookEventId: input.webhookEventId ?? null,
         },
-        module: "lead_inbox",
-        projectId: isUuid(input.projectId) ? input.projectId : null,
-        source,
-        userId: input.session.userId,
-        workspaceId: input.session.workspaceId,
-      }),
-      recordSpeedToLeadEvent({
-        channel: source,
-        contactId,
-        dueAt: slaDueAt,
-        leadId,
-        metadata: {
-          externalMessageId: input.externalMessageId ?? null,
-          score,
-          sourcePayload: "bot_message",
-          trigger: "bot_message",
-          webhookEventId: input.webhookEventId ?? null,
-        },
-        projectId: isUuid(input.projectId) ? input.projectId : null,
-        source,
-        state: "covered",
-        userId: input.session.userId,
-        workspaceId: input.session.workspaceId,
-      }),
-    ]);
-  }
+        before: existingLead
+          ? { leadId: existingLead.id, projectId: existingLead.projectId }
+          : null,
+        entityId: lead.id,
+        entityType: "lead",
+        projectId: effectiveProjectId,
+        session: input.session,
+        transaction,
+        webhookEventId: input.webhookEventId,
+      });
 
-  return {
-    contactCreated: !existingContact,
-    contactId,
-    leadCreated: !existingLead,
-    leadId,
-    timelineItemId: timeline?.id ?? null,
-  };
+      if (!existingLead) {
+        const analyticsEventId = await writeCrmAnalyticsEvent({
+          channel: source,
+          contactId: contact.id,
+          entityId: lead.id,
+          entityType: "lead",
+          eventType: "lead_created",
+          leadId: lead.id,
+          metadata: {
+            contactCreated: !existingContact,
+            externalMessageId: input.externalMessageId ?? null,
+            score,
+            status: statusFromScore(score),
+            trigger: "bot_message",
+            webhookEventId: input.webhookEventId ?? null,
+          },
+          module: "lead_inbox",
+          projectId: effectiveProjectId,
+          source,
+          transaction,
+          userId: input.session.userId,
+          workspaceId: input.session.workspaceId,
+        });
+        if (!analyticsEventId) throw new Error("Bot CRM analytics event could not be persisted");
+
+        const speedToLeadEventId = await recordSpeedToLeadEvent({
+          channel: source,
+          contactId: contact.id,
+          dueAt: slaDueAt,
+          leadId: lead.id,
+          metadata: {
+            externalMessageId: input.externalMessageId ?? null,
+            score,
+            sourcePayload: "bot_message",
+            trigger: "bot_message",
+            webhookEventId: input.webhookEventId ?? null,
+          },
+          ownerUserId,
+          projectId: effectiveProjectId,
+          source,
+          state: "covered",
+          transaction,
+          userId: input.session.userId,
+          workspaceId: input.session.workspaceId,
+        });
+        if (!speedToLeadEventId) throw new Error("Bot CRM speed-to-lead event could not be persisted");
+      }
+
+      return {
+        contactCreated: !existingContact,
+        contactId: contact.id,
+        leadCreated: !existingLead,
+        leadId: lead.id,
+        timelineItemId: timeline.id,
+      };
+    },
+  );
 }
 
 export async function linkBotConversationToCrmEntities(input: {
@@ -2102,6 +2459,12 @@ export async function linkBotConversationToCrmEntities(input: {
           metadata = metadata || $5::jsonb,
           updated_at = now()
       where id = $1 and workspace_id = $2
+        and ($3::uuid is null or exists (
+          select 1 from contacts where workspace_id = $2 and id = $3::uuid and archived_at is null
+        ))
+        and ($4::uuid is null or exists (
+          select 1 from leads where workspace_id = $2 and id = $4::uuid
+        ))
       returning id
     `,
     [
@@ -2328,29 +2691,72 @@ export async function findBotChannelAccountForWebhook(input: {
   channel: string;
 }) {
   const accountRef = cleanString(input.accountRef);
+  const channel = cleanString(input.channel);
   if (!canPersist()) return { account: null, status: "unavailable" as const };
-  if (!accountRef) return { account: null, status: "not_found" as const };
+  if (!accountRef || !channel || accountRef.length > 256 || channel.length > 80) {
+    return { account: null, status: "not_found" as const };
+  }
 
   const rows = await queryRows<{
+    actorProductRole: string;
+    actorRole: string;
+    actorStatus: string;
+    actorUserId: string;
+    botId: string | null;
     id: string;
     workspaceId: string;
     workspaceName: string | null;
     channel: string;
     externalAccountId: string;
+    projectId: string | null;
     provider: string;
     metadata: unknown;
   }>(
     `
       select
+        webhook_actor.product_role as "actorProductRole",
+        webhook_actor.role as "actorRole",
+        webhook_actor.status as "actorStatus",
+        webhook_actor.id as "actorUserId",
+        bot.id as "botId",
         bca.id,
         bca.workspace_id as "workspaceId",
         w.name as "workspaceName",
         bca.channel,
         bca.external_account_id as "externalAccountId",
+        bot.project_id as "projectId",
         bca.provider,
         bca.metadata
       from bot_channel_accounts bca
       left join workspaces w on w.id = bca.workspace_id
+      left join bots bot
+        on bot.workspace_id = bca.workspace_id
+        and bot.id = bca.bot_id
+      join lateral (
+        select
+          workspace_user.id,
+          workspace_user.product_role,
+          workspace_user.role,
+          workspace_user.status
+        from workspace_users workspace_user
+        where workspace_user.workspace_id = bca.workspace_id
+          and workspace_user.status = 'active'
+          and workspace_user.role in ('owner', 'admin', 'agent')
+          and workspace_user.product_role = any($3::text[])
+        order by
+          case
+            when workspace_user.id::text = bca.metadata->>'connectedByUserId' then 0
+            else 1
+          end,
+          case workspace_user.role
+            when 'owner' then 0
+            when 'admin' then 1
+            else 2
+          end,
+          workspace_user.created_at asc,
+          workspace_user.id asc
+        limit 1
+      ) webhook_actor on true
       where bca.active = true
         and bca.setup_status in ('ready', 'connected')
         and bca.workspace_id is not null
@@ -2359,18 +2765,33 @@ export async function findBotChannelAccountForWebhook(input: {
       order by bca.updated_at desc
       limit 2
     `,
-    [input.channel, accountRef],
+    [channel, accountRef, [...botWebhookActorProductRoles]],
   );
 
   if (rows.length === 0) return { account: null, status: "not_found" as const };
   if (rows.length !== 1) return { account: null, status: "ambiguous" as const };
 
   const row = rows[0];
-  if (!row || !isUuid(row.workspaceId)) return { account: null, status: "not_found" as const };
+  const actorCandidate = row ? {
+    productRole: row.actorProductRole,
+    role: row.actorRole,
+    status: row.actorStatus,
+  } : null;
+  if (
+    !row ||
+    !actorCandidate ||
+    !isUuid(row.workspaceId) ||
+    !isUuid(row.actorUserId) ||
+    !isEligibleBotWebhookActor(actorCandidate) ||
+    (row.botId !== null && !isUuid(row.botId)) ||
+    (row.projectId !== null && !isUuid(row.projectId))
+  ) return { account: null, status: "not_found" as const };
 
   return {
     account: {
       ...row,
+      actorProductRole: actorCandidate.productRole,
+      actorRole: actorCandidate.role,
       credentials: decryptBotChannelCredentials(row.metadata),
     },
     status: "matched" as const,
@@ -2378,65 +2799,639 @@ export async function findBotChannelAccountForWebhook(input: {
 }
 
 export async function insertBotChannelWebhook(input: {
+  actorUserId: string;
+  applyRateBudget: boolean;
   workspaceId: string;
   channelAccountId: string;
   externalMessageId: string;
   contactRef?: string | null;
   eventType: string;
   payload: unknown;
+  payloadSha256: string;
   normalizedMessage: unknown;
-  status?: string;
 }) {
+  const externalMessageId = cleanString(input.externalMessageId);
+  const contactRef = cleanString(input.contactRef) || null;
+  const eventType = cleanString(input.eventType);
+  const serializedPayload = JSON.stringify(input.payload ?? {});
+  const serializedMessage = JSON.stringify(input.normalizedMessage ?? {});
   if (
     !canPersist() ||
+    !isUuid(input.actorUserId) ||
     !isUuid(input.workspaceId) ||
     !isUuid(input.channelAccountId) ||
-    !cleanString(input.externalMessageId)
+    !/^evt_[0-9a-f]{64}$/u.test(externalMessageId) ||
+    !eventType ||
+    eventType.length > 100 ||
+    (contactRef?.length ?? 0) > 512 ||
+    serializedPayload.length > 65_536 ||
+    serializedMessage.length > 65_536 ||
+    !/^[0-9a-f]{64}$/u.test(input.payloadSha256)
   ) return null;
 
+  const leaseToken = randomUUID();
   const params: unknown[] = [input.channelAccountId, input.workspaceId];
-  const externalSql = addParam(params, input.externalMessageId ?? null);
-  const contactSql = addParam(params, input.contactRef ?? null);
-  const eventSql = addParam(params, input.eventType);
-  const payloadSql = addParam(params, JSON.stringify(input.payload ?? {}));
-  const normalizedSql = addParam(params, JSON.stringify(input.normalizedMessage ?? {}));
-  const statusSql = addParam(params, input.status ?? "received");
+  const externalSql = addParam(params, externalMessageId);
+  const contactSql = addParam(params, contactRef);
+  const eventSql = addParam(params, eventType);
+  const payloadSql = addParam(params, serializedPayload);
+  const normalizedSql = addParam(params, serializedMessage);
+  const payloadShaSql = addParam(params, input.payloadSha256);
+  const leaseTokenSql = addParam(params, leaseToken);
+  const leaseSecondsSql = addParam(params, botWebhookLeaseSeconds);
 
-  const row = await queryOne<IdRow & { status: string }>(
-    `
+  type WebhookClaimRow = {
+    id: string;
+    leaseToken: string;
+    processingAttempt: number;
+    processingResult: unknown;
+    replyResult: unknown;
+    replyState: string;
+    status: string;
+  };
+  type ExistingWebhookRow = {
+    id: string;
+    leaseExpiresAt: string | Date | null;
+    payloadSha256: string | null;
+    processingAttempt: number;
+    processingResult: unknown;
+    replyResult: unknown;
+    replyState: string;
+    status: string;
+  };
+  const claimSql = `
       insert into bot_channel_webhooks (
         workspace_id, channel_account_id, channel, external_message_id, contact_ref,
-        event_type, payload, normalized_message, status
+        event_type, payload, normalized_message, status, payload_sha256,
+        processing_attempt, lease_token, lease_expires_at
       )
       select
         bca.workspace_id, bca.id, bca.channel, ${externalSql}, ${contactSql},
-        ${eventSql}, ${payloadSql}::jsonb, ${normalizedSql}::jsonb, ${statusSql}
+        ${eventSql}, ${payloadSql}::jsonb, ${normalizedSql}::jsonb, 'processing', ${payloadShaSql},
+        1, ${leaseTokenSql}::uuid, now() + (${leaseSecondsSql}::integer * interval '1 second')
       from bot_channel_accounts bca
       where bca.id = $1::uuid
         and bca.workspace_id = $2::uuid
         and bca.active = true
         and bca.setup_status in ('ready', 'connected')
-      on conflict do nothing
-      returning id, status
-    `,
-    params,
-  );
-
-  if (row) return { duplicate: false, id: row.id, status: row.status };
-
-  const existing = await queryOne<{ id: string; status: string }>(
-    `
-      select id, status
+      on conflict (channel_account_id, external_message_id)
+        where channel_account_id is not null and external_message_id is not null
+        do update set
+          status = 'processing',
+          payload_sha256 = coalesce(bot_channel_webhooks.payload_sha256, excluded.payload_sha256),
+          processing_attempt = bot_channel_webhooks.processing_attempt + 1,
+          lease_token = excluded.lease_token,
+          lease_expires_at = excluded.lease_expires_at,
+          last_error = null,
+          reply_state = case
+            when bot_channel_webhooks.reply_state = 'attempting' then 'uncertain'
+            else bot_channel_webhooks.reply_state
+          end,
+          reply_completed_at = case
+            when bot_channel_webhooks.reply_state = 'attempting' then now()
+            else bot_channel_webhooks.reply_completed_at
+          end,
+          reply_result = case
+            when bot_channel_webhooks.reply_state = 'attempting'
+              then coalesce(bot_channel_webhooks.reply_result, '{}'::jsonb)
+                || jsonb_build_object('reconciliationReason', 'interrupted_provider_attempt')
+            else bot_channel_webhooks.reply_result
+          end
+        where coalesce(bot_channel_webhooks.payload_sha256, excluded.payload_sha256) = excluded.payload_sha256
+          and (
+            bot_channel_webhooks.status in ('received', 'failed')
+            or (
+              bot_channel_webhooks.status = 'processing'
+              and bot_channel_webhooks.lease_expires_at <= now()
+            )
+          )
+      returning
+        id,
+        lease_token as "leaseToken",
+        processing_attempt as "processingAttempt",
+        processing_result as "processingResult",
+        reply_result as "replyResult",
+        reply_state as "replyState",
+        status
+  `;
+  const existingSql = `
+      select
+        id,
+        lease_expires_at as "leaseExpiresAt",
+        payload_sha256 as "payloadSha256",
+        processing_attempt as "processingAttempt",
+        processing_result as "processingResult",
+        reply_result as "replyResult",
+        reply_state as "replyState",
+        status
       from bot_channel_webhooks
-      where channel_account_id = $1::uuid
-        and external_message_id = $2
+      where workspace_id = $1::uuid
+        and channel_account_id = $2::uuid
+        and external_message_id = $3
       order by received_at asc
       limit 1
+  `;
+
+  return withTenantTransaction(
+    { actorId: input.actorUserId, workspaceId: input.workspaceId },
+    async (transaction) => {
+      // Account and contact locks are always acquired in lexical order. The
+      // account lock serializes every new event for its provider account; the
+      // contact lock documents and preserves the narrower budget boundary.
+      const budgetLockKeys = [
+        `bot_webhook_account:${input.workspaceId}:${input.channelAccountId}`,
+        `bot_webhook_contact:${input.workspaceId}:${input.channelAccountId}:${contactRef ?? "anonymous"}`,
+      ].sort();
+      for (const lockKey of budgetLockKeys) {
+        await transaction.queryOne<{ locked: boolean }>(
+          `select pg_advisory_xact_lock(hashtextextended($1, 0)) is null as locked`,
+          [lockKey],
+        );
+      }
+
+      const row = await transaction.queryOne<WebhookClaimRow>(claimSql, params);
+      if (row) {
+        if (input.applyRateBudget && Number(row.processingAttempt) === 1) {
+          const counts = await transaction.queryOne<{
+            accountEventCount: number | string;
+            contactEventCount: number | string;
+          }>(
+            `
+              select
+                count(*)::integer as "accountEventCount",
+                count(*) filter (where contact_ref = $3)::integer as "contactEventCount"
+              from bot_channel_webhooks
+              where workspace_id = $1::uuid
+                and channel_account_id = $2::uuid
+                and received_at >= now() - ($4::integer * interval '1 minute')
+                and coalesce(normalized_message->>'text', '') <> ''
+            `,
+            [input.workspaceId, input.channelAccountId, contactRef, botWebhookRateWindowMinutes],
+          );
+          if (!counts) throw new Error("Bot webhook rate budget could not be read");
+          const budget = evaluateBotWebhookBudget({
+            accountEventCount: Number(counts.accountEventCount),
+            contactEventCount: Number(counts.contactEventCount),
+          });
+          if (!budget.allowed) {
+            const ignored = await transaction.queryOne<IdRow>(
+              `
+                update bot_channel_webhooks
+                set status = 'ignored',
+                    processing_result = jsonb_build_object('reason', $4),
+                    completed_at = now(),
+                    lease_token = null,
+                    lease_expires_at = null,
+                    quarantine_reason = $4,
+                    quarantined_at = now(),
+                    reply_state = 'not_applicable',
+                    reply_completed_at = now(),
+                    reply_result = jsonb_build_object('reason', $4)
+                where workspace_id = $1::uuid
+                  and id = $2::uuid
+                  and status = 'processing'
+                  and lease_token = $3::uuid
+                returning id
+              `,
+              [input.workspaceId, row.id, row.leaseToken, budget.reason],
+            );
+            if (!ignored) throw new Error("Bot webhook rate limit could not be settled");
+            return {
+              id: row.id,
+              outcome: "ignored" as const,
+              processingAttempt: Number(row.processingAttempt),
+              processingResult: { reason: budget.reason },
+              quarantineReason: budget.reason,
+              replyResult: { reason: budget.reason },
+              replyState: "not_applicable",
+            };
+          }
+        }
+
+        return {
+          id: row.id,
+          leaseToken: row.leaseToken,
+          outcome: "claimed" as const,
+          processingAttempt: Number(row.processingAttempt),
+          processingResult: row.processingResult,
+          replyResult: row.replyResult,
+          replyState: row.replyState,
+        };
+      }
+
+      const existing = await transaction.queryOne<ExistingWebhookRow>(
+        existingSql,
+        [input.workspaceId, input.channelAccountId, externalMessageId],
+      );
+      if (!existing) return null;
+      if (existing.payloadSha256 && existing.payloadSha256 !== input.payloadSha256) {
+        return {
+          id: existing.id,
+          outcome: "payload_conflict" as const,
+          processingAttempt: Number(existing.processingAttempt),
+          processingResult: existing.processingResult,
+          replyResult: existing.replyResult,
+          replyState: existing.replyState,
+        };
+      }
+      const outcome = existing.status === "completed"
+        ? "completed"
+        : existing.status === "ignored"
+          ? "ignored"
+          : "in_flight";
+
+      return {
+        id: existing.id,
+        leaseExpiresAt: existing.leaseExpiresAt,
+        outcome,
+        processingAttempt: Number(existing.processingAttempt),
+        processingResult: existing.processingResult,
+        replyResult: existing.replyResult,
+        replyState: existing.replyState,
+      };
+    },
+  );
+}
+
+export async function quarantineBotChannelWebhookPayloadConflict(input: {
+  id: string;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id)) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set quarantine_reason = 'payload_conflict',
+          quarantined_at = coalesce(quarantined_at, now()),
+          conflict_count = conflict_count + 1,
+          last_error = 'payload_conflict_quarantined'
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      returning id
     `,
-    [input.channelAccountId, input.externalMessageId],
+    [input.workspaceId, input.id],
   );
 
-  return existing ? { duplicate: true, id: existing.id, status: existing.status } : null;
+  return Boolean(row);
+}
+
+export async function quarantineBotChannelWebhookEnvelope(input: {
+  eventCount: number;
+  payloadSha256: string;
+  provider: "custom" | "meta" | "unknown";
+  reason: "batch_event_limit_exceeded";
+}) {
+  const reason = cleanString(input.reason);
+  if (
+    !canPersist()
+    || !/^[0-9a-f]{64}$/u.test(input.payloadSha256)
+    || !["custom", "meta", "unknown"].includes(input.provider)
+    || !Number.isSafeInteger(input.eventCount)
+    || input.eventCount < 1
+    || input.eventCount > 100_000
+    || !reason
+    || reason.length > 100
+  ) return null;
+
+  return queryOne<IdRow>(
+    `
+      select public.quarantine_bot_channel_webhook_envelope(
+        $1, $2, $3, $4
+      ) as id
+    `,
+    [input.payloadSha256, input.provider, input.eventCount, reason],
+  );
+}
+
+export async function persistBotChannelWebhookProcessingResult(input: {
+  id: string;
+  leaseToken: string;
+  processingResult: unknown;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set processing_result = $4::jsonb
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+      returning id
+    `,
+    [input.workspaceId, input.id, input.leaseToken, JSON.stringify(input.processingResult ?? null)],
+  );
+
+  return Boolean(row);
+}
+
+export async function ignoreBotChannelWebhook(input: {
+  id: string;
+  leaseToken: string;
+  processingResult?: unknown;
+  reason?: string;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return false;
+  const reason = cleanString(input.reason) || "no_processable_text";
+  if (reason.length > 100) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set status = 'ignored',
+          processing_result = $4::jsonb,
+          completed_at = now(),
+          last_error = null,
+          lease_token = null,
+          lease_expires_at = null,
+          quarantine_reason = case
+            when $5 = 'no_processable_text' then quarantine_reason
+            else $5
+          end,
+          quarantined_at = case
+            when $5 = 'no_processable_text' then quarantined_at
+            else coalesce(quarantined_at, now())
+          end,
+          reply_state = case
+            when reply_state = 'attempting' then 'uncertain'
+            when reply_state = 'not_requested' then 'not_applicable'
+            else reply_state
+          end,
+          reply_completed_at = case
+            when reply_state in ('attempting', 'not_requested') then now()
+            else reply_completed_at
+          end,
+          reply_result = case
+            when reply_state in ('attempting', 'not_requested')
+              then coalesce(reply_result, '{}'::jsonb) || jsonb_build_object('reason', $5)
+            else reply_result
+          end
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+      returning id
+    `,
+    [input.workspaceId, input.id, input.leaseToken, JSON.stringify(input.processingResult ?? null), reason],
+  );
+
+  return Boolean(row);
+}
+
+export async function beginBotChannelWebhookReplyAttempt(input: {
+  id: string;
+  leaseToken: string;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return null;
+
+  const replyAttemptToken = randomUUID();
+  const row = await queryOne<{
+    replyAttemptToken: string | null;
+    replyResult: unknown;
+    replyState: string;
+  }>(
+    `
+      update bot_channel_webhooks
+      set reply_state = 'attempting',
+          reply_attempt_token = $4::uuid,
+          reply_attempted_at = now(),
+          reply_completed_at = null,
+          reply_result = null
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+        and reply_state = 'not_requested'
+      returning
+        reply_attempt_token as "replyAttemptToken",
+        reply_result as "replyResult",
+        reply_state as "replyState"
+    `,
+    [input.workspaceId, input.id, input.leaseToken, replyAttemptToken],
+  );
+
+  if (row) return row;
+
+  return queryOne<{
+    replyAttemptToken: string | null;
+    replyResult: unknown;
+    replyState: string;
+  }>(
+    `
+      select
+        reply_attempt_token as "replyAttemptToken",
+        reply_result as "replyResult",
+        reply_state as "replyState"
+      from bot_channel_webhooks
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+      limit 1
+    `,
+    [input.workspaceId, input.id, input.leaseToken],
+  );
+}
+
+export async function settleBotChannelWebhookReply(input: {
+  id: string;
+  leaseToken: string;
+  replyAttemptToken: string;
+  replyResult: unknown;
+  replyState: "blocked" | "completed" | "uncertain";
+  workspaceId: string;
+}) {
+  if (
+    !canPersist() ||
+    !isUuid(input.workspaceId) ||
+    !isUuid(input.id) ||
+    !isUuid(input.leaseToken) ||
+    !isUuid(input.replyAttemptToken)
+  ) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set reply_state = $5,
+          reply_result = $6::jsonb,
+          reply_completed_at = now()
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+        and reply_attempt_token = $4::uuid
+        and reply_state = 'attempting'
+      returning id
+    `,
+    [
+      input.workspaceId,
+      input.id,
+      input.leaseToken,
+      input.replyAttemptToken,
+      input.replyState,
+      JSON.stringify(input.replyResult ?? null),
+    ],
+  );
+
+  return Boolean(row);
+}
+
+export async function settleBotChannelWebhookReplyWithoutAttempt(input: {
+  id: string;
+  leaseToken: string;
+  replyResult: unknown;
+  replyState: "blocked" | "not_applicable";
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set reply_state = $4,
+          reply_result = $5::jsonb,
+          reply_completed_at = now()
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+        and reply_state = 'not_requested'
+      returning id
+    `,
+    [input.workspaceId, input.id, input.leaseToken, input.replyState, JSON.stringify(input.replyResult ?? null)],
+  );
+
+  return Boolean(row);
+}
+
+export async function completeBotChannelWebhook(input: {
+  id: string;
+  leaseToken: string;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set status = 'completed',
+          completed_at = now(),
+          last_error = null,
+          lease_token = null,
+          lease_expires_at = null
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+        and processing_result is not null
+        and reply_state in ('completed', 'blocked', 'not_applicable', 'uncertain')
+      returning id
+    `,
+    [input.workspaceId, input.id, input.leaseToken],
+  );
+
+  return Boolean(row);
+}
+
+export async function failBotChannelWebhook(input: {
+  id: string;
+  leaseToken: string;
+  reason: string;
+  workspaceId: string;
+}) {
+  if (!canPersist() || !isUuid(input.workspaceId) || !isUuid(input.id) || !isUuid(input.leaseToken)) return false;
+
+  const row = await queryOne<IdRow>(
+    `
+      update bot_channel_webhooks
+      set status = 'failed',
+          last_error = left($4, 160),
+          lease_token = null,
+          lease_expires_at = null,
+          reply_state = case when reply_state = 'attempting' then 'uncertain' else reply_state end,
+          reply_completed_at = case when reply_state = 'attempting' then now() else reply_completed_at end,
+          reply_result = case
+            when reply_state = 'attempting'
+              then coalesce(reply_result, '{}'::jsonb)
+                || jsonb_build_object('reconciliationReason', 'processing_failed_after_attempt_started')
+            else reply_result
+          end
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+        and status = 'processing'
+        and lease_token = $3::uuid
+      returning id
+    `,
+    [input.workspaceId, input.id, input.leaseToken, input.reason],
+  );
+
+  return Boolean(row);
+}
+
+export async function findBotChannelWebhookRunRecovery(input: {
+  id: string;
+  session: AppSession;
+}) {
+  if (
+    !canPersist()
+    || !isUuid(input.session.workspaceId)
+    || !isUuid(input.session.userId)
+    || !isUuid(input.id)
+  ) return null;
+
+  return withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+    async (transaction) => {
+      const recovery = await transaction.queryOne<{
+        conversationId: string;
+        messageContent: string;
+        messageId: string;
+        messageMetadata: unknown;
+        messageModel: string | null;
+      }>(
+        `
+          select
+            conversation.id as "conversationId",
+            message.content as "messageContent",
+            message.id as "messageId",
+            message.metadata as "messageMetadata",
+            message.model as "messageModel"
+          from bot_conversations conversation
+          join bot_messages message
+            on message.workspace_id = conversation.workspace_id
+            and message.conversation_id = conversation.id
+            and message.webhook_event_id = conversation.webhook_event_id
+            and message.role = 'assistant'
+          where conversation.workspace_id = $1::uuid
+            and conversation.webhook_event_id = $2::uuid
+          limit 1
+        `,
+        [input.session.workspaceId, input.id],
+      );
+      if (!recovery) return null;
+
+      const reconciled = await recordFirstResponseAnalyticsEvent({
+        conversationId: recovery.conversationId,
+        messageId: recovery.messageId,
+        metadata: recovery.messageMetadata,
+        model: recovery.messageModel,
+        session: input.session,
+        transaction,
+      });
+      if (!reconciled) throw new Error("Bot webhook first-response recovery could not be reconciled");
+
+      return {
+        conversationId: recovery.conversationId,
+        messageContent: recovery.messageContent,
+        messageMetadata: recovery.messageMetadata,
+      };
+    },
+  );
 }
 
 export async function listBotChannelWebhookEvents(input: {
@@ -2448,10 +3443,16 @@ export async function listBotChannelWebhookEvents(input: {
   return queryRows<{
     id: string;
     channel: string;
+    completedAt: string | Date | null;
     externalMessageId: string | null;
     contactRef: string | null;
     eventType: string;
+    leaseExpiresAt: string | Date | null;
     normalizedMessage: unknown;
+    processingAttempt: number;
+    replyAttemptedAt: string | Date | null;
+    replyCompletedAt: string | Date | null;
+    replyState: string;
     status: string;
     receivedAt: string | Date;
   }>(
@@ -2463,6 +3464,12 @@ export async function listBotChannelWebhookEvents(input: {
         contact_ref as "contactRef",
         event_type as "eventType",
         normalized_message as "normalizedMessage",
+        processing_attempt as "processingAttempt",
+        lease_expires_at as "leaseExpiresAt",
+        completed_at as "completedAt",
+        reply_state as "replyState",
+        reply_attempted_at as "replyAttemptedAt",
+        reply_completed_at as "replyCompletedAt",
         status,
         received_at as "receivedAt"
       from bot_channel_webhooks
@@ -2513,7 +3520,7 @@ export async function listBotMessages(input: {
   ).then((rows) => rows.reverse());
 }
 
-export async function insertBotMessage(input: {
+type BotMessageInsertInput = {
   session: AppSession;
   conversationId?: string | null;
   role: "system" | "user" | "assistant" | "tool";
@@ -2522,50 +3529,92 @@ export async function insertBotMessage(input: {
   toolCallId?: string | null;
   model?: string | null;
   metadata?: unknown;
-}) {
-  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+  webhookEventId?: string | null;
+};
 
-  const row = await queryOne<IdRow>(
-    `
-      insert into bot_messages (
-        workspace_id, conversation_id, role, content, tool_name, tool_call_id, model, metadata
-      )
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      input.conversationId,
-      input.role,
-      input.content,
-      input.toolName ?? null,
-      input.toolCallId ?? null,
-      input.model ?? null,
-      JSON.stringify(input.metadata ?? {}),
-    ],
-  );
+async function persistBotMessage(input: BotMessageInsertInput, transaction?: TenantTransaction) {
+  const insertSql = `
+    insert into bot_messages (
+      workspace_id, conversation_id, role, content, tool_name, tool_call_id, model, metadata,
+      webhook_event_id
+    )
+    values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::uuid)
+    on conflict (workspace_id, webhook_event_id, role)
+      where webhook_event_id is not null
+      do nothing
+    returning id
+  `;
+  const insertParams = [
+    input.session.workspaceId,
+    input.conversationId,
+    input.role,
+    input.content,
+    input.toolName ?? null,
+    input.toolCallId ?? null,
+    input.model ?? null,
+    JSON.stringify(input.metadata ?? {}),
+    isUuid(input.webhookEventId) ? input.webhookEventId : null,
+  ];
+  const row = transaction
+    ? await transaction.queryOne<IdRow>(insertSql, insertParams)
+    : await queryOne<IdRow>(insertSql, insertParams);
 
-  await queryOne(
-    `
-      update bot_conversations
-      set updated_at = now()
-      where id = $1 and workspace_id = $2
-      returning id
-    `,
-    [input.conversationId, input.session.workspaceId],
-  );
+  const existingSql = `
+    select id
+    from bot_messages
+    where workspace_id = $1::uuid
+      and webhook_event_id = $2::uuid
+      and role = $3
+    limit 1
+  `;
+  const existingParams = [input.session.workspaceId, input.webhookEventId, input.role];
+  const persistedRow = row ?? (isUuid(input.webhookEventId)
+    ? transaction
+      ? await transaction.queryOne<IdRow>(existingSql, existingParams)
+      : await queryOne<IdRow>(existingSql, existingParams)
+    : null);
 
-  if (row?.id && input.role === "assistant") {
-    await recordFirstResponseAnalyticsEvent({
-      conversationId: input.conversationId,
-      messageId: row.id,
+  const updateSql = `
+    update bot_conversations
+    set updated_at = now()
+    where id = $1 and workspace_id = $2
+    returning id
+  `;
+  if (transaction) {
+    await transaction.queryOne<IdRow>(updateSql, [input.conversationId, input.session.workspaceId]);
+  } else {
+    await queryOne<IdRow>(updateSql, [input.conversationId, input.session.workspaceId]);
+  }
+
+  if (persistedRow?.id && input.role === "assistant") {
+    const reconciled = await recordFirstResponseAnalyticsEvent({
+      conversationId: input.conversationId as string,
+      messageId: persistedRow.id,
       metadata: input.metadata,
       model: input.model,
       session: input.session,
+      transaction,
     });
+    if (transaction && !reconciled) throw new Error("Bot first-response effects could not be persisted");
   }
 
   return row?.id ?? null;
+}
+
+export async function insertBotMessage(input: BotMessageInsertInput) {
+  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.conversationId)) return null;
+
+  if (input.role === "assistant" && isUuid(input.webhookEventId) && isUuid(input.session.userId)) {
+    // For webhook runs the assistant row is the recovery marker. Commit it
+    // together with first_response analytics and speed-to-lead so a transient
+    // failure cannot leave a marker that falsely claims derived effects exist.
+    return withTenantTransaction(
+      { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+      (transaction) => persistBotMessage(input, transaction),
+    );
+  }
+
+  return persistBotMessage(input);
 }
 
 async function recordFirstResponseAnalyticsEvent(input: {
@@ -2574,47 +3623,87 @@ async function recordFirstResponseAnalyticsEvent(input: {
   metadata?: unknown;
   model?: string | null;
   session: AppSession;
+  transaction?: TenantTransaction;
 }) {
-  const conversation = await queryOne<{
+  type ConversationRow = {
     botId: string | null;
     contactId: string | null;
     leadId: string | null;
     metadata: unknown;
     projectId: string | null;
-  }>(
-    `
-      select
-        bot_id as "botId",
-        contact_id as "contactId",
-        lead_id as "leadId",
-        metadata,
-        project_id as "projectId"
-      from bot_conversations
-      where id = $1 and workspace_id = $2
-      limit 1
-    `,
-    [input.conversationId, input.session.workspaceId],
-  );
+  };
+  const conversationSql = `
+    select
+      bot_id as "botId",
+      contact_id as "contactId",
+      lead_id as "leadId",
+      metadata,
+      project_id as "projectId"
+    from bot_conversations
+    where id = $1 and workspace_id = $2
+    limit 1
+  `;
+  const conversationParams = [input.conversationId, input.session.workspaceId];
+  const conversation = input.transaction
+    ? await input.transaction.queryOne<ConversationRow>(conversationSql, conversationParams)
+    : await queryOne<ConversationRow>(conversationSql, conversationParams);
 
   if (!conversation) return null;
 
-  const existing = await queryOne<IdRow>(
-    `
-      select id
+  if (input.transaction) {
+    // The duplicate query below treats either a shared Contact or a shared
+    // Lead as the same first-response entity. Acquire every available entity
+    // lock in one global order so the lock equivalence matches that OR query.
+    const firstResponseScopeKeys = [
+      conversation.contactId ? `contact:${conversation.contactId}` : null,
+      conversation.leadId ? `lead:${conversation.leadId}` : null,
+    ].filter((value): value is string => Boolean(value));
+    if (!firstResponseScopeKeys.length) {
+      firstResponseScopeKeys.push(`conversation:${input.conversationId}`);
+    }
+    firstResponseScopeKeys.sort();
+    for (const firstResponseScope of firstResponseScopeKeys) {
+      await input.transaction.queryOne<{ locked: boolean }>(
+        `select pg_advisory_xact_lock(hashtextextended($1, 0)) is null as locked`,
+        [`bot_first_response:${input.session.workspaceId}:${firstResponseScope}`],
+      );
+    }
+  }
+
+  type FirstResponseRow = IdRow & { occurredAt: string | Date };
+  const exactAnalyticsSql = `
+    select id, occurred_at as "occurredAt"
+    from analytics_events
+    where workspace_id = $1
+      and event_type = 'first_response'
+      and metadata->>'conversationId' = $2
+    order by occurred_at asc
+    limit 1
+  `;
+  const exactAnalyticsParams = [input.session.workspaceId, input.conversationId];
+  const exactAnalytics = input.transaction
+    ? await input.transaction.queryOne<FirstResponseRow>(exactAnalyticsSql, exactAnalyticsParams)
+    : await queryOne<FirstResponseRow>(exactAnalyticsSql, exactAnalyticsParams);
+
+  if (!exactAnalytics) {
+    const priorEntityAnalyticsSql = `
+      select id, occurred_at as "occurredAt"
       from analytics_events
       where workspace_id = $1
         and event_type = 'first_response'
         and (
           ($2::uuid is not null and lead_id = $2::uuid)
           or ($3::uuid is not null and contact_id = $3::uuid)
-          or metadata->>'conversationId' = $4
         )
+      order by occurred_at asc
       limit 1
-    `,
-    [input.session.workspaceId, conversation.leadId, conversation.contactId, input.conversationId],
-  );
-
-  if (existing) return existing.id;
+    `;
+    const priorEntityAnalyticsParams = [input.session.workspaceId, conversation.leadId, conversation.contactId];
+    const priorEntityAnalytics = input.transaction
+      ? await input.transaction.queryOne<FirstResponseRow>(priorEntityAnalyticsSql, priorEntityAnalyticsParams)
+      : await queryOne<FirstResponseRow>(priorEntityAnalyticsSql, priorEntityAnalyticsParams);
+    if (priorEntityAnalytics) return priorEntityAnalytics.id;
+  }
 
   const conversationMetadata = asPlainObject(conversation.metadata);
   const messageMetadata = asPlainObject(input.metadata);
@@ -2624,47 +3713,72 @@ async function recordFirstResponseAnalyticsEvent(input: {
     || "bot";
   const entityId = conversation.leadId ?? conversation.contactId ?? input.messageId;
   const entityType = conversation.leadId ? "lead" : conversation.contactId ? "contact" : "bot_message";
-  const firstResponseAt = new Date().toISOString();
+  const firstResponseAt = exactAnalytics
+    ? exactAnalytics.occurredAt instanceof Date
+      ? exactAnalytics.occurredAt.toISOString()
+      : String(exactAnalytics.occurredAt)
+    : new Date().toISOString();
 
-  const analyticsEventId = await writeCrmAnalyticsEvent({
-    channel,
-    contactId: conversation.contactId,
-    entityId,
-    entityType,
-    eventType: "first_response",
-    leadId: conversation.leadId,
-    metadata: {
-      botId: conversation.botId,
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      model: input.model ?? null,
-    },
-    module: "lead_inbox",
-    projectId: conversation.projectId,
-    source: channel,
-    userId: input.session.userId,
-    workspaceId: input.session.workspaceId,
-  });
+  const analyticsEventId = exactAnalytics?.id ?? await writeCrmAnalyticsEvent({
+      channel,
+      contactId: conversation.contactId,
+      entityId,
+      entityType,
+      eventType: "first_response",
+      leadId: conversation.leadId,
+      metadata: {
+        botId: conversation.botId,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        model: input.model ?? null,
+      },
+      module: "lead_inbox",
+      occurredAt: firstResponseAt,
+      projectId: conversation.projectId,
+      source: channel,
+      transaction: input.transaction,
+      userId: input.session.userId,
+      workspaceId: input.session.workspaceId,
+    });
+  if (!analyticsEventId) return null;
 
-  await recordSpeedToLeadEvent({
-    channel,
-    contactId: conversation.contactId,
-    firstResponseAt,
-    leadId: conversation.leadId,
-    metadata: {
-      analyticsEventId,
-      botId: conversation.botId,
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      model: input.model ?? null,
-      sourcePayload: "bot_first_response",
-    },
-    projectId: conversation.projectId,
-    source: channel,
-    state: "covered",
-    userId: input.session.userId,
-    workspaceId: input.session.workspaceId,
-  });
+  const speedEventSql = `
+    select id
+    from speed_to_lead_events
+    where workspace_id = $1
+      and metadata->>'conversationId' = $2
+      and metadata->>'sourcePayload' = 'bot_first_response'
+    order by created_at asc
+    limit 1
+  `;
+  const speedEventParams = [input.session.workspaceId, input.conversationId];
+  const existingSpeedEvent = input.transaction
+    ? await input.transaction.queryOne<IdRow>(speedEventSql, speedEventParams)
+    : await queryOne<IdRow>(speedEventSql, speedEventParams);
+
+  if (!existingSpeedEvent) {
+    const speedEventId = await recordSpeedToLeadEvent({
+      channel,
+      contactId: conversation.contactId,
+      firstResponseAt,
+      leadId: conversation.leadId,
+      metadata: {
+        analyticsEventId,
+        botId: conversation.botId,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        model: input.model ?? null,
+        sourcePayload: "bot_first_response",
+      },
+      projectId: conversation.projectId,
+      source: channel,
+      state: "covered",
+      transaction: input.transaction,
+      userId: input.session.userId,
+      workspaceId: input.session.workspaceId,
+    });
+    if (input.transaction && !speedEventId) throw new Error("Bot speed-to-lead effect could not be persisted");
+  }
 
   return analyticsEventId;
 }
@@ -2680,6 +3794,7 @@ export async function insertBotToolCall(input: {
   status?: "pending_approval" | "approved" | "denied" | "completed" | "failed";
   requiresApproval?: boolean;
   error?: string | null;
+  webhookEventId?: string | null;
 }) {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
 
@@ -2693,22 +3808,43 @@ export async function insertBotToolCall(input: {
   const statusSql = addParam(params, input.status ?? "completed");
   const approvalSql = addParam(params, Boolean(input.requiresApproval));
   const errorSql = addParam(params, input.error ?? null);
+  const webhookEventSql = addUuidParam(params, input.webhookEventId);
 
   const row = await queryOne<IdRow>(
     `
       insert into bot_tool_calls (
-        workspace_id, conversation_id, bot_id, tool_name, risk_level, input, output, status, requires_approval, error
+        workspace_id, conversation_id, bot_id, tool_name, risk_level, input, output, status, requires_approval, error,
+        webhook_event_id
       )
       values (
         $1, ${conversationSql}, ${botSql}, ${toolSql}, ${riskSql}, ${inputSql}::jsonb,
-        ${outputSql}::jsonb, ${statusSql}, ${approvalSql}, ${errorSql}
+        ${outputSql}::jsonb, ${statusSql}, ${approvalSql}, ${errorSql},
+        ${webhookEventSql}
       )
+      on conflict (workspace_id, webhook_event_id, tool_name)
+        where webhook_event_id is not null
+        do nothing
       returning id
     `,
     params,
   );
 
-  return row?.id ?? null;
+  if (row?.id) return row.id;
+  if (!isUuid(input.webhookEventId)) return null;
+
+  const existing = await queryOne<IdRow>(
+    `
+      select id
+      from bot_tool_calls
+      where workspace_id = $1::uuid
+        and webhook_event_id = $2::uuid
+        and tool_name = $3
+      limit 1
+    `,
+    [input.session.workspaceId, input.webhookEventId, input.toolName],
+  );
+
+  return existing?.id ?? null;
 }
 export async function insertBotDocumentSend(input: {
   session: AppSession;
@@ -2722,7 +3858,14 @@ export async function insertBotDocumentSend(input: {
   approvalRequestId?: string | null;
   metadata?: unknown;
   sentAt?: string | null;
+  webhookEventId?: string | null;
 }) {
+  if (
+    ["queued", "sending", "sent"].includes(input.status) &&
+    !evaluateLaunchScope("customerCommunicationProviderMutation").allowed
+  ) {
+    return null;
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
 
   const params: unknown[] = [input.session.workspaceId];
@@ -2736,6 +3879,7 @@ export async function insertBotDocumentSend(input: {
   const approvalSql = addUuidParam(params, input.approvalRequestId);
   const metadataSql = addParam(params, JSON.stringify(input.metadata ?? {}));
   const sentAtSql = addParam(params, input.sentAt ?? null);
+  const webhookEventSql = addUuidParam(params, input.webhookEventId);
 
   const row = await queryOne<IdRow>(
     `
@@ -2750,7 +3894,8 @@ export async function insertBotDocumentSend(input: {
         status,
         approval_request_id,
         metadata,
-        sent_at
+        sent_at,
+        webhook_event_id
       )
       values (
         $1,
@@ -2763,14 +3908,32 @@ export async function insertBotDocumentSend(input: {
         ${statusSql},
         ${approvalSql},
         ${metadataSql}::jsonb,
-        ${sentAtSql}::timestamptz
+        ${sentAtSql}::timestamptz,
+        ${webhookEventSql}
       )
+      on conflict (workspace_id, webhook_event_id)
+        where webhook_event_id is not null
+        do nothing
       returning id
     `,
     params,
   );
 
-  return row?.id ?? null;
+  if (row?.id) return row.id;
+  if (!isUuid(input.webhookEventId)) return null;
+
+  const existing = await queryOne<IdRow>(
+    `
+      select id
+      from bot_document_sends
+      where workspace_id = $1::uuid
+        and webhook_event_id = $2::uuid
+      limit 1
+    `,
+    [input.session.workspaceId, input.webhookEventId],
+  );
+
+  return existing?.id ?? null;
 }
 
 export async function updateBotDocumentSendDelivery(input: {
@@ -2780,6 +3943,12 @@ export async function updateBotDocumentSendDelivery(input: {
   metadata?: unknown;
   sentAt?: string | null;
 }) {
+  if (
+    ["queued", "sending", "sent"].includes(input.status) &&
+    !evaluateLaunchScope("customerCommunicationProviderMutation").allowed
+  ) {
+    return null;
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.documentSendId)) return null;
 
   const row = await queryOne<IdRow>(
@@ -3060,6 +4229,7 @@ export async function insertNewsletterSend(input: {
   session: AppSession;
   campaignId?: string | null;
   contactId?: string | null;
+  deliveryPurpose: "bot_document" | "meeting_qa_test" | "newsletter";
   provider: string;
   providerMessageId?: string | null;
   toEmail: string;
@@ -3069,6 +4239,15 @@ export async function insertNewsletterSend(input: {
   metadata?: unknown;
   sentAt?: string | null;
 }) {
+  const deliveryLaunchEnabled = input.deliveryPurpose === "newsletter"
+    ? evaluateLaunchScope("newsletterDelivery").allowed
+    : evaluateLaunchScope("customerCommunicationProviderMutation").allowed;
+  if (
+    ["queued", "sent", "delivered"].includes(input.status) &&
+    !deliveryLaunchEnabled
+  ) {
+    return null;
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId)) return null;
 
   const params: unknown[] = [input.session.workspaceId];

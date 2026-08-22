@@ -238,6 +238,7 @@ export async function triggerWorkspacePasswordReset(input: {
   const delivery = await sendNewsletterEmail({
     html,
     idempotencyKey: `settings-password-reset:${created.tokenId}`,
+    purpose: "password_reset",
     subject,
     to: user.email,
   });

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { queryOne } from "@/lib/db/client";
+import { queryOne, withDatabaseTransaction } from "@/lib/db/client";
 import {
   createPublicSubmissionOpaqueHash,
   parsePublicSubmissionResponseSnapshot,
@@ -14,17 +14,93 @@ type IdempotencyClaimRow = {
   responsePayload: unknown;
 };
 
+type IdempotencyReadRow = {
+  readState: "conflict" | "expired" | "processing" | "replay";
+  leaseVersion: number | string;
+  responsePayload: unknown;
+};
+
 type RateLimitRow = {
   allowed: boolean;
+  capacityAllowed: boolean;
+  consumedCount: number | string;
 };
 
 const sha256Pattern = /^[a-f0-9]{64}$/u;
+const signedBigIntUpperBound = BigInt(1) << BigInt(63);
+const unsignedBigIntModulus = BigInt(1) << BigInt(64);
+
+function toPublicRateLimitAdvisoryLockKey(keyHash: string) {
+  const unsigned = BigInt(`0x${keyHash.slice(0, 16)}`);
+  return (unsigned >= signedBigIntUpperBound
+    ? unsigned - unsignedBigIntModulus
+    : unsigned).toString();
+}
 
 export type PublicSubmissionIdempotencyClaim =
   | { leaseVersion: number; state: "claimed" }
   | { state: "conflict" }
   | { leaseVersion: number; state: "processing" }
   | { response: PublicSubmissionResponseSnapshot; state: "replay" };
+
+export type PublicSubmissionIdempotencyRead =
+  | { state: "missing" }
+  | { state: "conflict" }
+  | { leaseVersion: number; state: "processing" }
+  | { response: PublicSubmissionResponseSnapshot; state: "replay" };
+
+/**
+ * Read-only replay/processing check used before anonymous rate limiting.
+ *
+ * A new idempotency row is deliberately not created here: otherwise an
+ * attacker could bypass the rate limiter's storage bound by presenting fresh
+ * signed proofs. Expired processing leases are reported as missing so the
+ * caller may pass the abuse controls before attempting an atomic reclaim.
+ */
+export async function readPublicSubmissionIdempotency(input: {
+  actionHash: string;
+  idempotencyHash: string;
+  requestHash: string;
+  scopeHash: string;
+}): Promise<PublicSubmissionIdempotencyRead> {
+  assertSha256Hashes(input);
+
+  const row = await queryOne<IdempotencyReadRow>(
+    `
+      select
+        case
+          when existing.action_hash <> $2
+            or existing.scope_hash <> $3
+            or existing.request_hash <> $4
+            then 'conflict'
+          when existing.state = 'completed' and existing.response_payload is not null
+            then 'replay'
+          when existing.state = 'processing' and existing.expires_at <= now()
+            then 'expired'
+          else 'processing'
+        end as "readState",
+        existing.lease_version as "leaseVersion",
+        existing.response_payload as "responsePayload"
+      from public_submission_idempotency existing
+      where existing.idempotency_hash = $1
+      limit 1
+    `,
+    [input.idempotencyHash, input.actionHash, input.scopeHash, input.requestHash],
+  );
+
+  if (!row || row.readState === "expired") return { state: "missing" };
+  if (row.readState === "conflict") return { state: "conflict" };
+  if (row.readState === "replay") {
+    const response = parsePublicSubmissionResponseSnapshot(row.responsePayload);
+    if (!response) throw new Error("Public submission replay payload is invalid");
+    return { response, state: "replay" };
+  }
+  const leaseVersion = Number(row.leaseVersion);
+  if (!Number.isSafeInteger(leaseVersion) || leaseVersion < 1) {
+    throw new Error("Public submission idempotency lease is invalid");
+  }
+  return { leaseVersion, state: "processing" };
+}
 
 export async function claimPublicSubmissionIdempotency(input: {
   actionHash: string;
@@ -197,9 +273,62 @@ export async function consumePublicSubmissionRateLimits(input: {
     }
   }
 
-  const row = await queryOne<RateLimitRow>(
-    `
-      with policies as (
+  const uniquePolicyKeys = new Set(input.policies.map((policy) => policy.keyHash));
+  if (uniquePolicyKeys.size !== input.policies.length) {
+    throw new Error("Duplicate public submission rate-limit policy");
+  }
+
+  const policies = [...input.policies].sort((left, right) =>
+    left.keyHash.localeCompare(right.keyHash),
+  );
+
+  const lockKeys = policies
+    .map((policy) => toPublicRateLimitAdvisoryLockKey(policy.keyHash))
+    .sort((left, right) => {
+      const leftKey = BigInt(left);
+      const rightKey = BigInt(right);
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+    });
+
+  return withDatabaseTransaction(async (transaction) => {
+    // Acquire every overlapping policy lock in one global order. Capacity is
+    // read only by the following statement, whose READ COMMITTED snapshot is
+    // created after any lock wait has completed.
+    for (const lockKey of lockKeys) {
+      await transaction.execute(
+        "select pg_advisory_xact_lock($1::bigint)",
+        [lockKey],
+      );
+    }
+
+    const row = await transaction.queryOne<RateLimitRow>(
+      `
+        with expired_idempotency as (
+        select idempotency_hash
+        from public_submission_idempotency
+        where expires_at <= now()
+        order by expires_at, idempotency_hash
+        limit 64
+        for update skip locked
+      ), pruned_idempotency as (
+        delete from public_submission_idempotency expired
+        using expired_idempotency targets
+        where expired.idempotency_hash = targets.idempotency_hash
+        returning expired.idempotency_hash
+      ), expired_rate_limits as (
+        select key_hash, bucket_started_at
+        from public_submission_rate_limits
+        where expires_at <= now()
+        order by expires_at, key_hash, bucket_started_at
+        limit 64
+        for update skip locked
+      ), pruned_rate_limits as (
+        delete from public_submission_rate_limits expired
+        using expired_rate_limits targets
+        where expired.key_hash = targets.key_hash
+          and expired.bucket_started_at = targets.bucket_started_at
+        returning expired.key_hash
+      ), policies as (
         select *
         from unnest($1::text[], $2::integer[], $3::integer[])
           as requested(key_hash, limit_count, window_seconds)
@@ -212,6 +341,27 @@ export async function consumePublicSubmissionRateLimits(input: {
             floor(extract(epoch from now()) / window_seconds) * window_seconds
           ) as bucket_started_at
         from policies
+      ), current_capacity as materialized (
+        select
+          bucketed.key_hash,
+          bucketed.limit_count,
+          bucketed.window_seconds,
+          bucketed.bucket_started_at,
+          existing.limit_count as existing_limit_count,
+          existing.request_count as existing_request_count,
+          existing.expires_at as existing_expires_at
+        from bucketed
+        left join public_submission_rate_limits existing
+          on existing.key_hash = bucketed.key_hash
+          and existing.bucket_started_at = bucketed.bucket_started_at
+      ), capacity as materialized (
+        select
+          count(*) = cardinality($1::text[])
+          and bool_and(
+            coalesce(existing_request_count, 0)
+              < least(coalesce(existing_limit_count, limit_count), limit_count)
+          ) as allowed
+        from current_capacity
       ), consumed as (
         insert into public_submission_rate_limits (
           key_hash,
@@ -228,7 +378,9 @@ export async function consumePublicSubmissionRateLimits(input: {
           limit_count,
           1,
           bucket_started_at + make_interval(secs => window_seconds * 2)
-        from bucketed
+        from current_capacity
+        cross join capacity
+        where capacity.allowed
         on conflict (key_hash, bucket_started_at) do update
         set
           request_count = public_submission_rate_limits.request_count + 1,
@@ -239,17 +391,35 @@ export async function consumePublicSubmissionRateLimits(input: {
         returning key_hash
       )
       select
-        (select count(*) from consumed) = cardinality($1::text[]) as allowed
-    `,
-    [
-      input.policies.map((policy) => policy.keyHash),
-      input.policies.map((policy) => policy.limit),
-      input.policies.map((policy) => policy.windowSeconds),
-    ],
-  );
+        coalesce((select allowed from capacity), false) as "capacityAllowed",
+        (select count(*) from consumed) as "consumedCount",
+        coalesce((select allowed from capacity), false)
+          and (select count(*) from consumed) = cardinality($1::text[]) as allowed,
+        (select count(*) from pruned_idempotency) as "prunedIdempotencyCount",
+        (select count(*) from pruned_rate_limits) as "prunedRateLimitCount"
+      `,
+      [
+        policies.map((policy) => policy.keyHash),
+        policies.map((policy) => policy.limit),
+        policies.map((policy) => policy.windowSeconds),
+      ],
+    );
 
-  if (!row) throw new Error("Public submission rate limiter failed closed");
-  return { allowed: row.allowed };
+    if (!row) throw new Error("Public submission rate limiter failed closed");
+    const consumedCount = Number(row.consumedCount);
+    if (!Number.isSafeInteger(consumedCount) || consumedCount < 0) {
+      throw new Error("Public submission rate limiter returned an invalid write count");
+    }
+    if (
+      (row.capacityAllowed && consumedCount !== policies.length) ||
+      (!row.capacityAllowed && consumedCount !== 0)
+    ) {
+      // An unexpected non-cooperating writer must not turn a denied request
+      // into partial counter consumption. Throwing rolls back this transaction.
+      throw new Error("Public submission rate limiter atomicity conflict");
+    }
+    return { allowed: row.allowed === true };
+  });
 }
 
 function assertSha256Hashes(value: Record<string, string>) {
