@@ -13,7 +13,7 @@ Dieses Ledger trennt strikt zwischen:
 - belegten Code-, Contract- und lokalen Buildtests;
 - read-only erhobener Live-/Vercel-/Neon-Evidenz sowie separat ausgewiesenen, nicht produktiven Infrastrukturänderungen;
 - nicht ausgeführten Preview-Runtime-, Provider-, Zwei-Tenant- und Production-Prüfungen;
-- produktiven Daten-, Schema- und Deploymentänderungen, die nicht vorgenommen wurden. Auf Vercel wurden ausschließlich Preview-Blob-Ressourcen neu angelegt und bestehende Resource-Connections enger auf Production/Preview begrenzt. Preview-Main enthält weiterhin 060 sowie 068–072. Auf dem temporären Evidence-Branch wurde zusätzlich der Cutover 057 + 073–076 vollständig angewandt, geprüft, vom Parent wiederhergestellt und identisch erneut angewandt; Production blieb unverändert.
+- produktiven Daten-, Schema- und Deploymentänderungen, die nicht vorgenommen wurden. Auf Vercel wurden ausschließlich Preview-Blob-Ressourcen neu angelegt und bestehende Resource-Connections enger auf Production/Preview begrenzt. Preview-Main enthält jetzt 057, 060 sowie 068–076; 10/10 geforderte Migrationen stimmen bytegenau mit den lokalen Checksummen überein. Auf dem temporären Evidence-Branch wurde der Cutover 057 + 073–076 zuvor vollständig angewandt, geprüft, vom Parent wiederhergestellt und identisch erneut angewandt; Production blieb unverändert.
 
 Ein Gate ist nur dann als <strong>PASS / BESTANDEN</strong> markiert, wenn der im Master-Prompt geforderte Nachweis für den geprüften Scope vorliegt. Ein vorhandener Unit- oder Contract-Test schließt kein Gate, das zusätzlich einen echten Preview-, Provider-, Zwei-Tenant-, Browser-, Cleanup- oder Production-Nachweis fordert. <strong>NOT RUN / NICHT AUSGEFÜHRT</strong> zählt gemäß Master-Prompt als nicht bestanden.
 
@@ -219,10 +219,10 @@ Dieser Audit wurde vor den Kandidatenmigrationen 069–076 erhoben und darf nich
 | erwartete CRM-Tabellen laut <code>src/lib/db/schema.ts</code> | 118; <code>bot_channel_webhook_envelopes</code> liegt bewusst außerhalb <code>crmTables</code> |
 | Kandidatenmigrationen | <code>068</code>–<code>076</code> einschließlich des manuellen Vor-Cutovers <code>057</code> |
 | zusätzliche tatsächliche Tabellen gegenüber dem 115er Auditstand | mindestens <code>property_unit_idempotency</code>, <code>property_building_idempotency</code>, <code>public_funnel_visit_events</code> und <code>bot_channel_webhook_envelopes</code>; damit mindestens 119 tatsächliche Tabellen |
-| isolierte Preview-Zustände | Preview-Main: <code>060</code> + <code>068</code>–<code>072</code>; Evidence-Branch: <code>057</code> + <code>073</code>–<code>076</code> mit Apply/Restore/Reapply und 21/21 Artefakten |
+| isolierte Preview-Zustände | Preview-Main: <code>057</code>, <code>060</code> + <code>068</code>–<code>076</code>; 10/10 exakte lokale Checksummen, 19/19 validierte/deferred Tenant-FKs, 0/19 Anti-Join-Verstöße und 21/21 Artefakte. Evidence-Branch: <code>057</code> + <code>073</code>–<code>076</code> mit bestandenem Apply/Restore/Reapply |
 | auf Production angewendet | keine der Migrationen 057, 068–076 |
 
-Es erfolgte kein Production-Schema-Write. Preview-Main enthält weiterhin 060 und 068–072. Der zusätzliche Evidence-Drill für 057 + 073–076 ist durch den unveränderlichen Pre-073-Snapshot, Apply, Katalogprüfung, Restore, Abwesenheitsprüfung und identischen Reapply abgesichert. Eine spätere Production-Anwendung bleibt bis zu DBA-/Release-Freigabe, Production-Backup und bestätigtem Rollbackziel gesperrt; 061 bleibt zusätzlich bis zum App-Rollen-Cutover gesperrt.
+Es erfolgte kein Production-Schema-Write. Preview-Main enthält jetzt 057, 060 und 068–076; das Zielgate bestand dort mit 10/10 exakten lokalen Checksummen, 19/19 validierten, deferrable und initial deferred Tenant-FKs, 0/19 Anti-Join-Verstößen sowie 21/21 Artefakten. Der vorangegangene Evidence-Drill für 057 + 073–076 ist durch den unveränderlichen Pre-073-Snapshot, Apply, Katalogprüfung, Restore, Abwesenheitsprüfung und identischen Reapply abgesichert. Eine spätere Production-Anwendung bleibt bis zu DBA-/Release-Freigabe, Production-Backup und bestätigtem Rollbackziel gesperrt; 061 bleibt zusätzlich bis zum App-Rollen-Cutover gesperrt.
 
 ### 6.3 Isolierter Preview-/Migration- und Restore-Drill
 
@@ -243,7 +243,7 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 |---|---|---|
 | REL-01 | FAIL / FEHLER | lokaler Freeze unter Node 24.14.0/npm 11.9.0 für Toolchain, Unit 491/491, Remediation 251/251, Integration 15/15, i18n 10/10, vollständiges ESLint, Typecheck, Security Audit, Diff-Check und Production-Build mit 84 Seiten grün; die Kandidaten-SHA entsteht mit dem Commit-Freeze, ein SHA-identisch deployter Kandidat sowie Deployment-/Alias-Parität fehlen weiterhin |
 | REL-02 | FAIL / FEHLER | historischer Production-Audit <code>ok: false</code> bei 112/115 Tabellen und Ledger 067; Preview-Kandidat erwartet nach 075/076 mindestens 119 Tabellen und Migrationen 068–076 einschließlich manuellem Cutover 057, ohne Production-Anwendung |
-| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | isolierter Neon-Migrations-/Restore-Drill bestanden, Pre-Cutover-Snapshot vorhanden und Preview-Main bis 072 migriert; RPO/RTO/Reconciliation, 061-App-Rollen-Cutover, privater-Blob-End-to-End, Queue-/Cron-SLO und signierte Ops-Evidenz fehlen |
+| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | isolierter Neon-Migrations-/Restore-/Reapply-Drill bestanden, Pre-Cutover-Snapshot vorhanden und Preview-Main checksummengenau auf 057 + 068–076; RPO/RTO/Reconciliation, 061-App-Rollen-Cutover, echter App-Login-RPC-Probe, privater-Blob-End-to-End, Queue-/Cron-SLO und signierte Ops-Evidenz fehlen |
 | REL-04 | NOT RUN / NICHT AUSGEFÜHRT | fünf Unternehmensprofilblocker sowie Legal-/Ops-Abnahme nicht belegt |
 | SCOPE-01 | FAIL / FEHLER | versionierte zentrale Policy für die remediated Surfaces vorhanden und unbekannte Surfaces fail-closed; vollständige signierte ON/OFF/INTERNAL-Matrix, Vollabdeckung und deployte Negativmatrix fehlen |
 | ENV-01 | FAIL / FEHLER | Preview-Blob auf Ressourcen-/Connection-/Codeebene getrennt; Queue-/Providerziele und deployter Runtime-E2E weiterhin unklar |
@@ -331,7 +331,7 @@ Zusätzlicher P3-Härtungshinweis: Der shared bounded-JSON-Reader berechnet im F
 1. Preview besitzt getrennte DB- und Blob-Ressourcen/Connections; Queue- und Providerziele sowie der SHA-identische Runtime-/Uploadnachweis fehlen weiterhin und blockieren den vollständigen ENV-01-Abschluss.
 2. Eine versionierte zentrale technische Launch-Scope-Policy ist vorhanden; vollständige fachliche ON/OFF/INTERNAL-Signaturen, Vollabdeckung und deployte Negativmatrix fehlen.
 3. Unternehmensprofil, rechtliche DE/EN-Inhalte, Legal-Sign-off, ES-Entscheidung und verbindliche KPI-Definitionen fehlen.
-4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; Preview-Main ist kontrolliert bis 072 migriert, Production hingegen unverändert.
+4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; Preview-Main ist kontrolliert und checksummengenau auf 057 + 068–076, Production hingegen unverändert.
 5. Der technische Preview-Backup-/Restore-Drill ist bestanden. Offen bleiben 061-App-Rollen-Cutover, formale RPO/RTO- und Reconciliation-Abnahme, Production-Backup/Rollbackziel sowie DBA-/Releasefreigabe.
 6. Resend-Integration, Domain/From/Key, eigene QA-Mailbox und genau ein echter allowlisteter Versand sind nicht validiert.
 7. Eigener QA-Kalender und kompletter Booking-Lifecycle einschließlich Providerstatus und Cleanup sind nicht validiert; die öffentlichen Write-Pfade bleiben deshalb Launch-off.
@@ -348,7 +348,7 @@ Aufgrund von ENV-01, fehlenden Freigaben und fehlender SHA-identischer Preview-R
 
 - keine Änderung von Vercel-Production-Env-Variablen;
 - keine Providerdomain-, Key-, From-, Mailbox- oder Kalenderänderung;
-- keine Production-Migration; Preview-Main enthält 060 und 068–072, der isolierte Evidence-Branch zusätzlich den bestandenen Restore-/Reapply-Drill für 057 + 073–076; 061 blieb gesperrt;
+- keine Production-Migration; Preview-Main enthält checksummengenau 057, 060 und 068–076, der isolierte Evidence-Branch belegt zusätzlich den bestandenen Restore-/Reapply-Drill für 057 + 073–076; 061 blieb gesperrt;
 - kein CRM-Geschäftsobjekt-Seed; ausschließlich die sichere QA-Tenant-/Identity-/Batch-Provisionierung wurde ausgeführt;
 - kein Preview-/Production-CRUD und kein Upload;
 - kein echter Provider-Mailversand und kein Kalendereintrag;
@@ -383,7 +383,7 @@ Vor Ausführung sind mindestens die jeweils genannten Freigaben und Sicherungen 
 
 1. Launch-Scope, Legal, Unternehmensprofil, ES und KPI-Definitionen fachlich signieren.
 2. Die vorhandene DB-/Blob-Trennung per SHA-identischem Preview-Runtime-Test nachweisen, getrennte Queue-/Providerziele schließen und ENV-01 erneut bewerten.
-3. Den bestandenen Evidence-Drill formal abnehmen und <code>057</code> + <code>073</code>–<code>076</code> nach finalem Commit und Pre-Cutover-Snapshot auf Preview-Main anwenden; den echten <code>novalure_app</code>-RPC-/Grant-Probe ausführen. 061 erst nach SHA-identischem Deployment, sicherer App-Verbindung, Rollenmitgliedschaft und Deployment-Attestation ausführen. RPO/RTO, Schema-Diff und Reconciliation mit DBA signieren.
+3. Den bestandenen Evidence-Drill und den checksummengenauen Preview-Main-Cutover 057 + 073–076 formal abnehmen; den echten <code>novalure_app</code>-RPC-/Grant-Probe ausführen. 061 erst nach SHA-identischem Deployment, sicherer App-Verbindung, Rollenmitgliedschaft und Deployment-Attestation ausführen. RPO/RTO, Schema-Diff und Reconciliation mit DBA signieren.
 4. Branchgebundene Preview-ENV setzen und den exakt gepinnten Kandidaten-SHA einmal deployen.
 5. Danach Barrieredrill und Zwei-Tenant-Harness einschließlich Dry-run/Execute/Null-Rest-Cleanup ausführen.
 6. Den bislang öffentlichen Funnel-Publish-Token kontrolliert rotieren und die alte Capability widerrufen.
