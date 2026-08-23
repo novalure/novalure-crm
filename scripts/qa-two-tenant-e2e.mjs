@@ -504,18 +504,12 @@ async function scopedRead(sql, tenant, actorId) {
           )
         union all
         select
-          '075.grants.tenant_app',
-          coalesce((
-            select array_agg(distinct acl.privilege_type order by acl.privilege_type)
-              = array['DELETE', 'INSERT', 'SELECT']::text[]
-            from pg_catalog.pg_class relation
-            cross join lateral pg_catalog.aclexplode(
-              coalesce(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
-            ) acl
-            join pg_catalog.pg_roles role_state on role_state.oid = acl.grantee
-            where relation.oid = to_regclass('public.public_funnel_visit_events')
-              and role_state.rolname = 'novalure_tenant_app'
-          ), false)
+          '075.grants.tenant_app_none',
+          not (
+            has_table_privilege('novalure_tenant_app', 'public.public_funnel_visit_events', 'SELECT')
+            or has_table_privilege('novalure_tenant_app', 'public.public_funnel_visit_events', 'INSERT')
+            or has_table_privilege('novalure_tenant_app', 'public.public_funnel_visit_events', 'DELETE')
+          )
         union all
         select
           '075.grants.public_none',
@@ -892,8 +886,8 @@ async function verifyDatabasePreflight(config, evidence) {
       schemaArtifacts: state.launchSchemaArtifacts,
       violations: state.tenantRelationViolations,
     });
-    check(`${tenant.key.toLowerCase()}.db.migrations_057_077`, tenantRelationGate.migrationsPresent, tenantRelationGate.errors, qaRequiredMigrationVersions);
-    check(`${tenant.key.toLowerCase()}.db.migrations_checksummed_057_077`, tenantRelationGate.migrationsChecksummed, tenantRelationGate.errors, true);
+    check(`${tenant.key.toLowerCase()}.db.migrations_launch_required`, tenantRelationGate.migrationsPresent, tenantRelationGate.errors, qaRequiredMigrationVersions);
+    check(`${tenant.key.toLowerCase()}.db.migrations_launch_required_checksummed`, tenantRelationGate.migrationsChecksummed, tenantRelationGate.errors, true);
     check(`${tenant.key.toLowerCase()}.db.launch_schema_artifacts_075_076`, tenantRelationGate.schemaArtifactsValid, tenantRelationGate.errors, qaLaunchSchemaArtifactNames);
     check(`${tenant.key.toLowerCase()}.db.tenant_constraints_present`, tenantRelationGate.constraintsPresent, state.tenantConstraintState?.found, qaTenantConstraintNames.length);
     check(`${tenant.key.toLowerCase()}.db.tenant_constraints_validated`, tenantRelationGate.constraintsValidated, state.tenantConstraintState?.validated, qaTenantConstraintNames.length);

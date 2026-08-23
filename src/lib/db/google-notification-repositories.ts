@@ -2,6 +2,7 @@ import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   classifyDeliveryError,
   createLeaseOwner,
@@ -678,6 +679,9 @@ export async function queueGoogleNotification(input: {
   summary: string;
   title: string;
 }): Promise<{ job?: GoogleNotificationJob; queued: boolean; reason?: string }> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { queued: false, reason: "google_notification_delivery_launch_off" };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { queued: false, reason: "DATABASE_URL is not configured" };
   }
@@ -844,6 +848,9 @@ export async function queueGoogleLeadSlaOverdueAlerts(input: {
   limit?: number;
   session: AppSession;
 }): Promise<{ checked: number; queued: number; failed: number; pendingConfig: number }> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
@@ -933,6 +940,9 @@ export async function queueGoogleCustomerAccessRiskAlerts(input: {
   limit?: number;
   session: AppSession;
 }): Promise<{ checked: number; queued: number; failed: number; pendingConfig: number }> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
@@ -1030,6 +1040,9 @@ export async function queueDealStageChangeGoogleNotification(input: {
   session: AppSession;
   toStage: string;
 }) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { queued: false, reason: "google_notification_delivery_launch_off" };
+  }
   if (!isImportantStage(input.toStage) || !isUuid(input.dealId)) {
     return { queued: false, reason: "Stage is not configured as critical" };
   }
@@ -1108,6 +1121,9 @@ export async function queueMeetingBookedGoogleNotification(input: {
   session: AppSession;
   startsAt: string;
 }) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { queued: false, reason: "google_notification_delivery_launch_off" };
+  }
   if (!isUuid(input.bookingId)) return { queued: false, reason: "Invalid booking" };
 
   const project = input.projectId && isUuid(input.projectId)
@@ -1180,6 +1196,9 @@ export async function queueScheduledCriticalGoogleAlerts(input: {
   shouldContinue?: () => boolean;
   workspaceLimit?: number;
 } = {}) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
+  }
   if (!hasDatabaseUrl()) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
   }
@@ -1245,6 +1264,9 @@ export async function reconcileGoogleNotificationJob(input: {
   ok: boolean;
   state?: "already_reconciled" | "blocked" | "reconciled";
 }> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { error: "google_notification_delivery_launch_off", ok: false };
+  }
   if (
     !hasDatabaseUrl() ||
     !isUuid(input.session.workspaceId) ||
@@ -1427,6 +1449,9 @@ export async function runGoogleNotificationTargetTestSinkHealthcheck(input: {
   session: AppSession;
   targetId: string;
 }) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { error: "google_notification_delivery_launch_off", ok: false as const };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.targetId)) {
     return { error: "invalid_google_target", ok: false as const };
   }
@@ -1486,6 +1511,7 @@ export async function runGoogleNotificationTargetTestSinkHealthcheck(input: {
 }
 
 async function listDueGoogleNotificationJobIds(limit = 25, workspaceId?: string | null) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) return [];
   if (!hasDatabaseUrl()) return [];
 
   return queryRows<{ id: string }>(
@@ -1517,6 +1543,7 @@ async function prepareGoogleNotificationJobForDelivery(input: {
   id: string;
   workspaceId?: string | null;
 }): Promise<"pending_config" | "ready" | "skipped"> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) return "skipped";
   if (!hasDatabaseUrl() || !isUuid(input.id)) return "skipped";
 
   const row = await queryOne<{
@@ -1610,6 +1637,7 @@ async function claimGoogleNotificationJob(input: {
   leaseOwner: string;
   workspaceId?: string | null;
 }): Promise<ClaimedJobRow | null> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) return null;
   if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
 
   return queryOne<ClaimedJobRow>(
@@ -1759,6 +1787,15 @@ async function markGoogleNotificationFailed(input: {
 }
 
 async function sendGoogleWebhook(job: ClaimedJobRow) {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return {
+      adminAction: undefined,
+      configurationCode: "launch_off",
+      error: "google_notification_delivery_launch_off",
+      ok: false as const,
+      status: null,
+    };
+  }
   const readiness = validateNotificationTargetReadiness({
     alertType: job.alertType,
     projectId: job.projectId,
@@ -1832,6 +1869,9 @@ export async function processDueGoogleNotifications(
     workspaceId?: string | null;
   } = {},
 ): Promise<{ checked: number; failed: number; pendingConfig: number; sent: number }> {
+  if (!evaluateLaunchScope("googleNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, sent: 0 };
+  }
   const refs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueGoogleNotificationJobIds(input.limit ?? 25, input.workspaceId);

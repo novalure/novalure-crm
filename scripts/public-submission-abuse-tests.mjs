@@ -7,6 +7,7 @@ import {
   assertPublicSubmissionAbuseConfiguration,
   bookingSubmissionBodyLimits,
   buildPublicSubmissionScope,
+  createPublicFormProofRefreshRateLimitPolicies,
   createPublicSubmissionProof,
   createPublicSubmissionRateLimitPolicies,
   escapeHtmlText,
@@ -384,7 +385,33 @@ test("all public renderers carry the proof contract and forms refresh safely for
   assert.match(formRuntime, /formElement\.requestSubmit\(\)/);
   assert.match(refreshRoute, /getPublicFormLaunchBlockReason/);
   assert.match(refreshRoute, /refreshPublicSubmissionProof/);
+  assert.match(refreshRoute, /getTrustedPublicSubmissionClientIp\(request\.headers\)/);
+  assert.match(refreshRoute, /createPublicFormProofRefreshRateLimitPolicies/);
+  const trustedIp = refreshRoute.indexOf("getTrustedPublicSubmissionClientIp(request.headers)");
+  const limiter = refreshRoute.indexOf("consumePublicSubmissionRateLimits({");
+  const lookup = refreshRoute.indexOf("getPublicWebsiteFormByKey(formKey)");
+  assert.ok(trustedIp >= 0 && trustedIp < limiter && limiter < lookup);
+  assert.match(refreshRoute, /!rateLimit\.allowed[\s\S]*"rate_limited"[\s\S]*429/);
+  assert.match(refreshRoute, /submission_proof_refresh_unavailable[\s\S]*503/);
   assert.ok(refreshRoute.indexOf("getPublicWebsiteFormByKey(formKey)") < refreshRoute.indexOf("refreshPublicSubmissionProof({"));
   assert.match(refreshRoute, /"Access-Control-Allow-Origin": "\*"/);
   assert.match(refreshRoute, /"Cache-Control": "private, no-store"/);
+});
+
+test("form proof refresh rate policies hash IP, proof and form scope without storing raw subjects", () => {
+  const raw = {
+    clientIp: "203.0.113.17",
+    formKey: "workspace/form/private-publish-key",
+    idempotencyKey: "private-idempotency-key",
+  };
+  const policies = createPublicFormProofRefreshRateLimitPolicies({ ...raw, secret });
+
+  assert.equal(policies.length, 3);
+  assert.deepEqual(policies.map((policy) => policy.limit), [120, 4, 600]);
+  assert.deepEqual(policies.map((policy) => policy.windowSeconds), [600, 900, 600]);
+  for (const policy of policies) {
+    assert.match(policy.keyHash, /^[a-f0-9]{64}$/u);
+    for (const value of Object.values(raw)) assert.doesNotMatch(policy.keyHash, new RegExp(value, "u"));
+  }
+  assert.equal(new Set(policies.map((policy) => policy.keyHash)).size, 3);
 });

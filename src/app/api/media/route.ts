@@ -9,6 +9,7 @@ import {
   saveWorkspaceFile,
   serializeMediaAsset,
 } from "@/lib/media-store";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 const privateJsonHeaders = { "cache-control": "private, no-store" };
 
@@ -16,9 +17,21 @@ export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
+  const mutationScope = evaluateLaunchScope("mediaBlobMutation");
+  if (new URL(request.url).searchParams.get("scopeOnly") === "true") {
+    return NextResponse.json(
+      { mutationsAllowed: mutationScope.allowed },
+      { headers: privateJsonHeaders },
+    );
+  }
+
   const media = await listWorkspaceMedia(auth.session.workspaceId);
   return NextResponse.json(
-    { assets: media.assets.map(serializeMediaAsset), quota: media.quota },
+    {
+      assets: media.assets.map(serializeMediaAsset),
+      mutationsAllowed: mutationScope.allowed,
+      quota: media.quota,
+    },
     { headers: privateJsonHeaders },
   );
 }
@@ -26,6 +39,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
+
+  const launchScope = evaluateLaunchScope("mediaBlobMutation");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "media_blob_mutation_launch_scope_blocked" },
+      { headers: privateJsonHeaders, status: 503 },
+    );
+  }
 
   if (request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -107,6 +128,7 @@ function isTruthy(value: FormDataEntryValue | null) {
 function statusForMediaError(error: MediaStoreError) {
   if (error.code === "FILE_TOO_LARGE" || error.code === "IMAGE_TOO_LARGE") return 413;
   if (error.code === "PRIVATE_STORAGE_UNAVAILABLE" || error.code === "PUBLIC_STORAGE_UNAVAILABLE") return 503;
+  if (error.code.startsWith("LAUNCH_SCOPE_")) return 503;
   if (error.code === "WORKSPACE_QUOTA_EXCEEDED") return 409;
   return 415;
 }

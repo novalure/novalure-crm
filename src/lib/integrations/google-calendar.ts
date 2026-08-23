@@ -191,6 +191,9 @@ export async function listGoogleBusyTimes(input: {
   timeZone?: string;
   workspaceId: string;
 }): Promise<BusyTimeRange[]> {
+  if (!evaluateLaunchScope("calendarProviderRead").allowed) {
+    throw new Error(calendarProviderReadUnavailableCode);
+  }
   const accessToken = await getCalendarReadAccessToken({
     provider: "google",
     workspaceId: input.workspaceId,

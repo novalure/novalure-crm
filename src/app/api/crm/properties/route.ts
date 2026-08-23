@@ -18,6 +18,7 @@ import {
   updateSellerListingRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { enforceCsrfForSession } from "@/lib/security/csrf";
 import {
   routePropertyInquiry,
@@ -239,6 +240,14 @@ export async function POST(request: Request) {
   }
 
   if (operation === "run_preflight") {
+    const launchScope = evaluateLaunchScope("propertyExportQueue");
+    if (!launchScope.allowed) {
+      return NextResponse.json(
+        { code: launchScope.code, error: "property_export_queue_launch_off", persisted: false },
+        { headers: { "cache-control": "private, no-store" }, status: 503 },
+      );
+    }
+
     const idempotencyKey = parseIdempotencyKey(request);
     if (input.recordHistory !== false && !idempotencyKey) {
       return NextResponse.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });

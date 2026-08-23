@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
+import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { Pool } from "@neondatabase/serverless";
 import {
@@ -24,6 +25,7 @@ import {
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
+  recovery: ".env.recovery.local",
   test: ".env.local",
 });
 
@@ -41,6 +43,8 @@ const manualCutoverVersions = new Set([
   "065_notification_guard_search_path_hardening",
   "068_qa_batch_reset_safety",
   "074_validate_launch_tenant_relation_guards",
+  "078_company_profile_approval_integrity",
+  "079_public_funnel_visit_role_boundary",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -69,6 +73,8 @@ const migrationDependencies = new Map([
     "057_bot_webhook_legacy_index_cutover",
   ]],
   ["077_schema_ledger_runtime_projection", "076_bot_webhook_durable_processing"],
+  ["078_company_profile_approval_integrity", "036_company_profiles"],
+  ["079_public_funnel_visit_role_boundary", "075_public_funnel_visit_truth"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 
@@ -112,6 +118,7 @@ function parseArgs(argv) {
   const onlyArg = args.find((arg) => arg.startsWith("--only="));
   const planTokenFileArg = args.find((arg) => arg.startsWith("--plan-token-file="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
+  const connectionStdin = args.includes("--connection-stdin");
 
   if (!command || !validCommands.has(command)) {
     fail(`Command required: ${[...validCommands].join("|")}`);
@@ -130,6 +137,7 @@ function parseArgs(argv) {
   return {
     allowManualCutover,
     command,
+    connectionStdin,
     only: onlyArg ? onlyArg.slice("--only=".length).trim() : "",
     planTokenFile: planTokenFileArg
       ? planTokenFileArg.slice("--plan-token-file=".length).trim()
@@ -152,18 +160,47 @@ function resolvePlanTokenFile(path) {
   return normalized;
 }
 
-function resolveTarget() {
+export async function readMigrationDatabaseUrlFromStdin(input = process.stdin) {
+  const lines = createInterface({ crlfDelay: Infinity, input });
+  try {
+    for await (const rawLine of lines) {
+      if (rawLine.length > 4_096) {
+        throw new Error("Migration database URL from stdin is invalid.");
+      }
+      const databaseUrl = cleanDatabaseUrl(rawLine);
+      if (!/^postgres(?:ql)?:\/\/[^\s]+$/i.test(databaseUrl)) {
+        throw new Error("Migration database URL from stdin is invalid.");
+      }
+      return databaseUrl;
+    }
+  } finally {
+    lines.close();
+  }
+  throw new Error("Migration database URL from stdin is missing.");
+}
+
+async function resolveTarget(connectionStdin = false) {
   const targetName = process.env.MIGRATION_TARGET;
   if (!targetName || !(targetName in targetEnvFiles)) {
-    fail("MIGRATION_TARGET must be explicitly set to 'test' or 'prod'");
+    fail("MIGRATION_TARGET must be explicitly set to 'test', 'recovery', or 'prod'");
   }
 
   loadEnvFile(join(process.cwd(), targetEnvFiles[targetName]));
 
-  const databaseUrl =
-    cleanDatabaseUrl(process.env.MIGRATION_DATABASE_URL);
+  const configuredDatabaseUrl = cleanDatabaseUrl(process.env.MIGRATION_DATABASE_URL);
+  if (connectionStdin && configuredDatabaseUrl) {
+    fail("Refusing ambiguous migration database URL sources.");
+  }
+  let databaseUrl = configuredDatabaseUrl;
+  if (connectionStdin) {
+    try {
+      databaseUrl = await readMigrationDatabaseUrlFromStdin();
+    } catch {
+      fail("Migration database URL from stdin is invalid or missing.");
+    }
+  }
 
-  if (!databaseUrl) fail("MIGRATION_DATABASE_URL is missing");
+  if (!databaseUrl) fail("MIGRATION_DATABASE_URL is missing; use --connection-stdin for a secure stream");
 
   let verifiedTarget;
   try {
@@ -694,8 +731,14 @@ async function applyMigration(client, migration) {
 }
 
 async function main() {
-  const { allowManualCutover, command, only, planTokenFile } = parseArgs(process.argv);
-  const target = resolveTarget();
+  const {
+    allowManualCutover,
+    command,
+    connectionStdin,
+    only,
+    planTokenFile,
+  } = parseArgs(process.argv);
+  const target = await resolveTarget(connectionStdin);
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {

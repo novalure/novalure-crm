@@ -4,6 +4,7 @@ import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { protectAuthResponse } from "@/lib/auth/response-security";
 import { resolveLanguage } from "@/lib/i18n";
 import { validateCsrfRequestContext } from "@/lib/security/csrf-core";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 function getFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -11,6 +12,16 @@ function getFormValue(formData: FormData, key: string) {
 }
 
 export async function POST(request: Request) {
+  const launchScope = evaluateLaunchScope("accountAccessPasswordResetEmail");
+  if (!launchScope.allowed) {
+    return protectAuthResponse(
+      NextResponse.json(
+        { code: launchScope.code, error: "account_access_password_reset_email_launch_off" },
+        { status: 503 },
+      ),
+    );
+  }
+
   const trustedOrigin = getTrustedAppOrigin();
   const requestContext = validateCsrfRequestContext(request.headers, trustedOrigin);
   if (!requestContext.ok) {

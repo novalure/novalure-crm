@@ -5,6 +5,7 @@ export const QA_CLEANUP_CONFIRMATION = "RESET_TWO_TENANT_QA";
 
 export const qaRequiredMigrationVersions = Object.freeze([
   "057_bot_webhook_legacy_index_cutover",
+  "060_tenant_rls_pilot_prepare",
   "068_qa_batch_reset_safety",
   "069_property_unit_idempotency",
   "070_funnel_submission_idempotency_recovery",
@@ -15,6 +16,8 @@ export const qaRequiredMigrationVersions = Object.freeze([
   "075_public_funnel_visit_truth",
   "076_bot_webhook_durable_processing",
   "077_schema_ledger_runtime_projection",
+  "078_company_profile_approval_integrity",
+  "079_public_funnel_visit_role_boundary",
 ]);
 
 export const qaTenantConstraintNames = Object.freeze([
@@ -45,7 +48,7 @@ export const qaLaunchSchemaArtifactNames = Object.freeze([
   "075.constraint.funnel_fk",
   "075.constraints.checks",
   "075.index.expiry",
-  "075.grants.tenant_app",
+  "075.grants.tenant_app_none",
   "075.grants.public_none",
   "076.columns.webhook_state",
   "076.constraints.webhook_state",

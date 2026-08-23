@@ -18,6 +18,7 @@ import {
 } from "@/lib/product-model";
 import type { LanguageCode } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 type CountryFieldRequirement = {
   appliesToRealEstate?: boolean;
@@ -126,6 +127,7 @@ const copy = {
     draft: "Entwurf",
     email: "E-Mail",
     invite: "Einladen",
+    invitationLaunchOff: "Einladungs-E-Mails sind für den Launch noch nicht freigegeben.",
     inviteLink: "Einladungslink",
     jurisdiction: "Jurisdiktion",
     legalForm: "Rechtsform",
@@ -138,6 +140,7 @@ const copy = {
     password: "Passwort",
     passwordConfirm: "Neues Passwort bestätigen",
     passwordReset: "Passwortlink",
+    passwordResetLaunchOff: "Passwort-Reset-E-Mails sind für den Launch noch nicht freigegeben.",
     passwordUpdated: "Passwort wurde aktualisiert.",
     privacy: "Datenschutz",
     privacyContact: "Privacy Kontakt",
@@ -187,6 +190,7 @@ const copy = {
     draft: "Draft",
     email: "Email",
     invite: "Invite",
+    invitationLaunchOff: "Invitation email is not approved for launch yet.",
     inviteLink: "Invite link",
     jurisdiction: "Jurisdiction",
     legalForm: "Legal form",
@@ -199,6 +203,7 @@ const copy = {
     password: "Password",
     passwordConfirm: "Confirm new password",
     passwordReset: "Password link",
+    passwordResetLaunchOff: "Password-reset email is not approved for launch yet.",
     passwordUpdated: "Password updated.",
     privacy: "Privacy",
     privacyContact: "Privacy contact",
@@ -425,6 +430,8 @@ export function CompanyProfileSettings({
   });
   const canLoadCurrentProfile = profileScope !== "crm_account" || organizationId.trim().length > 0;
   const canShowOperator = isOperatorAdmin(context);
+  const invitationEmailLaunchEnabled = isLaunchSurfaceEnabled("accountAccessInvitationEmail");
+  const passwordResetEmailLaunchEnabled = isLaunchSurfaceEnabled("accountAccessPasswordResetEmail");
   const profileScopes = useMemo<CompanyProfileScope[]>(
     () => canShowOperator ? ["workspace_owner", "platform_operator", "crm_account"] : ["workspace_owner", "crm_account"],
     [canShowOperator],
@@ -556,6 +563,10 @@ export function CompanyProfileSettings({
   }
 
   async function inviteUser() {
+    if (!invitationEmailLaunchEnabled) {
+      setAccessMessage(text.invitationLaunchOff);
+      return;
+    }
     setAccessBusy("invite");
     setAccessMessage("");
     const role = mapProductRoleToTechnicalRole(inviteDraft.productRole);
@@ -587,6 +598,14 @@ export function CompanyProfileSettings({
   }
 
   async function runAccessAction(action: AccessAction, userId: string) {
+    if (action === "password_reset" && !passwordResetEmailLaunchEnabled) {
+      setAccessMessage(text.passwordResetLaunchOff);
+      return;
+    }
+    if (action === "resend_invitation" && !invitationEmailLaunchEnabled) {
+      setAccessMessage(text.invitationLaunchOff);
+      return;
+    }
     setAccessBusy(`${action}:${userId}`);
     setAccessMessage("");
     const response = await csrfFetch("/api/settings/access/users", {
@@ -860,7 +879,7 @@ export function CompanyProfileSettings({
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
           <div className="min-w-0">
-            {accessPayload?.canManage ? (
+            {accessPayload?.canManage && invitationEmailLaunchEnabled ? (
               <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
                 <Field label="Name" onChange={(value) => setInviteDraft((current) => ({ ...current, name: value }))} value={inviteDraft.name} />
                 <Field label={text.email} onChange={(value) => setInviteDraft((current) => ({ ...current, email: value }))} type="email" value={inviteDraft.email} />
@@ -880,6 +899,23 @@ export function CompanyProfileSettings({
                   <SmallButton disabled={accessBusy === "invite"} onClick={inviteUser}>{text.invite}</SmallButton>
                 </div>
               </div>
+            ) : null}
+
+            {accessPayload?.canManage && !invitationEmailLaunchEnabled ? (
+              <p
+                className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                data-account-access-invitation-launch-scope="off"
+              >
+                {text.invitationLaunchOff}
+              </p>
+            ) : null}
+            {accessPayload?.canManage && !passwordResetEmailLaunchEnabled ? (
+              <p
+                className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                data-account-access-password-reset-launch-scope="off"
+              >
+                {text.passwordResetLaunchOff}
+              </p>
             ) : null}
 
             <div className="max-w-full overflow-x-auto rounded-lg border border-stone-200">
@@ -944,10 +980,12 @@ export function CompanyProfileSettings({
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
                           <SmallButton disabled={!accessPayload?.canManage || accessBusy === user.id} onClick={() => updateUser(user)}>{text.save}</SmallButton>
-                          {user.status === "invited" ? (
+                          {user.status === "invited" && invitationEmailLaunchEnabled ? (
                             <SmallButton disabled={!accessPayload?.canManage || accessBusy === `resend_invitation:${user.id}`} onClick={() => runAccessAction("resend_invitation", user.id)}>{text.resend}</SmallButton>
                           ) : null}
-                          <SmallButton disabled={!accessPayload?.canManage || accessBusy === `password_reset:${user.id}`} onClick={() => runAccessAction("password_reset", user.id)}>{text.passwordReset}</SmallButton>
+                          {passwordResetEmailLaunchEnabled ? (
+                            <SmallButton disabled={!accessPayload?.canManage || accessBusy === `password_reset:${user.id}`} onClick={() => runAccessAction("password_reset", user.id)}>{text.passwordReset}</SmallButton>
+                          ) : null}
                           <SmallButton disabled={!accessPayload?.canManage || accessBusy === `revoke_invitation:${user.id}`} onClick={() => runAccessAction("revoke_invitation", user.id)}>{text.revoke}</SmallButton>
                         </div>
                       </td>

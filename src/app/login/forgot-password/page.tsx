@@ -9,6 +9,7 @@ import { getSessionFromHeaders } from "@/lib/auth/session";
 import { getLoginPageCopy } from "@/lib/i18n";
 import { withPublicLanguage } from "@/lib/public-language";
 import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 type ForgotPasswordPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -50,6 +51,10 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
   const login = getLoginPageCopy(language);
   const reset = login.passwordReset;
   const sent = getQueryValue(query.sent) === "1";
+  const resetEmailLaunchEnabled = isLaunchSurfaceEnabled("accountAccessPasswordResetEmail");
+  const launchOffMessage = language === "de"
+    ? "Der E-Mail-Versand für die Kontowiederherstellung ist zum Launch noch nicht freigegeben. Bitte wenden Sie sich an Ihren Workspace-Administrator."
+    : "Account-recovery email is not approved for launch yet. Please contact your workspace administrator.";
   const intro = language === "de"
     ? {
         body: "Fordern Sie einen einmaligen Link an. Aus Sicherheitsgründen wird unabhängig vom Kontostatus dieselbe Bestätigung angezeigt.",
@@ -82,7 +87,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
           <h2 id="forgot-password-heading">{reset.requestTitle}</h2>
           <p>{reset.requestDescription}</p>
 
-          {sent ? (
+          {sent && resetEmailLaunchEnabled ? (
             <p
               aria-live="polite"
               className={subpageStyles.noticeSuccess}
@@ -92,26 +97,36 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
             </p>
           ) : null}
 
-          <SubmitOnceForm action="/api/auth/password-reset/request" className={subpageStyles.form} method="post">
-            <input name="lang" type="hidden" value={language} />
-            <label className={subpageStyles.field}>
-              {reset.emailLabel}
-              <input
-                autoComplete="username"
-                className={subpageStyles.input}
-                name="email"
-                placeholder={login.placeholderEmail}
-                required
-                type="email"
-              />
-            </label>
-            <button
-              className={subpageStyles.submitButton}
-              type="submit"
+          {resetEmailLaunchEnabled ? (
+            <SubmitOnceForm action="/api/auth/password-reset/request" className={subpageStyles.form} method="post">
+              <input name="lang" type="hidden" value={language} />
+              <label className={subpageStyles.field}>
+                {reset.emailLabel}
+                <input
+                  autoComplete="username"
+                  className={subpageStyles.input}
+                  name="email"
+                  placeholder={login.placeholderEmail}
+                  required
+                  type="email"
+                />
+              </label>
+              <button
+                className={subpageStyles.submitButton}
+                type="submit"
+              >
+                {reset.requestSubmit}
+              </button>
+            </SubmitOnceForm>
+          ) : (
+            <p
+              className={subpageStyles.notice}
+              data-account-access-password-reset-launch-scope="off"
+              role="status"
             >
-              {reset.requestSubmit}
-            </button>
-          </SubmitOnceForm>
+              {launchOffMessage}
+            </p>
+          )}
 
           <p className={subpageStyles.authHelp}>{reset.requestHelp}</p>
           <Link

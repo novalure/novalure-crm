@@ -8,9 +8,12 @@ import {
   canAdministerQaReset,
   parseQaResetRequest,
   QaResetContractError,
-  resolveQaResetWorkspaceAllowlist,
   type QaResetRequest,
 } from "@/lib/qa-reset-contract";
+import {
+  qaBatchRuntimeErrorResponse,
+  resolveQaBatchCapabilityConfig,
+} from "@/lib/qa-batch-runtime";
 import { enforceCsrfForSession } from "@/lib/security/csrf";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
 
@@ -71,6 +74,13 @@ export async function POST(request: Request) {
     return json({ error: "Forbidden" }, 403);
   }
 
+  let runtimeConfig: ReturnType<typeof resolveQaBatchCapabilityConfig>;
+  try {
+    runtimeConfig = resolveQaBatchCapabilityConfig();
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error) ?? json({ error: "QA reset runtime boundary unavailable" }, 503);
+  }
+
   let parsedRequest: QaResetRequest | null = null;
   try {
     const text = await request.text();
@@ -89,7 +99,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const allowlistedWorkspaceIds = resolveQaResetWorkspaceAllowlist();
+    const allowlistedWorkspaceIds = runtimeConfig.allowlistedWorkspaceIds;
     assertQaResetWorkspaceAllowlisted(parsedRequest.workspaceId, allowlistedWorkspaceIds);
     assertQaResetExecutionAuthorized(parsedRequest);
 

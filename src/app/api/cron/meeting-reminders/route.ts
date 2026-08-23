@@ -15,16 +15,25 @@ export async function GET(request: Request) {
     );
   }
   const run = createCronRun({ route: "meeting-reminders" });
-  if (areQueueWorkersPaused()) {
-    return Response.json({ ok: true, paused: true, runId: run.runId });
+  try {
+    if (areQueueWorkersPaused()) {
+      const response = Response.json({ ok: true, paused: true, runId: run.runId });
+      run.succeed("paused");
+      return response;
+    }
+
+    const result = await processDueMeetingNotifications({ limit: 25, shouldContinue: run.shouldContinue });
+
+    const response = Response.json({
+      durationMs: run.durationMs(),
+      ok: true,
+      runId: run.runId,
+      ...result,
+    });
+    run.succeed();
+    return response;
+  } catch (error) {
+    run.fail();
+    throw error;
   }
-
-  const result = await processDueMeetingNotifications({ limit: 25, shouldContinue: run.shouldContinue });
-
-  return Response.json({
-    durationMs: run.durationMs(),
-    ok: true,
-    runId: run.runId,
-    ...result,
-  });
 }

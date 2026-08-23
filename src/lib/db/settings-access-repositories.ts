@@ -9,6 +9,7 @@ import { inviteWorkspaceUser, updateWorkspaceUserAccess } from "@/lib/db/custome
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const customerAssignableSettingsProductRoles: ProductRole[] = [
   "customer_owner",
@@ -122,6 +123,9 @@ export async function inviteSettingsWorkspaceUser(input: {
   session: AppSession;
   userAgent?: string | null;
 }) {
+  if (!evaluateLaunchScope("accountAccessInvitationEmail").allowed) {
+    return { ok: false as const, reason: "account_access_invitation_email_launch_off", status: 503 };
+  }
   return inviteWorkspaceUser({
     email: input.email,
     language: input.language,
@@ -163,6 +167,9 @@ export async function resendWorkspaceInvitation(input: {
   userAgent?: string | null;
   userId: string;
 }) {
+  if (!evaluateLaunchScope("accountAccessInvitationEmail").allowed) {
+    return { ok: false as const, reason: "account_access_invitation_email_launch_off", status: 503 };
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.userId)) {
     return { ok: false as const, reason: "User input is incomplete", status: 400 };
   }
@@ -200,6 +207,9 @@ export async function triggerWorkspacePasswordReset(input: {
   userAgent?: string | null;
   userId: string;
 }) {
+  if (!evaluateLaunchScope("accountAccessPasswordResetEmail").allowed) {
+    return { ok: false as const, reason: "account_access_password_reset_email_launch_off", status: 503 };
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.userId)) {
     return { ok: false as const, reason: "User input is incomplete", status: 400 };
   }
@@ -220,6 +230,7 @@ export async function triggerWorkspacePasswordReset(input: {
 
   const created = await createMembershipPasswordResetLink({
     language: input.language === "de" ? "de" : "en",
+    purpose: "password_reset",
     requestIp: input.requestIp,
     userAgent: input.userAgent,
     workspaceId: input.session.workspaceId,

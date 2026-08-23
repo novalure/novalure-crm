@@ -23,7 +23,16 @@ function restoreEnv(name, value) {
   else process.env[name] = value;
 }
 
-test("Resend adapter dynamically blocks every unapproved purpose before fetch while preserving account mail", async () => {
+const EMAIL_PURPOSES = [
+  "newsletter",
+  "meeting_notification",
+  "meeting_qa_test",
+  "bot_document",
+  "password_reset",
+  "workspace_invitation",
+];
+
+test("Resend adapter blocks every launch-off purpose, including account mail, before fetch", async () => {
   const resendSource = (await source("src/lib/integrations/resend.ts")).replace(
     'import { evaluateLaunchScope } from "@/lib/launch-scope";',
     "const evaluateLaunchScope = () => ({ allowed: false });",
@@ -31,11 +40,15 @@ test("Resend adapter dynamically blocks every unapproved purpose before fetch wh
   const resend = await importTranspiled(resendSource);
   const originalApiKey = process.env.RESEND_API_KEY;
   const originalFrom = process.env.RESEND_FROM;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalQaAllowlist = process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
   const originalFetch = globalThis.fetch;
   let providerRequests = 0;
 
   process.env.RESEND_API_KEY = "re_testkey123";
   process.env.RESEND_FROM = "Novalure <noreply@example.com>";
+  process.env.VERCEL_ENV = "preview";
+  delete process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
   globalThis.fetch = async () => {
     providerRequests += 1;
     return new Response(JSON.stringify({ id: "msg_test" }), {
@@ -45,7 +58,15 @@ test("Resend adapter dynamically blocks every unapproved purpose before fetch wh
   };
 
   try {
-    for (const purpose of ["newsletter", "meeting_notification", "meeting_qa_test", "bot_document", undefined]) {
+    for (const purpose of [
+      "newsletter",
+      "meeting_notification",
+      "meeting_qa_test",
+      "bot_document",
+      "password_reset",
+      "workspace_invitation",
+      undefined,
+    ]) {
       const result = await resend.sendNewsletterEmail({
         html: "<p>test</p>",
         purpose,
@@ -56,21 +77,189 @@ test("Resend adapter dynamically blocks every unapproved purpose before fetch wh
       assert.equal(result.errorCode, "launch_off");
     }
     assert.equal(providerRequests, 0);
-
-    const accountMail = await resend.sendNewsletterEmail({
-      html: "<p>reset</p>",
-      purpose: "password_reset",
-      subject: "Reset",
-      to: "recipient@example.com",
-    });
-    assert.equal(accountMail.status, "sent");
-    assert.equal(providerRequests, 1);
-    assert.equal(resend.isEmailDeliveryPurposeLaunchEnabled("workspace_invitation"), true);
+    assert.equal(resend.isEmailDeliveryPurposeLaunchEnabled("password_reset"), false);
+    assert.equal(resend.isEmailDeliveryPurposeLaunchEnabled("workspace_invitation"), false);
     assert.equal(resend.isEmailDeliveryPurposeLaunchEnabled("unknown"), false);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("RESEND_API_KEY", originalApiKey);
     restoreEnv("RESEND_FROM", originalFrom);
+    restoreEnv("VERCEL_ENV", originalVercelEnv);
+    restoreEnv("NOVALURE_QA_EMAIL_ALLOWLIST", originalQaAllowlist);
+  }
+});
+
+test("account mail reaches Resend only when its exact launch surfaces are approved", async () => {
+  const resendSource = (await source("src/lib/integrations/resend.ts")).replace(
+    'import { evaluateLaunchScope } from "@/lib/launch-scope";',
+    `const evaluateLaunchScope = (surface) => ({
+      allowed: surface === "accountAccessPasswordResetEmail" || surface === "accountAccessInvitationEmail",
+    });`,
+  );
+  const resend = await importTranspiled(resendSource);
+  const originalApiKey = process.env.RESEND_API_KEY;
+  const originalFrom = process.env.RESEND_FROM;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalQaAllowlist = process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+  const originalFetch = globalThis.fetch;
+  let providerRequests = 0;
+
+  process.env.RESEND_API_KEY = "re_testkey123";
+  process.env.RESEND_FROM = "Novalure <noreply@example.com>";
+  process.env.VERCEL_ENV = "production";
+  delete process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+  globalThis.fetch = async () => {
+    providerRequests += 1;
+    return new Response(JSON.stringify({ id: `msg_${providerRequests}` }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  };
+
+  try {
+    for (const purpose of ["password_reset", "workspace_invitation"]) {
+      const result = await resend.sendNewsletterEmail({
+        html: "<p>account access</p>",
+        purpose,
+        subject: "Account access",
+        to: "recipient@example.com",
+      });
+      assert.equal(result.status, "sent");
+    }
+    assert.equal(providerRequests, 2);
+
+    const newsletter = await resend.sendNewsletterEmail({
+      html: "<p>newsletter</p>",
+      purpose: "newsletter",
+      subject: "Newsletter",
+      to: "recipient@example.com",
+    });
+    assert.equal(newsletter.errorCode, "launch_off");
+    assert.equal(providerRequests, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("RESEND_API_KEY", originalApiKey);
+    restoreEnv("RESEND_FROM", originalFrom);
+    restoreEnv("VERCEL_ENV", originalVercelEnv);
+    restoreEnv("NOVALURE_QA_EMAIL_ALLOWLIST", originalQaAllowlist);
+  }
+});
+
+test("Preview requires a valid QA recipient allowlist for every launch-enabled email purpose before fetch", async () => {
+  const resendSource = (await source("src/lib/integrations/resend.ts")).replace(
+    'import { evaluateLaunchScope } from "@/lib/launch-scope";',
+    "const evaluateLaunchScope = () => ({ allowed: true });",
+  );
+  const resend = await importTranspiled(resendSource);
+  const originalApiKey = process.env.RESEND_API_KEY;
+  const originalFrom = process.env.RESEND_FROM;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalQaAllowlist = process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+  const originalFetch = globalThis.fetch;
+  let providerRequests = 0;
+
+  process.env.RESEND_API_KEY = "re_testkey123";
+  process.env.RESEND_FROM = "Novalure <noreply@example.com>";
+  process.env.VERCEL_ENV = "preview";
+  globalThis.fetch = async () => {
+    providerRequests += 1;
+    throw new Error("Preview recipient policy must block before fetch");
+  };
+
+  try {
+    for (const scenario of [
+      { allowlist: undefined, errorCode: "configuration" },
+      { allowlist: "   ", errorCode: "configuration" },
+      { allowlist: "approved@example.com invalid", errorCode: "configuration" },
+      { allowlist: "other@example.com", errorCode: "invalid_input" },
+    ]) {
+      if (scenario.allowlist === undefined) delete process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+      else process.env.NOVALURE_QA_EMAIL_ALLOWLIST = scenario.allowlist;
+
+      for (const purpose of EMAIL_PURPOSES) {
+        const result = await resend.sendNewsletterEmail({
+          html: "<p>preview QA</p>",
+          purpose,
+          subject: "Preview QA",
+          to: "approved@example.com",
+        });
+        assert.equal(result.status, "failed");
+        assert.equal(result.errorCode, scenario.errorCode);
+      }
+    }
+
+    assert.equal(providerRequests, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("RESEND_API_KEY", originalApiKey);
+    restoreEnv("RESEND_FROM", originalFrom);
+    restoreEnv("VERCEL_ENV", originalVercelEnv);
+    restoreEnv("NOVALURE_QA_EMAIL_ALLOWLIST", originalQaAllowlist);
+  }
+});
+
+test("Preview allowlist compares normalized recipients for every purpose while Production remains unaffected", async () => {
+  const resendSource = (await source("src/lib/integrations/resend.ts")).replace(
+    'import { evaluateLaunchScope } from "@/lib/launch-scope";',
+    "const evaluateLaunchScope = () => ({ allowed: true });",
+  );
+  const resend = await importTranspiled(resendSource);
+  const originalApiKey = process.env.RESEND_API_KEY;
+  const originalFrom = process.env.RESEND_FROM;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalQaAllowlist = process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+  const originalFetch = globalThis.fetch;
+  const recipients = [];
+
+  process.env.RESEND_API_KEY = "re_testkey123";
+  process.env.RESEND_FROM = "Novalure <noreply@example.com>";
+  globalThis.fetch = async (_url, init) => {
+    recipients.push(JSON.parse(String(init?.body)).to);
+    return new Response(JSON.stringify({ id: `msg_${recipients.length}` }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    });
+  };
+
+  try {
+    process.env.VERCEL_ENV = "preview";
+    process.env.NOVALURE_QA_EMAIL_ALLOWLIST = "SECOND@example.com; QA.Receiver@Example.COM";
+    for (const purpose of EMAIL_PURPOSES) {
+      const result = await resend.sendNewsletterEmail({
+        html: "<p>preview QA</p>",
+        purpose,
+        subject: "Preview QA",
+        to: "  qa.receiver@EXAMPLE.com ",
+      });
+      assert.equal(result.status, "sent");
+    }
+
+    process.env.VERCEL_ENV = "production";
+    delete process.env.NOVALURE_QA_EMAIL_ALLOWLIST;
+    for (const purpose of EMAIL_PURPOSES) {
+      const result = await resend.sendNewsletterEmail({
+        html: "<p>production contract</p>",
+        purpose,
+        subject: "Production contract",
+        to: "production-recipient@example.com",
+      });
+      assert.equal(result.status, "sent");
+    }
+
+    assert.deepEqual(
+      recipients.slice(0, EMAIL_PURPOSES.length),
+      EMAIL_PURPOSES.map(() => ["qa.receiver@example.com"]),
+    );
+    assert.deepEqual(
+      recipients.slice(EMAIL_PURPOSES.length),
+      EMAIL_PURPOSES.map(() => ["production-recipient@example.com"]),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("RESEND_API_KEY", originalApiKey);
+    restoreEnv("RESEND_FROM", originalFrom);
+    restoreEnv("VERCEL_ENV", originalVercelEnv);
+    restoreEnv("NOVALURE_QA_EMAIL_ALLOWLIST", originalQaAllowlist);
   }
 });
 

@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { reconcileTeamsNotificationJob } from "@/lib/db/teams-notification-repositories";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type RouteContext = {
   params: Promise<{ notificationId: string }>;
 };
 
 export async function POST(request: Request, context: RouteContext) {
+  const launchScope = evaluateLaunchScope("teamsNotificationDelivery");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "teams_notification_delivery_launch_off" },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   const auth = await resolveWorkspaceScopedSession(request, {
     capability: "settings:manage",
     permission: "crm:write",

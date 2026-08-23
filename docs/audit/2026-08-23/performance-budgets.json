@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "status": "PENDING_SIGNATURE",
+  "public": {
+    "performanceScoreMin": 0.9,
+    "accessibilityScoreMin": 0.95,
+    "bestPracticesScoreMin": 0.9,
+    "largestContentfulPaintMaxMs": 2500,
+    "cumulativeLayoutShiftMax": 0.1,
+    "totalBlockingTimeMaxMs": 200
+  },
+  "authenticated": {
+    "performanceScoreMin": 0.8,
+    "accessibilityScoreMin": 0.95,
+    "bestPracticesScoreMin": 0.9,
+    "largestContentfulPaintMaxMs": 2500,
+    "cumulativeLayoutShiftMax": 0.1,
+    "totalBlockingTimeMaxMs": 300
+  },
+  "realUserP75": {
+    "largestContentfulPaintMaxMs": 2500,
+    "interactionToNextPaintMaxMs": 200,
+    "cumulativeLayoutShiftMax": 0.1
+  },
+  "bundle": {
+    "maxRegressionPercent": 5
+  },
+  "requiredSignatures": {
+    "product": null,
+    "engineering": null,
+    "operations": null
+  }
+}

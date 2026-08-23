@@ -30,3 +30,17 @@ test("unit action controls reflow and preserve 44px targets", () => {
   assert.match(unitBoard, /min-h-11 whitespace-normal break-words/);
   assert.match(unitBoard, /min-w-60 px-4 py-3/);
 });
+
+test("relationship viewing and offer actions are UI fail-closed while launch scope is off", () => {
+  for (const handler of ["createViewingSlot", "createOfferMilestone", "markOfferLost"]) {
+    assert.match(
+      unitBoard,
+      new RegExp(`function ${handler}\\([^)]*\\) \\{\\s*if \\(!canManage \\|\\| !reservationRelationshipSyncLaunchEnabled\\) return;`),
+    );
+  }
+
+  const guardedButtons = unitBoard.match(
+    /disabled=\{!canManage \|\| !reservationRelationshipSyncLaunchEnabled/g,
+  ) ?? [];
+  assert.ok(guardedButtons.length >= 7, "all reservation, viewing and offer buttons must be disabled");
+});

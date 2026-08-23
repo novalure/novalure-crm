@@ -19,11 +19,9 @@ import {
   buildFunnelSubmissionRequest,
   clearFunnelSubmissionIntentId,
   getOrCreateFunnelSubmissionIntentId,
+  sanitizeFunnelSubmissionSourceUrl,
 } from "@/lib/funnel-submission-request";
-import {
-  getOrCreatePublicFunnelVisitId,
-  isFunnelPublicationStaleResponse,
-} from "@/lib/funnel-runtime-contract";
+import { isFunnelPublicationStaleResponse } from "@/lib/funnel-runtime-contract";
 import { getFunnelRendererCopy, type LanguageCode } from "@/lib/i18n";
 import {
   parsePublicSubmissionProof,
@@ -462,12 +460,11 @@ export function FunnelRenderer({
     }
     const visitKey = `${blueprint.id}:publication:${publicationRevision}`;
     if (visitRecordedRef.current === visitKey) return;
-    const visitId = getOrCreatePublicFunnelVisitId(blueprint.id, Number(publicationRevision));
     let cancelled = false;
 
     const sendVisit = async (proof: PublicSubmissionProof, allowExpiredRefresh: boolean): Promise<void> => {
       const response = await fetch(`/api/funnels/${encodeURIComponent(blueprint.id)}/visits`, {
-        body: JSON.stringify({ proof, publicationRevision, visitId }),
+        body: JSON.stringify({ proof, publicationRevision }),
         cache: "no-store",
         credentials: "omit",
         headers: {
@@ -528,6 +525,7 @@ export function FunnelRenderer({
   function withRuntimeHiddenAnswers(current: Record<string, FieldValue>) {
     if (typeof window === "undefined") return current;
     const params = new URLSearchParams(window.location.search);
+    const sourceUrl = sanitizeFunnelSubmissionSourceUrl(window.location.href) ?? "";
     const next = { ...current };
 
     allFields.forEach((field) => {
@@ -541,7 +539,7 @@ export function FunnelRenderer({
       if (field.hiddenValueSource === "urlParam" && field.publicQueryParameter) {
         value = params.get(field.publicQueryParameter) ?? value;
       }
-      if (field.captureSourceUrl) value = window.location.href;
+      if (field.captureSourceUrl) value = sourceUrl;
       if (value) {
         next[field.id] = value;
       }
@@ -588,7 +586,9 @@ export function FunnelRenderer({
       const utm = readUtmParams();
       const visitor = {
         id: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("visitorId") ?? undefined : undefined,
-        sourceUrl: typeof window !== "undefined" ? window.location.href : undefined,
+        sourceUrl: typeof window !== "undefined"
+          ? sanitizeFunnelSubmissionSourceUrl(window.location.href)
+          : undefined,
         userAgent: typeof window !== "undefined" ? window.navigator.userAgent : undefined,
       };
 
@@ -634,7 +634,11 @@ export function FunnelRenderer({
         throw new Error("submission_failed");
       };
 
-      await sendAttempt(testOnly ? undefined : submissionProofRef.current, true);
+      // Browser timers can be throttled while a long form remains in the
+      // background. Refresh immediately before the first live write and fail
+      // closed when the current publication can no longer renew this proof.
+      const proofForFirstAttempt = testOnly ? undefined : await refreshSubmissionProof();
+      await sendAttempt(proofForFirstAttempt, true);
       if (!testOnly) clearFunnelSubmissionIntentId(blueprint.id);
       setSubmitState("sent");
       setRuntimeError("");

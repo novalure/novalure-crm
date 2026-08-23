@@ -650,6 +650,7 @@ export function UnitBoard({
   }
 
   function createViewingSlot(view: UnitBoardView) {
+    if (!canManage || !reservationRelationshipSyncLaunchEnabled) return;
     const matchLead = view.buyerMatches[0]?.lead;
     const startsAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
     const endsAt = new Date(new Date(startsAt).getTime() + 45 * 60 * 1000).toISOString();
@@ -672,6 +673,7 @@ export function UnitBoard({
   }
 
   function createOfferMilestone(view: UnitBoardView) {
+    if (!canManage || !reservationRelationshipSyncLaunchEnabled) return;
     return postRuntimeWorkflow(
       `offer:${view.unit.id}`,
       {
@@ -689,6 +691,7 @@ export function UnitBoard({
   }
 
   function markOfferLost(view: UnitBoardView) {
+    if (!canManage || !reservationRelationshipSyncLaunchEnabled) return;
     return postRuntimeWorkflow(
       `offer-lost:${view.unit.id}`,
       {
@@ -1621,7 +1624,7 @@ export function UnitBoard({
                         <div className="grid gap-2">
                           <button
                             className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!canManage || Boolean(runtimeBusyKey) || (!buyer && !buyerMatches.length)}
+                            disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || Boolean(runtimeBusyKey) || (!buyer && !buyerMatches.length)}
                             onClick={() => void createViewingSlot(view)}
                             type="button"
                           >
@@ -1629,7 +1632,7 @@ export function UnitBoard({
                           </button>
                           <button
                             className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!canManage || Boolean(runtimeBusyKey) || !reservation}
+                            disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || Boolean(runtimeBusyKey) || !reservation}
                             onClick={() => void createOfferMilestone(view)}
                             type="button"
                           >
@@ -1638,7 +1641,7 @@ export function UnitBoard({
                         </div>
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-rose-200 px-3 py-2 text-left text-xs font-semibold text-rose-800 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canManage || Boolean(runtimeBusyKey) || (!reservation && !deal)}
+                          disabled={!canManage || !reservationRelationshipSyncLaunchEnabled || Boolean(runtimeBusyKey) || (!reservation && !deal)}
                           onClick={() => void markOfferLost(view)}
                           type="button"
                         >

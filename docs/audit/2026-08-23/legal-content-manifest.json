@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "approvalStatus": "PENDING_LEGAL_REVIEW",
+  "candidateCommit": null,
+  "testedDeployment": null,
+  "sharedFacts": {
+    "path": "src/lib/legal.ts",
+    "sha256": "50da69eaeea760ddcd42ba7bf487959733ea91517d41c4c337ad45f250f12e1c"
+  },
+  "pages": [
+    {
+      "route": "/imprint",
+      "publicUrl": "https://www.novalure-crm.app/imprint",
+      "languages": ["de", "en"],
+      "lastUpdated": "December 2025",
+      "sourceFiles": [{"path": "src/app/imprint/page.tsx", "sha256": "baf437839de3284a632fa7cca927cf4972c1fe1e17eca928b36f1df1124819aa"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/privacy",
+      "publicUrl": "https://www.novalure-crm.app/privacy",
+      "languages": ["de", "en"],
+      "lastUpdated": "20 May 2026",
+      "sourceFiles": [{"path": "src/app/privacy/page.tsx", "sha256": "454cc95b1152747071f89c7b61233506c0a288c44a32312d5eca87bf6d03a4dd"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/terms",
+      "publicUrl": "https://www.novalure-crm.app/terms",
+      "languages": ["de", "en"],
+      "lastUpdated": "20 May 2026",
+      "sourceFiles": [{"path": "src/app/terms/page.tsx", "sha256": "92b339b502c6ca2b093a3d034d10d1b0f84077888b54e30dbbdaf99df1fa700e"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/cookies",
+      "publicUrl": "https://www.novalure-crm.app/cookies",
+      "languages": ["de", "en"],
+      "lastUpdated": "20 May 2026",
+      "sourceFiles": [{"path": "src/app/cookies/page.tsx", "sha256": "f3943532a163b477ed6c6c08cc876501de0d5de10770ef5d94854619e096e596"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/data-deletion",
+      "publicUrl": "https://www.novalure-crm.app/data-deletion",
+      "languages": ["de", "en"],
+      "lastUpdated": "20 May 2026",
+      "sourceFiles": [{"path": "src/app/data-deletion/page.tsx", "sha256": "ed4a318073eb1232f9fccc1f24cc14764e1800d71183196329ad59ce0091f556"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/meta",
+      "publicUrl": "https://www.novalure-crm.app/meta",
+      "languages": ["de", "en"],
+      "lastUpdated": "20 May 2026",
+      "sourceFiles": [{"path": "src/app/meta/page.tsx", "sha256": "d52794182a635d7b766787480f49d01fcbd0e2bf8a16872223dcc36e2519b00c"}],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    },
+    {
+      "route": "/unsubscribe",
+      "publicUrl": "https://www.novalure-crm.app/unsubscribe",
+      "languages": ["de", "en"],
+      "lastUpdated": null,
+      "sourceFiles": [
+        {"path": "src/app/unsubscribe/page.tsx", "sha256": "bbba5526c0d407bed362ce88f3e88cd33cec843ee0820450947b8270a157e250"},
+        {"path": "src/app/unsubscribe/unsubscribe-confirmation.tsx", "sha256": "37d1e4777fd08e0a4ae925a6b95be0597117d85c1733bd0e11a49494178e8004"}
+      ],
+      "renderedContentSha256": null,
+      "legalOwner": null,
+      "legalStatus": "PENDING",
+      "approvedAt": null
+    }
+  ]
+}

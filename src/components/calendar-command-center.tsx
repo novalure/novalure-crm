@@ -12,6 +12,7 @@ import {
   getLocale,
   type LanguageCode,
 } from "@/lib/i18n";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type CalendarCommandCenterProps = {
@@ -34,6 +35,10 @@ type CalendarCommandCenterCopy = ReturnType<typeof getCalendarCommandCenterCopy>
 type OwnerDisplay = Pick<WorkspaceUser, "id" | "name" | "email">;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const calendarProviderReadLaunchEnabled = isLaunchSurfaceEnabled("calendarProviderRead");
+const calendarProviderMutationLaunchEnabled = isLaunchSurfaceEnabled("calendarProviderMutation");
+const calendarProviderSetupLaunchEnabled =
+  calendarProviderReadLaunchEnabled && calendarProviderMutationLaunchEnabled;
 
 function navigateToOAuthStart(path: string) {
   // A full document navigation is required because this route returns a provider redirect, not an RSC payload.
@@ -710,6 +715,9 @@ export function CalendarCommandCenter({
   workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
+  const calendarProviderLaunchOffMessage = language === "de"
+    ? "Kalenderanbieter sind für den Launch noch nicht freigegeben. Bestehende Verbindungen bleiben unverändert."
+    : "Calendar providers are not approved for launch yet. Existing connections remain unchanged.";
   const qaTestCopy = language === "de"
     ? {
         apiUnavailable: "Der externe QA-Testversand ist derzeit nicht erreichbar.",
@@ -1505,6 +1513,8 @@ export function CalendarCommandCenter({
     field: keyof CalendarConnectionConfig,
     value: string | boolean,
   ) => {
+    if (!calendarProviderSetupLaunchEnabled) return;
+
     setCalendarIntegrations((current) => ({
       ...current,
       [provider]: {
@@ -1515,6 +1525,8 @@ export function CalendarCommandCenter({
   };
 
   const connectCalendarProvider = (provider: CalendarProvider) => {
+    if (!calendarProviderSetupLaunchEnabled) return;
+
     const option = calendarProviderOptions.find((item) => item.id === provider);
 
     setCalendarIntegrations((current) => ({
@@ -1540,6 +1552,8 @@ export function CalendarCommandCenter({
   };
 
   const connectMeetingProvider = (provider: CalendarProvider) => {
+    if (!calendarProviderSetupLaunchEnabled) return;
+
     const meetingProvider =
       provider === "google" ? ("google-meet" as const) : ("microsoft-teams" as const);
 
@@ -1566,6 +1580,8 @@ export function CalendarCommandCenter({
   };
 
   const disconnectCalendarProvider = async (provider: CalendarProvider) => {
+    if (!calendarProviderSetupLaunchEnabled) return;
+
     const providerLabel = getCalendarProviderLabel(provider, text);
 
     setLiveCalendarAction({
@@ -1621,6 +1637,8 @@ export function CalendarCommandCenter({
             : text.calendarSetup.missingConnection);
 
   const syncLiveTeamsMeeting = async () => {
+    if (!calendarProviderSetupLaunchEnabled) return;
+
     setLiveCalendarAction({ status: "running" });
 
     try {
@@ -2717,7 +2735,11 @@ export function CalendarCommandCenter({
         ) : null}
       </article>
 
-      <article className="rounded-lg border border-blue-100 bg-white p-5">
+      {calendarProviderSetupLaunchEnabled ? (
+      <article
+        className="rounded-lg border border-blue-100 bg-white p-5"
+        data-calendar-provider-launch-scope="on"
+      >
         <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
@@ -2980,6 +3002,25 @@ export function CalendarCommandCenter({
             : text.calendarSetup.missingConnection}
         </div>
       </article>
+      ) : (
+        <article
+          className="rounded-lg border border-stone-200 bg-stone-50 p-5"
+          data-calendar-provider-launch-scope="off"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
+            {text.calendarSetup.eyebrow}
+          </p>
+          <h4 className="mt-1 break-words text-xl font-semibold text-slate-950">
+            {text.calendarSetup.title}
+          </h4>
+          <p
+            className="mt-3 max-w-3xl rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700"
+            role="status"
+          >
+            {calendarProviderLaunchOffMessage}
+          </p>
+        </article>
+      )}
 
       <article className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -3221,7 +3262,11 @@ export function CalendarCommandCenter({
         </div>
       </article>
 
-      <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
+      {calendarProviderSetupLaunchEnabled ? (
+      <article
+        className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-950"
+        data-calendar-provider-live-sync="enabled"
+      >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em]">
@@ -3269,6 +3314,7 @@ export function CalendarCommandCenter({
           </div>
         </div>
       </article>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
         {activeView === "bookings" ? (

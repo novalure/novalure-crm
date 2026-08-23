@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   listGoogleNotificationJobs,
   listGoogleNotificationTargets,
@@ -56,6 +57,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const launchScope = evaluateLaunchScope("googleNotificationDelivery");
+  if (!launchScope.allowed) {
+    return NextResponse.json(
+      { code: launchScope.code, error: "google_notification_delivery_launch_off" },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
   if (!auth.ok) return auth.response;
 

@@ -1,3 +1,5 @@
+import { evaluateLaunchScope } from "@/lib/launch-scope";
+
 type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -38,8 +40,19 @@ function resolveProviderConfig() {
 }
 
 export function getModelProviderStatus() {
-  const config = resolveProviderConfig();
   const model = process.env.NOVALURE_LLM_MODEL || "openai/gpt-5.4";
+  const launchScope = evaluateLaunchScope("authenticatedBotModelProvider");
+  if (!launchScope.allowed) {
+    return {
+      configured: false,
+      provider: "deterministic-fallback",
+      model,
+      external: false,
+      reason: "authenticated_bot_model_provider_launch_off",
+    };
+  }
+
+  const config = resolveProviderConfig();
 
   return {
     configured: Boolean(config),
@@ -123,6 +136,20 @@ export async function generateModelReply(input: {
   knowledgeContext?: Array<{ title: string; excerpt: string; citationUrl?: string | null; score?: number }>;
   qualificationSummary?: string;
 }): Promise<ModelReply> {
+  const launchScope = evaluateLaunchScope("authenticatedBotModelProvider");
+  if (!launchScope.allowed) {
+    return {
+      ...fallbackReply({
+        prompt: input.prompt,
+        language: input.language,
+        knowledgeTitles: input.knowledgeTitles ?? [],
+        knowledgeContext: input.knowledgeContext,
+        qualificationSummary: input.qualificationSummary,
+      }),
+      reason: "authenticated_bot_model_provider_launch_off",
+    };
+  }
+
   const config = resolveProviderConfig();
   const model = input.model || process.env.NOVALURE_LLM_MODEL || "openai/gpt-5.4";
   const knowledgeContext = formatKnowledgeContext(input.knowledgeContext);

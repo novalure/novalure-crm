@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 2,
+  "standard": "WCAG 2.2 Level AA",
+  "status": "PENDING_SIGNATURE",
+  "scope": {
+    "public": [
+      "home",
+      "login",
+      "forgot-password",
+      "reset-password-invalid-result",
+      "imprint",
+      "privacy",
+      "cookies",
+      "terms",
+      "data-deletion",
+      "meta"
+    ],
+    "authenticated": [
+      "dashboard",
+      "contacts",
+      "pipelines",
+      "tasks",
+      "meetings",
+      "forms",
+      "funnels",
+      "settings",
+      "invitation"
+    ],
+    "authChallenges": [
+      "mfa-verification"
+    ],
+    "publicFixtureFlows": [
+      "public-form-page",
+      "public-form-submit-result",
+      "public-funnel-page",
+      "public-funnel-submit-result",
+      "password-reset-result"
+    ],
+    "languages": [
+      "de",
+      "en"
+    ],
+    "viewports": [
+      "desktop-1440",
+      "mobile-390",
+      "zoom-200-reflow-640",
+      "zoom-400-reflow-320"
+    ]
+  },
+  "releaseRule": {
+    "automatedTechnicalPassRequired": true,
+    "authenticatedCoverageRequired": true,
+    "authChallengeCoverageRequired": true,
+    "dynamicFixtureCoverageRequired": true,
+    "blockedRowsFailRelease": true,
+    "manualChecksMustAllPass": true,
+    "signedApprovalsRequired": true,
+    "publicOnlyDiagnosticCanRelease": false
+  },
+  "fixtureRequirements": [
+    {
+      "id": "isolated-auth-fixture",
+      "requirement": "Use only NOVALURE_QA_PREVIEW_EMAIL and NOVALURE_QA_PREVIEW_PASSWORD with the codextest_preview_ email prefix and the CODEXTEST_PREVIEW_ Preview-workspace markers. MFA completion additionally requires the matching action-time NOVALURE_QA_PREVIEW_TOTP_SECRET. Values must never be logged or written to evidence.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "public-action-time-fixtures",
+      "requirement": "Provide disposable public Form, public live Funnel and password-reset result URLs only through the documented environment variables or --fixture-input-stdin at action time. Every URL must match the exact Preview origin; URLs and publish/share tokens must never be written to evidence.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "release-surface-manifest-contract",
+      "requirement": "The runner must validate Forms, Funnel, Settings, invitation, MFA/login, password-reset and public submit routes against docs/audit/2026-08-23/release-surface-manifest.json before browser work begins.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    }
+  ],
+  "automatedChecks": [
+    {
+      "id": "axe-wcag-22-aa",
+      "criteria": [
+        "WCAG 2.0 A and AA machine-testable rules",
+        "WCAG 2.1 A and AA machine-testable rules",
+        "WCAG 2.2 AA machine-testable rules"
+      ],
+      "requirement": "No Critical or Serious Axe violation and no unresolved Critical or Serious incomplete result on every required public and authenticated matrix entry.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "language-document-structure",
+      "criteria": [
+        "1.3.1",
+        "2.4.2",
+        "3.1.1"
+      ],
+      "requirement": "The document language, title, main landmark and authenticated application shell match the expected surface and language.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "keyboard-entry-focus",
+      "criteria": [
+        "2.1.1",
+        "2.4.7"
+      ],
+      "requirement": "The first keyboard Tab action reaches a focusable control on every required matrix entry.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "zoom-reflow-overflow",
+      "criteria": [
+        "1.4.4",
+        "1.4.10"
+      ],
+      "requirement": "Required 200 percent and 400 percent reflow profiles have no horizontal document overflow.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "browser-runtime-errors",
+      "criteria": [
+        "4.1.2",
+        "4.1.3"
+      ],
+      "requirement": "No uncaught page error or browser console error occurs during a required matrix entry.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    },
+    {
+      "id": "required-fixture-flow-coverage",
+      "criteria": [
+        "1.3.1",
+        "2.1.1",
+        "3.3.1",
+        "4.1.3"
+      ],
+      "requirement": "Every required MFA, invitation, password-reset result, authenticated Forms/Funnel/Settings and public form/funnel page-plus-submit entry must be observed. A missing or invalid action-time fixture is recorded as redacted BLOCKED and fails the release gate.",
+      "required": true,
+      "owner": null,
+      "signature": null
+    }
+  ],
+  "manualChecks": [
+    {
+      "id": "screenreader-navigation-and-announcements",
+      "criteria": [
+        "1.3.1",
+        "2.4.1",
+        "2.4.6",
+        "3.3.1",
+        "4.1.2",
+        "4.1.3"
+      ],
+      "requirement": "NVDA with Firefox and VoiceOver with Safari can navigate landmarks, headings, controls, status messages and validation errors in both languages on representative public and authenticated views.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "dialog-focus-trap-and-return",
+      "criteria": [
+        "2.1.1",
+        "2.1.2",
+        "2.4.3",
+        "2.4.7",
+        "2.4.11"
+      ],
+      "requirement": "Every launch-enabled dialog receives initial focus, retains focus while open, closes by keyboard where intended and returns focus to its invoking control with an unobscured focus indicator.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "form-errors-and-instructions",
+      "criteria": [
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "3.3.7",
+        "3.3.8"
+      ],
+      "requirement": "Login, MFA, password-reset results, invitation, authenticated Forms/Funnel/Settings, and public form/funnel submissions expose persistent labels, instructions, error identification, actionable correction guidance and accessible status announcements without relying on color alone.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "complete-keyboard-operation",
+      "criteria": [
+        "2.1.1",
+        "2.1.2",
+        "2.4.3",
+        "2.4.7",
+        "2.4.11",
+        "2.5.7"
+      ],
+      "requirement": "All launch-enabled actions in dashboard, contacts, pipelines, tasks, meetings, forms, funnels, settings and invitation management are operable with keyboard only, in a logical focus order, without a trap and with visible unobscured focus.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "zoom-reflow-and-text-spacing",
+      "criteria": [
+        "1.4.4",
+        "1.4.10",
+        "1.4.12",
+        "1.4.13"
+      ],
+      "requirement": "Representative public and authenticated flows remain usable at 200 percent zoom, 400 percent reflow and WCAG text-spacing overrides, with no lost content, controls or essential two-dimensional context.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "mobile-orientation-and-targets",
+      "criteria": [
+        "1.3.4",
+        "2.5.8"
+      ],
+      "requirement": "Representative mobile flows work in portrait and landscape without orientation lock, and pointer targets meet the WCAG 2.2 minimum or a documented exception.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "mfa-reset-and-invitation-flow",
+      "criteria": [
+        "2.4.3",
+        "3.3.1",
+        "3.3.2",
+        "3.3.3",
+        "4.1.3"
+      ],
+      "requirement": "In DE and EN, the isolated Preview fixture completes MFA without losing focus context, password-reset success and failure results are announced, and the invitation surface exposes its launch state, validation and result without an inaccessible dead end.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    },
+    {
+      "id": "public-form-and-funnel-submit-flow",
+      "criteria": [
+        "1.3.1",
+        "2.1.1",
+        "2.4.3",
+        "3.3.1",
+        "3.3.2",
+        "3.3.7",
+        "4.1.3"
+      ],
+      "requirement": "Approved disposable public Form and Funnel fixtures can be completed and submitted in DE and EN on desktop, mobile and the selected 400-percent reflow profile; validation and success states are perceivable, keyboard operable and announced.",
+      "required": true,
+      "status": "PENDING",
+      "owner": null,
+      "tester": null,
+      "signature": null,
+      "signedAt": null,
+      "evidence": null
+    }
+  ],
+  "approvals": [
+    {
+      "role": "Accessibility owner",
+      "status": "PENDING",
+      "owner": null,
+      "signature": null,
+      "signedAt": null
+    },
+    {
+      "role": "Product owner",
+      "status": "PENDING",
+      "owner": null,
+      "signature": null,
+      "signedAt": null
+    },
+    {
+      "role": "Release owner",
+      "status": "PENDING",
+      "owner": null,
+      "signature": null,
+      "signedAt": null
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   classifyDeliveryError,
   createLeaseOwner,
@@ -705,6 +706,9 @@ export async function queueTeamsNotification(input: {
   summary: string;
   title: string;
 }): Promise<{ job?: TeamsNotificationJob; queued: boolean; reason?: string }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { queued: false, reason: "teams_notification_delivery_launch_off" };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { queued: false, reason: "DATABASE_URL is not configured" };
   }
@@ -873,6 +877,9 @@ export async function queueLeadSlaOverdueAlerts(input: {
   limit?: number;
   session: AppSession;
 }): Promise<{ checked: number; failed: number; pendingConfig: number; queued: number }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
@@ -1113,6 +1120,9 @@ export async function queueLeadSlaDueSoonAlerts(input: {
   limit?: number;
   session: AppSession;
 }): Promise<{ checked: number; failed: number; pendingConfig: number; queued: number }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
@@ -1227,6 +1237,9 @@ export async function queueCustomerAccessRiskAlerts(input: {
   limit?: number;
   session: AppSession;
 }): Promise<{ checked: number; failed: number; pendingConfig: number; queued: number }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0 };
   }
@@ -1325,6 +1338,9 @@ export async function queueDealStageChangeTeamsNotification(input: {
   session: AppSession;
   toStage: string;
 }) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { queued: false, reason: "teams_notification_delivery_launch_off" };
+  }
   if (!isImportantStage(input.toStage) || !isUuid(input.dealId)) {
     return { queued: false, reason: "Stage is not configured as critical" };
   }
@@ -1405,6 +1421,9 @@ export async function queueMeetingBookedTeamsNotification(input: {
   session: AppSession;
   startsAt: string;
 }) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { queued: false, reason: "teams_notification_delivery_launch_off" };
+  }
   if (!isUuid(input.bookingId)) {
     return { queued: false, reason: "Invalid booking" };
   }
@@ -1473,6 +1492,9 @@ export async function queueScheduledCriticalTeamsAlerts(input: {
   shouldContinue?: () => boolean;
   workspaceLimit?: number;
 } = {}) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
+  }
   if (!hasDatabaseUrl()) {
     return { checked: 0, failed: 0, pendingConfig: 0, queued: 0, workspaces: 0 };
   }
@@ -1533,6 +1555,9 @@ export async function reconcileTeamsNotificationJob(input: {
   ok: boolean;
   state?: "already_reconciled" | "blocked" | "reconciled";
 }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { error: "teams_notification_delivery_launch_off", ok: false };
+  }
   if (
     !hasDatabaseUrl() ||
     !isUuid(input.session.workspaceId) ||
@@ -1718,6 +1743,9 @@ export async function runTeamsNotificationTargetTestSinkHealthcheck(input: {
   session: AppSession;
   targetId: string;
 }) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { error: "teams_notification_delivery_launch_off", ok: false as const };
+  }
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId) || !isUuid(input.targetId)) {
     return { error: "invalid_teams_target", ok: false as const };
   }
@@ -1781,6 +1809,7 @@ async function prepareTeamsNotificationJobForDelivery(input: {
   id: string;
   workspaceId?: string | null;
 }): Promise<"pending_config" | "ready" | "skipped"> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) return "skipped";
   if (!hasDatabaseUrl() || !isUuid(input.id)) return "skipped";
 
   const row = await queryOne<{
@@ -1872,6 +1901,7 @@ async function claimTeamsNotificationJob(input: {
   leaseOwner: string;
   workspaceId?: string | null;
 }): Promise<ClaimedJobRow | null> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) return null;
   if (!hasDatabaseUrl() || !isUuid(input.id) || !input.leaseOwner) return null;
 
   return queryOne<ClaimedJobRow>(
@@ -1941,6 +1971,7 @@ async function claimTeamsNotificationJob(input: {
 }
 
 async function listDueTeamsNotificationJobIds(limit = 25, workspaceId?: string | null) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) return [];
   if (!hasDatabaseUrl()) return [];
 
   return queryRows<{ id: string }>(
@@ -2049,6 +2080,15 @@ async function markTeamsNotificationFailed(input: {
 }
 
 async function sendTeamsWebhook(job: ClaimedJobRow) {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return {
+      adminAction: undefined,
+      configurationCode: "launch_off",
+      error: "teams_notification_delivery_launch_off",
+      ok: false as const,
+      status: null,
+    };
+  }
   const readiness = validateNotificationTargetReadiness({
     alertType: job.alertType,
     projectId: job.projectId,
@@ -2124,6 +2164,9 @@ export async function processDueTeamsNotifications(
     workspaceId?: string | null;
   } = {},
 ): Promise<{ checked: number; failed: number; pendingConfig: number; sent: number }> {
+  if (!evaluateLaunchScope("teamsNotificationDelivery").allowed) {
+    return { checked: 0, failed: 0, pendingConfig: 0, sent: 0 };
+  }
   const refs = input.jobIds?.length
     ? input.jobIds.map((id) => ({ id }))
     : await listDueTeamsNotificationJobIds(input.limit ?? 25, input.workspaceId);

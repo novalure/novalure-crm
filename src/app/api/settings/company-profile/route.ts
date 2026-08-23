@@ -75,7 +75,13 @@ export async function PATCH(request: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: result.status });
+    return NextResponse.json(
+      {
+        error: result.reason,
+        issues: "issues" in result ? result.issues : undefined,
+      },
+      { status: result.status },
+    );
   }
 
   return NextResponse.json(result.payload);

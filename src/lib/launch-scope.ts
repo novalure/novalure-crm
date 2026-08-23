@@ -7,7 +7,7 @@ export const launchScopeDecisions = {
 export type LaunchScopeDecision =
   (typeof launchScopeDecisions)[keyof typeof launchScopeDecisions];
 
-export const launchScopePolicyVersion = "2026-08-22.7";
+export const launchScopePolicyVersion = "2026-08-22.11";
 
 /**
  * This is the enforceable technical candidate. It deliberately does not claim
@@ -36,6 +36,18 @@ const internalProductRoles = Object.freeze(["platform_admin", "novalureAdmin"]);
  * override: a missing or misspelled surface must stay closed in every runtime.
  */
 export const launchScopePolicy = Object.freeze({
+  accountAccessInvitationEmail: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Workspace invitation email requires approved Resend targets, sender-domain acceptance and signed account-access operations approval.",
+  }),
+  accountAccessPasswordResetEmail: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Password-reset email requires approved Resend targets, sender-domain acceptance and signed account-recovery operations approval.",
+  }),
+  authenticatedBotModelProvider: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Authenticated Bot model execution requires signed Product, Security and Operations approval plus an approved provider target and abuse controls.",
+  }),
   botChannelInboundProcessing: Object.freeze({
     decision: launchScopeDecisions.off,
     reason: "Inbound Bot channel processing, LLM execution and CRM mutation require signed Security, Product and Operations approval plus provider abuse acceptance.",
@@ -44,9 +56,17 @@ export const launchScopePolicy = Object.freeze({
     decision: launchScopeDecisions.off,
     reason: "Google and Microsoft calendar provider mutations require an approved QA target and provider acceptance.",
   }),
+  calendarProviderRead: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Google and Microsoft calendar availability reads require approved QA provider accounts, token handling and provider acceptance.",
+  }),
   customerCommunicationProviderMutation: Object.freeze({
     decision: launchScopeDecisions.off,
     reason: "Customer-facing meeting, bot, document and QA provider delivery requires signed Product and Operations scope plus approved isolated provider targets. Transactional account access email is a separate contract.",
+  }),
+  externalEmbeddingProvider: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "External embedding requests require signed Product, Security and Operations approval plus an approved provider target and data-processing acceptance.",
   }),
   funnelWebhookDelivery: Object.freeze({
     decision: launchScopeDecisions.off,
@@ -69,6 +89,14 @@ export const launchScopePolicy = Object.freeze({
   newsletterDelivery: Object.freeze({
     decision: launchScopeDecisions.off,
     reason: "Provider, sender domain, replay safety and allowlisted QA delivery are not approved.",
+  }),
+  mediaBlobMutation: Object.freeze({
+    decision: launchScopeDecisions.on,
+    reason: "Tenant-scoped runtime media and Blob mutations are a technical candidate for Preview validation; Production remains closed until the launch policy is signed.",
+  }),
+  propertyExportQueue: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Property export enqueueing remains unavailable until a durable consumer, retry contract, monitoring and Product approval exist.",
   }),
   propertyReservationRelationshipSync: Object.freeze({
     decision: launchScopeDecisions.off,
@@ -145,6 +173,14 @@ export const launchScopePolicy = Object.freeze({
     reason: "Database and migration diagnostics are an internal operations surface.",
     requiredProductPermissions: Object.freeze(["novalure:internal"]),
   }),
+  googleNotificationDelivery: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Google Chat notification delivery, queueing and retry require an approved provider target and signed Operations acceptance.",
+  }),
+  teamsNotificationDelivery: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "Microsoft Teams notification delivery, queueing and retry require an approved provider target and signed Operations acceptance.",
+  }),
 } satisfies Record<string, LaunchScopeRule>);
 
 export type LaunchScopeSurface = keyof typeof launchScopePolicy;
@@ -166,7 +202,12 @@ export function evaluateLaunchScope(
   | { allowed: true; decision: LaunchScopeDecision; rule: LaunchScopeRule }
   | {
       allowed: false;
-      code: "LAUNCH_SCOPE_INTERNAL_ONLY" | "LAUNCH_SCOPE_OFF" | "LAUNCH_SCOPE_UNKNOWN";
+      code:
+        | "LAUNCH_SCOPE_INTERNAL_ONLY"
+        | "LAUNCH_SCOPE_OFF"
+        | "LAUNCH_SCOPE_RUNTIME_UNSAFE"
+        | "LAUNCH_SCOPE_UNKNOWN"
+        | "LAUNCH_SCOPE_UNSIGNED";
       decision: LaunchScopeDecision;
       rule: LaunchScopeRule;
     } {
@@ -185,6 +226,28 @@ export function evaluateLaunchScope(
     return {
       allowed: false,
       code: "LAUNCH_SCOPE_OFF",
+      decision: rule.decision,
+      rule,
+    };
+  }
+  const vercelEnvironment = process.env.VERCEL_ENV?.trim().toLowerCase() ?? "";
+  const ambiguousVercelRuntime =
+    process.env.VERCEL === "1" &&
+    vercelEnvironment !== "production" &&
+    vercelEnvironment !== "preview" &&
+    vercelEnvironment !== "development";
+  if (ambiguousVercelRuntime) {
+    return {
+      allowed: false,
+      code: "LAUNCH_SCOPE_RUNTIME_UNSAFE",
+      decision: rule.decision,
+      rule,
+    };
+  }
+  if (vercelEnvironment === "production" && String(launchScopePolicyApproval) !== "SIGNED") {
+    return {
+      allowed: false,
+      code: "LAUNCH_SCOPE_UNSIGNED",
       decision: rule.decision,
       rule,
     };

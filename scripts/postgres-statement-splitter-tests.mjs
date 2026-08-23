@@ -32,6 +32,8 @@ for (const file of [
   "migrations/074_validate_launch_tenant_relation_guards.sql",
   "migrations/075_public_funnel_visit_truth.sql",
   "migrations/076_bot_webhook_durable_processing.sql",
+  "migrations/078_company_profile_approval_integrity.sql",
+  "migrations/079_public_funnel_visit_role_boundary.sql",
 ]) {
   const statements = splitPostgresStatements(await readFile(file, "utf8"));
   assert.ok(statements.length > 0, `${file} should contain executable statements`);

@@ -8,6 +8,7 @@ import type {
 import { executeQuery, queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
 
 type RepositoryWriteResult<T> =
@@ -1504,6 +1505,10 @@ export async function recordPropertyPreflightRun(input: {
   projectId?: string | null;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ id: string }>> {
+  if (!evaluateLaunchScope("propertyExportQueue").allowed) {
+    return { persisted: false, reason: "property_export_queue_launch_off" };
+  }
+
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "Database persistence is not configured" };
   }

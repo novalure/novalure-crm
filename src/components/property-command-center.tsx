@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -350,6 +350,7 @@ export function PropertyCommandCenter({
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mediaMutationsAllowed, setMediaMutationsAllowed] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(() => ({
@@ -389,6 +390,22 @@ export function PropertyCommandCenter({
     usageType: "residential",
     yearBuilt: "",
   }));
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/media?scopeOnly=true")
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { mutationsAllowed?: boolean } | null) => {
+        if (active) setMediaMutationsAllowed(payload?.mutationsAllowed === true);
+      })
+      .catch(() => {
+        if (active) setMediaMutationsAllowed(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filteredAssets = assets.filter((asset) => {
     const matchesStatus = statusFilter === "all" || asset.status === statusFilter;
@@ -524,7 +541,7 @@ export function PropertyCommandCenter({
   }
 
   async function uploadAndAttachFile(file: File, kind: "media" | "document") {
-    if (!selectedAsset?.sellerListingId || saving) return;
+    if (!mediaMutationsAllowed || !selectedAsset?.sellerListingId || saving) return;
     const setUploading = kind === "media" ? setUploadingMedia : setUploadingDocument;
     setUploading(true);
     setNotice(null);
@@ -1297,7 +1314,7 @@ export function PropertyCommandCenter({
                 <input
                   accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingMedia}
+                  disabled={!mediaMutationsAllowed || !selectedAsset?.sellerListingId || uploadingMedia}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void uploadAndAttachFile(file, "media");
@@ -1311,7 +1328,7 @@ export function PropertyCommandCenter({
                 <input
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingDocument}
+                  disabled={!mediaMutationsAllowed || !selectedAsset?.sellerListingId || uploadingDocument}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void uploadAndAttachFile(file, "document");

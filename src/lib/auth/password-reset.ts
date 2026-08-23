@@ -16,6 +16,7 @@ import { getPasswordValidationError, hashPassword } from "@/lib/auth/passwords";
 import { reserveAuthRateLimitAttempt } from "@/lib/auth/rate-limit";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import { validateCsrfRequestContext } from "@/lib/security/csrf-core";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 type ResetIdentityRow = {
   displayEmail: string;
@@ -197,12 +198,19 @@ async function insertPasswordResetToken(input: {
 
 export async function createMembershipPasswordResetLink(input: {
   language: LanguageCode;
+  purpose: "password_reset" | "workspace_invitation";
   requestIp?: string | null;
   ttlMinutes?: number;
   userAgent?: string | null;
   workspaceId: string;
   workspaceUserId: string;
 }) {
+  const launchSurface = input.purpose === "workspace_invitation"
+    ? "accountAccessInvitationEmail"
+    : "accountAccessPasswordResetEmail";
+  const launchScope = evaluateLaunchScope(launchSurface);
+  if (!launchScope.allowed) throw new Error(launchScope.code);
+
   const membership = await queryOne<{
     authIdentityId: string;
     email: string;
@@ -248,6 +256,9 @@ export async function requestPasswordReset(input: {
   language: LanguageCode;
   request: Request;
 }) {
+  if (!evaluateLaunchScope("accountAccessPasswordResetEmail").allowed) {
+    return { status: "unavailable" as const };
+  }
   const startedAt = Date.now();
   const email = normalizeAuthEmail(input.email);
 

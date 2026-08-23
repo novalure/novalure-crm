@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 const EMAIL_PATTERN = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
+const MAX_QA_EMAIL_ALLOWLIST_RECIPIENTS = 20;
 const PROVIDER_TIMEOUT_MS = 12_000;
 const RESEND_API_URL = "https://api.resend.com/emails";
 
@@ -45,7 +46,12 @@ export type EmailDeliveryPurpose =
  * when a caller reaches this adapter without its route/repository guard.
  */
 export function isEmailDeliveryPurposeLaunchEnabled(purpose: unknown) {
-  if (purpose === "password_reset" || purpose === "workspace_invitation") return true;
+  if (purpose === "password_reset") {
+    return evaluateLaunchScope("accountAccessPasswordResetEmail").allowed;
+  }
+  if (purpose === "workspace_invitation") {
+    return evaluateLaunchScope("accountAccessInvitationEmail").allowed;
+  }
   if (purpose === "newsletter") return evaluateLaunchScope("newsletterDelivery").allowed;
   if (
     purpose === "bot_document" ||
@@ -61,6 +67,29 @@ export function isEmailDeliveryPurposeLaunchEnabled(purpose: unknown) {
 function normalizeMailbox(value: string | undefined) {
   const mailbox = String(value ?? "").trim().toLowerCase();
   return EMAIL_PATTERN.test(mailbox) ? mailbox : "";
+}
+
+function getPreviewQaEmailAllowlist() {
+  const raw = String(process.env.NOVALURE_QA_EMAIL_ALLOWLIST ?? "").trim();
+  if (!raw) return null;
+
+  const entries = raw.split(/[\s,;]+/).filter(Boolean);
+  if (!entries.length || entries.length > MAX_QA_EMAIL_ALLOWLIST_RECIPIENTS) return null;
+
+  const normalized = entries.map((entry) => normalizeMailbox(entry));
+  if (normalized.some((mailbox) => !mailbox)) return null;
+
+  return new Set(normalized);
+}
+
+function evaluatePreviewRecipient(recipient: string) {
+  if (String(process.env.VERCEL_ENV ?? "").trim().toLowerCase() !== "preview") {
+    return "not_applicable" as const;
+  }
+
+  const allowlist = getPreviewQaEmailAllowlist();
+  if (!allowlist) return "misconfigured" as const;
+  return allowlist.has(recipient) ? ("allowed" as const) : ("denied" as const);
 }
 
 function normalizeApiKey(value: string | undefined) {
@@ -142,6 +171,34 @@ export async function sendNewsletterEmail(input: {
     };
   }
 
+  const to = normalizeMailbox(input.to);
+  if (!to) {
+    return {
+      provider: "resend",
+      status: "failed",
+      error: "Email request contains an invalid recipient",
+      errorCode: "invalid_input",
+    };
+  }
+
+  const previewRecipient = evaluatePreviewRecipient(to);
+  if (previewRecipient === "misconfigured") {
+    return {
+      provider: "resend",
+      status: "failed",
+      error: "Preview email recipient allowlist is not configured correctly",
+      errorCode: "configuration",
+    };
+  }
+  if (previewRecipient === "denied") {
+    return {
+      provider: "resend",
+      status: "failed",
+      error: "Email recipient is not approved for Preview delivery",
+      errorCode: "invalid_input",
+    };
+  }
+
   const providerStatus = getNewsletterProviderStatus();
   const apiKey = normalizeApiKey(process.env.RESEND_API_KEY);
 
@@ -154,7 +211,6 @@ export async function sendNewsletterEmail(input: {
     };
   }
 
-  const to = normalizeMailbox(input.to);
   const requestedFrom = String(input.from ?? "").trim();
   const from = providerStatus.from;
   const replyTo = input.replyTo?.trim() ? normalizeMailbox(input.replyTo) : "";

@@ -957,6 +957,13 @@ async function listExternalBusyTimes(input: {
   timeZone: string;
   workspaceId: string;
 }) {
+  if (
+    (input.calendarProvider === "google" || input.calendarProvider === "microsoft") &&
+    !evaluateLaunchScope("calendarProviderRead").allowed
+  ) {
+    return { error: "calendar_provider_unavailable" as const, ranges: [] };
+  }
+
   try {
     if (input.calendarProvider === "google") {
       return {

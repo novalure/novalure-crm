@@ -170,6 +170,7 @@ type BotActionsApiResponse = {
 
 type BotDocumentsApiResponse = {
   assets?: BotDocumentAsset[];
+  mutationsAllowed?: boolean;
   quota?: {
     limitBytes: number;
     maxFileBytes: number;
@@ -484,6 +485,7 @@ export function BotCommandCenter({
   const [botSetupSaveStatus, setBotSetupSaveStatus] = useState<"idle" | "ready" | "error">("idle");
   const [botSetupSavingId, setBotSetupSavingId] = useState<string | null>(null);
   const [documentAssets, setDocumentAssets] = useState<BotDocumentAsset[]>([]);
+  const [documentMutationsAllowed, setDocumentMutationsAllowed] = useState(false);
   const [documentQuota, setDocumentQuota] = useState<BotDocumentsApiResponse["quota"] | null>(null);
   const [documentUploadErrors, setDocumentUploadErrors] = useState<Record<string, string>>({});
   const [documentUploadingId, setDocumentUploadingId] = useState<string | null>(null);
@@ -719,6 +721,7 @@ export function BotCommandCenter({
         setPolicyRules(channelData.policyRules ?? []);
         setApprovals(approvalData.approvals ?? []);
         setDocumentAssets(documentData.assets ?? []);
+        setDocumentMutationsAllowed(documentData.mutationsAllowed === true);
         setDocumentQuota(documentData.quota ?? null);
         setDocumentSends(actionData.documentSends ?? []);
         setMeetingBookings(actionData.meetingBookings ?? []);
@@ -901,6 +904,14 @@ export function BotCommandCenter({
   }
 
   async function uploadDocumentForAction(documentSend: BotActionDocumentSend, file: File) {
+    if (!documentMutationsAllowed) {
+      setDocumentUploadErrors((current) => ({
+        ...current,
+        [documentSend.id]: text.documentUploadFailed,
+      }));
+      return;
+    }
+
     const maxFileBytes = documentQuota?.maxFileBytes ?? 10 * 1024 * 1024;
 
     if (file.size > maxFileBytes) {
@@ -1659,7 +1670,7 @@ export function BotCommandCenter({
                                   <input
                                     accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
                                     className="sr-only"
-                                    disabled={isUploading || isUpdating}
+                                    disabled={!documentMutationsAllowed || isUploading || isUpdating}
                                     onChange={(event) => {
                                       const file = event.target.files?.[0];
                                       if (file) void uploadDocumentForAction(documentSend, file);

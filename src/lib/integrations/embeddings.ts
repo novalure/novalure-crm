@@ -1,3 +1,5 @@
+import { evaluateLaunchScope } from "@/lib/launch-scope";
+
 export type EmbeddingResult = {
   embedding: number[];
   model: string;
@@ -38,6 +40,17 @@ function resolveEmbeddingProviderConfig() {
 }
 
 export function getEmbeddingProviderStatus() {
+  const launchScope = evaluateLaunchScope("externalEmbeddingProvider");
+  if (!launchScope.allowed) {
+    return {
+      configured: false,
+      provider: "deterministic-local",
+      model: "deterministic-local-1536",
+      external: false,
+      reason: "external_embedding_provider_launch_off",
+    };
+  }
+
   const config = resolveEmbeddingProviderConfig();
   const model = process.env.NOVALURE_EMBEDDING_MODEL || "text-embedding-3-small";
 
@@ -66,6 +79,17 @@ function deterministicEmbedding(text: string, dimensions = 1536) {
 }
 
 export async function embedText(text: string): Promise<EmbeddingResult> {
+  const launchScope = evaluateLaunchScope("externalEmbeddingProvider");
+  if (!launchScope.allowed) {
+    return {
+      embedding: deterministicEmbedding(text),
+      model: "deterministic-local-1536",
+      provider: "deterministic-local",
+      external: false,
+      reason: "external_embedding_provider_launch_off",
+    };
+  }
+
   const config = resolveEmbeddingProviderConfig();
 
   if (!config) {

@@ -22,19 +22,28 @@ export async function GET(request: Request) {
     );
   }
   const run = createCronRun({ route: "property-reservations" });
-  if (areQueueWorkersPaused()) {
-    return Response.json({ ok: true, paused: true, runId: run.runId });
+  try {
+    if (areQueueWorkersPaused()) {
+      const response = Response.json({ ok: true, paused: true, runId: run.runId });
+      run.succeed("paused");
+      return response;
+    }
+
+    const result = await expireOverduePropertyReservations({
+      limit: getLimit(request),
+      source: "cron/property-reservations",
+    });
+
+    const response = Response.json({
+      durationMs: run.durationMs(),
+      ok: true,
+      runId: run.runId,
+      ...result,
+    });
+    run.succeed();
+    return response;
+  } catch (error) {
+    run.fail();
+    throw error;
   }
-
-  const result = await expireOverduePropertyReservations({
-    limit: getLimit(request),
-    source: "cron/property-reservations",
-  });
-
-  return Response.json({
-    durationMs: run.durationMs(),
-    ok: true,
-    runId: run.runId,
-    ...result,
-  });
 }

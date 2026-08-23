@@ -60,6 +60,9 @@ async function loadCommonJsTypeScript(path, dependencyMocks) {
     process,
     require(specifier) {
       if (Object.hasOwn(dependencyMocks, specifier)) return dependencyMocks[specifier];
+      if (specifier === "@/lib/launch-scope") {
+        return { evaluateLaunchScope: () => ({ allowed: true }) };
+      }
       if (specifier === "server-only") return {};
       if (specifier.startsWith("node:")) return nodeRequire(specifier);
       throw new Error(`Unexpected runtime import in ${path}: ${specifier}`);

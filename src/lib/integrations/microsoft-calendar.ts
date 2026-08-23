@@ -302,6 +302,9 @@ export async function listMicrosoftBusyTimes(input: {
   timeMin: string;
   workspaceId: string;
 }): Promise<Array<{ end: string; start: string }>> {
+  if (!evaluateLaunchScope("calendarProviderRead").allowed) {
+    throw new Error(calendarProviderReadUnavailableCode);
+  }
   const graph = await getGraphToken(input.workspaceId);
   if (!graph) throw new Error(calendarProviderReadUnavailableCode);
 

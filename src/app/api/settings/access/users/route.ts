@@ -10,6 +10,7 @@ import {
   updateSettingsWorkspaceUser,
 } from "@/lib/db/settings-access-repositories";
 import { resolveRequestLanguage } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 async function readJson(request: Request) {
   try {
@@ -71,6 +72,23 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "invite";
+  const launchSurface = operation === "password_reset"
+    ? "accountAccessPasswordResetEmail"
+    : operation === "revoke_invitation"
+      ? null
+      : "accountAccessInvitationEmail";
+  const launchScope = launchSurface ? evaluateLaunchScope(launchSurface) : null;
+  if (launchScope && !launchScope.allowed) {
+    return NextResponse.json(
+      {
+        code: launchScope.code,
+        error: launchSurface === "accountAccessPasswordResetEmail"
+          ? "account_access_password_reset_email_launch_off"
+          : "account_access_invitation_email_launch_off",
+      },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
   const language = resolveRequestLanguage(request);
   const requestIp = getTrustedAuthClientIp(request.headers);
   const userAgent = request.headers.get("user-agent");

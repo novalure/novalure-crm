@@ -54,6 +54,39 @@ test("company profile repository enforces scope separation, country preflight an
   assert.match(repo, /writeAuditLog/);
 });
 
+test("company profile approvals are preflighted, immutable and atomically evidenced", () => {
+  const repo = readText("src/lib/db/company-profile-repositories.ts");
+  const route = readText("src/app/api/settings/company-profile/route.ts");
+  const migration = readText("migrations/078_company_profile_approval_integrity.sql");
+  const saveStart = repo.indexOf("export async function saveCompanyProfile");
+  assert.notEqual(saveStart, -1);
+  const save = repo.slice(saveStart);
+
+  assert.match(repo, /status: "needs_review"/);
+  assert.match(repo, /Freigabestatus ist ohne Approver und Freigabezeitpunkt ungültig/);
+  assert.match(save, /withDatabaseTransaction/);
+  assert.match(save, /forUpdate: true/);
+  assert.match(save, /protectedContentChanges/);
+  assert.match(save, /Company profile must be moved to needs_review/);
+  assert.match(save, /runCompanyProfilePreflight\(candidate, input\.session\)/);
+  assert.match(save, /Company profile approval preflight failed/);
+  assert.match(save, /const approvedByUserId = approving[\s\S]*: null/);
+  assert.match(save, /const approvedAt = approving[\s\S]*: null/);
+  assert.match(save, /transaction\.execute\(/);
+  assert.match(save, /writeAuditLog\([\s\S]*transaction,/);
+  assert.ok(
+    save.indexOf("runCompanyProfilePreflight(candidate") < save.indexOf("update company_profiles"),
+    "approval preflight must run before the profile write",
+  );
+
+  assert.match(migration, /status = 'needs_review'/);
+  assert.match(migration, /approved_by_user_id = null/);
+  assert.match(migration, /company_profiles_approval_integrity_check/);
+  assert.match(migration, /jsonb_array_length\(representatives\) > 0/);
+  assert.match(migration, /validate constraint company_profiles_approval_integrity_check/);
+  assert.match(route, /"issues" in result \? result\.issues/);
+});
+
 test("company profile and access APIs are mounted under settings", () => {
   const profileRoute = readText("src/app/api/settings/company-profile/route.ts");
   const accessRoute = readText("src/app/api/settings/access/users/route.ts");

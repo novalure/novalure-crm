@@ -35,6 +35,14 @@ const infraEnvironmentKeys = [
   "NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST",
   "NOVALURE_PRODUCTION_PROJECT_FINGERPRINT",
   "NOVALURE_PRODUCTION_PROJECT_ID",
+  "NOVALURE_RECOVERY_DATABASE_HOST",
+  "NOVALURE_RECOVERY_BRANCH_ID",
+  "NOVALURE_RECOVERY_DATABASE_NAME",
+  "NOVALURE_RECOVERY_DATABASE_ROLE",
+  "NOVALURE_RECOVERY_MIGRATION_DATABASE_ROLE",
+  "NOVALURE_RECOVERY_MIGRATION_DATABASE_HOST",
+  "NOVALURE_RECOVERY_PROJECT_FINGERPRINT",
+  "NOVALURE_RECOVERY_PROJECT_ID",
   "NOVALURE_QA_DATABASE_HOST",
   "NOVALURE_QA_BRANCH_ID",
   "NOVALURE_QA_DATABASE_NAME",
@@ -263,6 +271,108 @@ test("migration connections verify the actual Neon branch, database and role", a
     }),
     /PostgreSQL version does not meet the migration-runner requirement/,
   );
+});
+
+test("recovery migrations require one exact Production-project child branch", async () => {
+  await withoutInfraEnvironment(async () => {
+    const env = {
+      NOVALURE_PRODUCTION_BRANCH_ID: "br-production-main-1234",
+      NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: "prod-main.example.neon.tech",
+      NOVALURE_PRODUCTION_PROJECT_ID: "prod-project-1234",
+      NOVALURE_QA_MIGRATION_DATABASE_HOST: "qa-isolated.example.neon.tech",
+      NOVALURE_RECOVERY_BRANCH_ID: "br-recovery-child-1234",
+      NOVALURE_RECOVERY_DATABASE_NAME: "neondb",
+      NOVALURE_RECOVERY_DATABASE_ROLE: "novalure_app",
+      NOVALURE_RECOVERY_MIGRATION_DATABASE_HOST: "recovery-child.example.neon.tech",
+      NOVALURE_RECOVERY_MIGRATION_DATABASE_ROLE: "migration_owner",
+      NOVALURE_RECOVERY_PROJECT_ID: "prod-project-1234",
+      POSTGRES_NEON_PROJECT_ID: "prod-project-1234",
+    };
+    const databaseUrlFixture = new URL("postgresql://recovery-child.example.neon.tech/neondb");
+    databaseUrlFixture.username = "migration_owner";
+    databaseUrlFixture.password = "fixture_not_a_secret";
+    const databaseUrl = databaseUrlFixture.href;
+
+    assert.deepEqual(
+      assertDatabaseTarget({
+        connectionMode: "direct",
+        databaseUrl,
+        env,
+        purpose: "recovery migration test",
+        target: "recovery",
+      }),
+      {
+        host: "recovery-child.example.neon.tech",
+        projectId: "prod-project-1234",
+        target: "recovery",
+      },
+    );
+
+    const actual = {
+      branchId: "br-recovery-child-1234",
+      databaseName: "neondb",
+      projectId: "prod-project-1234",
+      roleName: "migration_owner",
+      serverVersionNum: "170004",
+    };
+    assert.deepEqual(
+      await assertConnectedDatabaseTarget({
+        client: { query: async () => ({ rows: [actual] }) },
+        connectionMode: "direct",
+        env,
+        minimumServerVersionNum: 170000,
+        target: "recovery",
+      }),
+      { ...actual, serverVersionNum: 170004, target: "recovery" },
+    );
+
+    assert.throws(
+      () => assertDatabaseTarget({
+        connectionMode: "direct",
+        databaseUrl,
+        env: { ...env, NOVALURE_PRODUCTION_PROJECT_ID: "different-prod-project" },
+        target: "recovery",
+      }),
+      /exact declared Production Neon project/,
+    );
+    assert.throws(
+      () => assertDatabaseTarget({
+        connectionMode: "direct",
+        databaseUrl,
+        env: {
+          ...env,
+          NOVALURE_RECOVERY_BRANCH_ID: "br-production-main-1234",
+        },
+        target: "recovery",
+      }),
+      /must differ from Production Main/,
+    );
+    assert.throws(
+      () => assertDatabaseTarget({
+        connectionMode: "direct",
+        databaseUrl,
+        env: {
+          ...env,
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: "recovery-child.example.neon.tech",
+        },
+        target: "recovery",
+      }),
+      /target hosts must be different/,
+    );
+    await assert.rejects(
+      () => assertConnectedDatabaseTarget({
+        client: {
+          query: async () => ({
+            rows: [{ ...actual, branchId: "br-production-main-1234" }],
+          }),
+        },
+        connectionMode: "direct",
+        env,
+        target: "recovery",
+      }),
+      /does not match the declared recovery target/,
+    );
+  });
 });
 
 test("database scripts use the central target guard without embedded provider fingerprints", async () => {

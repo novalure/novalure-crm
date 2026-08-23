@@ -10,7 +10,8 @@ import {
   parseFunnelVisitRequest,
 } from "@/lib/funnel-runtime-contract";
 import {
-  createPublicFunnelVisitIdHash,
+  createPublicFunnelVisitIngressRateLimitPolicies,
+  createPublicFunnelVisitProofIdentityHash,
   createPublicFunnelVisitRateLimitPolicies,
 } from "@/lib/funnel-runtime-security";
 import { runFunnelLivePreflight } from "@/lib/funnel-live-preflight";
@@ -66,6 +67,17 @@ export async function POST(request: Request, context: RouteContext) {
   const visitRequest = parseFunnelVisitRequest(parsedRequest.value);
   if (!visitRequest) return json({ error: "invalid_funnel_visit" }, 400);
 
+  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
+  if (!clientIp) return json({ error: "funnel_visit_unavailable" }, 503);
+  try {
+    const ingressRateLimit = await consumePublicSubmissionRateLimits({
+      policies: createPublicFunnelVisitIngressRateLimitPolicies({ clientIp }),
+    });
+    if (!ingressRateLimit.allowed) return json({ error: "rate_limited" }, 429);
+  } catch {
+    return json({ error: "funnel_visit_unavailable" }, 503);
+  }
+
   let stored: Awaited<ReturnType<typeof getStoredFunnel>>;
   try {
     stored = await getStoredFunnel(funnelId);
@@ -86,6 +98,7 @@ export async function POST(request: Request, context: RouteContext) {
     return stalePublicationResponse();
   }
 
+  let proofIdempotencyKey = "";
   let scope: string;
   try {
     scope = buildPublicSubmissionScope({
@@ -102,19 +115,16 @@ export async function POST(request: Request, context: RouteContext) {
       scope,
     });
     if (!proofValidation.ok) return json({ error: proofValidation.reason }, 400);
+    proofIdempotencyKey = proofValidation.proof.idempotencyKey;
   } catch {
     return json({ error: "funnel_visit_unavailable" }, 503);
   }
 
-  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-  if (!clientIp) return json({ error: "funnel_visit_unavailable" }, 503);
-
   try {
     const rateLimit = await consumePublicSubmissionRateLimits({
       policies: createPublicFunnelVisitRateLimitPolicies({
-        clientIp,
+        idempotencyKey: proofIdempotencyKey,
         scope,
-        visitId: visitRequest.visitId,
       }),
     });
     if (!rateLimit.allowed) return json({ error: "rate_limited" }, 429);
@@ -122,9 +132,9 @@ export async function POST(request: Request, context: RouteContext) {
     const result = await recordPublicFunnelVisit({
       funnelId: stored.funnelId,
       publicationRevision,
-      visitIdHash: createPublicFunnelVisitIdHash({
+      visitIdHash: createPublicFunnelVisitProofIdentityHash({
+        idempotencyKey: proofIdempotencyKey,
         scope,
-        visitId: visitRequest.visitId,
       }),
       workspaceId: stored.workspaceId,
     });

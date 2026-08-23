@@ -514,6 +514,8 @@ export async function getCalendarReadAccessToken(input: {
   provider: CalendarOAuthProvider;
   workspaceId: string;
 }) {
+  if (!evaluateLaunchScope("calendarProviderRead").allowed) return null;
+
   const row = await getProviderConnection(input.workspaceId, input.provider);
   if (!row || row.status !== "connected") return null;
 

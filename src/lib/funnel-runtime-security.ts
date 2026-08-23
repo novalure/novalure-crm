@@ -2,13 +2,13 @@ import "server-only";
 
 import { createPublicSubmissionOpaqueHash } from "@/lib/security/public-submission-abuse";
 
-export function createPublicFunnelVisitIdHash(input: {
+export function createPublicFunnelVisitProofIdentityHash(input: {
+  idempotencyKey: string;
   scope: string;
-  visitId: string;
 }) {
   return createPublicSubmissionOpaqueHash({
-    label: "public-funnel-visit-id",
-    value: `${input.scope}\n${input.visitId}`,
+    label: "public-funnel-visit-proof-identity",
+    value: `${input.scope}\n${input.idempotencyKey}`,
   });
 }
 
@@ -36,10 +36,22 @@ export function createPublicFunnelProofRefreshRateLimitPolicies(input: {
   ];
 }
 
-export function createPublicFunnelVisitRateLimitPolicies(input: {
+export function createPublicFunnelVisitIngressRateLimitPolicies(input: {
   clientIp: string;
+}) {
+  return [{
+    keyHash: createPublicSubmissionOpaqueHash({
+      label: "public-funnel-visit-ingress-rate-ip",
+      value: input.clientIp,
+    }),
+    limit: 90,
+    windowSeconds: 10 * 60,
+  }];
+}
+
+export function createPublicFunnelVisitRateLimitPolicies(input: {
+  idempotencyKey: string;
   scope: string;
-  visitId: string;
 }) {
   const hash = (label: string, value: string) =>
     createPublicSubmissionOpaqueHash({
@@ -49,12 +61,7 @@ export function createPublicFunnelVisitRateLimitPolicies(input: {
 
   return [
     {
-      keyHash: hash("ip", input.clientIp),
-      limit: 90,
-      windowSeconds: 10 * 60,
-    },
-    {
-      keyHash: hash("visit", input.visitId),
+      keyHash: hash("proof", input.idempotencyKey),
       limit: 8,
       windowSeconds: 15 * 60,
     },

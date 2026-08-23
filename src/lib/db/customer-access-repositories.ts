@@ -18,6 +18,7 @@ import { queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getNewsletterProviderStatus, sendNewsletterEmail } from "@/lib/integrations/resend";
 import { isProductRole, mapProductRoleToTechnicalRole, type ProductRole } from "@/lib/product-model";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type CustomerAccessHealth = CustomerWorkspaceAccess["health"];
 export type CustomerAccessProjectRole = WorkspaceRole;
@@ -655,6 +656,9 @@ export async function inviteWorkspaceUser(input: {
   session: AppSession;
   userAgent?: string | null;
 }) {
+  if (!evaluateLaunchScope("accountAccessInvitationEmail").allowed) {
+    return { ok: false as const, reason: "account_access_invitation_email_launch_off", status: 503 };
+  }
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { ok: false as const, reason: "Database persistence is not configured" };
   }
@@ -746,6 +750,7 @@ export async function inviteWorkspaceUser(input: {
 
   const created = await createMembershipPasswordResetLink({
     language: input.language === "de" ? "de" : "en",
+    purpose: "workspace_invitation",
     requestIp: input.requestIp,
     ttlMinutes: 10080,
     userAgent: input.userAgent,

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { del, get, put } from "@vercel/blob";
+import { BlobNotFoundError, del, get, head, put } from "@vercel/blob";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   createMediaShareToken,
   hasExpectedMediaMagicBytes,
@@ -183,6 +184,8 @@ export async function saveWorkspaceImage(input: {
   name?: string;
   workspaceId: string;
 }) {
+  assertMediaBlobMutationAllowed();
+
   if (!isAllowedImage(input.file)) {
     throw new MediaStoreError("UNSUPPORTED_IMAGE_TYPE", "Only JPG, PNG, WebP, GIF and AVIF images are supported.");
   }
@@ -197,6 +200,8 @@ export async function saveWorkspaceFile(input: {
   name?: string;
   workspaceId: string;
 }) {
+  assertMediaBlobMutationAllowed();
+
   const sizeBytes = input.file.size;
 
   if (!isAllowedMediaFile(input.file)) {
@@ -250,7 +255,15 @@ export async function saveWorkspaceFile(input: {
   try {
     await persistMediaAsset(asset);
   } catch (error) {
-    await deleteStoredFile(asset).catch(() => undefined);
+    try {
+      await deleteStoredFile(asset);
+    } catch (compensationError) {
+      throw new MediaStoreError(
+        "STORAGE_COMPENSATION_FAILED",
+        "Media upload could not be finalized safely.",
+        { cause: new AggregateError([error, compensationError], "Media metadata persistence and Blob compensation failed.") },
+      );
+    }
     throw error;
   }
 
@@ -305,6 +318,8 @@ export async function publishWorkspaceMedia(
   workspaceId: string,
   options: MediaPublicationOptions = {},
 ) {
+  assertMediaBlobMutationAllowed();
+
   const existingAsset = await findWorkspaceMediaAsset(assetId, workspaceId);
   if (!existingAsset) return null;
   storagePathname(existingAsset);
@@ -383,6 +398,8 @@ export async function revokeWorkspaceMediaShare(
   workspaceId: string,
   publicShareId: string,
 ) {
+  assertMediaBlobMutationAllowed();
+
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
       `
@@ -462,6 +479,8 @@ export async function extendWorkspaceMediaShare(
   publicShareId: string,
   expiresInSeconds: number,
 ) {
+  assertMediaBlobMutationAllowed();
+
   const expiresAt = new Date(Date.now() + getMediaShareTtlSeconds(expiresInSeconds) * 1000).toISOString();
 
   if (hasDatabaseUrl()) {
@@ -500,6 +519,8 @@ export async function extendWorkspaceMediaShare(
 }
 
 export async function revokeWorkspaceMediaPublication(assetId: string, workspaceId: string) {
+  assertMediaBlobMutationAllowed();
+
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
       `
@@ -606,10 +627,20 @@ export function mediaAssetPath(asset: MediaAsset) {
 }
 
 export async function deleteWorkspaceMedia(assetId: string, workspaceId: string) {
+  assertMediaBlobMutationAllowed();
+
   const asset = hasDatabaseUrl()
     ? await findWorkspaceMediaAsset(assetId, workspaceId)
     : (await readMediaLibrary()).assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
   if (!asset) return null;
+
+  // Physical storage is removed first. If this fails, metadata remains intact so
+  // the operation is observable and retryable instead of creating an orphaned Blob.
+  try {
+    await deleteStoredFile(asset);
+  } catch (error) {
+    throw new MediaStoreError("STORAGE_DELETE_FAILED", "Media storage deletion failed.", { cause: error });
+  }
 
   if (hasDatabaseUrl()) {
     await executeQuery("delete from media_assets where id = $1 and workspace_id = $2", [assetId, workspaceId]);
@@ -619,13 +650,23 @@ export async function deleteWorkspaceMedia(assetId: string, workspaceId: string)
     library.shares = library.shares.filter((item) => item.assetId !== assetId || item.workspaceId !== workspaceId);
     await writeMediaLibrary(library);
   }
-
-  await deleteStoredFile(asset).catch(() => undefined);
   return asset;
 }
 
 export async function mediaAssetExists(asset: MediaAsset) {
-  if (asset.storageProvider === "vercel-blob") return true;
+  if (asset.storageProvider === "vercel-blob") {
+    const token = blobTokenForAsset(asset);
+    try {
+      await head(storagePathname(asset), {
+        abortSignal: AbortSignal.timeout(15_000),
+        token,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof BlobNotFoundError) return false;
+      throw new MediaStoreError("STORAGE_READ_FAILED", "Media storage could not be verified.", { cause: error });
+    }
+  }
 
   try {
     await stat(mediaAssetPath(asset));
@@ -679,14 +720,22 @@ export class MediaStoreError extends Error {
     | "FILE_TOO_LARGE"
     | "IMAGE_TOO_LARGE"
     | "INVALID_STORAGE_REFERENCE"
+    | "LAUNCH_SCOPE_INTERNAL_ONLY"
+    | "LAUNCH_SCOPE_OFF"
+    | "LAUNCH_SCOPE_RUNTIME_UNSAFE"
+    | "LAUNCH_SCOPE_UNKNOWN"
+    | "LAUNCH_SCOPE_UNSIGNED"
     | "PRIVATE_STORAGE_UNAVAILABLE"
     | "PUBLIC_STORAGE_UNAVAILABLE"
+    | "STORAGE_COMPENSATION_FAILED"
+    | "STORAGE_DELETE_FAILED"
+    | "STORAGE_READ_FAILED"
     | "UNSUPPORTED_FILE_TYPE"
     | "UNSUPPORTED_IMAGE_TYPE"
     | "WORKSPACE_QUOTA_EXCEEDED";
 
-  constructor(code: MediaStoreError["code"], message: string) {
-    super(message);
+  constructor(code: MediaStoreError["code"], message: string, options?: ErrorOptions) {
+    super(message, options);
     this.code = code;
   }
 }
@@ -865,6 +914,8 @@ async function storeMediaFile(
   file: File,
   relativePath: string,
 ): Promise<Pick<MediaAsset, "relativePath" | "storageAccess" | "storageProvider">> {
+  assertMediaBlobMutationAllowed();
+
   const privateToken = privateBlobToken();
   if (privateToken) {
     const blob = await put(relativePath, file, {
@@ -896,9 +947,10 @@ async function storeMediaFile(
 }
 
 async function deleteStoredFile(asset: MediaAsset) {
+  assertMediaBlobMutationAllowed();
+
   if (asset.storageProvider === "vercel-blob") {
-    const token = asset.storageAccess === "private" ? privateBlobToken() : publicBlobToken();
-    if (!token) throw new MediaStoreError("PRIVATE_STORAGE_UNAVAILABLE", "Media storage is unavailable.");
+    const token = blobTokenForAsset(asset);
     await del(storagePathname(asset), { token });
     return;
   }
@@ -906,28 +958,53 @@ async function deleteStoredFile(asset: MediaAsset) {
   await rm(mediaAssetPath(asset), { force: true });
 }
 
+function assertMediaBlobMutationAllowed() {
+  const launchScope = evaluateLaunchScope("mediaBlobMutation");
+  if (!launchScope.allowed) {
+    throw new MediaStoreError(launchScope.code, "Runtime media mutation is unavailable until launch scope is approved.");
+  }
+}
+
+function blobTokenForAsset(asset: MediaAsset) {
+  const privateAccess = asset.storageAccess === "private";
+  const token = privateAccess ? privateBlobToken() : publicBlobToken();
+  if (!token) {
+    throw new MediaStoreError(
+      privateAccess ? "PRIVATE_STORAGE_UNAVAILABLE" : "PUBLIC_STORAGE_UNAVAILABLE",
+      "Media storage is unavailable.",
+    );
+  }
+  return token;
+}
+
 function privateBlobToken() {
-  if (process.env.VERCEL_ENV?.trim().toLowerCase() === "preview") {
+  const environment = process.env.VERCEL_ENV?.trim().toLowerCase();
+  if (environment === "preview") {
     return process.env.NOVALURE_PREVIEW_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() || "";
   }
-
-  return (
-    process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() ||
-    process.env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() ||
-    ""
-  );
+  if (environment === "production") {
+    return (
+      process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() ||
+      process.env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() ||
+      ""
+    );
+  }
+  return "";
 }
 
 function publicBlobToken() {
-  if (process.env.VERCEL_ENV?.trim().toLowerCase() === "preview") {
+  const environment = process.env.VERCEL_ENV?.trim().toLowerCase();
+  if (environment === "preview") {
     return process.env.NOVALURE_PREVIEW_PUBLIC_BLOB_READ_WRITE_TOKEN?.trim() || "";
   }
-
-  return (
-    process.env.NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN?.trim() ||
-    process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
-    ""
-  );
+  if (environment === "production") {
+    return (
+      process.env.NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN?.trim() ||
+      process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
+      ""
+    );
+  }
+  return "";
 }
 
 function assertBlobAccessConfigured(asset: MediaAsset) {

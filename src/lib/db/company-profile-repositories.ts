@@ -9,7 +9,13 @@ import type {
   CompanyProfileVersion,
 } from "@/lib/crm-types";
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
-import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import {
+  hasDatabaseUrl,
+  queryOne,
+  queryRows,
+  withDatabaseTransaction,
+  type DatabaseTransaction,
+} from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { hasProductCapability } from "@/lib/product-model";
 
@@ -255,7 +261,7 @@ function buildFallbackProfile(scope: CompanyProfileScope, session: AppSession, o
       registrationAuthority: companyLegalDetails.registeredWith,
       registrationNumber: companyLegalDetails.companyNumber,
       representatives: [],
-      status: "approved",
+      status: "needs_review",
       taxNumber: "",
       updatedAt: now,
       usageSettings: { emails: true, imprint: true, legalFooter: true, privacy: true },
@@ -356,7 +362,7 @@ export function runCompanyProfilePreflight(profile: CompanyProfile, session: App
     issues.push({
       field: "countryCode",
       message: "Landesspezifische Pflichtfelder sind nur für AT, DE und IE vorbereitet.",
-      severity: "warning",
+      severity: "blocker",
     });
   }
 
@@ -404,12 +410,34 @@ export function runCompanyProfilePreflight(profile: CompanyProfile, session: App
     issues.push({ field: "vatId", message: "VAT/UID passt nicht zum ausgewählten Land.", severity: "warning" });
   }
 
+  if (
+    (profile.status === "approved" || profile.status === "locked") &&
+    (!profile.approvedAt || !profile.approvedByUserId)
+  ) {
+    issues.push({
+      field: "status",
+      message: "Freigabestatus ist ohne Approver und Freigabezeitpunkt ungültig.",
+      severity: "blocker",
+    });
+  }
+
   return issues;
 }
 
-async function findProfile(scope: CompanyProfileScope, session: AppSession, organizationId?: string) {
+async function findProfile(
+  scope: CompanyProfileScope,
+  session: AppSession,
+  organizationId?: string,
+  options: { forUpdate?: boolean; transaction?: DatabaseTransaction } = {},
+) {
+  const lockClause = options.forUpdate ? "for update" : "";
+  const fetchOne = (query: string, params: readonly unknown[] = []) =>
+    options.transaction
+      ? options.transaction.queryOne<CompanyProfileRow>(query, params)
+      : queryOne<CompanyProfileRow>(query, [...params]);
+
   if (scope === "platform_operator") {
-    return queryOne<CompanyProfileRow>(
+    return fetchOne(
       `
         select
           id,
@@ -446,12 +474,13 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
         from company_profiles
         where profile_scope = 'platform_operator'
         limit 1
+        ${lockClause}
       `,
     );
   }
 
   if (scope === "crm_account") {
-    return queryOne<CompanyProfileRow>(
+    return fetchOne(
       `
         select
           id,
@@ -490,12 +519,13 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
           and workspace_id = $1
           and organization_id = $2
         limit 1
+        ${lockClause}
       `,
       [session.workspaceId, organizationId],
     );
   }
 
-  return queryOne<CompanyProfileRow>(
+  return fetchOne(
     `
       select
         id,
@@ -533,6 +563,7 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
       where profile_scope = 'workspace_owner'
         and workspace_id = $1
       limit 1
+      ${lockClause}
     `,
     [session.workspaceId],
   );
@@ -669,24 +700,74 @@ export async function saveCompanyProfile(input: {
     return { ok: false as const, reason: "Company profile access is not allowed for this role", status: 403 };
   }
 
-  const existingRow = await findProfile(scope, input.session, organizationId);
-  const existing = existingRow ? toProfile(existingRow) : buildFallbackProfile(scope, input.session, organizationId);
-  if (existing.status === "locked" && !canApproveScope(input.session, scope)) {
-    return { ok: false as const, reason: "Company profile is locked", status: 423 };
-  }
+  const transactionResult = await withDatabaseTransaction(async (transaction) => {
+    const existingRow = await findProfile(scope, input.session, organizationId, {
+      forUpdate: true,
+      transaction,
+    });
+    const existing = existingRow
+      ? toProfile(existingRow)
+      : buildFallbackProfile(scope, input.session, organizationId);
+    const canApprove = canApproveScope(input.session, scope);
+    if (existing.status === "locked" && !canApprove) {
+      return { ok: false as const, reason: "Company profile is locked", status: 423 };
+    }
 
-  const canApprove = canApproveScope(input.session, scope);
-  const next = sanitizeProfileInput(input.body, existing, canApprove);
-  const changedFields = getChangedFields(existingRow ? existing : null, next);
-  const approvedByUserId = canApprove && (next.status === "approved" || next.status === "locked") && isUuid(input.session.userId)
-    ? input.session.userId
-    : existing.approvedByUserId ?? null;
-  const approvedAt = canApprove && (next.status === "approved" || next.status === "locked")
-    ? new Date().toISOString()
-    : existing.approvedAt ?? null;
+    const next = sanitizeProfileInput(input.body, existing, canApprove);
+    const changedFields = getChangedFields(existingRow ? existing : null, next);
+    const protectedApproval = existingRow && (existing.status === "approved" || existing.status === "locked");
+    const protectedContentChanges = changedFields.filter((field) => field !== "status");
+    if (protectedApproval && protectedContentChanges.length > 0) {
+      return {
+        ok: false as const,
+        reason: "Company profile must be moved to needs_review before approved content can be edited",
+        status: 423,
+      };
+    }
 
-  const row = existingRow
-    ? await queryOne<CompanyProfileRow>(
+    const approving = next.status === "approved" || next.status === "locked";
+    if (approving && (!canApprove || !isUuid(input.session.userId))) {
+      return { ok: false as const, reason: "Company profile approval is not allowed for this actor", status: 403 };
+    }
+
+    const preserveApproval = Boolean(
+      approving &&
+      protectedApproval &&
+      existing.approvedAt &&
+      existing.approvedByUserId,
+    );
+    const approvedByUserId = approving
+      ? preserveApproval
+        ? existing.approvedByUserId ?? null
+        : input.session.userId
+      : null;
+    const approvedAt = approving
+      ? preserveApproval
+        ? existing.approvedAt ?? null
+        : new Date().toISOString()
+      : null;
+
+    if (approving) {
+      const candidate: CompanyProfile = {
+        ...existing,
+        ...next,
+        approvedAt: approvedAt ?? undefined,
+        approvedByUserId: approvedByUserId ?? undefined,
+      };
+      const blockers = runCompanyProfilePreflight(candidate, input.session)
+        .filter((issue) => issue.severity === "blocker");
+      if (blockers.length > 0) {
+        return {
+          issues: blockers,
+          ok: false as const,
+          reason: "Company profile approval preflight failed",
+          status: 422,
+        };
+      }
+    }
+
+    const row = existingRow
+      ? await transaction.queryOne<CompanyProfileRow>(
         `
           update company_profiles
           set
@@ -779,7 +860,7 @@ export async function saveCompanyProfile(input: {
           approvedAt,
         ],
       )
-    : await queryOne<CompanyProfileRow>(
+      : await transaction.queryOne<CompanyProfileRow>(
         `
           insert into company_profiles (
             profile_scope,
@@ -904,13 +985,13 @@ export async function saveCompanyProfile(input: {
           approvedByUserId,
           approvedAt,
         ],
-      );
+        );
 
-  if (!row) return { ok: false as const, reason: "Company profile could not be saved", status: 500 };
-  const profile = toProfile(row);
+    if (!row) return { ok: false as const, reason: "Company profile could not be saved", status: 500 };
+    const profile = toProfile(row);
 
-  await executeQuery(
-    `
+    await transaction.execute(
+      `
       insert into company_profile_versions (
         company_profile_id,
         workspace_id,
@@ -922,25 +1003,31 @@ export async function saveCompanyProfile(input: {
       )
       values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::text[])
     `,
-    [
-      profile.id,
-      profile.workspaceId ?? null,
-      isUuid(input.session.userId) ? input.session.userId : null,
-      existingRow ? "company_profile.updated" : "company_profile.created",
-      JSON.stringify(existingRow ? existing : null),
-      JSON.stringify(profile),
-      changedFields,
-    ],
-  );
+      [
+        profile.id,
+        profile.workspaceId ?? null,
+        isUuid(input.session.userId) ? input.session.userId : null,
+        existingRow ? "company_profile.updated" : "company_profile.created",
+        JSON.stringify(existingRow ? existing : null),
+        JSON.stringify(profile),
+        changedFields,
+      ],
+    );
 
-  await writeAuditLog({
-    action: existingRow ? "company_profile.updated" : "company_profile.created",
-    after: { changedFields, profile },
-    before: existingRow ? existing : null,
-    entityId: isUuid(profile.id) ? profile.id : null,
-    entityType: "company_profile",
-    session: input.session,
+    await writeAuditLog({
+      action: existingRow ? "company_profile.updated" : "company_profile.created",
+      after: { changedFields, profile },
+      before: existingRow ? existing : null,
+      entityId: isUuid(profile.id) ? profile.id : null,
+      entityType: "company_profile",
+      session: input.session,
+      transaction,
+    });
+
+    return { ok: true as const };
   });
+
+  if (!transactionResult.ok) return transactionResult;
 
   return {
     ok: true as const,

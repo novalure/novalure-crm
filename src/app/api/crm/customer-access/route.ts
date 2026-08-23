@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/customer-access-repositories";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import { resolveRequestLanguage } from "@/lib/i18n";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 async function readJson(request: Request) {
   try {
@@ -56,6 +57,15 @@ export async function PATCH(request: Request) {
 
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "access";
+  if (operation === "invite_user") {
+    const launchScope = evaluateLaunchScope("accountAccessInvitationEmail");
+    if (!launchScope.allowed) {
+      return NextResponse.json(
+        { code: launchScope.code, error: "account_access_invitation_email_launch_off" },
+        { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+      );
+    }
+  }
   const language = resolveRequestLanguage(request);
   const result =
     operation === "project_grant"

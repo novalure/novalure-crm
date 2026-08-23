@@ -16,6 +16,7 @@ import type {
   WorkspaceRole,
 } from "@/lib/crm-types";
 import { getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 import { hasProductCapability, type ProductRole } from "@/lib/product-model";
 
 export type PropertyDepartmentTabId =
@@ -491,6 +492,7 @@ export function getPropertyActionStates(input: {
   const canWritePipeline = hasProductCapability(input.productRole, "pipeline:write");
   const canReserve = hasProductCapability(input.productRole, "reservations:write");
   const canPublish = hasProductCapability(input.productRole, "funnels:publish") || hasProductCapability(input.productRole, "newsletter:send");
+  const propertyExportQueueLaunchEnabled = isLaunchSurfaceEnabled("propertyExportQueue");
   const canAdmin = input.technicalRole === "owner" ||
     input.technicalRole === "admin" ||
     hasProductCapability(input.productRole, "settings:manage") ||
@@ -524,9 +526,9 @@ export function getPropertyActionStates(input: {
       reason: canOperate || canWritePipeline ? undefined : writeReason,
     },
     exportChannel: {
-      enabled: canPublish && canAdmin,
+      enabled: propertyExportQueueLaunchEnabled && canPublish && canAdmin,
       label: copy.actions.exportChannel,
-      reason: canPublish && canAdmin ? undefined : copy.actions.publishingReason,
+      reason: propertyExportQueueLaunchEnabled && canPublish && canAdmin ? undefined : copy.actions.publishingReason,
     },
     publishProperty: {
       enabled: canPublish && canAdmin,

@@ -32,11 +32,64 @@ test("worker kill switch pauses claims without mutating queue state", () => {
 });
 
 test("cron run exposes a bounded soft deadline and run metadata", () => {
-  const run = createCronRun({ route: "test", softDeadlineMs: 5_000 });
-  assert.equal(run.route, "test");
+  const run = createCronRun({ route: "meeting-reminders", softDeadlineMs: 5_000 });
+  assert.equal(run.route, "meeting-reminders");
   assert.match(run.runId, /^[0-9a-f-]{36}$/i);
   assert.equal(run.shouldContinue(), true);
   assert.ok(run.durationMs() >= 0);
+  assert.equal(run.succeed(), true);
+  assert.equal(run.succeed(), false);
+  assert.equal(run.fail(), false);
+});
+
+test("cron observability emits correlated redacted start, success, and failure events", { concurrency: false }, (t) => {
+  const lines = [];
+  t.mock.method(console, "log", (line) => lines.push(String(line)));
+  t.mock.method(console, "error", (line) => lines.push(String(line)));
+
+  const successfulRun = createCronRun({ route: "property-reservations" });
+  successfulRun.succeed("paused");
+
+  const secret = "franz@example.test?token=do-not-log";
+  const failedRun = createCronRun({ route: "teams-alerts" });
+  failedRun.fail(new Error(secret));
+
+  const records = lines.map((line) => JSON.parse(line));
+  assert.deepEqual(
+    records.map((record) => record.event),
+    [
+      "novalure.cron.started",
+      "novalure.cron.succeeded",
+      "novalure.cron.started",
+      "novalure.cron.failed",
+    ],
+  );
+  assert.equal(records[0].invocationId, records[1].invocationId);
+  assert.equal(records[2].invocationId, records[3].invocationId);
+  assert.notEqual(records[0].invocationId, records[2].invocationId);
+  assert.equal(records[1].outcome, "paused");
+  assert.equal(records[3].outcome, "failed");
+  assert.equal(records[3].level, "error");
+  assert.ok(records.every((record) => Number.isInteger(record.durationMs) && record.durationMs >= 0));
+  assert.ok(
+    records.every(
+      (record) =>
+        JSON.stringify(Object.keys(record).sort()) ===
+        JSON.stringify(
+          [
+            "component",
+            "durationMs",
+            "event",
+            "invocationId",
+            "level",
+            "outcome",
+            "route",
+            "schemaVersion",
+          ].sort(),
+        ),
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(records), /franz@example\.test|do-not-log|token=/i);
 });
 
 test("production schedules are staggered and workers use shared guards", async () => {
@@ -56,8 +109,21 @@ test("production schedules are staggered and workers use shared guards", async (
     assert.match(source, /isCronAuthorized/);
     assert.match(source, /areQueueWorkersPaused/);
     assert.match(source, /runId/);
+    assert.match(source, /run\.succeed\(/);
+    assert.match(source, /run\.fail\(\)/);
+    assert.match(source, /catch \(error\)/);
+    assert.match(source, /throw error/);
     assert.doesNotMatch(source, /VERCEL_ENV\s*!==\s*["']production["']/);
   }
+});
+
+test("cron event implementation cannot ingest request or error details", async () => {
+  const runtime = await readFile(new URL("../src/lib/cron/runtime.ts", import.meta.url), "utf8");
+  const observability = runtime.slice(runtime.indexOf("function emitCronEvent"));
+
+  assert.match(observability, /const CRON_ROUTE_NAMES|cronRouteNames/);
+  assert.doesNotMatch(observability, /request\.url|request\.headers|\.message|\.stack|payload|email/i);
+  assert.doesNotMatch(observability, /console\.(?:log|error)\([^\n]*error/i);
 });
 
 test("Google workspace scans avoid parallel database bursts while durable workers stay leased", async () => {

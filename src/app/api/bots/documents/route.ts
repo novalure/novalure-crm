@@ -189,6 +189,7 @@ export async function GET(request: Request) {
     {
       assets: media.assets.map(serializeMediaAsset),
       documentTypes: ["expose", "offer", "pdf", "checklist"],
+      mutationsAllowed: evaluateLaunchScope("mediaBlobMutation").allowed,
       quota: media.quota,
     },
     { headers: privateJsonHeaders },

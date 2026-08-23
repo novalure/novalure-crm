@@ -12,6 +12,9 @@ const manualCutovers = new Set([
   "062_private_media_contract_cutover",
   "065_notification_guard_search_path_hardening",
   "068_qa_batch_reset_safety",
+  "074_validate_launch_tenant_relation_guards",
+  "078_company_profile_approval_integrity",
+  "079_public_funnel_visit_role_boundary",
 ]);
 
 function clean(value) {

@@ -40,5 +40,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Meeting page not found" }, { status: 404 });
   }
 
+  if (availability.error) {
+    return NextResponse.json(
+      { availability, error: availability.error },
+      { headers: { "Cache-Control": "private, no-store" }, status: 503 },
+    );
+  }
+
   return NextResponse.json({ availability });
 }

@@ -7,12 +7,14 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import test from "node:test";
 import {
   applyCommittedMigrationPlan,
   assertMigrationCommitted,
   createMigrationPlanToken,
   createMigrationPlan,
+  readMigrationDatabaseUrlFromStdin,
   resolveMigrationLedgerState,
   validateMigrationPlan,
 } from "./db-migrate.mjs";
@@ -694,6 +696,8 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"062_private_media_contract_cutover"/);
   assert.match(runner, /"065_notification_guard_search_path_hardening"/);
   assert.match(runner, /"068_qa_batch_reset_safety"/);
+  assert.match(runner, /"078_company_profile_approval_integrity"/);
+  assert.match(runner, /"079_public_funnel_visit_role_boundary"/);
   assert.match(
     runner,
     /\["068_qa_batch_reset_safety", "060_tenant_rls_pilot_prepare"\]/,
@@ -710,6 +714,10 @@ test("automatic migration plans exclude every release cutover phase", () => {
     runner,
     /\["077_schema_ledger_runtime_projection", "076_bot_webhook_durable_processing"\]/,
   );
+  assert.match(
+    runner,
+    /\["079_public_funnel_visit_role_boundary", "075_public_funnel_visit_truth"\]/,
+  );
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 
@@ -718,6 +726,35 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /migration\.manualCutover && !allowManualCutover/);
   assert.match(runner, /Refusing manual cutover migration/);
   assert.match(runner, /never included automatically/);
+});
+
+test("recovery database URLs use a bounded, redacted stdin-only channel", async () => {
+  const databaseUrlFixture = new URL("postgresql://recovery.example.neon.tech/neondb");
+  databaseUrlFixture.username = "migration_owner";
+  databaseUrlFixture.password = "fixture_not_a_secret";
+  const databaseUrl = databaseUrlFixture.href;
+  assert.equal(
+    await readMigrationDatabaseUrlFromStdin(Readable.from([`${databaseUrl}\n`])),
+    databaseUrl,
+  );
+  await assert.rejects(
+    () => readMigrationDatabaseUrlFromStdin(Readable.from(["https://example.invalid/not-postgres\n"])),
+    /stdin is invalid/,
+  );
+  await assert.rejects(
+    () => readMigrationDatabaseUrlFromStdin(Readable.from([`${"x".repeat(4_097)}\n`])),
+    /stdin is invalid/,
+  );
+  await assert.rejects(
+    () => readMigrationDatabaseUrlFromStdin(Readable.from([])),
+    /stdin is missing/,
+  );
+
+  assert.match(runner, /recovery:\s*"\.env\.recovery\.local"/);
+  assert.match(runner, /--connection-stdin/);
+  assert.match(runner, /rawLine\.length > 4_096/);
+  assert.match(runner, /Refusing ambiguous migration database URL sources/);
+  assert.doesNotMatch(runner, /console\.(?:log|error)\([^\n;]*databaseUrl/);
 });
 
 test("QA migration CI previews before apply and keeps manual tenant cutovers excluded", () => {

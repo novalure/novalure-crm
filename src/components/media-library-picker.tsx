@@ -36,6 +36,7 @@ type MediaLibraryPickerProps = {
 
 type MediaResponse = {
   assets: CrmMediaAsset[];
+  mutationsAllowed?: boolean;
   quota: MediaQuota;
 };
 
@@ -52,6 +53,7 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
   const [assets, setAssets] = useState<CrmMediaAsset[]>([]);
   const [quota, setQuota] = useState<MediaQuota>(defaultQuota);
   const [error, setError] = useState("");
+  const [mutationsAllowed, setMutationsAllowed] = useState(false);
   const [publishingId, setPublishingId] = useState("");
   const [uploading, setUploading] = useState(false);
 
@@ -62,6 +64,7 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
       .then((payload: MediaResponse | null) => {
         if (!active || !payload) return;
         setAssets(payload.assets);
+        setMutationsAllowed(payload.mutationsAllowed === true);
         setQuota(payload.quota);
       })
       .catch(() => {
@@ -75,6 +78,11 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
 
   async function uploadImage(file: File) {
     setError("");
+
+    if (!mutationsAllowed) {
+      setError(copy.uploadFailed);
+      return;
+    }
 
     if (!file.type.startsWith("image/")) {
       setError(copy.imageRequired);
@@ -123,6 +131,11 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
       return;
     }
 
+    if (!mutationsAllowed) {
+      setError(copy.uploadFailed);
+      return;
+    }
+
     setError("");
     setPublishingId(asset.id);
     try {
@@ -157,12 +170,15 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
             )}
           </p>
         </div>
-        <label className="cursor-pointer rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
+        <label
+          aria-disabled={!mutationsAllowed || uploading}
+          className="cursor-pointer rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        >
           {uploading ? copy.uploading : copy.upload}
           <input
             accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
             className="sr-only"
-            disabled={uploading}
+            disabled={!mutationsAllowed || uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void uploadImage(file);
@@ -186,7 +202,7 @@ export function MediaLibraryPicker({ currentUrl, folder, language, onSelect }: M
               className={`grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-md border p-2 text-left text-xs ${
                 currentUrl === (asset.publicUrl ?? asset.url) ? "border-slate-950 bg-white" : "border-stone-200 bg-white"
               }`}
-              disabled={Boolean(publishingId)}
+              disabled={Boolean(publishingId) || (!asset.publicUrl && !mutationsAllowed)}
               key={asset.id}
               onClick={() => void selectForPublicUse(asset)}
               type="button"

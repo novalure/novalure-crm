@@ -885,13 +885,16 @@ test("route requires session, CSRF, exact platform role and capability before re
   assert.match(route, /getRequestSession\(request\)/);
   assert.match(route, /enforceCsrfForSession\(request, session\)/);
   assert.match(route, /canAdministerQaReset\(session\)/);
-  assert.match(route, /resolveQaResetWorkspaceAllowlist\(\)/);
+  assert.match(route, /resolveQaBatchCapabilityConfig\(\)/);
+  assert.match(route, /runtimeConfig\.allowlistedWorkspaceIds/);
+  assert.match(route, /qaBatchRuntimeErrorResponse\(error\)/);
   assert.match(route, /error\.code === "production_denylist_not_configured"/);
   assert.match(route, /assertQaResetExecutionAuthorized\(parsedRequest\)/);
   assert.match(route, /expectedPlanDigest: parsedRequest\.expectedPlanDigest/);
   assert.match(route, /error\.code === "plan_digest_mismatch"/);
   assert.match(route, /recordBlockedAttempt/);
   assert.match(route, /Cache-Control["']:\s*["']private, no-store/);
+  assert.ok(route.indexOf("resolveQaBatchCapabilityConfig()") < route.indexOf("request.text()"));
   assert.ok(route.indexOf("enforceCsrfForSession") < route.indexOf("runQaBatchReset({"));
   assert.doesNotMatch(route, /export async function (?:GET|DELETE|PATCH|PUT)/);
 });

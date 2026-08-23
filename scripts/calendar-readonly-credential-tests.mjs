@@ -119,7 +119,7 @@ async function loadCalendarConnections({ expiresAt, launchAllowed = false }) {
   return { counters, module: cjsModule.exports };
 }
 
-async function loadBusyAdapter(path, { readToken }) {
+async function loadBusyAdapter(path, { launchAllowed = false, readToken }) {
   const counters = { mutationTokenCalls: 0, providerRequests: 0, readTokenCalls: 0 };
   const requests = [];
   const cjsModule = { exports: {} };
@@ -139,12 +139,14 @@ async function loadBusyAdapter(path, { readToken }) {
     }
     if (specifier === "@/lib/launch-scope") {
       return {
-        evaluateLaunchScope: () => ({
-          allowed: false,
-          code: "LAUNCH_SCOPE_OFF",
-          decision: "LAUNCH-OFF",
-          rule: {},
-        }),
+        evaluateLaunchScope: () => launchAllowed
+          ? { allowed: true, decision: "LAUNCH-ON", rule: {} }
+          : {
+              allowed: false,
+              code: "LAUNCH_SCOPE_OFF",
+              decision: "LAUNCH-OFF",
+              rule: {},
+            },
       };
     }
     if (specifier === "@/lib/meetings/booking-lifecycle") {
@@ -186,7 +188,7 @@ async function loadBusyAdapter(path, { readToken }) {
   return { counters, module: cjsModule.exports, requests };
 }
 
-test("expired workspace credentials stay read-only while calendar provider mutation is launch-off", async () => {
+test("calendar provider read launch-off returns before database, token or provider access", async () => {
   const previousKey = process.env.OAUTH_TOKEN_ENCRYPTION_KEY;
   process.env.OAUTH_TOKEN_ENCRYPTION_KEY = tokenEncryptionKey;
 
@@ -199,11 +201,7 @@ test("expired workspace credentials stay read-only while calendar provider mutat
       await loaded.module.getCalendarReadAccessToken({ provider: "google", workspaceId }),
       null,
     );
-    assert.equal(
-      await loaded.module.getCalendarAccessToken({ provider: "google", workspaceId }),
-      null,
-    );
-    assert.equal(loaded.counters.databaseReads, 2);
+    assert.equal(loaded.counters.databaseReads, 0);
     assert.equal(loaded.counters.providerRequests, 0);
     assert.equal(loaded.counters.databaseWrites, 0);
   } finally {
@@ -212,13 +210,14 @@ test("expired workspace credentials stay read-only while calendar provider mutat
   }
 });
 
-test("a still-valid workspace token remains available without refresh or persistence", async () => {
+test("a signed calendar-provider-read scope can use a still-valid token without refresh or persistence", async () => {
   const previousKey = process.env.OAUTH_TOKEN_ENCRYPTION_KEY;
   process.env.OAUTH_TOKEN_ENCRYPTION_KEY = tokenEncryptionKey;
 
   try {
     const loaded = await loadCalendarConnections({
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      launchAllowed: true,
     });
 
     assert.equal(
@@ -261,7 +260,7 @@ test("workspace busy-time reads never fall back to global Microsoft credentials"
       }),
       /calendar_provider_read_unavailable/,
     );
-    assert.equal(microsoft.counters.readTokenCalls, 1);
+    assert.equal(microsoft.counters.readTokenCalls, 0);
     assert.equal(microsoft.counters.mutationTokenCalls, 0);
     assert.equal(microsoft.counters.providerRequests, 0);
   } finally {
@@ -279,14 +278,51 @@ test("workspace busy-time reads never fall back to global Microsoft credentials"
   }
 });
 
+test("calendar busy-time adapters fail before token and provider access while provider read is launch-off", async () => {
+  const [google, microsoft] = await Promise.all([
+    loadBusyAdapter("src/lib/integrations/google-calendar.ts", { readToken: "must-not-be-read" }),
+    loadBusyAdapter("src/lib/integrations/microsoft-calendar.ts", { readToken: "must-not-be-read" }),
+  ]);
+
+  await assert.rejects(
+    google.module.listGoogleBusyTimes({
+      timeMax: "2026-08-23T11:00:00.000Z",
+      timeMin: "2026-08-23T10:00:00.000Z",
+      timeZone: "Europe/Vienna",
+      workspaceId,
+    }),
+    /calendar_provider_read_unavailable/,
+  );
+  await assert.rejects(
+    microsoft.module.listMicrosoftBusyTimes({
+      timeMax: "2026-08-23T11:00:00.000Z",
+      timeMin: "2026-08-23T10:00:00.000Z",
+      workspaceId,
+    }),
+    /calendar_provider_read_unavailable/,
+  );
+
+  for (const adapter of [google, microsoft]) {
+    assert.equal(adapter.counters.readTokenCalls, 0);
+    assert.equal(adapter.counters.mutationTokenCalls, 0);
+    assert.equal(adapter.counters.providerRequests, 0);
+  }
+});
+
 test("busy-time adapters use valid workspace tokens without a mutation token path", async () => {
   const previousGlobalToken = process.env.MICROSOFT_GRAPH_ACCESS_TOKEN;
   process.env.MICROSOFT_GRAPH_ACCESS_TOKEN = "global-token-must-not-be-used";
 
   try {
     const [google, microsoft] = await Promise.all([
-      loadBusyAdapter("src/lib/integrations/google-calendar.ts", { readToken: "google-workspace-token" }),
-      loadBusyAdapter("src/lib/integrations/microsoft-calendar.ts", { readToken: "microsoft-workspace-token" }),
+      loadBusyAdapter("src/lib/integrations/google-calendar.ts", {
+        launchAllowed: true,
+        readToken: "google-workspace-token",
+      }),
+      loadBusyAdapter("src/lib/integrations/microsoft-calendar.ts", {
+        launchAllowed: true,
+        readToken: "microsoft-workspace-token",
+      }),
     ]);
 
     await google.module.listGoogleBusyTimes({
@@ -328,6 +364,8 @@ test("source contracts keep refresh and persistence fenced while status routes r
     connections.indexOf("export async function getCalendarReadAccessToken"),
     connections.indexOf("function getUsableStoredCalendarAccessToken"),
   );
+  const readGuard = accessTokenRead.indexOf('evaluateLaunchScope("calendarProviderRead")');
+  assert.ok(readGuard >= 0 && readGuard < accessTokenRead.indexOf("getProviderConnection("));
   const refresh = connections.slice(
     connections.indexOf("async function refreshCalendarAccessToken"),
     connections.indexOf("async function refreshGoogleToken"),
@@ -355,6 +393,10 @@ test("source contracts keep refresh and persistence fenced while status routes r
     microsoft.indexOf("const directToken"),
   );
 
+  const googleReadGuard = googleBusy.indexOf('evaluateLaunchScope("calendarProviderRead")');
+  const microsoftReadGuard = microsoftBusy.indexOf('evaluateLaunchScope("calendarProviderRead")');
+  assert.ok(googleReadGuard >= 0 && googleReadGuard < googleBusy.indexOf("getCalendarReadAccessToken"));
+  assert.ok(microsoftReadGuard >= 0 && microsoftReadGuard < microsoftBusy.indexOf("getGraphToken"));
   assert.match(googleBusy, /getCalendarReadAccessToken/);
   assert.doesNotMatch(googleBusy, /getCalendarAccessToken/);
   assert.match(microsoftBusy, /getGraphToken\(input\.workspaceId\)/);

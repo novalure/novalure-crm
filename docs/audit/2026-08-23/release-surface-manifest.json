@@ -1,0 +1,512 @@
+{
+  "schemaVersion": 2,
+  "baselineCommit": "0189f4f27e8762c84a49a5cf194e8fa49cf9d05f",
+  "candidateCommit": null,
+  "approvalStatus": "PENDING_SIGNATURE",
+  "inventoryGeneratedFor": "LOCAL_WORKTREE_ONLY",
+  "pages": [
+    "/",
+    "/book/[slug]",
+    "/book/[slug]/[meetingSlug]",
+    "/cookies",
+    "/data-deletion",
+    "/datadeletion",
+    "/forms/[slug]",
+    "/forms/[slug]/[formSlug]",
+    "/imprint",
+    "/login",
+    "/login/forgot-password",
+    "/login/reset-password",
+    "/meta",
+    "/preview/[funnelId]",
+    "/privacy",
+    "/terms",
+    "/unsubscribe",
+    "/visual-qa/crm",
+    "/visual-qa/crm/content"
+  ],
+  "nonApiRouteHandlers": [
+    "/forms/embed",
+    "/m/[slug]",
+    "/m/[slug]/[meetingSlug]",
+    "/unsubscribe/confirm"
+  ],
+  "apiRoutes": [
+    "/api/admin/audit-logs",
+    "/api/admin/funnels/[funnelId]/publish-token/cutover",
+    "/api/admin/qa-batch-capability",
+    "/api/admin/qa-reset",
+    "/api/approvals",
+    "/api/auth/csrf",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/onboarding",
+    "/api/auth/password-reset/confirm",
+    "/api/auth/password-reset/exchange",
+    "/api/auth/password-reset/request",
+    "/api/auth/session",
+    "/api/bots/actions",
+    "/api/bots/agent",
+    "/api/bots/calls",
+    "/api/bots/channels",
+    "/api/bots/channels/webhook",
+    "/api/bots/chat",
+    "/api/bots/documents",
+    "/api/bots/evaluations",
+    "/api/bots/knowledge",
+    "/api/bots/leads",
+    "/api/bots/meetings",
+    "/api/calendar/google",
+    "/api/calendar/microsoft",
+    "/api/crm/analytics-events",
+    "/api/crm/bots",
+    "/api/crm/broker/mandates",
+    "/api/crm/broker/search-profiles",
+    "/api/crm/calendar-events",
+    "/api/crm/contacts",
+    "/api/crm/core",
+    "/api/crm/customer-access",
+    "/api/crm/dashboard-views",
+    "/api/crm/data-quality",
+    "/api/crm/deals",
+    "/api/crm/deals/[dealId]/stage",
+    "/api/crm/deals/[dealId]/stage-history",
+    "/api/crm/editor-preflight",
+    "/api/crm/funnels",
+    "/api/crm/google-notifications",
+    "/api/crm/google-notifications/[notificationId]/retry",
+    "/api/crm/leads",
+    "/api/crm/notes",
+    "/api/crm/projects",
+    "/api/crm/properties",
+    "/api/crm/recommendation-runtime",
+    "/api/crm/reservations",
+    "/api/crm/tasks",
+    "/api/crm/teams-notifications",
+    "/api/crm/teams-notifications/[notificationId]/retry",
+    "/api/crm/units",
+    "/api/cron/google-alerts",
+    "/api/cron/meeting-reminders",
+    "/api/cron/property-reservations",
+    "/api/cron/teams-alerts",
+    "/api/forms",
+    "/api/forms/resolve",
+    "/api/forms/submission-proof",
+    "/api/forms/submissions",
+    "/api/funnels/[funnelId]/blueprint",
+    "/api/funnels/[funnelId]/publish-token/rotate",
+    "/api/funnels/[funnelId]/submission-proof",
+    "/api/funnels/[funnelId]/submissions",
+    "/api/funnels/[funnelId]/visits",
+    "/api/health",
+    "/api/media",
+    "/api/media/[assetId]",
+    "/api/media/files/[assetId]",
+    "/api/media/public/[token]",
+    "/api/meetings/availability",
+    "/api/meetings/bookings",
+    "/api/meetings/bookings/[bookingId]/cancel",
+    "/api/meetings/bookings/[bookingId]/confirm",
+    "/api/meetings/bookings/[bookingId]/reschedule",
+    "/api/meetings/notifications",
+    "/api/meetings/notifications/[notificationId]/retry",
+    "/api/meetings/oauth/[provider]/callback",
+    "/api/meetings/oauth/[provider]/disconnect",
+    "/api/meetings/oauth/[provider]/start",
+    "/api/meetings/oauth/status",
+    "/api/meetings/settings",
+    "/api/newsletter/send",
+    "/api/settings/access/password",
+    "/api/settings/access/users",
+    "/api/settings/company-profile",
+    "/api/system/database",
+    "/api/workspaces"
+  ],
+  "navigationEntries": [
+    "analysis",
+    "analytics",
+    "appointments",
+    "approvals",
+    "auditLog",
+    "botGovernance",
+    "bots",
+    "buyerLeads",
+    "buyerProfiles",
+    "calendar",
+    "communication",
+    "consultations",
+    "contacts",
+    "customerAccess",
+    "customerReport",
+    "customerSuccess",
+    "customerSwitch",
+    "customerWorkspaces",
+    "dailyQueue",
+    "dashboard",
+    "dataHygiene",
+    "deals",
+    "demosTrials",
+    "developerLeads",
+    "followUpQueue",
+    "forms",
+    "funnels",
+    "governanceCompliance",
+    "knowledge",
+    "leadInbox",
+    "managedService",
+    "newsletter",
+    "objectsMandates",
+    "onboarding",
+    "pipelines",
+    "projectAnalytics",
+    "projectOverview",
+    "projectPipeline",
+    "projects",
+    "properties",
+    "reservations",
+    "sellerLeads",
+    "serviceCockpit",
+    "settings",
+    "slaCockpit",
+    "systemReleases",
+    "tasks",
+    "ticketsSupport",
+    "units",
+    "usersRoles",
+    "workspaces"
+  ],
+  "serverActions": [],
+  "serverActionDiscovery": {
+    "checkedRoot": "src",
+    "checkedExtensions": [".js", ".jsx", ".ts", ".tsx"],
+    "directivePatterns": ["\"use server\"", "'use server'"],
+    "result": "VERIFIED_NONE"
+  },
+  "cronRoutes": [
+    "/api/cron/google-alerts",
+    "/api/cron/meeting-reminders",
+    "/api/cron/property-reservations",
+    "/api/cron/teams-alerts"
+  ],
+  "cronJobs": [
+    {
+      "id": "google-alerts",
+      "route": "/api/cron/google-alerts",
+      "schedule": "9,24,39,54 * * * *",
+      "sourceFile": "src/app/api/cron/google-alerts/route.ts",
+      "worker": "processDueGoogleNotifications"
+    },
+    {
+      "id": "meeting-reminders",
+      "route": "/api/cron/meeting-reminders",
+      "schedule": "2 * * * *",
+      "sourceFile": "src/app/api/cron/meeting-reminders/route.ts",
+      "worker": "processDueMeetingNotifications"
+    },
+    {
+      "id": "property-reservations",
+      "route": "/api/cron/property-reservations",
+      "schedule": "7 * * * *",
+      "sourceFile": "src/app/api/cron/property-reservations/route.ts",
+      "worker": "expireOverduePropertyReservations"
+    },
+    {
+      "id": "teams-alerts",
+      "route": "/api/cron/teams-alerts",
+      "schedule": "4,19,34,49 * * * *",
+      "sourceFile": "src/app/api/cron/teams-alerts/route.ts",
+      "worker": "processDueTeamsNotifications"
+    }
+  ],
+  "queueAndBackgroundJobs": [
+    {
+      "id": "bot-webhook-durable-processing",
+      "storageTable": "bot_channel_webhooks",
+      "producerFiles": ["src/app/api/bots/channels/webhook/route.ts"],
+      "consumerFiles": ["src/app/api/bots/channels/webhook/route.ts"],
+      "triggerRoutes": ["/api/bots/channels/webhook"],
+      "implementationStatus": "REQUEST_BOUND_LEASE_RECLAIM_WITHOUT_INDEPENDENT_SCANNER",
+      "launchScopeKey": "botChannelInboundProcessing"
+    },
+    {
+      "id": "google-notification-delivery",
+      "storageTable": "google_notification_jobs",
+      "producerFiles": ["src/lib/db/google-notification-repositories.ts"],
+      "consumerFiles": ["src/lib/db/google-notification-repositories.ts"],
+      "triggerRoutes": [
+        "/api/cron/google-alerts",
+        "/api/crm/google-notifications",
+        "/api/crm/google-notifications/[notificationId]/retry"
+      ],
+      "implementationStatus": "DURABLE_LEASE_QUEUE",
+      "launchScopeKey": "googleNotificationDelivery"
+    },
+    {
+      "id": "meeting-notification-delivery",
+      "storageTable": "meeting_notification_jobs",
+      "producerFiles": ["src/lib/db/meeting-repositories.ts"],
+      "consumerFiles": ["src/lib/meetings/notification-runner.ts"],
+      "triggerRoutes": [
+        "/api/cron/meeting-reminders",
+        "/api/meetings/notifications/[notificationId]/retry"
+      ],
+      "implementationStatus": "DURABLE_LEASE_QUEUE",
+      "launchScopeKey": "customerCommunicationProviderMutation"
+    },
+    {
+      "id": "property-export-queue",
+      "storageTable": "property_export_jobs",
+      "producerFiles": ["src/lib/db/property-department-repositories.ts"],
+      "consumerFiles": [],
+      "triggerRoutes": ["/api/crm/properties"],
+      "implementationStatus": "ENQUEUE_ONLY_NO_CONSUMER_LAUNCH_OFF",
+      "launchScopeKey": "propertyExportQueue"
+    },
+    {
+      "id": "property-reservation-expiry",
+      "storageTable": null,
+      "producerFiles": ["src/app/api/cron/property-reservations/route.ts"],
+      "consumerFiles": ["src/lib/db/reservation-repositories.ts"],
+      "triggerRoutes": ["/api/cron/property-reservations"],
+      "implementationStatus": "SCHEDULED_DATABASE_WORKER",
+      "launchScopeKey": "propertyReservationRelationshipSync"
+    },
+    {
+      "id": "teams-notification-delivery",
+      "storageTable": "teams_notification_jobs",
+      "producerFiles": ["src/lib/db/teams-notification-repositories.ts"],
+      "consumerFiles": ["src/lib/db/teams-notification-repositories.ts"],
+      "triggerRoutes": [
+        "/api/cron/teams-alerts",
+        "/api/crm/teams-notifications",
+        "/api/crm/teams-notifications/[notificationId]/retry"
+      ],
+      "implementationStatus": "DURABLE_LEASE_QUEUE",
+      "launchScopeKey": "teamsNotificationDelivery"
+    }
+  ],
+  "webhooks": [
+    {
+      "id": "bot-channel-inbound",
+      "direction": "INBOUND",
+      "routeOrJob": "/api/bots/channels/webhook",
+      "sourceFiles": ["src/app/api/bots/channels/webhook/route.ts"],
+      "implementationStatus": "IMPLEMENTED_REQUEST_BOUND",
+      "launchScopeKey": "botChannelInboundProcessing"
+    },
+    {
+      "id": "funnel-submission-outbound",
+      "direction": "OUTBOUND",
+      "routeOrJob": "/api/crm/funnels",
+      "sourceFiles": ["src/app/api/crm/funnels/route.ts", "src/lib/funnel-schema.ts"],
+      "implementationStatus": "CONFIGURATION_ONLY_NO_DELIVERY_WORKER_DISCOVERED",
+      "launchScopeKey": "funnelWebhookDelivery"
+    },
+    {
+      "id": "google-chat-outbound",
+      "direction": "OUTBOUND",
+      "routeOrJob": "google_notification_jobs",
+      "sourceFiles": ["src/lib/db/google-notification-repositories.ts"],
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF",
+      "launchScopeKey": "googleNotificationDelivery"
+    },
+    {
+      "id": "teams-outbound",
+      "direction": "OUTBOUND",
+      "routeOrJob": "teams_notification_jobs",
+      "sourceFiles": ["src/lib/db/teams-notification-repositories.ts"],
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF",
+      "launchScopeKey": "teamsNotificationDelivery"
+    }
+  ],
+  "providerSideEffects": [
+    {
+      "id": "bot-model-completion",
+      "provider": "Vercel AI Gateway or OpenAI-compatible chat",
+      "operations": ["chat completion"],
+      "sourceFiles": ["src/lib/integrations/model-provider.ts"],
+      "launchScopeKey": "authenticatedBotModelProvider",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF_BEFORE_PROVIDER_FETCH"
+    },
+    {
+      "id": "bot-knowledge-embedding",
+      "provider": "OpenAI-compatible embeddings",
+      "operations": ["embedding generation"],
+      "sourceFiles": ["src/lib/integrations/embeddings.ts"],
+      "launchScopeKey": "externalEmbeddingProvider",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF_BEFORE_PROVIDER_FETCH"
+    },
+    {
+      "id": "calendar-oauth-token-and-profile",
+      "provider": "Google OAuth and Microsoft identity",
+      "operations": ["authorization-code exchange", "access-token refresh", "account profile read"],
+      "sourceFiles": ["src/lib/integrations/calendar-connections.ts"],
+      "launchScopeKey": "calendarProviderMutation",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "google-calendar-read",
+      "provider": "Google Calendar",
+      "operations": ["free/busy read"],
+      "sourceFiles": ["src/lib/integrations/google-calendar.ts"],
+      "launchScopeKey": "calendarProviderRead",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "google-calendar-mutation",
+      "provider": "Google Calendar",
+      "operations": ["event create", "event update", "event delete"],
+      "sourceFiles": ["src/lib/integrations/google-calendar.ts"],
+      "launchScopeKey": "calendarProviderMutation",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "google-notification-webhook",
+      "provider": "Google Chat webhook",
+      "operations": ["notification delivery"],
+      "sourceFiles": ["src/lib/db/google-notification-repositories.ts"],
+      "launchScopeKey": "googleNotificationDelivery",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "meta-messaging-delivery",
+      "provider": "Meta Graph",
+      "operations": ["WhatsApp document and text delivery", "Instagram reply", "Messenger reply"],
+      "sourceFiles": ["src/lib/bots/provider-actions.ts"],
+      "launchScopeKey": "customerCommunicationProviderMutation",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "microsoft-calendar-read",
+      "provider": "Microsoft Graph Calendar",
+      "operations": ["calendar view read"],
+      "sourceFiles": ["src/lib/integrations/microsoft-calendar.ts"],
+      "launchScopeKey": "calendarProviderRead",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "microsoft-calendar-mutation",
+      "provider": "Microsoft Graph Calendar",
+      "operations": ["event create", "event update", "event delete"],
+      "sourceFiles": ["src/lib/integrations/microsoft-calendar.ts"],
+      "launchScopeKey": "calendarProviderMutation",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "resend-customer-communication",
+      "provider": "Resend",
+      "operations": ["meeting notification", "bot document delivery"],
+      "sourceFiles": ["src/lib/integrations/resend.ts"],
+      "launchScopeKey": "customerCommunicationProviderMutation",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "resend-invitation",
+      "provider": "Resend",
+      "operations": ["workspace invitation email"],
+      "sourceFiles": ["src/lib/integrations/resend.ts"],
+      "launchScopeKey": "accountAccessInvitationEmail",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "resend-newsletter",
+      "provider": "Resend",
+      "operations": ["newsletter delivery"],
+      "sourceFiles": ["src/lib/integrations/resend.ts"],
+      "launchScopeKey": "newsletterDelivery",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "resend-password-reset",
+      "provider": "Resend",
+      "operations": ["password-reset email"],
+      "sourceFiles": ["src/lib/integrations/resend.ts"],
+      "launchScopeKey": "accountAccessPasswordResetEmail",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    },
+    {
+      "id": "teams-notification-webhook",
+      "provider": "Microsoft Teams webhook",
+      "operations": ["notification delivery"],
+      "sourceFiles": ["src/lib/db/teams-notification-repositories.ts"],
+      "launchScopeKey": "teamsNotificationDelivery",
+      "implementationStatus": "IMPLEMENTED_LAUNCH_OFF"
+    }
+  ],
+  "publicFormsAndFunnels": [
+    {
+      "id": "public-form-pages",
+      "surfaces": ["/forms/[slug]", "/forms/[slug]/[formSlug]", "/forms/embed", "/api/forms/resolve"]
+    },
+    { "id": "public-form-proof-refresh", "surfaces": ["/api/forms/submission-proof"] },
+    { "id": "public-form-submission", "surfaces": ["/api/forms/submissions"] },
+    {
+      "id": "public-funnel-page-publication",
+      "surfaces": ["/preview/[funnelId]", "/api/funnels/[funnelId]/blueprint"]
+    },
+    { "id": "public-funnel-proof-refresh", "surfaces": ["/api/funnels/[funnelId]/submission-proof"] },
+    { "id": "public-funnel-submission", "surfaces": ["/api/funnels/[funnelId]/submissions"] },
+    { "id": "public-funnel-visits", "surfaces": ["/api/funnels/[funnelId]/visits"] }
+  ],
+  "internalAdminSurfaces": [
+    { "id": "admin-audit-api", "surfaces": ["/api/admin/audit-logs"] },
+    { "id": "admin-audit-navigation", "surfaces": ["navigation:auditLog"] },
+    {
+      "id": "admin-funnel-publish-cutover",
+      "surfaces": ["/api/admin/funnels/[funnelId]/publish-token/cutover"]
+    },
+    { "id": "admin-governance-navigation", "surfaces": ["navigation:governanceCompliance"] },
+    { "id": "admin-qa-batch-capability", "surfaces": ["/api/admin/qa-batch-capability"] },
+    { "id": "admin-qa-reset", "surfaces": ["/api/admin/qa-reset"] },
+    { "id": "admin-system-releases-navigation", "surfaces": ["navigation:systemReleases"] },
+    { "id": "system-database-diagnostics", "surfaces": ["/api/system/database"] },
+    { "id": "visual-qa-pages", "surfaces": ["/visual-qa/crm", "/visual-qa/crm/content"] }
+  ],
+  "blobWriteSurfaces": [
+    {
+      "id": "bot-document-public-share",
+      "operations": ["create or extend a transient public share"],
+      "routeOrJob": "/api/bots/actions and /api/bots/documents",
+      "sourceFiles": [
+        "src/app/api/bots/actions/route.ts",
+        "src/app/api/bots/documents/route.ts",
+        "src/lib/bots/chat-runtime.ts",
+        "src/lib/media-store.ts"
+      ],
+      "launchScopeKey": "mediaBlobMutation"
+    },
+    {
+      "id": "legacy-blob-cutover-cli",
+      "operations": [
+        "copy legacy-public object to private Blob",
+        "verify hash and size",
+        "compare-and-swap metadata",
+        "separately finalize source deletion"
+      ],
+      "routeOrJob": "scripts/legacy-blob-cutover.mjs",
+      "sourceFiles": ["scripts/legacy-blob-cutover.mjs", "scripts/lib/legacy-blob-cutover.mjs"],
+      "launchScopeKey": null
+    },
+    {
+      "id": "media-physical-delete",
+      "operations": ["delete Blob before metadata"],
+      "routeOrJob": "DELETE /api/media/[assetId]",
+      "sourceFiles": ["src/app/api/media/[assetId]/route.ts", "src/lib/media-store.ts"],
+      "launchScopeKey": "mediaBlobMutation"
+    },
+    {
+      "id": "media-upload",
+      "operations": ["private Blob put", "metadata persistence", "compensating Blob delete on metadata failure"],
+      "routeOrJob": "POST /api/media",
+      "sourceFiles": ["src/app/api/media/route.ts", "src/lib/media-store.ts"],
+      "launchScopeKey": "mediaBlobMutation"
+    },
+    {
+      "id": "media-publication-state",
+      "operations": ["publish", "revoke", "share metadata mutation"],
+      "routeOrJob": "POST /api/media",
+      "sourceFiles": ["src/app/api/media/route.ts", "src/lib/media-store.ts"],
+      "launchScopeKey": "mediaBlobMutation"
+    }
+  ]
+}

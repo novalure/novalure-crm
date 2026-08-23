@@ -12,12 +12,7 @@ export type FunnelProofRefreshRequest = {
   publicationRevision: number;
 };
 
-export type FunnelVisitRequest = FunnelProofRefreshRequest & {
-  visitId: string;
-};
-
-const visitIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+export type FunnelVisitRequest = FunnelProofRefreshRequest;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -45,42 +40,7 @@ export function parseFunnelProofRefreshRequest(value: unknown): FunnelProofRefre
 }
 
 export function parseFunnelVisitRequest(value: unknown): FunnelVisitRequest | null {
-  const record = asRecord(value);
-  if (
-    !record ||
-    Object.keys(record).some((key) =>
-      key !== "proof" && key !== "publicationRevision" && key !== "visitId"
-    ) ||
-    !isPublicationRevision(record.publicationRevision) ||
-    typeof record.visitId !== "string" ||
-    !visitIdPattern.test(record.visitId)
-  ) {
-    return null;
-  }
-  const proof = parsePublicSubmissionProof(record.proof);
-  if (!proof) return null;
-
-  return {
-    proof,
-    publicationRevision: record.publicationRevision,
-    visitId: record.visitId,
-  };
-}
-
-export function getOrCreatePublicFunnelVisitId(
-  funnelId: string,
-  publicationRevision: number,
-) {
-  const storageKey = `novalure:funnel-visit:${funnelId}:publication:${publicationRevision}`;
-  try {
-    const existing = window.sessionStorage.getItem(storageKey);
-    if (existing && visitIdPattern.test(existing)) return existing;
-    const created = window.crypto.randomUUID();
-    window.sessionStorage.setItem(storageKey, created);
-    return created;
-  } catch {
-    return globalThis.crypto.randomUUID();
-  }
+  return parseFunnelProofRefreshRequest(value);
 }
 
 export function isFunnelPublicationStaleResponse(value: unknown) {

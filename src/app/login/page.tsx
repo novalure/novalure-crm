@@ -26,6 +26,7 @@ import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
 import { resolvePublicLanguage } from "@/lib/public-language";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
 import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
+import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 
 type LoginPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -173,6 +174,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const loginCopy = getLoginPageCopy(language);
   const landingCopy = getCrmLandingPageCopy(language);
   const configured = isLoginConfigured();
+  const passwordResetEmailLaunchEnabled = isLaunchSurfaceEnabled("accountAccessPasswordResetEmail");
   const loginChallenge = configured ? await getLoginChallengeView(requestHeaders) : null;
   const errorText = getErrorText(getQueryValue(query.error), loginCopy);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
@@ -378,14 +380,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                   </div>
                   <p className={subpageStyles.fieldHelp}>{loginCopy.passcodeHelp}</p>
                 </div>
-                <div className={subpageStyles.alignRight}>
-                  <Link
-                    className={subpageStyles.textLink}
-                    href={getForgotPasswordHref(language)}
-                  >
-                    {loginCopy.passwordReset.forgotLink}
-                  </Link>
-                </div>
+                {passwordResetEmailLaunchEnabled ? (
+                  <div className={subpageStyles.alignRight}>
+                    <Link
+                      className={subpageStyles.textLink}
+                      href={getForgotPasswordHref(language)}
+                    >
+                      {loginCopy.passwordReset.forgotLink}
+                    </Link>
+                  </div>
+                ) : null}
                 <button
                   className={subpageStyles.submitButton}
                   disabled={!configured}

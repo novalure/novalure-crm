@@ -1,3 +1,4 @@
+import { consumePublicSubmissionRateLimits } from "@/lib/db/public-submission-abuse-repository";
 import { getPublicWebsiteFormByKey } from "@/lib/db/form-repositories";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { getPublicFormLaunchBlockReason } from "@/lib/public-form-dto";
@@ -5,7 +6,9 @@ import { publicSubmissionControlFields } from "@/lib/public-submission-contract"
 import {
   buildPublicSubmissionScope,
   buildVersionedPublicSubmissionResourceId,
+  createPublicFormProofRefreshRateLimitPolicies,
   getPublicSubmissionProof,
+  getTrustedPublicSubmissionClientIp,
   publicSubmissionActions,
   publicSubmissionProofRefreshGraceSeconds,
   publicSubmissionProofTtlSeconds,
@@ -74,6 +77,21 @@ export async function POST(request: Request) {
   const formKey = getString(formData, "form");
   if (!formKey || formKey.length > 512 || /[\r\n\u0000]/u.test(formKey)) {
     return json({ error: "invalid_form_key" }, 400);
+  }
+
+  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
+  if (!clientIp) return json({ error: "submission_proof_refresh_unavailable" }, 503);
+  try {
+    const rateLimit = await consumePublicSubmissionRateLimits({
+      policies: createPublicFormProofRefreshRateLimitPolicies({
+        clientIp,
+        formKey,
+        idempotencyKey: getString(formData, publicSubmissionControlFields.idempotencyKey),
+      }),
+    });
+    if (!rateLimit.allowed) return json({ error: "rate_limited" }, 429);
+  } catch {
+    return json({ error: "submission_proof_refresh_unavailable" }, 503);
   }
 
   let lookup: Awaited<ReturnType<typeof getPublicWebsiteFormByKey>>;

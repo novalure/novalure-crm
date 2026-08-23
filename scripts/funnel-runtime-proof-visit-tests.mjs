@@ -135,13 +135,12 @@ test("rotation between refresh and submit makes the refreshed old-publication pr
   );
 });
 
-test("refresh and visit request contracts reject extra fields, invalid revisions and invalid visit identities", () => {
+test("refresh and visit request contracts reject extra fields and invalid revisions", () => {
   const contract = readProjectFile("src/lib/funnel-runtime-contract.ts");
 
   assert.match(contract, /Object\.keys\(record\)\.some\(\(key\) => key !== "proof" && key !== "publicationRevision"\)/);
   assert.match(contract, /Number\.isSafeInteger\(value\)[\s\S]*Number\(value\) >= 0/);
-  assert.match(contract, /key !== "proof" && key !== "publicationRevision" && key !== "visitId"/);
-  assert.match(contract, /const visitIdPattern =[\s\S]*\^\[0-9a-f\]/);
+  assert.doesNotMatch(contract, /visitId|sessionStorage|randomUUID/);
   assert.match(contract, /parsePublicSubmissionProof\(record\.proof\)/);
   assert.match(contract, /funnel_publication_stale[\s\S]*reloadRequired === true/);
 });
@@ -178,7 +177,7 @@ function createKpiHarness() {
   };
 }
 
-test("Page-Visit -> reload -> Submit produces a deduped database denominator and truthful KPI", () => {
+test("Page-Visit duplicate delivery -> Submit produces a deduped database denominator and truthful KPI", () => {
   const harness = createKpiHarness();
   const visit = {
     funnelId: "11111111-1111-4111-8111-111111111111",
@@ -194,7 +193,7 @@ test("Page-Visit -> reload -> Submit produces a deduped database denominator and
     leads: 0,
     visits: 1,
   });
-  assert.equal(harness.visit(visit).counted, false, "a reload reuses the same visit identity");
+  assert.equal(harness.visit(visit).counted, false, "a repeated delivery reuses the signed proof identity");
   assert.equal(harness.visit({ ...visit, publicationRevision: 8 }).accepted, false);
   assert.deepEqual(harness.read(), { conversionRate: 0, leads: 0, visits: 1 });
   assert.deepEqual(harness.submit(), { conversionRate: 100, leads: 1, visits: 1 });
@@ -206,27 +205,40 @@ test("Page-Visit -> reload -> Submit produces a deduped database denominator and
 
 test("Visit route is bounded, current-publication-only and persists after cryptographic proof validation", () => {
   const route = readProjectFile("src/app/api/funnels/[funnelId]/visits/route.ts");
+  const security = readProjectFile("src/lib/funnel-runtime-security.ts");
   const guard = route.indexOf('evaluateLaunchScope("publicFunnelVisit")');
   const body = route.indexOf("readBoundedPublicSubmissionJson(");
   const lookup = route.indexOf("getStoredFunnel(funnelId)");
   const live = route.indexOf("isStoredFunnelPubliclyLive(");
   const revision = route.indexOf("visitRequest.publicationRevision !== publicationRevision");
   const proof = route.indexOf("verifyPublicSubmissionProof({");
-  const rate = route.indexOf("consumePublicSubmissionRateLimits({");
+  const ingressRate = route.indexOf("consumePublicSubmissionRateLimits({", body);
+  const scopedRate = route.indexOf("consumePublicSubmissionRateLimits({", proof);
   const persist = route.indexOf("recordPublicFunnelVisit({");
 
   assert.ok(guard >= 0 && guard < body && body < lookup);
-  assert.ok(lookup < live && live < revision && revision < proof && proof < rate && rate < persist);
+  assert.ok(body < ingressRate && ingressRate < lookup);
+  assert.ok(lookup < live && live < revision && revision < proof && proof < scopedRate && scopedRate < persist);
   assert.match(route, /funnelRuntimeRequestBodyLimits/);
   assert.match(route, /"Cache-Control": "private, no-store"/);
   assert.match(route, /"Referrer-Policy": "no-referrer"/);
+  assert.match(route, /proofValidation\.proof\.idempotencyKey/);
+  assert.match(route, /createPublicFunnelVisitIngressRateLimitPolicies\(\{ clientIp \}\)/);
+  assert.match(route, /createPublicFunnelVisitProofIdentityHash\(\{[\s\S]*idempotencyKey: proofIdempotencyKey/);
+  assert.match(security, /public-funnel-visit-ingress-rate-ip[\s\S]*limit: 90[\s\S]*windowSeconds: 10 \* 60/);
+  assert.match(security, /value: `\$\{input\.scope\}\\n\$\{input\.idempotencyKey\}`/);
+  assert.doesNotMatch(route, /visitRequest\.visitId/);
+  assert.doesNotMatch(security, /visitId/);
   assert.doesNotMatch(route, /publishToken|publicToken/);
 });
 
 test("Visit repository atomically inserts the analytics source and advances KPIs only once", () => {
   const repository = readProjectFile("src/lib/db/funnel-visit-repository.ts");
   const migration = readProjectFile("migrations/075_public_funnel_visit_truth.sql");
+  const roleBoundary = readProjectFile("migrations/079_public_funnel_visit_role_boundary.sql");
   const qaResetContract = readProjectFile("src/lib/qa-reset-contract.ts");
+  const qaTenantE2e = readProjectFile("scripts/qa-two-tenant-e2e.mjs");
+  const qaTenantMatrix = readProjectFile("scripts/lib/qa-two-tenant-matrix.mjs");
   const schema = readProjectFile("src/lib/db/schema.ts");
 
   assert.match(repository, /funnel\.workspace_id = \$1::uuid/);
@@ -255,8 +267,13 @@ test("Visit repository atomically inserts the analytics source and advances KPIs
   assert.match(migration, /foreign key \(workspace_id, funnel_id\)[\s\S]*references public\.funnels\(workspace_id, id\)/);
   assert.match(migration, /grant select, insert, delete on table public\.public_funnel_visit_events[\s\S]*to novalure_tenant_app/);
   assert.match(migration, /grant select, insert, delete on table public\.public_funnel_visit_events to novalure_app/);
+  assert.match(roleBoundary, /migration 075_public_funnel_visit_truth is required before 079/);
+  assert.match(roleBoundary, /revoke all on table public\.public_funnel_visit_events[\s\S]*from public, novalure_tenant_app/);
+  assert.doesNotMatch(roleBoundary, /grant[\s\S]{0,120}novalure_tenant_app/);
   assert.match(schema, /"public_funnel_visit_events"/);
   assert.match(qaResetContract, /qaResetCascadeOwnedTables[\s\S]*"public_funnel_visit_events"/);
+  assert.match(qaTenantE2e, /075\.grants\.tenant_app_none[\s\S]*not \([\s\S]*has_table_privilege\('novalure_tenant_app'[\s\S]*'SELECT'[\s\S]*'INSERT'[\s\S]*'DELETE'/);
+  assert.match(qaTenantMatrix, /"075\.grants\.tenant_app_none"/);
 });
 
 test("Production Funnel KPIs do not render LAUNCH-OFF visits or conversion as zero truth", () => {
@@ -301,6 +318,12 @@ test("Visit truth migration is fully parseable by the guarded migration statemen
   assert.match(statements[2], /do \$migration\$[\s\S]*migration 074_validate_launch_tenant_relation_guards/);
   assert.match(statements[3], /create table if not exists public\.public_funnel_visit_events/);
   assert.match(statements[6], /grant select, insert, delete[\s\S]*novalure_tenant_app/);
+
+  const roleBoundaryStatements = splitPostgresStatements(
+    readProjectFile("migrations/079_public_funnel_visit_role_boundary.sql"),
+  );
+  assert.ok(roleBoundaryStatements.length > 0);
+  assert.match(roleBoundaryStatements.join("\n"), /revoke all[\s\S]*novalure_tenant_app/);
 });
 
 test("Client refreshes before expiry, retries only explicit expiry once, and never forwards the URL token", () => {
@@ -312,15 +335,20 @@ test("Client refreshes before expiry, retries only explicit expiry once, and nev
 
   assert.match(renderer, /publicSubmissionProofRefreshLeadSeconds/);
   assert.match(renderer, /proof\.idempotencyKey !== currentProof\.idempotencyKey/);
-  assert.match(renderer, /getOrCreatePublicFunnelVisitId/);
+  assert.doesNotMatch(renderer, /getOrCreatePublicFunnelVisitId|visitId/);
   assert.match(renderer, /!visitTrackingEnabled[\s\S]*!runtimeConsent\.analytics/);
   assert.match(renderer, /data-funnel-runtime-error=\{reloadRequired \? "publication-stale"/);
   assert.match(submit, /const submissionIntentId[\s\S]*const sendAttempt/);
+  assert.match(submit, /const proofForFirstAttempt = testOnly \? undefined : await refreshSubmissionProof\(\)[\s\S]*await sendAttempt\(proofForFirstAttempt, true\)/);
   assert.match(submit, /submission_proof_expired[\s\S]*return sendAttempt\(refreshedProof, false\)/);
   assert.match(submit, /isFunnelPublicationStaleResponse\(responsePayload\)[\s\S]*markPublicationStale\(\)[\s\S]*funnel_publication_stale/);
   assert.doesNotMatch(invalidBranch, /return sendAttempt\(/);
   assert.match(requestBuilder, /credentials: "omit"/);
   assert.match(requestBuilder, /referrerPolicy: "no-referrer"/);
+  assert.match(renderer, /sanitizeFunnelSubmissionSourceUrl\(window\.location\.href\)/);
+  assert.match(renderer, /if \(field\.captureSourceUrl\) value = sourceUrl/);
+  assert.doesNotMatch(renderer, /captureSourceUrl\) value = window\.location\.href/);
+  assert.doesNotMatch(renderer, /sourceUrl:\s*typeof window[^\n]*window\.location\.href/);
   assert.match(page, /referrer: "no-referrer"/);
   assert.match(page, /visitTrackingEnabled=\{mode === "live" && evaluateLaunchScope\("publicFunnelVisit"\)\.allowed\}/);
   assert.ok(page.indexOf("canUsePublicLiveFunnel") < page.indexOf("createPublicSubmissionProof({"));

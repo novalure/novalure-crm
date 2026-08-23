@@ -352,6 +352,38 @@ export function createPublicSubmissionRateLimitPolicies(input: {
   ];
 }
 
+export function createPublicFormProofRefreshRateLimitPolicies(input: {
+  clientIp: string;
+  formKey: string;
+  idempotencyKey: string;
+  secret?: string;
+}) {
+  const hash = (label: string, value: string) =>
+    createPublicSubmissionOpaqueHash({
+      label: `public-form-proof-refresh-rate-${label}`,
+      secret: input.secret,
+      value,
+    });
+
+  return [
+    {
+      keyHash: hash("ip", input.clientIp),
+      limit: 120,
+      windowSeconds: 10 * 60,
+    },
+    {
+      keyHash: hash("proof", input.idempotencyKey || "missing"),
+      limit: 4,
+      windowSeconds: 15 * 60,
+    },
+    {
+      keyHash: hash("form", input.formKey),
+      limit: 600,
+      windowSeconds: 10 * 60,
+    },
+  ];
+}
+
 export function normalizePublicSubmissionIdentifier(
   value: string,
   type: "email" | "phone" | "opaque" = "opaque",

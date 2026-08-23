@@ -11,6 +11,16 @@ const targetDefinitions = Object.freeze({
     projectIdKey: "NOVALURE_PRODUCTION_PROJECT_ID",
     roleNameKey: "NOVALURE_PRODUCTION_DATABASE_ROLE",
   }),
+  recovery: Object.freeze({
+    branchIdKey: "NOVALURE_RECOVERY_BRANCH_ID",
+    databaseNameKey: "NOVALURE_RECOVERY_DATABASE_NAME",
+    hostKey: "NOVALURE_RECOVERY_DATABASE_HOST",
+    migrationHostKey: "NOVALURE_RECOVERY_MIGRATION_DATABASE_HOST",
+    migrationRoleNameKey: "NOVALURE_RECOVERY_MIGRATION_DATABASE_ROLE",
+    projectFingerprintKey: "NOVALURE_RECOVERY_PROJECT_FINGERPRINT",
+    projectIdKey: "NOVALURE_RECOVERY_PROJECT_ID",
+    roleNameKey: "NOVALURE_RECOVERY_DATABASE_ROLE",
+  }),
   test: Object.freeze({
     branchIdKey: "NOVALURE_QA_BRANCH_ID",
     databaseNameKey: "NOVALURE_QA_DATABASE_NAME",
@@ -31,9 +41,38 @@ function readConfiguredValue(env, key) {
 function requireTargetDefinition(target) {
   const definition = targetDefinitions[target];
   if (!definition) {
-    throw new Error("Database target must be explicitly set to 'test' or 'prod'.");
+    throw new Error("Database target must be explicitly set to 'test', 'recovery', or 'prod'.");
   }
   return definition;
+}
+
+function assertRecoveryTargetDeclaration(env, connectionMode, expectedProject) {
+  if (!expectedProject.exact) {
+    throw new Error("Recovery requires an exact NOVALURE_RECOVERY_PROJECT_ID.");
+  }
+  const productionProjectId = readConfiguredValue(env, "NOVALURE_PRODUCTION_PROJECT_ID");
+  if (!productionProjectId || productionProjectId !== expectedProject.value) {
+    throw new Error("Recovery must use the exact declared Production Neon project.");
+  }
+  const recoveryBranchId = readConfiguredValue(env, "NOVALURE_RECOVERY_BRANCH_ID");
+  const productionBranchId = readConfiguredValue(env, "NOVALURE_PRODUCTION_BRANCH_ID");
+  if (!/^br-[A-Za-z0-9-]{8,128}$/.test(recoveryBranchId)) {
+    throw new Error("NOVALURE_RECOVERY_BRANCH_ID must identify one explicit Neon child branch.");
+  }
+  if (!/^br-[A-Za-z0-9-]{8,128}$/.test(productionBranchId)) {
+    throw new Error("NOVALURE_PRODUCTION_BRANCH_ID is required for the Recovery boundary.");
+  }
+  if (recoveryBranchId === productionBranchId) {
+    throw new Error("Recovery branch must differ from Production Main.");
+  }
+
+  for (const target of ["prod", "test"]) {
+    const definition = targetDefinitions[target];
+    const key = connectionMode === "direct" ? definition.migrationHostKey : definition.hostKey;
+    if (!readConfiguredValue(env, key)) {
+      throw new Error(`${key} is required for Recovery host separation.`);
+    }
+  }
 }
 
 function normalizeExpectedHost(value, key, connectionMode) {
@@ -94,17 +133,21 @@ export function resolveDatabaseTarget(target, env = process.env, connectionMode 
 
   const expectedHost = normalizeExpectedHost(expectedHostValue, hostKey, connectionMode);
   const expectedProject = resolveExpectedProject(definition, env);
-  const otherTarget = target === "test" ? "prod" : "test";
-  const otherDefinition = targetDefinitions[otherTarget];
-  const otherHostKey = connectionMode === "direct"
-    ? otherDefinition.migrationHostKey
-    : otherDefinition.hostKey;
-  const otherHostValue = readConfiguredValue(env, otherHostKey);
-  if (
-    otherHostValue &&
-    normalizeExpectedHost(otherHostValue, otherHostKey, connectionMode) === expectedHost
-  ) {
-    throw new Error("QA and production database hosts must be different.");
+  if (target === "recovery") {
+    assertRecoveryTargetDeclaration(env, connectionMode, expectedProject);
+  }
+  for (const [otherTarget, otherDefinition] of Object.entries(targetDefinitions)) {
+    if (otherTarget === target) continue;
+    const otherHostKey = connectionMode === "direct"
+      ? otherDefinition.migrationHostKey
+      : otherDefinition.hostKey;
+    const otherHostValue = readConfiguredValue(env, otherHostKey);
+    if (
+      otherHostValue &&
+      normalizeExpectedHost(otherHostValue, otherHostKey, connectionMode) === expectedHost
+    ) {
+      throw new Error("Database target hosts must be different.");
+    }
   }
 
   return Object.freeze({ connectionMode, expectedHost, expectedProject, target });
@@ -201,6 +244,9 @@ export function validateConnectedDatabaseTarget({
     throw new Error("Database connection mode must be 'pooled' or 'direct'.");
   }
   const expectedProject = resolveExpectedProject(definition, env);
+  if (target === "recovery") {
+    assertRecoveryTargetDeclaration(env, connectionMode, expectedProject);
+  }
   const roleNameKey = connectionMode === "direct"
     ? definition.migrationRoleNameKey
     : definition.roleNameKey;

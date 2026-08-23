@@ -151,7 +151,7 @@ test("tenant relation gate passes only the complete checksummed, validated and c
   assert.deepEqual(result.errors, []);
 });
 
-test("tenant relation gate rejects missing 073-077 and a blank checksum", () => {
+test("tenant relation gate rejects missing launch migrations through 079 and a blank checksum", () => {
   const missing073 = validTenantRelationGateState();
   missing073.migrations = missing073.migrations.filter((migration) => migration.version !== "073_launch_tenant_relation_guards");
   assert.match(
@@ -170,6 +170,8 @@ test("tenant relation gate rejects missing 073-077 and a blank checksum", () => 
     "075_public_funnel_visit_truth",
     "076_bot_webhook_durable_processing",
     "077_schema_ledger_runtime_projection",
+    "078_company_profile_approval_integrity",
+    "079_public_funnel_visit_role_boundary",
   ]) {
     const missing = validTenantRelationGateState();
     missing.migrations = missing.migrations.filter((migration) => migration.version !== version);
@@ -400,6 +402,8 @@ test("legacy unclean E2E entry points are replaced by the batch-safe harness", (
   assert.match(matrixContract, /075_public_funnel_visit_truth/);
   assert.match(matrixContract, /076_bot_webhook_durable_processing/);
   assert.match(matrixContract, /077_schema_ledger_runtime_projection/);
+  assert.match(matrixContract, /078_company_profile_approval_integrity/);
+  assert.match(matrixContract, /079_public_funnel_visit_role_boundary/);
   assert.match(harness, /from public\.novalure_schema_migration_checksums/);
   assert.doesNotMatch(harness, /from (?:public\.)?novalure_schema_migrations/);
   assert.match(harness, /ledger_base_denied/);
@@ -425,7 +429,7 @@ test("legacy unclean E2E entry points are replaced by the batch-safe harness", (
   assert.match(harness, /has_table_privilege\(current_user, 'public\.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION'\)/i);
   assert.match(harness, /has_any_column_privilege\(current_user, 'public\.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION'\)/i);
   assert.equal((harness.match(/where c\.workspace_id = \$\{tenant\.workspaceId\}::uuid/g) ?? []).length, 19);
-  assert.match(harness, /migrations_checksummed_057_077/);
+  assert.match(harness, /migrations_launch_required_checksummed/);
   assert.match(harness, /launch_schema_artifacts_075_076/);
   assert.match(harness, /loadRequiredMigrationChecksums/);
   assert.match(harness, /tenant_constraints_validated/);

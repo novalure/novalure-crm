@@ -4,6 +4,7 @@ import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import { listBotConversations, listBotMessages } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { getModelProviderStatus } from "@/lib/integrations/model-provider";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export const maxDuration = 60;
 
@@ -61,6 +62,18 @@ export async function POST(request: Request) {
     !canViewAllWorkspaceContacts(auth.session)
   ) {
     return Response.json({ error: "bot_crm_write_permission_required" }, { status: 403 });
+  }
+
+  const launchScope = evaluateLaunchScope("authenticatedBotModelProvider");
+  if (!launchScope.allowed) {
+    return Response.json(
+      {
+        code: launchScope.code,
+        error: "authenticated_bot_model_provider_launch_off",
+        ok: false,
+      },
+      { headers: { "cache-control": "private, no-store" }, status: 503 },
+    );
   }
 
   const body = await readJson(request);

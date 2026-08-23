@@ -9,7 +9,7 @@ const [calendar, workspace] = await Promise.all([
   readFile(new URL("../src/components/crm-workspace.tsx", import.meta.url), "utf8"),
 ]);
 
-test("the five visible calendar selectors have stable visible labels", () => {
+test("calendar selectors retain stable visible labels whenever their gated panels are enabled", () => {
   const ids = [
     "calendar-default-provider",
     "calendar-default-meeting-provider",
