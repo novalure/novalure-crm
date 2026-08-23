@@ -150,7 +150,7 @@ test("tenant relation gate passes only the complete checksummed, validated and c
   assert.deepEqual(result.errors, []);
 });
 
-test("tenant relation gate rejects missing 073-076 and a blank checksum", () => {
+test("tenant relation gate rejects missing 073-077 and a blank checksum", () => {
   const missing073 = validTenantRelationGateState();
   missing073.migrations = missing073.migrations.filter((migration) => migration.version !== "073_launch_tenant_relation_guards");
   assert.match(
@@ -165,7 +165,11 @@ test("tenant relation gate rejects missing 073-076 and a blank checksum", () => 
     /missing_migration:074_validate_launch_tenant_relation_guards/,
   );
 
-  for (const version of ["075_public_funnel_visit_truth", "076_bot_webhook_durable_processing"]) {
+  for (const version of [
+    "075_public_funnel_visit_truth",
+    "076_bot_webhook_durable_processing",
+    "077_schema_ledger_runtime_projection",
+  ]) {
     const missing = validTenantRelationGateState();
     missing.migrations = missing.migrations.filter((migration) => migration.version !== version);
     assert.match(
@@ -290,7 +294,33 @@ test("legacy unclean E2E entry points are replaced by the batch-safe harness", (
   assert.match(matrixContract, /074_validate_launch_tenant_relation_guards/);
   assert.match(matrixContract, /075_public_funnel_visit_truth/);
   assert.match(matrixContract, /076_bot_webhook_durable_processing/);
-  assert.match(harness, /migrations_checksummed_068_076/);
+  assert.match(matrixContract, /077_schema_ledger_runtime_projection/);
+  assert.match(harness, /from public\.novalure_schema_migration_checksums/);
+  assert.doesNotMatch(harness, /from (?:public\.)?novalure_schema_migrations/);
+  assert.match(harness, /ledger_base_denied/);
+  assert.match(harness, /ledger_projection_read_only/);
+  assert.match(harness, /tenant_role_inherited/);
+  assert.match(harness, /row_security_active\('public\.qa_batches'::regclass\)/);
+  assert.match(harness, /row_security_active\('public\.qa_batch_objects'::regclass\)/);
+  assert.match(harness, /relation\.relowner = ledger\.relowner/);
+  assert.match(harness, /not pg_catalog\.pg_has_role\(current_user, relation\.relowner, 'MEMBER'\)/);
+  assert.match(harness, /not pg_catalog\.pg_has_role\(current_user, relation\.relowner, 'USAGE'\)/);
+  for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"]) {
+    assert.match(
+      harness,
+      new RegExp(`has_table_privilege\\(current_user, 'public\\.novalure_schema_migrations', '${privilege}'\\)`, "i"),
+    );
+  }
+  for (const privilege of ["SELECT", "INSERT", "UPDATE", "REFERENCES"]) {
+    assert.match(
+      harness,
+      new RegExp(`has_any_column_privilege\\(current_user, 'public\\.novalure_schema_migrations', '${privilege}'\\)`, "i"),
+    );
+  }
+  assert.match(harness, /has_table_privilege\(current_user, 'public\.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION'\)/i);
+  assert.match(harness, /has_any_column_privilege\(current_user, 'public\.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION'\)/i);
+  assert.equal((harness.match(/where c\.workspace_id = \$\{tenant\.workspaceId\}::uuid/g) ?? []).length, 19);
+  assert.match(harness, /migrations_checksummed_057_077/);
   assert.match(harness, /launch_schema_artifacts_075_076/);
   assert.match(harness, /loadRequiredMigrationChecksums/);
   assert.match(harness, /tenant_constraints_validated/);

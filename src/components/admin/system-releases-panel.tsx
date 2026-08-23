@@ -58,9 +58,7 @@ export function parseSystemDatabaseDiagnostics(value: unknown): SystemDatabaseDi
     (row) =>
       isRecord(row) &&
       typeof row.version === "string" &&
-      typeof row.name === "string" &&
-      isNullableString(row.checksum) &&
-      (typeof row.appliedAt === "string" || row.appliedAt instanceof Date),
+      isNullableString(row.checksum),
   );
   const validTableStatus = value.tableStatus.every(
     (row) => isRecord(row) && typeof row.exists === "boolean" && typeof row.tableName === "string",

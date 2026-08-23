@@ -10,9 +10,7 @@ export type TableStatusRow = {
 };
 
 export type MigrationLedgerRow = {
-  appliedAt: string | Date;
   checksum: string | null;
-  name: string;
   version: string;
 };
 
@@ -88,10 +86,8 @@ export async function GET(request: Request) {
         `
           select
             version,
-            name,
-            checksum,
-            applied_at as "appliedAt"
-          from novalure_schema_migrations
+            checksum
+          from public.novalure_schema_migration_checksums
           order by version asc
         `,
       ),

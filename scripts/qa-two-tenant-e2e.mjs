@@ -311,9 +311,82 @@ async function scopedRead(sql, tenant, actorId) {
     `,
     transaction`
       select version, checksum
-      from novalure_schema_migrations
+      from public.novalure_schema_migration_checksums
       where version = any(${qaRequiredMigrationVersions}::text[])
       order by version
+    `,
+    transaction`
+      select
+        current_user = 'novalure_app' as "appRole",
+        pg_catalog.pg_has_role(current_user, 'novalure_tenant_app', 'USAGE') as "tenantRoleInherited",
+        not (
+          pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'SELECT')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'INSERT')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'UPDATE')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'DELETE')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'TRUNCATE')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'REFERENCES')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'TRIGGER')
+          or pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migrations', 'MAINTAIN')
+          or pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migrations', 'SELECT')
+          or pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migrations', 'INSERT')
+          or pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migrations', 'UPDATE')
+          or pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migrations', 'REFERENCES')
+        ) as "baseDenied",
+        (
+          pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'SELECT')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'INSERT')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'UPDATE')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'DELETE')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'TRUNCATE')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'REFERENCES')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'TRIGGER')
+          and not pg_catalog.has_table_privilege(current_user, 'public.novalure_schema_migration_checksums', 'MAINTAIN')
+          and not pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migration_checksums', 'INSERT')
+          and not pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migration_checksums', 'UPDATE')
+          and not pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migration_checksums', 'REFERENCES')
+          and not pg_catalog.has_any_column_privilege(current_user, 'public.novalure_schema_migration_checksums', 'SELECT WITH GRANT OPTION')
+        ) as "projectionReadOnly",
+        exists (
+          select 1
+          from pg_catalog.pg_class relation
+          join pg_catalog.pg_class ledger
+            on ledger.oid = to_regclass('public.novalure_schema_migrations')
+          where relation.oid = to_regclass('public.novalure_schema_migration_checksums')
+            and relation.relkind = 'v'
+            and relation.relowner = ledger.relowner
+            and not pg_catalog.pg_has_role(current_user, relation.relowner, 'MEMBER')
+            and not pg_catalog.pg_has_role(current_user, relation.relowner, 'USAGE')
+            and 'security_barrier=true' = any(coalesce(relation.reloptions, '{}'::text[]))
+            and 'security_invoker=false' = any(coalesce(relation.reloptions, '{}'::text[]))
+        ) as "projectionOwnerScoped",
+        pg_catalog.row_security_active('public.qa_batches'::regclass) as "qaBatchesRlsActive",
+        pg_catalog.row_security_active('public.qa_batch_objects'::regclass) as "qaBatchObjectsRlsActive",
+        (
+          select array_agg(attribute.attname::text order by attribute.attnum)
+          from pg_catalog.pg_attribute attribute
+          where attribute.attrelid = to_regclass('public.novalure_schema_migration_checksums')
+            and attribute.attnum > 0
+            and not attribute.attisdropped
+        ) = array['version', 'checksum']::text[] as "projectionColumnsExact",
+        not exists (
+          select 1
+          from pg_catalog.pg_class relation
+          cross join lateral pg_catalog.aclexplode(
+            coalesce(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+          ) acl
+          where relation.oid = to_regclass('public.novalure_schema_migration_checksums')
+            and acl.grantee = 0
+          union all
+          select 1
+          from pg_catalog.pg_attribute attribute
+          cross join lateral pg_catalog.aclexplode(attribute.attacl) acl
+          where attribute.attrelid = to_regclass('public.novalure_schema_migration_checksums')
+            and attribute.attnum > 0
+            and not attribute.attisdropped
+            and acl.grantee = 0
+        ) as "projectionPublicDenied"
     `,
     transaction`
       select
@@ -327,25 +400,25 @@ async function scopedRead(sql, tenant, actorId) {
     transaction`
       select relation, violations
       from (
-        select 'funnels.project' relation, count(*)::int violations from funnels c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.project_id is not null and p.id is null
-        union all select 'funnels.owner', count(*)::int from funnels c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.owner_user_id where c.owner_user_id is not null and p.id is null
-        union all select 'funnel_steps.project', count(*)::int from funnel_steps c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.project_id is not null and p.id is null
-        union all select 'funnel_steps.funnel', count(*)::int from funnel_steps c left join funnels p on p.workspace_id = c.workspace_id and p.id = c.funnel_id where c.funnel_id is not null and p.id is null
-        union all select 'funnel_steps.bot', count(*)::int from funnel_steps c left join bots p on p.workspace_id = c.workspace_id and p.id = c.bot_rule_id where c.bot_rule_id is not null and p.id is null
-        union all select 'property_inquiries.project', count(*)::int from property_inquiries c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.project_id is not null and p.id is null
-        union all select 'property_inquiries.property', count(*)::int from property_inquiries c left join seller_listings p on p.workspace_id = c.workspace_id and p.id = c.property_id where c.property_id is not null and p.id is null
-        union all select 'property_inquiries.unit', count(*)::int from property_inquiries c left join property_units p on p.workspace_id = c.workspace_id and p.id = c.unit_id where c.unit_id is not null and p.id is null
-        union all select 'property_inquiries.contact', count(*)::int from property_inquiries c left join contacts p on p.workspace_id = c.workspace_id and p.id = c.contact_id where c.contact_id is not null and p.id is null
-        union all select 'property_inquiries.lead', count(*)::int from property_inquiries c left join leads p on p.workspace_id = c.workspace_id and p.id = c.lead_id where c.lead_id is not null and p.id is null
-        union all select 'property_inquiries.funnel', count(*)::int from property_inquiries c left join funnels p on p.workspace_id = c.workspace_id and p.id = c.funnel_id where c.funnel_id is not null and p.id is null
-        union all select 'property_inquiries.form', count(*)::int from property_inquiries c left join forms p on p.workspace_id = c.workspace_id and p.id = c.form_id where c.form_id is not null and p.id is null
-        union all select 'property_inquiries.owner', count(*)::int from property_inquiries c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.owner_user_id where c.owner_user_id is not null and p.id is null
-        union all select 'property_activity.project', count(*)::int from property_activity_events c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.project_id is not null and p.id is null
-        union all select 'property_activity.property', count(*)::int from property_activity_events c left join seller_listings p on p.workspace_id = c.workspace_id and p.id = c.property_id where c.property_id is not null and p.id is null
-        union all select 'property_activity.unit', count(*)::int from property_activity_events c left join property_units p on p.workspace_id = c.workspace_id and p.id = c.unit_id where c.unit_id is not null and p.id is null
-        union all select 'property_activity.contact', count(*)::int from property_activity_events c left join contacts p on p.workspace_id = c.workspace_id and p.id = c.contact_id where c.contact_id is not null and p.id is null
-        union all select 'property_activity.lead', count(*)::int from property_activity_events c left join leads p on p.workspace_id = c.workspace_id and p.id = c.lead_id where c.lead_id is not null and p.id is null
-        union all select 'property_activity.actor', count(*)::int from property_activity_events c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.actor_user_id where c.actor_user_id is not null and p.id is null
+        select 'funnels.project' relation, count(*)::int violations from funnels c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.project_id is not null and p.id is null
+        union all select 'funnels.owner', count(*)::int from funnels c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.owner_user_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.owner_user_id is not null and p.id is null
+        union all select 'funnel_steps.project', count(*)::int from funnel_steps c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.project_id is not null and p.id is null
+        union all select 'funnel_steps.funnel', count(*)::int from funnel_steps c left join funnels p on p.workspace_id = c.workspace_id and p.id = c.funnel_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.funnel_id is not null and p.id is null
+        union all select 'funnel_steps.bot', count(*)::int from funnel_steps c left join bots p on p.workspace_id = c.workspace_id and p.id = c.bot_rule_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.bot_rule_id is not null and p.id is null
+        union all select 'property_inquiries.project', count(*)::int from property_inquiries c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.project_id is not null and p.id is null
+        union all select 'property_inquiries.property', count(*)::int from property_inquiries c left join seller_listings p on p.workspace_id = c.workspace_id and p.id = c.property_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.property_id is not null and p.id is null
+        union all select 'property_inquiries.unit', count(*)::int from property_inquiries c left join property_units p on p.workspace_id = c.workspace_id and p.id = c.unit_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.unit_id is not null and p.id is null
+        union all select 'property_inquiries.contact', count(*)::int from property_inquiries c left join contacts p on p.workspace_id = c.workspace_id and p.id = c.contact_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.contact_id is not null and p.id is null
+        union all select 'property_inquiries.lead', count(*)::int from property_inquiries c left join leads p on p.workspace_id = c.workspace_id and p.id = c.lead_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.lead_id is not null and p.id is null
+        union all select 'property_inquiries.funnel', count(*)::int from property_inquiries c left join funnels p on p.workspace_id = c.workspace_id and p.id = c.funnel_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.funnel_id is not null and p.id is null
+        union all select 'property_inquiries.form', count(*)::int from property_inquiries c left join forms p on p.workspace_id = c.workspace_id and p.id = c.form_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.form_id is not null and p.id is null
+        union all select 'property_inquiries.owner', count(*)::int from property_inquiries c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.owner_user_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.owner_user_id is not null and p.id is null
+        union all select 'property_activity.project', count(*)::int from property_activity_events c left join projects p on p.workspace_id = c.workspace_id and p.id = c.project_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.project_id is not null and p.id is null
+        union all select 'property_activity.property', count(*)::int from property_activity_events c left join seller_listings p on p.workspace_id = c.workspace_id and p.id = c.property_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.property_id is not null and p.id is null
+        union all select 'property_activity.unit', count(*)::int from property_activity_events c left join property_units p on p.workspace_id = c.workspace_id and p.id = c.unit_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.unit_id is not null and p.id is null
+        union all select 'property_activity.contact', count(*)::int from property_activity_events c left join contacts p on p.workspace_id = c.workspace_id and p.id = c.contact_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.contact_id is not null and p.id is null
+        union all select 'property_activity.lead', count(*)::int from property_activity_events c left join leads p on p.workspace_id = c.workspace_id and p.id = c.lead_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.lead_id is not null and p.id is null
+        union all select 'property_activity.actor', count(*)::int from property_activity_events c left join workspace_users p on p.workspace_id = c.workspace_id and p.id = c.actor_user_id where c.workspace_id = ${tenant.workspaceId}::uuid and c.actor_user_id is not null and p.id is null
       ) relation_checks
       order by relation
     `,
@@ -700,16 +773,17 @@ async function scopedRead(sql, tenant, actorId) {
   ], { readOnly: true });
   return {
     batch: results[4][0] ?? null,
-    batchObjectCount: Number(results[8][0]?.count ?? 0),
+    batchObjectCount: Number(results[9][0]?.count ?? 0),
+    ledgerAccess: results[6][0] ?? null,
     markerCounts: {
-      contacts: Number(results[9][0]?.contacts ?? 0),
-      deals: Number(results[9][0]?.deals ?? 0),
+      contacts: Number(results[10][0]?.contacts ?? 0),
+      deals: Number(results[10][0]?.deals ?? 0),
     },
-    launchSchemaArtifacts: results[10],
+    launchSchemaArtifacts: results[11],
     migrations: results[5],
     project: results[2][0] ?? null,
-    tenantConstraintState: results[6][0] ?? null,
-    tenantRelationViolations: results[7],
+    tenantConstraintState: results[7][0] ?? null,
+    tenantRelationViolations: results[8],
     users: results[3],
     workspace: results[1][0] ?? null,
   };
@@ -772,6 +846,15 @@ async function verifyDatabasePreflight(config, evidence) {
   const expectedMigrationChecksums = await loadRequiredMigrationChecksums();
   for (const tenant of config.tenants) {
     const state = await scopedRead(sql, tenant, tenant.resetActorUserId);
+    check(`${tenant.key.toLowerCase()}.db.app_role`, state.ledgerAccess?.appRole === true, state.ledgerAccess?.appRole, true);
+    check(`${tenant.key.toLowerCase()}.db.tenant_role_inherited`, state.ledgerAccess?.tenantRoleInherited === true, state.ledgerAccess?.tenantRoleInherited, true);
+    check(`${tenant.key.toLowerCase()}.db.qa_batches_rls_active`, state.ledgerAccess?.qaBatchesRlsActive === true, state.ledgerAccess?.qaBatchesRlsActive, true);
+    check(`${tenant.key.toLowerCase()}.db.qa_batch_objects_rls_active`, state.ledgerAccess?.qaBatchObjectsRlsActive === true, state.ledgerAccess?.qaBatchObjectsRlsActive, true);
+    check(`${tenant.key.toLowerCase()}.db.ledger_base_denied`, state.ledgerAccess?.baseDenied === true, state.ledgerAccess?.baseDenied, true);
+    check(`${tenant.key.toLowerCase()}.db.ledger_projection_read_only`, state.ledgerAccess?.projectionReadOnly === true, state.ledgerAccess?.projectionReadOnly, true);
+    check(`${tenant.key.toLowerCase()}.db.ledger_projection_owner_scoped`, state.ledgerAccess?.projectionOwnerScoped === true, state.ledgerAccess?.projectionOwnerScoped, true);
+    check(`${tenant.key.toLowerCase()}.db.ledger_projection_columns_exact`, state.ledgerAccess?.projectionColumnsExact === true, state.ledgerAccess?.projectionColumnsExact, true);
+    check(`${tenant.key.toLowerCase()}.db.ledger_projection_public_denied`, state.ledgerAccess?.projectionPublicDenied === true, state.ledgerAccess?.projectionPublicDenied, true);
     check(`${tenant.key.toLowerCase()}.db.workspace_is_qa`, state.workspace?.isQa === true, Boolean(state.workspace?.isQa), true);
     check(`${tenant.key.toLowerCase()}.db.project_scope`, state.project?.workspaceId === tenant.workspaceId, Boolean(state.project), true);
     check(`${tenant.key.toLowerCase()}.db.batch_exists`, Boolean(state.batch), Boolean(state.batch), true);
@@ -794,8 +877,8 @@ async function verifyDatabasePreflight(config, evidence) {
       schemaArtifacts: state.launchSchemaArtifacts,
       violations: state.tenantRelationViolations,
     });
-    check(`${tenant.key.toLowerCase()}.db.migrations_068_076`, tenantRelationGate.migrationsPresent, tenantRelationGate.errors, qaRequiredMigrationVersions);
-    check(`${tenant.key.toLowerCase()}.db.migrations_checksummed_068_076`, tenantRelationGate.migrationsChecksummed, tenantRelationGate.errors, true);
+    check(`${tenant.key.toLowerCase()}.db.migrations_057_077`, tenantRelationGate.migrationsPresent, tenantRelationGate.errors, qaRequiredMigrationVersions);
+    check(`${tenant.key.toLowerCase()}.db.migrations_checksummed_057_077`, tenantRelationGate.migrationsChecksummed, tenantRelationGate.errors, true);
     check(`${tenant.key.toLowerCase()}.db.launch_schema_artifacts_075_076`, tenantRelationGate.schemaArtifactsValid, tenantRelationGate.errors, qaLaunchSchemaArtifactNames);
     check(`${tenant.key.toLowerCase()}.db.tenant_constraints_present`, tenantRelationGate.constraintsPresent, state.tenantConstraintState?.found, qaTenantConstraintNames.length);
     check(`${tenant.key.toLowerCase()}.db.tenant_constraints_validated`, tenantRelationGate.constraintsValidated, state.tenantConstraintState?.validated, qaTenantConstraintNames.length);

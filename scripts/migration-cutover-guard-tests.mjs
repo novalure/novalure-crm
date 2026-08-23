@@ -706,6 +706,10 @@ test("automatic migration plans exclude every release cutover phase", () => {
     runner,
     /\["076_bot_webhook_durable_processing", \[[\s\S]*"075_public_funnel_visit_truth"[\s\S]*"057_bot_webhook_legacy_index_cutover"/,
   );
+  assert.match(
+    runner,
+    /\["077_schema_ledger_runtime_projection", "076_bot_webhook_durable_processing"\]/,
+  );
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 

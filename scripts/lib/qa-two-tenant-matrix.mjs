@@ -14,6 +14,7 @@ export const qaRequiredMigrationVersions = Object.freeze([
   "074_validate_launch_tenant_relation_guards",
   "075_public_funnel_visit_truth",
   "076_bot_webhook_durable_processing",
+  "077_schema_ledger_runtime_projection",
 ]);
 
 export const qaTenantConstraintNames = Object.freeze([

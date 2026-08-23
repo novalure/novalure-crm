@@ -313,7 +313,7 @@ test("local 049/052 snapshots remain byte-stable while 049 ledger recovery is bl
     new URL("../src/app/api/system/database/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /from novalure_schema_migrations/i);
+  assert.match(route, /from public\.novalure_schema_migration_checksums/i);
   assert.match(route, /order by version asc/i);
   assert.match(route, /checksum/);
   assert.doesNotMatch(route, /060_tenant_rls_pilot_prepare/);

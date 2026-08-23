@@ -32,7 +32,7 @@ test("system diagnostics and trusted-candidate workflow include the property dep
   const workflow = read(".github/workflows/livegang-e2e.yml");
   const seed = read("scripts/qa-livegang-seed.mjs");
 
-  assert.match(read("src/app/api/system/database/route.ts"), /from novalure_schema_migrations/);
+  assert.match(read("src/app/api/system/database/route.ts"), /from public\.novalure_schema_migration_checksums/);
   assert.match(workflow, /Preview checksummed QA migration plan without writes/);
   assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Seed two or more isolated QA workspaces/);
   assert.doesNotMatch(seed, /applyMigration\(/);

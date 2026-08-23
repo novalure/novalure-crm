@@ -68,6 +68,7 @@ const migrationDependencies = new Map([
     "075_public_funnel_visit_truth",
     "057_bot_webhook_legacy_index_cutover",
   ]],
+  ["077_schema_ledger_runtime_projection", "076_bot_webhook_durable_processing"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 

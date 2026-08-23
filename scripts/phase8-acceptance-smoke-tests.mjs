@@ -90,7 +90,7 @@ test("fresh-user onboarding tour has a persisted profile confirmation path", () 
   assert.match(migration, /add column if not exists onboarding_current_step text/);
   assert.match(migration, /add column if not exists onboarding_completed_steps text\[\] not null default '\{\}'/);
   assert.match(migration, /add column if not exists onboarding_skipped_steps text\[\] not null default '\{\}'/);
-  assert.match(databaseRoute, /from novalure_schema_migrations/);
+  assert.match(databaseRoute, /from public\.novalure_schema_migration_checksums/);
   assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Seed two or more isolated QA workspaces/);
   assert.doesNotMatch(seed, /applyMigration\(/);
   assert.match(apiRoute, /select[\s\S]*onboarding_completed_at as "completedAt"/);

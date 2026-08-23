@@ -7,7 +7,7 @@ import {
   withDatabaseConnectionRetry,
 } from "../src/lib/db/connection-retry.ts";
 
-test("database diagnostics read the migration ledger dynamically and redact failures", async () => {
+test("database diagnostics read the least-privilege migration projection and redact failures", async () => {
   const [source, health] = await Promise.all([
     readFile(new URL("../src/app/api/system/database/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/app/api/health/route.ts", import.meta.url), "utf8"),
@@ -18,7 +18,8 @@ test("database diagnostics read the migration ledger dynamically and redact fail
   assert.match(source, /\{ error: "not_found" \}/);
   assert.match(source, /status: 404/);
   assert.doesNotMatch(source, /isProductionDiagnosticsRestricted|NOVALURE_RESTRICT_SYSTEM_DIAGNOSTICS/);
-  assert.match(source, /from novalure_schema_migrations/i);
+  assert.match(source, /from public\.novalure_schema_migration_checksums/i);
+  assert.doesNotMatch(source, /from (?:public\.)?novalure_schema_migrations/i);
   assert.match(source, /order by version asc/i);
   assert.match(source, /checksum/);
   assert.match(source, /migrationStatus/);
