@@ -121,7 +121,8 @@ export async function POST(request: Request) {
       }
       const configurationError =
         error instanceof QaResetContractError &&
-        (error.code === "qa_allowlist_not_configured" ||
+        (error.code === "production_denylist_not_configured" ||
+          error.code === "qa_allowlist_not_configured" ||
           error.code === "qa_allowlist_too_small" ||
           error.code === "qa_production_allowlist_overlap");
       const planConflict =

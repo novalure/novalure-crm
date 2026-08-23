@@ -27,7 +27,7 @@ Scope: Repository-/Migrationsartefakte, isolierter Preview-Neon-Migrations-/Rest
   - benötigt eine persistierte Cookie-Session, technische Rolle `owner`, Produktrolle `platform_admin`, App-Permission `settings:manage` sowie Produkt-Capabilities `novalure:internal` und `settings:manage`;
   - erzwingt CSRF vor Capability-/Reset-Aufruf;
   - akzeptiert nur Workspace-IDs aus der serverseitigen `NOVALURE_QA_RESET_WORKSPACE_IDS`-Allowlist; mindestens zwei IDs sind Pflicht;
-  - verweigert jede Überschneidung mit `NOVALURE_PRODUCTION_WORKSPACE_IDS`;
+  - verlangt eine nichtleere `NOVALURE_PRODUCTION_WORKSPACE_IDS`-Denylist und verweigert jede Überschneidung mit ihr; fehlt sie, antwortet der Runtime-Rand fail-closed mit einem Konfigurationsfehler;
   - führt ohne Modus immer `dry_run` aus;
   - `execute` benötigt zusätzlich `NOVALURE_QA_RESET_EXECUTION_ENABLED=true`, die exakte Confirmation `RESET QA BATCH <workspaceId> <batchId>` sowie `expectedPlanDigest` mit dem exakten SHA-256-Plandigest aus dem unmittelbar vorherigen blockerfreien `dry_run`;
   - Antwort und Audit sind `private, no-store` und enthalten keine Secrets.

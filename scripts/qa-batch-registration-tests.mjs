@@ -99,6 +99,12 @@ test("QA batch header is accepted only for explicit isolated Preview configurati
     })),
     (error) => error?.code === "QA_BATCH_ISOLATION_INVALID",
   );
+  assert.throws(
+    () => runtime.readQaBatchMutationHeader(requestWithBatch(), session(), previewEnvironment({
+      NOVALURE_PRODUCTION_WORKSPACE_IDS: undefined,
+    })),
+    (error) => error?.code === "QA_BATCH_ISOLATION_INVALID",
+  );
 });
 
 test("registration commits every exact object and reports committed", async () => {

@@ -247,6 +247,19 @@ test("server allowlist requires two QA tenants and cannot overlap production", (
   );
   assert.throws(
     () => resolveQaResetWorkspaceAllowlist({
+      NOVALURE_QA_RESET_WORKSPACE_IDS: `${workspaceA},${workspaceB}`,
+    }),
+    /NOVALURE_PRODUCTION_WORKSPACE_IDS is required/,
+  );
+  assert.throws(
+    () => resolveQaResetWorkspaceAllowlist({
+      NOVALURE_PRODUCTION_WORKSPACE_IDS: "  ",
+      NOVALURE_QA_RESET_WORKSPACE_IDS: `${workspaceA},${workspaceB}`,
+    }),
+    /NOVALURE_PRODUCTION_WORKSPACE_IDS is required/,
+  );
+  assert.throws(
+    () => resolveQaResetWorkspaceAllowlist({
       NOVALURE_PRODUCTION_WORKSPACE_IDS: workspaceB,
       NOVALURE_QA_RESET_WORKSPACE_IDS: `${workspaceA},${workspaceB}`,
     }),
@@ -873,6 +886,7 @@ test("route requires session, CSRF, exact platform role and capability before re
   assert.match(route, /enforceCsrfForSession\(request, session\)/);
   assert.match(route, /canAdministerQaReset\(session\)/);
   assert.match(route, /resolveQaResetWorkspaceAllowlist\(\)/);
+  assert.match(route, /error\.code === "production_denylist_not_configured"/);
   assert.match(route, /assertQaResetExecutionAuthorized\(parsedRequest\)/);
   assert.match(route, /expectedPlanDigest: parsedRequest\.expectedPlanDigest/);
   assert.match(route, /error\.code === "plan_digest_mismatch"/);

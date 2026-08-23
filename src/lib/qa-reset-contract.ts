@@ -30,6 +30,7 @@ export type QaResetContractErrorCode =
   | "invalid_confirmation"
   | "invalid_plan_digest"
   | "plan_digest_required"
+  | "production_denylist_not_configured"
   | "qa_allowlist_not_configured"
   | "qa_allowlist_too_small"
   | "qa_production_allowlist_overlap"
@@ -122,6 +123,12 @@ export function resolveQaResetWorkspaceAllowlist(env: NodeJS.ProcessEnv = proces
   }
 
   const productionWorkspaceIds = parseUuidSet(env.NOVALURE_PRODUCTION_WORKSPACE_IDS);
+  if (productionWorkspaceIds.size === 0) {
+    throw new QaResetContractError(
+      "production_denylist_not_configured",
+      "NOVALURE_PRODUCTION_WORKSPACE_IDS is required",
+    );
+  }
   for (const workspaceId of qaWorkspaceIds) {
     if (productionWorkspaceIds.has(workspaceId)) {
       throw new QaResetContractError(

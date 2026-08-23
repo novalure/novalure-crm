@@ -60,7 +60,7 @@ Der Verification-Stop-Contract gilt: Beim ersten gebrochenen Boundary wird die f
 
 ## Implementierter Runtime-Vertrag
 
-Der Kandidat implementiert den serverseitigen Vertrag fail-closed. Er wird nur aktiv, wenn `VERCEL_ENV=preview`, `NOVALURE_QA_BATCH_REGISTRATION_ENABLED=true`, ein 40-stelliger `VERCEL_GIT_COMMIT_SHA` vorhanden ist und `NOVALURE_QA_RESET_WORKSPACE_IDS` mindestens zwei QA-Workspaces ohne Überschneidung zu `NOVALURE_PRODUCTION_WORKSPACE_IDS` enthält. In Production wird jeder Request mit QA-Batchheader vor einem Write abgewiesen.
+Der Kandidat implementiert den serverseitigen Vertrag fail-closed. Er wird nur aktiv, wenn `VERCEL_ENV=preview`, `NOVALURE_QA_BATCH_REGISTRATION_ENABLED=true`, ein 40-stelliger `VERCEL_GIT_COMMIT_SHA` vorhanden ist, `NOVALURE_QA_RESET_WORKSPACE_IDS` mindestens zwei QA-Workspaces enthält und eine nichtleere, dazu disjunkte `NOVALURE_PRODUCTION_WORKSPACE_IDS`-Denylist konfiguriert ist. Fehlt die Production-Denylist, liefern Capability, QA-Mutationen und Reset einen Konfigurationsfehler; in Production wird jeder Request mit QA-Batchheader vor einem Write abgewiesen.
 
 ### Capability-Preflight
 

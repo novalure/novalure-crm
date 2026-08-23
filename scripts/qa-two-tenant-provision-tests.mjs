@@ -38,6 +38,7 @@ test("provisioning generates a secret local bundle without printing credentials"
     assert.match(bundle, /^NOVALURE_QA_TENANT_A_OWNER_PASSWORD=/m);
     assert.match(bundle, /^NOVALURE_QA_TENANT_B_CUSTOMER_TOTP_SECRET=/m);
     assert.match(bundle, /^NOVALURE_QA_RESET_WORKSPACE_IDS=[^,]+,[^,]+$/m);
+    assert.match(bundle, /^NOVALURE_PRODUCTION_WORKSPACE_IDS=[^,]+,[^,]+$/m);
 
     const plan = JSON.parse(await readFile(path.join(directory, ".env.qa-two-tenant-plan.local.json"), "utf8"));
     assert.equal(plan.schemaVersion, 1);
