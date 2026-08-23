@@ -828,7 +828,12 @@ async function main() {
         }
 
         const nextLedger = await readLedger(client);
-        const nextPlan = plannedMigrations({ ledgerRows: nextLedger.rows, migrations, only: "" });
+        const nextPlan = plannedMigrations({
+          allowManualCutover,
+          ledgerRows: nextLedger.rows,
+          migrations,
+          only,
+        });
         printStatus({ ledger: nextLedger, migrations, plan: nextPlan });
       }
     } finally {

@@ -726,6 +726,11 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /migration\.manualCutover && !allowManualCutover/);
   assert.match(runner, /Refusing manual cutover migration/);
   assert.match(runner, /never included automatically/);
+  assert.match(
+    runner,
+    /const nextPlan = plannedMigrations\(\{\s*allowManualCutover,\s*ledgerRows: nextLedger\.rows,\s*migrations,\s*only,\s*\}\)/,
+    "post-apply verification must retain the explicit --only boundary instead of expanding to the automatic plan",
+  );
 });
 
 test("recovery database URLs use a bounded, redacted stdin-only channel", async () => {
