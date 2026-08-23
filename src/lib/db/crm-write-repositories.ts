@@ -203,6 +203,7 @@ type TaskRow = {
   projectId: string | null;
   status: Task["status"];
   title: string;
+  updatedAt: string;
   workspaceId: string;
 };
 
@@ -852,7 +853,7 @@ export async function upsertDealRecord(input: {
           risk_level as "riskLevel",
           source,
           next_action as "nextAction",
-          updated_at as "updatedAt"`,
+          updated_at::text as "updatedAt"`,
         [
           existing.id,
           input.session.workspaceId,
@@ -948,7 +949,7 @@ export async function upsertDealRecord(input: {
             risk_level as "riskLevel",
             source,
             next_action as "nextAction",
-            updated_at as "updatedAt",
+            updated_at::text as "updatedAt",
             (xmax = 0) as "wasInserted"
         `,
         [
@@ -1393,7 +1394,7 @@ export async function upsertTaskRecord(input: {
             status = $10,
             metadata = coalesce(metadata, '{}'::jsonb) || $11::jsonb,
             updated_at = now()
-          where id = $1 and workspace_id = $2 and updated_at = $26::timestamptz
+          where id = $1 and workspace_id = $2 and updated_at = $12::timestamptz
           returning
             id,
             workspace_id as "workspaceId",
@@ -1406,6 +1407,7 @@ export async function upsertTaskRecord(input: {
             priority,
             status,
             metadata,
+            updated_at::text as "updatedAt",
             (select name from projects p where p.id = tasks.project_id) as project
         `,
         [
@@ -1420,6 +1422,7 @@ export async function upsertTaskRecord(input: {
           input.task.priority ?? existing.priority,
           input.task.status ?? existing.status,
           JSON.stringify(taskMetadata),
+          existing.updatedAt,
         ],
       )
     : await queryOne<TaskRow>(
@@ -1449,6 +1452,7 @@ export async function upsertTaskRecord(input: {
             priority,
             status,
             metadata,
+            updated_at::text as "updatedAt",
             (select name from projects p where p.id = tasks.project_id) as project
         `,
         [
@@ -1465,7 +1469,12 @@ export async function upsertTaskRecord(input: {
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Task could not be saved" };
+  if (!row) {
+    return {
+      persisted: false,
+      reason: existing ? "Concurrent task update conflict" : "Task could not be saved",
+    };
+  }
 
   await Promise.all([
     writeAuditLog({
@@ -2635,7 +2644,7 @@ export async function upsertContactRecord(input: {
             c.email,
             c.phone,
             (select name from projects p where p.id = c.project_id) as project,
-            c.updated_at as "updatedAt"
+            c.updated_at::text as "updatedAt"
         `,
         [
           existing.id,
@@ -2686,7 +2695,7 @@ export async function upsertContactRecord(input: {
             email,
             phone,
             (select name from projects p where p.id = contacts.project_id) as project,
-            updated_at as "updatedAt"
+            updated_at::text as "updatedAt"
         `,
         [
           input.session.workspaceId,
@@ -4318,7 +4327,7 @@ const contactSelectSql = `
     c.email,
     c.phone,
     p.name as project,
-    c.updated_at as "updatedAt"
+    c.updated_at::text as "updatedAt"
   from contacts c
   left join projects p on p.id = c.project_id and p.workspace_id = c.workspace_id
 `;
@@ -4348,7 +4357,7 @@ const leadReturningSql = `
   buyer_profile as "buyerProfile",
   seller_profile as "sellerProfile",
   investor_profile as "investorProfile",
-  updated_at as "updatedAt"
+  updated_at::text as "updatedAt"
 `;
 
 const leadSelectSql = `
@@ -4377,7 +4386,7 @@ const dealSelectSql = `
     d.risk_level as "riskLevel",
     d.source,
     d.next_action as "nextAction",
-    d.updated_at as "updatedAt"
+    d.updated_at::text as "updatedAt"
   from deals d
 `;
 
@@ -4418,7 +4427,8 @@ const taskSelectSql = `
     p.name as project,
     t.due_at as due,
     t.priority,
-    t.status
+    t.status,
+    t.updated_at::text as "updatedAt"
   from tasks t
   left join projects p on p.id = t.project_id
 `;

@@ -64,6 +64,72 @@ test("manual and public contact writes share ordered identity locks and contact 
   assert.match(contactsRoute, /normalizedReason\.includes\("conflict"\)\) return 409/);
 });
 
+test("CRM repositories retain textual PostgreSQL CAS tokens and strict timestamp equality", async () => {
+  const [tasksRoute, writes] = await Promise.all([
+    source("src/app/api/crm/tasks/route.ts"),
+    source("src/lib/db/crm-write-repositories.ts"),
+  ]);
+  const contactSelect = writes.slice(writes.indexOf("const contactSelectSql"), writes.indexOf("const leadReturningSql"));
+  const leadSelect = writes.slice(writes.indexOf("const leadReturningSql"), writes.indexOf("const dealSelectSql"));
+  const dealSelect = writes.slice(writes.indexOf("const dealSelectSql"), writes.indexOf("const dealUpdateSql"));
+  const taskSelect = writes.slice(writes.indexOf("const taskSelectSql"));
+
+  assert.match(contactSelect, /c\.updated_at::text as "updatedAt"/);
+  assert.match(leadSelect, /updated_at::text as "updatedAt"/);
+  assert.match(dealSelect, /d\.updated_at::text as "updatedAt"/);
+  assert.match(taskSelect, /t\.updated_at::text as "updatedAt"/);
+
+  const dealUpdate = writes.slice(writes.indexOf("export async function upsertDealRecord"), writes.indexOf("export async function upsertTaskRecord"));
+  const taskUpdate = writes.slice(writes.indexOf("export async function upsertTaskRecord"), writes.indexOf("export async function listNoteRecords"));
+  const leadUpdate = writes.slice(writes.indexOf("export async function upsertLeadRecord"), writes.indexOf("export async function upsertContactRecord"));
+  const contactUpdate = writes.slice(writes.indexOf("export async function upsertContactRecord"), writes.indexOf("export async function archiveContactRecord"));
+  const contactArchive = writes.slice(writes.indexOf("export async function archiveContactRecord"), writes.indexOf("export async function upsertFunnelRecord"));
+
+  assert.match(dealUpdate, /updated_at = \$21::timestamptz/);
+  assert.match(taskUpdate, /updated_at = \$12::timestamptz/);
+  assert.match(leadUpdate, /updated_at = \$26::timestamptz/);
+  assert.match(contactUpdate, /c\.updated_at = \$14::timestamptz/);
+  assert.match(contactArchive, /updated_at = \$5::timestamptz/);
+  assert.doesNotMatch(`${dealUpdate}\n${taskUpdate}\n${leadUpdate}\n${contactUpdate}\n${contactArchive}`, /date_trunc|interval\s+'/i);
+  assert.match(taskUpdate, /JSON\.stringify\(taskMetadata\),\s*existing\.updatedAt,/);
+  assert.doesNotMatch(taskUpdate, /updated_at = \$26::timestamptz/);
+  assert.match(taskUpdate, /existing \? "Concurrent task update conflict" : "Task could not be saved"/);
+  assert.match(tasksRoute, /normalizedReason\.includes\("conflict"\)\) return 409/);
+});
+
+test("Task route maps only controlled CAS misses to 409", async () => {
+  let repositoryWrite = async () => ({ persisted: false, reason: "Concurrent task update conflict" });
+  const route = await loadCommonJsTypeScript("src/app/api/crm/tasks/route.ts", {
+    "next/server": {
+      NextResponse: {
+        json(body, init = {}) {
+          return { body, status: init.status ?? 200 };
+        },
+      },
+    },
+    "@/lib/auth/session": {
+      resolveWorkspaceScopedSession: async () => ({ ok: true, session: {} }),
+    },
+    "@/lib/db/crm-write-repositories": {
+      upsertTaskRecord: (...args) => repositoryWrite(...args),
+    },
+  });
+  const request = { json: async () => ({ task: { title: "CAS regression" } }) };
+
+  assert.equal((await route.PATCH(request)).status, 409);
+
+  repositoryWrite = async () => ({ persisted: false, reason: "Task could not be saved" });
+  assert.equal((await route.POST(request)).status, 503);
+
+  repositoryWrite = async () => ({ persisted: false, reason: "DATABASE_URL is not configured" });
+  assert.equal((await route.POST(request)).status, 503);
+
+  repositoryWrite = async () => {
+    throw new Error("database transport failed");
+  };
+  await assert.rejects(() => route.POST(request), /database transport failed/);
+});
+
 test("sparse Contact PATCH retains identity while explicit empty fields clear only the requested channel", async () => {
   assert.deepEqual(
     resolveContactIdentityMutation({

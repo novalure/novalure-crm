@@ -12,6 +12,7 @@ async function readJson(request: Request) {
 
 function getTaskWriteStatus(reason: string) {
   const normalizedReason = reason.toLowerCase();
+  if (normalizedReason.includes("conflict")) return 409;
   if (
     reason.includes("not available in this workspace") ||
     normalizedReason.includes("permission") ||
