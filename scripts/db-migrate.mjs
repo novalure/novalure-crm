@@ -84,6 +84,16 @@ function requiredMigrationVersions(version) {
   return Array.isArray(required) ? required : [required];
 }
 
+function isRequiredMigrationVerified({ checksummedVersions, migrations, requiredVersion }) {
+  if (checksummedVersions.has(requiredVersion)) return true;
+  if (!checksummedVersions.has(baselineVersion)) return false;
+
+  const requiredMigration = migrations.find(
+    (migration) => !migration.rollback && migration.version === requiredVersion,
+  );
+  return Boolean(requiredMigration && requiredMigration.number < baselineNumber);
+}
+
 function fail(message) {
   console.error(`[ERROR] ${message}`);
   process.exit(1);
@@ -521,9 +531,12 @@ export function resolveMigrationLedgerState({ ledgerRows, migrations }) {
 
   for (const [version] of migrationDependencies) {
     for (const requiredVersion of requiredMigrationVersions(version)) {
-      if (!appliedVersions.has(version) || checksummedVersions.has(requiredVersion)) continue;
+      if (
+        !appliedVersions.has(version) ||
+        isRequiredMigrationVerified({ checksummedVersions, migrations: runnable, requiredVersion })
+      ) continue;
       throw new Error(
-        `Invalid migration ledger: ${version} is applied without required predecessor ${requiredVersion} carrying its exact checksum`,
+        `Invalid migration ledger: ${version} is applied without required predecessor ${requiredVersion} carrying its exact checksum or being covered by the checksummed ${baselineVersion}`,
       );
     }
   }
@@ -561,7 +574,7 @@ function numberCollisions(ledgerRows, migrations, aliases) {
 
 export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations, only }) {
   const { appliedVersions, checksummedVersions } = resolveMigrationLedgerState({ ledgerRows, migrations });
-  const hasBaseline = appliedVersions.has(baselineVersion);
+  const hasBaseline = checksummedVersions.has(baselineVersion);
   const runnable = migrations.filter((migration) => !migration.rollback);
 
   if (only) {
@@ -574,7 +587,11 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
       );
     }
     const missingRequiredMigrations = requiredMigrationVersions(migration.version)
-      .filter((requiredMigration) => !checksummedVersions.has(requiredMigration));
+      .filter((requiredVersion) => !isRequiredMigrationVerified({
+        checksummedVersions,
+        migrations: runnable,
+        requiredVersion,
+      }));
     if (missingRequiredMigrations.length) {
       throw new Error(
         `Refusing migration ${migration.version}: required predecessor ${missingRequiredMigrations.join(", ")} is not checksummed in the ledger`,
@@ -592,6 +609,11 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
   });
 
   const availableVersions = new Set(checksummedVersions);
+  if (hasBaseline) {
+    for (const migration of runnable) {
+      if (migration.number < baselineNumber) availableVersions.add(migration.version);
+    }
+  }
   for (const migration of plan) {
     const missingRequiredMigrations = requiredMigrationVersions(migration.version)
       .filter((requiredMigration) => !availableVersions.has(requiredMigration));

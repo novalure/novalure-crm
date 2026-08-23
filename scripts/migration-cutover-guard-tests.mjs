@@ -216,6 +216,51 @@ test("an explicit historical migration is covered by the 041 baseline and cannot
   );
 });
 
+test("the checksummed 041 baseline verifies historical dependencies without weakening fail-closed plans", () => {
+  const historical = migration("036_company_profiles", "sha-036");
+  const baseline = migration("041_schema_ledger_baseline", "sha-041");
+  const approvalIntegrity = migration(
+    "078_company_profile_approval_integrity",
+    "sha-078",
+    { manualCutover: true },
+  );
+  const migrations = [historical, baseline, approvalIntegrity];
+  const baselineLedger = [ledgerRow("041_schema_ledger_baseline", "sha-041")];
+
+  assert.deepEqual(
+    createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: baselineLedger,
+      migrations,
+      only: approvalIntegrity.version,
+    }),
+    [approvalIntegrity],
+  );
+  assert.doesNotThrow(() => resolveMigrationLedgerState({
+    ledgerRows: [...baselineLedger, ledgerRow(approvalIntegrity.version, approvalIntegrity.checksum)],
+    migrations,
+  }));
+  assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [],
+      migrations,
+      only: approvalIntegrity.version,
+    }),
+    /required predecessor 036_company_profiles/,
+  );
+  assert.throws(
+    () => resolveMigrationLedgerState({
+      ledgerRows: [
+        ledgerRow("041_schema_ledger_baseline", null),
+        ledgerRow(approvalIntegrity.version, approvalIntegrity.checksum),
+      ],
+      migrations,
+    }),
+    /required predecessor 036_company_profiles/,
+  );
+});
+
 test("migration apply accepts only content committed byte-for-byte in HEAD", () => {
   const cwd = mkdtempSync(join(tmpdir(), "novalure-migration-commit-test-"));
   mkdirSync(join(cwd, "migrations"));
