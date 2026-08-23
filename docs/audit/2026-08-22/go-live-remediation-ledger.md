@@ -13,7 +13,7 @@ Dieses Ledger trennt strikt zwischen:
 - belegten Code-, Contract- und lokalen Buildtests;
 - read-only erhobener Live-/Vercel-/Neon-Evidenz sowie separat ausgewiesenen, nicht produktiven Infrastrukturänderungen;
 - nicht ausgeführten Preview-Runtime-, Provider-, Zwei-Tenant- und Production-Prüfungen;
-- produktiven Daten-, Schema- und Deploymentänderungen, die nicht vorgenommen wurden. Auf Vercel wurden ausschließlich Preview-Blob-Ressourcen neu angelegt und bestehende Resource-Connections enger auf Production/Preview begrenzt. Preview-Main enthält jetzt 057, 060 sowie 068–076; 10/10 geforderte Migrationen stimmen bytegenau mit den lokalen Checksummen überein. Auf dem temporären Evidence-Branch wurde der Cutover 057 + 073–076 zuvor vollständig angewandt, geprüft, vom Parent wiederhergestellt und identisch erneut angewandt; Production blieb unverändert.
+- produktiven Daten-, Schema- und Deploymentänderungen, die nicht vorgenommen wurden. Auf Vercel wurden ausschließlich Preview-Blob-Ressourcen neu angelegt, bestehende Resource-Connections enger auf Production/Preview begrenzt und zehn sensitive Variablen branchgebunden nur für `codex/go-live-remediation-20260822` hinterlegt. Preview-Main enthält jetzt 057, 060 sowie 068–077; 11/11 geforderte Migrationen stimmen bytegenau mit den lokalen Checksummen überein. Auf dem temporären Evidence-Branch wurde der Cutover 057 + 073–076 zuvor vollständig angewandt, geprüft, vom Parent wiederhergestellt und identisch erneut angewandt; 077 wurde dort danach separat least-privilege-validiert und nach ausdrücklicher Freigabe atomar auf Preview-Main angewandt. Production blieb unverändert.
 
 Ein Gate ist nur dann als <strong>PASS / BESTANDEN</strong> markiert, wenn der im Master-Prompt geforderte Nachweis für den geprüften Scope vorliegt. Ein vorhandener Unit- oder Contract-Test schließt kein Gate, das zusätzlich einen echten Preview-, Provider-, Zwei-Tenant-, Browser-, Cleanup- oder Production-Nachweis fordert. <strong>NOT RUN / NICHT AUSGEFÜHRT</strong> zählt gemäß Master-Prompt als nicht bestanden.
 
@@ -96,7 +96,7 @@ Der vollständige lokale Kandidat einschließlich Preview-Blob-Isolation, zentra
 | <code>npm run ci:toolchain</code> | Exit 0 | mit temporär isolierter, exakt gepinnter Laufzeit Node 24.14.0/npm 11.9.0 verifiziert |
 | <code>npm run lint</code> | Exit 0 | vollständiges ESLint auf aktuellem Delta |
 | <code>npm run typecheck</code> | Exit 0 | aktueller Delta-Stand |
-| <code>npm run test:unit</code> | 491/491 | 240/240 Basissuite plus 251/251 Go-Live-Remediation, zwei Runner; unter Node 24.14.0/npm 11.9.0 wiederholt |
+| <code>npm run test:unit</code> | 492/492 | 241/241 Basissuite plus 251/251 Go-Live-Remediation, zwei Runner; unter Node 24.14.0/npm 11.9.0 wiederholt |
 | Funnel-Zielsuites | Deep-DTO 4/4; finaler Consent-/Alias-/Publish-Preflight-Zielstand 29/29; früherer breiter P1-Handoff 99/99 | Deep-Redaction, Minimalresponse, Atomizität, Abuse/Lease, Fresh Snapshot und einheitlicher Publish-/Restore-/Runtime-Preflight lokal belegt |
 | Unit-/Building-Zielsuites | 44/44 | nach Tenant-Transaction-/Fresh-Snapshot-Fix |
 | Knowledge-Zielsuite | 6/6 | nach External-Provider-Fail-Closed-Fix |
@@ -117,7 +117,7 @@ Der vollständige lokale Kandidat einschließlich Preview-Blob-Isolation, zentra
 | <code>git diff --check</code> | Exit 0 | keine Whitespace-/Patch-Formalfehler |
 | <code>npm run release:verify-vercel-env</code> | nicht erfolgreich | lokaler Lauf verlangt <code>VERCEL_TOKEN</code>; Live-Metadaten wurden separat read-only geprüft |
 
-Der aktuelle Delta-Stand ist für Unit 491/491 (240/240 Basis plus 251/251 Remediation), Integration 15/15 und i18n 10/10 grün. Unter der exakt gepinnten Ziel-Toolchain Node 24.14.0/npm 11.9.0 sind Toolchain-Check, vollständiges ESLint, Typecheck, Security Audit mit 0 Vulnerabilities, <code>git diff --check</code> und der Next-Production-Build mit 84 generierten Seiten bestanden. Der Remediation-Verbund wurde nach dem letzten Scope-/Dokument-Delta nochmals mit 251/251 bestätigt. Ältere Zähler sind supersediert; die unveränderliche Kandidaten-SHA entsteht mit dem anschließenden Commit-Freeze und wird im Deployment-Nachweis festgehalten.
+Der aktuelle Delta-Stand ist für Unit 492/492 (241/241 Basis plus 251/251 Remediation), Integration 15/15 und i18n 10/10 grün. Unter der exakt gepinnten Ziel-Toolchain Node 24.14.0/npm 11.9.0 sind Toolchain-Check, vollständiges ESLint, Typecheck, Security Audit mit 0 Vulnerabilities, <code>git diff --check</code> und der Next-Production-Build mit 84 generierten Seiten bestanden. Der Remediation-Verbund wurde nach dem letzten Scope-/Dokument-Delta nochmals mit 251/251 bestätigt. Die zwei älteren Funnel-P1-Befunde zu Proof-Refresh und Visit-Persistenz wurden gegen den aktuellen Stand mit 33/33 fokussierten Tests als überholt bestätigt. Ältere Zähler sind supersediert; die unveränderliche Kandidaten-SHA entsteht mit dem anschließenden Commit-Freeze und wird im Deployment-Nachweis festgehalten.
 
 Neue, über <code>test:go-live-remediation</code> in <code>test:unit</code> eingebundene Suites:
 
@@ -200,7 +200,7 @@ Konsequenz: Die frühere Blob-Kollision ist auf Ressourcen-, Connection- und Cod
 
 ### 6.1 Historischer Production-Audit
 
-Dieser Audit wurde vor den Kandidatenmigrationen 069–076 erhoben und darf nicht als Schemaaudit des aktuellen Worktrees ausgegeben werden.
+Dieser Audit wurde vor den Kandidatenmigrationen 069–077 erhoben und darf nicht als Schemaaudit des aktuellen Worktrees ausgegeben werden.
 
 | Prüfung | Historisches Production-Ergebnis |
 |---|---|
@@ -217,12 +217,12 @@ Dieser Audit wurde vor den Kandidatenmigrationen 069–076 erhoben und darf nich
 | Prüfung | Kandidatenstand |
 |---|---|
 | erwartete CRM-Tabellen laut <code>src/lib/db/schema.ts</code> | 118; <code>bot_channel_webhook_envelopes</code> liegt bewusst außerhalb <code>crmTables</code> |
-| Kandidatenmigrationen | <code>068</code>–<code>076</code> einschließlich des manuellen Vor-Cutovers <code>057</code> |
+| Kandidatenmigrationen | <code>068</code>–<code>077</code> einschließlich des manuellen Vor-Cutovers <code>057</code> |
 | zusätzliche tatsächliche Tabellen gegenüber dem 115er Auditstand | mindestens <code>property_unit_idempotency</code>, <code>property_building_idempotency</code>, <code>public_funnel_visit_events</code> und <code>bot_channel_webhook_envelopes</code>; damit mindestens 119 tatsächliche Tabellen |
-| isolierte Preview-Zustände | Preview-Main: <code>057</code>, <code>060</code> + <code>068</code>–<code>076</code>; 10/10 exakte lokale Checksummen, 19/19 validierte/deferred Tenant-FKs, 0/19 Anti-Join-Verstöße und 21/21 Artefakte. Evidence-Branch: <code>057</code> + <code>073</code>–<code>076</code> mit bestandenem Apply/Restore/Reapply |
-| auf Production angewendet | keine der Migrationen 057, 068–076 |
+| isolierte Preview-Zustände | Preview-Main: <code>057</code>, <code>060</code> + <code>068</code>–<code>077</code>; 11/11 exakte lokale Checksummen, 19/19 validierte/deferred Tenant-FKs, 0/19 Anti-Join-Verstöße, 21/21 Launch-Artefakte und vollständiges 077-Owner-/ACL-Gate. Evidence-Branch: <code>057</code> + <code>073</code>–<code>076</code> mit bestandenem Apply/Restore/Reapply, danach 077 separat validiert |
+| auf Production angewendet | keine der Migrationen 057, 068–077 |
 
-Es erfolgte kein Production-Schema-Write. Preview-Main enthält jetzt 057, 060 und 068–076; das Zielgate bestand dort mit 10/10 exakten lokalen Checksummen, 19/19 validierten, deferrable und initial deferred Tenant-FKs, 0/19 Anti-Join-Verstößen sowie 21/21 Artefakten. Der vorangegangene Evidence-Drill für 057 + 073–076 ist durch den unveränderlichen Pre-073-Snapshot, Apply, Katalogprüfung, Restore, Abwesenheitsprüfung und identischen Reapply abgesichert. Eine spätere Production-Anwendung bleibt bis zu DBA-/Release-Freigabe, Production-Backup und bestätigtem Rollbackziel gesperrt; 061 bleibt zusätzlich bis zum App-Rollen-Cutover gesperrt.
+Es erfolgte kein Production-Schema-Write. Preview-Main enthält jetzt 057, 060 und 068–077; das Zielgate bestand dort mit 11/11 exakten lokalen Checksummen, 19/19 validierten, deferrable und initial deferred Tenant-FKs, 0/19 Anti-Join-Verstößen, 21/21 Launch-Artefakten sowie exaktem 077-Checksum- und vollständigem Owner-/ACL-Beweis. Der vorangegangene Evidence-Drill für 057 + 073–076 ist durch den unveränderlichen Pre-073-Snapshot, Apply, Katalogprüfung, Restore, Abwesenheitsprüfung und identischen Reapply abgesichert; 077 wurde danach auf demselben Evidence-Branch separat geprüft. Eine spätere Production-Anwendung bleibt bis zu DBA-/Release-Freigabe, Production-Backup und bestätigtem Rollbackziel gesperrt; 061 bleibt zusätzlich bis zum App-Rollen-Cutover gesperrt.
 
 ### 6.3 Isolierter Preview-/Migration- und Restore-Drill
 
@@ -231,6 +231,7 @@ Es erfolgte kein Production-Schema-Write. Preview-Main enthält jetzt 057, 060 u
 - Der migrierte Zustand wurde als `go-live-f5c8c8a-postmigration-proof-20260822` (`br-royal-hat-al9sbbbl`) erhalten. Danach wurde `br-dawn-base-alycxxsv` per `reset_from_parent` auf den unmigrierten Elternzustand zurückgesetzt; dort waren 072 und die QA-Grenze anschließend wieder abwesend. Damit ist der funktionale Restore-/Rollback-Drill belegt.
 - Vor dem Preview-Cutover wurde zusätzlich Snapshot `go-live-preview-main-precutover-20260822` (`br-round-haze-aljmj73e`) erstellt. Danach wurden 060 sowie 068–072 auf Preview-Main in einer Transaktion angewandt und Ledger/QA-Tabellen/Constraints verifiziert. Anschließend wurden zwei isolierte `is_qa=true`-Workspaces mit insgesamt zehn MFA-fähigen Mitgliedschaften und je einem leeren Batch provisioniert; CRM-Geschäftsobjekte wurden noch nicht erzeugt.
 - Vor 073 wurde Snapshot `go-live-preview-main-pre073-20260822` (`br-square-bird-alpv01dg`) erstellt. Auf Evidence-Branch `go-live-final-evidence-20260822-v2` (`br-spring-math-aljuzher`) wurde 057 + 073–076 zunächst angewandt. Das Gate bestätigte 5/5 exakte lokale Checksummen, 19/19 validierte, deferrable und initial deferred Tenant-FKs, 0/19 Anti-Join-Verstöße sowie 21/21 Artefakte für Visit-Truth und durable Webhook-Verarbeitung. Danach wurde der Branch ohne Preserve auf Preview-Main zurückgesetzt; alle fünf Ledgerzeilen, 19 Constraints und beide neuen Tabellen waren wieder abwesend, der Legacy-Webhook-Index wieder vorhanden. Der identische Reapply bestand anschließend dasselbe Gate erneut.
+- Migration 077 wurde anschließend auf dem Evidence-Branch als ownergebundene, nicht aktualisierbare Runtime-Projektion validiert. Nach ausdrücklicher Freigabe wurde exakt der committed SHA-256-Stand `6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae` atomar auf Preview-Main angewandt. Dort sind 11/11 Pflichtchecksummen identisch. Die View `public.novalure_schema_migration_checksums` enthält exakt `version` und `checksum`, verwendet `security_barrier=true` sowie `security_invoker=false` und besitzt exakt denselben Owner wie das Basis-Ledger. App- und Tenant-Rolle besitzen null Direktzugriff einschließlich Tabellen-/Spaltenrechten, `TRUNCATE` und PostgreSQL-17-`MAINTAIN`; `novalure_app` besitzt ausschließlich SELECT ohne Grant-Option auf der Projektion, PUBLIC besitzt keine Tabellen-/Spalten-ACL und die App kann den Owner nicht übernehmen. Ein zusätzlicher Gesamtschema-Diff gegen den Evidence-Branch überschritt die Connector-Grenze mit HTTP 413; deshalb basiert die Abnahme auf den fokussierten Katalogbeweisen.
 - Der Connector darf die App-Rolle nicht per `SET ROLE` impersonieren. Katalogseitig ist belegt: `novalure_app` besitzt keine direkten SELECT/INSERT/UPDATE/DELETE-Rechte auf der globalen Envelope-Tabelle, aber EXECUTE auf die validierende SECURITY-DEFINER-RPC; der tatsächliche App-Login-RPC-Probe bleibt Bestandteil des SHA-identischen Preview-E2E.
 - Migration 061 wurde absichtlich nicht angewandt: Die sichere Gruppe `novalure_tenant_app` ist vorhanden, aber App-Verbindung, direkte Mitgliedschaft und immutable Deployment-Attestation sind noch nicht als gemeinsam wirksamer Cutover belegt. RLS auf den fünf Pilot-Tabellen bleibt daher aus.
 - RPO/RTO-Zielwerte, Recovery-Reconciliation und formale DBA-/Release-Signatur bleiben offen; der technische Restore-Drill selbst ist nicht mehr offen.
@@ -241,15 +242,15 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 
 | Test-ID | Status | Präziser Nachweis bzw. Grund |
 |---|---|---|
-| REL-01 | FAIL / FEHLER | lokaler Freeze unter Node 24.14.0/npm 11.9.0 für Toolchain, Unit 491/491, Remediation 251/251, Integration 15/15, i18n 10/10, vollständiges ESLint, Typecheck, Security Audit, Diff-Check und Production-Build mit 84 Seiten grün; die Kandidaten-SHA entsteht mit dem Commit-Freeze, ein SHA-identisch deployter Kandidat sowie Deployment-/Alias-Parität fehlen weiterhin |
-| REL-02 | FAIL / FEHLER | historischer Production-Audit <code>ok: false</code> bei 112/115 Tabellen und Ledger 067; Preview-Kandidat erwartet nach 075/076 mindestens 119 Tabellen und Migrationen 068–076 einschließlich manuellem Cutover 057, ohne Production-Anwendung |
-| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | isolierter Neon-Migrations-/Restore-/Reapply-Drill bestanden, Pre-Cutover-Snapshot vorhanden und Preview-Main checksummengenau auf 057 + 068–076; RPO/RTO/Reconciliation, 061-App-Rollen-Cutover, echter App-Login-RPC-Probe, privater-Blob-End-to-End, Queue-/Cron-SLO und signierte Ops-Evidenz fehlen |
+| REL-01 | FAIL / FEHLER | lokaler Freeze unter Node 24.14.0/npm 11.9.0 für Toolchain, Unit 492/492, Remediation 251/251, Integration 15/15, i18n 10/10, vollständiges ESLint, Typecheck, Security Audit, Diff-Check und Production-Build mit 84 Seiten grün; für den 077-Dokument-Freeze fehlt noch der neue SHA-identische Preview-Deploy samt Deployment-/Alias-Parität |
+| REL-02 | FAIL / FEHLER | historischer Production-Audit <code>ok: false</code> bei 112/115 Tabellen und Ledger 067; Preview-Kandidat erwartet nach 075/076 mindestens 119 Tabellen und Migrationen 068–077 einschließlich manuellem Cutover 057, ohne Production-Anwendung |
+| REL-03 | NOT RUN / NICHT AUSGEFÜHRT | isolierter Neon-Migrations-/Restore-/Reapply-Drill bestanden, Pre-Cutover-Snapshot vorhanden und Preview-Main checksummengenau auf 057 + 068–077 einschließlich vollständigem 077-Least-Privilege-Gate; RPO/RTO/Reconciliation, 061-App-Rollen-Cutover, echter App-Login-RPC-Probe, privater-Blob-End-to-End, Queue-/Cron-SLO und signierte Ops-Evidenz fehlen |
 | REL-04 | NOT RUN / NICHT AUSGEFÜHRT | fünf Unternehmensprofilblocker sowie Legal-/Ops-Abnahme nicht belegt |
 | SCOPE-01 | FAIL / FEHLER | versionierte zentrale Policy für die remediated Surfaces vorhanden und unbekannte Surfaces fail-closed; vollständige signierte ON/OFF/INTERNAL-Matrix, Vollabdeckung und deployte Negativmatrix fehlen |
-| ENV-01 | FAIL / FEHLER | Preview-Blob auf Ressourcen-/Connection-/Codeebene getrennt; Queue-/Providerziele und deployter Runtime-E2E weiterhin unklar |
+| ENV-01 | FAIL / FEHLER | Preview-DB und Preview-Blob auf Ressourcen-/Connection-/Codeebene getrennt; zehn sensitive Variablen sind ausschließlich branchgebunden gesetzt. Queue-/Providerziele und der Runtime-E2E des neuen Kandidaten bleiben offen |
 | DATA-01 | PASS / BESTANDEN | Forms, Knowledge und Funnel verwenden DB-only-Wahrheit; automatisierte Produktionswahrheits-/Fallback-Negativtests grün |
 | DATA-02 | NOT RUN / NICHT AUSGEFÜHRT | kein vollständiger UI/API/DB-Drei-Wege-Abgleich für alle Launch-KPIs |
-| CRUD-01 | FAIL / FEHLER | Migration 068 ist auf isoliertem Preview angewandt; zwei reale `is_qa`-Tenants, zehn MFA-fähige Mitgliedschaften, zwei leere Batches und der atomare Rollen-/Batch-/Cleanup-Harness sind vorhanden. Branchgebundene Runtime-ENV, Capability-Preflight und Matrix-/Reset-E2E fehlen |
+| CRUD-01 | FAIL / FEHLER | Migrationen 068–077 sind auf isoliertem Preview angewandt; zwei reale `is_qa`-Tenants, zehn MFA-fähige Mitgliedschaften, zwei leere Batches, branchgebundene Runtime-ENV und der atomare Rollen-/Batch-/Cleanup-Harness sind vorhanden. Capability-Preflight und Matrix-/Reset-E2E des neuen Kandidaten fehlen |
 | CRUD-02 | NOT RUN / NICHT AUSGEFÜHRT | vollständige CRM-Kernkette Create→Reload→Update→Relation→Filter→Cleanup nicht in isolierter QA-Umgebung ausgeführt |
 | CRUD-03 | NOT RUN / NICHT AUSGEFÜHRT | einzelne Idempotenz-/Validierungsfixes getestet, aber keine vollständige Doppelklick-/Zwei-Tab-/Offline-/Retry-Matrix |
 | FORM-01 | NOT RUN / NICHT AUSGEFÜHRT | Resolver-/Persistenz-Code gehärtet, aber kein Adminstatus/DB/Canonical/Embed-E2E auf einem Kandidaten |
@@ -292,7 +293,7 @@ Zusammenfassung: 2 PASS, 6 FAIL, 38 NOT RUN. Da jedes NOT RUN laut Master-Prompt
 
 | Befund | Umgesetzter Fix | Test/Evidenz | Reststatus |
 |---|---|---|---|
-| Fixture-/Fallback-Risiko bei Forms/Knowledge/Funnel | DB-only-Repositories und fail-closed Resolver; Knowledge approved/search nur mit externem Provider | zielgerichtete Forms-/Knowledge-/Funnel-Suites und Unit 491/491 | DATA-01 für den Code-Contract bestanden; deployed E2E weiterhin offen |
+| Fixture-/Fallback-Risiko bei Forms/Knowledge/Funnel | DB-only-Repositories und fail-closed Resolver; Knowledge approved/search nur mit externem Provider | zielgerichtete Forms-/Knowledge-/Funnel-Suites und Unit 492/492 | DATA-01 für den Code-Contract bestanden; deployed E2E weiterhin offen |
 | Public Funnel überträgt internen Blueprint/Diagnostik | Deep-Allowlist-DTO; Public Proof statt Publish-Token im Browser/POST; minimale Live-Response ohne interne IDs; DB-Fehler bleiben 5xx | Funnel-Public-DTO-Security 4/4 und Funnel-Zielsuites | Kandidatencode geschlossen; externer Publish-Token muss vor GO rotiert werden; deployed E2E offen |
 | Funnel-Submit konnte Teilwrites, parallele Kontaktduplikate oder Consent-/Alias-Drift erzeugen | atomarer Domain-/Claim-CTE; lease-gefencete Replayresponse; shared Form/Funnel-Email-/Phone-Identity-Advisory-Locks in Tenant-TX; kanonische Consent-/Identity-Aliasse; gemeinsamer Publish-/Restore-/Runtime-Preflight | Funnel-Abuse-/Migration-/Boundary-/Preflight-Zielsuites, finaler Freeze 29/29 | Kandidatencode geschlossen; echtes DB-Concurrency-/Zwei-Tenant-E2E offen |
 | Funnel-Webhooks ohne freigegebenen Scope | Konfiguration/API/Persistenz/Adapter explizit LAUNCH-OFF | Funnel-Production-Boundary-Test | Teil von SCOPE-01; Gesamtgate offen |
@@ -331,14 +332,14 @@ Zusätzlicher P3-Härtungshinweis: Der shared bounded-JSON-Reader berechnet im F
 1. Preview besitzt getrennte DB- und Blob-Ressourcen/Connections; Queue- und Providerziele sowie der SHA-identische Runtime-/Uploadnachweis fehlen weiterhin und blockieren den vollständigen ENV-01-Abschluss.
 2. Eine versionierte zentrale technische Launch-Scope-Policy ist vorhanden; vollständige fachliche ON/OFF/INTERNAL-Signaturen, Vollabdeckung und deployte Negativmatrix fehlen.
 3. Unternehmensprofil, rechtliche DE/EN-Inhalte, Legal-Sign-off, ES-Entscheidung und verbindliche KPI-Definitionen fehlen.
-4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; Preview-Main ist kontrolliert und checksummengenau auf 057 + 068–076, Production hingegen unverändert.
+4. Production-Schema/Ledger ist nicht releasebereit: historisch 112/115 Tabellen bei Ledger 067; Preview-Main ist kontrolliert und checksummengenau auf 057 + 068–077, Production hingegen unverändert.
 5. Der technische Preview-Backup-/Restore-Drill ist bestanden. Offen bleiben 061-App-Rollen-Cutover, formale RPO/RTO- und Reconciliation-Abnahme, Production-Backup/Rollbackziel sowie DBA-/Releasefreigabe.
 6. Resend-Integration, Domain/From/Key, eigene QA-Mailbox und genau ein echter allowlisteter Versand sind nicht validiert.
 7. Eigener QA-Kalender und kompletter Booking-Lifecycle einschließlich Providerstatus und Cleanup sind nicht validiert; die öffentlichen Write-Pfade bleiben deshalb Launch-off.
 8. Zwei QA-Tenants und echte Rollen sind provisioniert; die vollständigen CRM-CRUD-, RBAC-, IDOR-, Auth-, Datei-, Newsletter-, Data-Hygiene-, Bot-, OAuth- und Integrations-E2Es auf einem SHA-identischen Preview fehlen.
 9. Cron-/Queue-SLO, Recovery, Monitore und getestete Alarme fehlen.
 10. Der lokale Toolchain-Nachweis Node 24.14.0/npm 11.9.0 ist bestanden; offen bleibt der SHA-identische CI-/Deployment-Nachweis.
-11. Es gibt keinen deployten Remediation-Preview-/Production-Kandidaten, keine Kandidaten-Screenshots, kein vollständiges Axe-/Screenreader- und Mobile-Set und keine Lighthouse-/Web-Vitals-Evidenz.
+11. Ein früherer Remediation-Preview für SHA `976e91c3560c04a7e11c125e35c80795e9d58646` ist deployt; für den aktuellen 077-Dokument-Freeze fehlen noch der neue SHA-identische Preview, Kandidaten-Screenshots, vollständiges Axe-/Screenreader- und Mobile-Set sowie Lighthouse-/Web-Vitals-Evidenz. Ein Production-Kandidat wurde nicht deployt.
 12. Production-Beobachtungsfenster von 60 Minuten, 24 Stunden und sieben Tagen wurden für den Remediation-Kandidaten nicht begonnen.
 13. Der bislang im öffentlichen Live-Funnel verwendete Publish-Token muss vor GO rotiert, die alte Capability widerrufen und die neue Capability kontrolliert verteilt werden. Diese externe Rotation wurde nicht ausgeführt.
 
@@ -348,14 +349,14 @@ Aufgrund von ENV-01, fehlenden Freigaben und fehlender SHA-identischer Preview-R
 
 - keine Änderung von Vercel-Production-Env-Variablen;
 - keine Providerdomain-, Key-, From-, Mailbox- oder Kalenderänderung;
-- keine Production-Migration; Preview-Main enthält checksummengenau 057, 060 und 068–076, der isolierte Evidence-Branch belegt zusätzlich den bestandenen Restore-/Reapply-Drill für 057 + 073–076; 061 blieb gesperrt;
+- keine Production-Migration; Preview-Main enthält checksummengenau 057, 060 und 068–077, der isolierte Evidence-Branch belegt zusätzlich den bestandenen Restore-/Reapply-Drill für 057 + 073–076 und den separaten 077-Least-Privilege-Test; 061 blieb gesperrt;
 - kein CRM-Geschäftsobjekt-Seed; ausschließlich die sichere QA-Tenant-/Identity-/Batch-Provisionierung wurde ausgeführt;
 - kein Preview-/Production-CRUD und kein Upload;
 - kein echter Provider-Mailversand und kein Kalendereintrag;
 - kein QA-CRM-Geschäftsobjekt-Write;
 - kein Cleanup/Reset in Production;
 - keine historische Retry-/Recovery-Aktion;
-- kein Deployment, keine Promotion, keine Aliasumschaltung und keine öffentliche Feature-Freischaltung;
+- kein Production-Deployment, keine Promotion, keine Production-Aliasumschaltung und keine öffentliche Feature-Freischaltung; Preview-Deployments blieben auf den autorisierten Remediation-Branch begrenzt;
 - keine Blob-Dateiobjekte, Queue-Nachrichten oder Provider-Sends erzeugt; angelegt wurden ausschließlich die zwei leeren Preview-Blob-Stores sowie Drill-, Preserve- und Pre-Cutover-Snapshot-Branches im isolierten Neon-Projekt;
 - keine operative Testdatenbereinigung erforderlich; zwei leere QA-Batches sind vorhanden.
 
@@ -370,7 +371,7 @@ Vor Ausführung sind mindestens die jeweils genannten Freigaben und Sicherungen 
 | Vercel-Production-Env ändern | schriftliche Release-/Ops-Freigabe, dokumentierter Vorherstand und Rollback |
 | weitere Preview-Ziele provisionieren/verbinden oder bestehende ändern | freigegebene getrennte Ressourcen und erneuter fingerprintbasierter ENV-01-Nachweis |
 | Providerdomain/Key/From ändern | Product/Ops/Provider-Freigabe, Domainverifikation, Secret-Rotation und Rollback |
-| Produktionsmigrationen bis einschließlich Kandidatenstand 076, einschließlich manuellem Vor-Cutover 057; 061 bleibt separater App-Rollen-Cutover | Backup, Dry-run, geprüfter Rollback, erfolgreicher Restore-Drill, DBA-/Releasefreigabe |
+| Produktionsmigrationen bis einschließlich Kandidatenstand 077, einschließlich manuellem Vor-Cutover 057; 061 bleibt separater App-Rollen-Cutover | Backup, Dry-run, geprüfter Rollback, erfolgreicher Restore-Drill, DBA-/Releasefreigabe |
 | Funnel-Publish-Token rotieren | Security-/Ops-Freigabe, kontrollierte Verteilung, Widerruf der alten Capability, Audit und Negativtest der alten URL |
 | Production-Deploy oder Promotion | alle Pflichtgates grün, exakte SHA/Lockfile/Env-Buildinput-Evidenz und Rollbackziel |
 | produktiver QA-Write | allowlisteter QA-Workspace, genehmigter Batch, Monitoring und Reset-/Reconciliation-Plan |
@@ -383,8 +384,8 @@ Vor Ausführung sind mindestens die jeweils genannten Freigaben und Sicherungen 
 
 1. Launch-Scope, Legal, Unternehmensprofil, ES und KPI-Definitionen fachlich signieren.
 2. Die vorhandene DB-/Blob-Trennung per SHA-identischem Preview-Runtime-Test nachweisen, getrennte Queue-/Providerziele schließen und ENV-01 erneut bewerten.
-3. Den bestandenen Evidence-Drill und den checksummengenauen Preview-Main-Cutover 057 + 073–076 formal abnehmen; den echten <code>novalure_app</code>-RPC-/Grant-Probe ausführen. 061 erst nach SHA-identischem Deployment, sicherer App-Verbindung, Rollenmitgliedschaft und Deployment-Attestation ausführen. RPO/RTO, Schema-Diff und Reconciliation mit DBA signieren.
-4. Branchgebundene Preview-ENV setzen und den exakt gepinnten Kandidaten-SHA einmal deployen.
+3. Den bestandenen Evidence-Drill 057 + 073–076 und den checksummengenauen Preview-Main-Zielstand 057 + 068–077 formal abnehmen; den echten <code>novalure_app</code>-RPC-/Grant-Probe im Runtime-Preflight ausführen. 061 erst nach SHA-identischem Deployment, sicherer App-Verbindung, Rollenmitgliedschaft und Deployment-Attestation ausführen. RPO/RTO und Reconciliation mit DBA signieren; der fokussierte Schema-/ACL-Beweis ist grün, der Connector-Gesamtdiff wegen HTTP 413 separat zu dokumentieren.
+4. Die zehn bereits branchgebundenen Preview-ENV beibehalten und den exakt gepinnten neuen Kandidaten-SHA deployen; Production-ENV und Production-Deployment bleiben gesperrt.
 5. Danach Barrieredrill und Zwei-Tenant-Harness einschließlich Dry-run/Execute/Null-Rest-Cleanup ausführen.
 6. Den bislang öffentlichen Funnel-Publish-Token kontrolliert rotieren und die alte Capability widerrufen.
 7. Vollständige Gate-Matrix einschließlich Zwei-Tenant-, Provider-, File-, A11y-, Mobile-, Performance- und Cleanup-E2Es ausführen.

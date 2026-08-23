@@ -58,7 +58,7 @@ Die versionierte Liste steht in `qaResetRetainedTables`. Dazu gehören insbesond
    Reset und Registrierung verwenden denselben exklusiven Transaction-Advisory-Lock. Nach einem append-only Execute-Audit ist der Batch endgültig versiegelt; parallel wartende und spätere Registrierungen werden vor jedem Geschäftswrite abgewiesen.
    Die lokale Simulation beider Startreihenfolgen ist grün. Der neue Live-Barrierenharness und sein vollständig zurückgerollter Contract sind vorhanden; sein echtes `--execute` gegen den isolierten Preview-Batch wurde in diesem Code-Delta bewusst nicht ausgeführt und bleibt ein Pflichtgate.
 4. Blob- und Provider-Cleanup-Adapter fehlen. Deshalb verweigert der Executor entsprechende Batches absichtlich.
-5. Migrationen 057 und 068–076 wurden checksummengenau auf Preview-Main verifiziert; 057 + 073–076 wurden zuvor auf dem isolierten Evidence-Branch per Apply/Restore/Reapply geprüft. Preview-Main besteht 19/19 Tenant-FKs, 0/19 Anti-Joins und 21/21 Artefakte. Eine tatsächliche Batch-Closure-FK-Graphprüfung mit erzeugten CRM-Objekten fehlt.
+5. Migrationen 057 und 068–077 wurden checksummengenau auf Preview-Main verifiziert; 057 + 073–076 wurden zuvor auf dem isolierten Evidence-Branch per Apply/Restore/Reapply geprüft, 077 dort anschließend separat least-privilege-validiert. Preview-Main besteht 11/11 Checksummen, 19/19 Tenant-FKs, 0/19 Anti-Joins, 21/21 Launch-Artefakte und das vollständige 077-Owner-/ACL-Gate. Eine tatsächliche Batch-Closure-FK-Graphprüfung mit erzeugten CRM-Objekten fehlt.
 6. RLS ist für die drei QA-Ledger aktiv. Die separate Kern-CRM-Pilotaktivierung 061 ist absichtlich noch nicht angewandt, bis `novalure_app`-Runtimeverbindung, Rollenmitgliedschaft und immutable Deployment-Attestation zusammen belegt sind. Zwei-Tenant-IDOR/Graph-Closure bleibt ein separates SEC-01-/Preview-Gate.
 7. Die initiale `is_qa`-/Identity-/Batch-Provisionierung ist abgeschlossen. Nach jedem versiegelten Lauf muss ein neuer, gesondert genehmigter und zielgeprüfter Batch provisioniert werden. Es existiert absichtlich keine globale Admin-Delete-Funktion.
 8. Weitere Preview-Runtime-Mutationen bleiben bis zur vollständigen Preview-ENV-, Tenant- und Batch-Konfiguration gesperrt. Production-Migration und Production-Reset benötigen jeweils explizite Freigabe, Backup, Dry-run und Rollbackplan.
@@ -72,7 +72,7 @@ DB-01 ist code- und Preview-schema-seitig gehärtet, aber noch nicht vollständi
 | Command | Ergebnis |
 |---|---|
 | `npm.cmd run typecheck` | PASS |
-| `npm.cmd run test:unit` | PASS, 240/240 Basissuite plus 251/251 Remediation = 491/491 |
+| `npm.cmd run test:unit` | PASS, 241/241 Basissuite plus 251/251 Remediation = 492/492 |
 | `node --test scripts/qa-reset-safety-tests.mjs` | PASS, 27/27 inklusive beider Lock-Startreihenfolgen |
 | `node --test scripts/qa-reset-safety-tests.mjs scripts/auth-security-tests.mjs scripts/csrf-security-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs` | PASS, 90/90 |
 | `npx.cmd eslint src/lib/qa-reset-contract.ts src/lib/db/qa-reset-repository.ts src/app/api/admin/qa-reset/route.ts scripts/qa-reset-safety-tests.mjs scripts/qa-livegang-reset.mjs scripts/db-migrate.mjs scripts/migration-cutover-guard-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs --max-warnings=0` | PASS |
@@ -83,4 +83,4 @@ DB-01 ist code- und Preview-schema-seitig gehärtet, aber noch nicht vollständi
 | `npm.cmd run qa:batch-lock-order:execute -- --workspace-id <uuid> --batch-id <uuid> --actor-id <uuid>` | NICHT AUSGEFÜHRT; echter isolierter Preview-Barrierennachweis bleibt Pflichtgate |
 | isolierter Preview-Neon-Drill | PASS; 060 und 068–072 angewandt, migrierten Zustand preserviert, Drill-Branch auf Elternzustand zurückgesetzt |
 | isolierter 057+073–076-Evidence-Drill | PASS; 5/5 Checksummen, 19/19 Tenant-FKs, 0/19 Anti-Joins, 21/21 Artefakte; Restore-Abwesenheitsprüfung und identischer Reapply bestanden |
-| Preview-Main-Cutover 057+073–076 | PASS; insgesamt 10/10 geforderte lokale Checksummen, 19/19 validierte/deferred Tenant-FKs, 0/19 Anti-Joins und 21/21 Artefakte; Production unverändert |
+| Preview-Main-Zielstand 057+068–077 | PASS; zusätzlich ist 060 vorhanden; insgesamt 11/11 geforderte lokale Checksummen, 19/19 validierte/deferred Tenant-FKs, 0/19 Anti-Joins, 21/21 Launch-Artefakte und vollständiger 077-Owner-/ACL-Beweis; Production unverändert |
