@@ -30,6 +30,7 @@ const read = (name) => readFile(new URL(`../${name}`, import.meta.url), "utf8");
 
 const runtime = await import("../src/lib/qa-batch-runtime.ts");
 const repository = await import("../src/lib/db/qa-batch-registration-repository.ts");
+const { withTenantTransaction } = await import("../src/lib/db/tenant-client.ts");
 
 function previewEnvironment(overrides = {}) {
   return {
@@ -150,6 +151,46 @@ test("batch registration is allowed before execute and sealed after execute", as
     () => repository.assertQaBatchForMutation(afterExecute.transaction, { batchId, workspaceId: workspaceA }),
     (error) => error?.code === "QA_BATCH_SEALED" && error.status === 409,
   );
+});
+
+test("batch availability SQL passes the tenant single-statement guard", async () => {
+  const calls = [];
+  const releaseCalls = [];
+  const client = {
+    async query(sql, params = []) {
+      const normalized = sql.replace(/\s+/g, " ").trim().toLowerCase();
+      calls.push({ normalized, params: [...params], sql });
+
+      if (["begin", "commit", "rollback"].includes(normalized)) return { rows: [] };
+      if (normalized.includes("set_config('app.tenant_id'")) {
+        return { rows: [{ actorId: params[1], workspaceId: params[0] }] };
+      }
+      if (normalized.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (normalized.includes("from qa_batches batch")) return { rows: [{ id: batchId }] };
+      if (normalized.includes("from qa_reset_audit_events")) return { rows: [] };
+
+      throw new Error(`Unexpected SQL in tenant guard regression test: ${normalized}`);
+    },
+    release(error) {
+      releaseCalls.push(Boolean(error));
+    },
+  };
+  const pool = { connect: async () => client };
+
+  await assert.doesNotReject(() => withTenantTransaction(
+    { actorId, workspaceId: workspaceA },
+    (transaction) => repository.assertQaBatchForMutation(transaction, {
+      batchId,
+      workspaceId: workspaceA,
+    }),
+    { pool },
+  ));
+
+  const batchQuery = calls.find(({ normalized }) => normalized.includes("from qa_batches batch"));
+  assert.ok(batchQuery, "the guarded QA batch query must reach the checked-out client");
+  assert.match(batchQuery.sql, /for share of workspace/i);
+  assert.equal(calls.at(-1).normalized, "commit");
+  assert.deepEqual(releaseCalls, [false]);
 });
 
 test("registration delayed behind a parallel reset observes executed evidence and fails closed", async () => {
