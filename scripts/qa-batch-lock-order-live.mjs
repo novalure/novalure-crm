@@ -33,7 +33,7 @@ export const qaBatchLockOrderSql = Object.freeze({
     where batch.id = $1::uuid
       and batch.workspace_id = $2::uuid
       and workspace.is_qa = true
-    for share of workspace, batch
+    for share of workspace
   `,
   resetWorkspace: `select id from workspaces where id = $1::uuid and is_qa = true for update`,
   rollback: "rollback",
@@ -57,7 +57,7 @@ export const qaBatchLockOrderSql = Object.freeze({
      and actor.status = 'active'
     where workspace.id = $1::uuid
       and workspace.is_qa = true
-    for share of workspace, batch, actor
+    for share of workspace, actor
   `,
 });
 
@@ -301,7 +301,52 @@ async function beginScopedSession(client, config) {
 }
 
 async function rollback(client) {
-  await client.query(qaBatchLockOrderSql.rollback).catch(() => undefined);
+  await client.query(qaBatchLockOrderSql.rollback);
+}
+
+async function rollbackSessions(clients, { bestEffort = false } = {}) {
+  const results = await Promise.allSettled(clients.map((client) => rollback(client)));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure && !bestEffort) throw failure.reason;
+}
+
+export async function verifyPinnedRuntimeSessions({
+  config,
+  env = process.env,
+  firstClient,
+  inspectTarget = assertConnectedDatabaseTarget,
+  secondClient,
+}) {
+  try {
+    const pinResults = await Promise.allSettled([
+      beginScopedSession(firstClient, config),
+      beginScopedSession(secondClient, config),
+    ]);
+    const pinFailure = pinResults.find((result) => result.status === "rejected");
+    if (pinFailure) throw pinFailure.reason;
+    const [firstTarget, secondTarget, firstBackend, secondBackend] = await Promise.all([
+      inspectTarget({ client: firstClient, env, purpose: "QA lock drill session A", target: "test" }),
+      inspectTarget({ client: secondClient, env, purpose: "QA lock drill session B", target: "test" }),
+      firstClient.query(qaBatchLockOrderSql.backendIdentity),
+      secondClient.query(qaBatchLockOrderSql.backendIdentity),
+    ]);
+    const firstBackendPid = firstBackend.rows[0]?.backendPid;
+    const secondBackendPid = secondBackend.rows[0]?.backendPid;
+    if (
+      firstTarget.roleName !== "novalure_app" ||
+      secondTarget.roleName !== "novalure_app" ||
+      !Number.isSafeInteger(firstBackendPid) ||
+      !Number.isSafeInteger(secondBackendPid) ||
+      firstBackendPid <= 0 ||
+      secondBackendPid <= 0 ||
+      firstBackendPid === secondBackendPid
+    ) {
+      throw new Error("Lock drill requires two distinct pinned novalure_app PostgreSQL sessions.");
+    }
+    return Object.freeze({ firstTarget, secondTarget });
+  } finally {
+    await rollbackSessions([firstClient, secondClient]);
+  }
 }
 
 async function runBarrierScenario({ firstClient, firstKind, secondClient, secondKind, config }) {
@@ -340,9 +385,9 @@ async function runBarrierScenario({ firstClient, firstKind, secondClient, second
       status: "pass",
     });
   } finally {
-    await rollback(firstClient);
+    await rollbackSessions([firstClient], { bestEffort: true });
     if (waiter) await Promise.allSettled([waiter]);
-    await rollback(secondClient);
+    await rollbackSessions([secondClient], { bestEffort: true });
   }
 }
 
@@ -385,9 +430,9 @@ async function runQaFlagRaceScenario({ firstClient, firstKind, secondClient, sec
       status: "pass",
     });
   } finally {
-    await rollback(firstClient);
+    await rollbackSessions([firstClient], { bestEffort: true });
     if (waiter) await Promise.allSettled([waiter]);
-    await rollback(secondClient);
+    await rollbackSessions([secondClient], { bestEffort: true });
   }
 }
 
@@ -419,19 +464,12 @@ export async function executeQaBatchLockOrderDrill(config, env = process.env) {
   try {
     firstClient = await pool.connect();
     secondClient = await pool.connect();
-    const [firstTarget, secondTarget, firstBackend, secondBackend] = await Promise.all([
-      assertConnectedDatabaseTarget({ client: firstClient, env, purpose: "QA lock drill session A", target: "test" }),
-      assertConnectedDatabaseTarget({ client: secondClient, env, purpose: "QA lock drill session B", target: "test" }),
-      firstClient.query(qaBatchLockOrderSql.backendIdentity),
-      secondClient.query(qaBatchLockOrderSql.backendIdentity),
-    ]);
-    if (
-      firstTarget.roleName !== "novalure_app" ||
-      secondTarget.roleName !== "novalure_app" ||
-      firstBackend.rows[0]?.backendPid === secondBackend.rows[0]?.backendPid
-    ) {
-      throw new Error("Lock drill requires two distinct novalure_app PostgreSQL sessions.");
-    }
+    const { firstTarget } = await verifyPinnedRuntimeSessions({
+      config,
+      env,
+      firstClient,
+      secondClient,
+    });
     await validateFixture(firstClient, config);
 
     const mutationFirst = await runBarrierScenario({
@@ -485,8 +523,7 @@ export async function executeQaBatchLockOrderDrill(config, env = process.env) {
     assertEvidenceContainsNoSecrets(evidence);
     return evidence;
   } finally {
-    if (firstClient) await rollback(firstClient);
-    if (secondClient) await rollback(secondClient);
+    await rollbackSessions([firstClient, secondClient].filter(Boolean), { bestEffort: true });
     firstClient?.release();
     secondClient?.release();
     await pool.end();

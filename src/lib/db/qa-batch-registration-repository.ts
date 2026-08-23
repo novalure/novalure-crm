@@ -32,7 +32,10 @@ export async function assertQaBatchForMutation(
       where batch.id = $1::uuid
         and batch.workspace_id = $2::uuid
         and workspace.is_qa = true
-      for share of workspace, batch
+      -- qa_batches is append-only and the runtime role deliberately has no
+      -- UPDATE privilege. Lock the mutable QA boundary; the advisory batch
+      -- fence serializes registration/reset operations for the immutable row.
+      for share of workspace
     `,
     [input.batchId, input.workspaceId],
   );

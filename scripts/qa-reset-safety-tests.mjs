@@ -899,7 +899,8 @@ test("route requires session, CSRF, exact platform role and capability before re
 test("repository locks QA roots, scopes exact ledger ids and checks FK closure", async () => {
   const repository = await read("src/lib/db/qa-reset-repository.ts");
   assert.match(repository, /is_qa as "isQa" from workspaces where id = \$1::uuid for update/);
-  assert.match(repository, /where id = \$1::uuid\s+and workspace_id = \$2::uuid\s+for share/);
+  assert.match(repository, /where id = \$1::uuid\s+and workspace_id = \$2::uuid\s+`/);
+  assert.doesNotMatch(repository, /from qa_batches[\s\S]{0,180}for (?:key )?share/);
   assert.match(repository, /lockQaBatchFence\(transaction, input\.batchId\)/);
   assert.match(repository, /hasExecutedQaBatchAudit\(transaction, input\)/);
   assert.match(repository, /from qa_batch_objects/);

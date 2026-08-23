@@ -670,7 +670,6 @@ export async function runQaBatchResetInTransaction(
       from qa_batches
       where id = $1::uuid
         and workspace_id = $2::uuid
-      for share
     `,
     [input.batchId, input.workspaceId],
   );
