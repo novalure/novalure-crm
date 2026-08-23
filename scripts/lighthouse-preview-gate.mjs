@@ -2,12 +2,20 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import { launch } from "chrome-launcher";
+import { killAll, launch } from "chrome-launcher";
 import lighthouse from "lighthouse";
 import { connect } from "puppeteer-core";
+import {
+  createBrowserRuntimeCleanup,
+  installTerminationCleanup,
+  requirePreviewApplicationLanding,
+  requireTrustedShareLanding,
+  settleRunWithCleanup,
+} from "./lighthouse-preview-runtime.mjs";
 
 const publicRoutes = ["/", "/login", "/privacy"];
 const authenticatedRoutes = [
@@ -98,8 +106,12 @@ async function bootstrapShareAccess(chromePort, base, shareUrl) {
   try {
     const page = await browser.newPage();
     try {
-      await page.goto(shareUrl.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      assert.equal(new URL(page.url()).origin, base.origin, "Share access did not return to the exact Preview origin.");
+      let response = await page.goto(shareUrl.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      const shareLandingOrigin = requireTrustedShareLanding(page.url(), base.origin);
+      if (shareLandingOrigin !== base.origin) {
+        response = await page.goto(base.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      }
+      await requirePreviewApplicationLanding({ page, previewOrigin: base.origin, response });
     } finally {
       await page.close();
     }
@@ -176,14 +188,35 @@ const baseline = baselinePath ? JSON.parse(await readFile(path.resolve(baselineP
 const baselineBytes = new Map((baseline?.results ?? []).map((item) => [resultKey(item), item.metrics?.totalByteWeight ?? null]));
 
 const chromePath = args.get("browser-executable") ?? process.env.NOVALURE_BROWSER_EXECUTABLE;
-const chrome = await launch({
-  chromeFlags: ["--headless=new", "--disable-gpu", "--no-default-browser-check", "--no-first-run"],
-  chromePath: chromePath || undefined,
-  logLevel: "silent",
+const chromeUserDataDirectory = await mkdtemp(path.join(tmpdir(), "novalure-lighthouse-"));
+let chromeLaunchPromise = null;
+let chrome = null;
+const cleanupBrowserRuntime = createBrowserRuntimeCleanup({
+  getBrowser: async () => {
+    if (!chromeLaunchPromise) return null;
+    try {
+      return await chromeLaunchPromise;
+    } catch {
+      return null;
+    }
+  },
+  killOrphanedBrowsers: () => killAll(),
+  profileDirectory: chromeUserDataDirectory,
+  removeDirectory: rm,
 });
+const removeTerminationHandlers = installTerminationCleanup(cleanupBrowserRuntime);
 const results = [];
+let runError = null;
 
 try {
+  chromeLaunchPromise = launch({
+    chromeFlags: ["--headless=new", "--disable-gpu", "--no-default-browser-check", "--no-first-run"],
+    chromePath: chromePath || undefined,
+    handleSIGINT: false,
+    logLevel: "silent",
+    userDataDir: chromeUserDataDirectory,
+  });
+  chrome = await chromeLaunchPromise;
   await bootstrapShareAccess(chrome.port, base, shareUrl);
 
   async function runSurface(surface, routes) {
@@ -266,8 +299,14 @@ try {
     await bootstrapQaAuthentication(chrome.port, base, qaCredentials);
     await runSurface("authenticated", authenticatedRoutes);
   }
+} catch (error) {
+  runError = error;
 } finally {
-  await chrome.kill();
+  try {
+    await settleRunWithCleanup(runError, cleanupBrowserRuntime);
+  } finally {
+    removeTerminationHandlers();
+  }
 }
 
 const technicalPassed = results.every((item) => item.passed);
