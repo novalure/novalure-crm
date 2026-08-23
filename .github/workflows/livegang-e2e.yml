@@ -1,84 +1,110 @@
-name: Go-live quality gates
+name: Exact protected Preview two-tenant QA
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_EXACT_PROTECTED_PREVIEW_QA
+        required: true
+        type: string
+      candidate_sha:
+        description: Exact 40-character lowercase candidate commit
+        required: true
+        type: string
+      trusted_harness_sha:
+        description: Exact protected-main harness commit, matching the Environment variable
+        required: true
+        type: string
+      candidate_branch:
+        description: Exact codex/ Preview branch
+        required: true
+        type: string
+      deployment_id:
+        description: Exact READY Vercel Preview deployment id
+        required: true
+        type: string
+      preview_origin:
+        description: Exact HTTPS Vercel Preview origin without trailing slash
+        required: true
+        type: string
+      preview_host:
+        description: Exact Vercel Preview hostname
+        required: true
+        type: string
+      neon_project_id:
+        description: Exact isolated Preview Neon project id
+        required: true
+        type: string
+      neon_branch_id:
+        description: Exact isolated Preview Neon branch id
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: novalure-go-live-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  NEXT_TELEMETRY_DISABLED: "1"
+  group: exact-protected-preview-${{ inputs.deployment_id }}
+  cancel-in-progress: false
 
 jobs:
-  quality:
-    name: Lockfile, lint, typecheck, tests and build
+  protected-preview-two-tenant:
+    name: Validate, preflight and execute exact protected Preview
     runs-on: ubuntu-latest
+    environment: go-live-preview
+    timeout-minutes: 45
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NOVALURE_WORKFLOW_ENVIRONMENT: go-live-preview
+      NOVALURE_WORKFLOW_CONFIRMATION: ${{ inputs.confirmation }}
+      NOVALURE_WORKFLOW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      NOVALURE_WORKFLOW_CANDIDATE_BRANCH: ${{ inputs.candidate_branch }}
+      NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA: ${{ vars.NOVALURE_QA_TRUSTED_HARNESS_SHA }}
+      NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT: ${{ inputs.trusted_harness_sha }}
+      NOVALURE_WORKFLOW_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      NOVALURE_WORKFLOW_PREVIEW_ORIGIN: ${{ inputs.preview_origin }}
+      NOVALURE_WORKFLOW_PREVIEW_HOST: ${{ inputs.preview_host }}
+      NOVALURE_WORKFLOW_NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
+      NOVALURE_WORKFLOW_NEON_BRANCH_ID: ${{ inputs.neon_branch_id }}
     steps:
-      - name: Checkout
+      - name: Reject malformed dispatch inputs before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/livegang-e2e.yml@refs/heads/main"
+          test "$NOVALURE_WORKFLOW_CONFIRMATION" = "RUN_EXACT_PROTECTED_PREVIEW_QA"
+          [[ "$NOVALURE_WORKFLOW_CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          test "$GITHUB_SHA" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          [[ "$NOVALURE_WORKFLOW_CANDIDATE_BRANCH" =~ ^codex/[A-Za-z0-9._/-]{1,220}$ ]]
+          [[ "$NOVALURE_WORKFLOW_DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]{20,80}$ ]]
+          [[ "$NOVALURE_WORKFLOW_PREVIEW_HOST" =~ ^[a-z0-9][a-z0-9.-]*\.vercel\.app$ ]]
+          test "$NOVALURE_WORKFLOW_PREVIEW_ORIGIN" = "https://$NOVALURE_WORKFLOW_PREVIEW_HOST"
+          [[ "$NOVALURE_WORKFLOW_NEON_PROJECT_ID" =~ ^[-A-Za-z0-9]{8,80}$ ]]
+          [[ "$NOVALURE_WORKFLOW_NEON_BRANCH_ID" =~ ^br-[-A-Za-z0-9]{8,128}$ ]]
+
+      - name: Checkout only the exact trusted harness SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ inputs.trusted_harness_sha }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-
-      - name: Install dependencies from lockfile
-        run: npm ci
-
-      - name: Verify toolchain
-        run: npm run ci:toolchain
-
-      - name: Lint without warnings
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit and component smoke tests
-        run: npm run test:unit
-
-      - name: Security and scope integration tests
-        run: npm run test:integration
-
-      - name: Production build
-        run: npm run build
-
-      - name: Reject whitespace errors
+      - name: Prove protected-main harness identity
         shell: bash
-        env:
-          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          EVENT_HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          base_sha="$EVENT_BASE_SHA"
-          if [ -z "$base_sha" ] || [[ "$base_sha" =~ ^0+$ ]]; then
-            if ! base_sha="$(git rev-parse HEAD^ 2>/dev/null)"; then
-              echo "No parent commit is available; whitespace range check is not applicable."
-              exit 0
-            fi
-          fi
-          git diff --check "$base_sha" "$EVENT_HEAD_SHA"
-
-  production-sca:
-    name: Production dependency audit and SBOM
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          git show-ref --verify --quiet refs/remotes/origin/main
+          git merge-base --is-ancestor "$checked_out_sha" origin/main
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -89,220 +115,591 @@ jobs:
       - name: Install dependencies from lockfile
         run: npm ci
 
-      - name: Fail on production dependency findings
-        run: npm run security:production
+      - name: Run protected Preview QA with in-memory action secrets
+        id: protected_qa
+        env:
+          NOVALURE_QA_TWO_TENANT_ENV_B64: ${{ secrets.NOVALURE_QA_TWO_TENANT_ENV_B64 }}
+          NOVALURE_QA_VERCEL_SHARE_URL: ${{ secrets.NOVALURE_QA_VERCEL_SHARE_URL }}
+        run: node scripts/qa-protected-preview-action-runner.mjs
 
-      - name: Generate CycloneDX SBOM
-        run: npm sbom --omit=dev --sbom-format=cyclonedx > novalure-production-sbom.cdx.json
-
-      - name: Canonicalize SBOM component inventory
+      - name: Verify the exact secret-free upload allowlist
+        shell: bash
+        env:
+          EVIDENCE_ROOT: ${{ steps.protected_qa.outputs.evidence_root }}
         run: |
-          node scripts/canonicalize-sbom.mjs novalure-production-sbom.cdx.json > novalure-production-sbom.components.txt
-          sha256sum novalure-production-sbom.components.txt > novalure-production-sbom.components.sha256
+          set -euo pipefail
+          case "$EVIDENCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-qa-public-*) ;;
+            *) exit 1 ;;
+          esac
+          test -d "$EVIDENCE_ROOT"
+          test ! -L "$EVIDENCE_ROOT"
+          mapfile -t evidence_files < <(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          expected=(
+            execute-two-tenant-e2e.json
+            execute-two-tenant-e2e.sha256
+            preflight-two-tenant-e2e.json
+            preflight-two-tenant-e2e.sha256
+          )
+          test "${#evidence_files[@]}" -eq "${#expected[@]}"
+          test "${evidence_files[*]}" = "${expected[*]}"
+          test -z "$(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
+          for evidence in "${expected[@]}"; do
+            test -f "$EVIDENCE_ROOT/$evidence"
+            test ! -L "$EVIDENCE_ROOT/$evidence"
+            test "$(stat -c '%h' "$EVIDENCE_ROOT/$evidence")" = "1"
+          done
+          (cd "$EVIDENCE_ROOT" && sha256sum --check --strict preflight-two-tenant-e2e.sha256 execute-two-tenant-e2e.sha256)
 
-      - name: Upload SBOM
+      - name: Create the immutable attestation subject and manifest
+        id: provenance_subject
+        shell: bash
+        env:
+          EVIDENCE_ROOT: ${{ steps.protected_qa.outputs.evidence_root }}
+        run: |
+          set -euo pipefail
+          umask 077
+          case "$EVIDENCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-qa-public-*) ;;
+            *) exit 1 ;;
+          esac
+          test -d "$EVIDENCE_ROOT"
+          test ! -L "$EVIDENCE_ROOT"
+          provenance_root="$(mktemp -d "$RUNNER_TEMP/novalure-provenance-XXXXXXXX")"
+          chmod 0700 "$provenance_root"
+          artifact_name="exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
+          artifact_path="$provenance_root/$artifact_name"
+          manifest_path="$provenance_root/protected-workflow-artifact-manifest.json"
+          expected=(
+            execute-two-tenant-e2e.json
+            execute-two-tenant-e2e.sha256
+            preflight-two-tenant-e2e.json
+            preflight-two-tenant-e2e.sha256
+          )
+          for evidence in "${expected[@]}"; do
+            test -f "$EVIDENCE_ROOT/$evidence"
+            test ! -L "$EVIDENCE_ROOT/$evidence"
+            test "$(stat -c '%h' "$EVIDENCE_ROOT/$evidence")" = "1"
+          done
+          (
+            cd "$EVIDENCE_ROOT"
+            LC_ALL=C tar \
+              --format=posix \
+              --sort=name \
+              --mtime='@0' \
+              --owner=0 \
+              --group=0 \
+              --numeric-owner \
+              --pax-option=delete=atime,delete=ctime \
+              -cf "$artifact_path" \
+              -- "${expected[@]}"
+          )
+          test -f "$artifact_path"
+          test ! -L "$artifact_path"
+          test "$(stat -c '%h' "$artifact_path")" = "1"
+          artifact_digest="$(sha256sum -- "$artifact_path" | cut -d ' ' -f 1)"
+          PROVENANCE_ARTIFACT_DIGEST="$artifact_digest" \
+          PROVENANCE_ARTIFACT_NAME="$artifact_name" \
+          PROVENANCE_EVIDENCE_ROOT="$EVIDENCE_ROOT" \
+          PROVENANCE_MANIFEST_PATH="$manifest_path" \
+          node --input-type=module <<'NODE'
+          import {
+            closeSync,
+            constants,
+            lstatSync,
+            openSync,
+            readFileSync,
+            writeFileSync,
+          } from "node:fs";
+          import { createHash } from "node:crypto";
+          import path from "node:path";
+
+          const names = [
+            "execute-two-tenant-e2e.json",
+            "execute-two-tenant-e2e.sha256",
+            "preflight-two-tenant-e2e.json",
+            "preflight-two-tenant-e2e.sha256",
+          ];
+          const root = process.env.PROVENANCE_EVIDENCE_ROOT;
+          const files = names.map((name) => {
+            const candidate = path.join(root, name);
+            const state = lstatSync(candidate);
+            if (state.isSymbolicLink() || !state.isFile() || state.nlink !== 1 || state.size <= 0 || state.size > 16 * 1024 * 1024) {
+              throw new Error("PROTECTED_WORKFLOW_EVIDENCE_FILE_INVALID");
+            }
+            return {
+              name,
+              sha256: createHash("sha256").update(readFileSync(candidate)).digest("hex"),
+              sizeBytes: state.size,
+            };
+          });
+          const manifest = {
+            artifactDigest: process.env.PROVENANCE_ARTIFACT_DIGEST,
+            artifactName: process.env.PROVENANCE_ARTIFACT_NAME,
+            files,
+            recordType: "NOVALURE_PROTECTED_WORKFLOW_ARTIFACT_MANIFEST",
+            schemaVersion: 1,
+          };
+          const descriptor = openSync(
+            process.env.PROVENANCE_MANIFEST_PATH,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+            0o400,
+          );
+          try {
+            writeFileSync(descriptor, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+          } finally {
+            closeSync(descriptor);
+          }
+          NODE
+          (
+            cd "$provenance_root"
+            sha256sum -- "$artifact_name" > "$artifact_name.sha256"
+            sha256sum -- "$(basename "$manifest_path")" > "$(basename "$manifest_path").sha256"
+          )
+          chmod 0400 \
+            "$artifact_path" \
+            "$artifact_path.sha256" \
+            "$manifest_path" \
+            "$manifest_path.sha256"
+          echo "provenance_root=$provenance_root" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+          echo "artifact_sha256_path=$artifact_path.sha256" >> "$GITHUB_OUTPUT"
+          echo "manifest_path=$manifest_path" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256_path=$manifest_path.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub artifact attestation
+        id: github_attestation
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.provenance_subject.outputs.artifact_path }}
+          show-summary: false
+
+      - name: Freeze the Sigstore bundle as evidence
+        id: provenance_bundle
+        shell: bash
+        env:
+          ATTESTATION_BUNDLE_SOURCE: ${{ steps.github_attestation.outputs.bundle-path }}
+          PROVENANCE_ROOT: ${{ steps.provenance_subject.outputs.provenance_root }}
+        run: |
+          set -euo pipefail
+          umask 077
+          case "$PROVENANCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-provenance-*) ;;
+            *) exit 1 ;;
+          esac
+          test -d "$PROVENANCE_ROOT"
+          test ! -L "$PROVENANCE_ROOT"
+          case "$ATTESTATION_BUNDLE_SOURCE" in
+            "$RUNNER_TEMP"/*) ;;
+            *) exit 1 ;;
+          esac
+          test -f "$ATTESTATION_BUNDLE_SOURCE"
+          test ! -L "$ATTESTATION_BUNDLE_SOURCE"
+          test "$(stat -c '%h' "$ATTESTATION_BUNDLE_SOURCE")" = "1"
+          bundle_size="$(stat -c '%s' "$ATTESTATION_BUNDLE_SOURCE")"
+          test "$bundle_size" -gt 0
+          test "$bundle_size" -le 16777216
+          bundle_source_real="$(realpath -e -- "$ATTESTATION_BUNDLE_SOURCE")"
+          case "$bundle_source_real" in
+            "$RUNNER_TEMP"/*) ;;
+            *) exit 1 ;;
+          esac
+          bundle_path="$PROVENANCE_ROOT/github-artifact-attestation.sigstore.json"
+          install -m 0400 -- "$bundle_source_real" "$bundle_path"
+          test -f "$bundle_path"
+          test ! -L "$bundle_path"
+          test "$(stat -c '%h' "$bundle_path")" = "1"
+          (
+            cd "$PROVENANCE_ROOT"
+            sha256sum -- "$(basename "$bundle_path")" > "$(basename "$bundle_path").sha256"
+          )
+          chmod 0400 "$bundle_path.sha256"
+          echo "bundle_path=$bundle_path" >> "$GITHUB_OUTPUT"
+          echo "bundle_sha256_path=$bundle_path.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload secret-free QA and immutable provenance evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: novalure-production-sbom
+          name: exact-preview-two-tenant-${{ inputs.candidate_sha }}
           path: |
-            novalure-production-sbom.cdx.json
-            novalure-production-sbom.components.txt
-            novalure-production-sbom.components.sha256
+            ${{ steps.protected_qa.outputs.evidence_root }}/preflight-two-tenant-e2e.json
+            ${{ steps.protected_qa.outputs.evidence_root }}/preflight-two-tenant-e2e.sha256
+            ${{ steps.protected_qa.outputs.evidence_root }}/execute-two-tenant-e2e.json
+            ${{ steps.protected_qa.outputs.evidence_root }}/execute-two-tenant-e2e.sha256
+            ${{ steps.provenance_subject.outputs.artifact_path }}
+            ${{ steps.provenance_subject.outputs.artifact_sha256_path }}
+            ${{ steps.provenance_subject.outputs.manifest_path }}
+            ${{ steps.provenance_subject.outputs.manifest_sha256_path }}
+            ${{ steps.provenance_bundle.outputs.bundle_path }}
+            ${{ steps.provenance_bundle.outputs.bundle_sha256_path }}
           if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
 
-  qa-e2e:
-    name: Manual trusted-candidate QA regression and tenant diagnostics
-    if: github.event_name == 'workflow_dispatch'
+      - name: Remove staged public QA and provenance evidence
+        if: always()
+        shell: bash
+        env:
+          EVIDENCE_ROOT: ${{ steps.protected_qa.outputs.evidence_root }}
+          PROVENANCE_ROOT: ${{ steps.provenance_subject.outputs.provenance_root }}
+        run: |
+          set -euo pipefail
+          if [ -n "$EVIDENCE_ROOT" ]; then
+            case "$EVIDENCE_ROOT" in
+              "$RUNNER_TEMP"/novalure-qa-public-*) ;;
+              *) exit 1 ;;
+            esac
+            test -d "$EVIDENCE_ROOT"
+            test ! -L "$EVIDENCE_ROOT"
+            find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            rmdir "$EVIDENCE_ROOT"
+          fi
+          if [ -n "$PROVENANCE_ROOT" ]; then
+            case "$PROVENANCE_ROOT" in
+              "$RUNNER_TEMP"/novalure-provenance-*) ;;
+              *) exit 1 ;;
+            esac
+            test -d "$PROVENANCE_ROOT"
+            test ! -L "$PROVENANCE_ROOT"
+            test -z "$(find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
+            find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            rmdir "$PROVENANCE_ROOT"
+          fi
+
+  protected-preview-public-runtime:
+    name: Execute and attest exact protected Public Form/Funnel QA
     runs-on: ubuntu-latest
-    environment: novalure-qa
-    concurrency:
-      group: novalure-shared-qa
-      cancel-in-progress: false
-    needs:
-      - quality
-      - production-sca
+    environment: go-live-preview
+    timeout-minutes: 75
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
     env:
-      NOVALURE_QA_RUN_PREFIX: GOLIVETEST_${{ github.run_id }}_${{ github.run_attempt }}
-      NOVALURE_APP_ORIGIN: http://127.0.0.1:3000
-      NOVALURE_PUBLIC_SUBMISSION_QA_MODE: "1"
-      NOVALURE_QA_BASE_URL: http://127.0.0.1:3000
-      NOVALURE_TRUSTED_CLIENT_IP_HEADER: x-forwarded-for
+      NEXT_TELEMETRY_DISABLED: "1"
+      NOVALURE_WORKFLOW_ENVIRONMENT: go-live-preview
+      NOVALURE_WORKFLOW_CONFIRMATION: ${{ inputs.confirmation }}
+      NOVALURE_WORKFLOW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      NOVALURE_WORKFLOW_CANDIDATE_BRANCH: ${{ inputs.candidate_branch }}
+      NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA: ${{ vars.NOVALURE_QA_TRUSTED_HARNESS_SHA }}
+      NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT: ${{ inputs.trusted_harness_sha }}
+      NOVALURE_WORKFLOW_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      NOVALURE_WORKFLOW_PREVIEW_ORIGIN: ${{ inputs.preview_origin }}
+      NOVALURE_WORKFLOW_PREVIEW_HOST: ${{ inputs.preview_host }}
+      NOVALURE_WORKFLOW_NEON_PROJECT_ID: ${{ inputs.neon_project_id }}
+      NOVALURE_WORKFLOW_NEON_BRANCH_ID: ${{ inputs.neon_branch_id }}
+      NOVALURE_WORKFLOW_PUBLIC_BATCH_POLICY: fresh-deployment-bound-single-use-v1
+      NOVALURE_PUBLIC_CANDIDATE_ROOT: ${{ github.workspace }}/candidate
     steps:
-      - name: Checkout
+      - name: Reject malformed Public dispatch inputs before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/livegang-e2e.yml@refs/heads/main"
+          test "$NOVALURE_WORKFLOW_CONFIRMATION" = "RUN_EXACT_PROTECTED_PREVIEW_QA"
+          [[ "$NOVALURE_WORKFLOW_CANDIDATE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          test "$GITHUB_SHA" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          [[ "$NOVALURE_WORKFLOW_CANDIDATE_BRANCH" =~ ^codex/[A-Za-z0-9._/-]{1,220}$ ]]
+          [[ "$NOVALURE_WORKFLOW_DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]{20,80}$ ]]
+          [[ "$NOVALURE_WORKFLOW_PREVIEW_HOST" =~ ^[a-z0-9][a-z0-9.-]*\.vercel\.app$ ]]
+          test "$NOVALURE_WORKFLOW_PREVIEW_ORIGIN" = "https://$NOVALURE_WORKFLOW_PREVIEW_HOST"
+          [[ "$NOVALURE_WORKFLOW_NEON_PROJECT_ID" =~ ^[-A-Za-z0-9]{8,80}$ ]]
+          [[ "$NOVALURE_WORKFLOW_NEON_BRANCH_ID" =~ ^br-[-A-Za-z0-9]{8,128}$ ]]
+          test "$NOVALURE_WORKFLOW_PUBLIC_BATCH_POLICY" = "fresh-deployment-bound-single-use-v1"
+
+      - name: Checkout only the exact trusted Public harness SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+          ref: ${{ inputs.trusted_harness_sha }}
 
-      - name: Setup Node.js
+      - name: Prove protected-main Public harness identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          test "$checked_out_sha" = "$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"
+          git show-ref --verify --quiet refs/remotes/origin/main
+          git merge-base --is-ancestor "$checked_out_sha" origin/main
+
+      - name: Checkout the exact Public candidate into an isolated directory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          path: candidate
+          persist-credentials: false
+          ref: ${{ inputs.candidate_branch }}
+
+      - name: Prove isolated Public candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$NOVALURE_PUBLIC_CANDIDATE_ROOT/.git"
+          test ! -L "$NOVALURE_PUBLIC_CANDIDATE_ROOT"
+          test "$(git -C "$NOVALURE_PUBLIC_CANDIDATE_ROOT" rev-parse HEAD)" = "$NOVALURE_WORKFLOW_CANDIDATE_SHA"
+          test "$(git -C "$NOVALURE_PUBLIC_CANDIDATE_ROOT" branch --show-current)" = "$NOVALURE_WORKFLOW_CANDIDATE_BRANCH"
+          test -z "$(git -C "$NOVALURE_PUBLIC_CANDIDATE_ROOT" status --short)"
+
+      - name: Setup Node.js for Public QA
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
           package-manager-cache: false
 
-      - name: Install dependencies from lockfile
+      - name: Install Public QA dependencies from lockfile
         run: npm ci
 
-      - name: Require all QA secrets and variables
+      - name: Require two fresh deployment-bound single-use batches and run Public Preview QA
+        id: protected_public
+        env:
+          NOVALURE_QA_PUBLIC_RUNTIME_INPUT_B64: ${{ secrets.NOVALURE_QA_PUBLIC_RUNTIME_INPUT_B64 }}
+        run: node scripts/qa-protected-public-action-runner.mjs
+
+      - name: Verify the exact six-file Public evidence allowlist
         shell: bash
         env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
-          NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_QA_SESSION_SECRET }}
-          NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
-          NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
-          NOVALURE_AUTH_RATE_LIMIT_SECRET: ${{ secrets.NOVALURE_QA_AUTH_RATE_LIMIT_SECRET }}
-          OAUTH_STATE_SECRET: ${{ secrets.NOVALURE_QA_OAUTH_STATE_SECRET }}
+          EVIDENCE_ROOT: ${{ steps.protected_public.outputs.evidence_root }}
         run: |
-          required=(
-            NOVALURE_QA_DATABASE_URL
-            NOVALURE_QA_MIGRATION_DATABASE_URL
-            NOVALURE_QA_DATABASE_HOST
-            NOVALURE_QA_MIGRATION_DATABASE_HOST
-            NOVALURE_QA_DATABASE_ROLE
-            NOVALURE_QA_MIGRATION_DATABASE_ROLE
-            NOVALURE_QA_DATABASE_NAME
-            NOVALURE_QA_PROJECT_ID
-            NOVALURE_QA_BRANCH_ID
-            NOVALURE_PRODUCTION_DATABASE_HOST
-            NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST
-            NOVALURE_QA_PASSWORD
-            NOVALURE_SESSION_SECRET
-            NOVALURE_ABUSE_SECRET
-            NOVALURE_AUTH_ENCRYPTION_KEY
-            NOVALURE_AUTH_RATE_LIMIT_SECRET
-            OAUTH_STATE_SECRET
+          set -euo pipefail
+          case "$EVIDENCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-public-evidence-*) ;;
+            *) exit 1 ;;
+          esac
+          test -d "$EVIDENCE_ROOT"
+          test ! -L "$EVIDENCE_ROOT"
+          mapfile -t evidence_files < <(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          expected=(
+            funnel-publish-token-rotation.json
+            public-form-funnel-cleanup.json
+            public-form-live-submission.json
+            public-form-long-proof-refresh.json
+            public-funnel-live-submission.json
+            public-funnel-long-proof-refresh.json
           )
-          for name in "${required[@]}"; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is required; this check cannot be skipped."
-              exit 1
-            fi
+          test "${#evidence_files[@]}" -eq "${#expected[@]}"
+          test "${evidence_files[*]}" = "${expected[*]}"
+          test -z "$(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
+          for evidence in "${expected[@]}"; do
+            test -f "$EVIDENCE_ROOT/$evidence"
+            test ! -L "$EVIDENCE_ROOT/$evidence"
+            test "$(stat -c '%h' "$EVIDENCE_ROOT/$evidence")" = "1"
           done
 
-      - name: Reject production or ambiguous database targets
-        env:
-          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-        run: npm run ci:qa-target
-
-      - name: Preview checksummed QA migration plan without writes
-        env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-        run: node scripts/db-migrate.mjs dry-run --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
-
-      - name: Apply checksummed QA migrations
-        env:
-          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          MIGRATION_TARGET: test
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
-          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
-          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-        run: node scripts/db-migrate.mjs up --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
-
-      - name: Seed two or more isolated QA workspaces
-        env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-          NOVALURE_QA_SEED_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
-        run: npm run qa:livegang:seed
-
-      - name: Build the production artifact
-        run: npm run build
-
-      - name: Start production server
+      - name: Create the immutable Public attestation subject and manifest
+        id: public_provenance_subject
         shell: bash
         env:
-          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
-          NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
-          NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
-          NOVALURE_AUTH_RATE_LIMIT_SECRET: ${{ secrets.NOVALURE_QA_AUTH_RATE_LIMIT_SECRET }}
-          NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_QA_SESSION_SECRET }}
-          OAUTH_STATE_SECRET: ${{ secrets.NOVALURE_QA_OAUTH_STATE_SECRET }}
+          EVIDENCE_ROOT: ${{ steps.protected_public.outputs.evidence_root }}
         run: |
-          npm run start -- --hostname 127.0.0.1 > /tmp/novalure-livegang.log 2>&1 &
-          echo $! > /tmp/novalure-livegang.pid
+          set -euo pipefail
+          umask 077
+          case "$EVIDENCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-public-evidence-*) ;;
+            *) exit 1 ;;
+          esac
+          provenance_root="$(mktemp -d "$RUNNER_TEMP/novalure-public-provenance-XXXXXXXX")"
+          chmod 0700 "$provenance_root"
+          artifact_name="public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
+          artifact_path="$provenance_root/$artifact_name"
+          manifest_path="$provenance_root/public-runtime-artifact-manifest.json"
+          expected=(
+            funnel-publish-token-rotation.json
+            public-form-funnel-cleanup.json
+            public-form-live-submission.json
+            public-form-long-proof-refresh.json
+            public-funnel-live-submission.json
+            public-funnel-long-proof-refresh.json
+          )
+          (
+            cd "$EVIDENCE_ROOT"
+            LC_ALL=C tar \
+              --format=posix \
+              --sort=name \
+              --mtime='@0' \
+              --owner=0 \
+              --group=0 \
+              --numeric-owner \
+              --pax-option=delete=atime,delete=ctime \
+              -cf "$artifact_path" \
+              -- "${expected[@]}"
+          )
+          test -f "$artifact_path"
+          test ! -L "$artifact_path"
+          test "$(stat -c '%h' "$artifact_path")" = "1"
+          artifact_digest="$(sha256sum -- "$artifact_path" | cut -d ' ' -f 1)"
+          PROVENANCE_ARTIFACT_DIGEST="$artifact_digest" \
+          PROVENANCE_ARTIFACT_NAME="$artifact_name" \
+          PROVENANCE_EVIDENCE_ROOT="$EVIDENCE_ROOT" \
+          PROVENANCE_MANIFEST_PATH="$manifest_path" \
+          node --input-type=module <<'NODE'
+          import {
+            closeSync,
+            constants,
+            lstatSync,
+            openSync,
+            readFileSync,
+            writeFileSync,
+          } from "node:fs";
+          import { createHash } from "node:crypto";
+          import path from "node:path";
 
-      - name: Wait for app
+          const names = [
+            "funnel-publish-token-rotation.json",
+            "public-form-funnel-cleanup.json",
+            "public-form-live-submission.json",
+            "public-form-long-proof-refresh.json",
+            "public-funnel-live-submission.json",
+            "public-funnel-long-proof-refresh.json",
+          ];
+          const root = process.env.PROVENANCE_EVIDENCE_ROOT;
+          const files = names.map((name) => {
+            const candidate = path.join(root, name);
+            const state = lstatSync(candidate);
+            if (state.isSymbolicLink() || !state.isFile() || state.nlink !== 1 || state.size <= 0 || state.size > 16 * 1024 * 1024) {
+              throw new Error("PROTECTED_PUBLIC_EVIDENCE_FILE_INVALID");
+            }
+            return {
+              name,
+              sha256: createHash("sha256").update(readFileSync(candidate)).digest("hex"),
+              sizeBytes: state.size,
+            };
+          });
+          const manifest = {
+            artifactDigest: process.env.PROVENANCE_ARTIFACT_DIGEST,
+            artifactName: process.env.PROVENANCE_ARTIFACT_NAME,
+            files,
+            recordType: "NOVALURE_PUBLIC_RUNTIME_ARTIFACT_MANIFEST",
+            schemaVersion: 1,
+          };
+          const descriptor = openSync(
+            process.env.PROVENANCE_MANIFEST_PATH,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+            0o400,
+          );
+          try {
+            writeFileSync(descriptor, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+          } finally {
+            closeSync(descriptor);
+          }
+          NODE
+          (
+            cd "$provenance_root"
+            sha256sum -- "$artifact_name" > "$artifact_name.sha256"
+            sha256sum -- "$(basename "$manifest_path")" > "$(basename "$manifest_path").sha256"
+          )
+          chmod 0400 \
+            "$artifact_path" \
+            "$artifact_path.sha256" \
+            "$manifest_path" \
+            "$manifest_path.sha256"
+          echo "provenance_root=$provenance_root" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+          echo "artifact_sha256_path=$artifact_path.sha256" >> "$GITHUB_OUTPUT"
+          echo "manifest_path=$manifest_path" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256_path=$manifest_path.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Create separate GitHub Public artifact attestation
+        id: github_public_attestation
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.public_provenance_subject.outputs.artifact_path }}
+          show-summary: false
+
+      - name: Freeze the Public Sigstore bundle as evidence
+        id: public_provenance_bundle
         shell: bash
+        env:
+          ATTESTATION_BUNDLE_SOURCE: ${{ steps.github_public_attestation.outputs.bundle-path }}
+          PROVENANCE_ROOT: ${{ steps.public_provenance_subject.outputs.provenance_root }}
         run: |
-          for attempt in {1..60}; do
-            if curl -fsS "$NOVALURE_QA_BASE_URL/api/health" > /tmp/novalure-health.json; then
-              exit 0
-            fi
-            sleep 2
-          done
-          node scripts/summarize-app-log.mjs /tmp/novalure-livegang.log
-          exit 1
+          set -euo pipefail
+          umask 077
+          case "$PROVENANCE_ROOT" in
+            "$RUNNER_TEMP"/novalure-public-provenance-*) ;;
+            *) exit 1 ;;
+          esac
+          test -d "$PROVENANCE_ROOT"
+          test ! -L "$PROVENANCE_ROOT"
+          case "$ATTESTATION_BUNDLE_SOURCE" in
+            "$RUNNER_TEMP"/*) ;;
+            *) exit 1 ;;
+          esac
+          test -f "$ATTESTATION_BUNDLE_SOURCE"
+          test ! -L "$ATTESTATION_BUNDLE_SOURCE"
+          test "$(stat -c '%h' "$ATTESTATION_BUNDLE_SOURCE")" = "1"
+          bundle_size="$(stat -c '%s' "$ATTESTATION_BUNDLE_SOURCE")"
+          test "$bundle_size" -gt 0
+          test "$bundle_size" -le 16777216
+          bundle_source_real="$(realpath -e -- "$ATTESTATION_BUNDLE_SOURCE")"
+          case "$bundle_source_real" in
+            "$RUNNER_TEMP"/*) ;;
+            *) exit 1 ;;
+          esac
+          bundle_path="$PROVENANCE_ROOT/github-public-runtime-attestation.sigstore.json"
+          install -m 0400 -- "$bundle_source_real" "$bundle_path"
+          test -f "$bundle_path"
+          test ! -L "$bundle_path"
+          test "$(stat -c '%h' "$bundle_path")" = "1"
+          (
+            cd "$PROVENANCE_ROOT"
+            sha256sum -- "$(basename "$bundle_path")" > "$(basename "$bundle_path").sha256"
+          )
+          chmod 0400 "$bundle_path.sha256"
+          echo "bundle_path=$bundle_path" >> "$GITHUB_OUTPUT"
+          echo "bundle_sha256_path=$bundle_path.sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Run CRM API regression and role-negative tests
-        env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-          NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
-        run: npm run test:e2e
+      - name: Upload separate Public QA and provenance evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: exact-preview-public-runtime-${{ inputs.candidate_sha }}
+          path: |
+            ${{ steps.protected_public.outputs.evidence_root }}/funnel-publish-token-rotation.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-form-funnel-cleanup.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-form-live-submission.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-form-long-proof-refresh.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-funnel-live-submission.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-funnel-long-proof-refresh.json
+            ${{ steps.public_provenance_subject.outputs.artifact_path }}
+            ${{ steps.public_provenance_subject.outputs.artifact_sha256_path }}
+            ${{ steps.public_provenance_subject.outputs.manifest_path }}
+            ${{ steps.public_provenance_subject.outputs.manifest_sha256_path }}
+            ${{ steps.public_provenance_bundle.outputs.bundle_path }}
+            ${{ steps.public_provenance_bundle.outputs.bundle_sha256_path }}
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
 
-      - name: Run tenant-isolation diagnostics
-        env:
-          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
-          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
-          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
-          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
-          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
-          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
-          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-        run: npm run qa:tenant-isolation
-
-      - name: Stop production server
+      - name: Remove staged Public QA and provenance evidence
         if: always()
         shell: bash
+        env:
+          EVIDENCE_ROOT: ${{ steps.protected_public.outputs.evidence_root }}
+          PROVENANCE_ROOT: ${{ steps.public_provenance_subject.outputs.provenance_root }}
         run: |
-          if [ -f /tmp/novalure-livegang.pid ]; then
-            kill "$(cat /tmp/novalure-livegang.pid)" || true
+          set -euo pipefail
+          if [ -n "$EVIDENCE_ROOT" ]; then
+            case "$EVIDENCE_ROOT" in
+              "$RUNNER_TEMP"/novalure-public-evidence-*) ;;
+              *) exit 1 ;;
+            esac
+            test -d "$EVIDENCE_ROOT"
+            test ! -L "$EVIDENCE_ROOT"
+            find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            rmdir "$EVIDENCE_ROOT"
           fi
-
-      - name: Print app log on failure
-        if: failure()
-        run: node scripts/summarize-app-log.mjs /tmp/novalure-livegang.log || true
+          if [ -n "$PROVENANCE_ROOT" ]; then
+            case "$PROVENANCE_ROOT" in
+              "$RUNNER_TEMP"/novalure-public-provenance-*) ;;
+              *) exit 1 ;;
+            esac
+            test -d "$PROVENANCE_ROOT"
+            test ! -L "$PROVENANCE_ROOT"
+            test -z "$(find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
+            find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            rmdir "$PROVENANCE_ROOT"
+          fi

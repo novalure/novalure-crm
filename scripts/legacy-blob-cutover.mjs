@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { Pool } from "@neondatabase/serverless";
-import { del, get, put } from "@vercel/blob";
+import { del, get, list, put } from "@vercel/blob";
 import {
   createFileCutoverJournal,
   LegacyBlobCutoverError,
@@ -107,7 +107,12 @@ async function readSdkBlob(pathname, { access, maximumBytes, token }) {
   };
 }
 
-export function createVercelBlobCutoverAdapter(config) {
+function publicSourceObjectUrl(storeId, pathname) {
+  const encodedPath = pathname.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  return `https://${storeId}.public.blob.vercel-storage.com/${encodedPath}`;
+}
+
+export function createVercelBlobCutoverAdapter(config, { fetchImpl = globalThis.fetch } = {}) {
   return Object.freeze({
     async deleteDestination(pathname) {
       await del(pathname, { token: config.destinationToken });
@@ -127,6 +132,37 @@ export function createVercelBlobCutoverAdapter(config) {
       });
       return { pathname: result.pathname };
     },
+    async listSourceObjects(maximumObjects) {
+      if (!Number.isSafeInteger(maximumObjects) || maximumObjects < 1 || maximumObjects > 1_001) {
+        throw new LegacyBlobCutoverError("BLOB_LIST_LIMIT_INVALID", "The source Blob list limit is invalid.");
+      }
+      const pathnames = [];
+      let cursor;
+      for (let page = 0; page < 1_001 && pathnames.length < maximumObjects; page += 1) {
+        const result = await list({
+          cursor,
+          limit: Math.min(1_000, maximumObjects - pathnames.length),
+          token: config.sourceToken,
+        });
+        if (!result || !Array.isArray(result.blobs)) {
+          throw new LegacyBlobCutoverError("SOURCE_LIST_INVALID", "The source Blob store returned an invalid listing.");
+        }
+        for (const blob of result.blobs) {
+          const pathname = String(blob?.pathname ?? "");
+          if (!pathname || pathname.includes("\0") || pathname.startsWith("/") || pathname.includes("../")) {
+            throw new LegacyBlobCutoverError("SOURCE_LIST_PATH_INVALID", "The source Blob listing contained an invalid pathname.");
+          }
+          pathnames.push(pathname);
+          if (pathnames.length >= maximumObjects) break;
+        }
+        if (!result.hasMore) return pathnames;
+        if (typeof result.cursor !== "string" || !result.cursor || result.cursor === cursor) {
+          throw new LegacyBlobCutoverError("SOURCE_LIST_CURSOR_INVALID", "The source Blob listing cursor is invalid.");
+        }
+        cursor = result.cursor;
+      }
+      return pathnames;
+    },
     async readDestination(pathname, maximumBytes) {
       return readSdkBlob(pathname, {
         access: "private",
@@ -140,6 +176,20 @@ export function createVercelBlobCutoverAdapter(config) {
         maximumBytes,
         token: config.sourceToken,
       });
+    },
+    async readSourcePublic(pathname) {
+      if (typeof fetchImpl !== "function") {
+        throw new LegacyBlobCutoverError("PUBLIC_READ_ADAPTER_MISSING", "The public source read adapter is unavailable.");
+      }
+      const response = await fetchImpl(publicSourceObjectUrl(config.sourceStoreId, pathname), {
+        cache: "no-store",
+        credentials: "omit",
+        headers: { Accept: "application/octet-stream" },
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(15_000),
+      });
+      return { status: response.status };
     },
   });
 }

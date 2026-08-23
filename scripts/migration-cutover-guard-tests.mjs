@@ -24,6 +24,10 @@ const workflow = await readFile(
   new URL("../.github/workflows/livegang-e2e.yml", import.meta.url),
   "utf8",
 );
+const protectedPreviewRunner = await readFile(
+  new URL("./qa-protected-preview-action-runner.mjs", import.meta.url),
+  "utf8",
+);
 const [
   webhookExpand,
   webhookCutover,
@@ -807,13 +811,20 @@ test("recovery database URLs use a bounded, redacted stdin-only channel", async 
   assert.doesNotMatch(runner, /console\.(?:log|error)\([^\n;]*databaseUrl/);
 });
 
-test("QA migration CI previews before apply and keeps manual tenant cutovers excluded", () => {
-  const previewIndex = workflow.indexOf("node scripts/db-migrate.mjs dry-run");
-  const applyIndex = workflow.indexOf("node scripts/db-migrate.mjs up");
-  assert.ok(previewIndex > 0, "QA CI must contain a read-only migration preview");
-  assert.ok(applyIndex > previewIndex, "QA CI must preview the checksummed plan before applying it");
-  assert.match(workflow, /dry-run --plan-token-file="\$MIGRATION_PLAN_TOKEN_FILE"/);
-  assert.match(workflow, /up --plan-token-file="\$MIGRATION_PLAN_TOKEN_FILE"/);
+test("protected Preview CI never applies migrations and keeps manual tenant cutovers excluded", () => {
+  assert.match(workflow, /node scripts\/qa-protected-preview-action-runner\.mjs/);
+  assert.match(protectedPreviewRunner, /\["scripts\/qa-two-tenant-e2e\.mjs", "--validate-config"\]/);
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--preflight", "--share-url-stdin"\]/,
+  );
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--execute", "--share-url-stdin"\]/,
+  );
+  const protectedPreviewExecution = `${workflow}\n${protectedPreviewRunner}`;
+  assert.doesNotMatch(protectedPreviewExecution, /node scripts\/db-migrate\.mjs (?:dry-run|up)/);
+  assert.doesNotMatch(protectedPreviewExecution, /qa-livegang-seed/);
   assert.match(runner, /pg_try_advisory_lock/);
   assert.match(runner, /set lock_timeout = '5s'/);
   assert.match(runner, /set statement_timeout = '14min'/);
@@ -828,21 +839,21 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   assert.match(runner, /pathStat\.isFile\(\)/);
   assert.doesNotMatch(runner, /unlinkSync/);
   assert.match(runner, /up requires --plan-token-file/);
-  assert.doesNotMatch(workflow, /--allow-manual-cutover/);
+  assert.doesNotMatch(protectedPreviewExecution, /--allow-manual-cutover/);
 });
 
-test("QA secrets are step-scoped behind install and all third-party actions are SHA pinned", () => {
-  const qaJob = workflow.slice(workflow.indexOf("  qa-e2e:"));
+test("protected Preview secrets are step-scoped behind install and all third-party actions are SHA pinned", () => {
+  const qaJob = workflow.slice(workflow.indexOf("  protected-preview-two-tenant:"));
   const jobEnv = qaJob.match(/\n    env:\n([\s\S]*?)\n    steps:/)?.[1] ?? "";
   assert.doesNotMatch(jobEnv, /secrets\./);
-  assert.match(qaJob, /environment: novalure-qa/);
+  assert.match(qaJob, /environment: go-live-preview/);
   assert.ok(
-    qaJob.indexOf("Install dependencies from lockfile") < qaJob.indexOf("secrets.NOVALURE_QA_DATABASE_URL"),
+    qaJob.indexOf("Install dependencies from lockfile") < qaJob.indexOf("secrets.NOVALURE_QA_TWO_TENANT_ENV_B64"),
     "QA secrets must not be exposed to checkout, setup, or npm lifecycle scripts",
   );
 
   const actionReferences = [...workflow.matchAll(/uses:\s+([^\s#]+)/g)].map((match) => match[1]);
-  assert.ok(actionReferences.length >= 7);
+  assert.ok(actionReferences.length >= 3);
   for (const reference of actionReferences) {
     assert.match(reference, /@[0-9a-f]{40}$/, `${reference} must use a full commit SHA`);
   }

@@ -23,6 +23,21 @@ const workspaceB = "22222222-2222-4222-8222-222222222222";
 const productionWorkspace = "33333333-3333-4333-8333-333333333333";
 const batchId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const actorId = "77777777-7777-4777-8777-777777777777";
+const runtimeDatabaseEnvironment = {
+  NOVALURE_PRODUCTION_BRANCH_ID: "br-production-main-1234",
+  NOVALURE_PRODUCTION_PROJECT_ID: "production-project-1234",
+  NOVALURE_QA_BRANCH_ID: "br-lucky-heart-alrm9dlw",
+  NOVALURE_QA_DATABASE_NAME: "neondb",
+  NOVALURE_QA_DATABASE_ROLE: "novalure_app",
+  NOVALURE_QA_PROJECT_ID: "weathered-term-98273025",
+};
+const runtimeTargetRow = {
+  branchId: runtimeDatabaseEnvironment.NOVALURE_QA_BRANCH_ID,
+  databaseName: runtimeDatabaseEnvironment.NOVALURE_QA_DATABASE_NAME,
+  projectId: runtimeDatabaseEnvironment.NOVALURE_QA_PROJECT_ID,
+  role: runtimeDatabaseEnvironment.NOVALURE_QA_DATABASE_ROLE,
+};
+Object.assign(process.env, runtimeDatabaseEnvironment);
 const syntacticallyValidPlanDigest = "0".repeat(64);
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -50,10 +65,13 @@ const platformAdmin = {
   source: "cookie",
 };
 
-function fakeTransaction(handler) {
+function fakeTransaction(handler, targetRow = runtimeTargetRow) {
   const calls = [];
   const invoke = async (kind, sql, params = []) => {
     calls.push({ kind, params, sql });
+    if (/current_setting\('neon\.project_id'/i.test(sql) && /current_database\(\)/i.test(sql)) {
+      return targetRow;
+    }
     return handler({ kind, params, sql, calls });
   };
   return {
@@ -112,7 +130,7 @@ function repositoryFixture(overrides = {}) {
       return [{ id: "99999999-9999-4999-8999-999999999999" }];
     }
     return [];
-  });
+  }, overrides.runtimeTargetRow ?? runtimeTargetRow);
 }
 
 function deferred() {
@@ -173,6 +191,9 @@ function raceRepositoryFixture() {
         },
         async queryOne(sql, params = []) {
           calls.push({ kind: "queryOne", params, sql });
+          if (/current_setting\('neon\.project_id'/i.test(sql) && /current_database\(\)/i.test(sql)) {
+            return runtimeTargetRow;
+          }
           if (/from workspaces where/i.test(sql)) {
             hooks.workspaceReached?.resolve();
             if (hooks.releaseWorkspace) await hooks.releaseWorkspace.promise;
@@ -222,6 +243,27 @@ async function createDryRunPlan(overrides = {}) {
   });
   return result.plan;
 }
+
+test("QA reset rejects a same-transaction database target mismatch with zero writes", async () => {
+  const { runQaBatchResetInTransaction } = await qaResetRepository;
+  const fixture = repositoryFixture({
+    runtimeTargetRow: {
+      ...runtimeTargetRow,
+      branchId: runtimeDatabaseEnvironment.NOVALURE_PRODUCTION_BRANCH_ID,
+    },
+  });
+  await assert.rejects(
+    runQaBatchResetInTransaction(fixture.transaction, {
+      actorId,
+      allowlistedWorkspaceIds: new Set([workspaceA, workspaceB]),
+      batchId,
+      mode: "dry_run",
+      workspaceId: workspaceA,
+    }),
+    (error) => error?.code === "QA_BATCH_DATABASE_TARGET_MISMATCH" && error.status === 503,
+  );
+  assert.equal(fixture.calls.some((call) => /insert|update|delete/i.test(call.sql)), false);
+});
 
 test("QA reset request is dry-run by default and rejects mass assignment", () => {
   const request = parseQaResetRequest({ batchId, workspaceId: workspaceA });
@@ -428,8 +470,7 @@ test("mutation-first then reset serializes without deadlock and seals the batch"
     workspaceId: workspaceA,
   }));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(resetTx.calls.length, 1);
-  assert.match(resetTx.calls[0].sql, /pg_advisory_xact_lock/);
+  assert.equal(resetTx.calls.filter((call) => /pg_advisory_xact_lock/i.test(call.sql)).length, 1);
 
   releaseMutation.resolve();
   await withTimeout(mutation, "mutation-first completion");
@@ -478,8 +519,7 @@ test("a registration that wins the batch fence after dry-run invalidates execute
     (error) => ({ error, result: null }),
   );
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(resetTx.calls.length, 1);
-  assert.match(resetTx.calls[0].sql, /pg_advisory_xact_lock/);
+  assert.equal(resetTx.calls.filter((call) => /pg_advisory_xact_lock/i.test(call.sql)).length, 1);
 
   releaseMutation.resolve();
   await withTimeout(mutation, "registration-first completion");
@@ -508,8 +548,9 @@ test("reset-first then mutation serializes without deadlock and rejects the wait
     workspaceId: workspaceA,
   }));
   await withTimeout(workspaceReached.promise, "reset-first workspace lock");
-  assert.match(resetTx.calls[0].sql, /pg_advisory_xact_lock/);
-  assert.match(resetTx.calls[1].sql, /from workspaces where/);
+  assert.match(resetTx.calls[0].sql, /current_setting\('neon\.project_id'/);
+  assert.match(resetTx.calls[1].sql, /pg_advisory_xact_lock/);
+  assert.match(resetTx.calls[2].sql, /from workspaces where/);
 
   const mutationTx = fixture.transaction("mutation-second");
   const mutation = fixture.run("mutation-second", mutationTx, (transaction) =>
@@ -519,8 +560,7 @@ test("reset-first then mutation serializes without deadlock and rejects the wait
     (error) => ({ error, ok: false }),
   );
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(mutationTx.calls.length, 1);
-  assert.match(mutationTx.calls[0].sql, /pg_advisory_xact_lock/);
+  assert.equal(mutationTx.calls.filter((call) => /pg_advisory_xact_lock/i.test(call.sql)).length, 1);
 
   releaseWorkspace.resolve();
   const result = await withTimeout(reset, "reset-first completion");

@@ -1,6 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  previewLegacyBlobStoreFingerprint,
+  previewPrivateBlobStoreFingerprint,
+} from "./blob-store-fingerprints.mjs";
 
 const journalVersion = 1;
 const minimumDeleteDelayMs = 24 * 60 * 60 * 1_000;
@@ -206,14 +210,15 @@ export function resolvePreviewCutoverConfig({ args = {}, env = process.env } = {
     activeBranchFingerprint: publicFingerprint("legacy-blob-active-branch:v1", activeBranch),
     confirmation: clean(args.confirmation),
     deleteDelayMs: deleteDelayHours * 60 * 60 * 1_000,
-    destinationStoreFingerprint: publicFingerprint("legacy-blob-destination-store:v1", destinationStoreId),
+    destinationStoreFingerprint: previewPrivateBlobStoreFingerprint(destinationStoreId),
     execute,
     limit,
     maximumBlobBytes,
     mode: requestedMode,
     notBefore: normalizedNotBefore,
+    previewTarget: "isolated-preview",
     runId,
-    sourceStoreFingerprint: publicFingerprint("legacy-blob-source-store:v1", sourceStoreId),
+    sourceStoreFingerprint: previewLegacyBlobStoreFingerprint(sourceStoreId),
   };
   defineSecret(config, "databaseUrl", databaseUrl);
   defineSecret(config, "destinationStoreId", destinationStoreId);
@@ -307,6 +312,10 @@ export function createMemoryCutoverJournal(initialRecords = []) {
 
 function assetKey(asset) {
   return sha256("legacy-blob-asset:v1", `${asset.workspaceId}\0${asset.id}`);
+}
+
+export function legacyBlobAssetKey(asset) {
+  return assetKey(asset);
 }
 
 function sanitizeStorageSegment(value) {
@@ -461,6 +470,10 @@ function targetFingerprint(databaseIdentity, config) {
     "legacy-blob-target:v1",
     `${safeIdentity}\0${config.sourceStoreFingerprint}\0${config.destinationStoreFingerprint}`,
   );
+}
+
+export function legacyBlobTargetFingerprint(databaseIdentity, config) {
+  return targetFingerprint(databaseIdentity, config);
 }
 
 function eventBase(config, target, now, mode) {

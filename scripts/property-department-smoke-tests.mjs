@@ -28,13 +28,18 @@ test("property department migration creates canonical support tables without rep
   assert.match(migration, /'properties', true/i);
 });
 
-test("system diagnostics and trusted-candidate workflow include the property department migration", () => {
+test("system diagnostics expose migration evidence while protected Preview workflow never migrates or seeds", () => {
   const workflow = read(".github/workflows/livegang-e2e.yml");
+  const protectedPreviewRunner = read("scripts/qa-protected-preview-action-runner.mjs");
   const seed = read("scripts/qa-livegang-seed.mjs");
 
   assert.match(read("src/app/api/system/database/route.ts"), /from public\.novalure_schema_migration_checksums/);
-  assert.match(workflow, /Preview checksummed QA migration plan without writes/);
-  assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Seed two or more isolated QA workspaces/);
+  assert.match(workflow, /node scripts\/qa-protected-preview-action-runner\.mjs/);
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--preflight", "--share-url-stdin"\]/,
+  );
+  assert.doesNotMatch(`${workflow}\n${protectedPreviewRunner}`, /db-migrate\.mjs up|qa-livegang-seed/);
   assert.doesNotMatch(seed, /applyMigration\(/);
   assert.match(read("package.json"), /db:migrate:property-default-units/);
   assert.match(read("package.json"), /db:migrate:property-content-guards/);

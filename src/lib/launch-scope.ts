@@ -167,9 +167,9 @@ export const launchScopePolicy = Object.freeze({
     requiredProductPermissions: Object.freeze(["novalure:internal", "settings:manage"]),
   }),
   qaBatchMutation: Object.freeze({
-    allowedProductRoles: Object.freeze(["customer_owner", "workspace_admin", "team_member"]),
+    allowedProductRoles: Object.freeze(["customer_owner", "platform_admin", "workspace_admin", "team_member"]),
     decision: launchScopeDecisions.internalOnly,
-    reason: "QA-labelled CRM mutations are restricted to the isolated two-tenant Preview matrix.",
+    reason: "QA-labelled CRM mutations are restricted to allowlisted isolated Preview tenants; platform admins are required by the protected public-runtime harness.",
   }),
   systemDatabaseDiagnostics: Object.freeze({
     allowedProductRoles: internalProductRoles,

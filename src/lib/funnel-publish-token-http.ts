@@ -6,6 +6,7 @@ import {
   getFunnelPublishTokenRotationStatus,
   rotateFunnelPublishToken,
 } from "@/lib/db/funnel-publish-token-repository";
+import { qaBatchSuccessHeaders } from "@/lib/qa-batch-runtime";
 
 const privateHeaders = {
   "Cache-Control": "private, no-store",
@@ -88,6 +89,7 @@ export async function getFunnelPublishTokenStatusResponse(input: {
 
 export async function rotateFunnelPublishTokenResponse(input: {
   funnelId: string;
+  qaBatchId?: string;
   request: Request;
   session: AppSession;
 }) {
@@ -120,16 +122,26 @@ export async function rotateFunnelPublishTokenResponse(input: {
       expectedRevision: command.expectedRevision as number,
       funnelId: input.funnelId,
       idempotencyKey,
+      qaBatchId: input.qaBatchId,
       session: input.session,
     });
+    const success = (body: unknown) => {
+      const response = privateJson(body);
+      for (const [name, value] of Object.entries(
+        qaBatchSuccessHeaders(input.qaBatchId ?? null, input.qaBatchId ? "already-registered" : undefined) ?? {},
+      )) {
+        response.headers.set(name, value);
+      }
+      return response;
+    };
     if (result.status === "already-rotated") {
-      return privateJson({
+      return success({
         funnelId: input.funnelId,
         replayed: true,
         revision: result.revision,
       });
     }
-    return privateJson({
+    return success({
       funnelId: input.funnelId,
       publishToken: result.publishToken,
       replayed: false,

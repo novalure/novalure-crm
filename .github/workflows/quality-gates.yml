@@ -1,0 +1,220 @@
+name: Read-only quality and security gates
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  quality:
+    name: ${{ matrix.gate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gate: Lint
+            command: npm run lint
+          - gate: Typecheck
+            command: npm run typecheck
+          - gate: Unit and contract tests
+            command: npm run test:unit
+          - gate: Integration tests
+            command: npm run test:integration
+          - gate: Production build
+            command: npm run build
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup exact repository Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Verify runtime and install the immutable lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v$(tr -d '\r\n' < .node-version)"
+          expected_npm="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          test "$(npm --version)" = "$expected_npm"
+          test "$(node -p "require('./package-lock.json').lockfileVersion")" = "3"
+          npm ci
+          git diff --exit-code -- package.json package-lock.json
+
+      - name: Run ${{ matrix.gate }} without Preview or Production credentials
+        run: ${{ matrix.command }}
+
+  production-sca:
+    name: Production dependency vulnerability gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup exact repository Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Verify exact runtime and lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v$(tr -d '\r\n' < .node-version)"
+          expected_npm="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          test "$(npm --version)" = "$expected_npm"
+          test "$(node -p "require('./package-lock.json').lockfileVersion")" = "3"
+
+      - name: Fail on moderate-or-higher production dependency advisories
+        run: npm audit --omit=dev --audit-level=moderate
+
+  baseline-license-policy:
+    name: Complete lockfile license policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup exact repository Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Verify every locked package license against the explicit policy
+        run: node scripts/dependency-license-policy.mjs
+
+  dependency-review:
+    name: Pull-request dependency and license delta
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Reject vulnerable or prohibited new dependencies
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          deny-licenses: >-
+            AGPL-1.0-only, AGPL-1.0-or-later,
+            AGPL-3.0-only, AGPL-3.0-or-later,
+            GPL-1.0-only, GPL-1.0-or-later,
+            GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0-only, GPL-3.0-or-later,
+            SSPL-1.0
+
+  sast:
+    name: CodeQL JavaScript and TypeScript SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Initialize pinned CodeQL
+        uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+
+      - name: Analyze and upload CodeQL results
+        uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
+
+  sbom:
+    name: CycloneDX SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup exact repository Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Generate one bounded regular CycloneDX document
+        id: generate_sbom
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v$(tr -d '\r\n' < .node-version)"
+          expected_npm="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          test "$(npm --version)" = "$expected_npm"
+          npm ci --ignore-scripts
+          sbom="$RUNNER_TEMP/novalure-crm.cdx.json"
+          test ! -e "$sbom"
+          umask 077
+          npm sbom --sbom-format=cyclonedx > "$sbom"
+          test -f "$sbom"
+          test ! -L "$sbom"
+          test "$(stat -c '%h' "$sbom")" = "1"
+          test "$(stat -c '%s' "$sbom")" -gt 0
+          test "$(stat -c '%s' "$sbom")" -lt 16777216
+          node -e "const fs=require('node:fs'); const value=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); if(value.bomFormat!=='CycloneDX'||!Array.isArray(value.components)) process.exit(1)" "$sbom"
+          printf 'path=%s\n' "$sbom" >> "$GITHUB_OUTPUT"
+
+      - name: Upload only the verified SBOM file
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: novalure-crm-cyclonedx-${{ github.sha }}
+          path: ${{ steps.generate_sbom.outputs.path }}
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 30
+
+      - name: Remove the local SBOM
+        if: always()
+        shell: bash
+        env:
+          SBOM_PATH: ${{ steps.generate_sbom.outputs.path }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SBOM_PATH" ]; then
+            test "$SBOM_PATH" = "$RUNNER_TEMP/novalure-crm.cdx.json"
+            test -f "$SBOM_PATH"
+            test ! -L "$SBOM_PATH"
+            test "$(stat -c '%h' "$SBOM_PATH")" = "1"
+            rm -f -- "$SBOM_PATH"
+          fi

@@ -4,6 +4,10 @@ import type { AppSession } from "@/lib/auth/session";
 import type { Funnel } from "@/lib/crm-types";
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
 import {
+  assertQaBatchForMutation,
+  assertQaBatchOwnsObject,
+} from "@/lib/db/qa-batch-registration-repository";
+import {
   withTenantTransaction,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
@@ -262,6 +266,7 @@ async function saveStoredFunnelToDatabase(
   session: AppSession | undefined,
   expectedBlueprintRevision: number,
   auditAction: "funnel.blueprint_saved" | "funnel.version_restored",
+  qaBatchId?: string,
 ) {
   if (!evaluateLaunchScope("publicFunnelPublication").allowed) {
     throw new Error("Public funnel publication is launch-off");
@@ -275,6 +280,14 @@ async function saveStoredFunnelToDatabase(
   return withTenantTransaction(
     { actorId: session.userId, workspaceId },
     async (transaction) => {
+      if (qaBatchId) {
+        await assertQaBatchForMutation(transaction, { batchId: qaBatchId, workspaceId });
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: qaBatchId,
+          object: { id: blueprint.id, type: "funnels" },
+          workspaceId,
+        });
+      }
       // The funnel row is locked before deriving any state. Publication credentials
       // remain database-authoritative and are never copied into a normal save payload.
       const existingRow = await findFunnelDatabaseRowInTransaction(
@@ -424,6 +437,7 @@ export async function saveStoredFunnel(
   session: AppSession | undefined,
   expectedBlueprintRevision: number,
   auditAction: "funnel.blueprint_saved" | "funnel.version_restored" = "funnel.blueprint_saved",
+  qaBatchId?: string,
 ) {
   assertFunnelLivePreflight(blueprint);
   const stored = await saveStoredFunnelToDatabase(
@@ -432,6 +446,7 @@ export async function saveStoredFunnel(
     session,
     expectedBlueprintRevision,
     auditAction,
+    qaBatchId,
   );
   if (!stored) throw new Error("Funnel blueprint could not be saved");
   return stored;
@@ -442,6 +457,7 @@ export async function restoreStoredFunnelVersion(
   versionId: string,
   session: AppSession,
   expectedBlueprintRevision: number,
+  qaBatchId?: string,
 ) {
   const databaseStored = await getStoredFunnel(funnelId, session.workspaceId);
   const databaseVersion = databaseStored?.versions.find((item) => item.id === versionId);
@@ -452,6 +468,7 @@ export async function restoreStoredFunnelVersion(
       session,
       expectedBlueprintRevision,
       "funnel.version_restored",
+      qaBatchId,
     );
   }
   return null;

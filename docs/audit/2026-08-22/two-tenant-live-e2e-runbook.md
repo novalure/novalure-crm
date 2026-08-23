@@ -15,13 +15,13 @@ Der neue Einstiegspunkt ist `scripts/qa-two-tenant-e2e.mjs`. Er ersetzt `test:e2
 Der Lauf schreibt erst, wenn alle folgenden Grenzen bestanden sind:
 
 1. Preview-Origin und Production-Origin sind explizit angegeben und verschieden.
-2. Der gepoolte Neon-Host, Projekt-, Branch-, Datenbank- und Rollenfingerprint stimmt exakt; Production-Host ist ausgeschlossen.
+2. Der gepoolte Neon-Host, Projekt-, Branch-, Datenbank- und Rollenfingerprint stimmt exakt; unabhängige Production-Projekt-, -Branch- und -Host-Deny-Targets sind vollständig gesetzt und von QA verschieden.
 3. Migration `057` sowie die Migrationen `068` bis `077` stehen mit exakt den lokal berechneten SHA-256-Checksummen im Preview-Schema-Ledger; eine bloß formal 64-stellige Fremdchecksumme reicht nicht. Das read-only `pg_catalog`-Gate verlangt für 075 Tabelle, Unique-/FK-/Check-Constraints, Expiry-Index und Minimalgrants, für 076 die exakten State-/Event-Spalten, validierten Checks, Workspace-Unique-, Account/Event-, Legacy-Abwesenheits-, Reclaim- und Account/Received-Indexzustände, 7 Event-Unique-Indizes, die globale Envelope-Quarantänetabelle, die write-only `SECURITY DEFINER`-RPC mit `search_path=pg_catalog` und Minimalgrants, 6 tenantqualifizierte FKs und bewusst keinen Live-FK vom append-only `audit_logs`-Snapshot sowie für 077 die ownergebundene, nicht aktualisierbare `version`-/`checksum`-Projektion bei vollständig entzogenen Direktrechten auf das Basis-Ledger.
 4. Alle 19 Tenant-Relationsconstraints aus 073 sind nach dem Anti-Join-Preflight aus 074 `convalidated=true`; der Live-Harness wiederholt alle 19 Driftprüfungen read-only und verlangt Summe null.
 5. Beide Workspace-Wurzeln haben `is_qa = true`; Projekte und alle Mitgliedschaften gehören zum erwarteten Workspace.
 6. Zwei verschiedene append-only `qa_batches` sind vorprovisioniert und an den jeweiligen Plattform-Admin-Aktor gebunden.
-7. Acht getrennte, aktive Rollenaccounts sind mit MFA vorab registriert. Der Harness enrollt MFA niemals selbst.
-8. Der Runtime-Capability-Preflight bestätigt **vor dem ersten Geschäftsobjekt** die atomare Batchregistrierung und exakt den erwarteten Commit-SHA.
+7. Acht getrennte, aktive Rollenaccounts sind mit MFA vorab registriert. Jede Fixture-Credential-Rotation widerruft bestehende Sessions derselben zentralen Identität und konsumiert offene Login-Challenges atomar mit append-only Auth-Audit. Der DB-Preflight verlangt danach vor dem ersten Login exakt null aktive Fixture-Sessions; der Harness enrollt MFA niemals selbst.
+8. `GET /api/admin/qa-runtime-identity` bestätigt **vor jedem Auth-Request** ausschließlich Preview-Deployment-ID/-Host, Git-Branch/SHA, einen SHA-256-Digest aus Neon-Projekt/Branch/Datenbank/Rolle sowie aktive Ledger-RLS und Least Privilege. Ein Mismatch stoppt mit genau diesem öffentlichen Request und null `/api/auth/*`-Requests. Erst danach bestätigt der authentifizierte Capability-Preflight dieselbe Identität und die atomare Batchregistrierung.
 9. Schreib- und Cleanup-Bestätigung sind unabhängig voneinander gesetzt.
 10. `POST /api/admin/qa-reset` akzeptiert beide Workspaces über die serverseitige QA-Allowlist, hat keinen Production-Overlap und erlaubt Execute ausdrücklich.
 11. Provider-/Blob-Schreibpfade sind nicht Bestandteil dieses Laufs. Ein unerwartetes Blob-/Providerziel blockiert den Reset.
@@ -64,6 +64,21 @@ Der Kandidat implementiert den serverseitigen Vertrag fail-closed. Er wird nur a
 
 ### Capability-Preflight
 
+`GET /api/admin/qa-runtime-identity` ist ein absichtlich unauthentifizierter, aber ausschließlich in der explizit aktivierten Preview-QA-Runtime verfügbarer Pre-Auth-Endpunkt. Er enthält keine Workspace-, Tenant-, User-, Session-, Credential- oder rohen Datenbankkennungen und ist im Release-Surface-Manifest als `INTERNAL` inventarisiert:
+
+```json
+{
+  "version": 1,
+  "deploymentId": "<exact dpl_...>",
+  "deploymentHost": "<exact Preview host>",
+  "gitBranch": "<exact codex/... branch>",
+  "gitSha": "<40-character candidate SHA>",
+  "databaseTargetDigest": "sha256:<64 hex>",
+  "databaseRlsActive": true,
+  "databaseLeastPrivilege": true
+}
+```
+
 `GET /api/admin/qa-batch-capability` benötigt eine persistierte Plattform-Admin-Cookie-Session und muss liefern:
 
 ```json
@@ -71,7 +86,10 @@ Der Kandidat implementiert den serverseitigen Vertrag fail-closed. Er wird nur a
   "atomicRegistration": true,
   "version": 1,
   "header": "x-novalure-qa-batch-id",
-  "gitSha": "<40-character candidate SHA>"
+  "gitSha": "<40-character candidate SHA>",
+  "databaseTargetDigest": "sha256:<same 64 hex>",
+  "databaseRlsActive": true,
+  "databaseLeastPrivilege": true
 }
 ```
 
@@ -92,6 +110,8 @@ x-novalure-qa-batch-registration: committed
 
 Ein idempotenter Replay oder die Mutation eines bereits batchregistrierten Hauptobjekts liefert `already-registered`. Abgewiesene 401/403/404/409-Mutationen erzeugen keine Ledgerzeile. Ein Header allein oder nachträgliches Registrieren durch den Testclient gilt nicht als Atomicity Proof.
 
+Unmittelbar vor jedem QA-Batch-Write und jedem Reset-DML liest ein zentraler Guard **in derselben aktiven Tenant-Transaktion** `neon.project_id`, `neon.branch_id`, `current_database()` und `current_user`. Diese vier Werte müssen exakt mit den branchgebundenen Preview-Runtime-Werten `NOVALURE_QA_PROJECT_ID`, `NOVALURE_QA_BRANCH_ID`, `NOVALURE_QA_DATABASE_NAME` und `NOVALURE_QA_DATABASE_ROLE=novalure_app` übereinstimmen. Zusätzlich müssen `NOVALURE_PRODUCTION_PROJECT_ID` und `NOVALURE_PRODUCTION_BRANCH_ID` vollständig gesetzt und vom QA-Ziel verschieden sein. Ein fehlender Wert, Production-Overlap oder Runtime-Mismatch wirft `QA_BATCH_DATABASE_TARGET_MISMATCH`, rollt die Transaktion zurück und bewirkt **null Geschäfts-, Ledger- oder Reset-Writes**. Der frühere HTTP-/DB-Preflight bleibt eine zusätzliche Vorprüfung, ersetzt diesen Write-Time-Guard aber nicht.
+
 Reset und Registrierung serialisieren über denselben exklusiven Transaction-Advisory-Lock pro Batch. Ein erfolgreiches Execute versiegelt den Batch endgültig anhand des append-only `qa_reset_audit_events`-Eintrags mit `mode=execute` und `outcome=executed`. Eine bereits wartende oder später eintreffende Mutation erhält `QA_BATCH_SEALED`; eine Mutation, die den Lock vorher besitzt, committed vollständig vor dem Reset und wird dadurch in dessen geschlossener Zielmenge berücksichtigt. Die append-only Batchzeile selbst bleibt unverändert.
 
 Der Capability-Preflight prüft zusätzlich persistierte Plattform-Admin-Cookie-Session, Launch-Scope/RBAC, QA-Allowlist, `workspaces.is_qa`, Ledger-Verfügbarkeit und den Kandidaten-SHA, bevor er `atomicRegistration: true` meldet.
@@ -111,15 +131,17 @@ DB-Verifikation am Provisionierungstag: zwei QA-Workspaces, je fünf aktive Mitg
 
 Die Tabelle dokumentiert den Provisionierungsstand vom 22.08.2026 und ist keine Freigabe zur Wiederverwendung dieser Batch-IDs. Die späteren Execute- und Repository-Proben verwendeten weitere append-only Batches; alle dabei verwendeten Batches wurden nach Cleanup/Reset versiegelt. Vor jedem neuen Execute müssen deshalb zwei frische, tenantgebundene Batches erzeugt und erneut geprüft werden.
 
-Der wiederverwendbare Generator ist `scripts/qa-two-tenant-provision.mjs`. Er verlangt die exakte Confirmation `PROVISION_ISOLATED_TWO_TENANT_QA`, schreibt ausschließlich Dateien mit dem gitignorierten Präfix `.env.qa-two-tenant*`, verweigert Überschreiben und gibt auf stdout nur nicht geheime IDs aus. Ein neuer Execute-Lauf benötigt nach Batch-Seal einen neu provisionierten Batch.
+Der wiederverwendbare Generator ist `scripts/qa-two-tenant-provision.mjs`. Er verlangt die exakte Confirmation `PROVISION_ISOLATED_TWO_TENANT_QA`, `NOVALURE_QA_EXPECTED_GIT_BRANCH` als expliziten `codex/`-Preview-Branch, `NOVALURE_QA_EXPECTED_GIT_SHA` als vollständige kleingeschriebene Candidate-SHA sowie unabhängige QA-/Production-Projekt-, -Branch- und -Host-Identitäten. Sein Schema-v2-Plan ist nur als eine Transaktion zulässig: Statement 0 attestiert über `current_setting('neon.project_id')`, `current_setting('neon.branch_id')` und `current_database()` das exakte QA-Ziel und blockiert Production-Overlap, bevor irgendein DML folgt. Credential-Rotation, Session-Widerruf, Challenge-Verbrauch und Auth-Audit bleiben je Identität in einem SQL-Statement atomar. Branch und SHA werden in das lokale Fixture-Bundle geschrieben; die SHA wird zusätzlich unveränderlich in die Metadaten jedes frisch erzeugten QA-Batches geschrieben. Der Generator läuft bewusst vor dem Deployment, damit seine sensitiven Branch-Variablen in das Candidate-Deployment einfließen können. Erst nachdem dieses Deployment `READY` ist, muss dessen exakte ID separat als `NOVALURE_QA_EXPECTED_DEPLOYMENT_ID` in den lokalen Runner-Prozess injiziert werden; sie darf nicht erneut als Vercel-Variable hochgeladen werden, weil dies ein neues Deployment und damit einen Bindungszyklus erzeugen würde. Der Generator schreibt ausschließlich Dateien mit dem gitignorierten Präfix `.env.qa-two-tenant*`, verweigert Überschreiben und gibt auf stdout nur nicht geheime IDs aus. Er erzeugt zunächst eine leere Datei, erzwingt und verifiziert unter Windows per nicht-shellbasiertem `icacls` eine einzige nicht geerbte Full-Control-ACE des aktuellen Owner-SID beziehungsweise unter POSIX exakt `0600`, schreibt erst danach Secrets und löscht die Datei bei jedem nicht beweisbaren ACL-/Mode-Zustand. Bundle und Plan werden bei partieller Generierung gemeinsam zurückgerollt. Ein neuer Execute-Lauf benötigt nach Batch-Seal einen neu provisionierten Batch.
 
 ### Gemeinsame Zielwerte
 
 - `NOVALURE_QA_BASE_URL`: SHA-identische Preview-Origin, niemals Production.
 - `NOVALURE_PRODUCTION_ORIGIN`: expliziter Deny-Target.
+- `NOVALURE_QA_EXPECTED_GIT_BRANCH`: exakter `codex/`-Preview-Branch.
+- `NOVALURE_QA_EXPECTED_DEPLOYMENT_ID`: exakte Vercel-Preview-Deployment-ID; erst nach `READY` ausschließlich lokal in den Runner-Prozess injizieren.
 - `NOVALURE_QA_EXPECTED_GIT_SHA`: 40-stelliger Kandidaten-SHA.
 - `NOVALURE_QA_DATABASE_URL`, `NOVALURE_QA_DATABASE_HOST`, `NOVALURE_QA_PROJECT_ID`, `NOVALURE_QA_BRANCH_ID`, `NOVALURE_QA_DATABASE_NAME`, `NOVALURE_QA_DATABASE_ROLE`.
-- `NOVALURE_PRODUCTION_DATABASE_HOST`: expliziter DB-Deny-Target.
+- `NOVALURE_PRODUCTION_PROJECT_ID`, `NOVALURE_PRODUCTION_BRANCH_ID`, `NOVALURE_PRODUCTION_DATABASE_HOST`: drei eigenständige und verpflichtend von QA verschiedene DB-Deny-Targets.
 - `NOVALURE_QA_RUN_PREFIX`: einmalig, Format `GOLIVETEST_<id>`.
 - `NOVALURE_QA_RESET_ADMIN_EMAIL`, `NOVALURE_QA_RESET_ADMIN_PASSWORD`, `NOVALURE_QA_RESET_ADMIN_TOTP_SECRET`.
 - optional `NOVALURE_QA_PASSWORD` als gemeinsames Passwort-Fallback; es wird niemals ausgegeben oder in Evidenz geschrieben.
@@ -143,6 +165,8 @@ Alle acht Rollen-E-Mails, alle zehn Rollen-/Reset-Mitgliedschafts-IDs, beide Wor
 
 - `NOVALURE_QA_RESET_WORKSPACE_IDS=<tenant-a>,<tenant-b>`.
 - `NOVALURE_PRODUCTION_WORKSPACE_IDS=<vollständige Production-Allowlist>` ohne Überschneidung.
+- `NOVALURE_QA_PROJECT_ID`, `NOVALURE_QA_BRANCH_ID`, `NOVALURE_QA_DATABASE_NAME` und exakt `NOVALURE_QA_DATABASE_ROLE=novalure_app` als branchgebundene erwartete Write-Time-Zielidentität.
+- `NOVALURE_PRODUCTION_PROJECT_ID` und `NOVALURE_PRODUCTION_BRANCH_ID` als vollständige, vom QA-Ziel disjunkte Deny-Identität; der getrennte Production-Datenbankhost bleibt für die vorgelagerten Host-Gates verpflichtend.
 - `NOVALURE_QA_RESET_EXECUTION_ENABLED=true` nur für das isolierte QA-Deployment.
 - Atomic-Batch-Context aktiviert; Funnel, Newsletter, Mail, Kalender, Cron und andere Provider-Side-Effects bleiben in diesem Lauf Launch-OFF.
 
@@ -158,18 +182,48 @@ NOVALURE_QA_E2E_CLEANUP_CONFIRM=RESET_TWO_TENANT_QA
 ```powershell
 npm.cmd run qa:two-tenant:provision
 npm.cmd run qa:two-tenant:plan
+# Sensitive Branch-Variablen hochladen, Candidate deployen und READY/Deployment-ID verifizieren.
+npm.cmd run qa:two-tenant:bind-runtime
 npm.cmd run qa:two-tenant:validate
-npm.cmd run qa:two-tenant:preflight
-npm.cmd run qa:two-tenant:execute
+npm.cmd run qa:two-tenant:preflight:protected
+npm.cmd run qa:two-tenant:execute:protected
 ```
 
 - `provision` ist ein separat bestätigter, zielgeprüfter Preview-Schritt und darf niemals gegen Production laufen; für den dokumentierten Lauf ist er bereits abgeschlossen.
 - `plan` benötigt keine Env-Werte, öffnet keine Verbindung und schreibt nichts.
+- `bind-runtime` liest nach `READY` genau ein strikt typisiertes Schema-v2-JSON von stdin, bindet Deployment-ID/Origin sowie die isolierte Preview-DB an das lokale owner-only-Bundle und gibt weder DB-URL noch Credentials aus. QA-Projekt, -Branch, -Datenbank und -Host sowie Production-Projekt, -Branch und -Host müssen dem unveränderten Provisionierungsplan entsprechen und voneinander verschieden sein. Dieser Schritt lädt keine Vercel-Variable hoch und löst kein neues Deployment aus.
 - `validate` prüft nur Formate, Eindeutigkeit und Production-Deny-Ziele.
-- `preflight` liest DB/HTTP-Zustand und prüft echte Auth-/Tenant-Grenzen; es schreibt keine CRM-Geschäftsobjekte. Persistierte Auth-Session-/Auditzeilen sind erwartete Sicherheitsbelege.
-- `execute` verlangt zusätzlich Capability-Proof und beide Bestätigungen; für jeden Reset muss es außerdem den exakten Plandigest des unmittelbar vorherigen blockerfreien Dry-runs zurückreichen. Cleanup wird immer versucht, sobald der erste Geschäftsschreibpfad gestartet wurde.
+- `preflight:protected` liest die deploymentgebundene temporäre Vercel-Share-URL ausschließlich von stdin, behält nur sichere `_vercel_*`-Cookies, prüft zuerst den zero-auth Runtime-Identity-Endpunkt, danach DB-Ziel und null aktive Fixture-Sessions und erst anschließend HTTP/Auth-/Tenant-Grenzen; es schreibt keine CRM-Geschäftsobjekte. Persistierte Auth-Session-/Auditzeilen sind erwartete Sicherheitsbelege.
+- `execute:protected` verwendet denselben stdin-Vertrag und verlangt zusätzlich Capability-Proof und beide Bestätigungen; für jeden Reset muss es außerdem den exakten Plandigest des unmittelbar vorherigen blockerfreien Dry-runs zurückreichen. Cleanup wird immer versucht, sobald der erste Geschäftsschreibpfad gestartet wurde.
 
 Preflight und Execute dürfen denselben noch leeren Batch verwenden. Nach dem ersten Geschäfts-Write werden Run-Prefix und Batch nicht für einen zweiten Testlauf wiederverwendet. Bei fehlgeschlagenem Cleanup wird zunächst der gespeicherte Resetplan repariert und derselbe Batch ausschließlich zur Reconciliation über den sicheren API-Vertrag verwendet; direkte SQL-Löschung ist verboten.
+
+### Manueller GitHub-Workflow
+
+`.github/workflows/livegang-e2e.yml` besitzt ausschließlich `workflow_dispatch` und läuft nur im geschützten GitHub Environment `go-live-preview`; Pull Requests, Pushes, localhost und ein lokaler Production-Server sind ausgeschlossen. Das Environment muss Deployments auf den geschützten Default-Branch `main` begrenzen und vor Secret-Freigabe die vorgeschriebenen Reviewer anwenden. Der Workflow verlangt `GITHUB_REF=refs/heads/main` und den exakten `GITHUB_WORKFLOW_REF` dieses Workflows auf `main`. Vor dem Checkout sind die exakte Confirmation `RUN_EXACT_PROTECTED_PREVIEW_QA`, Candidate-SHA, `codex/`-Branch, READY-Deployment-ID, Preview-Origin und -Host, Neon-Projekt und -Branch sowie eine vertrauenswürdige Harness-SHA als Dispatch-Inputs verpflichtend.
+
+`vars.NOVALURE_QA_TRUSTED_HARNESS_SHA` muss im geschützten Environment auf genau den freigegebenen 40-stelligen Commit von `main` zeigen. Input, Environment-Variable, `GITHUB_SHA` und der anschließend ausgecheckte Commit müssen identisch sein; der Commit muss als Vorfahr von `origin/main` nachweisbar sein. Ausschließlich dieser Trust-Anchor wird installiert und ausgeführt. Die Candidate-SHA wird **nicht** ausgecheckt oder als lokaler Code ausgeführt, sondern bleibt die erwartete Identität des externen, bereits `READY` gemeldeten Preview-Deployments. Damit kann ein beliebiger Candidate-Commit die zur Laufzeit freigegebenen Secrets nicht über eigenen Runner-Code auslesen. Fehlt die geschützte Branch-/Reviewer-/Trust-Anchor-Konfiguration, ist der Lauf `NOT_RUN`/rot und darf nicht als E2E-Beleg gelten.
+
+Die später im Runner-JSON gespeicherten `GITHUB_*`-Strings sind allein kein Herkunftsnachweis. Der finale PASS-Verifier verlangt zusätzlich das exakte Vier-Dateien-Artefaktmanifest sowie eine extern verwurzelte Ed25519-Receipt der Rolle `github-actions-attestor`. Diese bindet OIDC-Issuer, Subject und Audience, Repository, geschützte Environment, Workflow-Ref, immutable Main-Harness-SHA, Run-ID/Attempt, SLSA-Predicate, Artifact-Attestation-Bundle und den exakten Artefakt-Digest an denselben Candidate/Deployment/DB-Branch. Ohne diese kryptografische Receipt bleibt selbst eine fachlich grüne Matrix `BLOCKED`.
+
+Das Environment muss zur Aktionszeit genau zwei verschlüsselte Secrets liefern:
+
+- `NOVALURE_QA_TWO_TENANT_ENV_B64`: Base64 des vollständigen, bereits deployment- und datenbankgebundenen `.env.qa-two-tenant.local`-Bundles einschließlich beider Tenant-Fixtures, Ausführungsbestätigungen und der drei Production-Deny-Targets.
+- `NOVALURE_QA_VERCEL_SHARE_URL`: temporäre Share-URL direkt auf der exakten Preview-Origin; eine generische `vercel.com/share`-URL wird im Workflow bewusst abgewiesen.
+
+Das Base64-Bundle und die Share-URL existieren ausschließlich als action-time Secret-Umgebungswerte des vertrauenswürdigen Node-Harness. Das Bundle wird nur im Speicher kanonisch decodiert und strikt gegen die vollständige Key-Allowlist geparst; es wird weder im Workspace noch unter `RUNNER_TEMP`, in `GITHUB_ENV`, in Outputs oder in irgendeiner temporären Datei materialisiert. Server-only DB-/Auth-Secrets und beide Action-Secrets werden keinem Child-Prozess mitgegeben. Die drei Child-Läufe erhalten jeweils nur die explizit benötigten Runner-Werte; die Share-URL wird Preflight/Execute ausschließlich über stdin übergeben.
+
+Nach `validate`, Protected-Preflight und Protected-Execute akzeptiert der Runner genau vier geheimnisfreie Evidenzdateien: Preflight-/Execute-JSON und deren SHA-256-Sidecars. Quelle und außerhalb des Workspace liegendes Staging-Ziel müssen normale, nicht verlinkte Einzeldateien mit genau einem Hardlink sein; Größe, Inode/Device und Digest werden fail-closed geprüft. Der Upload nennt diese vier Dateien einzeln und umfasst weder ein Verzeichnis noch Symlinks, Hidden Files oder sonstigen Workspace-Inhalt. Das öffentliche Staging wird anschließend in `if: always()` gelöscht. Die Execute-Evidenz enthält außerdem einen `workflowTrust`-Receipt mit Candidate-SHA, Trusted-Harness-SHA, Workflow-Ref und Workflow-SHA; ohne exakte Übereinstimmung mit `runtime.trustedHarnessSha` darf die finale Release-Attestierung keinen PASS ausstellen.
+
+Der Workflow provisioniert, deployt, promoted oder verändert Production nicht und wird durch diese Dokumentation nicht automatisch ausgelöst.
+
+### Automatische, read-only CI-/Security-Gates
+
+`.github/workflows/quality-gates.yml` stellt für jeden Pull Request und Push die nichtmutierenden Qualitätsprüfungen wieder her. Die Jobs besitzen standardmäßig nur `contents: read`, verwenden ausschließlich immutable Commit-Pins für Actions, lesen die exakte Node-Version aus `.node-version`, verlangen die im `packageManager` fixierte npm-Version sowie Lockfile-Version 3 und installieren mit `npm ci`. Lint, Typecheck, Unit-/Contract-Tests, Integrationstests und Production-Build laufen als getrennte sichtbare Matrix-Gates ohne Preview-/Production-Secrets.
+
+Security wird nicht aus einem generischen Quality-PASS abgeleitet: ein eigener Production-SCA-Job führt `npm audit --omit=dev --audit-level=moderate` aus; die vollständige Lockfile-Lizenzinventur blockiert unbekannte, fehlende oder nicht explizit erlaubte Lizenzangaben; der Pull-Request-Delta-Gate verwendet die immutable gepinnte Dependency-Review-Action; und ein separater immutable gepinnter CodeQL-Job führt JavaScript-/TypeScript-SAST mit `security-extended` und `security-and-quality` aus. Ein eigener Job erzeugt ein begrenztes CycloneDX-SBOM, prüft die einzelne reguläre Datei und lädt nur diese Datei hoch. Die technische Lizenz-Allowlist ist eine Driftbarriere, **keine** juristische Produktfreigabe.
+
+Diese lokalen Workflow-Verträge belegen nur die fail-closed Konfiguration. Bis GitHub die Jobs auf dem exakten Commit tatsächlich ausgeführt hat und die unveränderlichen Run-URLs/Receipts in der Release-Attestierung referenziert sind, bleiben CI, CodeQL, Dependency Review, SCA, Lizenzprüfung, Build und SBOM operativ `NOT_RUN`; sie dürfen nicht still als PASS gewertet werden. Wenn Repository-/GitHub-Advanced-Security-Funktionen fehlen, muss der entsprechende Job rot/blockiert bleiben oder durch einen gleichwertigen signierten Beleg ersetzt werden.
 
 ### PostgreSQL-Barriere-Gate für die Batch-Lockreihenfolge
 

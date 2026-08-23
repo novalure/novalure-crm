@@ -16,6 +16,7 @@ import {
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
 import { hasExecutedQaBatchAudit, lockQaBatchFence } from "@/lib/db/qa-batch-fence";
+import { assertQaRuntimeTargetInTransaction } from "@/lib/db/qa-runtime-target-guard";
 
 const maximumBatchObjects = 20_000;
 const identifierPattern = /^[a-z][a-z0-9_]{0,62}$/;
@@ -655,6 +656,7 @@ export async function runQaBatchResetInTransaction(
     }
   }
 
+  await assertQaRuntimeTargetInTransaction(transaction);
   await lockQaBatchFence(transaction, input.batchId);
 
   const workspace = await transaction.queryOne<QaWorkspaceRow>(

@@ -4,10 +4,19 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { validateReleaseDocumentCandidateState } from "./final-preview-release-attestation-contract.mjs";
 
 const manifest = JSON.parse(
   await readFile("docs/audit/2026-08-23/legal-content-manifest.json", "utf8"),
 );
+const [finalPreviewAttestation, releaseSurfaceManifest, releaseGateMatrix] = await Promise.all([
+  readFile(
+    "docs/audit/2026-08-23/final-preview-release-attestation.template.json",
+    "utf8",
+  ).then(JSON.parse),
+  readFile("docs/audit/2026-08-23/release-surface-manifest.json", "utf8").then(JSON.parse),
+  readFile("docs/audit/2026-08-23/release-gate-matrix.json", "utf8").then(JSON.parse),
+]);
 
 async function sha256(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
@@ -50,7 +59,18 @@ test("every required route has independent DE and EN render evidence without fab
     }
   }
   assert.equal(manifest.approvalStatus, "PENDING_LEGAL_REVIEW");
-  assert.equal(manifest.candidateCommit, null);
+  assert.deepEqual(
+    validateReleaseDocumentCandidateState({
+      attestation: finalPreviewAttestation,
+      legalContentManifest: manifest,
+      releaseGateMatrix,
+      releaseSurfaceManifest,
+    }),
+    {
+      candidateCommit: finalPreviewAttestation.runtime.candidateCommit,
+      status: finalPreviewAttestation.status,
+    },
+  );
   assert.equal(manifest.testedDeployment, null);
 });
 

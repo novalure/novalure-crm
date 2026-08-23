@@ -107,5 +107,35 @@
     "protectedSourceMaps": "DISABLED",
     "optionsAllowlistEnabled": false
   },
+  "observability": {
+    "status": "FAIL_OPERATIONAL_ALERTING_NOT_CONFIGURED",
+    "projectAlertRuleCount": 0,
+    "projectDrainCount": 0,
+    "traceSamplingRuleCount": 0,
+    "controlledAlertDeliveryTest": "NOT_RUN",
+    "alertAcknowledgementTest": "NOT_RUN",
+    "finalCandidateSoak": "NOT_RUN"
+  },
+  "supplyChain": {
+    "status": "PARTIAL_PASS",
+    "node": "24.14.0",
+    "npm": "11.9.0",
+    "productionDependencyAudit": "PASS_0_KNOWN_VULNERABILITIES_LOCAL_CACHE",
+    "productionDependencyTreeProblems": 0,
+    "githubActionReferencesPinned": "8_OF_8_FULL_COMMIT_SHA",
+    "cycloneDx": {
+      "schemaVersion": "1.5",
+      "componentCount": 70,
+      "dependencyNodeCount": 71,
+      "uniquePurlCount": 70,
+      "rootPurl": "pkg:npm/novalure-crm@0.1.0",
+      "localRootDisplayNameAssessment": "WORKTREE_DIRECTORY_NAME_ONLY",
+      "componentsWithEmbeddedLicenseMetadata": "69_OF_70",
+      "rgbcolorLicenseFileVerified": true
+    },
+    "dedicatedSast": "NOT_RUN_NO_LOCAL_TOOL",
+    "fullHistoryGitleaks": "NOT_RUN_NO_LOCAL_BINARY",
+    "formalLicensePolicy": "NOT_RUN_NO_POLICY"
+  },
   "gateDecision": "NO_GO_UNTIL_EMAIL_CALENDAR_BYPASS_AND_RUNTIME_LIFECYCLE_GAPS_ARE_CLOSED"
 }

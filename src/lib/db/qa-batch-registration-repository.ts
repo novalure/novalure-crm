@@ -1,5 +1,6 @@
 import type { TenantTransaction } from "@/lib/db/tenant-client";
 import { hasExecutedQaBatchAudit, lockQaBatchFence } from "@/lib/db/qa-batch-fence";
+import { assertQaRuntimeTargetInTransaction } from "@/lib/db/qa-runtime-target-guard";
 import {
   isQaResetDatabaseTable,
   type QaResetDatabaseTable,
@@ -19,10 +20,65 @@ type ExistingRegistrationRow = {
   workspaceId: string;
 };
 
+/**
+ * Resolves the active QA batch that owns an already-persisted public fixture.
+ *
+ * Public submission routes are intentionally anonymous and therefore cannot
+ * trust a caller-supplied QA header.  Their only safe bridge into the reset
+ * ledger is the server-side ownership of the Form/Funnel parent created by an
+ * authenticated, Preview-only QA mutation.  Production and normal customer
+ * objects return null because the workspace must be marked QA and the batch
+ * must not have an executed reset audit.
+ */
+export async function findActiveQaBatchForObject(
+  transaction: TenantTransaction,
+  input: { object: QaBatchObject; workspaceId: string },
+) {
+  const row = await transaction.queryOne<{ actorId: string; batchId: string; transactionActorId: string }>(
+    `
+      select
+        batch.created_by_user_id as "actorId",
+        batch.id as "batchId",
+        nullif(current_setting('app.actor_id', true), '') as "transactionActorId"
+      from qa_batch_objects object
+      inner join qa_batches batch
+        on batch.id = object.batch_id
+       and batch.workspace_id = object.workspace_id
+      inner join workspaces workspace
+        on workspace.id = object.workspace_id
+      where object.workspace_id = $1::uuid
+        and object.resource_scope = 'database'
+        and object.resource_type = $2
+        and object.resource_id = $3
+        and workspace.is_qa = true
+        and not exists (
+          select 1
+          from qa_reset_audit_events audit
+          where audit.workspace_id = object.workspace_id
+            and audit.batch_id = object.batch_id
+            and audit.outcome = 'executed'
+        )
+      limit 1
+    `,
+    [input.workspaceId, input.object.type, input.object.id],
+  );
+  if (row?.batchId && row.actorId && row.transactionActorId !== row.actorId) {
+    throw new QaBatchRuntimeError(
+      "QA_BATCH_ACTOR_MISMATCH",
+      "Public QA fixture owner does not match the active QA batch actor",
+      409,
+    );
+  }
+  return row?.batchId && row.actorId
+    ? { actorId: row.actorId, batchId: row.batchId }
+    : null;
+}
+
 export async function assertQaBatchForMutation(
   transaction: TenantTransaction,
   input: { batchId: string; workspaceId: string },
 ) {
+  await assertQaRuntimeTargetInTransaction(transaction);
   await lockQaBatchFence(transaction, input.batchId);
   const batch = await transaction.queryOne<{ id: string }>(
     `
@@ -94,6 +150,7 @@ export async function registerQaBatchObjects(
     workspaceId: string;
   },
 ): Promise<QaBatchRegistrationStatus> {
+  await assertQaRuntimeTargetInTransaction(transaction);
   let inserted = 0;
   const uniqueObjects = new Map<string, QaBatchObject>();
   for (const object of input.objects) {

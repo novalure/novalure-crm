@@ -23,7 +23,9 @@ type EditorPreflightRunRow = {
   workspaceId: string;
 };
 
-export async function runEditorPreflight(input: {
+/** Pure preflight evaluation for Preview QA transactions that must not create
+ * an independently committed resettable row before the actual fixture write. */
+export async function evaluateEditorPreflight(input: {
   editorType: EditorPreflightType;
   entityId?: string | null;
   payload?: unknown;
@@ -49,6 +51,32 @@ export async function runEditorPreflight(input: {
     : warnings.length > 0
       ? "warning"
       : "pass";
+  return {
+    blockers,
+    checks,
+    createdAt: new Date().toISOString(),
+    editorType: input.editorType,
+    entityId: input.entityId ?? text(payload.id) ?? undefined,
+    id: "preflight_evaluation_only",
+    metadata: { persisted: false, source: "qa_atomic_evaluation" },
+    projectId: projectId ?? undefined,
+    status,
+    warnings,
+    workspaceId: input.session.workspaceId,
+  };
+}
+
+export async function runEditorPreflight(input: {
+  editorType: EditorPreflightType;
+  entityId?: string | null;
+  payload?: unknown;
+  projectId?: string | null;
+  session: AppSession;
+}): Promise<EditorPreflightRun> {
+  const payload = asObject(input.payload);
+  const projectId = normalizeUuid(input.projectId ?? payload.projectId);
+  const evaluated = await evaluateEditorPreflight(input);
+  const { blockers, checks, status, warnings } = evaluated;
 
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return {

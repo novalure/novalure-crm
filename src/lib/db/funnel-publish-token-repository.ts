@@ -3,6 +3,10 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import {
+  assertQaBatchForMutation,
+  assertQaBatchOwnsObject,
+} from "@/lib/db/qa-batch-registration-repository";
+import {
   withTenantTransaction,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
@@ -215,19 +219,33 @@ export async function rotateFunnelPublishToken(input: {
   expectedRevision: number;
   funnelId: string;
   idempotencyKey: string;
+  qaBatchId?: string;
   session: AppSession;
 }) {
   validateRotationInput(input);
   return withTenantTransaction(
     { actorId: input.session.userId, workspaceId: input.session.workspaceId },
-    (transaction) => rotateFunnelPublishTokenInTransaction({
-      actorUserId: input.session.userId,
-      expectedRevision: input.expectedRevision,
-      funnelId: input.funnelId,
-      idempotencyKey: input.idempotencyKey,
-      transaction,
-      workspaceId: input.session.workspaceId,
-    }),
+    async (transaction) => {
+      if (input.qaBatchId) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: input.qaBatchId,
+          workspaceId: input.session.workspaceId,
+        });
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: input.qaBatchId,
+          object: { id: input.funnelId, type: "funnels" },
+          workspaceId: input.session.workspaceId,
+        });
+      }
+      return rotateFunnelPublishTokenInTransaction({
+        actorUserId: input.session.userId,
+        expectedRevision: input.expectedRevision,
+        funnelId: input.funnelId,
+        idempotencyKey: input.idempotencyKey,
+        transaction,
+        workspaceId: input.session.workspaceId,
+      });
+    },
   );
 }
 

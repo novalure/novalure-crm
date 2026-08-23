@@ -6,6 +6,7 @@ import { extname, join, relative, sep } from "node:path";
 import test from "node:test";
 
 await import("./legal-approval-manifest-tests.mjs");
+await import("./final-preview-release-attestation-contract-tests.mjs");
 
 const appRoot = join(process.cwd(), "src", "app");
 const sourceRoot = join(process.cwd(), "src");
@@ -13,6 +14,17 @@ const manifestPath = "docs/audit/2026-08-23/release-surface-manifest.json";
 const matrixPath = "docs/audit/2026-08-23/release-gate-matrix.json";
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const matrix = JSON.parse(await readFile(matrixPath, "utf8"));
+const legalContentManifest = JSON.parse(
+  await readFile("docs/audit/2026-08-23/legal-content-manifest.json", "utf8"),
+);
+const finalPreviewAttestation = JSON.parse(
+  await readFile(
+    "docs/audit/2026-08-23/final-preview-release-attestation.template.json",
+    "utf8",
+  ),
+);
+const { validateReleaseDocumentCandidateState } =
+  await import("./final-preview-release-attestation-contract.mjs");
 const {
   launchScopeDecisions,
   launchScopePolicy,
@@ -78,7 +90,7 @@ test("release surface manifest is an exact filesystem inventory of every routabl
   assert.deepEqual(manifest.publicLocales, ["de", "en", "es"]);
   assert.equal(pages.length, 19);
   assert.equal(nonApiRouteHandlers.length, 4);
-  assert.equal(apiRoutes.length, 89);
+  assert.equal(apiRoutes.length, 90);
   assert.equal(cronRoutes.length, 4);
 });
 
@@ -247,6 +259,29 @@ test("webhook, public-form/funnel, internal-admin and Blob categories match code
   }
 });
 
+test("zero-auth QA runtime identity is inventoried once as INTERNAL with pending owners and signatures", () => {
+  const route = "/api/admin/qa-runtime-identity";
+  assert.equal(manifest.apiRoutes.filter((value) => value === route).length, 1);
+  assert.deepEqual(
+    manifest.internalAdminSurfaces.find((entry) => entry.id === "admin-qa-runtime-identity"),
+    { id: "admin-qa-runtime-identity", surfaces: [route] },
+  );
+  const surface = matrix.surfaces.find((entry) => entry.id === "scope.qa-batch-registration");
+  assert.equal(surface?.desiredLaunchStatus, "INTERNAL");
+  assert.ok(surface?.routeApiJob.includes(route));
+  assert.deepEqual(surface?.owners, { legal: "UNASSIGNED", product: "UNASSIGNED", technical: "UNASSIGNED" });
+  assert.deepEqual(matrix.signatures, {
+    "data-compliance": null,
+    engineering: null,
+    legal: null,
+    operations: null,
+    privacy: null,
+    product: null,
+    "sales-operations": null,
+    security: null,
+  });
+});
+
 test("central gap remediations have one stable release-gate decision each", () => {
   const expected = new Map([
     ["authenticatedBotModelProvider", "scope.authenticated-bot-model-provider"],
@@ -265,18 +300,33 @@ test("central gap remediations have one stable release-gate decision each", () =
   }
 });
 
-test("unsigned inventory and release matrix cannot claim a candidate or signature", () => {
+test("release inventory and matrix candidate state is bound to the separate attestation", () => {
+  assert.deepEqual(
+    validateReleaseDocumentCandidateState({
+      attestation: finalPreviewAttestation,
+      legalContentManifest,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: manifest,
+    }),
+    {
+      candidateCommit: finalPreviewAttestation.runtime.candidateCommit,
+      status: finalPreviewAttestation.status,
+    },
+  );
   for (const document of [manifest, matrix]) {
     assert.equal(document.approvalStatus, "PENDING_SIGNATURE");
-    assert.equal(document.candidateCommit, null);
     assert.match(document.baselineCommit, /^[a-f0-9]{40}$/u);
   }
   assert.equal(launchScopePolicyApproval, "PENDING_SIGNATURE");
   assert.equal(matrix.launchScopePolicyVersion, launchScopePolicyVersion);
   assert.deepEqual(matrix.signatures, {
+    "data-compliance": null,
     engineering: null,
+    legal: null,
     operations: null,
+    privacy: null,
     product: null,
+    "sales-operations": null,
     security: null,
   });
   assert.deepEqual(matrix.specialDecisions.unitBuyerDealRelationship, {

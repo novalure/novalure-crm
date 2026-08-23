@@ -13,6 +13,11 @@ import {
 import type { BotEvaluationCaseResult, BotEvaluationRun } from "@/lib/crm-types";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import {
+  assertQaBatchForMutation,
+  findActiveQaBatchForObject,
+  registerQaBatchObjects,
+} from "@/lib/db/qa-batch-registration-repository";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
@@ -373,6 +378,11 @@ type FunnelContactIdentityRow = {
   conflict: boolean;
 };
 
+type QaOwnedFunnelObjectRow = {
+  id: string;
+  type: "consent_records" | "speed_to_lead_events";
+};
+
 export async function findPersistedFunnelSubmissionByIdempotency(input: {
   databaseFunnelId: string;
   submissionIdempotencyHash: string;
@@ -500,6 +510,16 @@ export async function persistFunnelSubmission(input: {
   const row = await withTenantTransaction(
     { actorId: input.session.userId, workspaceId: input.session.workspaceId },
     async (transaction) => {
+      const qaBatch = await findActiveQaBatchForObject(transaction, {
+        object: { id: input.databaseFunnelId, type: "funnels" },
+        workspaceId: input.session.workspaceId,
+      });
+      if (qaBatch) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: qaBatch.batchId,
+          workspaceId: input.session.workspaceId,
+        });
+      }
       // Keep contact lookup and insert safe across Form and Funnel channels.
       // Locks are acquired in separate READ COMMITTED statements so each
       // following lookup sees records committed by the previous lock holder.
@@ -560,7 +580,7 @@ export async function persistFunnelSubmission(input: {
         ],
       );
       if (contactIdentity?.conflict) return { identityConflict: true } as const;
-      return transaction.queryOne<FunnelSubmissionPersistenceRow>(
+      const persisted = await transaction.queryOne<FunnelSubmissionPersistenceRow>(
     `
       with locked_funnel as (
         select
@@ -624,6 +644,18 @@ export async function persistFunnelSubmission(input: {
           )
           and (c.project_id = f."projectId" or c.project_id is null)
           and c.archived_at is null
+          and (
+            $30::uuid is null
+            or exists (
+              select 1
+              from qa_batch_objects object
+              where object.workspace_id = $1::uuid
+                and object.batch_id = $30::uuid
+                and object.resource_scope = 'database'
+                and object.resource_type = 'contacts'
+                and object.resource_id = c.id::text
+            )
+          )
         order by (c.project_id = f."projectId") desc, c.created_at asc
         limit 1
         for update of c
@@ -1210,8 +1242,44 @@ export async function persistFunnelSubmission(input: {
       normalizedEmail || null,
       normalizedPhone || null,
       input.expectedPublicationRevision,
+      qaBatch?.batchId ?? null,
         ],
       );
+
+      if (!persisted || !qaBatch || !persisted.submissionId || !persisted.contactId) {
+        return persisted;
+      }
+      const ancillary = await transaction.query<QaOwnedFunnelObjectRow>(
+        `
+          select consent.id, 'consent_records'::text as type
+          from consent_records consent
+          where consent.workspace_id = $1::uuid
+            and consent.metadata->>'submissionIdempotencyHash' = $2
+          union all
+          select speed.id, 'speed_to_lead_events'::text as type
+          from speed_to_lead_events speed
+          where speed.workspace_id = $1::uuid
+            and speed.metadata->>'submissionIdempotencyHash' = $2
+        `,
+        [input.session.workspaceId, input.submissionIdempotencyHash],
+      );
+      await registerQaBatchObjects(transaction, {
+        actorId: qaBatch.actorId,
+        batchId: qaBatch.batchId,
+        objects: [
+          { id: persisted.contactId, type: "contacts" },
+          { id: persisted.submissionId, type: "funnel_submissions" },
+          ...(persisted.leadId ? [{ id: persisted.leadId, type: "leads" as const }] : []),
+          ...(persisted.dealId ? [{ id: persisted.dealId, type: "deals" as const }] : []),
+          ...(persisted.taskId ? [{ id: persisted.taskId, type: "tasks" as const }] : []),
+          ...(persisted.timelineItemId
+            ? [{ id: persisted.timelineItemId, type: "contact_timeline_items" as const }]
+            : []),
+          ...ancillary,
+        ],
+        workspaceId: input.session.workspaceId,
+      });
+      return persisted;
     },
   );
 

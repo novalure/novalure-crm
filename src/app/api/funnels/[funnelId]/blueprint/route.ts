@@ -9,6 +9,11 @@ import { getStoredFunnel, restoreStoredFunnelVersion, saveStoredFunnel } from "@
 import { toFunnelBlueprintResponse } from "@/lib/funnel-store-response";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
+import {
+  qaBatchRuntimeErrorResponse,
+  qaBatchSuccessHeaders,
+  readQaBatchMutationHeader,
+} from "@/lib/qa-batch-runtime";
 
 type RouteContext = {
   params: Promise<{ funnelId: string }>;
@@ -42,6 +47,14 @@ export async function PUT(request: Request, context: RouteContext) {
   }
   const auth = await requirePermissionAndProductCapability(request, "funnels:write", "funnels:publish");
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error)
+      ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   const text = getApiSystemCopy(resolveRequestLanguage(request));
   const { funnelId } = await context.params;
@@ -80,8 +93,11 @@ export async function PUT(request: Request, context: RouteContext) {
         body.restoreVersionId,
         auth.session,
         expectedBlueprintRevision,
+        qaBatchId ?? undefined,
       );
     } catch (error) {
+      const qaError = qaBatchRuntimeErrorResponse(error);
+      if (qaError) return qaError;
       if (error instanceof FunnelLivePreflightError) {
         return NextResponse.json(
           { error: error.message, preflight: error.preflight },
@@ -95,7 +111,10 @@ export async function PUT(request: Request, context: RouteContext) {
       );
     }
     if (!restored) return NextResponse.json({ error: text.versionNotFound }, { status: 404 });
-    return NextResponse.json(toFunnelBlueprintResponse(restored));
+    return NextResponse.json(
+      toFunnelBlueprintResponse(restored),
+      { headers: qaBatchSuccessHeaders(qaBatchId, qaBatchId ? "already-registered" : undefined) },
+    );
   }
 
   if (!body.blueprint || body.blueprint.id !== funnelId) {
@@ -122,8 +141,12 @@ export async function PUT(request: Request, context: RouteContext) {
       body.label,
       auth.session,
       expectedBlueprintRevision,
+      "funnel.blueprint_saved",
+      qaBatchId ?? undefined,
     );
   } catch (error) {
+    const qaError = qaBatchRuntimeErrorResponse(error);
+    if (qaError) return qaError;
     if (error instanceof FunnelLivePreflightError) {
       return NextResponse.json(
         { error: error.message, preflight: error.preflight },
@@ -141,5 +164,7 @@ export async function PUT(request: Request, context: RouteContext) {
   return NextResponse.json({
     ...toFunnelBlueprintResponse(saved),
     preflight,
+  }, {
+    headers: qaBatchSuccessHeaders(qaBatchId, qaBatchId ? "already-registered" : undefined),
   });
 }

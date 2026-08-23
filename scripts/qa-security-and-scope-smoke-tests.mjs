@@ -71,15 +71,26 @@ function withoutInfraEnvironment(callback) {
 test("CI pins the exact Node runtime and fails closed for QA targets", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const workflow = await readFile(new URL("../.github/workflows/livegang-e2e.yml", import.meta.url), "utf8");
+  const protectedPreviewRunner = await readFile(
+    new URL("./qa-protected-preview-action-runner.mjs", import.meta.url),
+    "utf8",
+  );
   const guard = await readFile(new URL("./qa-target-guard.mjs", import.meta.url), "utf8");
 
   assert.equal(packageJson.engines.node, ">=24 <25");
   assert.match(workflow, /node-version-file:\s*\.node-version/);
   assert.doesNotMatch(workflow, /secrets\.DATABASE_URL/);
   assert.doesNotMatch(workflow, /NOVALURE_RUN_LIVEGANG_E2E/);
-  assert.match(workflow, /npm run ci:qa-target/);
-  assert.match(workflow, /qa-e2e:[\s\S]*if:\s*github\.event_name == 'workflow_dispatch'/);
-  assert.match(workflow, /group:\s*novalure-shared-qa[\s\S]*cancel-in-progress:\s*false/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment:\s*go-live-preview/);
+  assert.match(workflow, /node scripts\/qa-protected-preview-action-runner\.mjs/);
+  assert.match(protectedPreviewRunner, /qa-protected-preview-workflow-contract\.mjs/);
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--preflight", "--share-url-stdin"\]/,
+  );
+  assert.match(workflow, /group:\s*exact-protected-preview-\$\{\{ inputs\.deployment_id \}\}[\s\S]*cancel-in-progress:\s*false/);
+  assert.doesNotMatch(workflow, /db-migrate\.mjs up|qa-livegang-seed/);
   assert.match(guard, /neon\.branch_id/);
   assert.match(guard, /-pooler\./);
 
@@ -461,25 +472,47 @@ test("secret scanning is immutable, full-history and least-privilege", async () 
   assert.match(gitignore, /^\*\.log$/m);
 });
 
-test("CI pins the exact runtime, canonicalizes SBOM and never prints raw app logs", async () => {
+test("protected Preview CI pins the trusted harness, remote candidate and immutable actions", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/livegang-e2e.yml", import.meta.url),
     "utf8",
   );
+  const protectedPreviewRunner = await readFile(
+    new URL("./qa-protected-preview-action-runner.mjs", import.meta.url),
+    "utf8",
+  );
   const setupBlocks = [...workflow.matchAll(/uses:\s+actions\/setup-node@[\s\S]*?package-manager-cache:\s*false/g)];
 
-  assert.equal(setupBlocks.length, 3);
+  assert.equal(setupBlocks.length, 2);
   for (const block of setupBlocks) assert.match(block[0], /node-version-file:\s*\.node-version/);
-  assert.match(workflow, /canonicalize-sbom\.mjs/);
-  assert.match(workflow, /novalure-production-sbom\.components\.sha256/);
-  assert.match(workflow, /NOVALURE_QA_MIGRATION_DATABASE_ROLE/);
-  assert.match(workflow, /NOVALURE_QA_DATABASE_ROLE/);
+  assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:/m);
+  assert.doesNotMatch(workflow, /^\s+(?:push|pull_request):/m);
+  assert.match(workflow, /environment:\s*go-live-preview/);
+  assert.match(workflow, /permissions:\s*\n\s+contents:\s*read/);
   assert.match(workflow, /fetch-depth:\s*0/);
-  assert.match(workflow, /git diff --check "\$base_sha" "\$EVENT_HEAD_SHA"/);
-  assert.match(workflow, /github\.event\.pull_request\.base\.sha \|\| github\.event\.before/);
-  assert.match(workflow, /required=\([\s\S]*NOVALURE_PRODUCTION_DATABASE_HOST/);
+  assert.match(workflow, /persist-credentials:\s*false/);
+  assert.match(workflow, /ref:\s*\$\{\{ inputs\.trusted_harness_sha \}\}/);
+  assert.doesNotMatch(workflow, /ref:\s*\$\{\{ inputs\.candidate_sha \}\}/);
+  assert.match(workflow, /test "\$checked_out_sha" = "\$NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA"/);
+  assert.match(workflow, /NOVALURE_WORKFLOW_CANDIDATE_SHA:\s*\$\{\{ inputs\.candidate_sha \}\}/);
+  assert.equal((workflow.match(/\bnpm ci\b/g) ?? []).length, 2);
+  assert.match(workflow, /actions\/checkout@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+/);
+  assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+/);
+  assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+/);
+  assert.doesNotMatch(workflow, /uses:\s*[^\s]+@(main|master|v\d+)\s*$/m);
+  assert.doesNotMatch(workflow, /db-migrate\.mjs|qa-test-db-seed-base\.mjs|migrate-and-seed/);
   assert.doesNotMatch(workflow, /cat \/tmp\/novalure-livegang\.log/);
-  assert.match(workflow, /summarize-app-log\.mjs \/tmp\/novalure-livegang\.log/);
+  assert.match(workflow, /node scripts\/qa-protected-preview-action-runner\.mjs/);
+  assert.match(protectedPreviewRunner, /qa-protected-preview-workflow-contract\.mjs/);
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--preflight", "--share-url-stdin"\]/,
+  );
+  assert.match(
+    protectedPreviewRunner,
+    /\["scripts\/qa-two-tenant-e2e\.mjs", "--execute", "--share-url-stdin"\]/,
+  );
+  assert.doesNotMatch(workflow, /\.env\.qa-two-tenant|shred --force/);
 });
 
 test("Meta webhook HMAC is bound to the unchanged raw body", () => {

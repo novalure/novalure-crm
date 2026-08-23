@@ -12,14 +12,29 @@ const runbookPath = new URL(
   "../docs/audit/2026-08-23/database-recovery-runbook.md",
   import.meta.url,
 );
-const baselineSource = await readFile(baselinePath, "utf8");
+const evidenceManifestPath = new URL(
+  "../docs/audit/2026-08-23/database-recovery-evidence-manifest.json",
+  import.meta.url,
+);
+const rollbackEvidencePath = new URL(
+  "../docs/audit/2026-08-23/database-recovery-rollback-evidence.json",
+  import.meta.url,
+);
+const [baselineSource, runbook, evidenceManifest, rollbackEvidence] = await Promise.all([
+  readFile(baselinePath, "utf8"),
+  readFile(runbookPath, "utf8"),
+  readFile(evidenceManifestPath, "utf8").then(JSON.parse),
+  readFile(rollbackEvidencePath, "utf8").then(JSON.parse),
+]);
 const baseline = JSON.parse(baselineSource);
-const runbook = await readFile(runbookPath, "utf8");
 
 test("Recovery baseline records an unchanged Production and an exact restore comparison", () => {
   assert.equal(baseline.schemaVersion, 2);
   assert.equal(baseline.status, "CURRENT_SHA_REHEARSAL_AND_RESET_PASS");
-  assert.equal(baseline.candidateCommit, "2d29252a7252bac9e5367662cf72c22006222067");
+  assert.equal(baseline.candidateCommit, evidenceManifest.candidateCommit);
+  assert.match(baseline.candidateCommit, /^[a-f0-9]{40}$/u);
+  assert.equal(baseline.migrationRehearsal.candidateCommit, baseline.candidateCommit);
+  assert.equal(baseline.rollbackDrill.candidateCommit, baseline.candidateCommit);
   assert.equal(baseline.productionMutationPerformed, false);
   assert.equal(baseline.comparison.comparisonResult, "PASS");
   assert.equal(baseline.comparison.rowCountMismatchCount, 0);
@@ -60,18 +75,33 @@ test("Recovery plan includes discovered dependencies and keeps migration 061 sep
 });
 
 test("Current candidate rehearsal and reset evidence are explicit and bounded", () => {
-  assert.equal(baseline.migrationRehearsal.status, "PASS");
-  assert.equal(
-    baseline.migrationRehearsal.selectedEvidenceSha256,
-    "a4483c22b676fab393475af2339764cb027165359eeef5344d574da768dd8310",
+  const selectedPass = evidenceManifest.evidence.find((entry) => entry.role === "SELECTED_PASS");
+  const failedAttempts = evidenceManifest.evidence.filter(
+    (entry) => entry.role === "EXCLUDED_FAILED_ATTEMPT",
   );
-  assert.equal(baseline.migrationRehearsal.excludedFailedAttemptCount, 3);
+  assert.equal(baseline.migrationRehearsal.status, "PASS");
+  assert.equal(baseline.migrationRehearsal.selectedEvidencePath, selectedPass.path);
+  assert.equal(baseline.migrationRehearsal.selectedEvidenceSha256, selectedPass.sha256);
+  assert.equal(baseline.migrationRehearsal.excludedFailedAttemptCount, failedAttempts.length);
   assert.equal(baseline.rollbackDrill.status, "PASS");
-  assert.equal(baseline.rollbackDrill.preservedMigratedBranchId, "br-empty-tree-alp9d9z1");
-  assert.equal(baseline.rollbackDrill.resetRecoveryBranchId, "br-calm-poetry-al5i1a9c");
-  assert.equal(baseline.rollbackDrill.migrationCount, 19);
-  assert.equal(baseline.rollbackDrill.migrationMaxVersion, "067_app_role_runtime_grants");
-  assert.equal(baseline.rollbackDrill.rowTableCount, 19);
+  assert.equal(
+    baseline.rollbackDrill.preservedMigratedBranchId,
+    rollbackEvidence.rehearsal.preservedMigratedBranchId,
+  );
+  assert.equal(
+    baseline.rollbackDrill.resetRecoveryBranchId,
+    rollbackEvidence.reset.resetRecoveryBranchId,
+  );
+  assert.equal(
+    baseline.rollbackDrill.dataFingerprintSha256,
+    evidenceManifest.rollback.dataFingerprintSha256,
+  );
+  assert.equal(baseline.rollbackDrill.migrationCount, evidenceManifest.rollback.migrationLedgerCount);
+  assert.equal(
+    baseline.rollbackDrill.migrationMaxVersion,
+    evidenceManifest.rollback.migrationLedgerMaxVersion,
+  );
+  assert.equal(baseline.rollbackDrill.rowTableCount, evidenceManifest.rollback.tableCount);
   assert.equal(baseline.rollbackDrill.rowCountMismatchCount, 0);
   assert.equal(baseline.rollbackDrill.comparisonResult, "PASS");
   assert.equal(baseline.rollbackDrill.productionMutationPerformed, false);
@@ -80,7 +110,8 @@ test("Current candidate rehearsal and reset evidence are explicit and bounded", 
     "UNAVAILABLE_HTTP_413_TOOL_LIMIT",
   );
   assert.equal(baseline.rollbackDrill.schemaDiffApi.countedAsPassEvidence, false);
-  assert.match(runbook, /Drei davor entstandene Dateien mit `status=FAIL`/u);
+  assert.match(runbook, /`status=FAIL`/u);
+  assert.match(runbook, /`passEligible=false`/u);
   assert.match(runbook, /HTTP 413/u);
   assert.match(runbook, /kein Schema-Diff-PASS/u);
   assert.match(runbook, /PENDING_SIGNATURE/u);

@@ -37,6 +37,7 @@
     "/api/admin/funnels/[funnelId]/publish-token/cutover",
     "/api/admin/qa-batch-capability",
     "/api/admin/qa-reset",
+    "/api/admin/qa-runtime-identity",
     "/api/approvals",
     "/api/auth/csrf",
     "/api/auth/login",
@@ -459,6 +460,7 @@
     { "id": "admin-governance-navigation", "surfaces": ["navigation:governanceCompliance"] },
     { "id": "admin-qa-batch-capability", "surfaces": ["/api/admin/qa-batch-capability"] },
     { "id": "admin-qa-reset", "surfaces": ["/api/admin/qa-reset"] },
+    { "id": "admin-qa-runtime-identity", "surfaces": ["/api/admin/qa-runtime-identity"] },
     { "id": "admin-system-releases-navigation", "surfaces": ["navigation:systemReleases"] },
     { "id": "system-database-diagnostics", "surfaces": ["/api/system/database"] },
     { "id": "visual-qa-pages", "surfaces": ["/visual-qa/crm", "/visual-qa/crm/content"] }

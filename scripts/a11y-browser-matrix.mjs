@@ -1,11 +1,23 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { createHash, createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { createA11yBrowserContextOptions } from "./lib/a11y-browser-context.mjs";
+import {
+  createA11yBrowserContextOptions,
+  installA11yReadOnlyRequestGuard,
+} from "./lib/a11y-browser-context.mjs";
+import {
+  attestMfaVerificationChallenge,
+  attestPreviewRuntimeIdentity,
+  attestQaBrowserSession,
+  currentTotp,
+  parseStrictCliArgs,
+  requirePreviewRuntimeIdentityExpectation,
+  requireQaBrowserCredentials,
+} from "./lib/preview-runtime-identity.mjs";
 
 const publicRoutes = [
   "/",
@@ -17,6 +29,7 @@ const publicRoutes = [
   "/cookies",
   "/terms",
   "/data-deletion",
+  "/datadeletion",
   "/meta",
 ];
 const requiredPublicScopeIds = [
@@ -29,6 +42,7 @@ const requiredPublicScopeIds = [
   "cookies",
   "terms",
   "data-deletion",
+  "data-deletion-alias",
   "meta",
 ];
 const authenticatedSurfaces = [
@@ -72,8 +86,8 @@ const requiredFixtureRequirementIds = [
 const publicProfiles = [
   { height: 900, name: "desktop", routes: publicRoutes, width: 1440 },
   { height: 844, isMobile: true, name: "mobile", routes: publicRoutes, width: 390 },
-  { height: 800, name: "zoom-200-reflow", routes: ["/", "/login", "/login/reset-password", "/privacy"], width: 640 },
-  { height: 800, name: "zoom-400-reflow", routes: ["/", "/login", "/login/reset-password", "/privacy"], width: 320 },
+  { height: 800, name: "zoom-200-reflow", routes: ["/", "/login", "/login/reset-password", "/privacy", "/datadeletion"], width: 640 },
+  { height: 800, name: "zoom-400-reflow", routes: ["/", "/login", "/login/reset-password", "/privacy", "/datadeletion"], width: 320 },
 ];
 const authenticatedProfiles = [
   { height: 900, name: "desktop", routes: authenticatedRoutes, width: 1440 },
@@ -102,21 +116,21 @@ const actionInputKeys = new Set(["passwordResetResultUrl", "publicFormUrl", "pub
 const wcagTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 function parseArgs(argv) {
-  const values = new Map();
-  const booleanArguments = new Set(["--fixture-input-stdin", "--public-only", "--share-url-stdin"]);
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (!argument.startsWith("--")) throw new Error("Unexpected positional argument.");
-    if (booleanArguments.has(argument)) {
-      values.set(argument.slice(2), "1");
-      continue;
-    }
-    const value = argv[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
-    values.set(argument.slice(2), value);
-    index += 1;
-  }
-  return values;
+  return parseStrictCliArgs(argv, {
+    booleanNames: ["fixture-input-stdin", "public-only", "read-only", "share-url-stdin"],
+    valueNames: [
+      "acceptance-matrix",
+      "base-url",
+      "browser-executable",
+      "expected-database-branch-id",
+      "expected-deployment-id",
+      "expected-git-branch",
+      "expected-host",
+      "expected-sha",
+      "output-dir",
+      "release-surface-manifest",
+    ],
+  });
 }
 
 async function readBoundedStdin(maximumBytes) {
@@ -290,50 +304,6 @@ function requirePreviewTarget(baseUrl, expectedHost) {
   return parsed;
 }
 
-function requireQaFixtureCredentials() {
-  const email = process.env.NOVALURE_QA_PREVIEW_EMAIL?.trim().toLowerCase() ?? "";
-  const password = process.env.NOVALURE_QA_PREVIEW_PASSWORD ?? "";
-  if (!/^codextest_preview_[^@\s]+@[^@\s]+$/u.test(email)) {
-    throw new Error("NOVALURE_QA_PREVIEW_EMAIL must identify the isolated codextest_preview_ fixture.");
-  }
-  if (password.length < 16) {
-    throw new Error("NOVALURE_QA_PREVIEW_PASSWORD must contain at least 16 characters.");
-  }
-  const totpSecret = (process.env.NOVALURE_QA_PREVIEW_TOTP_SECRET ?? "").replace(/[\s-]/gu, "").toUpperCase();
-  if (totpSecret && !/^[A-Z2-7]{16,128}$/u.test(totpSecret)) {
-    throw new Error("NOVALURE_QA_PREVIEW_TOTP_SECRET must be a bounded Base32 fixture secret.");
-  }
-  return { email, password, totpSecret };
-}
-
-function decodeBase32(value) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const character of value) {
-    const index = alphabet.indexOf(character);
-    if (index < 0) throw new Error("QA fixture TOTP secret is invalid.");
-    bits += index.toString(2).padStart(5, "0");
-  }
-  const bytes = [];
-  for (let index = 0; index + 8 <= bits.length; index += 8) {
-    bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
-  }
-  return Buffer.from(bytes);
-}
-
-function currentTotp(secret, now = Date.now()) {
-  const counter = Math.floor(now / 30_000);
-  const counterBytes = Buffer.alloc(8);
-  counterBytes.writeBigUInt64BE(BigInt(counter));
-  const digest = createHmac("sha1", decodeBase32(secret)).update(counterBytes).digest();
-  const offset = digest[digest.length - 1] & 0x0f;
-  const binary = ((digest[offset] & 0x7f) << 24) |
-    ((digest[offset + 1] & 0xff) << 16) |
-    ((digest[offset + 2] & 0xff) << 8) |
-    (digest[offset + 3] & 0xff);
-  return String(binary % 1_000_000).padStart(6, "0");
-}
-
 async function loadPlaywright() {
   try {
     return await import("playwright");
@@ -459,11 +429,24 @@ async function beginQaFixtureLogin(context, base, credentials, language) {
     if (finalUrl.origin !== base.origin) {
       return { blocker: "deployment_protection", challenge: false, ok: false, status: 0 };
     }
-    if (finalUrl.pathname === "/login" && await page.locator("#login-mfa-code").count() === 1) {
-      return { blocker: null, challenge: true, ok: false, status: loginResponse?.status() ?? 0 };
-    }
     if (finalUrl.pathname === "/login") {
-      return { blocker: "qa_authentication_failed", challenge: false, ok: false, status: 0 };
+      try {
+        attestMfaVerificationChallenge({
+          hasCodeInput: await page.locator("#login-mfa-code").count() === 1,
+          hasEnrollmentControl: await page.locator('input[name="recoveryCodesSaved"]').count() > 0,
+          hasWorkspaceSelectionControl: await page.locator('button[name="workspaceUserId"]').count() > 0,
+          step: finalUrl.searchParams.get("step"),
+        });
+      } catch {
+        return { blocker: "qa_mfa_verification_challenge_required", challenge: false, ok: false, status: 0 };
+      }
+      return {
+        blocker: null,
+        challenge: true,
+        challengeKind: "mfa_verification",
+        ok: false,
+        status: loginResponse?.status() ?? 0,
+      };
     }
     return { blocker: null, challenge: false, ok: true, status: loginResponse?.status() ?? 0 };
   } catch {
@@ -473,13 +456,15 @@ async function beginQaFixtureLogin(context, base, credentials, language) {
   }
 }
 
-async function completeQaMfaChallenge(context, base, credentials, language) {
+async function completeQaMfaChallenge(context, base, credentials, language, challengeKind) {
   if (!credentials.totpSecret) {
     return { blocker: "qa_mfa_totp_unavailable", ok: false, status: 0 };
   }
   const page = await context.newPage();
   try {
-    const response = await page.goto(safePublicRouteUrl(base, "/login", language).href, {
+    const challengeUrl = safePublicRouteUrl(base, "/login", language);
+    challengeUrl.searchParams.set("step", challengeKind);
+    const response = await page.goto(challengeUrl.href, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
@@ -487,11 +472,16 @@ async function completeQaMfaChallenge(context, base, credentials, language) {
       return { blocker: "deployment_protection", ok: false, status: response?.status() ?? 0 };
     }
     const codeInput = page.locator("#login-mfa-code");
-    if (await codeInput.count() !== 1) {
+    try {
+      attestMfaVerificationChallenge({
+        hasCodeInput: await codeInput.count() === 1,
+        hasEnrollmentControl: await page.locator('input[name="recoveryCodesSaved"]').count() > 0,
+        hasWorkspaceSelectionControl: await page.locator('button[name="workspaceUserId"]').count() > 0,
+        step: challengeKind,
+      });
+    } catch {
       return { blocker: "qa_mfa_challenge_unavailable", ok: false, status: response?.status() ?? 0 };
     }
-    const recoveryCodesSaved = page.locator('input[name="recoveryCodesSaved"]');
-    if (await recoveryCodesSaved.count() === 1) await recoveryCodesSaved.check();
     await codeInput.fill(currentTotp(credentials.totpSecret));
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30_000 }),
@@ -515,31 +505,44 @@ async function verifyQaFixtureSession(context, base, credentials) {
       return { blocker: "qa_authentication_failed", ok: false, status: sessionResponse.status() };
     }
     const session = await sessionResponse.json().catch(() => null);
-    const isolatedFixtureVerified =
-      session?.authenticated === true &&
-      session?.user?.email?.toLowerCase() === credentials.email &&
-      session?.user?.role === "agent" &&
-      session?.user?.productRole === "team_member" &&
-      session?.workspace?.setupState?.previewFixture === true &&
-      session?.workspace?.setupState?.qaPrefix === "CODEXTEST_PREVIEW_";
-    if (!isolatedFixtureVerified) {
+    let sessionAttestation;
+    try {
+      sessionAttestation = attestQaBrowserSession(session, credentials);
+    } catch {
       return { blocker: "qa_authentication_failed", ok: false, status: sessionResponse.status() };
     }
-    return { blocker: null, ok: true, status: sessionResponse.status() };
+    return { blocker: null, ok: true, sessionAttestation, status: sessionResponse.status() };
   } catch {
     return { blocker: "qa_authentication_failed", ok: false, status: 0 };
   }
 }
 
-async function authenticateQaFixture(context, base, credentials, language = "de") {
+async function attestQaRuntimeIdentity(context, base, expectedRuntimeIdentity) {
+  const response = await context.request.get(new URL("/api/admin/qa-batch-capability", base).href, {
+    timeout: 30_000,
+  });
+  const payload = await response.json().catch(() => null);
+  return attestPreviewRuntimeIdentity({ expected: expectedRuntimeIdentity, payload, status: response.status() });
+}
+
+async function authenticateQaFixture(context, base, credentials, expectedRuntimeIdentity, language = "de") {
   const login = await beginQaFixtureLogin(context, base, credentials, language);
   if (login.challenge) {
-    const mfa = await completeQaMfaChallenge(context, base, credentials, language);
+    const mfa = await completeQaMfaChallenge(context, base, credentials, language, login.challengeKind);
     if (!mfa.ok) return mfa;
   } else if (!login.ok) {
     return login;
   }
-  return verifyQaFixtureSession(context, base, credentials);
+  const verification = await verifyQaFixtureSession(context, base, credentials);
+  if (!verification.ok) return verification;
+  try {
+    return {
+      ...verification,
+      runtimeIdentity: await attestQaRuntimeIdentity(context, base, expectedRuntimeIdentity),
+    };
+  } catch {
+    return { blocker: "runtime_identity_mismatch", ok: false, status: 0 };
+  }
 }
 
 function createBlockedResult({ blocker, language, profile, route, status, surface }) {
@@ -560,6 +563,38 @@ function createBlockedResult({ blocker, language, profile, route, status, surfac
   };
 }
 
+function createNotRunResult({ blocker, language, profile, route, surface }) {
+  return {
+    ...createBlockedResult({ blocker, language, profile, route, status: 0, surface }),
+    outcome: "NOT_RUN",
+  };
+}
+
+async function logoutQaSession(context, base) {
+  const sessionBefore = await context.request.get(new URL("/api/auth/session", base).href, { timeout: 30_000 });
+  if (sessionBefore.status() === 401) return "NO_SESSION";
+  assert.equal(sessionBefore.status(), 200, "QA session state could not be checked before logout.");
+  const csrfUrl = new URL("/api/auth/csrf", base);
+  csrfUrl.searchParams.set("method", "POST");
+  csrfUrl.searchParams.set("path", "/api/auth/logout");
+  const sameOriginHeaders = { origin: base.origin, referer: base.href, "sec-fetch-site": "same-origin" };
+  const csrfResponse = await context.request.get(csrfUrl.href, { headers: sameOriginHeaders, timeout: 30_000 });
+  assert.equal(csrfResponse.status(), 200, "QA logout CSRF preflight failed.");
+  const csrf = await csrfResponse.json().catch(() => null);
+  assert.ok(typeof csrf?.csrfToken === "string", "QA logout CSRF token is unavailable.");
+  const logoutUrl = new URL("/api/auth/logout", base);
+  logoutUrl.searchParams.set("lang", "en");
+  const logoutResponse = await context.request.post(logoutUrl.href, {
+    headers: { ...sameOriginHeaders, "x-novalure-csrf-token": csrf.csrfToken },
+    maxRedirects: 0,
+    timeout: 30_000,
+  });
+  assert.ok([200, 303].includes(logoutResponse.status()), "QA logout failed.");
+  const sessionAfter = await context.request.get(new URL("/api/auth/session", base).href, { timeout: 30_000 });
+  assert.equal(sessionAfter.status(), 401, "QA session remained active after logout.");
+  return "LOGGED_OUT";
+}
+
 async function confirmAuthenticatedSurface(page, expectedHash) {
   await page.locator("[data-crm-shell]").waitFor({ state: "visible", timeout: 15_000 });
   await page.waitForTimeout(300);
@@ -571,7 +606,7 @@ async function confirmAuthenticatedSurface(page, expectedHash) {
   return finalHash === expectedHash;
 }
 
-async function auditPage({ action, axeSource, context, expectedHash, language, profile, requiredSelector, route, surface, url }) {
+async function auditPage({ axeSource, context, expectedHash, language, profile, requiredSelector, route, surface, url }) {
   const page = await context.newPage();
   let browserErrorCount = 0;
   let consoleErrorCount = 0;
@@ -583,7 +618,7 @@ async function auditPage({ action, axeSource, context, expectedHash, language, p
   try {
     const startedAt = performance.now();
     const response = await page.goto(url.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    let durationMs = Math.round(performance.now() - startedAt);
+    const durationMs = Math.round(performance.now() - startedAt);
     const finalUrl = new URL(page.url());
     if (finalUrl.origin !== url.origin) {
       return {
@@ -616,35 +651,6 @@ async function auditPage({ action, axeSource, context, expectedHash, language, p
     }
     if (requiredSelector) {
       await page.locator(requiredSelector).first().waitFor({ state: "visible", timeout: 15_000 });
-    }
-    let actionStatus = null;
-    if (action) {
-      const actionResult = await action(page);
-      durationMs = Math.round(performance.now() - startedAt);
-      if (!actionResult?.ok) {
-        return {
-          ...createBlockedResult({
-            blocker: actionResult?.blocker ?? "fixture_action_failed",
-            language,
-            profile,
-            route,
-            status: actionResult?.status ?? 0,
-            surface,
-          }),
-          browserErrorCount,
-          consoleErrorCount,
-          durationMs,
-        };
-      }
-      actionStatus = actionResult.status;
-      if (new URL(page.url()).origin !== url.origin) {
-        return {
-          ...createBlockedResult({ blocker: "deployment_protection", language, profile, route, status: actionStatus ?? 0, surface }),
-          browserErrorCount,
-          consoleErrorCount,
-          durationMs,
-        };
-      }
     }
     await page.waitForTimeout(150);
     await page.addScriptTag({ content: axeSource });
@@ -692,7 +698,7 @@ async function auditPage({ action, axeSource, context, expectedHash, language, p
     });
     const seriousOrCritical = audit.violations.filter((item) => item.impact === "serious" || item.impact === "critical");
     const unresolvedSeriousOrCritical = audit.incomplete.filter((item) => item.impact === "serious" || item.impact === "critical");
-    const status = actionStatus ?? response?.status() ?? 0;
+    const status = response?.status() ?? 0;
     const passed =
       status >= 200 && status < 400 &&
       browserErrorCount === 0 &&
@@ -734,119 +740,15 @@ async function auditPage({ action, axeSource, context, expectedHash, language, p
   }
 }
 
-async function fillSafeQaControls(form) {
-  const controls = form.locator("input, select, textarea");
-  for (let index = 0; index < await controls.count(); index += 1) {
-    const control = controls.nth(index);
-    if (!await control.isVisible() || !await control.isEnabled()) continue;
-    const tag = await control.evaluate((element) => element.tagName.toLowerCase());
-    const type = (await control.getAttribute("type") ?? "text").toLowerCase();
-    if (["button", "hidden", "reset", "submit"].includes(type)) continue;
-    if (type === "file") throw new Error("qa_fixture_file_field_unsupported");
-    if (type === "checkbox") {
-      if (!await control.isChecked()) await control.check();
-      continue;
-    }
-    if (type === "radio") {
-      if (!await control.isChecked()) await control.check();
-      continue;
-    }
-    if (tag === "select") {
-      if (await control.locator("option").count() > 1) await control.selectOption({ index: 1 });
-      continue;
-    }
-    if (await control.getAttribute("readonly") !== null) continue;
-    let value = "codextest_preview_a11y";
-    if (type === "email") value = `codextest_preview_a11y_${Date.now()}@example.invalid`;
-    else if (type === "tel") value = "+43123456789";
-    else if (type === "url") value = "https://example.invalid/a11y";
-    else if (type === "date") value = "2026-08-23";
-    else if (type === "time") value = "12:00";
-    else if (type === "number" || type === "range") {
-      const minimum = Number(await control.getAttribute("min"));
-      const maximum = Number(await control.getAttribute("max"));
-      const candidate = Number.isFinite(minimum) ? minimum : 1;
-      value = String(Number.isFinite(maximum) ? Math.min(candidate, maximum) : candidate);
-    }
-    await control.fill(value);
-  }
-}
-
-async function submitPublicFormFixture(page) {
-  try {
-    const form = page.locator('form[data-novalure-runtime="form"]').first();
-    await form.waitFor({ state: "visible", timeout: 15_000 });
-    const fixturePage = new URL(page.url());
-    for (let step = 0; step < 20; step += 1) {
-      await fillSafeQaControls(form);
-      const next = form.locator('button[data-action="next"]:visible');
-      if (await next.count() > 0) {
-        await next.click();
-        continue;
-      }
-      const submit = form.locator('button[type="submit"]:visible').first();
-      if (await submit.count() !== 1) {
-        return { blocker: "public_form_submit_control_unavailable", ok: false, status: 0 };
-      }
-      const expectedOrigin = new URL(page.url()).origin;
-      const responsePromise = page.waitForResponse((response) => {
-        try {
-          const candidate = new URL(response.url());
-          return candidate.origin === expectedOrigin && candidate.pathname === "/api/forms/submissions";
-        } catch {
-          return false;
-        }
-      }, { timeout: 30_000 });
-      await submit.click();
-      const response = await responsePromise;
-      await page.waitForLoadState("domcontentloaded", { timeout: 30_000 }).catch(() => undefined);
-      const finalUrl = new URL(page.url());
-      const submitted = response.status() >= 200 && response.status() < 400 &&
-        finalUrl.origin === fixturePage.origin && finalUrl.pathname === fixturePage.pathname &&
-        finalUrl.searchParams.get("submitted") === "1";
-      if (!submitted) return { blocker: "public_form_submit_failed", ok: false, status: response.status() };
-      fixturePage.searchParams.set("submitted", "1");
-      const resultResponse = await page.goto(fixturePage.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      const ok = Boolean(resultResponse && resultResponse.status() >= 200 && resultResponse.status() < 400);
-      return { blocker: ok ? null : "public_form_submit_result_failed", ok, status: response.status() };
-    }
-    return { blocker: "public_form_step_limit", ok: false, status: 0 };
-  } catch {
-    return { blocker: "public_form_submit_failed", ok: false, status: 0 };
-  }
-}
-
-async function submitPublicFunnelFixture(page) {
-  try {
-    const form = page.locator('[data-funnel-mode="live"] form').first();
-    await form.waitFor({ state: "visible", timeout: 15_000 });
-    await fillSafeQaControls(form);
-    const expectedOrigin = new URL(page.url()).origin;
-    const responsePromise = page.waitForResponse((response) => {
-      try {
-        const candidate = new URL(response.url());
-        return candidate.origin === expectedOrigin && /^\/api\/funnels\/[a-zA-Z0-9_-]{1,128}\/submissions$/u.test(candidate.pathname);
-      } catch {
-        return false;
-      }
-    }, { timeout: 30_000 });
-    await form.locator('button[type="submit"]:visible').first().click();
-    const response = await responsePromise;
-    const success = form.locator(".text-emerald-800");
-    await success.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
-    const ok = response.status() >= 200 && response.status() < 300 && await success.count() > 0;
-    return { blocker: ok ? null : "public_funnel_submit_failed", ok, status: response.status() };
-  } catch {
-    return { blocker: "public_funnel_submit_failed", ok: false, status: 0 };
-  }
-}
-
 const args = parseArgs(process.argv.slice(2));
+const startedAt = new Date().toISOString();
 const baseUrl = args.get("base-url") ?? process.env.NOVALURE_QA_BASE_URL ?? "";
 const expectedHost = args.get("expected-host") ?? process.env.NOVALURE_QA_EXPECTED_HOST ?? "";
 assert.ok(baseUrl, "--base-url is required.");
 assert.ok(expectedHost, "--expected-host is required.");
 const base = requirePreviewTarget(baseUrl, expectedHost);
+const readOnlyMode = args.has("read-only");
+assert.ok(readOnlyMode, "--read-only is mandatory; the accessibility runner never writes public or CRM business data.");
 assert.ok(!(args.has("fixture-input-stdin") && args.has("share-url-stdin")), "Choose only one stdin input mode.");
 const stdinActionInputs = args.has("fixture-input-stdin") ? await readActionInputsFromStdin() : {};
 const legacyShareUrlInput = args.has("share-url-stdin") ? await readBoundedStdin(2_048) : "";
@@ -880,19 +782,57 @@ const releaseSurfaceManifestPath = path.resolve(
 );
 const releaseSurfaceManifest = JSON.parse(await readFile(releaseSurfaceManifestPath, "utf8"));
 const releaseSurfaceManifestVerified = validateReleaseSurfaceManifest(releaseSurfaceManifest);
-const expectedSha = (args.get("expected-sha") ?? "").trim();
-if (expectedSha) assert.match(expectedSha, /^[a-f0-9]{40}$/u, "--expected-sha must be a full Git SHA.");
+const expectedRuntimeIdentity = requirePreviewRuntimeIdentityExpectation({
+  databaseBranchId: args.get("expected-database-branch-id") ?? process.env.NOVALURE_QA_BRANCH_ID,
+  deploymentHost: expectedHost,
+  deploymentId: args.get("expected-deployment-id") ?? process.env.NOVALURE_QA_DEPLOYMENT_ID,
+  gitBranch: args.get("expected-git-branch") ?? process.env.NOVALURE_QA_EXPECTED_GIT_BRANCH,
+  gitSha: args.get("expected-sha") ?? process.env.NOVALURE_QA_EXPECTED_GIT_SHA,
+});
 
 const { chromium } = await loadPlaywright();
 const browserExecutable = args.get("browser-executable") ?? process.env.NOVALURE_BROWSER_EXECUTABLE;
 const browser = await chromium.launch({ executablePath: browserExecutable || undefined, headless: true });
 const axeSource = await readFile(path.resolve("node_modules", "axe-core", "axe.min.js"), "utf8");
 const results = [];
+const runtimeIdentityAttestations = [];
+const cleanup = {
+  browserClosed: false,
+  sessionLogoutAttempts: 0,
+  sessionLogoutFailures: 0,
+  sessionLogouts: 0,
+  sessionsAlreadyAbsent: 0,
+};
+const blockedUnsafeHttpWrites = [];
+let guardedContextCount = 0;
+
+async function guardContext(context, { allowAuthWrites, surface }) {
+  await installA11yReadOnlyRequestGuard(context, {
+    allowAuthWrites,
+    onBlocked: ({ category, method }) => {
+      blockedUnsafeHttpWrites.push({ category, method, surface });
+    },
+    previewOrigin: base.origin,
+  });
+  guardedContextCount += 1;
+}
+
+async function cleanupQaContext(context) {
+  cleanup.sessionLogoutAttempts += 1;
+  try {
+    const status = await logoutQaSession(context, base);
+    if (status === "LOGGED_OUT") cleanup.sessionLogouts += 1;
+    if (status === "NO_SESSION") cleanup.sessionsAlreadyAbsent += 1;
+  } catch {
+    cleanup.sessionLogoutFailures += 1;
+  }
+}
 
 async function runPublicMatrix() {
   for (const profile of publicProfiles) {
     const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
+      await guardContext(context, { allowAuthWrites: false, surface: "public" });
       await primePreviewAccess(context, shareUrl, base);
       for (const route of profile.routes) {
         for (const language of languages) {
@@ -917,9 +857,20 @@ async function runPublicFixtureMatrix() {
   for (const profile of publicFixtureProfiles) {
     const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
+      await guardContext(context, { allowAuthWrites: false, surface: "public-fixture" });
       await primePreviewAccess(context, shareUrl, base);
       for (const scenario of publicFixtureScenarios) {
         for (const language of languages) {
+          if (scenario.kind === "submit") {
+            results.push(createNotRunResult({
+              blocker: "read_only_public_write_prohibited",
+              language,
+              profile,
+              route: scenario.id,
+              surface: "public-fixture",
+            }));
+            continue;
+          }
           const fixtureUrl = actionTimeFixtures[scenario.fixture];
           if (!fixtureUrl) {
             results.push(createBlockedResult({
@@ -938,13 +889,7 @@ async function runPublicFixtureMatrix() {
             : scenario.fixture === "publicFunnel"
               ? '[data-funnel-mode="live"]'
               : '[aria-live="polite"]';
-          const action = scenario.kind !== "submit"
-            ? undefined
-            : scenario.fixture === "publicForm"
-              ? submitPublicFormFixture
-              : submitPublicFunnelFixture;
           results.push(await auditPage({
-            action,
             axeSource,
             context,
             language,
@@ -965,7 +910,7 @@ async function runPublicFixtureMatrix() {
 async function runMfaMatrix() {
   let credentials;
   try {
-    credentials = requireQaFixtureCredentials();
+    credentials = requireQaBrowserCredentials(process.env, { requireTotp: true });
   } catch {
     for (const profile of mfaProfiles) {
       for (const language of languages) {
@@ -985,6 +930,7 @@ async function runMfaMatrix() {
     for (const language of languages) {
       const context = await browser.newContext(createA11yBrowserContextOptions(profile));
       try {
+        await guardContext(context, { allowAuthWrites: true, surface: "auth-fixture" });
         await primePreviewAccess(context, shareUrl, base);
         const login = await beginQaFixtureLogin(context, base, credentials, language);
         if (!login.challenge) {
@@ -1012,7 +958,13 @@ async function runMfaMatrix() {
           results.push(auditResult);
           continue;
         }
-        const completion = await completeQaMfaChallenge(context, base, credentials, language);
+        const completion = await completeQaMfaChallenge(
+          context,
+          base,
+          credentials,
+          language,
+          login.challengeKind,
+        );
         const verification = completion.ok
           ? await verifyQaFixtureSession(context, base, credentials)
           : completion;
@@ -1026,8 +978,21 @@ async function runMfaMatrix() {
           });
           continue;
         }
+        try {
+          runtimeIdentityAttestations.push(await attestQaRuntimeIdentity(context, base, expectedRuntimeIdentity));
+        } catch {
+          results.push({
+            ...auditResult,
+            blocker: "runtime_identity_mismatch",
+            outcome: "BLOCKED",
+            passed: false,
+            status: 0,
+          });
+          continue;
+        }
         results.push(auditResult);
       } finally {
+        await cleanupQaContext(context);
         await context.close();
       }
     }
@@ -1037,7 +1002,7 @@ async function runMfaMatrix() {
 async function runAuthenticatedMatrix() {
   let credentials;
   try {
-    credentials = requireQaFixtureCredentials();
+    credentials = requireQaBrowserCredentials(process.env);
   } catch {
     for (const profile of authenticatedProfiles) {
       for (const route of profile.routes) {
@@ -1058,8 +1023,9 @@ async function runAuthenticatedMatrix() {
   for (const profile of authenticatedProfiles) {
     const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
+      await guardContext(context, { allowAuthWrites: true, surface: "authenticated" });
       await primePreviewAccess(context, shareUrl, base);
-      const authentication = await authenticateQaFixture(context, base, credentials);
+      const authentication = await authenticateQaFixture(context, base, credentials, expectedRuntimeIdentity);
       if (!authentication.ok) {
         for (const route of profile.routes) {
           for (const language of languages) {
@@ -1075,6 +1041,7 @@ async function runAuthenticatedMatrix() {
         }
         continue;
       }
+      runtimeIdentityAttestations.push(authentication.runtimeIdentity);
       for (const route of profile.routes) {
         const surfaceDefinition = authenticatedSurfaceById.get(route);
         assert.ok(surfaceDefinition, "Authenticated route is not in the fixed release matrix.");
@@ -1093,11 +1060,13 @@ async function runAuthenticatedMatrix() {
         }
       }
     } finally {
+      await cleanupQaContext(context);
       await context.close();
     }
   }
 }
 
+let executionBlocker = null;
 try {
   await runPublicMatrix();
   await runPublicFixtureMatrix();
@@ -1105,9 +1074,17 @@ try {
     await runMfaMatrix();
     await runAuthenticatedMatrix();
   }
+} catch {
+  executionBlocker = "browser_matrix_execution_failed";
 } finally {
-  await browser.close();
+  try {
+    await browser.close();
+    cleanup.browserClosed = true;
+  } catch {
+    executionBlocker ??= "browser_cleanup_failed";
+  }
 }
+if (blockedUnsafeHttpWrites.length > 0) executionBlocker ??= "unsafe_http_write_attempted";
 
 const publicResults = results.filter((item) => item.surface === "public");
 const publicFixtureResults = results.filter((item) => item.surface === "public-fixture");
@@ -1121,9 +1098,25 @@ const publicCoverageComplete = publicResults.length === publicExpected;
 const publicFixtureCoverageComplete = publicFixtureResults.length === publicFixtureExpected;
 const authenticatedCoverageComplete = !publicOnlyDiagnostic && authenticatedResults.length === authenticatedExpected;
 const authFixtureCoverageComplete = !publicOnlyDiagnostic && authFixtureResults.length === authFixtureExpected;
+const runtimeIdentityAttestationExpected = publicOnlyDiagnostic ? 0 : mfaProfiles.length * languages.length + authenticatedProfiles.length;
+const runtimeIdentityAttestationComplete =
+  !publicOnlyDiagnostic &&
+  runtimeIdentityAttestations.length === runtimeIdentityAttestationExpected;
+const cleanupComplete = cleanup.browserClosed && cleanup.sessionLogoutFailures === 0;
+const expectedGuardedContextCount =
+  publicProfiles.length +
+  publicFixtureProfiles.length +
+  (publicOnlyDiagnostic ? 0 : mfaProfiles.length * languages.length + authenticatedProfiles.length);
+const unsafeHttpWriteGuardComplete =
+  blockedUnsafeHttpWrites.length === 0 &&
+  guardedContextCount === expectedGuardedContextCount;
 const automatedSubsetPassed = results.length > 0 && results.every((item) => item.passed);
 const automatedTechnicalPassed =
   !publicOnlyDiagnostic &&
+  executionBlocker === null &&
+  cleanupComplete &&
+  unsafeHttpWriteGuardComplete &&
+  runtimeIdentityAttestationComplete &&
   releaseSurfaceManifestVerified &&
   publicCoverageComplete &&
   publicFixtureCoverageComplete &&
@@ -1136,6 +1129,7 @@ const releasePassed =
   acceptance.matrixSigned &&
   acceptance.manualAcceptancePassed &&
   acceptance.signaturesComplete;
+const endedAt = new Date().toISOString();
 const evidence = {
   acceptance: {
     contractComplete: acceptance.acceptanceContractComplete,
@@ -1150,6 +1144,10 @@ const evidence = {
   automatedSubsetPassed,
   automatedTechnicalPassed,
   browser: "chromium",
+  cleanup: {
+    ...cleanup,
+    complete: cleanupComplete,
+  },
   coverage: {
     authenticated: {
       complete: authenticatedCoverageComplete,
@@ -1172,27 +1170,79 @@ const evidence = {
       observed: publicFixtureResults.length,
     },
   },
+  endedAt,
   evidenceDigest: null,
-  expectedSha: expectedSha || null,
-  generatedAt: new Date().toISOString(),
+  executionBlocker,
+  expectedSha: expectedRuntimeIdentity.gitSha,
+  generatedAt: endedAt,
   matrix: {
     blocked: results.filter((item) => item.outcome === "BLOCKED").length,
+    blockedOrNotRun: results.filter((item) => item.outcome === "BLOCKED" || item.outcome === "NOT_RUN").length,
     failed: results.filter((item) => !item.passed).length,
+    notRun: results.filter((item) => item.outcome === "NOT_RUN").length,
     passed: results.filter((item) => item.passed).length,
     total: results.length,
   },
   mode: publicOnlyDiagnostic ? "PUBLIC_ONLY_DIAGNOSTIC" : "RELEASE_GATE",
+  productionMutationPerformed: false,
+  executionScope: {
+    authSideEffects: publicOnlyDiagnostic
+      ? "NOT_APPLICABLE"
+      : "LOGIN_CHALLENGE_MFA_VERIFICATION_AUDIT_AND_SESSION_WRITES_EXPECTED",
+    mfaEnrollment: "PROHIBITED",
+    publicAndCrmBusinessData: readOnlyMode && unsafeHttpWriteGuardComplete
+      ? "HTTP_WRITE_GUARD_ENFORCED"
+      : "BLOCKED_UNSAFE_HTTP_WRITE_ATTEMPT",
+    sessionCleanupRequired: !publicOnlyDiagnostic,
+  },
   releaseSurfaceManifestVerified,
   releasePassed,
   results,
-  schemaVersion: 3,
+  runtimeIdentity: {
+    attestationComplete: runtimeIdentityAttestationComplete,
+    attestationCount: runtimeIdentityAttestations.length,
+    expectedAttestationCount: runtimeIdentityAttestationExpected,
+    expected: expectedRuntimeIdentity,
+  },
+  schemaVersion: 4,
+  startedAt,
   targetHost: base.hostname,
+  unsafeHttpWriteGuard: {
+    allowedAuthWrites: [
+      "POST /api/auth/login",
+      "POST /api/auth/logout",
+      "POST /api/auth/session",
+    ],
+    blockedAttemptCount: blockedUnsafeHttpWrites.length,
+    blockedByMethod: Object.fromEntries(
+      [...new Set(blockedUnsafeHttpWrites.map((attempt) => attempt.method))]
+        .sort()
+        .map((method) => [method, blockedUnsafeHttpWrites.filter((attempt) => attempt.method === method).length]),
+    ),
+    blockedBySurface: Object.fromEntries(
+      [...new Set(blockedUnsafeHttpWrites.map((attempt) => attempt.surface))]
+        .sort()
+        .map((surface) => [surface, blockedUnsafeHttpWrites.filter((attempt) => attempt.surface === surface).length]),
+    ),
+    complete: unsafeHttpWriteGuardComplete,
+    expectedGuardedContextCount,
+    guardedContextCount,
+    serviceWorkersBlocked: true,
+  },
   wcagStandard: "WCAG 2.2 AA automated subset plus signed manual acceptance",
 };
 const canonical = `${JSON.stringify(evidence, null, 2)}\n`;
 evidence.evidenceDigest = sha256(canonical);
 await mkdir(outputDirectory, { recursive: true });
-await writeFile(path.join(outputDirectory, "a11y-browser-matrix.json"), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+const evidenceFileName = "a11y-browser-matrix.json";
+const evidenceSidecarFileName = "a11y-browser-matrix.json.sha256";
+const serializedEvidence = `${JSON.stringify(evidence, null, 2)}\n`;
+await writeFile(path.join(outputDirectory, evidenceFileName), serializedEvidence, "utf8");
+await writeFile(
+  path.join(outputDirectory, evidenceSidecarFileName),
+  `${sha256(serializedEvidence)}  ${evidenceFileName}\n`,
+  "utf8",
+);
 
 console.log(JSON.stringify({
   automatedTechnicalPassed: evidence.automatedTechnicalPassed,

@@ -9,7 +9,11 @@
     "product": null,
     "engineering": null,
     "security": null,
-    "operations": null
+    "operations": null,
+    "legal": null,
+    "privacy": null,
+    "sales-operations": null,
+    "data-compliance": null
   },
   "specialDecisions": {
     "unitBuyerDealRelationship": {
@@ -130,7 +134,7 @@
       "id": "api.admin",
       "function": "Internal administration API namespace",
       "routeApiJob": ["/api/admin/**"],
-      "currentTechnicalStatus": "ROLE_GUARDED_MIXED_OPERATION_SCOPE",
+      "currentTechnicalStatus": "ROLE_OR_PREVIEW_RUNTIME_GUARDED_MIXED_OPERATION_SCOPE",
       "desiredLaunchStatus": "INTERNAL",
       "launchScopeKey": null,
       "launchScopeNotApplicableReason": "The namespace contains several independently scoped internal operations; their mutation decisions are represented by dedicated launch-scope entries below.",
@@ -830,17 +834,17 @@
     },
     {
       "id": "scope.qa-batch-registration",
-      "function": "Atomic isolated Preview QA batch capability registration",
-      "routeApiJob": ["/api/admin/qa-batch-capability"],
-      "currentTechnicalStatus": "INTERNAL_ROLE_PERMISSION_AND_TARGET_GUARDED",
+      "function": "Atomic isolated Preview QA batch capability registration and zero-auth target identity preflight",
+      "routeApiJob": ["/api/admin/qa-batch-capability", "/api/admin/qa-runtime-identity"],
+      "currentTechnicalStatus": "INTERNAL_PREVIEW_DEPLOYMENT_DATABASE_RLS_AND_LEAST_PRIVILEGE_GUARDED",
       "desiredLaunchStatus": "INTERNAL",
       "launchScopeKey": "qaBatchRegistration",
       "launchScopeNotApplicableReason": null,
       "owners": { "technical": "UNASSIGNED", "product": "UNASSIGNED", "legal": "UNASSIGNED" },
       "tests": ["scripts/qa-batch-registration-tests.mjs", "scripts/qa-reset-safety-tests.mjs"],
-      "evidencePaths": ["docs/audit/2026-08-22/db-01-qa-reset-inventory.md"],
+      "evidencePaths": ["docs/audit/2026-08-22/db-01-qa-reset-inventory.md", "src/app/api/admin/qa-runtime-identity/route.ts"],
       "rollbackBehavior": "Do not reuse or reopen sealed batches; create a new isolated batch after fixing the cause.",
-      "inventorySelectors": [{ "category": "internalAdminSurfaces", "values": ["admin-qa-batch-capability"] }]
+      "inventorySelectors": [{ "category": "internalAdminSurfaces", "values": ["admin-qa-batch-capability", "admin-qa-runtime-identity"] }]
     },
     {
       "id": "scope.qa-batch-mutation",

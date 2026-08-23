@@ -3,7 +3,14 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import test from "node:test";
-import { createHttpClient } from "./qa-two-tenant-e2e.mjs";
+import {
+  bootstrapPreviewShareCookies,
+  createHttpClient,
+  matchesQaRuntimeCapability,
+  matchesQaRuntimeIdentity,
+  validatePreviewShareUrl,
+  verifyPreviewRuntimeIdentity,
+} from "./qa-two-tenant-e2e.mjs";
 import {
   assertEvidenceContainsNoSecrets,
   buildQaTwoTenantScenarioMatrix,
@@ -14,10 +21,12 @@ import {
   QA_WRITE_CONFIRMATION,
   qaLaunchSchemaArtifactNames,
   qaRequiredMigrationVersions,
+  qaRuntimeDatabaseTargetDigest,
   qaTenantConstraintNames,
   qaTenantRelationNames,
   qaTwoTenantRequiredEnvironment,
 } from "./lib/qa-two-tenant-matrix.mjs";
+import { validateProtectedPreviewWorkflowContract } from "./qa-protected-preview-workflow-contract.mjs";
 
 function uuid(value) {
   return `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -25,7 +34,9 @@ function uuid(value) {
 
 function validEnvironment() {
   const env = {
+    NOVALURE_PRODUCTION_BRANCH_ID: "br-production-main-1234",
     NOVALURE_PRODUCTION_DATABASE_HOST: "prod-pooler.example.neon.tech",
+    NOVALURE_PRODUCTION_PROJECT_ID: "production-project-1234",
     NOVALURE_PRODUCTION_ORIGIN: "https://www.novalure-crm.app",
     NOVALURE_QA_BASE_URL: "https://candidate.example.test",
     NOVALURE_QA_BRANCH_ID: "br-qa-isolated",
@@ -35,6 +46,8 @@ function validEnvironment() {
     NOVALURE_QA_DATABASE_URL: "postgresql://novalure_app:unit-test-only@qa-pooler.example.neon.tech/neondb?sslmode=require",
     NOVALURE_QA_E2E_CLEANUP_CONFIRM: QA_CLEANUP_CONFIRMATION,
     NOVALURE_QA_E2E_WRITE_CONFIRM: QA_WRITE_CONFIRMATION,
+    NOVALURE_QA_EXPECTED_DEPLOYMENT_ID: "dpl_1234567890abcdefghij",
+    NOVALURE_QA_EXPECTED_GIT_BRANCH: "codex/go-live-remediation-20260822",
     NOVALURE_QA_EXPECTED_GIT_SHA: "a".repeat(40),
     NOVALURE_QA_PASSWORD: "unit-test-password",
     NOVALURE_QA_PROJECT_ID: "neon-project-qa",
@@ -66,15 +79,38 @@ test("two-tenant config accepts only explicit, isolated fixture identities", () 
   assert.notEqual(config.tenants[0].workspaceId, config.tenants[1].workspaceId);
   assert.equal(config.tenants[0].actors.owner.productRole, "customer_owner");
   assert.equal(config.tenants[0].actors.customer.productRole, "viewer");
+  assert.equal(config.expectedGitBranch, "codex/go-live-remediation-20260822");
+});
+
+test("two-tenant config requires an explicit codex Preview branch", () => {
+  const missing = validEnvironment();
+  delete missing.NOVALURE_QA_EXPECTED_GIT_BRANCH;
+  assert.throws(() => parseQaTwoTenantConfig(missing), /NOVALURE_QA_EXPECTED_GIT_BRANCH/);
+
+  const production = validEnvironment();
+  production.NOVALURE_QA_EXPECTED_GIT_BRANCH = "main";
+  assert.throws(() => parseQaTwoTenantConfig(production), /explicit codex\/ Preview branch/);
+});
+
+test("two-tenant config requires an exact Vercel Preview deployment id", () => {
+  const missing = validEnvironment();
+  delete missing.NOVALURE_QA_EXPECTED_DEPLOYMENT_ID;
+  assert.throws(() => parseQaTwoTenantConfig(missing), /NOVALURE_QA_EXPECTED_DEPLOYMENT_ID/);
+
+  const invalid = validEnvironment();
+  invalid.NOVALURE_QA_EXPECTED_DEPLOYMENT_ID = "preview-latest";
+  assert.throws(() => parseQaTwoTenantConfig(invalid), /exact Vercel deployment id/);
 });
 
 test("two-tenant config rejects production origin and production database target", () => {
   const env = validEnvironment();
   env.NOVALURE_QA_BASE_URL = env.NOVALURE_PRODUCTION_ORIGIN;
   env.NOVALURE_PRODUCTION_DATABASE_HOST = env.NOVALURE_QA_DATABASE_HOST;
+  env.NOVALURE_PRODUCTION_PROJECT_ID = env.NOVALURE_QA_PROJECT_ID;
+  env.NOVALURE_PRODUCTION_BRANCH_ID = env.NOVALURE_QA_BRANCH_ID;
   assert.throws(
     () => parseQaTwoTenantConfig(env),
-    /must not equal NOVALURE_PRODUCTION_ORIGIN[\s\S]*must not equal NOVALURE_PRODUCTION_DATABASE_HOST/,
+    /must not equal NOVALURE_PRODUCTION_ORIGIN[\s\S]*project must not equal[\s\S]*branch must not equal[\s\S]*host must not equal/,
   );
 });
 
@@ -100,6 +136,14 @@ test("execution mode requires independent write and cleanup confirmations", () =
     new RegExp(`${QA_WRITE_CONFIRMATION}[\\s\\S]*${QA_CLEANUP_CONFIRMATION}`),
   );
   assert.doesNotThrow(() => parseQaTwoTenantConfig(env, { requireExecution: false }));
+});
+
+test("evidence output is constrained to the secret-free artifacts/qa tree", () => {
+  for (const value of ["../outside", "artifacts/qa/../../outside", "C:/outside", "artifacts/qa//nested"]) {
+    const env = validEnvironment();
+    env.NOVALURE_QA_EVIDENCE_DIR = value;
+    assert.throws(() => parseQaTwoTenantConfig(env), /must stay inside artifacts\/qa/);
+  }
 });
 
 test("scenario matrix covers both tenants, every role CRUD, isolation, persistence, concurrency and cleanup", () => {
@@ -250,8 +294,134 @@ test("required environment inventory includes every tenant role and safety targe
     "NOVALURE_QA_TENANT_B_ADMIN_EMAIL",
     "NOVALURE_QA_TENANT_B_MEMBER_PASSWORD",
     "NOVALURE_QA_TENANT_B_RESET_ACTOR_USER_ID",
+    "NOVALURE_QA_EXPECTED_DEPLOYMENT_ID",
+    "NOVALURE_QA_EXPECTED_GIT_BRANCH",
+    "NOVALURE_PRODUCTION_BRANCH_ID",
     "NOVALURE_PRODUCTION_DATABASE_HOST",
+    "NOVALURE_PRODUCTION_PROJECT_ID",
   ]) assert(required.has(name));
+});
+
+test("runtime capability is bound to exact deployment id, host, Git branch, database branch and SHA", () => {
+  const config = parseQaTwoTenantConfig(validEnvironment());
+  const valid = {
+    atomicRegistration: true,
+    databaseBranchId: config.database.branchId,
+    databaseLeastPrivilege: true,
+    databaseRlsActive: true,
+    databaseTargetDigest: qaRuntimeDatabaseTargetDigest(config.database),
+    deploymentId: config.expectedDeploymentId,
+    deploymentHost: new URL(config.baseUrl).hostname,
+    gitBranch: config.expectedGitBranch,
+    gitSha: config.expectedGitSha,
+    header: "x-novalure-qa-batch-id",
+    version: 2,
+  };
+  assert.equal(matchesQaRuntimeCapability(config, 200, valid), true);
+  for (const [field, value] of [
+    ["deploymentId", "dpl_abcdefghij1234567890"],
+    ["deploymentHost", "other-preview.vercel.app"],
+    ["gitBranch", "codex/other-candidate"],
+    ["databaseBranchId", "br-other-isolated"],
+    ["databaseLeastPrivilege", false],
+    ["databaseRlsActive", false],
+    ["databaseTargetDigest", `sha256:${"b".repeat(64)}`],
+    ["gitSha", "b".repeat(40)],
+  ]) {
+    assert.equal(matchesQaRuntimeCapability(config, 200, { ...valid, [field]: value }), false, field);
+  }
+  assert.equal(matchesQaRuntimeCapability(config, 503, valid), false);
+});
+
+test("runtime identity mismatch stops after the public identity request with zero auth requests", async () => {
+  const config = parseQaTwoTenantConfig(validEnvironment());
+  const validIdentity = {
+    databaseLeastPrivilege: true,
+    databaseRlsActive: true,
+    databaseTargetDigest: qaRuntimeDatabaseTargetDigest(config.database),
+    deploymentHost: new URL(config.baseUrl).hostname,
+    deploymentId: config.expectedDeploymentId,
+    gitBranch: config.expectedGitBranch,
+    gitSha: config.expectedGitSha,
+    version: 2,
+  };
+  assert.equal(matchesQaRuntimeIdentity(config, 200, validIdentity), true);
+
+  const calls = [];
+  const evidence = { requests: [], results: [] };
+  await assert.rejects(
+    verifyPreviewRuntimeIdentity(config, evidence, new Map(), async (input) => {
+      const url = new URL(input);
+      calls.push(url.pathname);
+      return Response.json({ ...validIdentity, deploymentId: "dpl_abcdefghij1234567890" });
+    }),
+    /runtime\.identity\.pre_auth failed/,
+  );
+  assert.deepEqual(calls, ["/api/admin/qa-runtime-identity"]);
+  assert.equal(calls.some((item) => item.startsWith("/api/auth/")), false);
+  assert.deepEqual(evidence.requests.map((item) => item.path), ["/api/admin/qa-runtime-identity"]);
+});
+
+test("runner orders public runtime identity and zero-session proof before login", () => {
+  const harness = fs.readFileSync(new URL("./qa-two-tenant-e2e.mjs", import.meta.url), "utf8");
+  const main = harness.slice(harness.indexOf("async function main()"));
+  assert.ok(main.indexOf("verifyPreviewRuntimeIdentity(config") < main.indexOf("verifyDatabasePreflight(config"));
+  assert.ok(main.indexOf("verifyDatabasePreflight(config") < main.indexOf("verifyHttpPreflight(config"));
+  assert.match(harness, /active_sessions_before_login/);
+  assert.match(harness, /session\.revoked_at is null[\s\S]*session\.expires_at > now\(\)/);
+});
+
+function validProtectedWorkflowEnvironment(overrides = {}) {
+  const env = validEnvironment();
+  env.NOVALURE_QA_BASE_URL = "https://candidate-preview.vercel.app";
+  return {
+    ...env,
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "novalure/novalure-crm",
+    GITHUB_SHA: "c".repeat(40),
+    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
+    NOVALURE_QA_VERCEL_SHARE_URL: "https://candidate-preview.vercel.app/?_vercel_share=workflow-share-token-1234567890",
+    NOVALURE_WORKFLOW_CANDIDATE_BRANCH: env.NOVALURE_QA_EXPECTED_GIT_BRANCH,
+    NOVALURE_WORKFLOW_CANDIDATE_SHA: env.NOVALURE_QA_EXPECTED_GIT_SHA,
+    NOVALURE_WORKFLOW_CONFIRMATION: "RUN_EXACT_PROTECTED_PREVIEW_QA",
+    NOVALURE_WORKFLOW_DEPLOYMENT_ID: env.NOVALURE_QA_EXPECTED_DEPLOYMENT_ID,
+    NOVALURE_WORKFLOW_ENVIRONMENT: "go-live-preview",
+    NOVALURE_WORKFLOW_NEON_BRANCH_ID: env.NOVALURE_QA_BRANCH_ID,
+    NOVALURE_WORKFLOW_NEON_PROJECT_ID: env.NOVALURE_QA_PROJECT_ID,
+    NOVALURE_WORKFLOW_PREVIEW_HOST: "candidate-preview.vercel.app",
+    NOVALURE_WORKFLOW_PREVIEW_ORIGIN: "https://candidate-preview.vercel.app",
+    NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA: "c".repeat(40),
+    NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT: "c".repeat(40),
+    ...overrides,
+  };
+}
+
+test("manual protected-Preview workflow contract binds every dispatched identity", () => {
+  const valid = validProtectedWorkflowEnvironment();
+  assert.equal(validateProtectedPreviewWorkflowContract(valid).candidateSha, valid.NOVALURE_QA_EXPECTED_GIT_SHA);
+  for (const mismatch of [
+    { GITHUB_EVENT_NAME: "push" },
+    { NOVALURE_WORKFLOW_ENVIRONMENT: "production" },
+    { GITHUB_REF: "refs/heads/codex/untrusted" },
+    { GITHUB_SHA: "b".repeat(40) },
+    { NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA_INPUT: "b".repeat(40) },
+    { NOVALURE_WORKFLOW_CANDIDATE_BRANCH: "codex/other-preview" },
+    { NOVALURE_WORKFLOW_DEPLOYMENT_ID: "dpl_abcdefghij1234567890" },
+    { NOVALURE_WORKFLOW_NEON_PROJECT_ID: "different-preview-project" },
+    { NOVALURE_WORKFLOW_NEON_BRANCH_ID: "br-different-preview" },
+    { NOVALURE_WORKFLOW_PREVIEW_HOST: "other-preview.vercel.app" },
+    { NOVALURE_QA_VERCEL_SHARE_URL: "https://vercel.com/share/candidate?_vercel_share=workflow-share-token-1234567890" },
+  ]) {
+    assert.throws(() => validateProtectedPreviewWorkflowContract({ ...valid, ...mismatch }));
+  }
+
+  const productionOrigin = validProtectedWorkflowEnvironment({
+    NOVALURE_QA_BASE_URL: "https://www.novalure-crm.app",
+    NOVALURE_WORKFLOW_PREVIEW_HOST: "www.novalure-crm.app",
+    NOVALURE_WORKFLOW_PREVIEW_ORIGIN: "https://www.novalure-crm.app",
+  });
+  assert.throws(() => validateProtectedPreviewWorkflowContract(productionOrigin), /Vercel deployment|Production/);
 });
 
 test("plan mode is offline, deterministic and contains no credential values", () => {
@@ -265,6 +435,112 @@ test("plan mode is offline, deterministic and contains no credential values", ()
   assert.match(result.stdout, /TWO_TENANT_QA_MATRIX/);
   assert.match(result.stdout, /No network or writes performed/);
   assert.doesNotMatch(result.stdout, /unit-test-password|postgresql:\/\//);
+});
+
+test("Preview share URL validator is deployment-bound, HTTPS-only and parameter-exact", () => {
+  const baseUrl = "https://candidate.example.test";
+  const shareToken = "A_share-token-1234567890";
+  assert.equal(
+    validatePreviewShareUrl(`${baseUrl}/?_vercel_share=${shareToken}`, baseUrl).origin,
+    baseUrl,
+  );
+  assert.equal(
+    validatePreviewShareUrl(`https://vercel.com/share/candidate?_vercel_share=${shareToken}`, baseUrl).origin,
+    "https://vercel.com",
+  );
+
+  for (const invalid of [
+    `http://candidate.example.test/?_vercel_share=${shareToken}`,
+    `https://other.example.test/?_vercel_share=${shareToken}`,
+    `https://user:password@candidate.example.test/?_vercel_share=${shareToken}`,
+    `https://candidate.example.test/private?_vercel_share=${shareToken}`,
+    `https://candidate.example.test/?_vercel_share=${shareToken}&extra=1`,
+    `https://candidate.example.test/?_vercel_share=${shareToken}&_vercel_share=${shareToken}`,
+    `https://candidate.example.test/?_vercel_share=short`,
+    `https://candidate.example.test/?_vercel_share=${shareToken}#fragment`,
+  ]) {
+    assert.throws(() => validatePreviewShareUrl(invalid, baseUrl), /Preview|Vercel|share/);
+  }
+  assert.throws(
+    () => validatePreviewShareUrl(`${baseUrl}/?_vercel_share=${shareToken}`, `${baseUrl}/path?unsafe=1`),
+    /base URL must be an HTTPS origin/,
+  );
+});
+
+test("Preview share bootstrap keeps Vercel cookies origin-scoped and discards application cookies", async () => {
+  const baseUrl = "https://candidate.example.test";
+  const shareToken = "B_share-token-1234567890";
+  const shareUrl = `https://vercel.com/share/candidate?_vercel_share=${shareToken}`;
+  const calls = [];
+  const redirect = (location, cookies = []) => {
+    const headers = new Headers({ location });
+    for (const cookie of cookies) headers.append("set-cookie", cookie);
+    return new Response(null, { headers, status: 302 });
+  };
+  const fetchImplementation = async (input, init = {}) => {
+    const url = new URL(input);
+    calls.push({
+      cookie: new Headers(init.headers ?? {}).get("cookie"),
+      origin: url.origin,
+      path: url.pathname,
+      redirect: init.redirect,
+    });
+    if (calls.length === 1) {
+      return redirect(`${baseUrl}/?_vercel_share=${shareToken}`, [
+        "_vercel_landing=landing-cookie; Path=/; Secure; HttpOnly",
+        "novalure_session=must-not-cross; Path=/; Secure; HttpOnly",
+      ]);
+    }
+    if (calls.length === 2) {
+      return redirect("/", [
+        "_vercel_jwt=preview.jwt.value; Path=/; Secure; HttpOnly; SameSite=Lax",
+        "novalure_session=must-not-bootstrap; Path=/; Secure; HttpOnly",
+      ]);
+    }
+    return new Response("ok", { status: 200 });
+  };
+
+  const previewCookies = await bootstrapPreviewShareCookies(baseUrl, shareUrl, fetchImplementation);
+  assert.deepEqual(calls, [
+    { cookie: null, origin: "https://vercel.com", path: "/share/candidate", redirect: "manual" },
+    { cookie: null, origin: baseUrl, path: "/", redirect: "manual" },
+    { cookie: "_vercel_jwt=preview.jwt.value", origin: baseUrl, path: "/", redirect: "manual" },
+  ]);
+  assert.deepEqual([...previewCookies.entries()], [["_vercel_jwt", "preview.jwt.value"]]);
+});
+
+test("Preview share bootstrap rejects cross-origin redirects without exposing the share token", async () => {
+  const baseUrl = "https://candidate.example.test";
+  const shareToken = "C_share-token-1234567890";
+  const shareUrl = `${baseUrl}/?_vercel_share=${shareToken}`;
+  await assert.rejects(
+    bootstrapPreviewShareCookies(baseUrl, shareUrl, async () => new Response(null, {
+      headers: { location: "https://attacker.example.test/collect" },
+      status: 302,
+    })),
+    (error) => {
+      assert.match(error.message, /Cross-origin/);
+      assert.doesNotMatch(error.message, new RegExp(shareToken));
+      return true;
+    },
+  );
+});
+
+test("share stdin is rejected before plan or config validation and its value is never printed", () => {
+  const script = fileURLToPath(new URL("./qa-two-tenant-e2e.mjs", import.meta.url));
+  const shareToken = "D_share-token-1234567890";
+  for (const mode of ["--plan", "--validate-config"]) {
+    const result = spawnSync(process.execPath, [script, mode, "--share-url-stdin"], {
+      encoding: "utf8",
+      env: {},
+      input: `https://candidate.example.test/?_vercel_share=${shareToken}\n`,
+      timeout: 30_000,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /allowed only in preflight or execute mode/);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(shareToken));
+    assert.doesNotMatch(result.stderr, /Missing environment variables/);
+  }
 });
 
 test("login challenge continuation forwards and rotates the stored challenge cookie", async (context) => {
@@ -319,6 +595,7 @@ test("login challenge continuation forwards and rotates the stored challenge coo
     },
     { batchId: uuid(902), workspaceId },
     { requests: [] },
+    new Map([["_vercel_jwt", "preview-protection"]]),
   );
   await client.login();
 
@@ -329,10 +606,10 @@ test("login challenge continuation forwards and rotates the stored challenge coo
     ["POST", "/api/auth/login"],
     ["GET", "/api/auth/session"],
   ]);
-  assert.equal(calls[0].cookie, null);
-  assert.equal(calls[1].cookie, "novalure_login_challenge=challenge-one");
-  assert.equal(calls[2].cookie, "novalure_login_challenge=challenge-two");
-  assert.equal(calls[3].cookie, "novalure_session=session-one");
+  assert.equal(calls[0].cookie, "_vercel_jwt=preview-protection");
+  assert.equal(calls[1].cookie, "_vercel_jwt=preview-protection; novalure_login_challenge=challenge-one");
+  assert.equal(calls[2].cookie, "_vercel_jwt=preview-protection; novalure_login_challenge=challenge-two");
+  assert.equal(calls[3].cookie, "_vercel_jwt=preview-protection; novalure_session=session-one");
   assert.equal(new URLSearchParams(calls[1].body).get("flow"), "challenge");
   assert.equal(new URLSearchParams(calls[2].body).get("flow"), "challenge");
 });
@@ -378,10 +655,24 @@ test("legacy unclean E2E entry points are replaced by the batch-safe harness", (
   const matrixContract = fs.readFileSync(new URL("./lib/qa-two-tenant-matrix.mjs", import.meta.url), "utf8");
   const workflow = fs.readFileSync(new URL("../.github/workflows/livegang-e2e.yml", import.meta.url), "utf8");
   const localQaCommand = "node --env-file-if-exists=.env.qa-two-tenant.local scripts/qa-two-tenant-e2e.mjs";
-  assert.equal(packageJson.scripts["test:e2e"], `${localQaCommand} --execute`);
-  assert.equal(packageJson.scripts["qa:livegang:api"], `${localQaCommand} --execute`);
-  assert.match(workflow, /run:\s+npm run test:e2e/);
+  assert.equal(packageJson.scripts["test:e2e"], `${localQaCommand} --execute --share-url-stdin`);
+  assert.equal(packageJson.scripts["qa:livegang:api"], `${localQaCommand} --execute --share-url-stdin`);
+  assert.match(workflow, /node scripts\/qa-protected-preview-action-runner\.mjs/u);
   assert.doesNotMatch(workflow, /qa:livegang:reset/);
+  assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:/mu);
+  assert.match(workflow, /environment:\s+go-live-preview/u);
+  assert.match(workflow, /ref:\s+\$\{\{ inputs\.trusted_harness_sha \}\}/u);
+  assert.match(workflow, /GITHUB_WORKFLOW_REF[\s\S]*refs\/heads\/main/u);
+  assert.match(workflow, /NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA:\s+\$\{\{ vars\.NOVALURE_QA_TRUSTED_HARNESS_SHA \}\}/u);
+  assert.match(workflow, /NOVALURE_QA_TWO_TENANT_ENV_B64:\s+\$\{\{ secrets\.NOVALURE_QA_TWO_TENANT_ENV_B64 \}\}/u);
+  assert.match(workflow, /NOVALURE_QA_VERCEL_SHARE_URL:\s+\$\{\{ secrets\.NOVALURE_QA_VERCEL_SHARE_URL \}\}/u);
+  assert.doesNotMatch(workflow, /base64\s+--decode|--env-file|GITHUB_ENV|\.env\.qa-two-tenant/u);
+  assert.match(workflow, /Verify the exact secret-free upload allowlist/u);
+  assert.match(workflow, /find "\$EVIDENCE_ROOT"[^\n]+-type f -links 1/u);
+  assert.match(workflow, /if-no-files-found: error/u);
+  assert.doesNotMatch(workflow, /path:\s*artifacts\/qa/u);
+  assert.doesNotMatch(workflow, /127\.0\.0\.1|localhost|npm run start|pull_request:|push:/u);
+  assert.doesNotMatch(workflow, /set -x|printenv|\benv\s*>/u);
   for (const [scriptName, mode] of [
     ["qa:two-tenant:plan", "--plan"],
     ["qa:two-tenant:validate", "--validate-config"],
@@ -392,9 +683,19 @@ test("legacy unclean E2E entry points are replaced by the batch-safe harness", (
   }
   assert.match(legacy, /Legacy QA Livegang API is disabled/);
   assert.match(legacy, /process\.exit\(1\)/);
-  assert.match(harness, /capability\.json\?\.atomicRegistration === true/);
-  assert.match(harness, /capability\.json\?\.gitSha === config\.expectedGitSha/);
+  assert.match(harness, /capability\?\.atomicRegistration === true/);
+  assert.match(harness, /identity\?\.deploymentHost === expectedDeploymentHost/);
+  assert.match(harness, /identity\?\.gitBranch === config\.expectedGitBranch/);
+  assert.match(harness, /capability\?\.databaseBranchId === config\.database\.branchId/);
+  assert.match(harness, /identity\?\.gitSha === config\.expectedGitSha/);
+  assert.match(harness, /identity\?\.databaseTargetDigest === qaRuntimeDatabaseTargetDigest\(config\.database\)/);
+  assert.match(harness, /identity\?\.databaseRlsActive === true/);
+  assert.match(harness, /identity\?\.databaseLeastPrivilege === true/);
+  assert.match(harness, /\/api\/admin\/qa-runtime-identity/);
   assert.match(harness, /x-novalure-qa-batch-registration/);
+  assert.match(harness, /--share-url-stdin/);
+  assert.match(harness, /bootstrapPreviewShareCookies/);
+  assert.doesNotMatch(harness, /x-vercel-protection-bypass/i);
   assert.match(harness, /qaRequiredMigrationVersions/);
   assert.match(harness, /evaluateQaTenantRelationGate/);
   assert.match(matrixContract, /073_launch_tenant_relation_guards/);

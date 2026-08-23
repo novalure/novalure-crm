@@ -2914,6 +2914,7 @@ export async function archiveContactRecord(input: {
 
 export async function upsertFunnelDraft(input: {
   funnel: Partial<Funnel> & Record<string, unknown>;
+  qaBatchId?: string;
   session: AppSession;
   steps: Array<Partial<FunnelStep> & Record<string, unknown>>;
 }): Promise<RepositoryWriteResult<{ funnel: Funnel; stepIds: string[] }>> {
@@ -2928,6 +2929,12 @@ export async function upsertFunnelDraft(input: {
   const persisted = await withTenantTransaction(
     { actorId: input.session.userId, workspaceId: input.session.workspaceId },
     async (transaction) => {
+      if (input.qaBatchId) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: input.qaBatchId,
+          workspaceId: input.session.workspaceId,
+        });
+      }
       if (requestedFunnelId) {
         await transaction.execute(
           "select pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text, 0))",
@@ -2983,6 +2990,17 @@ export async function upsertFunnelDraft(input: {
       }
 
       if (existing) {
+        if (input.qaBatchId) {
+          await assertQaBatchOwnsObject(transaction, {
+            batchId: input.qaBatchId,
+            object: { id: existing.id, type: "funnels" },
+            workspaceId: input.session.workspaceId,
+          });
+          return {
+            ok: false as const,
+            reason: "QA batch Funnel updates require a fresh fixture to preserve exact reset-ledger ownership",
+          };
+        }
         const expectedBlueprintRevision = input.funnel.blueprintRevision;
         const currentBlueprintRevision = Number(existing.blueprintRevision);
         if (
@@ -3287,14 +3305,36 @@ export async function upsertFunnelDraft(input: {
         }),
       ]);
 
-      return { existingId: existing?.id ?? null, ok: true as const, row, stepIds };
+      const qaBatchRegistration = input.qaBatchId
+        ? await registerQaBatchObjects(transaction, {
+            actorId: input.session.userId,
+            batchId: input.qaBatchId,
+            objects: [
+              { id: row.id, type: "funnels" },
+              ...stepIds.map((id) => ({ id, type: "funnel_steps" as const })),
+            ],
+            workspaceId: input.session.workspaceId,
+          })
+        : undefined;
+
+      return {
+        existingId: existing?.id ?? null,
+        ok: true as const,
+        qaBatchRegistration,
+        row,
+        stepIds,
+      };
     },
   );
 
   if (!persisted.ok) return { persisted: false, reason: persisted.reason };
-  const { row, stepIds } = persisted;
+  const { qaBatchRegistration, row, stepIds } = persisted;
 
-  return { data: { funnel: toFunnel(row), stepIds }, persisted: true };
+  return {
+    data: { funnel: toFunnel(row), stepIds },
+    persisted: true,
+    qaBatchRegistration,
+  };
 }
 
 export async function updateNewsletterCampaignStatus(input: {

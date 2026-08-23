@@ -16,6 +16,7 @@ import {
   parseQaTwoTenantConfig,
   qaLaunchSchemaArtifactNames,
   qaRequiredMigrationVersions,
+  qaRuntimeDatabaseTargetDigest,
   qaTenantConstraintNames,
   qaTwoTenantRequiredEnvironment,
 } from "./lib/qa-two-tenant-matrix.mjs";
@@ -23,6 +24,7 @@ import {
 const registrationHeader = "x-novalure-qa-batch-registration";
 const batchHeader = "x-novalure-qa-batch-id";
 const capabilityPath = "/api/admin/qa-batch-capability";
+const runtimeIdentityPath = "/api/admin/qa-runtime-identity";
 const allowedRegistrationStates = new Set(["committed", "already-registered"]);
 const allowedChallengeDiagnostics = new Set(["mfa_enrollment", "mfa_verification", "workspace_selection"]);
 const allowedLoginErrorDiagnostics = new Set([
@@ -31,6 +33,11 @@ const allowedLoginErrorDiagnostics = new Set([
   "invalid_mfa",
   "login_not_configured",
 ]);
+const vercelShareLandingOrigin = "https://vercel.com";
+const vercelShareTokenPattern = /^[a-zA-Z0-9_-]{20,512}$/u;
+const vercelCookieNamePattern = /^_vercel_[a-zA-Z0-9_-]{1,64}$/u;
+const vercelCookieValuePattern = /^[a-zA-Z0-9._~-]{1,4096}$/u;
+const maximumShareRedirects = 5;
 
 async function loadRequiredMigrationChecksums() {
   const entries = await Promise.all(qaRequiredMigrationVersions.map(async (version) => {
@@ -49,21 +56,202 @@ function usage() {
     "  --validate-config  Validate identifiers/targets without network or writes",
     "  --preflight        Read-only DB/HTTP/auth/cross-tenant checks; no CRM object mutations",
     "  --execute          Run CRM writes only after atomic batch capability preflight, then reset in finally",
+    "  --share-url-stdin  Bootstrap deployment-bound Vercel Preview access from a URL read only from stdin",
     "",
     "The harness never accepts a production origin and never prints credentials or raw response bodies.",
   ].join("\n"));
 }
 
-function modeFromArgs(argv) {
+function optionsFromArgs(argv) {
+  const allowed = new Set(["--execute", "--help", "--plan", "--preflight", "--share-url-stdin", "--validate-config", "-h"]);
+  const seen = new Set();
+  for (const argument of argv) {
+    if (!allowed.has(argument)) throw new Error("Unexpected QA harness argument.");
+    if (seen.has(argument)) throw new Error("Duplicate QA harness argument.");
+    seen.add(argument);
+  }
   const modes = ["--plan", "--validate-config", "--preflight", "--execute"].filter((flag) => argv.includes(flag));
-  if (argv.includes("--help") || argv.includes("-h")) return "help";
+  const help = argv.includes("--help") || argv.includes("-h");
+  if (help && (modes.length || argv.includes("--share-url-stdin"))) {
+    throw new Error("Help cannot be combined with a harness mode or Preview access input.");
+  }
+  if (help) return { mode: "help", shareUrlStdin: false };
   if (modes.length > 1) throw new Error("Choose exactly one harness mode.");
-  return modes[0]?.slice(2) ?? "plan";
+  const mode = modes[0]?.slice(2) ?? "plan";
+  const shareUrlStdin = argv.includes("--share-url-stdin");
+  if (shareUrlStdin && !["execute", "preflight"].includes(mode)) {
+    throw new Error("Preview share input is allowed only in preflight or execute mode.");
+  }
+  return { mode, shareUrlStdin };
 }
 
 function splitSetCookie(header) {
   if (!header) return [];
   return header.split(/,(?=[^;,]+=)/g);
+}
+
+async function readBoundedStdin(maximumBytes) {
+  let value = "";
+  for await (const chunk of process.stdin) {
+    value += chunk;
+    if (Buffer.byteLength(value, "utf8") > maximumBytes) {
+      throw new Error("Preview share input is too large.");
+    }
+  }
+  return value.trim();
+}
+
+export function validatePreviewShareUrl(value, baseUrl) {
+  let base;
+  let share;
+  try {
+    base = new URL(baseUrl);
+    share = new URL(value);
+  } catch {
+    throw new Error("Preview share URL is invalid.");
+  }
+  if (
+    base.protocol !== "https:" ||
+    base.pathname !== "/" ||
+    base.search ||
+    base.hash ||
+    base.username ||
+    base.password
+  ) {
+    throw new Error("Preview base URL must be an HTTPS origin.");
+  }
+  if (share.protocol !== "https:" || share.username || share.password || share.hash) {
+    throw new Error("Preview share URL must use HTTPS without credentials or a fragment.");
+  }
+  if (share.origin !== base.origin && share.origin !== vercelShareLandingOrigin) {
+    throw new Error("Preview share URL must target the exact Preview origin or Vercel share landing.");
+  }
+  if (share.origin === base.origin && share.pathname !== "/") {
+    throw new Error("Preview-origin share URL must target the deployment root.");
+  }
+  if (share.origin === vercelShareLandingOrigin && (
+    share.pathname.length > 1_024 ||
+    share.pathname.startsWith("//") ||
+    /[\\\u0000-\u001f\u007f]/u.test(share.pathname)
+  )) {
+    throw new Error("Vercel share landing path is invalid.");
+  }
+  const queryEntries = [...share.searchParams.entries()];
+  if (queryEntries.length !== 1 || queryEntries[0][0] !== "_vercel_share") {
+    throw new Error("Only one Vercel share parameter is allowed.");
+  }
+  if (!vercelShareTokenPattern.test(queryEntries[0][1])) {
+    throw new Error("Preview share token is invalid.");
+  }
+  return share;
+}
+
+function cookieHeader(cookies) {
+  return [...cookies.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
+}
+
+function requestCookieHeader(cookies, includeApplicationCookies) {
+  return cookieHeader(new Map(
+    [...cookies.entries()].filter(([name]) => includeApplicationCookies || vercelCookieNamePattern.test(name)),
+  ));
+}
+
+function storeSecureVercelCookies(headers, cookies) {
+  const values = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : splitSetCookie(headers.get("set-cookie"));
+  for (const value of values) {
+    const parts = value.split(";").map((part) => part.trim());
+    const separator = parts[0].indexOf("=");
+    if (separator < 1) continue;
+    const name = parts[0].slice(0, separator).trim();
+    if (!vercelCookieNamePattern.test(name)) continue;
+    if (!parts.slice(1).some((attribute) => attribute.toLowerCase() === "secure")) {
+      throw new Error("Vercel Preview access cookie is not Secure.");
+    }
+    const cookieValue = parts[0].slice(separator + 1).trim();
+    const expired = parts.slice(1).some((attribute) => /^max-age=0$/iu.test(attribute));
+    if (!cookieValue || expired) {
+      cookies.delete(name);
+      continue;
+    }
+    if (!vercelCookieValuePattern.test(cookieValue)) {
+      throw new Error("Vercel Preview access cookie is invalid.");
+    }
+    cookies.set(name, cookieValue);
+  }
+}
+
+function assertSafeShareRedirect(value, currentUrl, baseOrigin, reachedBaseOrigin, expectedShareToken) {
+  let next;
+  try {
+    next = new URL(value, currentUrl);
+  } catch {
+    throw new Error("Vercel Preview access redirect is invalid.");
+  }
+  if (next.protocol !== "https:" || next.username || next.password || next.hash) {
+    throw new Error("Vercel Preview access redirect is unsafe.");
+  }
+  if (next.origin !== baseOrigin && next.origin !== vercelShareLandingOrigin) {
+    throw new Error("Cross-origin Vercel Preview access redirect rejected.");
+  }
+  if (reachedBaseOrigin && next.origin !== baseOrigin) {
+    throw new Error("Vercel Preview access redirect cannot leave the Preview origin.");
+  }
+  if (next.origin === baseOrigin && next.pathname !== "/") {
+    throw new Error("Vercel Preview access redirect must target the deployment root.");
+  }
+  if (next.origin === vercelShareLandingOrigin && (
+    next.pathname.length > 1_024 ||
+    next.pathname.startsWith("//") ||
+    /[\\\u0000-\u001f\u007f]/u.test(next.pathname)
+  )) {
+    throw new Error("Vercel Preview access redirect path is invalid.");
+  }
+  const queryEntries = [...next.searchParams.entries()];
+  if (queryEntries.length > 0 && (
+    queryEntries.length !== 1 ||
+    queryEntries[0][0] !== "_vercel_share" ||
+    queryEntries[0][1] !== expectedShareToken
+  )) {
+    throw new Error("Vercel Preview access redirect query is invalid.");
+  }
+  return next;
+}
+
+export async function bootstrapPreviewShareCookies(baseUrl, shareUrl, fetchImplementation = globalThis.fetch) {
+  if (typeof fetchImplementation !== "function") throw new Error("Fetch is unavailable for Preview access bootstrap.");
+  const baseOrigin = new URL(baseUrl).origin;
+  let currentUrl = validatePreviewShareUrl(shareUrl, baseUrl);
+  const expectedShareToken = currentUrl.searchParams.get("_vercel_share");
+  let reachedBaseOrigin = currentUrl.origin === baseOrigin;
+  const cookiesByOrigin = new Map();
+
+  for (let redirectCount = 0; redirectCount <= maximumShareRedirects; redirectCount += 1) {
+    const originCookies = cookiesByOrigin.get(currentUrl.origin) ?? new Map();
+    cookiesByOrigin.set(currentUrl.origin, originCookies);
+    const headers = new Headers({ accept: "text/html,application/xhtml+xml" });
+    if (originCookies.size) headers.set("cookie", cookieHeader(originCookies));
+    const response = await fetchImplementation(currentUrl, { headers, method: "GET", redirect: "manual" });
+    storeSecureVercelCookies(response.headers, originCookies);
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      if (redirectCount === maximumShareRedirects) {
+        throw new Error("Vercel Preview access redirect limit exceeded.");
+      }
+      const location = response.headers.get("location");
+      if (!location) throw new Error("Vercel Preview access redirect is missing a destination.");
+      currentUrl = assertSafeShareRedirect(location, currentUrl, baseOrigin, reachedBaseOrigin, expectedShareToken);
+      reachedBaseOrigin ||= currentUrl.origin === baseOrigin;
+      continue;
+    }
+
+    if (currentUrl.origin !== baseOrigin) {
+      throw new Error("Vercel Preview access did not finish on the exact Preview origin.");
+    }
+    const previewCookies = cookiesByOrigin.get(baseOrigin) ?? new Map();
+    if (!previewCookies.size) throw new Error("Vercel Preview access cookie was not established.");
+    return new Map(previewCookies);
+  }
+  throw new Error("Vercel Preview access bootstrap failed.");
 }
 
 function decodeBase32(value) {
@@ -100,8 +288,8 @@ function createTotpCode(secret, now = Date.now()) {
   return String(binary % 1_000_000).padStart(6, "0");
 }
 
-export function createHttpClient(config, actor, tenant, evidence) {
-  const cookies = new Map();
+export function createHttpClient(config, actor, tenant, evidence, previewCookies = new Map()) {
+  const cookies = new Map(previewCookies);
   const baseUrl = config.baseUrl;
   const origin = new URL(baseUrl).origin;
 
@@ -118,16 +306,13 @@ export function createHttpClient(config, actor, tenant, evidence) {
     }
   }
 
-  function cookieHeader() {
-    return [...cookies.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
-  }
-
   async function request(requestPath, options = {}) {
     const url = new URL(requestPath, baseUrl);
     if (url.origin !== origin) throw new Error("Cross-origin request rejected by QA harness.");
     const method = (options.method ?? "GET").toUpperCase();
     const headers = new Headers(options.headers ?? {});
-    if (options.auth !== false && cookies.size) headers.set("cookie", cookieHeader());
+    const requestCookies = requestCookieHeader(cookies, options.auth !== false);
+    if (requestCookies) headers.set("cookie", requestCookies);
     if (options.batchMutation) headers.set(batchHeader, tenant.batchId);
     if (["DELETE", "PATCH", "POST", "PUT"].includes(method) && options.auth !== false && cookies.has("novalure_session")) {
       const csrfUrl = new URL("/api/auth/csrf", baseUrl);
@@ -136,7 +321,7 @@ export function createHttpClient(config, actor, tenant, evidence) {
       const csrfResponse = await fetch(csrfUrl, {
         headers: {
           accept: "application/json",
-          cookie: cookieHeader(),
+          cookie: cookieHeader(cookies),
           origin,
           "sec-fetch-site": "same-origin",
         },
@@ -173,7 +358,9 @@ export function createHttpClient(config, actor, tenant, evidence) {
   }
 
   async function login() {
-    cookies.clear();
+    for (const name of cookies.keys()) {
+      if (!vercelCookieNamePattern.test(name)) cookies.delete(name);
+    }
     const body = new URLSearchParams({ email: actor.email, password: actor.password, returnTo: "/" });
     let result = await request("/api/auth/login", {
       auth: false,
@@ -249,15 +436,22 @@ export function createHttpClient(config, actor, tenant, evidence) {
   return { assertAtomicRegistration, login, logout, request };
 }
 
-function createPublicClient(config, evidence) {
+function createPublicClient(
+  config,
+  evidence,
+  previewCookies = new Map(),
+  fetchImplementation = globalThis.fetch,
+) {
+  if (typeof fetchImplementation !== "function") throw new Error("Fetch is unavailable for QA runtime verification.");
   return {
     async request(requestPath, options = {}) {
       const url = new URL(requestPath, config.baseUrl);
       if (url.origin !== config.baseUrl) throw new Error("Cross-origin public request rejected.");
       const method = (options.method ?? "GET").toUpperCase();
       const headers = new Headers(options.headers ?? {});
+      if (previewCookies.size) headers.set("cookie", cookieHeader(previewCookies));
       const startedAt = Date.now();
-      const response = await fetch(url, {
+      const response = await fetchImplementation(url, {
         body: options.json === undefined ? undefined : JSON.stringify(options.json),
         headers: options.json === undefined ? headers : new Headers({ ...Object.fromEntries(headers), "content-type": "application/json" }),
         method,
@@ -779,8 +973,20 @@ async function scopedRead(sql, tenant, actorId) {
       ) artifact_state
       order by artifact
     `,
+    transaction`
+      select count(*)::int as count
+      from auth_sessions session
+      where session.workspace_id = ${tenant.workspaceId}::uuid
+        and session.workspace_user_id = any(${[
+          tenant.resetActorUserId,
+          ...Object.values(tenant.actors).map((actor) => actor.userId),
+        ]}::uuid[])
+        and session.revoked_at is null
+        and session.expires_at > now()
+    `,
   ], { readOnly: true });
   return {
+    activeSessionCount: Number(results[12][0]?.count ?? -1),
     batch: results[4][0] ?? null,
     batchObjectCount: Number(results[9][0]?.count ?? 0),
     ledgerAccess: results[6][0] ?? null,
@@ -870,6 +1076,7 @@ async function verifyDatabasePreflight(config, evidence) {
     check(`${tenant.key.toLowerCase()}.db.batch_marker`, state.batch?.batchMarker === tenant.batchMarker, state.batch?.batchMarker === tenant.batchMarker, true);
     check(`${tenant.key.toLowerCase()}.db.batch_actor`, state.batch?.createdByUserId === tenant.resetActorUserId, state.batch?.createdByUserId === tenant.resetActorUserId, true);
     check(`${tenant.key.toLowerCase()}.db.batch_unused`, state.batchObjectCount === 0, state.batchObjectCount, 0);
+    check(`${tenant.key.toLowerCase()}.db.active_sessions_before_login`, state.activeSessionCount === 0, state.activeSessionCount, 0);
     const priorMarkerRows = Object.values(state.markerCounts).reduce((sum, count) => sum + count, 0);
     check(`${tenant.key.toLowerCase()}.db.marker_unused`, priorMarkerRows === 0, priorMarkerRows, 0);
     const userById = new Map(state.users.map((user) => [user.id, user]));
@@ -906,12 +1113,51 @@ async function verifyDatabasePreflight(config, evidence) {
   return sql;
 }
 
-async function verifyHttpPreflight(config, evidence, options = {}, clients = new Map()) {
+export function matchesQaRuntimeIdentity(config, responseStatus, identity) {
+  let expectedDeploymentHost;
+  try {
+    expectedDeploymentHost = new URL(config.baseUrl).hostname;
+  } catch {
+    return false;
+  }
+  return responseStatus === 200
+    && identity?.version === 2
+    && identity?.deploymentId === config.expectedDeploymentId
+    && identity?.deploymentHost === expectedDeploymentHost
+    && identity?.gitBranch === config.expectedGitBranch
+    && identity?.gitSha === config.expectedGitSha
+    && identity?.databaseTargetDigest === qaRuntimeDatabaseTargetDigest(config.database)
+    && identity?.databaseRlsActive === true
+    && identity?.databaseLeastPrivilege === true;
+}
+
+export function matchesQaRuntimeCapability(config, responseStatus, capability) {
+  return matchesQaRuntimeIdentity(config, responseStatus, capability)
+    && capability?.atomicRegistration === true
+    && capability?.header === batchHeader
+    && capability?.databaseBranchId === config.database.branchId;
+}
+
+export async function verifyPreviewRuntimeIdentity(
+  config,
+  evidence,
+  previewCookies = new Map(),
+  fetchImplementation = globalThis.fetch,
+) {
   const check = resultRecorder(evidence);
-  const publicClient = createPublicClient(config, evidence);
+  const publicClient = createPublicClient(config, evidence, previewCookies, fetchImplementation);
+  const identity = await publicClient.request(runtimeIdentityPath);
+  const valid = matchesQaRuntimeIdentity(config, identity.response.status, identity.json);
+  check("runtime.identity.pre_auth", valid, identity.response.status, 200);
+  return identity.json;
+}
+
+async function verifyHttpPreflight(config, evidence, clients = new Map(), previewCookies = new Map()) {
+  const check = resultRecorder(evidence);
+  const publicClient = createPublicClient(config, evidence, previewCookies);
   for (const tenant of config.tenants) {
     for (const actor of Object.values(tenant.actors)) {
-      const client = createHttpClient(config, actor, tenant, evidence);
+      const client = createHttpClient(config, actor, tenant, evidence, previewCookies);
       await client.login();
       clients.set(`${tenant.key}:${actor.name}`, client);
       check(`${tenant.key.toLowerCase()}.auth.${actor.name}`, true, 200, 200);
@@ -921,7 +1167,7 @@ async function verifyHttpPreflight(config, evidence, options = {}, clients = new
       name: "resetAdmin",
       userId: tenant.resetActorUserId,
     };
-    const resetClient = createHttpClient(config, resetActor, tenant, evidence);
+    const resetClient = createHttpClient(config, resetActor, tenant, evidence, previewCookies);
     await resetClient.login();
     clients.set(`${tenant.key}:resetAdmin`, resetClient);
     check(`${tenant.key.toLowerCase()}.auth.reset_admin`, true, 200, 200);
@@ -947,18 +1193,11 @@ async function verifyHttpPreflight(config, evidence, options = {}, clients = new
     check(`${tenant.key.toLowerCase()}.public.no_cross_tenant_id`, !publicPage.text.includes(other.workspaceId), false, false);
   }
 
-  if (options.requireAtomicCapability) {
-    for (const tenant of config.tenants) {
-      const client = clients.get(`${tenant.key}:resetAdmin`);
-      const capability = await client.request(capabilityPath);
-      const valid =
-        capability.response.status === 200 &&
-        capability.json?.atomicRegistration === true &&
-        capability.json?.version === 1 &&
-        capability.json?.header === batchHeader &&
-        capability.json?.gitSha === config.expectedGitSha;
-      check(`${tenant.key.toLowerCase()}.batch.atomic_capability`, valid, capability.response.status, 200);
-    }
+  for (const tenant of config.tenants) {
+    const client = clients.get(`${tenant.key}:resetAdmin`);
+    const capability = await client.request(capabilityPath);
+    const valid = matchesQaRuntimeCapability(config, capability.response.status, capability.json);
+    check(`${tenant.key.toLowerCase()}.batch.runtime_capability`, valid, capability.response.status, 200);
   }
   return clients;
 }
@@ -967,9 +1206,9 @@ function corePayload(result) {
   return result.json?.data ?? result.json ?? {};
 }
 
-async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evidence) {
+async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evidence, previewCookies = new Map()) {
   const check = resultRecorder(evidence);
-  const publicClient = createPublicClient(config, evidence);
+  const publicClient = createPublicClient(config, evidence, previewCookies);
   const actorNames = ["owner", "admin", "member"];
   const contacts = new Map();
   const deals = new Map();
@@ -1098,7 +1337,7 @@ async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evi
   check(`${tenant.key.toLowerCase()}.deal.owner.update`, dealUpdate.response.status === 200, dealUpdate.response.status, 200);
   owner.assertAtomicRegistration(dealUpdate, `${tenant.key} owner deal update`);
 
-  const freshOwner = createHttpClient(config, tenant.actors.owner, tenant, evidence);
+  const freshOwner = createHttpClient(config, tenant.actors.owner, tenant, evidence, previewCookies);
   clients.set(`${tenant.key}:ownerReload`, freshOwner);
   try {
     await freshOwner.login();
@@ -1224,24 +1463,56 @@ async function writeEvidence(config, evidence) {
   console.log(`Evidence digest: sha256:${digest}`);
 }
 
+function protectedWorkflowTrust(env, config) {
+  const repository = env.GITHUB_REPOSITORY?.trim() ?? "";
+  const workflowRef = env.GITHUB_WORKFLOW_REF?.trim() ?? "";
+  const workflowSha = env.GITHUB_SHA?.trim().toLowerCase() ?? "";
+  const trustedHarnessSha = env.NOVALURE_WORKFLOW_TRUSTED_HARNESS_SHA?.trim().toLowerCase() ?? "";
+  if (!repository && !workflowRef && !workflowSha && !trustedHarnessSha) return null;
+  if (
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository)
+    || workflowRef !== `${repository}/.github/workflows/livegang-e2e.yml@refs/heads/main`
+    || !/^[a-f0-9]{40}$/u.test(workflowSha)
+    || workflowSha !== trustedHarnessSha
+  ) {
+    throw new Error("Protected workflow trust receipt is incomplete or mismatched.");
+  }
+  return Object.freeze({
+    candidateSha: config.expectedGitSha,
+    schema: "novalure.qa.protected-workflow-trust.v1",
+    trustedHarnessSha,
+    workflowRef,
+    workflowSha,
+  });
+}
+
 function createEvidence(config, mode) {
   return {
     cleanup: [],
     commit: config.expectedGitSha,
     completedAt: null,
     mode,
+    productionMutationPerformed: false,
     requests: [],
     results: [],
     run: fingerprint(config.runPrefix),
+    runtime: {
+      databaseBranchId: config.database.branchId,
+      deploymentHost: new URL(config.baseUrl).hostname,
+      deploymentId: config.expectedDeploymentId,
+      gitBranch: config.expectedGitBranch,
+      gitSha: config.expectedGitSha,
+    },
     schema: "novalure.qa.two-tenant-e2e.v1",
     startedAt: new Date().toISOString(),
     summary: null,
     targets: [],
+    workflowTrust: protectedWorkflowTrust(process.env, config),
   };
 }
 
 async function main() {
-  const mode = modeFromArgs(process.argv.slice(2));
+  const { mode, shareUrlStdin } = optionsFromArgs(process.argv.slice(2));
   if (mode === "help") {
     usage();
     return;
@@ -1258,6 +1529,9 @@ async function main() {
   const config = parseQaTwoTenantConfig(process.env, { requireExecution: mode === "execute" });
   console.log(`QA config valid: run=${fingerprint(config.runPrefix)}; preview=${fingerprint(config.baseUrl)}; commit=${config.expectedGitSha}.`);
   if (mode === "validate-config") return;
+  const previewCookies = shareUrlStdin
+    ? await bootstrapPreviewShareCookies(config.baseUrl, await readBoundedStdin(2_048))
+    : new Map();
 
   const evidence = createEvidence(config, mode);
   let sql = null;
@@ -1265,15 +1539,16 @@ async function main() {
   let businessWritesStarted = false;
   let failure = null;
   try {
+    await verifyPreviewRuntimeIdentity(config, evidence, previewCookies);
     sql = await verifyDatabasePreflight(config, evidence);
     clients = new Map();
-    await verifyHttpPreflight(config, evidence, { requireAtomicCapability: mode === "execute" }, clients);
+    await verifyHttpPreflight(config, evidence, clients, previewCookies);
     if (mode !== "preflight") {
       businessWritesStarted = true;
       for (let index = 0; index < config.tenants.length; index += 1) {
         const tenant = config.tenants[index];
         const otherTenant = config.tenants[index === 0 ? 1 : 0];
-        await runTenantBusinessMatrix(config, tenant, otherTenant, clients, evidence);
+        await runTenantBusinessMatrix(config, tenant, otherTenant, clients, evidence, previewCookies);
       }
     }
   } catch (error) {

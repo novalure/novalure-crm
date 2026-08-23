@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import {
+  assertQaBatchForMutation,
+  findActiveQaBatchForObject,
+  registerQaBatchObjects,
+  registerQaBatchObjectsWithOwnershipGuard,
+} from "@/lib/db/qa-batch-registration-repository";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { withTenantTransaction } from "@/lib/db/tenant-client";
 import { isTruthyPublicConsentValue } from "@/lib/form-consent";
@@ -38,6 +44,7 @@ import type {
   FormsRuntimePayload,
   WebsiteForm,
 } from "@/lib/form-types";
+import type { QaBatchRegistrationStatus } from "@/lib/qa-batch-runtime";
 
 type IdRow = { id: string };
 
@@ -117,6 +124,8 @@ type AtomicFormSubmissionRow = {
   taskId: string | null;
   timelineItemId: string | null;
 };
+
+type QaOwnedObjectRow = { id: string; type: "consent_records" | "speed_to_lead_events" };
 
 export type WebsiteFormSubmissionPersistenceResult =
   | (Extract<PersistenceResult, { persisted: true }> & {
@@ -253,6 +262,7 @@ export async function upsertWebsiteForm(input: {
   session: AppSession;
   form: WebsiteForm;
   operationId: string;
+  qaBatchId?: string;
 }): Promise<{
   code?:
     | "FORM_CONSENT_CONFIGURATION_UNAVAILABLE"
@@ -264,6 +274,7 @@ export async function upsertWebsiteForm(input: {
     | "FORM_SAVE_CONFLICT";
   form: WebsiteForm | null;
   persisted: boolean;
+  qaBatchRegistration?: QaBatchRegistrationStatus;
   reason?: string;
 }> {
   if (!hasDatabaseUrl()) {
@@ -393,6 +404,12 @@ export async function upsertWebsiteForm(input: {
   const row = await withTenantTransaction(
     { actorId: input.session.userId, workspaceId: input.session.workspaceId },
     async (transaction) => {
+      if (input.qaBatchId) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: input.qaBatchId,
+          workspaceId: input.session.workspaceId,
+        });
+      }
       const savedRow = existingId
     ? await transaction.queryOne<FormRow>(
         `
@@ -595,11 +612,23 @@ export async function upsertWebsiteForm(input: {
         });
       }
 
-      return savedRow;
+      const qaBatchRegistration = savedRow && input.qaBatchId
+        ? await registerQaBatchObjectsWithOwnershipGuard(transaction, {
+            actorId: input.session.userId,
+            batchId: input.qaBatchId,
+            objects: [{ id: savedRow.id, type: "forms" }],
+            preExistingObjects: existingId || !savedRow.writeApplied
+              ? [{ id: savedRow.id, type: "forms" }]
+              : [],
+            workspaceId: input.session.workspaceId,
+          })
+        : undefined;
+
+      return { qaBatchRegistration, row: savedRow };
     },
   );
 
-  if (!row) {
+  if (!row.row) {
     return {
       code: "FORM_SAVE_CONFLICT",
       form: null,
@@ -608,7 +637,11 @@ export async function upsertWebsiteForm(input: {
     };
   }
 
-  return { form: toWebsiteForm(row), persisted: true };
+  return {
+    form: toWebsiteForm(row.row),
+    persisted: true,
+    qaBatchRegistration: row.qaBatchRegistration,
+  };
 }
 
 export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: string }): Promise<FormLookup | null> {
@@ -841,6 +874,16 @@ export async function persistWebsiteFormSubmission(input: {
   const row = await withTenantTransaction(
     { actorId: lookup.ownerUserId, workspaceId: lookup.workspaceId },
     async (transaction) => {
+      const qaBatch = await findActiveQaBatchForObject(transaction, {
+        object: { id: lookup.id, type: "forms" },
+        workspaceId: lookup.workspaceId,
+      });
+      if (qaBatch) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: qaBatch.batchId,
+          workspaceId: lookup.workspaceId,
+        });
+      }
       // Each identity lock is a separate READ COMMITTED statement. The CTE
       // below therefore starts with a fresh snapshot after a prior submitter
       // holding the same lock commits.
@@ -850,7 +893,7 @@ export async function persistWebsiteFormSubmission(input: {
           [lookup.workspaceId, publicContactIdentityLockNamespace, contactIdentityLock],
         );
       }
-      return transaction.queryOne<AtomicFormSubmissionRow>(
+      const persisted = await transaction.queryOne<AtomicFormSubmissionRow>(
     `
       with claim_fence as materialized (
         select claim.idempotency_hash
@@ -1004,6 +1047,18 @@ export async function persistWebsiteFormSubmission(input: {
         cross join contact_identity identity
         where not identity.conflict
           and contact.id = coalesce(identity."emailContactId", identity."phoneContactId")
+          and (
+            $39::uuid is null
+            or exists (
+              select 1
+              from qa_batch_objects object
+              where object.workspace_id = $1::uuid
+                and object.batch_id = $39::uuid
+                and object.resource_scope = 'database'
+                and object.resource_type = 'contacts'
+                and object.resource_id = contact.id::text
+            )
+          )
       ),
       updated_contact as (
         update contacts contact
@@ -1790,8 +1845,44 @@ export async function persistWebsiteFormSubmission(input: {
       emailIdentity.normalizedValue || null,
       phoneIdentity.normalizedValue || null,
       form.version,
+      qaBatch?.batchId ?? null,
     ],
       );
+
+      if (!persisted || !qaBatch || !persisted.submissionId || !persisted.contactId) {
+        return persisted;
+      }
+      const ancillary = await transaction.query<QaOwnedObjectRow>(
+        `
+          select consent.id, 'consent_records'::text as type
+          from consent_records consent
+          where consent.workspace_id = $1::uuid
+            and consent.metadata->>'submissionIdempotencyHash' = $2
+          union all
+          select speed.id, 'speed_to_lead_events'::text as type
+          from speed_to_lead_events speed
+          where speed.workspace_id = $1::uuid
+            and speed.metadata->>'submissionIdempotencyHash' = $2
+        `,
+        [lookup.workspaceId, input.idempotencyHash],
+      );
+      await registerQaBatchObjects(transaction, {
+        actorId: qaBatch.actorId,
+        batchId: qaBatch.batchId,
+        objects: [
+          { id: persisted.contactId, type: "contacts" },
+          { id: persisted.submissionId, type: "form_submissions" },
+          ...(persisted.leadId ? [{ id: persisted.leadId, type: "leads" as const }] : []),
+          ...(persisted.dealId ? [{ id: persisted.dealId, type: "deals" as const }] : []),
+          ...(persisted.taskId ? [{ id: persisted.taskId, type: "tasks" as const }] : []),
+          ...(persisted.timelineItemId
+            ? [{ id: persisted.timelineItemId, type: "contact_timeline_items" as const }]
+            : []),
+          ...ancillary,
+        ],
+        workspaceId: lookup.workspaceId,
+      });
+      return persisted;
     },
   );
 

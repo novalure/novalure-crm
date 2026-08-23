@@ -59,7 +59,13 @@ const access = await loadCommonJsTypeScript(
 );
 const repository = await loadCommonJsTypeScript(
   "src/lib/db/funnel-publish-token-repository.ts",
-  { "@/lib/db/tenant-client": { withTenantTransaction() { throw new Error("not used"); } } },
+  {
+    "@/lib/db/qa-batch-registration-repository": {
+      assertQaBatchForMutation() { throw new Error("not used"); },
+      assertQaBatchOwnsObject() { throw new Error("not used"); },
+    },
+    "@/lib/db/tenant-client": { withTenantTransaction() { throw new Error("not used"); } },
+  },
 );
 
 function createRotationHarness(initialTracking = {}) {

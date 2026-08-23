@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 2,
+  "recordType": "FINAL_PREVIEW_RELEASE_ATTESTATION",
+  "schemaPath": "docs/audit/2026-08-23/final-preview-release-attestation.schema.json",
+  "status": "PENDING",
+  "decision": "NO-GO",
+  "runtime": {
+    "branch": "codex/go-live-remediation-20260822",
+    "environment": "PREVIEW",
+    "candidateCommit": null,
+    "databaseBranchId": null,
+    "deploymentId": null,
+    "deploymentHost": null,
+    "shaIdentityStatus": "NOT_RUN",
+    "startedAt": null,
+    "completedAt": null,
+    "productionMutationPerformed": false,
+    "trustedHarnessSha": null
+  },
+  "approvalTrust": {
+    "trustAnchorId": null,
+    "trustAnchorSha256": null,
+    "verificationMode": "NOT_RUN"
+  },
+  "evidenceProvenance": {
+    "evidenceCommit": null,
+    "repositoryState": "NOT_RUN",
+    "runDirectory": null,
+    "runId": null
+  },
+  "documentBundleSha256": null,
+  "documents": [
+    {
+      "id": "database-recovery",
+      "path": "docs/audit/2026-08-23/database-recovery-evidence-manifest.json",
+      "sidecarPath": "docs/audit/2026-08-23/database-recovery-evidence-manifest.json.sha256",
+      "candidateJsonPointer": "/candidateCommit",
+      "sha256": null,
+      "verificationStatus": "NOT_RUN"
+    },
+    {
+      "id": "release-surface-manifest",
+      "path": "docs/audit/2026-08-23/release-surface-manifest.json",
+      "sidecarPath": "docs/audit/2026-08-23/release-surface-manifest.json.sha256",
+      "candidateJsonPointer": "/candidateCommit",
+      "sha256": null,
+      "verificationStatus": "NOT_RUN"
+    },
+    {
+      "id": "release-gate-matrix",
+      "path": "docs/audit/2026-08-23/release-gate-matrix.json",
+      "sidecarPath": "docs/audit/2026-08-23/release-gate-matrix.json.sha256",
+      "candidateJsonPointer": "/candidateCommit",
+      "sha256": null,
+      "verificationStatus": "NOT_RUN"
+    },
+    {
+      "id": "legal-content-manifest",
+      "path": "docs/audit/2026-08-23/legal-content-manifest.json",
+      "sidecarPath": "docs/audit/2026-08-23/legal-content-manifest.json.sha256",
+      "candidateJsonPointer": "/candidateCommit",
+      "sha256": null,
+      "verificationStatus": "NOT_RUN"
+    },
+    {
+      "id": "company-profile-approval",
+      "path": "docs/audit/2026-08-23/company-profile-approval.json",
+      "sidecarPath": "docs/audit/2026-08-23/company-profile-approval.json.sha256",
+      "candidateJsonPointer": "/candidateCommit",
+      "sha256": null,
+      "verificationStatus": "NOT_RUN"
+    }
+  ],
+  "gateEvidence": [
+    {
+      "id": "database-recovery",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "two-tenant-rbac-crud",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "preview-blob-lifecycle",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "provider-boundaries",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "public-form-funnel",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "accessibility-browser",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "performance",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "observability",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "security-supply-chain",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "cleanup-null-rest",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
+      "id": "runtime-logs",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    }
+  ],
+  "signatures": {
+    "product": null,
+    "engineering": null,
+    "security": null,
+    "operations": null,
+    "legal": null,
+    "privacy": null,
+    "sales-operations": null,
+    "data-compliance": null
+  }
+}

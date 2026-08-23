@@ -63,7 +63,10 @@ test("forms APIs fail closed and resolver verifies tenant-owned persisted public
   assert.match(repository, /if \(savedRow\?\.writeApplied\)/);
   const formSaveTransaction = repository.indexOf("const row = await withTenantTransaction(");
   const formSaveAudit = repository.indexOf("await writeAuditLog({", formSaveTransaction);
-  const formSaveReturn = repository.indexOf("return savedRow;", formSaveTransaction);
+  const formSaveReturn = repository.indexOf(
+    "return { qaBatchRegistration, row: savedRow };",
+    formSaveTransaction,
+  );
   assert.ok(formSaveTransaction >= 0 && formSaveTransaction < formSaveAudit && formSaveAudit < formSaveReturn);
   assert.match(repository.slice(formSaveAudit, formSaveReturn), /transaction,/);
   assert.match(repository, /resolveActiveWorkspaceOwner\([\s\S]*input\.session\.workspaceId/);

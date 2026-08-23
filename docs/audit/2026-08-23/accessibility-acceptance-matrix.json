@@ -13,6 +13,7 @@
       "cookies",
       "terms",
       "data-deletion",
+      "data-deletion-alias",
       "meta"
     ],
     "authenticated": [
@@ -60,7 +61,7 @@
   "fixtureRequirements": [
     {
       "id": "isolated-auth-fixture",
-      "requirement": "Use only NOVALURE_QA_PREVIEW_EMAIL and NOVALURE_QA_PREVIEW_PASSWORD with the codextest_preview_ email prefix and the CODEXTEST_PREVIEW_ Preview-workspace markers. MFA completion additionally requires the matching action-time NOVALURE_QA_PREVIEW_TOTP_SECRET. Values must never be logged or written to evidence.",
+      "requirement": "Use only NOVALURE_QA_PREVIEW_EMAIL and NOVALURE_QA_PREVIEW_PASSWORD with the generic codextest_ email prefix, and bind the exact fixture through NOVALURE_QA_PREVIEW_WORKSPACE_ID, NOVALURE_QA_PREVIEW_FIXTURE_MARKER_KEY=qaFixture, NOVALURE_QA_PREVIEW_FIXTURE_MARKER=go-live-two-tenant-v1, NOVALURE_QA_PREVIEW_ROLE and NOVALURE_QA_PREVIEW_PRODUCT_ROLE. MFA verification additionally requires the matching action-time NOVALURE_QA_PREVIEW_TOTP_SECRET. Values must never be logged or written to evidence.",
       "required": true,
       "owner": null,
       "signature": null

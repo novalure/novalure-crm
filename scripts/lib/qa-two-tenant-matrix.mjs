@@ -67,6 +67,8 @@ export const qaLaunchSchemaArtifactNames = Object.freeze([
 ]);
 
 const migrationChecksumPattern = /^[a-f0-9]{64}$/iu;
+const gitBranchPattern = /^codex\/[A-Za-z0-9._/-]{1,220}$/u;
+const deploymentIdPattern = /^dpl_[A-Za-z0-9]{20,80}$/u;
 
 export function evaluateQaTenantRelationGate(input = {}) {
   const migrations = Array.isArray(input.migrations) ? input.migrations : [];
@@ -162,6 +164,10 @@ const batchMarkerPattern = /^QA-TEST-[0-9]{8}-[0-9]{4}-[A-Za-z0-9][A-Za-z0-9_-]{
 const runPrefixPattern = /^GOLIVETEST_[A-Za-z0-9_-]{6,80}$/;
 const shaPattern = /^[a-f0-9]{40}$/i;
 const secretKeyPattern = /(password|passcode|secret|token|cookie|authorization|database.?url)/i;
+const neonProjectIdPattern = /^[-A-Za-z0-9]{8,80}$/;
+const neonBranchIdPattern = /^br-[-A-Za-z0-9]{8,128}$/;
+const databaseIdentifierPattern = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$/;
+const databaseHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 function required(env, name, missing) {
   const value = env[name]?.trim();
@@ -265,7 +271,40 @@ function parseTenant(env, key, sharedPassword, missing, errors) {
   });
 }
 
-function validateDatabaseTarget(database, productionHost, errors) {
+function validateDatabaseTarget(database, productionDatabase, errors) {
+  if (database.projectId && !neonProjectIdPattern.test(database.projectId)) {
+    errors.push("NOVALURE_QA_PROJECT_ID is invalid.");
+  }
+  if (database.branchId && !neonBranchIdPattern.test(database.branchId)) {
+    errors.push("NOVALURE_QA_BRANCH_ID is invalid.");
+  }
+  if (database.databaseName && !databaseIdentifierPattern.test(database.databaseName)) {
+    errors.push("NOVALURE_QA_DATABASE_NAME is invalid.");
+  }
+  if (database.role && database.role !== "novalure_app") {
+    errors.push("NOVALURE_QA_DATABASE_ROLE must be exactly novalure_app.");
+  }
+  if (database.host && !databaseHostPattern.test(database.host.toLowerCase())) {
+    errors.push("NOVALURE_QA_DATABASE_HOST is invalid.");
+  }
+  if (productionDatabase.projectId && !neonProjectIdPattern.test(productionDatabase.projectId)) {
+    errors.push("NOVALURE_PRODUCTION_PROJECT_ID is invalid.");
+  }
+  if (productionDatabase.branchId && !neonBranchIdPattern.test(productionDatabase.branchId)) {
+    errors.push("NOVALURE_PRODUCTION_BRANCH_ID is invalid.");
+  }
+  if (productionDatabase.host && !databaseHostPattern.test(productionDatabase.host.toLowerCase())) {
+    errors.push("NOVALURE_PRODUCTION_DATABASE_HOST is invalid.");
+  }
+  if (database.projectId && database.projectId === productionDatabase.projectId) {
+    errors.push("QA database project must not equal NOVALURE_PRODUCTION_PROJECT_ID.");
+  }
+  if (database.branchId && database.branchId === productionDatabase.branchId) {
+    errors.push("QA database branch must not equal NOVALURE_PRODUCTION_BRANCH_ID.");
+  }
+  if (database.host && database.host.toLowerCase() === productionDatabase.host.toLowerCase()) {
+    errors.push("QA database host must not equal NOVALURE_PRODUCTION_DATABASE_HOST.");
+  }
   if (!database.url) return;
   try {
     const url = new URL(database.url);
@@ -282,8 +321,8 @@ function validateDatabaseTarget(database, productionHost, errors) {
     if (decodeURIComponent(url.username) !== database.role) {
       errors.push("NOVALURE_QA_DATABASE_URL role must match NOVALURE_QA_DATABASE_ROLE.");
     }
-    if (productionHost && url.hostname.toLowerCase() === productionHost.toLowerCase()) {
-      errors.push("QA database host must not equal NOVALURE_PRODUCTION_DATABASE_HOST.");
+    if (!new Set(["require", "verify-full"]).has(url.searchParams.get("sslmode") ?? "")) {
+      errors.push("NOVALURE_QA_DATABASE_URL must enforce sslmode=require or verify-full.");
     }
   } catch {
     errors.push("NOVALURE_QA_DATABASE_URL must be a valid URL.");
@@ -319,6 +358,14 @@ export function parseQaTwoTenantConfig(env = process.env, options = {}) {
   if (expectedGitSha && !shaPattern.test(expectedGitSha)) {
     errors.push("NOVALURE_QA_EXPECTED_GIT_SHA must be a 40-character commit SHA.");
   }
+  const expectedGitBranch = required(env, "NOVALURE_QA_EXPECTED_GIT_BRANCH", missing);
+  if (expectedGitBranch && !gitBranchPattern.test(expectedGitBranch)) {
+    errors.push("NOVALURE_QA_EXPECTED_GIT_BRANCH must be an explicit codex/ Preview branch.");
+  }
+  const expectedDeploymentId = required(env, "NOVALURE_QA_EXPECTED_DEPLOYMENT_ID", missing);
+  if (expectedDeploymentId && !deploymentIdPattern.test(expectedDeploymentId)) {
+    errors.push("NOVALURE_QA_EXPECTED_DEPLOYMENT_ID must be an exact Vercel deployment id.");
+  }
 
   const tenants = [
     parseTenant(env, "A", sharedPassword, missing, errors),
@@ -333,8 +380,12 @@ export function parseQaTwoTenantConfig(env = process.env, options = {}) {
     role: required(env, "NOVALURE_QA_DATABASE_ROLE", missing),
     url: required(env, "NOVALURE_QA_DATABASE_URL", missing),
   });
-  const productionDatabaseHost = required(env, "NOVALURE_PRODUCTION_DATABASE_HOST", missing);
-  validateDatabaseTarget(database, productionDatabaseHost, errors);
+  const productionDatabase = Object.freeze({
+    branchId: required(env, "NOVALURE_PRODUCTION_BRANCH_ID", missing),
+    host: required(env, "NOVALURE_PRODUCTION_DATABASE_HOST", missing),
+    projectId: required(env, "NOVALURE_PRODUCTION_PROJECT_ID", missing),
+  });
+  validateDatabaseTarget(database, productionDatabase, errors);
 
   for (const tenant of tenants) {
     if (tenant.batchMarker && !batchMarkerPattern.test(tenant.batchMarker)) {
@@ -367,6 +418,15 @@ export function parseQaTwoTenantConfig(env = process.env, options = {}) {
     if (optional(env, "NOVALURE_QA_E2E_CLEANUP_CONFIRM") !== QA_CLEANUP_CONFIRMATION) {
       errors.push(`NOVALURE_QA_E2E_CLEANUP_CONFIRM must equal ${QA_CLEANUP_CONFIRMATION}.`);
     }
+  }
+
+  const evidenceDirectory = optional(env, "NOVALURE_QA_EVIDENCE_DIR") || `artifacts/qa/${runPrefix.toLowerCase()}`;
+  if (
+    !/^artifacts\/qa\/[a-z0-9][a-z0-9._/-]{1,180}$/u.test(evidenceDirectory)
+    || evidenceDirectory.includes("..")
+    || evidenceDirectory.includes("//")
+  ) {
+    errors.push("NOVALURE_QA_EVIDENCE_DIR must stay inside artifacts/qa without traversal.");
   }
 
   const allWorkspaceIds = tenants.map((tenant) => tenant.workspaceId).filter(Boolean);
@@ -417,8 +477,11 @@ export function parseQaTwoTenantConfig(env = process.env, options = {}) {
     allowLocal,
     baseUrl,
     database,
-    evidenceDirectory: optional(env, "NOVALURE_QA_EVIDENCE_DIR") || `artifacts/qa/${runPrefix.toLowerCase()}`,
+    evidenceDirectory,
+    expectedDeploymentId,
+    expectedGitBranch,
     expectedGitSha: expectedGitSha.toLowerCase(),
+    productionDatabase,
     productionOrigin,
     resetAdmin,
     runPrefix,
@@ -430,6 +493,8 @@ export function qaTwoTenantRequiredEnvironment() {
   const names = [
     "NOVALURE_QA_BASE_URL",
     "NOVALURE_PRODUCTION_ORIGIN",
+    "NOVALURE_QA_EXPECTED_DEPLOYMENT_ID",
+    "NOVALURE_QA_EXPECTED_GIT_BRANCH",
     "NOVALURE_QA_EXPECTED_GIT_SHA",
     "NOVALURE_QA_DATABASE_URL",
     "NOVALURE_QA_DATABASE_HOST",
@@ -438,6 +503,8 @@ export function qaTwoTenantRequiredEnvironment() {
     "NOVALURE_QA_DATABASE_NAME",
     "NOVALURE_QA_DATABASE_ROLE",
     "NOVALURE_PRODUCTION_DATABASE_HOST",
+    "NOVALURE_PRODUCTION_PROJECT_ID",
+    "NOVALURE_PRODUCTION_BRANCH_ID",
     "NOVALURE_QA_RUN_PREFIX",
     "NOVALURE_QA_RESET_ADMIN_EMAIL",
     "NOVALURE_QA_RESET_ADMIN_PASSWORD",
@@ -499,6 +566,12 @@ export function buildQaTwoTenantScenarioMatrix() {
 
 export function fingerprint(value, length = 16) {
   return `sha256:${createHash("sha256").update(String(value)).digest("hex").slice(0, length)}`;
+}
+
+export function qaRuntimeDatabaseTargetDigest(database) {
+  return `sha256:${createHash("sha256")
+    .update([database.projectId, database.branchId, database.databaseName, database.role].join("\0"))
+    .digest("hex")}`;
 }
 
 export function assertEvidenceContainsNoSecrets(value, path = "evidence") {

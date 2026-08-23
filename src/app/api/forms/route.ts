@@ -6,6 +6,11 @@ import {
   PublicSubmissionRequestError,
   readBoundedPublicSubmissionJson,
 } from "@/lib/security/public-submission-abuse";
+import {
+  qaBatchRuntimeErrorResponse,
+  qaBatchSuccessHeaders,
+  readQaBatchMutationHeader,
+} from "@/lib/qa-batch-runtime";
 
 const formEditorBodyLimits = Object.freeze({ maxBodyBytes: 256 * 1024 });
 
@@ -26,6 +31,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
+
+  let qaBatchId: string | null;
+  try {
+    qaBatchId = readQaBatchMutationHeader(request, auth.session);
+  } catch (error) {
+    return qaBatchRuntimeErrorResponse(error)
+      ?? NextResponse.json({ error: "QA batch validation failed" }, { status: 503 });
+  }
 
   let body: { expectedVersion?: number; form?: WebsiteForm };
   try {
@@ -62,9 +75,12 @@ export async function POST(request: Request) {
       expectedVersion,
       form: body.form,
       operationId,
+      qaBatchId: qaBatchId ?? undefined,
       session: auth.session,
     });
-  } catch {
+  } catch (error) {
+    const qaError = qaBatchRuntimeErrorResponse(error);
+    if (qaError) return qaError;
     return NextResponse.json(
       { code: "FORM_PERSISTENCE_UNAVAILABLE", error: "Forms persistence is temporarily unavailable" },
       { status: 503 },
@@ -87,5 +103,8 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ form: result.form, persisted: true });
+  return NextResponse.json(
+    { form: result.form, persisted: true },
+    { headers: qaBatchSuccessHeaders(qaBatchId, result.qaBatchRegistration) },
+  );
 }

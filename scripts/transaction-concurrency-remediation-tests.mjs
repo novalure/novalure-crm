@@ -324,6 +324,10 @@ test("funnel content revision survives metric timestamps and parallel saves have
       hasDatabaseUrl: () => true,
       queryOne: async () => structuredClone(state.row),
     },
+    "@/lib/db/qa-batch-registration-repository": {
+      assertQaBatchForMutation: async () => {},
+      assertQaBatchOwnsObject: async () => {},
+    },
     "@/lib/db/tenant-client": { withTenantTransaction },
     "@/lib/db/runtime-repositories": {
       writeAuditLog: async ({ action, transaction: auditTransaction }) => {

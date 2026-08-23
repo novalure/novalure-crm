@@ -763,6 +763,14 @@ export function FunnelRenderer({
             void submit(mode !== "live");
           }}
         >
+          {mode === "live" && activeSubmissionProof ? (
+            <>
+              <input name={publicSubmissionControlFields.idempotencyKey} readOnly type="hidden" value={activeSubmissionProof.idempotencyKey} />
+              <input name={publicSubmissionControlFields.issuedAt} readOnly type="hidden" value={activeSubmissionProof.issuedAt} />
+              <input name={publicSubmissionControlFields.expiresAt} readOnly type="hidden" value={activeSubmissionProof.expiresAt} />
+              <input name={publicSubmissionControlFields.proof} readOnly type="hidden" value={activeSubmissionProof.signature} />
+            </>
+          ) : null}
           {mode === "live" ? (
             <input
               aria-hidden="true"
