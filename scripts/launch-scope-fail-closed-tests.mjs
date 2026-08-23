@@ -665,11 +665,11 @@ test("checked-in launch-scope inventory exactly mirrors all candidate policy rul
     { "INTERNAL-ONLY": 0, "LAUNCH-OFF": 0, "LAUNCH-ON": 0 },
   );
 
-  assert.equal(launchScopePolicyVersion, "2026-08-22.11");
-  assert.equal(Object.keys(launchScopePolicy).length, 34);
+  assert.equal(launchScopePolicyVersion, "2026-08-22.12");
+  assert.equal(Object.keys(launchScopePolicy).length, 35);
   assert.deepEqual(decisionCounts, {
     "INTERNAL-ONLY": 5,
-    "LAUNCH-OFF": 23,
+    "LAUNCH-OFF": 24,
     "LAUNCH-ON": 6,
   });
   assert.equal(documentedRows.length, Object.keys(launchScopePolicy).length);
@@ -677,6 +677,26 @@ test("checked-in launch-scope inventory exactly mirrors all candidate policy rul
   assert.ok(snapshot.includes("Policy-Version: `" + launchScopePolicyVersion + "`"));
   assert.match(snapshot, /Policy-Freigabe: `PENDING_SIGNATURE`/u);
   assert.match(inventory, /Production-Umgebung[\s\S]*`LAUNCH_SCOPE_UNSIGNED`/u);
+});
+
+test("Spanish public discovery is centrally launch-off and cannot be advertised by the public runtime", () => {
+  const publicLanguage = readProjectFile("src/lib/public-language.ts");
+  const proxy = readProjectFile("src/proxy.ts");
+  const home = readProjectFile("src/app/page.tsx");
+  const landing = readProjectFile("src/components/public-crm-landing.tsx");
+  const optionsStart = landing.indexOf("const publicLanguageOptions");
+  const optionsEnd = landing.indexOf("function getLanguageSwitchLabels", optionsStart);
+
+  const evaluation = evaluateLaunchScope("publicSpanishLocale");
+  assert.equal(evaluation.allowed, false);
+  assert.equal(evaluation.code, "LAUNCH_SCOPE_OFF");
+  assert.match(publicLanguage, /evaluateLaunchScope\("publicSpanishLocale"\)\.allowed/);
+  assert.match(publicLanguage, /isPublicLanguageLaunchEnabled\(normalized\)/);
+  assert.match(publicLanguage, /isPublicLanguageLaunchEnabled\(language\) \? language : "en"/);
+  assert.match(proxy, /if \(isPublicLanguageLaunchEnabled\(requestedLanguage\)\)/);
+  assert.doesNotMatch(home, /\?lang=es/);
+  assert.ok(optionsStart >= 0 && optionsEnd > optionsStart);
+  assert.doesNotMatch(landing.slice(optionsStart, optionsEnd), /code: "es"/);
 });
 
 test("every candidate rule obeys its Preview decision and unsigned Production fail-closed contract", () => {

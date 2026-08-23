@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-23T16:16:11.626Z",
+  "scope": {
+    "environment": "preview",
+    "projectId": "weathered-term-98273025",
+    "projectName": "novalure-crm-tenant-isolation-test",
+    "branchId": "br-lucky-heart-alrm9dlw",
+    "branchName": "main",
+    "databaseName": "neondb",
+    "migrationRole": "neondb_owner",
+    "applicationRole": "novalure_app",
+    "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+    "authorizedMigrations": [
+      "078_company_profile_approval_integrity",
+      "079_public_funnel_visit_role_boundary"
+    ],
+    "explicitlyExcludedMigrations": [
+      "061_validate_and_activate_tenant_rls_pilot",
+      "062_private_media_contract_cutover",
+      "065_notification_guard_search_path_hardening"
+    ],
+    "productionMutationAttempted": false
+  },
+  "restorePoint": {
+    "projectId": "weathered-term-98273025",
+    "branchId": "br-gentle-voice-all5k2j7",
+    "branchName": "go-live-preview-main-pre078-079-20260823",
+    "parentBranchId": "br-lucky-heart-alrm9dlw",
+    "createdBeforeMigration078": true,
+    "computeUsageSecondsAtVerification": 0
+  },
+  "runner": {
+    "worktreeState": "clean",
+    "commit": "2d29252a7252bac9e5367662cf72c22006222067",
+    "nodeVersion": "24.18.0",
+    "neonDriverVersion": "1.1.0",
+    "certificateMode": "--use-system-ca",
+    "certificateValidationDisabled": false,
+    "connectionDelivery": "masked SecureString to runner stdin only",
+    "planBinding": "separate dry-run token per migration",
+    "temporaryPlanFilesRemoved": true
+  },
+  "preflight": {
+    "identityVerified": true,
+    "serverVersionNum": 170011,
+    "ledger": {
+      "rowCount": 62,
+      "maxVersion": "077_schema_ledger_runtime_projection",
+      "migration075Checksum": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466",
+      "migration061Present": false,
+      "migration062Present": false,
+      "migration065Present": false,
+      "migration078Present": false,
+      "migration079Present": false
+    },
+    "companyProfiles": {
+      "statusCounts": {
+        "approved": 1
+      },
+      "invalidApprovedOrLockedRows": 1,
+      "staleApprovalMetadataRows": 0,
+      "approvalIntegrityConstraintPresent": false
+    },
+    "publicFunnelVisitEvents": {
+      "rowCount": 0,
+      "fingerprintMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "selectedColumnAclRows": 0,
+      "publicPrivileges": [],
+      "novalureTenantAppPrivileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE"
+      ],
+      "novalureAppPrivileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE"
+      ],
+      "comment": "Opaque idempotency identities for public Funnel visits, scoped by tenant, Funnel and publication revision; eligible for deletion after 90 days. LAUNCH-OFF until an independently scheduled and monitored deletion job is approved."
+    }
+  },
+  "execution": [
+    {
+      "version": "078_company_profile_approval_integrity",
+      "checksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339",
+      "dryRunExitCode": 0,
+      "dryRunSingleton": true,
+      "applyExitCode": 0,
+      "transactionCommitted": true,
+      "effect": "One invalid approved QA company profile was demoted to needs_review and approval metadata was cleared; the approval integrity constraint was added and validated."
+    },
+    {
+      "version": "079_public_funnel_visit_role_boundary",
+      "checksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432",
+      "dryRunExitCode": 0,
+      "dryRunSingleton": true,
+      "applyExitCode": 0,
+      "transactionCommitted": true,
+      "effect": "All table privileges were removed from PUBLIC and novalure_tenant_app; SELECT, INSERT and DELETE were retained for novalure_app; the launch-off retention comment was updated."
+    }
+  ],
+  "postflight": {
+    "identityVerified": true,
+    "isReadReplica": false,
+    "ledger": {
+      "rowCount": 64,
+      "maxVersion": "079_public_funnel_visit_role_boundary",
+      "migration078": {
+        "presentExactlyOnce": true,
+        "checksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339"
+      },
+      "migration079": {
+        "presentExactlyOnce": true,
+        "checksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432"
+      },
+      "migration061Present": false,
+      "migration062Present": false,
+      "migration065Present": false,
+      "automaticPlanEmpty": true
+    },
+    "companyProfiles": {
+      "statusCounts": {
+        "needs_review": 1
+      },
+      "approvalIntegrityConstraintRows": 1,
+      "approvalIntegrityConstraintValidated": true,
+      "invalidApprovedOrLockedRows": 0,
+      "staleApprovalMetadataRows": 0
+    },
+    "publicFunnelVisitEvents": {
+      "rowCount": 0,
+      "fingerprintMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "dataFingerprintUnchanged": true,
+      "selectedColumnAclRows": 0,
+      "aclMatrixChecks": 24,
+      "aclMatrixAllPassed": true,
+      "publicPrivileges": [],
+      "novalureTenantAppPrivileges": [],
+      "novalureAppPrivileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE"
+      ],
+      "grantOptionsPresent": false,
+      "commentMatchesMigration079": true
+    },
+    "sessionHealth": {
+      "otherIdleInTransaction": 0,
+      "otherUngrantedLocksOnCutoverTables": 0
+    }
+  },
+  "verification": {
+    "targetedMigrationRoleProfileTests": {
+      "tests": 33,
+      "passed": 33,
+      "failed": 0
+    },
+    "goLiveRemediationSuite": {
+      "tests": 329,
+      "passed": 329,
+      "failed": 0,
+      "worktree": "go-live-remediation-20260822"
+    },
+    "cleanMigrationWorktreeSuiteAttempt": {
+      "result": "harness_only_failure",
+      "reason": "The deliberately minimal clean migration worktree does not contain the untracked artifacts/qa release-evidence directory.",
+      "productOrMigrationTestFailure": false
+    }
+  },
+  "nonMutatingRetries": [
+    {
+      "stage": "dry-run-078",
+      "result": "aborted_before_database_connection",
+      "reason": "Non-interactive stdin closed before the connection URL could be read.",
+      "planTokenCreated": false,
+      "sqlExecuted": false
+    },
+    {
+      "stage": "dry-run-078",
+      "result": "aborted_before_ledger_read",
+      "reason": "Node native WebSocket did not trust the local certificate chain before --use-system-ca was enabled.",
+      "planTokenCreated": false,
+      "sqlExecuted": false
+    }
+  ],
+  "result": {
+    "authorizedMigrationScope": "PASS",
+    "overallGoLiveDecision": "NOT_REASSESSED",
+    "reason": "This evidence closes only the explicitly authorized Preview migrations 078 and 079. All unrelated launch signatures, provider acceptance, legal/product approvals, accessibility/performance, production promotion and production-smoke gates remain governed by their own evidence."
+  }
+}

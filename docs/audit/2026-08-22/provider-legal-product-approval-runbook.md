@@ -87,7 +87,7 @@ Kein Feld darf aus Marketingtext oder Footer abgeleitet und ungeprüft als recht
 
 ## 5. Product-Entscheidungen
 
-Die versionierte technische Matrix `2026-08-22.7` liegt in `src/lib/launch-scope.ts`. Ihr Status bleibt `PENDING_SIGNATURE`.
+Die versionierte technische Matrix `2026-08-22.12` liegt in `src/lib/launch-scope.ts`. Ihr Status bleibt `PENDING_SIGNATURE`.
 
 Empfohlener Launchumfang:
 
@@ -101,7 +101,7 @@ Empfohlener Launchumfang:
 | Customer-facing Meeting-/Bot-/Dokument-/QA-Test-Providerdelivery | `LAUNCH-OFF` | isolierte QA-Ziele, Product-/Ops-Freigabe und Cleanup fehlen |
 | Public Booking und Kalender-Provider-Mutationen | `LAUNCH-OFF` | QA-Provider-/Saga-Nachweis fehlt |
 | QA Reset, Systemdiagnostik | `INTERNAL-ONLY` | zentrale Rolle/Capability plus lokaler Guard |
-| Spanische Produktoberfläche | `LAUNCH-OFF`, bis vollständige ES-Content-/Legal-Abnahme vorliegt | Teilübersetzung ist kein freigegebenes Produkt |
+| Spanische Produktoberfläche | `LAUNCH-OFF`, bis vollständige ES-Content-/Legal-Abnahme vorliegt | eigener zentraler Policy-Key; keine öffentliche ES-Sprachwahl, kein ES-hreflang und kein ES-Geotargeting; Quellcopy darf nur über eine separat intern geschützte Preview-Diagnostik geprüft werden |
 
 Product muss für jede inventarisierte Fläche im Launch-Scope-Inventar genau einen der drei Zustände signieren. Eine pauschale Unterschrift ohne Zeilenentscheidung ist ungültig.
 

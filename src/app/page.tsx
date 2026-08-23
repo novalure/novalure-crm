@@ -83,7 +83,6 @@ export async function generateMetadata({ searchParams }: HomeProps): Promise<Met
       languages: {
         de: `${publicSiteOrigin}/?lang=de`,
         en: `${publicSiteOrigin}/?lang=en`,
-        es: `${publicSiteOrigin}/?lang=es`,
       },
     },
     openGraph: {

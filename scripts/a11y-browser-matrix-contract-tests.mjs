@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { createA11yBrowserContextOptions } from "./lib/a11y-browser-context.mjs";
 
 const source = await readFile(new URL("./a11y-browser-matrix.mjs", import.meta.url), "utf8");
 const acceptanceMatrix = JSON.parse(await readFile(
@@ -22,6 +23,26 @@ test("browser matrix is exact-host Preview-only and refuses embedded credentials
   assert.match(source, /Action-time QA fixture must target the exact Preview origin/u);
   assert.match(source, /Action-time QA fixture must not contain a fragment/u);
   assert.match(source, /blocker: "deployment_protection"/u);
+});
+
+test("cross-origin subrequests can never inherit a direct Vercel bypass header", () => {
+  const options = createA11yBrowserContextOptions({
+    height: 844,
+    isMobile: true,
+    width: 390,
+  });
+  const inheritedHeaders = new Headers(options.extraHTTPHeaders);
+  const crossOriginSubrequest = new URL("https://third-party.example.invalid/pixel");
+
+  assert.equal(crossOriginSubrequest.origin, "https://third-party.example.invalid");
+  assert.equal(inheritedHeaders.has("x-vercel-protection-bypass"), false);
+  assert.equal(inheritedHeaders.has("x-vercel-set-bypass-cookie"), false);
+  assert.equal("extraHTTPHeaders" in options, false);
+  assert.doesNotMatch(
+    source,
+    /NOVALURE_QA_VERCEL_BYPASS_TOKEN|x-vercel-protection-bypass|x-vercel-set-bypass-cookie/u,
+  );
+  assert.match(source, /primePreviewAccess\(context, shareUrl, base\)/u);
 });
 
 test("static and dynamic public coverage always runs before any isolated fixture login", () => {
@@ -112,7 +133,7 @@ test("browser matrix covers DE/EN, desktop, mobile, reduced motion and selected 
   assert.match(source, /const authenticatedProfiles/u);
   assert.match(source, /const publicFixtureProfiles/u);
   assert.match(source, /const mfaProfiles/u);
-  assert.match(source, /reducedMotion: "reduce"/u);
+  assert.equal(createA11yBrowserContextOptions({ height: 900, width: 1440 }).reducedMotion, "reduce");
   assert.match(source, /horizontalOverflow/u);
   assert.match(source, /page\.keyboard\.press\("Tab"\)/u);
 });

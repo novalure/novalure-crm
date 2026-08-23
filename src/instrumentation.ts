@@ -8,13 +8,12 @@ function isProductionRuntime() {
 
 function safeLogToken(value: unknown, maxLength: number) {
   if (typeof value !== "string") return undefined;
-  const normalized = value.trim().slice(0, maxLength).replace(/[^a-zA-Z0-9_./:@-]/g, "_");
+  const normalized = value.trim().slice(0, maxLength).replace(/[^a-zA-Z0-9_./:-]/g, "_");
   return normalized || undefined;
 }
 
-function requestIdFromHeaders(headers: Record<string, string | string[] | undefined>) {
-  const raw = headers["x-vercel-id"] ?? headers["x-request-id"];
-  return safeLogToken(Array.isArray(raw) ? raw[0] : raw, 160);
+function createInternalRequestId() {
+  return `internal:${globalThis.crypto.randomUUID()}`;
 }
 
 /**
@@ -29,7 +28,7 @@ export const onRequestError: Instrumentation.onRequestError = (error, request, c
     event: "novalure.request.failed",
     level: "error",
     method: safeLogToken(request.method, 16) ?? "UNKNOWN",
-    requestId: requestIdFromHeaders(request.headers),
+    requestId: createInternalRequestId(),
     route: safeLogToken(context.routePath, 240) ?? "unknown",
     routeType: context.routeType,
     routerKind: context.routerKind,

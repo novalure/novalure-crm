@@ -75,6 +75,7 @@ test("release surface manifest is an exact filesystem inventory of every routabl
   assert.deepEqual(manifest.nonApiRouteHandlers, nonApiRouteHandlers);
   assert.deepEqual(manifest.apiRoutes, apiRoutes);
   assert.deepEqual(manifest.cronRoutes, cronRoutes);
+  assert.deepEqual(manifest.publicLocales, ["de", "en", "es"]);
   assert.equal(pages.length, 19);
   assert.equal(nonApiRouteHandlers.length, 4);
   assert.equal(apiRoutes.length, 89);
@@ -252,6 +253,7 @@ test("central gap remediations have one stable release-gate decision each", () =
     ["externalEmbeddingProvider", "provider.embeddings"],
     ["mediaBlobMutation", "api.media"],
     ["propertyExportQueue", "jobs.property-export"],
+    ["publicSpanishLocale", "scope.public-spanish-locale"],
   ]);
 
   for (const [launchScopeKey, surfaceId] of expected) {
@@ -276,6 +278,18 @@ test("unsigned inventory and release matrix cannot claim a candidate or signatur
     operations: null,
     product: null,
     security: null,
+  });
+  assert.deepEqual(matrix.specialDecisions.unitBuyerDealRelationship, {
+    launchScopeKey: "propertyReservationRelationshipSync",
+    decision: "OFF",
+    status: "PENDING_SIGNATURE",
+    decisionDocument: "docs/audit/2026-08-22/unit-buyer-deal-decision.md",
+    requiredSignatures: {
+      product: null,
+      salesOperations: null,
+      engineering: null,
+      dataCompliance: null,
+    },
   });
 });
 
@@ -321,6 +335,7 @@ test("release matrix has one complete decision for every launch-scope rule", asy
 
 test("every manifest item is assigned to exactly one release-matrix surface", () => {
   const categoryValues = {
+    publicLocales: manifest.publicLocales,
     pages: manifest.pages,
     nonApiRouteHandlers: manifest.nonApiRouteHandlers,
     apiRoutes: manifest.apiRoutes,

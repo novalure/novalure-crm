@@ -21,14 +21,14 @@ Die heute vorhandene technische Ebene besteht aus:
 - clientseitiger Navigation und Modulsichtbarkeit in `src/components/crm-workspace.tsx`;
 - funktionsspezifischen Public-Resolvern, Tokens, Signaturen, Provider-Readiness- und Kill-Switch-Prüfungen.
 
-Es existiert inzwischen eine versionierte, immutable und bei unbekannten Surfaces fail-closed arbeitende Launch-Scope-Policy (`2026-08-22.11`) mit 34 Regeln. Sie ist als technischer Kandidat für die remediated Surfaces in UI, API, Cron, Queue, Provideradapter, Repository und Blob-Grenze verdrahtet, trägt jedoch ausdrücklich `PENDING_SIGNATURE`. Solange dieser Status nicht durch echte Freigaben ersetzt ist, verweigert der zentrale Guard in der Production-Umgebung auch technisch als `LAUNCH-ON` oder `INTERNAL-ONLY` eingestufte Regeln mit `LAUNCH_SCOPE_UNSIGNED`; eine nicht eindeutig klassifizierte Vercel-Runtime bleibt unabhängig von einer Signatur mit `LAUNCH_SCOPE_RUNTIME_UNSAFE` geschlossen. `LAUNCH-OFF` und unbekannte Surfaces bleiben ebenfalls unabhängig davon geschlossen. Der Inbound-Bot-Channel-Guard beendet Webhook-POSTs vor Body, Datenbank, LLM und Providerwirkung. Zusätzlich bleiben authentifizierte Modellaufrufe, externe Embeddings und die consumerlose Property-Export-Queue technisch `LAUNCH-OFF`; Runtime-Media-/Blob-Mutationen sind in Preview testbar, verwenden Production-Tokens ausschließlich bei exakt `VERCEL_ENV=production` und bleiben in jeder anderen ambigen Runtime ohne Blob-Token. Eine signierte Vollmatrix und die vollständige Abdeckung jeder inventarisierten Produktfläche fehlen weiterhin.
+Es existiert inzwischen eine versionierte, immutable und bei unbekannten Surfaces fail-closed arbeitende Launch-Scope-Policy (`2026-08-22.12`) mit 35 Regeln. Sie ist als technischer Kandidat für die remediated Surfaces in UI, API, Cron, Queue, Provideradapter, Repository und Blob-Grenze verdrahtet, trägt jedoch ausdrücklich `PENDING_SIGNATURE`. Solange dieser Status nicht durch echte Freigaben ersetzt ist, verweigert der zentrale Guard in der Production-Umgebung auch technisch als `LAUNCH-ON` oder `INTERNAL-ONLY` eingestufte Regeln mit `LAUNCH_SCOPE_UNSIGNED`; eine nicht eindeutig klassifizierte Vercel-Runtime bleibt unabhängig von einer Signatur mit `LAUNCH_SCOPE_RUNTIME_UNSAFE` geschlossen. `LAUNCH-OFF` und unbekannte Surfaces bleiben ebenfalls unabhängig davon geschlossen. Der Inbound-Bot-Channel-Guard beendet Webhook-POSTs vor Body, Datenbank, LLM und Providerwirkung. Zusätzlich bleiben authentifizierte Modellaufrufe, externe Embeddings, die spanische öffentliche Produktoberfläche und die consumerlose Property-Export-Queue technisch `LAUNCH-OFF`; Runtime-Media-/Blob-Mutationen sind in Preview testbar, verwenden Production-Tokens ausschließlich bei exakt `VERCEL_ENV=production` und bleiben in jeder anderen ambigen Runtime ohne Blob-Token. Eine signierte Vollmatrix und die vollständige Abdeckung jeder inventarisierten Produktfläche fehlen weiterhin.
 
 ### 1.1 Exakter technischer Policy-Snapshot
 
-Die folgende Tabelle spiegelt ausschließlich den eingecheckten technischen Kandidaten in `src/lib/launch-scope.ts`. Sie enthält sechs `LAUNCH-ON`-, 23 `LAUNCH-OFF`- und fünf `INTERNAL-ONLY`-Regeln. Sie ist maschinengeprüft, aber wegen `PENDING_SIGNATURE` ausdrücklich keine fachlich signierte Launch-Matrix.
+Die folgende Tabelle spiegelt ausschließlich den eingecheckten technischen Kandidaten in `src/lib/launch-scope.ts`. Sie enthält sechs `LAUNCH-ON`-, 24 `LAUNCH-OFF`- und fünf `INTERNAL-ONLY`-Regeln. Sie ist maschinengeprüft, aber wegen `PENDING_SIGNATURE` ausdrücklich keine fachlich signierte Launch-Matrix.
 
 <!-- BEGIN:launch-scope-policy-snapshot -->
-Policy-Version: `2026-08-22.11`<br>
+Policy-Version: `2026-08-22.12`<br>
 Policy-Freigabe: `PENDING_SIGNATURE`
 
 | Surface | Technische Entscheidung |
@@ -56,6 +56,7 @@ Policy-Freigabe: `PENDING_SIGNATURE`
 | `publicFormFileUpload` | `LAUNCH-OFF` |
 | `publicFormProofRefresh` | `LAUNCH-ON` |
 | `publicFormRoundRobin` | `LAUNCH-OFF` |
+| `publicSpanishLocale` | `LAUNCH-OFF` |
 | `publicFormSubmission` | `LAUNCH-ON` |
 | `publicFunnelPublication` | `LAUNCH-ON` |
 | `publicFunnelProofRefresh` | `LAUNCH-ON` |
@@ -81,6 +82,8 @@ Policy-Freigabe: `PENDING_SIGNATURE`
 ## 3. Inventurmethodik
 
 Die ursprüngliche Inventur war read-only gegenüber Live-System, Datenbank und Providern. Im anschließenden Remediation-Delta wurden ausschließlich nicht produktive Preview-Blob-Stores angelegt, bestehende Vercel-Resource-Connections enger getrennt und auf dem isolierten Neon-Projekt ein Migrations-/Restore-Drill, ein Pre-Cutover-Snapshot, die Preview-Migrationen 060 und 068–072 sowie die sichere Zwei-Tenant-/Identity-/Batch-Provisionierung ausgeführt. 057 + 073–076 wurden zunächst auf einem isolierten Evidence-Branch angewandt, katalogseitig geprüft, auf den Pre-073-Stand restored und identisch erneut angewandt; 077 wurde dort anschließend separat least-privilege-validiert. Nach ausdrücklicher Freigabe wurde Preview-Main auf 057, 060 und 068–077 gebracht und dort mit 11/11 exakten Checksummen, 19/19 Tenant-FKs, 0/19 Anti-Joins, 21/21 Launch-Artefakten sowie vollständig grünem 077-Owner-/ACL-Gate bestätigt. Ein deployment-spezifisch freigegebener read-only Auth-/Tenant-/DB-Preflight auf Preview-SHA `2a765eb` bestand 94/94. Der direkte PostgreSQL-Barrieredrill bestand anschließend 4/4 mit zwei gepinnten App-Sessions, bestätigten Rollbacks und unabhängig belegtem Null-Rückstand; Capability, CRUD und API-Cleanup wurden dabei nicht ausgeführt. Es wurden keine Production-Daten-, Production-Schema- oder Provider-Send-/Kalender-Writes ausgeführt; Vercel-Änderungen blieben auf branchgebundene Preview-Variablen und Preview-Deployments begrenzt.
+
+Nachtrag 23.08.2026: Nach einer separaten, ausdrücklich auf Preview-Main begrenzten Freigabe wurden zusätzlich 078 und 079 checksummengebunden angewandt. Migration 061, 062 und 065 sowie Production blieben unverändert. Dieser Nachtrag ersetzt oder rückdatiert die vorstehenden zeitlich früheren Nachweise nicht.
 
 Statisch geprüft wurden:
 

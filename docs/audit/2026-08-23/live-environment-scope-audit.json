@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-08-23T17:00:51.3494112Z",
+  "project": {
+    "team": "novalure",
+    "name": "novalure-crm",
+    "id": "prj_R32Okl6AHijTohvuKmryuTLjWMsk"
+  },
+  "method": {
+    "source": "authenticated Vercel project UI",
+    "mode": "READ_ONLY",
+    "secretValuesInspected": false,
+    "secretValuesRecorded": false,
+    "externalMutationPerformed": false,
+    "productionMutationPerformed": false
+  },
+  "previewDatabaseAndAuthVariables": {
+    "status": "PASS_BRANCH_BOUND_SENSITIVE",
+    "environment": "Preview",
+    "gitBranch": "codex/go-live-remediation-20260822",
+    "variables": [
+      "DATABASE_URL",
+      "POSTGRES_URL",
+      "POSTGRES_URL_NON_POOLING",
+      "NOVALURE_SESSION_SECRET",
+      "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "NOVALURE_QA_BATCH_REGISTRATION_ENABLED",
+      "NOVALURE_QA_RESET_WORKSPACE_IDS",
+      "NOVALURE_QA_RESET_EXECUTION_ENABLED",
+      "NOVALURE_PRODUCTION_WORKSPACE_IDS"
+    ]
+  },
+  "blob": {
+    "status": "PARTIAL_PASS_SEPARATE_STORES_PROVIDER_LIFECYCLE_PENDING",
+    "previewPublicStore": {
+      "storeId": "store_02EWd3TY6A37G3sV",
+      "environment": "Preview",
+      "branchBound": false,
+      "tokenValueInspected": false
+    },
+    "previewPrivateStore": {
+      "storeId": "store_s5ER4TRlBGRnZXwf",
+      "environment": "Preview",
+      "branchBound": false,
+      "tokenValueInspected": false
+    },
+    "productionPrivateStore": {
+      "storeId": "store_vCn7LiyRocYNC8pM",
+      "environment": "Production",
+      "tokenValueInspected": false
+    },
+    "legacyDefaultTokenScope": "Production and Development",
+    "blockingFindings": [
+      "Preview Blob credentials apply to all Preview deployments rather than only the release branch.",
+      "The isolated Preview lifecycle and legacy-object migration have not yet produced final-SHA runtime evidence."
+    ]
+  },
+  "email": {
+    "status": "FAIL_SHARED_PREVIEW_PRODUCTION_CREDENTIAL_AND_SENDER_MISCONFIGURATION",
+    "findings": [
+      {
+        "variable": "RESEND_API_KEY",
+        "scope": "Production and Preview",
+        "sensitive": true
+      },
+      {
+        "variable": "RESEND_FORM",
+        "scope": "Production and Preview",
+        "sensitive": true,
+        "assessment": "The runtime requires RESEND_FROM; RESEND_FORM is not a supported fallback."
+      },
+      {
+        "variable": "RESEND_FROM",
+        "scope": "ABSENT",
+        "sensitive": null
+      },
+      {
+        "variable": "NOVALURE_EMAIL_FROM",
+        "scope": "Production",
+        "sensitive": true
+      }
+    ],
+    "qaRecipientAllowlistVerified": false,
+    "providerEndToEndStatus": "NOT_RUN"
+  },
+  "calendar": {
+    "status": "FAIL_PREVIEW_PROVIDER_ISOLATION_NOT_PROVEN",
+    "google": {
+      "credentialScope": "Production only",
+      "previewConfigured": false,
+      "providerEndToEndStatus": "NOT_RUN"
+    },
+    "microsoft": {
+      "credentialScope": "Production and Preview",
+      "previewProductionCredentialSeparation": false,
+      "providerEndToEndStatus": "NOT_RUN"
+    }
+  },
+  "deploymentProtection": {
+    "status": "FAIL_PERSISTENT_AUTOMATION_BYPASSES_REMAIN",
+    "vercelAuthentication": "REQUIRE_LOGIN_STANDARD_PROTECTION",
+    "automationBypassCount": 2,
+    "automationBypassValuesInspected": false,
+    "automationBypassAddedDisplay": "Jun 19",
+    "shareableLinksInventory": "DEPLOYMENT_SCOPED_NOT_LISTED_ON_PROJECT_SETTINGS_PAGE",
+    "protectedSourceMaps": "DISABLED",
+    "optionsAllowlistEnabled": false
+  },
+  "gateDecision": "NO_GO_UNTIL_EMAIL_CALENDAR_BYPASS_AND_RUNTIME_LIFECYCLE_GAPS_ARE_CLOSED"
+}

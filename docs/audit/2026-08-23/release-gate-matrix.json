@@ -1,15 +1,29 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "manifestPath": "docs/audit/2026-08-23/release-surface-manifest.json",
   "baselineCommit": "0189f4f27e8762c84a49a5cf194e8fa49cf9d05f",
   "candidateCommit": null,
   "approvalStatus": "PENDING_SIGNATURE",
-  "launchScopePolicyVersion": "2026-08-22.11",
+  "launchScopePolicyVersion": "2026-08-22.12",
   "signatures": {
     "product": null,
     "engineering": null,
     "security": null,
     "operations": null
+  },
+  "specialDecisions": {
+    "unitBuyerDealRelationship": {
+      "launchScopeKey": "propertyReservationRelationshipSync",
+      "decision": "OFF",
+      "status": "PENDING_SIGNATURE",
+      "decisionDocument": "docs/audit/2026-08-22/unit-buyer-deal-decision.md",
+      "requiredSignatures": {
+        "product": null,
+        "salesOperations": null,
+        "engineering": null,
+        "dataCompliance": null
+      }
+    }
   },
   "surfaces": [
     {
@@ -24,7 +38,10 @@
       "tests": ["scripts/phase0-smoke-tests.mjs", "scripts/auth-security-tests.mjs"],
       "evidencePaths": ["docs/audit/2026-08-23/release-surface-manifest.json"],
       "rollbackBehavior": "Return the canonical alias to the last known-good deployment; no data rollback is required for a read entry.",
-      "inventorySelectors": [{ "category": "pages", "values": ["/"] }]
+      "inventorySelectors": [
+        { "category": "pages", "values": ["/"] },
+        { "category": "publicLocales", "values": ["de", "en"] }
+      ]
     },
     {
       "id": "web.public-legal",
@@ -709,6 +726,20 @@
       "evidencePaths": ["src/lib/public-form-dto.ts"],
       "rollbackBehavior": "Use only the fixed approved owner and reject round-robin configuration before publication.",
       "inventorySelectors": []
+    },
+    {
+      "id": "scope.public-spanish-locale",
+      "function": "Spanish public landing and public-language discovery",
+      "routeApiJob": ["/?lang=es", "Spanish geotargeting and hreflang discovery"],
+      "currentTechnicalStatus": "FAIL_CLOSED_NOT_ADVERTISED_PRODUCTION_OR_PUBLIC_PREVIEW",
+      "desiredLaunchStatus": "OFF",
+      "launchScopeKey": "publicSpanishLocale",
+      "launchScopeNotApplicableReason": null,
+      "owners": { "technical": "UNASSIGNED", "product": "UNASSIGNED", "legal": "UNASSIGNED" },
+      "tests": ["scripts/i18n-localization-smoke-tests.mjs", "scripts/launch-scope-fail-closed-tests.mjs"],
+      "evidencePaths": ["src/lib/public-language.ts", "docs/audit/2026-08-22/provider-legal-product-approval-runbook.md"],
+      "rollbackBehavior": "Keep Spanish discovery and public routing OFF; retain ES source copy only for a separately guarded internal Preview review.",
+      "inventorySelectors": [{ "category": "publicLocales", "values": ["es"] }]
     },
     {
       "id": "scope.public-form-submission",

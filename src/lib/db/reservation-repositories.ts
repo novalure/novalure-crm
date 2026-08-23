@@ -675,11 +675,14 @@ function buildDealStageWarning(
 }
 
 function warnMissingReservationDealStage(warning: ReservationDealStageWarning) {
-  console.warn(
-    `[reservation-stage-resolver] Skipping deal stage change: action=${warning.action}; projectId=${warning.projectId}; candidates=${warning.candidates.join(
-      ", ",
-    )}; reason=${warning.reason}`,
-  );
+  console.warn(JSON.stringify({
+    action: warning.action,
+    component: "reservation_stage_resolver",
+    event: "reservation.deal_stage_sync_skipped",
+    level: "warn",
+    reasonCode: "stage_not_configured",
+    schemaVersion: 1,
+  }));
 }
 
 function isTerminalDealStage(stage: string | null | undefined) {

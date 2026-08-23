@@ -1,0 +1,22 @@
+{
+  "branchId": "br-calm-poetry-al5i1a9c",
+  "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+  "environment": "RECOVERY_BRANCH_ONLY",
+  "finishedAt": "2026-08-23T16:38:12.192Z",
+  "migration061Executed": false,
+  "productionMutationPerformed": false,
+  "records": [
+    {
+      "checksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f",
+      "dryRun": "NOT_RUN",
+      "finishedAt": "2026-08-23T16:38:12.191Z",
+      "startedAt": "2026-08-23T16:37:57.398Z",
+      "up": "NOT_RUN",
+      "version": "057_bot_webhook_legacy_index_cutover"
+    }
+  ],
+  "schemaVersion": 1,
+  "startedAt": "2026-08-23T16:37:57.394Z",
+  "status": "FAIL",
+  "tool": "scripts/recovery-migration-rehearsal.mjs"
+}

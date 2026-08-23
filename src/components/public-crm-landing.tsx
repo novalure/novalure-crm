@@ -191,7 +191,6 @@ function Brand({ language }: { language: PublicLanguageCode }) {
 const publicLanguageOptions = [
   { code: "de", shortLabel: "DE" },
   { code: "en", shortLabel: "EN" },
-  { code: "es", shortLabel: "ES" },
 ] as const satisfies readonly { code: PublicLanguageCode; shortLabel: string }[];
 
 function getLanguageSwitchLabels(language: PublicLanguageCode, pageCopy: PublicCopy) {

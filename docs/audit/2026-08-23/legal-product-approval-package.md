@@ -7,7 +7,7 @@ Dieses Paket friert ausschließlich die technisch geprüften Quellen ein. Es ist
 
 ## Legal-Inhalt
 
-Das maschinenlesbare Manifest liegt in legal-content-manifest.json. Es umfasst /imprint, /privacy, /terms, /cookies, /data-deletion, /meta und /unsubscribe jeweils für DE und EN. Die Source-Hashes werden durch scripts/legal-approval-manifest-tests.mjs gegen den Dateibaum geprüft.
+Das maschinenlesbare Manifest liegt in legal-content-manifest.json. Es umfasst /imprint, /privacy, /terms, /cookies, /data-deletion, /meta und /unsubscribe jeweils mit getrennten DE-/EN-Rendernachweisen. Der Legacy-Alias /datadeletion ist explizit an /data-deletion gebunden; /unsubscribe/confirm ist als eigener funktionaler POST-Vertrag inventarisiert. Die Source-Hashes werden durch scripts/legal-approval-manifest-tests.mjs gegen den Dateibaum geprüft. Render-Hashes, Legal-Owner und Freigabestatus bleiben bis zum finalen SHA-identischen Preview bewusst leer beziehungsweise PENDING.
 
 Noch zwingend durch Legal zu bestätigen:
 
@@ -32,7 +32,7 @@ Die technische Approval-Grenze wurde gehärtet:
 - Profil, Version und Audit werden in einer Transaktion geschrieben;
 - Migration 078 stuft bestehende unvollständige Scheinf­reigaben auf needs_review zurück und erzwingt Approval-Integrität.
 
-Migration 078 und die additive Rollenverschärfung 079 sind noch nicht auf Preview oder Production ausgeführt. Die bereits angewandte Migration 075 wurde nicht nachträglich verändert. Es wurden keine fehlenden Unternehmensdaten erfunden.
+Nachtrag 23.08.2026: Migration 078 und die additive Rollenverschärfung 079 wurden nach separater ausdrücklicher Freigabe ausschließlich auf der isolierten Preview-Main-Datenbank angewandt und checksummengebunden nachgeprüft. Migration 061, 062 und 065 sowie Production blieben unverändert. Das Preview-Unternehmensprofil wurde dabei korrekt von einer unvollständigen Scheinf­reigabe auf needs_review zurückgestuft; dies ist keine Legal-Freigabe. Die bereits angewandte Migration 075 wurde nicht nachträglich verändert. Es wurden keine fehlenden Unternehmensdaten erfunden.
 
 ## Product-Entscheidungen
 
@@ -42,10 +42,11 @@ Product muss die vollständige Surface-Matrix mit exakt LAUNCH-ON, LAUNCH-OFF od
 - Public Forms/Funnels, Consent und Proof-Refresh;
 - Provider-Reads und -Writes;
 - reduzierte OFF-Flächen;
+- spanische öffentliche Produktoberfläche als explizite `LAUNCH-OFF`-Surface ohne öffentliche Sprachwahl oder hreflang-Angebot;
 - Unit-/Buyer-/Deal-Beziehungen;
 - bekannte P2-Risiken samt Owner und Termin.
 
-Für Unit-/Buyer-/Deal-Beziehungen bleibt ausschließlich der reduzierte Weg zulässig, bis die zehn Fachentscheidungen in docs/audit/2026-08-22/unit-buyer-deal-decision.md beantwortet sind. Die API-, Cron-, Repository- und nun auch Viewing-/Offer-UI-Pfade bleiben technisch OFF.
+Für Unit-/Buyer-/Deal-Beziehungen bleibt ausschließlich der reduzierte Weg zulässig, bis die zehn Fachentscheidungen in docs/audit/2026-08-22/unit-buyer-deal-decision.md beantwortet sind. Die Initial-Launch-OFF-Entscheidung ist zusätzlich als `specialDecisions.unitBuyerDealRelationship` in der Gesamtmatrix abgebildet und benötigt eigene Signaturen von Product, Sales Operations, Engineering und Data/Compliance. Die API-, Cron-, Repository- und nun auch Viewing-/Offer-UI-Pfade bleiben technisch OFF.
 
 ## Signaturhülle
 

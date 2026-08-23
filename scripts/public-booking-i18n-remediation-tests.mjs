@@ -21,7 +21,15 @@ function loadPublicLanguageExports() {
   const cjsModule = { exports: {} };
   vm.runInNewContext(
     outputText,
-    { exports: cjsModule.exports, module: cjsModule, URLSearchParams },
+    {
+      exports: cjsModule.exports,
+      module: cjsModule,
+      require(specifier) {
+        assert.equal(specifier, "@/lib/launch-scope");
+        return { evaluateLaunchScope: () => ({ allowed: false }) };
+      },
+      URLSearchParams,
+    },
     { filename: path },
   );
   return cjsModule.exports;

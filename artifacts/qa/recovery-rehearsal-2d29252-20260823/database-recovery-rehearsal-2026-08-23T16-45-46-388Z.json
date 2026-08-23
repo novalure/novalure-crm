@@ -1,0 +1,126 @@
+{
+  "branchId": "br-calm-poetry-al5i1a9c",
+  "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+  "environment": "RECOVERY_BRANCH_ONLY",
+  "finishedAt": "2026-08-23T16:45:46.388Z",
+  "migration061Executed": false,
+  "productionMutationPerformed": false,
+  "records": [
+    {
+      "checksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:39:59.004Z",
+      "startedAt": "2026-08-23T16:39:34.103Z",
+      "up": "PASS",
+      "version": "057_bot_webhook_legacy_index_cutover"
+    },
+    {
+      "checksum": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:40:26.102Z",
+      "startedAt": "2026-08-23T16:39:59.005Z",
+      "up": "PASS",
+      "version": "060_tenant_rls_pilot_prepare"
+    },
+    {
+      "checksum": "9f93c0f8e1b03544285bf0b118c78355190f8d6ef78e62b0348b7eb37ff704a3",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:40:51.844Z",
+      "startedAt": "2026-08-23T16:40:26.103Z",
+      "up": "PASS",
+      "version": "068_qa_batch_reset_safety"
+    },
+    {
+      "checksum": "5d8807bea865dbc12e4492277f400931252cad115c686c8a0d22a5138ec28cc7",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:41:18.791Z",
+      "startedAt": "2026-08-23T16:40:51.844Z",
+      "up": "PASS",
+      "version": "069_property_unit_idempotency"
+    },
+    {
+      "checksum": "14fee3cca4530a5ab93b18aa9291837dc055a9f0b3f7132a11bb0ddbc1cc1598",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:41:45.037Z",
+      "startedAt": "2026-08-23T16:41:18.793Z",
+      "up": "PASS",
+      "version": "070_funnel_submission_idempotency_recovery"
+    },
+    {
+      "checksum": "504180c4f5f7da5f3e7b57547b3b07023fd83edcd29a452a1b0175edf5637011",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:42:11.103Z",
+      "startedAt": "2026-08-23T16:41:45.038Z",
+      "up": "PASS",
+      "version": "071_forms_owner_tenant_guard"
+    },
+    {
+      "checksum": "5313d802ed2087c64d859292e8851a5817cda174be8470d70514ba54c7cd311d",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:42:38.626Z",
+      "startedAt": "2026-08-23T16:42:11.104Z",
+      "up": "PASS",
+      "version": "072_form_submission_atomicity"
+    },
+    {
+      "checksum": "5e65eb70b7c5e20e66ed921f52539dde141bb5c02fd974c1a38164803e05e80d",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:43:05.371Z",
+      "startedAt": "2026-08-23T16:42:38.627Z",
+      "up": "PASS",
+      "version": "073_launch_tenant_relation_guards"
+    },
+    {
+      "checksum": "a644091fc9c2239968c9934651f8992bc913e1740077c907839b647dae6246e9",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:43:32.430Z",
+      "startedAt": "2026-08-23T16:43:05.372Z",
+      "up": "PASS",
+      "version": "074_validate_launch_tenant_relation_guards"
+    },
+    {
+      "checksum": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:43:58.515Z",
+      "startedAt": "2026-08-23T16:43:32.431Z",
+      "up": "PASS",
+      "version": "075_public_funnel_visit_truth"
+    },
+    {
+      "checksum": "c440582584555c006845f99a7c71ceab5318cd1acbd1138325b2034d4f0f0086",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:44:24.940Z",
+      "startedAt": "2026-08-23T16:43:58.516Z",
+      "up": "PASS",
+      "version": "076_bot_webhook_durable_processing"
+    },
+    {
+      "checksum": "6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:44:51.092Z",
+      "startedAt": "2026-08-23T16:44:24.941Z",
+      "up": "PASS",
+      "version": "077_schema_ledger_runtime_projection"
+    },
+    {
+      "checksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:45:18.811Z",
+      "startedAt": "2026-08-23T16:44:51.092Z",
+      "up": "PASS",
+      "version": "078_company_profile_approval_integrity"
+    },
+    {
+      "checksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432",
+      "dryRun": "PASS",
+      "finishedAt": "2026-08-23T16:45:46.386Z",
+      "startedAt": "2026-08-23T16:45:18.812Z",
+      "up": "PASS",
+      "version": "079_public_funnel_visit_role_boundary"
+    }
+  ],
+  "schemaVersion": 1,
+  "startedAt": "2026-08-23T16:39:34.100Z",
+  "status": "PASS",
+  "tool": "scripts/recovery-migration-rehearsal.mjs"
+}

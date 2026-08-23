@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "status": "CURRENT_SHA_REHEARSAL_AND_RESET_PASS",
+  "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+  "productionMutationPerformed": false,
+  "curationRule": "Exactly one complete 14-migration PASS is release evidence. Earlier FAIL attempts are retained for chronology but are explicitly ineligible for a PASS conclusion.",
+  "explicitlyExcludedMigrations": [
+    "061_validate_and_activate_tenant_rls_pilot",
+    "062_private_media_contract_cutover",
+    "065_notification_guard_search_path_hardening"
+  ],
+  "evidence": [
+    {
+      "role": "SELECTED_PASS",
+      "passEligible": true,
+      "path": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-45-46-388Z.json",
+      "sidecarPath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-45-46-388Z.json.sha256",
+      "sha256": "a4483c22b676fab393475af2339764cb027165359eeef5344d574da768dd8310"
+    },
+    {
+      "role": "EXCLUDED_FAILED_ATTEMPT",
+      "passEligible": false,
+      "path": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-37-21-444Z.json",
+      "sidecarPath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-37-21-444Z.json.sha256",
+      "sha256": "a077bb0c8ed1f7ad375c9b1b64a635c5f47aadec54fb574e4df294d53d43dee4"
+    },
+    {
+      "role": "EXCLUDED_FAILED_ATTEMPT",
+      "passEligible": false,
+      "path": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-38-12-192Z.json",
+      "sidecarPath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-38-12-192Z.json.sha256",
+      "sha256": "d0e05baa6897cb6b9e14157b9eed3064c24231819199cb3029a3cab8b0945974"
+    },
+    {
+      "role": "EXCLUDED_FAILED_ATTEMPT",
+      "passEligible": false,
+      "path": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-39-00-126Z.json",
+      "sidecarPath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-39-00-126Z.json.sha256",
+      "sha256": "2d3512d3eecc98651d871048b365d9e1c4cf8aeac05ae640ea027e7116e6f8a5"
+    },
+    {
+      "role": "ROLLBACK_RESET_PASS",
+      "passEligible": true,
+      "path": "docs/audit/2026-08-23/database-recovery-rollback-evidence.json",
+      "sidecarPath": "docs/audit/2026-08-23/database-recovery-rollback-evidence.json.sha256",
+      "sha256": "e8b7321d04bc04fe3d277ec16998c6288115ebc5ce9b204069206679e37ecb36"
+    }
+  ],
+  "rollback": {
+    "preservedMigratedBranchId": "br-empty-tree-alp9d9z1",
+    "resetRecoveryBranchId": "br-calm-poetry-al5i1a9c",
+    "dataFingerprintSha256": "c05c3a3d39c67510db92079f593756fcb7551d8f5446c47aa07aa3be4b2e45b8",
+    "tableCount": 19,
+    "migrationLedgerCount": 19,
+    "migrationLedgerMaxVersion": "067_app_role_runtime_grants",
+    "rowCountMismatchCount": 0
+  },
+  "schemaDiffApi": {
+    "status": "UNAVAILABLE_HTTP_413_TOOL_LIMIT",
+    "countedAsPassEvidence": false
+  },
+  "verificationContract": "scripts/database-recovery-evidence-verify.mjs",
+  "signatureStatus": "PENDING_SIGNATURE"
+}

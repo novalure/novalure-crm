@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+  "environment": "RECOVERY_BRANCH_ONLY",
+  "productionMutationPerformed": false,
+  "productionAliasOrEnvironmentChanged": false,
+  "explicitlyExcludedMigrations": [
+    "061_validate_and_activate_tenant_rls_pilot",
+    "062_private_media_contract_cutover",
+    "065_notification_guard_search_path_hardening"
+  ],
+  "rehearsal": {
+    "selectedEvidencePath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-45-46-388Z.json",
+    "selectedEvidenceSha256": "a4483c22b676fab393475af2339764cb027165359eeef5344d574da768dd8310",
+    "sourceBranchIdAtExecution": "br-calm-poetry-al5i1a9c",
+    "preservedMigratedBranchId": "br-empty-tree-alp9d9z1",
+    "appliedMigrations": [
+      "057_bot_webhook_legacy_index_cutover",
+      "060_tenant_rls_pilot_prepare",
+      "068_qa_batch_reset_safety",
+      "069_property_unit_idempotency",
+      "070_funnel_submission_idempotency_recovery",
+      "071_forms_owner_tenant_guard",
+      "072_form_submission_atomicity",
+      "073_launch_tenant_relation_guards",
+      "074_validate_launch_tenant_relation_guards",
+      "075_public_funnel_visit_truth",
+      "076_bot_webhook_durable_processing",
+      "077_schema_ledger_runtime_projection",
+      "078_company_profile_approval_integrity",
+      "079_public_funnel_visit_role_boundary"
+    ]
+  },
+  "reset": {
+    "strategy": "PRESERVE_MIGRATED_BRANCH_THEN_RESET_RECOVERY_FROM_PRODUCTION_PARENT",
+    "resetRecoveryBranchId": "br-calm-poetry-al5i1a9c",
+    "comparisonResult": "PASS",
+    "rowCountMismatchCount": 0,
+    "productionFingerprint": {
+      "migrationLedger": {
+        "count": 19,
+        "maxVersion": "067_app_role_runtime_grants"
+      },
+      "rowCounts": {
+        "auth_identities": 8,
+        "auth_sessions": 22,
+        "calendar_events": 9,
+        "consent_records": 0,
+        "contacts": 6,
+        "deals": 5,
+        "form_submissions": 0,
+        "forms": 0,
+        "funnel_submissions": 0,
+        "funnels": 4,
+        "leads": 5,
+        "media_assets": 1,
+        "meeting_bookings": 10,
+        "projects": 5,
+        "provider_connections": 4,
+        "public_submission_idempotency": 0,
+        "tasks": 21,
+        "workspace_users": 4,
+        "workspaces": 2
+      },
+      "dataFingerprintSha256": "c05c3a3d39c67510db92079f593756fcb7551d8f5446c47aa07aa3be4b2e45b8"
+    },
+    "recoveryFingerprint": {
+      "migrationLedger": {
+        "count": 19,
+        "maxVersion": "067_app_role_runtime_grants"
+      },
+      "rowCounts": {
+        "auth_identities": 8,
+        "auth_sessions": 22,
+        "calendar_events": 9,
+        "consent_records": 0,
+        "contacts": 6,
+        "deals": 5,
+        "form_submissions": 0,
+        "forms": 0,
+        "funnel_submissions": 0,
+        "funnels": 4,
+        "leads": 5,
+        "media_assets": 1,
+        "meeting_bookings": 10,
+        "projects": 5,
+        "provider_connections": 4,
+        "public_submission_idempotency": 0,
+        "tasks": 21,
+        "workspace_users": 4,
+        "workspaces": 2
+      },
+      "dataFingerprintSha256": "c05c3a3d39c67510db92079f593756fcb7551d8f5446c47aa07aa3be4b2e45b8"
+    }
+  },
+  "schemaDiffApi": {
+    "status": "UNAVAILABLE_HTTP_413_TOOL_LIMIT",
+    "countedAsPassEvidence": false,
+    "statement": "The connector-wide schema diff exceeded the API payload limit. No schema-diff PASS is claimed; the rollback PASS is limited to the recorded deterministic catalog baseline, migration ledger and 19-table row fingerprint comparison."
+  },
+  "verificationContract": "scripts/database-recovery-evidence-verify.mjs"
+}

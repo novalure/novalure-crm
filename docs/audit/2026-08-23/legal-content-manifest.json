@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "approvalStatus": "PENDING_LEGAL_REVIEW",
   "candidateCommit": null,
   "testedDeployment": null,
@@ -13,66 +13,78 @@
       "publicUrl": "https://www.novalure-crm.app/imprint",
       "languages": ["de", "en"],
       "lastUpdated": "December 2025",
-      "sourceFiles": [{"path": "src/app/imprint/page.tsx", "sha256": "baf437839de3284a632fa7cca927cf4972c1fe1e17eca928b36f1df1124819aa"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/imprint/page.tsx", "sha256": "baf437839de3284a632fa7cca927cf4972c1fe1e17eca928b36f1df1124819aa"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/imprint?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/imprint?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/privacy",
       "publicUrl": "https://www.novalure-crm.app/privacy",
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
-      "sourceFiles": [{"path": "src/app/privacy/page.tsx", "sha256": "454cc95b1152747071f89c7b61233506c0a288c44a32312d5eca87bf6d03a4dd"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/privacy/page.tsx", "sha256": "454cc95b1152747071f89c7b61233506c0a288c44a32312d5eca87bf6d03a4dd"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/privacy?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/privacy?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/terms",
       "publicUrl": "https://www.novalure-crm.app/terms",
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
-      "sourceFiles": [{"path": "src/app/terms/page.tsx", "sha256": "92b339b502c6ca2b093a3d034d10d1b0f84077888b54e30dbbdaf99df1fa700e"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/terms/page.tsx", "sha256": "92b339b502c6ca2b093a3d034d10d1b0f84077888b54e30dbbdaf99df1fa700e"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/terms?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/terms?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/cookies",
       "publicUrl": "https://www.novalure-crm.app/cookies",
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
-      "sourceFiles": [{"path": "src/app/cookies/page.tsx", "sha256": "f3943532a163b477ed6c6c08cc876501de0d5de10770ef5d94854619e096e596"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/cookies/page.tsx", "sha256": "f3943532a163b477ed6c6c08cc876501de0d5de10770ef5d94854619e096e596"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/cookies?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/cookies?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/data-deletion",
       "publicUrl": "https://www.novalure-crm.app/data-deletion",
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
-      "sourceFiles": [{"path": "src/app/data-deletion/page.tsx", "sha256": "ed4a318073eb1232f9fccc1f24cc14764e1800d71183196329ad59ce0091f556"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/data-deletion/page.tsx", "sha256": "ed4a318073eb1232f9fccc1f24cc14764e1800d71183196329ad59ce0091f556"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/data-deletion?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/data-deletion?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/meta",
       "publicUrl": "https://www.novalure-crm.app/meta",
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
-      "sourceFiles": [{"path": "src/app/meta/page.tsx", "sha256": "d52794182a635d7b766787480f49d01fcbd0e2bf8a16872223dcc36e2519b00c"}],
-      "renderedContentSha256": null,
-      "legalOwner": null,
-      "legalStatus": "PENDING",
-      "approvedAt": null
+      "sourceFiles": [
+        {"path": "src/app/meta/page.tsx", "sha256": "d52794182a635d7b766787480f49d01fcbd0e2bf8a16872223dcc36e2519b00c"}
+      ],
+      "renderedVariants": [
+        {"language": "de", "path": "/meta?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/meta?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
     },
     {
       "route": "/unsubscribe",
@@ -83,9 +95,38 @@
         {"path": "src/app/unsubscribe/page.tsx", "sha256": "bbba5526c0d407bed362ce88f3e88cd33cec843ee0820450947b8270a157e250"},
         {"path": "src/app/unsubscribe/unsubscribe-confirmation.tsx", "sha256": "37d1e4777fd08e0a4ae925a6b95be0597117d85c1733bd0e11a49494178e8004"}
       ],
-      "renderedContentSha256": null,
-      "legalOwner": null,
+      "renderedVariants": [
+        {"language": "de", "path": "/unsubscribe?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
+        {"language": "en", "path": "/unsubscribe?lang=en", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null}
+      ]
+    }
+  ],
+  "routeAliases": [
+    {
+      "route": "/datadeletion",
+      "canonicalRoute": "/data-deletion",
+      "contract": "Re-export the canonical page and metadata without independent legal copy.",
+      "sourceFiles": [
+        {"path": "src/app/datadeletion/page.tsx", "sha256": "61e950edb85c26bd7a79ace5127cbe2df4991e4fd4f5f1a3f34e0d28b22252e6"}
+      ],
+      "technicalStatus": "VERIFIED_ALIAS",
       "legalStatus": "PENDING",
+      "legalOwner": null,
+      "approvedAt": null
+    }
+  ],
+  "functionalContracts": [
+    {
+      "id": "unsubscribe-confirm",
+      "route": "/unsubscribe/confirm",
+      "methods": ["POST"],
+      "contract": "CSRF-bound, bounded JSON unsubscribe mutation with private no-store responses and no token disclosure.",
+      "sourceFiles": [
+        {"path": "src/app/unsubscribe/confirm/route.ts", "sha256": "e77da93899032e11596cf6930cf8e8ae81ddcf9e0142ea6bb8c87f1bf3054678"}
+      ],
+      "technicalStatus": "VERIFIED_BY_SECURITY_TESTS",
+      "legalStatus": "PENDING",
+      "legalOwner": null,
       "approvedAt": null
     }
   ]

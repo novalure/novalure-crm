@@ -385,10 +385,22 @@ async function runMissingCandidateCase(pool, POST) {
     assert.equal(result.payload.persisted, true, "missing-candidate reservation should persist");
     assert.equal(deal.stage, "Neu", "missing-candidate deal stage should remain unchanged");
     assert.ok(result.payload.dealStageWarning, "missing-candidate response should expose a dealStageWarning");
-    assert.ok(
-      warnings.some((message) => message.includes("[reservation-stage-resolver]") && message.includes(missingStageProjectId)),
-      "missing-candidate warning should be logged",
-    );
+    const warningRecords = warnings.flatMap((message) => {
+      try {
+        return [JSON.parse(message)];
+      } catch {
+        return [];
+      }
+    });
+    assert.ok(warningRecords.some((record) =>
+      record?.action === "create" &&
+      record?.component === "reservation_stage_resolver" &&
+      record?.event === "reservation.deal_stage_sync_skipped" &&
+      record?.reasonCode === "stage_not_configured"), "missing-candidate warning should be logged");
+    assert.doesNotMatch(warnings.join("\n"), new RegExp(missingStageProjectId, "u"));
+    assert.ok(warningRecords.every((record) =>
+      !("projectId" in record) && !("candidates" in record) && !("reason" in record)),
+    "reservation-stage logs must not contain tenant project, stage candidates or free-form reasons");
 
     console.log(
       JSON.stringify({

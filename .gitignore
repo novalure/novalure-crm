@@ -58,6 +58,9 @@ next-env.d.ts
 # local database helper scripts
 .novalure-*.cjs
 
+# local Codex QA probes may contain fixture identifiers or action-time inputs
+.codex-qa-*
+
 .vercel
 .env*.local
 

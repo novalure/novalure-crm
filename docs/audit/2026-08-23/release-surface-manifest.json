@@ -4,6 +4,7 @@
   "candidateCommit": null,
   "approvalStatus": "PENDING_SIGNATURE",
   "inventoryGeneratedFor": "LOCAL_WORKTREE_ONLY",
+  "publicLocales": ["de", "en", "es"],
   "pages": [
     "/",
     "/book/[slug]",

@@ -7,7 +7,7 @@ export const launchScopeDecisions = {
 export type LaunchScopeDecision =
   (typeof launchScopeDecisions)[keyof typeof launchScopeDecisions];
 
-export const launchScopePolicyVersion = "2026-08-22.11";
+export const launchScopePolicyVersion = "2026-08-22.12";
 
 /**
  * This is the enforceable technical candidate. It deliberately does not claim
@@ -129,6 +129,10 @@ export const launchScopePolicy = Object.freeze({
   publicFormRoundRobin: Object.freeze({
     decision: launchScopeDecisions.off,
     reason: "Public round-robin ownership and fallback semantics are not approved.",
+  }),
+  publicSpanishLocale: Object.freeze({
+    decision: launchScopeDecisions.off,
+    reason: "The Spanish public product surface requires complete ES content, Legal, accessibility and Product approval before it can be offered.",
   }),
   publicFormSubmission: Object.freeze({
     decision: launchScopeDecisions.on,

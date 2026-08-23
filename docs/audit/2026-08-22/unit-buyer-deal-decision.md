@@ -3,7 +3,19 @@
 Stand: 22.08.2026
 Technischer Policy-Key: `propertyReservationRelationshipSync`
 Aktueller technischer Zustand: `LAUNCH-OFF`
-Fachliche Freigabe: ausstehend
+Initial-Launch-Kandidatenentscheidung: `LAUNCH-OFF`
+Fachliche Signatur: `PENDING_SIGNATURE`
+
+## Bindung an die Gesamtentscheidung
+
+Die technische OFF-Grenze ist als `specialDecisions.unitBuyerDealRelationship` in `docs/audit/2026-08-23/release-gate-matrix.json` verankert. Sie wird erst zu einer gültigen Initial-Launch-Entscheidung, wenn Product, Sales Operations, Engineering und Data/Compliance denselben finalen Candidate-SHA, dasselbe SHA-identische Deployment und denselben Matrix-Hash ausdrücklich als `LAUNCH-OFF` bestätigen. Eine leere Zeile, eine A/B/C-Entscheidung oder eine pauschale Gesamtfreigabe ersetzt diese OFF-Signatur nicht.
+
+| Initial-Launch-Freigabe | Name | Entscheidung | Candidate-SHA | Deployment | Matrix-Hash | Datum/Zeit | Signatur/Referenz |
+|---|---|---|---|---|---|---|---|
+| Product | _offen_ | `LAUNCH-OFF` | _offen_ | _offen_ | _offen_ | _offen_ | _offen_ |
+| Sales Operations | _offen_ | `LAUNCH-OFF` | _offen_ | _offen_ | _offen_ | _offen_ | _offen_ |
+| Engineering | _offen_ | `LAUNCH-OFF` | _offen_ | _offen_ | _offen_ | _offen_ | _offen_ |
+| Data/Compliance | _offen_ | `LAUNCH-OFF` | _offen_ | _offen_ | _offen_ | _offen_ | _offen_ |
 
 ## Warum die Entscheidung vor Launch erforderlich ist
 
@@ -78,7 +90,7 @@ Der Policy-Key darf erst in einem eigenen, reviewten Commit auf `LAUNCH-ON` wech
 
 Bis dahin bleiben UI-Aktionen, `/api/crm/reservations`, der Property-Reservation-Cron und direkte Repository-Mutationen fail-closed. Inventarlesen und das Anlegen von Gebäuden/Einheiten bleiben davon getrennt verfügbar.
 
-## Freigabe
+## Spätere LAUNCH-ON-Freigabe
 
 | Rolle | Name | Entscheidung A/B/C | Datum | Signatur/Referenz |
 |---|---|---|---|---|

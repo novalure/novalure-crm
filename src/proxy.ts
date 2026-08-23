@@ -4,7 +4,7 @@ import {
   languageRequestHeaderName,
 } from "@/lib/language-runtime";
 import {
-  isPublicLanguageCode,
+  isPublicLanguageLaunchEnabled,
   publicLanguageRequestHeaderName,
   resolvePublicSiteLanguage,
   toAppLanguage,
@@ -49,7 +49,7 @@ export function proxy(request: NextRequest) {
   response.headers.set("content-security-policy", contentSecurityPolicy);
   response.headers.set("x-content-security-policy-mode", contentSecurityPolicyModeHeader);
 
-  if (isPublicLanguageCode(requestedLanguage)) {
+  if (isPublicLanguageLaunchEnabled(requestedLanguage)) {
     response.cookies.set(languageCookieName, requestedLanguage, {
       maxAge: 31536000,
       path: "/",

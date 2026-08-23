@@ -5,6 +5,7 @@ import { createHash, createHmac } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createA11yBrowserContextOptions } from "./lib/a11y-browser-context.mjs";
 
 const publicRoutes = [
   "/",
@@ -418,22 +419,6 @@ function evaluateAcceptanceMatrix(matrix) {
         nonEmptyString(approval.signature) &&
         nonEmptyString(approval.signedAt)),
     status: typeof matrix.status === "string" ? matrix.status : "INVALID",
-  };
-}
-
-function createContextOptions(profile, bypassToken) {
-  return {
-    colorScheme: "light",
-    extraHTTPHeaders: bypassToken
-      ? {
-          "x-vercel-protection-bypass": bypassToken,
-          "x-vercel-set-bypass-cookie": "true",
-        }
-      : undefined,
-    hasTouch: Boolean(profile.isMobile),
-    isMobile: Boolean(profile.isMobile),
-    reducedMotion: "reduce",
-    viewport: { height: profile.height, width: profile.width },
   };
 }
 
@@ -902,12 +887,11 @@ const { chromium } = await loadPlaywright();
 const browserExecutable = args.get("browser-executable") ?? process.env.NOVALURE_BROWSER_EXECUTABLE;
 const browser = await chromium.launch({ executablePath: browserExecutable || undefined, headless: true });
 const axeSource = await readFile(path.resolve("node_modules", "axe-core", "axe.min.js"), "utf8");
-const bypassToken = process.env.NOVALURE_QA_VERCEL_BYPASS_TOKEN?.trim();
 const results = [];
 
 async function runPublicMatrix() {
   for (const profile of publicProfiles) {
-    const context = await browser.newContext(createContextOptions(profile, bypassToken));
+    const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
       await primePreviewAccess(context, shareUrl, base);
       for (const route of profile.routes) {
@@ -931,7 +915,7 @@ async function runPublicMatrix() {
 
 async function runPublicFixtureMatrix() {
   for (const profile of publicFixtureProfiles) {
-    const context = await browser.newContext(createContextOptions(profile, bypassToken));
+    const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
       await primePreviewAccess(context, shareUrl, base);
       for (const scenario of publicFixtureScenarios) {
@@ -999,7 +983,7 @@ async function runMfaMatrix() {
   }
   for (const profile of mfaProfiles) {
     for (const language of languages) {
-      const context = await browser.newContext(createContextOptions(profile, bypassToken));
+      const context = await browser.newContext(createA11yBrowserContextOptions(profile));
       try {
         await primePreviewAccess(context, shareUrl, base);
         const login = await beginQaFixtureLogin(context, base, credentials, language);
@@ -1072,7 +1056,7 @@ async function runAuthenticatedMatrix() {
     return;
   }
   for (const profile of authenticatedProfiles) {
-    const context = await browser.newContext(createContextOptions(profile, bypassToken));
+    const context = await browser.newContext(createA11yBrowserContextOptions(profile));
     try {
       await primePreviewAccess(context, shareUrl, base);
       const authentication = await authenticateQaFixture(context, base, credentials);

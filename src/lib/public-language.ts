@@ -1,4 +1,5 @@
 import type { LanguageCode } from "@/lib/language-runtime";
+import { evaluateLaunchScope } from "@/lib/launch-scope";
 
 export type PublicLanguageCode = LanguageCode | "es";
 
@@ -39,9 +40,14 @@ export function isPublicLanguageCode(value: unknown): value is PublicLanguageCod
   return value === "de" || value === "en" || value === "es";
 }
 
+export function isPublicLanguageLaunchEnabled(value: unknown): value is PublicLanguageCode {
+  if (!isPublicLanguageCode(value)) return false;
+  return value !== "es" || evaluateLaunchScope("publicSpanishLocale").allowed;
+}
+
 function normalizePublicLanguage(value: string | string[] | null | undefined): PublicLanguageCode | null {
   const normalized = firstQueryValue(value).trim().toLowerCase();
-  if (isPublicLanguageCode(normalized)) return normalized;
+  if (isPublicLanguageLaunchEnabled(normalized)) return normalized;
   return null;
 }
 
@@ -56,7 +62,7 @@ function acceptedPublicLanguage(acceptLanguage: string | null | undefined): Publ
       return "de";
     }
 
-    if (locale === "es" || locale.startsWith("es-")) {
+    if ((locale === "es" || locale.startsWith("es-")) && isPublicLanguageLaunchEnabled("es")) {
       return "es";
     }
 
@@ -87,7 +93,7 @@ export function resolvePublicSiteLanguage(input: {
   const country = input.country?.trim().toUpperCase();
   if (country) {
     if (germanDefaultCountries.has(country)) return "de";
-    if (spanishDefaultCountries.has(country)) return "es";
+    if (spanishDefaultCountries.has(country) && isPublicLanguageLaunchEnabled("es")) return "es";
     return "en";
   }
 
@@ -106,6 +112,6 @@ export function withPublicLanguage(href: string, language: PublicLanguageCode) {
   const path = queryIndex >= 0 ? hrefWithoutHash.slice(0, queryIndex) : hrefWithoutHash;
   const query = queryIndex >= 0 ? hrefWithoutHash.slice(queryIndex + 1) : "";
   const searchParams = new URLSearchParams(query);
-  searchParams.set("lang", language);
+  searchParams.set("lang", isPublicLanguageLaunchEnabled(language) ? language : "en");
   return `${path}?${searchParams.toString()}${hash}`;
 }

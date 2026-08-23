@@ -1,7 +1,9 @@
 {
-  "schemaVersion": 1,
-  "status": "RESTORE_VERIFIED_MIGRATION_REHEARSAL_PENDING",
+  "schemaVersion": 2,
+  "status": "CURRENT_SHA_REHEARSAL_AND_RESET_PASS",
+  "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
   "productionMutationPerformed": false,
+  "evidenceManifest": "docs/audit/2026-08-23/database-recovery-evidence-manifest.json",
   "snapshot": {
     "parentTimestamp": "2026-08-23T13:23:21.000Z",
     "recoveryBranchCreatedAt": "2026-08-23T13:23:54.000Z",
@@ -43,7 +45,14 @@
     "comparisonResult": "PASS"
   },
   "migrationRehearsal": {
-    "status": "NOT_RUN_UNTIL_CLEAN_CANDIDATE_COMMIT",
+    "status": "PASS",
+    "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+    "selectedEvidencePath": "artifacts/qa/recovery-rehearsal-2d29252-20260823/database-recovery-rehearsal-2026-08-23T16-45-46-388Z.json",
+    "selectedEvidenceSha256": "a4483c22b676fab393475af2339764cb027165359eeef5344d574da768dd8310",
+    "selectedEvidenceStatus": "PASS",
+    "excludedFailedAttemptCount": 3,
+    "sourceBranchIdAtExecution": "br-calm-poetry-al5i1a9c",
+    "preservedMigratedBranchId": "br-empty-tree-alp9d9z1",
     "plannedOrder": [
       "057_bot_webhook_legacy_index_cutover",
       "060_tenant_rls_pilot_prepare",
@@ -69,7 +78,9 @@
       "079_public_funnel_visit_role_boundary"
     ],
     "explicitlyExcluded": [
-      "061_validate_and_activate_tenant_rls_pilot"
+      "061_validate_and_activate_tenant_rls_pilot",
+      "062_private_media_contract_cutover",
+      "065_notification_guard_search_path_hardening"
     ],
     "productionLedgerGapsOutsideOriginalList": [
       "060_tenant_rls_pilot_prepare",
@@ -79,11 +90,27 @@
       "079_public_funnel_visit_role_boundary"
     ],
     "dependencyFinding": "060 is a required predecessor of 068 and 075 and cannot be omitted from the rehearsal or a future Production authorization.",
-    "separateDecisionRequired": "062 and 065 are not dependencies of 068-079 but remain absent from Production and require an explicit DBA/Product decision. 078 and the additive privilege cutover 079 are candidate-required and need separate Preview and Production authorization."
+    "separateDecisionRequired": "061, 062 and 065 were deliberately excluded from this rehearsal. 061 remains a separate RLS cutover; 062 remains blocked until the physical private-media legacy migration is complete; 065 requires an explicit Security/DBA cutover decision. Production execution remains unauthorized."
   },
   "rollbackDrill": {
-    "status": "NOT_RUN_UNTIL_MIGRATION_REHEARSAL",
-    "strategy": "Discard only the temporary migrated Recovery branch, recreate a fresh child at the recorded parent timestamp, and repeat schema, ledger and row-count fingerprints.",
-    "productionAliasOrEnvironmentChanged": false
+    "status": "PASS",
+    "candidateCommit": "2d29252a7252bac9e5367662cf72c22006222067",
+    "strategy": "Preserve the migrated Recovery state on a separate branch, reset the designated Recovery branch from the Production parent, and compare the migration ledger plus row counts for 19 central tables without mutating Production.",
+    "preservedMigratedBranchId": "br-empty-tree-alp9d9z1",
+    "resetRecoveryBranchId": "br-calm-poetry-al5i1a9c",
+    "evidencePath": "docs/audit/2026-08-23/database-recovery-rollback-evidence.json",
+    "dataFingerprintSha256": "c05c3a3d39c67510db92079f593756fcb7551d8f5446c47aa07aa3be4b2e45b8",
+    "migrationCount": 19,
+    "migrationMaxVersion": "067_app_role_runtime_grants",
+    "rowTableCount": 19,
+    "rowCountMismatchCount": 0,
+    "comparisonResult": "PASS",
+    "productionAliasOrEnvironmentChanged": false,
+    "productionMutationPerformed": false,
+    "schemaDiffApi": {
+      "status": "UNAVAILABLE_HTTP_413_TOOL_LIMIT",
+      "countedAsPassEvidence": false,
+      "assessment": "No connector-wide schema-diff PASS is claimed. The reset PASS is bounded to the recorded deterministic catalog baseline, migration ledger and 19-table row fingerprint comparison."
+    }
   }
 }

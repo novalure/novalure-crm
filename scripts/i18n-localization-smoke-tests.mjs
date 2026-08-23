@@ -12,7 +12,7 @@ function readProjectFile(path) {
   return readFileSync(join(rootDir, path), "utf8");
 }
 
-function loadTranspiledExports(path) {
+function loadTranspiledExports(path, runtimeImports = {}) {
   const source = readProjectFile(path);
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: {
@@ -26,7 +26,9 @@ function loadTranspiledExports(path) {
   const sandbox = {
     exports: cjsModule.exports,
     module: cjsModule,
+    URLSearchParams,
     require(specifier) {
+      if (Object.hasOwn(runtimeImports, specifier)) return runtimeImports[specifier];
       throw new Error(`Unexpected runtime import in ${path}: ${specifier}`);
     },
   };
@@ -206,31 +208,38 @@ test("localized i18n exports keep matching de/en key structure", () => {
   }
 });
 
-test("public geotargeting defaults to de, es or en by visitor country", () => {
+test("public geotargeting offers only launch-approved de/en while Spanish remains centrally off", () => {
+  const launchScope = loadTranspiledExports("src/lib/launch-scope.ts");
   const {
+    isPublicLanguageLaunchEnabled,
     publicLanguageRequestHeaderName,
     resolvePublicLanguage,
     resolvePublicSiteLanguage,
     toAppLanguage,
-  } = loadTranspiledExports("src/lib/public-language.ts");
+    withPublicLanguage,
+  } = loadTranspiledExports("src/lib/public-language.ts", {
+    "@/lib/launch-scope": launchScope,
+  });
 
   for (const country of ["AT", "DE", "CH", "LU"]) {
     assert.equal(resolvePublicSiteLanguage({ country }), "de", `${country} should default to German`);
   }
 
   for (const country of ["AR", "BO", "CL", "CO", "CR", "CU", "DO", "EC", "ES", "GQ", "GT", "HN", "MX", "NI", "PA", "PE", "PR", "PT", "PY", "SV", "UY", "VE"]) {
-    assert.equal(resolvePublicSiteLanguage({ country }), "es", `${country} should default to Spanish`);
+    assert.equal(resolvePublicSiteLanguage({ country }), "en", `${country} must use English while Spanish is launch-off`);
   }
 
   for (const country of ["BR", "GB", "IE", "IT", "US"]) {
     assert.equal(resolvePublicSiteLanguage({ country }), "en", `${country} should default to English`);
   }
 
-  assert.equal(resolvePublicSiteLanguage({ country: "US", requestedLanguage: "es" }), "es");
+  assert.equal(resolvePublicSiteLanguage({ country: "US", requestedLanguage: "es" }), "en");
   assert.equal(resolvePublicSiteLanguage({ country: "ES", persistedLanguage: "de" }), "de");
-  assert.equal(resolvePublicSiteLanguage({ acceptLanguage: "es-MX,es;q=0.9,en;q=0.8" }), "es");
+  assert.equal(resolvePublicSiteLanguage({ acceptLanguage: "es-MX,es;q=0.9,en;q=0.8" }), "en");
   assert.equal(resolvePublicSiteLanguage({ acceptLanguage: "de-LU,de;q=0.9,en;q=0.8" }), "de");
   assert.equal(resolvePublicLanguage({ country: "ES" }), "en", "Spanish public visitors use the English app fallback");
+  assert.equal(isPublicLanguageLaunchEnabled("es"), false);
+  assert.equal(withPublicLanguage("/", "es"), "/?lang=en");
   assert.equal(toAppLanguage("es"), "en");
   assert.equal(publicLanguageRequestHeaderName, "x-novalure-public-language");
 
