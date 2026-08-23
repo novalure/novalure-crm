@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import test from "node:test";
+import { createHttpClient } from "./qa-two-tenant-e2e.mjs";
 import {
   assertEvidenceContainsNoSecrets,
   buildQaTwoTenantScenarioMatrix,
@@ -262,6 +263,110 @@ test("plan mode is offline, deterministic and contains no credential values", ()
   assert.match(result.stdout, /TWO_TENANT_QA_MATRIX/);
   assert.match(result.stdout, /No network or writes performed/);
   assert.doesNotMatch(result.stdout, /unit-test-password|postgresql:\/\//);
+});
+
+test("login challenge continuation forwards and rotates the stored challenge cookie", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const workspaceId = uuid(900);
+  const userId = uuid(901);
+  const redirect = (location, cookies = []) => {
+    const headers = new Headers({ location });
+    for (const cookie of cookies) headers.append("set-cookie", cookie);
+    return new Response(null, { headers, status: 303 });
+  };
+
+  globalThis.fetch = async (input, init = {}) => {
+    const headers = new Headers(init.headers ?? {});
+    calls.push({
+      body: init.body === undefined ? null : String(init.body),
+      cookie: headers.get("cookie"),
+      method: init.method ?? "GET",
+      path: new URL(input).pathname,
+    });
+    if (calls.length === 1) {
+      return redirect("/?step=workspace_selection", ["novalure_login_challenge=challenge-one; Path=/; HttpOnly"]);
+    }
+    if (calls.length === 2) {
+      return redirect("/?step=mfa_verification", ["novalure_login_challenge=challenge-two; Path=/; HttpOnly"]);
+    }
+    if (calls.length === 3) {
+      return redirect("/", [
+        "novalure_login_challenge=; Path=/; Max-Age=0",
+        "novalure_session=session-one; Path=/; HttpOnly",
+      ]);
+    }
+    return new Response(JSON.stringify({
+      user: { id: userId, productRole: "customer_owner", role: "owner" },
+      workspace: { id: workspaceId },
+    }), { headers: { "content-type": "application/json" }, status: 200 });
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const client = createHttpClient(
+    { baseUrl: "https://candidate.example.test" },
+    {
+      appRole: "owner",
+      email: "qa-owner@example.test",
+      password: "unit-test-password",
+      productRole: "customer_owner",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+      userId,
+    },
+    { batchId: uuid(902), workspaceId },
+    { requests: [] },
+  );
+  await client.login();
+
+  assert.equal(calls.length, 4);
+  assert.deepEqual(calls.map((call) => [call.method, call.path]), [
+    ["POST", "/api/auth/login"],
+    ["POST", "/api/auth/login"],
+    ["POST", "/api/auth/login"],
+    ["GET", "/api/auth/session"],
+  ]);
+  assert.equal(calls[0].cookie, null);
+  assert.equal(calls[1].cookie, "novalure_login_challenge=challenge-one");
+  assert.equal(calls[2].cookie, "novalure_login_challenge=challenge-two");
+  assert.equal(calls[3].cookie, "novalure_session=session-one");
+  assert.equal(new URLSearchParams(calls[1].body).get("flow"), "challenge");
+  assert.equal(new URLSearchParams(calls[2].body).get("flow"), "challenge");
+});
+
+test("unexpected login redirect diagnostics never expose raw query values", async (context) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, {
+    headers: { location: "/?step=raw-secret-value&error=credential-leak" },
+    status: 303,
+  });
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const client = createHttpClient(
+    { baseUrl: "https://candidate.example.test" },
+    {
+      appRole: "owner",
+      email: "qa-owner@example.test",
+      password: "unit-test-password",
+      productRole: "customer_owner",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+      userId: uuid(910),
+    },
+    { batchId: uuid(911), workspaceId: uuid(912) },
+    { requests: [] },
+  );
+
+  await assert.rejects(
+    client.login(),
+    (error) => {
+      assert.equal(error.message, "Unexpected login challenge (step=unknown, error=unknown).");
+      assert.doesNotMatch(error.message, /raw-secret-value|credential-leak/);
+      return true;
+    },
+  );
 });
 
 test("legacy unclean E2E entry points are replaced by the batch-safe harness", () => {

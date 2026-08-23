@@ -199,6 +199,12 @@ Der Harness legt ausschließlich lokale, geheimnisfreie Artefakte unter `NOVALUR
 
 Nicht gespeichert werden Passwörter, TOTP-Secrets, Cookies, CSRF-Tokens, Authorization-Header, Datenbank-URL, rohe Antwortkörper oder E-Mail-Adressen. Der Writer verweigert secret-ähnliche Schlüssel und überschreibt keine vorhandene Evidenz.
 
+### Bisherige read-only Runtime-Evidenz
+
+Auf Preview-Deployment `dpl_4rArLhVLBRts7JA2B7edY4F5dHon` mit Source-SHA `7faeda244fa964d73ecc63960e1b991d97488c60` bestand der lokal korrigierte Harness den Modus `preflight` mit 94/94 Ergebnissen und 50 Requests. Belegt sind beide QA-Tenant-Ziele, App-Rolle/RLS/Ledger-Projektion, 11/11 Migrationschecksummen, 19/19 validierte Tenant-Constraints ohne Anti-Join-Verstoß, zehn authentifizierte Rollen-/Reset-Sessions, acht korrekt verweigerte Cross-Tenant-Core-Reads, zwei anonyme 401-Grenzen, zwei öffentliche 200-Seiten ohne fremde Workspace-ID und zehn akzeptierte Logout-Aufrufe mit Status 303. Eine Post-Logout-Invalidierung wurde nicht geprüft. Die Requestliste enthält keine CRM-Mutationsroute; Auth-/Session-/Audit-Sicherheitswrites können dennoch erfolgt sein. `cleanup=[]` bedeutet deshalb ausschließlich, dass kein Geschäftswritelauf begonnen wurde, nicht dass Cleanup bewiesen wäre.
+
+Artefakt: `artifacts/qa/preview-7faeda2-cookiefix-precommit-20260823/preflight-two-tenant-e2e.json`; kanonischer SHA-256: `997bdcc41160c874bf5f78727f544063df8ea4124ee665a4f9ac454861cabdbf`. Capability-Endpunkt, atomare Runtime-Batchregistrierung, CRUD, Reset/Cleanup, Barrieredrill, Post-Logout-Invalidierung und vollständige MFA-/Ablauf-/Rate-Limit-Matrix sind nicht belegt. Da der Cookie-Fix-Harness zu diesem Zeitpunkt lokal noch nicht committed/deployt war, muss derselbe Preflight auf dem nächsten SHA-identischen Kandidaten wiederholt werden.
+
 ## Inventur der bisherigen QA-Pfade
 
 | Pfad | Status für finale Abnahme | Grund |
@@ -224,4 +230,4 @@ GO für SEC-/DB-E2E ist nur möglich, wenn:
 - der Evidence-SHA signiert beziehungsweise im Go-Live-Ledger referenziert ist;
 - keine Provider-/Blob-Side-Effects im Batch auftauchen und retained Audit/Auth/Security-Evidenz separat reconciled ist.
 
-Der lokale Harness-/Contracttest allein ist kein Live-Beweis. Reale QA-Wurzeln, MFA-Fixtures, leere Batches, Migrationen und der atomare Runtime-Vertrag sind vorhanden. Offen sind noch das SHA-identische Preview-Deployment, dessen branchgebundene Runtime-ENV, der Capability-/Auth-Preflight sowie der echte Matrix-/Cleanup-Lauf; deshalb bleibt dieses Gate bis dahin rot.
+Der lokale Harness-/Contracttest allein ist kein Live-Beweis. Reale QA-Wurzeln, MFA-Fixtures, leere Batches, Migrationen und der atomare Runtime-Vertrag sind vorhanden. Ein read-only Auth-/Tenant-/DB-Preflight auf dem supersedierten Preview-Commit `7faeda2` bestand mit dem lokal korrigierten Harness 94/94 Ergebnisse und 50 Requests; er erzeugte keine CRM-Geschäftsobjekte, zehn konfigurierte Rollen-/Reset-Clients erreichten Session 200 und zehn Logout-Requests endeten mit 303. Post-Logout-Invalidierung und die vollständige Challenge-Matrix sind damit nicht bewiesen. Weil die Harnesskorrektur noch nicht im deployten SHA enthalten war, bleiben das neue SHA-identische Preview-Deployment, dessen erneut deployment-spezifisch freizugebender Zugang, der wiederholte Preflight, Capability-Proof sowie der echte Matrix-/Cleanup-Lauf offen; deshalb bleibt dieses Gate rot.

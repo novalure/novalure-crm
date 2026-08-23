@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { createHash, createHmac } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { neon } from "@neondatabase/serverless";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 import {
@@ -23,6 +24,13 @@ const registrationHeader = "x-novalure-qa-batch-registration";
 const batchHeader = "x-novalure-qa-batch-id";
 const capabilityPath = "/api/admin/qa-batch-capability";
 const allowedRegistrationStates = new Set(["committed", "already-registered"]);
+const allowedChallengeDiagnostics = new Set(["mfa_enrollment", "mfa_verification", "workspace_selection"]);
+const allowedLoginErrorDiagnostics = new Set([
+  "database_unavailable",
+  "invalid_credentials",
+  "invalid_mfa",
+  "login_not_configured",
+]);
 
 async function loadRequiredMigrationChecksums() {
   const entries = await Promise.all(qaRequiredMigrationVersions.map(async (version) => {
@@ -92,7 +100,7 @@ function createTotpCode(secret, now = Date.now()) {
   return String(binary % 1_000_000).padStart(6, "0");
 }
 
-function createHttpClient(config, actor, tenant, evidence) {
+export function createHttpClient(config, actor, tenant, evidence) {
   const cookies = new Map();
   const baseUrl = config.baseUrl;
   const origin = new URL(baseUrl).origin;
@@ -178,12 +186,20 @@ function createHttpClient(config, actor, tenant, evidence) {
     }
     for (let index = 0; !cookies.has("novalure_session") && index < 3; index += 1) {
       const location = result.response.headers.get("location") ?? "/login";
-      const challengeKind = new URL(location, baseUrl).searchParams.get("step");
+      const challengeUrl = new URL(location, baseUrl);
+      const challengeKind = challengeUrl.searchParams.get("step");
       if (challengeKind === "mfa_enrollment") {
         throw new Error("QA account is not pre-enrolled for MFA; provisioning must complete before E2E.");
       }
-      if (!['workspace_selection', 'mfa_verification'].includes(challengeKind ?? "")) {
-        throw new Error("Unexpected login challenge.");
+      if (!["workspace_selection", "mfa_verification"].includes(challengeKind ?? "")) {
+        const errorKind = challengeUrl.searchParams.get("error");
+        const safeChallengeKind = challengeKind === null
+          ? "none"
+          : allowedChallengeDiagnostics.has(challengeKind) ? challengeKind : "unknown";
+        const safeErrorKind = errorKind === null
+          ? "none"
+          : allowedLoginErrorDiagnostics.has(errorKind) ? errorKind : "unknown";
+        throw new Error(`Unexpected login challenge (step=${safeChallengeKind}, error=${safeErrorKind}).`);
       }
       const challengeBody = new URLSearchParams({ flow: "challenge", returnTo: "/" });
       if (challengeKind === "workspace_selection") {
@@ -194,7 +210,6 @@ function createHttpClient(config, actor, tenant, evidence) {
         challengeBody.set("code", code);
       }
       result = await request("/api/auth/login", {
-        auth: false,
         body: challengeBody,
         headers: { "content-type": "application/x-www-form-urlencoded", origin, "sec-fetch-site": "same-origin" },
         method: "POST",
@@ -1303,7 +1318,13 @@ async function main() {
   if (failure) throw failure;
 }
 
-main().catch((error) => {
-  console.error(`QA two-tenant harness failed: ${error instanceof Error ? error.message : "unknown error"}`);
-  process.exitCode = 1;
-});
+const directEntrypoint = process.argv[1]
+  ? pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
+  : false;
+
+if (directEntrypoint) {
+  main().catch((error) => {
+    console.error(`QA two-tenant harness failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    process.exitCode = 1;
+  });
+}
