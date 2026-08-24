@@ -20,6 +20,11 @@ import {
   qaTenantConstraintNames,
   qaTwoTenantRequiredEnvironment,
 } from "./lib/qa-two-tenant-matrix.mjs";
+import {
+  applyVercelAutomationBypass,
+  bindVercelAutomationBypass,
+  validateVercelAutomationBypassUrl,
+} from "./lib/vercel-preview-access.mjs";
 
 const registrationHeader = "x-novalure-qa-batch-registration";
 const batchHeader = "x-novalure-qa-batch-id";
@@ -33,11 +38,7 @@ const allowedLoginErrorDiagnostics = new Set([
   "invalid_mfa",
   "login_not_configured",
 ]);
-const vercelShareLandingOrigin = "https://vercel.com";
-const vercelShareTokenPattern = /^[a-zA-Z0-9_-]{20,512}$/u;
 const vercelCookieNamePattern = /^_vercel_[a-zA-Z0-9_-]{1,64}$/u;
-const vercelCookieValuePattern = /^[a-zA-Z0-9._~-]{1,4096}$/u;
-const maximumShareRedirects = 5;
 
 async function loadRequiredMigrationChecksums() {
   const entries = await Promise.all(qaRequiredMigrationVersions.map(async (version) => {
@@ -102,48 +103,8 @@ async function readBoundedStdin(maximumBytes) {
 }
 
 export function validatePreviewShareUrl(value, baseUrl) {
-  let base;
-  let share;
-  try {
-    base = new URL(baseUrl);
-    share = new URL(value);
-  } catch {
-    throw new Error("Preview share URL is invalid.");
-  }
-  if (
-    base.protocol !== "https:" ||
-    base.pathname !== "/" ||
-    base.search ||
-    base.hash ||
-    base.username ||
-    base.password
-  ) {
-    throw new Error("Preview base URL must be an HTTPS origin.");
-  }
-  if (share.protocol !== "https:" || share.username || share.password || share.hash) {
-    throw new Error("Preview share URL must use HTTPS without credentials or a fragment.");
-  }
-  if (share.origin !== base.origin && share.origin !== vercelShareLandingOrigin) {
-    throw new Error("Preview share URL must target the exact Preview origin or Vercel share landing.");
-  }
-  if (share.origin === base.origin && share.pathname !== "/") {
-    throw new Error("Preview-origin share URL must target the deployment root.");
-  }
-  if (share.origin === vercelShareLandingOrigin && (
-    share.pathname.length > 1_024 ||
-    share.pathname.startsWith("//") ||
-    /[\\\u0000-\u001f\u007f]/u.test(share.pathname)
-  )) {
-    throw new Error("Vercel share landing path is invalid.");
-  }
-  const queryEntries = [...share.searchParams.entries()];
-  if (queryEntries.length !== 1 || queryEntries[0][0] !== "_vercel_share") {
-    throw new Error("Only one Vercel share parameter is allowed.");
-  }
-  if (!vercelShareTokenPattern.test(queryEntries[0][1])) {
-    throw new Error("Preview share token is invalid.");
-  }
-  return share;
+  const access = validateVercelAutomationBypassUrl(value, baseUrl);
+  return new URL(access.requestUrl);
 }
 
 function cookieHeader(cookies) {
@@ -156,102 +117,31 @@ function requestCookieHeader(cookies, includeApplicationCookies) {
   ));
 }
 
-function storeSecureVercelCookies(headers, cookies) {
-  const values = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : splitSetCookie(headers.get("set-cookie"));
-  for (const value of values) {
-    const parts = value.split(";").map((part) => part.trim());
-    const separator = parts[0].indexOf("=");
-    if (separator < 1) continue;
-    const name = parts[0].slice(0, separator).trim();
-    if (!vercelCookieNamePattern.test(name)) continue;
-    if (!parts.slice(1).some((attribute) => attribute.toLowerCase() === "secure")) {
-      throw new Error("Vercel Preview access cookie is not Secure.");
-    }
-    const cookieValue = parts[0].slice(separator + 1).trim();
-    const expired = parts.slice(1).some((attribute) => /^max-age=0$/iu.test(attribute));
-    if (!cookieValue || expired) {
-      cookies.delete(name);
-      continue;
-    }
-    if (!vercelCookieValuePattern.test(cookieValue)) {
-      throw new Error("Vercel Preview access cookie is invalid.");
-    }
-    cookies.set(name, cookieValue);
-  }
-}
-
-function assertSafeShareRedirect(value, currentUrl, baseOrigin, reachedBaseOrigin, expectedShareToken) {
-  let next;
-  try {
-    next = new URL(value, currentUrl);
-  } catch {
-    throw new Error("Vercel Preview access redirect is invalid.");
-  }
-  if (next.protocol !== "https:" || next.username || next.password || next.hash) {
-    throw new Error("Vercel Preview access redirect is unsafe.");
-  }
-  if (next.origin !== baseOrigin && next.origin !== vercelShareLandingOrigin) {
-    throw new Error("Cross-origin Vercel Preview access redirect rejected.");
-  }
-  if (reachedBaseOrigin && next.origin !== baseOrigin) {
-    throw new Error("Vercel Preview access redirect cannot leave the Preview origin.");
-  }
-  if (next.origin === baseOrigin && next.pathname !== "/") {
-    throw new Error("Vercel Preview access redirect must target the deployment root.");
-  }
-  if (next.origin === vercelShareLandingOrigin && (
-    next.pathname.length > 1_024 ||
-    next.pathname.startsWith("//") ||
-    /[\\\u0000-\u001f\u007f]/u.test(next.pathname)
-  )) {
-    throw new Error("Vercel Preview access redirect path is invalid.");
-  }
-  const queryEntries = [...next.searchParams.entries()];
-  if (queryEntries.length > 0 && (
-    queryEntries.length !== 1 ||
-    queryEntries[0][0] !== "_vercel_share" ||
-    queryEntries[0][1] !== expectedShareToken
-  )) {
-    throw new Error("Vercel Preview access redirect query is invalid.");
-  }
-  return next;
-}
-
 export async function bootstrapPreviewShareCookies(baseUrl, shareUrl, fetchImplementation = globalThis.fetch) {
   if (typeof fetchImplementation !== "function") throw new Error("Fetch is unavailable for Preview access bootstrap.");
-  const baseOrigin = new URL(baseUrl).origin;
-  let currentUrl = validatePreviewShareUrl(shareUrl, baseUrl);
-  const expectedShareToken = currentUrl.searchParams.get("_vercel_share");
-  let reachedBaseOrigin = currentUrl.origin === baseOrigin;
-  const cookiesByOrigin = new Map();
-
-  for (let redirectCount = 0; redirectCount <= maximumShareRedirects; redirectCount += 1) {
-    const originCookies = cookiesByOrigin.get(currentUrl.origin) ?? new Map();
-    cookiesByOrigin.set(currentUrl.origin, originCookies);
-    const headers = new Headers({ accept: "text/html,application/xhtml+xml" });
-    if (originCookies.size) headers.set("cookie", cookieHeader(originCookies));
-    const response = await fetchImplementation(currentUrl, { headers, method: "GET", redirect: "manual" });
-    storeSecureVercelCookies(response.headers, originCookies);
-
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      if (redirectCount === maximumShareRedirects) {
-        throw new Error("Vercel Preview access redirect limit exceeded.");
-      }
-      const location = response.headers.get("location");
-      if (!location) throw new Error("Vercel Preview access redirect is missing a destination.");
-      currentUrl = assertSafeShareRedirect(location, currentUrl, baseOrigin, reachedBaseOrigin, expectedShareToken);
-      reachedBaseOrigin ||= currentUrl.origin === baseOrigin;
-      continue;
-    }
-
-    if (currentUrl.origin !== baseOrigin) {
-      throw new Error("Vercel Preview access did not finish on the exact Preview origin.");
-    }
-    const previewCookies = cookiesByOrigin.get(baseOrigin) ?? new Map();
-    if (!previewCookies.size) throw new Error("Vercel Preview access cookie was not established.");
-    return new Map(previewCookies);
+  const previewAccess = new Map();
+  const access = bindVercelAutomationBypass(previewAccess, shareUrl, baseUrl);
+  const headers = new Headers({ accept: "text/html,application/xhtml+xml" });
+  applyVercelAutomationBypass(previewAccess, access.requestUrl, headers);
+  let response;
+  try {
+    response = await fetchImplementation(access.requestUrl, {
+      headers,
+      method: "GET",
+      redirect: "manual",
+    });
+  } catch {
+    throw new Error("Vercel Preview automation access failed.");
   }
-  throw new Error("Vercel Preview access bootstrap failed.");
+  if (
+    response.status < 200
+    || response.status >= 300
+    || response.headers.has("location")
+    || !(response.headers.get("content-type") ?? "").toLowerCase().includes("text/html")
+  ) {
+    throw new Error("Vercel Preview automation access failed.");
+  }
+  return previewAccess;
 }
 
 function decodeBase32(value) {
@@ -288,7 +178,15 @@ function createTotpCode(secret, now = Date.now()) {
   return String(binary % 1_000_000).padStart(6, "0");
 }
 
-export function createHttpClient(config, actor, tenant, evidence, previewCookies = new Map()) {
+export function createHttpClient(
+  config,
+  actor,
+  tenant,
+  evidence,
+  previewCookies = new Map(),
+  fetchImplementation = globalThis.fetch,
+) {
+  if (typeof fetchImplementation !== "function") throw new Error("Fetch is unavailable for QA HTTP client.");
   const cookies = new Map(previewCookies);
   const baseUrl = config.baseUrl;
   const origin = new URL(baseUrl).origin;
@@ -311,6 +209,7 @@ export function createHttpClient(config, actor, tenant, evidence, previewCookies
     if (url.origin !== origin) throw new Error("Cross-origin request rejected by QA harness.");
     const method = (options.method ?? "GET").toUpperCase();
     const headers = new Headers(options.headers ?? {});
+    applyVercelAutomationBypass(previewCookies, url, headers);
     const requestCookies = requestCookieHeader(cookies, options.auth !== false);
     if (requestCookies) headers.set("cookie", requestCookies);
     if (options.batchMutation) headers.set(batchHeader, tenant.batchId);
@@ -318,17 +217,24 @@ export function createHttpClient(config, actor, tenant, evidence, previewCookies
       const csrfUrl = new URL("/api/auth/csrf", baseUrl);
       csrfUrl.searchParams.set("method", method);
       csrfUrl.searchParams.set("path", url.pathname);
-      const csrfResponse = await fetch(csrfUrl, {
-        headers: {
-          accept: "application/json",
-          cookie: cookieHeader(cookies),
-          origin,
-          "sec-fetch-site": "same-origin",
-        },
+      const csrfHeaders = new Headers({
+        accept: "application/json",
+        cookie: cookieHeader(cookies),
+        origin,
+        "sec-fetch-site": "same-origin",
+      });
+      applyVercelAutomationBypass(previewCookies, csrfUrl, csrfHeaders);
+      const csrfResponse = await fetchImplementation(csrfUrl, {
+        headers: csrfHeaders,
+        redirect: "manual",
       });
       storeCookies(csrfResponse.headers);
       const csrfPayload = await csrfResponse.json().catch(() => null);
-      if (!csrfResponse.ok || typeof csrfPayload?.csrfToken !== "string") {
+      if (
+        !csrfResponse.ok
+        || csrfResponse.headers.has("location")
+        || typeof csrfPayload?.csrfToken !== "string"
+      ) {
         throw new Error(`CSRF preflight failed with HTTP ${csrfResponse.status}.`);
       }
       headers.set("origin", origin);
@@ -343,7 +249,7 @@ export function createHttpClient(config, actor, tenant, evidence, previewCookies
       init.body = options.body;
     }
     const startedAt = Date.now();
-    const response = await fetch(url, init);
+    const response = await fetchImplementation(url, init);
     storeCookies(response.headers);
     const contentType = response.headers.get("content-type") ?? "";
     const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
@@ -449,6 +355,7 @@ function createPublicClient(
       if (url.origin !== config.baseUrl) throw new Error("Cross-origin public request rejected.");
       const method = (options.method ?? "GET").toUpperCase();
       const headers = new Headers(options.headers ?? {});
+      applyVercelAutomationBypass(previewCookies, url, headers);
       if (previewCookies.size) headers.set("cookie", cookieHeader(previewCookies));
       const startedAt = Date.now();
       const response = await fetchImplementation(url, {
