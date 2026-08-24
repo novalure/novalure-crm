@@ -18,8 +18,10 @@ import {
 } from "./qa-two-tenant-e2e.mjs";
 import {
   bootstrapPublicRuntimeShareAccess,
+  buildPublicRuntimeReadOnlyScenarioRequest,
   createPublicRuntimeCookieJar,
   parsePublicRuntimeActionInput,
+  publicRuntimeReadOnlyScenarios,
   requestExact,
 } from "./lib/public-runtime-preview-e2e.mjs";
 import {
@@ -549,6 +551,36 @@ test("public runtime parser and bootstrap keep the bypass secret non-enumerable 
   assert.equal(followUpRequests.length, 1);
   assert.equal(new Headers(followUpRequests[0].init.headers).get(bypassHeader), bypassToken);
   assert.equal(new URL(followUpRequests[0].url).searchParams.has(bypassHeader), false);
+});
+
+test("public runtime read-only requests reach the intended semantic guards", () => {
+  const input = parsePublicRuntimeActionInput(JSON.stringify(publicRuntimeAction()));
+  const scenario = (id) => {
+    const found = publicRuntimeReadOnlyScenarios.find((entry) => entry.id === id);
+    assert.ok(found, `Missing read-only scenario ${id}.`);
+    return found;
+  };
+
+  const formProof = buildPublicRuntimeReadOnlyScenarioRequest(
+    input,
+    scenario("public-form-proof-invalid"),
+  );
+  const formProofBody = new URLSearchParams(formProof.body);
+  assert.equal(formProof.body, "form=");
+  assert.equal(formProofBody.has("form"), true);
+  assert.equal(formProofBody.get("form"), "");
+
+  const funnelProof = buildPublicRuntimeReadOnlyScenarioRequest(
+    input,
+    scenario("public-funnel-proof-invalid"),
+  );
+  assert.deepEqual(JSON.parse(funnelProof.body), {});
+
+  const funnelSubmission = buildPublicRuntimeReadOnlyScenarioRequest(
+    input,
+    scenario("public-funnel-submit-invalid"),
+  );
+  assert.equal(JSON.parse(funnelSubmission.body).mode, "blocked-contract");
 });
 
 test("public runtime automation bootstrap fails closed on redirects, network errors and non-HTML responses", async () => {

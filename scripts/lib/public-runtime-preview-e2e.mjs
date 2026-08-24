@@ -562,12 +562,12 @@ export const publicRuntimeReadOnlyScenarios = Object.freeze([
   { id: "public-funnel-visit-launch-off", method: "POST", expectedStatus: 503, expectedCode: "LAUNCH_SCOPE_OFF" },
 ]);
 
-function scenarioRequest(input, scenario) {
+export function buildPublicRuntimeReadOnlyScenarioRequest(input, scenario) {
   const missingId = deterministicMissingUuid(input.expectedGitSha);
   const slug = `qa-contract-${input.expectedGitSha.slice(0, 12)}-${input.batchFingerprint.slice(-8)}`;
   if (scenario.id === "public-form-shell-missing") return { path: `/forms/${slug}` };
   if (scenario.id === "public-form-proof-invalid") {
-    return { body: "", headers: { "content-type": "application/x-www-form-urlencoded" }, path: "/api/forms/submission-proof" };
+    return { body: "form=", headers: { "content-type": "application/x-www-form-urlencoded" }, path: "/api/forms/submission-proof" };
   }
   if (scenario.id === "public-form-submit-missing") {
     return {
@@ -680,7 +680,7 @@ export async function attestRuntime(input, jar, fetchImpl) {
 async function runReadOnlyScenarios(input, jar, fetchImpl) {
   const results = [];
   for (const scenario of publicRuntimeReadOnlyScenarios) {
-    const request = scenarioRequest(input, scenario);
+    const request = buildPublicRuntimeReadOnlyScenarioRequest(input, scenario);
     const result = await requestExact(input, jar, fetchImpl, request.path, {
       body: request.body,
       headers: request.headers,
