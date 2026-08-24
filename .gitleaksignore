@@ -1,0 +1,6 @@
+# Reviewed historical false positive: synthetic secret-pattern rejection fixture.
+6aed0e807d7a5f0a8f00723cb2bed7220aeab11f:scripts/database-recovery-live-evidence-tests.mjs:generic-api-key:983
+# Reviewed historical false positive: accessibility validation error code, not a credential.
+8872bd02ffd708ac534e3709482ac5fed663f5f0:scripts/lib/a11y-preview-fixture-lifecycle.mjs:generic-api-key:197
+# Reviewed historical false positive: deterministic test-only encryption-key fixture.
+f5c8c8afb162cc1b2ca08e2fc01e823adb465cd1:scripts/newsletter-unsubscribe-security-tests.mjs:generic-api-key:25
