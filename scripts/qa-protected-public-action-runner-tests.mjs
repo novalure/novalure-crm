@@ -8,6 +8,7 @@ import test from "node:test";
 import { canonicalJson } from "./lib/public-runtime-preview-e2e.mjs";
 import {
   publicRuntimeArtifactFiles,
+  publicRuntimeParentBaseArtifactFile,
   publicRuntimeProofObservations,
 } from "./lib/public-runtime-protected-receipt.mjs";
 import {
@@ -160,6 +161,7 @@ function completeEvidence() {
     },
     cleanup,
     databaseAttestation: {
+      contentFingerprintDigest: "8".repeat(64),
       freshBatch: true,
       isQa: true,
       qaBatchId: expected.qaBatchId,
@@ -174,7 +176,7 @@ function completeEvidence() {
   };
 }
 
-test("separate Public producer stages exactly six bound single-link evidence files", async () => {
+test("separate Public producer stages exactly seven bound single-link evidence files", async () => {
   const runnerTemp = await mkdtemp(path.join(os.tmpdir(), "novalure-protected-public-test-"));
   try {
     const evidence = completeEvidence();
@@ -187,7 +189,13 @@ test("separate Public producer stages exactly six bound single-link evidence fil
       assert.equal(state.isFile(), true);
       assert.equal(state.nlink, 1);
       actual.push(name);
-      if (name !== "public-form-funnel-cleanup.json") {
+      if (name === publicRuntimeParentBaseArtifactFile) {
+        const parentBase = JSON.parse(await readFile(filePath, "utf8"));
+        assert.deepEqual(parentBase, evidence);
+        assert.equal(Object.hasOwn(parentBase, "protectedWorkflowArtifactManifest"), false);
+        assert.equal(Object.hasOwn(parentBase, "protectedWorkflowReceipt"), false);
+        assert.equal(digest(await readFile(filePath)), digest(canonicalJson(evidence)));
+      } else if (name !== "public-form-funnel-cleanup.json") {
         const proof = evidence.proofs.find((entry) => entry.artifactFile === name);
         assert.equal(digest(await readFile(filePath)), proof.artifactSha256);
       }
@@ -201,7 +209,7 @@ test("separate Public producer stages exactly six bound single-link evidence fil
 test("Public producer rejects wrong inventory and batch, proof, cleanup or token drift", async (t) => {
   const runnerTemp = await mkdtemp(path.join(os.tmpdir(), "novalure-protected-public-negative-"));
   try {
-    await t.test("wrong six-file inventory", async () => {
+    await t.test("wrong proof inventory", async () => {
       const evidence = completeEvidence();
       evidence.proofs.pop();
       await assert.rejects(
@@ -215,6 +223,30 @@ test("Public producer rejects wrong inventory and batch, proof, cleanup or token
       await assert.rejects(
         stageProtectedPublicEvidence(evidence, expected, { runnerTemp }),
         /PROTECTED_PUBLIC_PROOF_BINDING_INVALID/u,
+      );
+    });
+    await t.test("missing database content fingerprint", async () => {
+      const evidence = completeEvidence();
+      delete evidence.databaseAttestation.contentFingerprintDigest;
+      await assert.rejects(
+        stageProtectedPublicEvidence(evidence, expected, { runnerTemp }),
+        /PROTECTED_PUBLIC_PARENT_EVIDENCE_INVALID/u,
+      );
+    });
+    await t.test("parent base with protected workflow references", async () => {
+      const evidence = completeEvidence();
+      evidence.protectedWorkflowReceipt = { status: "self-reference" };
+      await assert.rejects(
+        stageProtectedPublicEvidence(evidence, expected, { runnerTemp }),
+        /PROTECTED_PUBLIC_PARENT_EVIDENCE_REFERENCE_INVALID/u,
+      );
+    });
+    await t.test("parent base with a secret-shaped field", async () => {
+      const evidence = completeEvidence();
+      evidence.databaseUrl = "redacted";
+      await assert.rejects(
+        stageProtectedPublicEvidence(evidence, expected, { runnerTemp }),
+        /EVIDENCE_REDACTION_FAILED/u,
       );
     });
     await t.test("long-proof duration drift", async () => {

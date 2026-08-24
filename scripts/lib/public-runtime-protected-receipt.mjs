@@ -66,6 +66,8 @@ const publicRuntimeObservationStatuses = Object.freeze({
   "submission-accepted": successStatus,
 });
 
+export const publicRuntimeParentBaseArtifactFile = "public-runtime-parent-base.json";
+
 export const publicRuntimeArtifactFiles = Object.freeze([
   "funnel-publish-token-rotation.json",
   "public-form-funnel-cleanup.json",
@@ -73,6 +75,7 @@ export const publicRuntimeArtifactFiles = Object.freeze([
   "public-form-long-proof-refresh.json",
   "public-funnel-live-submission.json",
   "public-funnel-long-proof-refresh.json",
+  publicRuntimeParentBaseArtifactFile,
 ]);
 
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
@@ -262,6 +265,7 @@ function validateProof(proof, runtime, qaBatchId, cleanupInventorySha256, artifa
 export function validatePublicRuntimeProtectedReceipt({
   artifactManifest,
   cleanup,
+  parentBase,
   proofs,
   receipt,
   runtime,
@@ -357,6 +361,25 @@ export function validatePublicRuntimeProtectedReceipt({
   invariant(
     Date.parse(receipt.signedAt) >= latestObservationTime,
     "PUBLIC_RUNTIME_WORKFLOW_SIGNED_BEFORE_OBSERVATION",
+  );
+  invariant(
+    parentBase && typeof parentBase === "object" && !Array.isArray(parentBase),
+    "PUBLIC_RUNTIME_PARENT_BASE_REQUIRED",
+  );
+  invariant(
+    !Object.hasOwn(parentBase, "protectedWorkflowArtifactManifest")
+      && !Object.hasOwn(parentBase, "protectedWorkflowReceipt"),
+    "PUBLIC_RUNTIME_PARENT_BASE_REFERENCE_INVALID",
+  );
+  const canonicalParentBase = canonicalJson(parentBase);
+  const parentBaseArtifact = artifactFiles.get(publicRuntimeParentBaseArtifactFile);
+  invariant(
+    parentBaseArtifact?.sha256 === sha256(canonicalParentBase),
+    "PUBLIC_RUNTIME_PARENT_BASE_DIGEST_MISMATCH",
+  );
+  invariant(
+    parentBaseArtifact.sizeBytes === Buffer.byteLength(canonicalParentBase, "utf8"),
+    "PUBLIC_RUNTIME_PARENT_BASE_SIZE_MISMATCH",
   );
   return Object.freeze({
     artifactDigest: receipt.payload.artifactDigest,

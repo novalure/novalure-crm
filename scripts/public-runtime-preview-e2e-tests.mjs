@@ -624,6 +624,7 @@ test("mutating Preview runner proves both public flows, exactly once, rotation, 
   assert.equal(evidence.cleanup.exactPrePostContentFingerprintMatch, true);
   assert.equal(evidence.cleanup.inventoryBeforeSha256, evidence.cleanup.inventoryAfterSha256);
   assert.equal(evidence.cleanup.remainingObjectCount, 0);
+  assert.equal(evidence.databaseAttestation.contentFingerprintDigest, databaseFixture().contentFingerprintDigest);
   assert.equal(evidence.retainedEvidence.classification, "RETAINED_APPEND_ONLY_NOT_CLEANUP_TARGETS");
   assert.equal(evidence.retainedEvidence.rowDelta, 7);
   assert.notEqual(evidence.retainedEvidence.beforeSha256, evidence.retainedEvidence.afterSha256);

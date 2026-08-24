@@ -13,6 +13,12 @@ export const performanceManualAcceptanceRole = "performance-manual-owner";
 export const performanceManualAcceptanceRecordType = "NOVALURE_PERFORMANCE_MANUAL_ACCEPTANCE_RECEIPT";
 export const performanceRumAcceptanceRole = "performance-rum-attestor";
 export const performanceRumAcceptanceRecordType = "NOVALURE_PERFORMANCE_RUM_ACCEPTANCE_RECEIPT";
+export const performanceBudgetApprovalRecordType = "NOVALURE_PERFORMANCE_BUDGET_APPROVAL_RECEIPT";
+export const performanceBudgetApprovalRoles = Object.freeze([
+  Object.freeze({ approvalRole: "product", receiptRole: "performance-budget-product" }),
+  Object.freeze({ approvalRole: "engineering", receiptRole: "performance-budget-engineering" }),
+  Object.freeze({ approvalRole: "operations", receiptRole: "performance-budget-operations" }),
+]);
 export const performanceManualGateIds = Object.freeze([
   "mobileAssistiveTechnology",
   "screenReader",
@@ -40,10 +46,55 @@ function validateSignedAfterWindow(receipt, window, code) {
   );
 }
 
+export function validatePerformanceBudgetApprovalReceipt({
+  approvalRole,
+  budgetPolicy,
+  receipt,
+  runtime,
+  trustContext,
+}) {
+  const expected = performanceBudgetApprovalRoles.find((entry) => entry.approvalRole === approvalRole);
+  invariant(expected, "PERFORMANCE_BUDGET_APPROVAL_ROLE_INVALID");
+  invariant(
+    Array.isArray(budgetPolicy?.requiredApprovalRoles)
+      && budgetPolicy.requiredApprovalRoles.length === performanceBudgetApprovalRoles.length
+      && budgetPolicy.requiredApprovalRoles.every(
+        (role, index) => role === performanceBudgetApprovalRoles[index].approvalRole,
+      ),
+    "PERFORMANCE_BUDGET_APPROVAL_POLICY_ROLES_INVALID",
+  );
+  verifyExternalGateReceipt({
+    expectedRecordType: performanceBudgetApprovalRecordType,
+    expectedRole: expected.receiptRole,
+    receipt,
+    trustContext,
+  });
+  assertExactObjectKeys(receipt.payload, [
+    "approval",
+    "approvalRole",
+    "budgetPolicySha256",
+    "runtime",
+  ], "PERFORMANCE_BUDGET_APPROVAL_PAYLOAD");
+  invariant(receipt.payload.approval === "APPROVED", "PERFORMANCE_BUDGET_APPROVAL_NOT_APPROVED");
+  invariant(receipt.payload.approvalRole === approvalRole, "PERFORMANCE_BUDGET_APPROVAL_SCOPE_MISMATCH");
+  invariant(
+    receipt.payload.budgetPolicySha256 === sha256(canonicalJson(budgetPolicy)),
+    "PERFORMANCE_BUDGET_APPROVAL_POLICY_MISMATCH",
+  );
+  validateExternalGateRuntimeBinding(receipt.payload.runtime, runtime);
+  return Object.freeze({
+    approvalRole,
+    receiptId: receipt.receiptId,
+    receiptRole: expected.receiptRole,
+    status: "VERIFIED",
+  });
+}
+
 export function validatePerformanceManualAcceptanceReceipt({
   budgetPolicy,
   receipt,
   runtime,
+  technicalEvidenceSha256,
   trustContext,
 }) {
   verifyExternalGateReceipt({
@@ -60,7 +111,11 @@ export function validatePerformanceManualAcceptanceReceipt({
     "runtime",
   ], "PERFORMANCE_MANUAL_PAYLOAD");
   validateExternalGateRuntimeBinding(receipt.payload.runtime, runtime);
-  requireSha256(receipt.payload.artifactSha256, "PERFORMANCE_MANUAL_ARTIFACT_DIGEST_INVALID");
+  requireSha256(technicalEvidenceSha256, "PERFORMANCE_TECHNICAL_EVIDENCE_DIGEST_INVALID");
+  invariant(
+    receipt.payload.artifactSha256 === technicalEvidenceSha256,
+    "PERFORMANCE_MANUAL_ARTIFACT_DIGEST_MISMATCH",
+  );
   invariant(
     receipt.payload.budgetPolicySha256 === sha256(canonicalJson(budgetPolicy)),
     "PERFORMANCE_MANUAL_BUDGET_POLICY_MISMATCH",
@@ -89,6 +144,7 @@ export function validatePerformanceRumAcceptanceReceipt({
   budgetPolicy,
   receipt,
   runtime,
+  technicalEvidenceSha256,
   trustContext,
 }) {
   verifyExternalGateReceipt({
@@ -107,7 +163,11 @@ export function validatePerformanceRumAcceptanceReceipt({
     "sampleCount",
   ], "PERFORMANCE_RUM_PAYLOAD");
   validateExternalGateRuntimeBinding(receipt.payload.runtime, runtime);
-  requireSha256(receipt.payload.artifactSha256, "PERFORMANCE_RUM_ARTIFACT_DIGEST_INVALID");
+  requireSha256(technicalEvidenceSha256, "PERFORMANCE_TECHNICAL_EVIDENCE_DIGEST_INVALID");
+  invariant(
+    receipt.payload.artifactSha256 === technicalEvidenceSha256,
+    "PERFORMANCE_RUM_ARTIFACT_DIGEST_MISMATCH",
+  );
   invariant(
     receipt.payload.budgetPolicySha256 === sha256(canonicalJson(budgetPolicy)),
     "PERFORMANCE_RUM_BUDGET_POLICY_MISMATCH",

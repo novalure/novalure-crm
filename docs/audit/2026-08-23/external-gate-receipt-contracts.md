@@ -31,6 +31,8 @@ is `ACTIVE`, Ed25519, role-bound and signer-subject-bound.
 Supported gate roles:
 
 - `accessibility-owner`
+- `accessibility-product-owner`
+- `accessibility-release-owner`
 - `github-actions-attestor`
 - `observability-owner`
 - `runtime-logs-owner`
@@ -40,6 +42,11 @@ Supported gate roles:
 - `provider-acceptance-attestor`
 - `performance-manual-owner`
 - `performance-rum-attestor`
+- `launch-activation-attestor`
+- `production-funnel-token-cutover-attestor`
+- `production-cutover-dba`
+- `production-cutover-platform-operations`
+- `production-cutover-release-observer`
 - `blob-migration-attestor`
 
 The production verifier must construct `trustContext` as
@@ -60,24 +67,40 @@ deployment, artifact digest or trust-anchor digest invalidates the receipt.
 
 `scripts/lib/accessibility-manual-acceptance-receipt.mjs` exports:
 
-- `accessibilityManualAcceptanceRole`
-- `accessibilityManualAcceptanceRecordType`
+- `accessibilityApprovalRoles`
 - `accessibilityManualEvidenceRecordType`
+- `accessibilityManualObservationIdsByCheck`
 - `accessibilityRequiredManualCheckIds`
-- `validateAccessibilityManualAcceptanceReceipt`
+- `validateAccessibilityApprovalReceipts`
 
-The validator requires all eight manual checks in the frozen matrix order. It
-hashes the complete signed matrix, every individual evidence document, the
-ordered individual-evidence digest bundle and the automated schema-v4 evidence.
-Each individual document is candidate/deployment/branch/database-bound, covers
-DE and EN, has evidence-backed PASS observations, and identifies the tester and
-test contexts. Matrix `owner`, `signature` or `SIGNED` strings alone have no
-authority. The independent `accessibility-owner` receipt must be signed after
-the latest manual test.
+The validator requires all eight manual checks in the frozen matrix order and
+the exact observation inventory for every check. The public submit check is an
+exact Form/Funnel × DE/EN × desktop/mobile/400-percent-reflow ×
+validation/success Cartesian inventory (24 observations); a generic PASS note,
+missing state, duplicate or extra observation fails closed.
+
+The referenceless matrix body has exactly the display roles `Accessibility
+owner`, `Product owner` and `Release owner` in
+`READY_FOR_EXTERNAL_SIGNATURE`. Authority comes only from three separate
+Ed25519 receipts using the unambiguous machine roles `accessibility-owner`,
+`accessibility-product-owner` and `accessibility-release-owner`. Each receipt
+contains its exact display-role scope and independently binds the matrix SHA,
+full automated projection SHA, ordered manual-evidence digests, exact Preview
+runtime, Preview Neon project and the post-cleanup fixture-lifecycle SHA. Role
+swaps, omitted roles, reused signers or relabelled Product/Release approvals are
+rejected. Every receipt must be signed after the latest manual test.
+
+`scripts/lib/a11y-fixture-lifecycle-evidence.mjs` verifies the mandatory
+`a11y-fixture-lifecycle.json`. It is created only after both QA resets and binds
+the raw browser artifact SHA, fresh run ID, both batch fingerprints, exact
+deployment/SHA/branch/Neon identities, operational pre/post digest equality,
+zero registered residue and per-table append-only membership. The three
+approval receipts sign its exact canonical SHA.
 
 The final accessibility gate must call this validator and accept PASS only from
-its `VERIFIED` return value. The matrix, all eight individual documents, the
-automated evidence, receipt and sidecars must be frozen in the evidence commit.
+its `VERIFIED` return value with exactly three signatures. The matrix, all eight
+individual documents, automated evidence, lifecycle artifact and all three
+receipts plus sidecars must be frozen in the evidence commit.
 
 ## Protected GitHub workflow provenance
 
@@ -90,18 +113,41 @@ automated evidence, receipt and sidecars must be frozen in the evidence commit.
 - `protectedWorkflowProvenanceRecordType`
 - `protectedWorkflowArtifactManifestRecordType`
 - `protectedWorkflowEvidenceFiles`
+- `twoTenantParentBaseArtifactFile`
 - `validateVerifiedGitHubAttestationOutput`
 - `verifyGitHubArtifactAttestation`
 - `validateProtectedWorkflowProvenanceReceipt`
 
 The protected workflow grants only `contents: read`, `id-token: write` and
-`attestations: write` to the producer job. It creates a deterministic tar from
-the exact four QA evidence files and a matching manifest, then calls
+`attestations: write` to the producer job. It first copies the exact allowlist
+into a private, single-use, read-only staging snapshot. Both the deterministic
+USTAR subject and its member manifest are created only from that same snapshot;
+the live runner evidence directory is never read again for either output. It creates a canonical,
+secret-checked and provenance-reference-free `two-tenant-parent-base.json`
+from the validated Execute document, then creates a deterministic tar from
+those five exact evidence files and a matching manifest before calling
 `actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6` (v4.2.0). The immutable
 upload contains the tar, manifest, GitHub/Sigstore bundle and SHA-256 sidecars in
-addition to the four original QA files. Floating Action tags, a missing OIDC
+addition to the five attested QA files. The final verifier reconstructs the
+parent by removing only `protectedWorkflowArtifactManifest` and
+`protectedWorkflowReceipt` and binds its canonical digest and byte size to the
+manifest entry. Before accepting the GitHub attestation, the local verifier
+parses the attested USTAR itself and requires exactly the manifest allowlist of
+regular members in canonical order, with every member size and SHA-256 matching
+the manifest. Extra, duplicate, linked, truncated or substituted members fail
+closed; validating only the aggregate tar digest is insufficient. Floating Action tags, a missing OIDC
 permission, a missing bundle, symlinks, hard links or an expanded evidence
 inventory fail closed.
+
+The offline GitHub verifier never executes the original CLI path after hashing
+it. The pinned bytes are copied once into a private random temporary directory;
+only that copy is executed. The already verified artifact, bundle and Sigstore
+trusted-root bytes are copied into the same execution snapshot, and only those
+snapshot paths are passed to `gh`. Directory identity, every file inode, link
+count, size and SHA-256 are checked before and after every invocation, and the
+snapshot is removed after verification. Replacing an originally supplied path,
+the execution copy or the trusted root therefore cannot silently substitute
+different verification material.
 
 The local verifier never trusts copied `GITHUB_*` or caller-provided issuer,
 subject, run or workflow strings. It reads bounded regular artifact, bundle,
@@ -126,10 +172,15 @@ The final two-tenant gate repeats this verification from external file paths and
 explicitly requires `status === VERIFIED`. The Public Form/Funnel gate requires
 its own independently verified public-runtime artifact and bundle and compares
 their artifact, bundle, workflow SHA/ref and run ID to its signed workflow
-receipt. The protected workflow uses a separate producer job, six-file staging
-root, deterministic tar, `NOVALURE_PUBLIC_RUNTIME_ARTIFACT_MANIFEST` and
-Sigstore bundle for Public evidence. It never mixes or reuses the four-file
-Two-Tenant artifact. Neither gate can reuse an unverified or merely
+receipt. The protected workflow uses a separate producer job, seven-file
+single-use staging snapshot, deterministic USTAR,
+`NOVALURE_PUBLIC_RUNTIME_ARTIFACT_MANIFEST` and
+Sigstore bundle for Public evidence. It never mixes or reuses the five-file
+Two-Tenant artifact, including `two-tenant-parent-base.json`. The seventh Public file is the canonical, secret-checked
+and referenceless parent base; its manifest-bound digest prevents replacement
+of Candidate, request, database, mutation or cleanup evidence. Tar and manifest
+are both derived from the same snapshot and the same local member-level
+verification is mandatory. Neither gate can reuse an unverified or merely
 self-declared receipt.
 
 The two-tenant gate must require this validator in addition to its business
@@ -168,6 +219,15 @@ Generic attestation gates must use these validator results:
 - `runtime-logs` -> `runtime-logs-owner`
 - `cleanup-null-rest` -> `cleanup-owner`
 - `security-supply-chain` -> `supply-chain-owner`
+
+Der separate autoritative Production-Funnel-Cutover verwendet
+`production-funnel-token-cutover-attestor`. Dieser Schlüssel signiert entweder
+das vollständige, nichtleere Production-Funnel-/Revisionsinventar mit allen
+Cutover-Postconditions oder ausdrücklich ein autoritatives EMPTY-Inventar. Ein
+disposable Preview-/QA-Rotationsbeleg ist für diese Rolle nicht zulässig. Der
+dedizierte, netzwerkfreie Prüfer und das Verfahren stehen in
+`production-funnel-token-cutover-runbook.md`; der generische `--kind`-CLI-Pfad
+akzeptiert diesen Nachweistyp absichtlich nicht.
 
 ## Provider acceptance
 
@@ -208,8 +268,8 @@ nicht.
 
 Der separate Protected-Public-Producer startet den fest verdrahteten
 `public-runtime-preview-e2e`-Runner mit ausschließlich in-memory übergebenem
-Action-Input und erzeugt erst bei einem vollständigen Parent-PASS die sechs
-Dateien. Der mutierende Runner verlangt Capability schema v2 mit sieben exakt
+Action-Input und erzeugt erst bei einem vollständigen Parent-PASS die sieben
+Dateien einschließlich der kanonischen referenzfreien Parent-Basis. Der mutierende Runner verlangt Capability schema v2 mit sieben exakt
 benannten atomaren Public-Surfaces sowie zwei frische, deploymentgebundene und
 noch nie verwendete QA-Batches. Primary Actor, Fixture-Owner und Batch-Creator
 müssen identisch sein; ein separater Actor/Workspace/Batch beweist die
@@ -224,7 +284,7 @@ erzeugen; Unit- oder simulierte PASS-Evidenz ist kein Releasebeleg.
 
 ## Performance acceptance
 
-`scripts/lib/performance-acceptance-receipts.mjs` trennt die technische Lighthouse-Matrix von zwei unabhängigen externen Receipts: `performance-manual-owner` für Mobile/Assistive-Technology, Screenreader und Zoom/Reflow sowie `performance-rum-attestor` für ein mindestens 24 Stunden langes providergebundenes RUM-Fenster mit mindestens 100 Samples. Der finale Verifier berechnet alle Lighthouse-Budgets selbst neu, verlangt vollständige positive Scores/Metriken und eine echte Bundle-Baseline und prüft die p75-Werte erneut gegen die gebundene Budget-Policy. Leere Metriken, Nullscores, fehlende Baseline oder bloße Manual/RUM-PASS-Strings sind ungültig.
+`scripts/lib/performance-acceptance-receipts.mjs` trennt die technische Lighthouse-Matrix von fünf unabhängigen externen Receipts. Die drei Budget-Owner `performance-budget-product`, `performance-budget-engineering` und `performance-budget-operations` genehmigen jeweils die exakt gebundene Budget-Policy; sie können nicht durch Beobachtungsbelege ersetzt werden. Zusätzlich bestätigt `performance-manual-owner` Mobile/Assistive-Technology, Screenreader und Zoom/Reflow, während `performance-rum-attestor` ein mindestens 24 Stunden langes providergebundenes RUM-Fenster mit mindestens 100 Samples belegt. Erst nach erfolgreicher Prüfung aller fünf Rollen leitet der Freeze-Assembler `budgetApprovalStatus=SIGNED` und `signaturesPresent=true` ab. Der rohe Lighthouse-Producer bleibt dagegen korrekt auf `PENDING_SIGNATURE`/`false`. Der finale Verifier berechnet alle Lighthouse-Budgets selbst neu, verlangt vollständige positive Scores/Metriken und eine echte Bundle-Baseline und prüft die p75-Werte erneut gegen die gebundene Budget-Policy. Leere Metriken, Nullscores, fehlende Baseline, fehlende Budget-Owner oder bloße Manual/RUM-PASS-Strings sind ungültig.
 
 ## Legacy Blob migration
 
@@ -268,6 +328,16 @@ sidecars must be candidate-bound and frozen in the evidence commit. Current
 
 ## Read-only verifier CLI
 
+Der separate Production-Cutover-Vertrag verlangt die drei Rollen DBA, Platform
+Operations und Release Observer auf demselben kanonischen
+`PRE_ACTIVATION_READY`-Evidence-Digest. Der vollständige Offline-Verifier
+prüft Candidate-Git-Blobs, Production-Ziel, PITR/Restore, Post-Ledger,
+Blob-Distanz, Legacy-Inventar, `vercel --prod --skip-domain`, Rollback,
+Alias-Promotion, safe-closed Smokes und Monitoring. Details und CLI-Aufruf
+stehen in `production-cutover-receipt-runbook.md`. Dieser Nachweis ist eine
+zwingende Eingabe des Launch-Aktivierungsreceipts und führt selbst keine
+Production-Aktion aus.
+
 `scripts/external-gate-receipt-verify.mjs` is a network-free verifier. It reads
 bounded regular inputs and prints only a verification summary. It never signs a
 receipt or invents an observation. Common arguments are:
@@ -275,13 +345,15 @@ receipt or invents an observation. Common arguments are:
 ```text
 --kind <accessibility|protected-workflow|observability|runtime-logs|cleanup|supply-chain|company-profile>
 --runtime <exact-runtime.json>
---receipt <external-receipt.json>
+--receipt <external-receipt.json> # non-accessibility kinds
 --trust-anchor <absolute-out-of-repository-path>
 --expected-trust-anchor-sha256 <independently-fixed-digest>
 ```
 
-Accessibility additionally requires the matrix, automated evidence and ordered
-individual-evidence bundle. Protected workflow verification requires:
+Accessibility instead requires `--approval-receipts` (an exact three-role JSON
+object), `--matrix`, `--automated-evidence`, `--individual-evidence`,
+`--database-project-id`, `--fixture-lifecycle` and the independently recomputed
+`--fixture-lifecycle-sha256`. Protected workflow verification requires:
 
 ```text
 --artifact <absolute-attested-tar-path>

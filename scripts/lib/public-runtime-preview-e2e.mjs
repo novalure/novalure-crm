@@ -623,7 +623,7 @@ function scenarioRequest(input, scenario) {
   fail("HTTP_SCENARIO_INVALID");
 }
 
-async function requestExact(input, jar, fetchImpl, path, {
+export async function requestExact(input, jar, fetchImpl, path, {
   appSessionCookie = null,
   body,
   headers: initialHeaders = {},
@@ -691,7 +691,7 @@ async function attestRuntimeSession(input, jar, fetchImpl, expected) {
   }
 }
 
-async function attestRuntime(input, jar, fetchImpl) {
+export async function attestRuntime(input, jar, fetchImpl) {
   await attestRuntimeSession(input, jar, fetchImpl, {
     actorUserId: input.actorUserId,
     batchId: input.batchId,
@@ -761,12 +761,12 @@ const operationalSnapshotNames = Object.freeze([
   "public_funnel_visit_events",
 ]);
 
-function requireStatus(result, status, code) {
+export function requireStatus(result, status, code) {
   if (result.response.status !== status) fail(code);
   return result;
 }
 
-function requireJsonObject(result, code) {
+export function requireJsonObject(result, code) {
   if (!result.json || typeof result.json !== "object" || Array.isArray(result.json)) fail(code);
   return result.json;
 }
@@ -784,7 +784,7 @@ async function issueAuthenticatedCsrf(input, jar, fetchImpl, { appSessionCookie,
   return body.csrfToken;
 }
 
-async function authenticatedMutation(input, jar, fetchImpl, {
+export async function authenticatedMutation(input, jar, fetchImpl, {
   appSessionCookie,
   batchId = null,
   body,
@@ -919,7 +919,7 @@ export function buildPublicRuntimeFormFixture(input) {
   };
 }
 
-function stripFunnelValidationPatterns(blueprint) {
+export function stripFunnelValidationPatterns(blueprint) {
   const clone = structuredClone(blueprint);
   for (const page of clone.pages ?? []) {
     for (const section of page.sections ?? []) {
@@ -1108,18 +1108,18 @@ export function createPublicRuntimeDatabaseStore(input, { sqlFactory = neon } = 
       let results;
       try {
         results = await readOnly((transaction) => [
-          transaction`select count(*) as count from audit_logs where workspace_id = ${input.workspaceId}::uuid`,
-          transaction`select count(*) as count from analytics_events where workspace_id = ${input.workspaceId}::uuid`,
-          transaction`select count(*) as count from csrf_token_consumptions`,
-          transaction`select count(*) as count from public_submission_idempotency`,
-          transaction`select count(*) as count from public_submission_rate_limits`,
-          transaction`select count(*) as count from qa_batch_objects where workspace_id = ${input.workspaceId}::uuid and batch_id = ${input.batchId}::uuid`,
-          transaction`select count(*) as count from qa_reset_audit_events where workspace_id = ${input.workspaceId}::uuid and batch_id = ${input.batchId}::uuid`,
+          transaction`select id::text as member from audit_logs where workspace_id = ${input.workspaceId}::uuid order by id`,
+          transaction`select id::text as member from analytics_events where workspace_id = ${input.workspaceId}::uuid order by id`,
+          transaction`select token_hash as member from csrf_token_consumptions order by token_hash`,
+          transaction`select idempotency_hash as member from public_submission_idempotency order by idempotency_hash`,
+          transaction`select concat(key_hash, ':', bucket_started_at::text) as member from public_submission_rate_limits order by key_hash, bucket_started_at`,
+          transaction`select id::text as member from qa_batch_objects where workspace_id = ${input.workspaceId}::uuid and batch_id = ${input.batchId}::uuid order by id`,
+          transaction`select id::text as member from qa_reset_audit_events where workspace_id = ${input.workspaceId}::uuid and batch_id = ${input.batchId}::uuid order by id`,
         ]);
       } catch (error) {
         fail("DATABASE_RETAINED_INVENTORY_FAILED", error);
       }
-      const counts = Object.fromEntries([
+      const names = [
         "audit_logs",
         "analytics_events",
         "csrf_token_consumptions",
@@ -1127,10 +1127,29 @@ export function createPublicRuntimeDatabaseStore(input, { sqlFactory = neon } = 
         "public_submission_rate_limits",
         "qa_batch_objects",
         "qa_reset_audit_events",
-      ].map((name, index) => [name, numberValue(results[index + 1]?.[0]?.count)]));
+      ];
+      const tables = Object.fromEntries(names.map((name, index) => {
+        const members = (results[index + 1] ?? []).map((row) => {
+          if (typeof row?.member !== "string" || row.member.length === 0) {
+            fail("DATABASE_RETAINED_INVENTORY_FAILED");
+          }
+          return sha256(`${name}\0${row.member}`);
+        }).sort();
+        if (new Set(members).size !== members.length) fail("DATABASE_RETAINED_INVENTORY_FAILED");
+        return [name, {
+          digest: sha256(canonicalJson(members)),
+          members,
+          rowCount: members.length,
+        }];
+      }));
+      const summary = Object.fromEntries(names.map((name) => [name, {
+        digest: tables[name].digest,
+        rowCount: tables[name].rowCount,
+      }]));
       return {
-        digest: sha256(canonicalJson(counts)),
-        rowCount: Object.values(counts).reduce((sum, value) => sum + value, 0),
+        digest: sha256(canonicalJson(summary)),
+        rowCount: Object.values(tables).reduce((sum, table) => sum + table.rowCount, 0),
+        tables,
       };
     },
     async verifyFormSubmission(formId) {
@@ -1233,7 +1252,7 @@ export function createPublicRuntimeDatabaseStore(input, { sqlFactory = neon } = 
   });
 }
 
-async function resetQaBatch(input, jar, fetchImpl, { batchId, sessionCookie, workspaceId }) {
+export async function resetQaBatch(input, jar, fetchImpl, { batchId, sessionCookie, workspaceId }) {
   const resetPath = "/api/admin/qa-reset";
   const dryRun = await authenticatedMutation(input, jar, fetchImpl, {
     appSessionCookie: sessionCookie,
@@ -1807,6 +1826,7 @@ export async function executePublicRuntimePreview({
     cleanup: resultData.cleanup,
     completedAt: new Date().toISOString(),
     databaseAttestation: {
+      contentFingerprintDigest: before.contentFingerprintDigest,
       databaseName: before.attestation.databaseName,
       databaseRole: before.attestation.databaseRole,
       freshBatch: before.attestation.freshBatch,

@@ -1,3 +1,9 @@
+import { readLaunchActivationChannelSnapshot } from "./launch-activation-channel.shared.mjs";
+import {
+  launchActivationMinimumGeneration,
+  launchActivationProductionFlagsEnvironment,
+} from "./launch-activation-contract.shared.mjs";
+
 export const launchScopeDecisions = {
   internalOnly: "INTERNAL-ONLY",
   off: "LAUNCH-OFF",
@@ -15,6 +21,21 @@ export const launchScopePolicyVersion = "2026-08-22.12";
  * required by the release process.
  */
 export const launchScopePolicyApproval = "PENDING_SIGNATURE" as const;
+
+/**
+ * Production activation is deliberately separate from the checked-in policy
+ * approval marker. The repository never changes the marker to `SIGNED` and it
+ * never embeds a signer key. Instead, Operations may install the exact,
+ * non-secret binding produced by the external Ed25519 receipt verifier after
+ * the final deployment exists. Missing, partial or mismatched bindings fail
+ * closed. None of these values can change a policy decision.
+ */
+export const launchScopeProductionActivationContract =
+  "NOVALURE_LAUNCH_ACTIVATION_RECEIPT_V1" as const;
+export const launchScopeProductionFlagsEnvironment =
+  launchActivationProductionFlagsEnvironment;
+export const launchScopeProductionMinimumActivationGeneration =
+  launchActivationMinimumGeneration;
 
 type LaunchScopeActor = {
   productPermissions?: readonly string[];
@@ -187,6 +208,288 @@ export const launchScopePolicy = Object.freeze({
   }),
 } satisfies Record<string, LaunchScopeRule>);
 
+const compareCanonicalText = (left: string, right: string) =>
+  left < right ? -1 : left > right ? 1 : 0;
+
+const launchScopeCanonicalRules = Object.freeze(
+  (Object.entries(launchScopePolicy) as [string, LaunchScopeRule][])
+    .sort(([left], [right]) => compareCanonicalText(left, right))
+    .map(([surface, rule]) => Object.freeze({
+      allowedProductRoles: Object.freeze(
+        [...(rule.allowedProductRoles ?? [])].sort(compareCanonicalText),
+      ),
+      decision: rule.decision,
+      reason: rule.reason,
+      requiredProductPermissions: Object.freeze(
+        [...(rule.requiredProductPermissions ?? [])].sort(compareCanonicalText),
+      ),
+      surface,
+    })),
+);
+
+/** Canonical evidence input; its SHA-256 is independently recomputed in tests. */
+export const launchScopePolicyCanonicalDocument = Object.freeze({
+  policyVersion: launchScopePolicyVersion,
+  rules: launchScopeCanonicalRules,
+  schemaVersion: 1,
+});
+
+/**
+ * Decision-only evidence input. Reasons remain covered by the full policy
+ * digest, while this digest pins the executable decision/role/capability map.
+ */
+export const launchScopeDecisionCanonicalDocument = Object.freeze({
+  decisions: Object.freeze(launchScopeCanonicalRules.map((rule) => Object.freeze({
+    allowedProductRoles: rule.allowedProductRoles,
+    decision: rule.decision,
+    requiredProductPermissions: rule.requiredProductPermissions,
+    surface: rule.surface,
+  }))),
+  policyVersion: launchScopePolicyVersion,
+  schemaVersion: 1,
+});
+
+// These values are generated from the two canonical documents above. Keeping
+// them as literals makes this client-safe module independent of node:crypto.
+// Contract tests recompute both digests and reject any stale literal.
+export const launchScopePolicySha256 =
+  "7665d0dbf0b145a0148d43f5bfde65ea1afba36eece987bcc2530b22c213618f" as const;
+export const launchScopeDecisionSha256 =
+  "cdb09e429e79cd661d948d2dc8a4e78cf1a0aeb21169b24db69154e5fc10cb6a" as const;
+
+export const launchScopeActivationEnvironmentKeys = Object.freeze({
+  activationExpiresAt: "NOVALURE_LAUNCH_ACTIVATION_EXPIRES_AT",
+  activationGeneration: "NOVALURE_LAUNCH_ACTIVATION_GENERATION",
+  activationNotBefore: "NOVALURE_LAUNCH_ACTIVATION_NOT_BEFORE",
+  candidateCommit: "NOVALURE_LAUNCH_ACTIVATION_CANDIDATE_COMMIT",
+  contract: "NOVALURE_LAUNCH_ACTIVATION_CONTRACT",
+  decision: "NOVALURE_LAUNCH_ACTIVATION_DECISION",
+  decisionSha256: "NOVALURE_LAUNCH_ACTIVATION_DECISION_SHA256",
+  evidenceDeploymentHost: "NOVALURE_LAUNCH_ACTIVATION_EVIDENCE_DEPLOYMENT_HOST",
+  evidenceDeploymentId: "NOVALURE_LAUNCH_ACTIVATION_EVIDENCE_DEPLOYMENT_ID",
+  documentBundleSha256: "NOVALURE_LAUNCH_ACTIVATION_DOCUMENT_BUNDLE_SHA256",
+  finalAttestationSha256: "NOVALURE_LAUNCH_ACTIVATION_FINAL_ATTESTATION_SHA256",
+  flagsEnvironment: "NOVALURE_LAUNCH_ACTIVATION_FLAGS_ENVIRONMENT",
+  flagsRevisionFloor: "NOVALURE_LAUNCH_ACTIVATION_FLAGS_REVISION_FLOOR",
+  policySha256: "NOVALURE_LAUNCH_ACTIVATION_POLICY_SHA256",
+  policyVersion: "NOVALURE_LAUNCH_ACTIVATION_POLICY_VERSION",
+  productionDeploymentHost: "NOVALURE_LAUNCH_ACTIVATION_PRODUCTION_DEPLOYMENT_HOST",
+  productionDeploymentId: "NOVALURE_LAUNCH_ACTIVATION_PRODUCTION_DEPLOYMENT_ID",
+  productionHost: "NOVALURE_LAUNCH_ACTIVATION_PRODUCTION_HOST",
+  projectId: "NOVALURE_LAUNCH_ACTIVATION_PROJECT_ID",
+  receiptSha256: "NOVALURE_LAUNCH_ACTIVATION_RECEIPT_SHA256",
+  releaseGateMatrixSha256: "NOVALURE_LAUNCH_ACTIVATION_RELEASE_GATE_MATRIX_SHA256",
+  trustAnchorSha256: "NOVALURE_LAUNCH_ACTIVATION_TRUST_ANCHOR_SHA256",
+});
+
+type LaunchScopeEnvironment = Readonly<Record<string, string | undefined>>;
+
+export type LaunchScopeProductionActivationBinding = Readonly<{
+  activationExpiresAt: string;
+  activationGeneration: string;
+  activationNotBefore: string;
+  candidateCommit: string;
+  contract: typeof launchScopeProductionActivationContract;
+  decision: "GO";
+  decisionSha256: string;
+  evidenceDeploymentHost: string;
+  evidenceDeploymentId: string;
+  documentBundleSha256: string;
+  finalAttestationSha256: string;
+  flagsEnvironment: string;
+  flagsRevisionFloor: string;
+  policySha256: string;
+  policyVersion: typeof launchScopePolicyVersion;
+  productionDeploymentHost: string;
+  productionDeploymentId: string;
+  productionHost: string;
+  projectId: string;
+  receiptSha256: string;
+  releaseGateMatrixSha256: string;
+  trustAnchorSha256: string;
+}>;
+
+export type LaunchScopeProductionActivation =
+  | { active: true; binding: LaunchScopeProductionActivationBinding }
+  | {
+      active: false;
+      code:
+        | "CLIENT_RUNTIME"
+        | "RUNTIME_IDENTITY_INVALID"
+        | "ACTIVATION_CHANNEL_UNAVAILABLE"
+        | "ACTIVATION_CHANNEL_OFF"
+        | "ACTIVATION_CHANNEL_INVALID"
+        | "ACTIVATION_LEASE_INACTIVE"
+        | "ACTIVATION_BINDING_INVALID"
+        | "ACTIVATION_BINDING_MISMATCH";
+    };
+
+const commitPattern = /^[a-f0-9]{40}$/u;
+const deploymentIdPattern = /^dpl_[A-Za-z0-9]{20,80}$/u;
+const digestPattern = /^[a-f0-9]{64}$/u;
+const hostPattern = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/u;
+const projectIdPattern = /^prj_[A-Za-z0-9]{12,80}$/u;
+const canonicalPositiveIntegerPattern = /^[1-9]\d{0,15}$/u;
+const canonicalNonNegativeIntegerPattern = /^(?:0|[1-9]\d{0,15})$/u;
+const flagsEnvironmentPattern = /^[A-Za-z0-9_-]{1,160}$/u;
+function exactEnvironmentValue(env: LaunchScopeEnvironment, name: string) {
+  const value = env[name];
+  return typeof value === "string" && value === value.trim() && value.length > 0
+    ? value
+    : null;
+}
+
+function canonicalTimestamp(value: string | null) {
+  if (
+    value === null
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value)
+  ) return null;
+  const parsed = new Date(value);
+  const normalized = value.includes(".") ? value : value.replace(/Z$/u, ".000Z");
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === normalized
+    ? parsed.getTime()
+    : null;
+}
+
+/**
+ * Resolve the non-secret runtime binding emitted only after external receipt
+ * verification. This function performs no crypto and is safe in a shared
+ * module. Browser execution always fails closed; only the Node runtime can use
+ * the server-side Vercel identity and activation variables.
+ */
+export function resolveLaunchScopeProductionActivation(
+  providedEnvironment?: LaunchScopeEnvironment,
+): LaunchScopeProductionActivation {
+  if (typeof window !== "undefined") {
+    return { active: false, code: "CLIENT_RUNTIME" };
+  }
+  const env = providedEnvironment ?? process.env;
+  const runtimeCandidate = exactEnvironmentValue(env, "VERCEL_GIT_COMMIT_SHA");
+  const runtimeDeploymentHost = exactEnvironmentValue(env, "VERCEL_URL");
+  const runtimeDeploymentId = exactEnvironmentValue(env, "VERCEL_DEPLOYMENT_ID");
+  const runtimeProductionHost = exactEnvironmentValue(env, "VERCEL_PROJECT_PRODUCTION_URL");
+  const runtimeProjectId = exactEnvironmentValue(env, "VERCEL_PROJECT_ID");
+  if (
+    env.VERCEL !== "1"
+    || env.VERCEL_ENV !== "production"
+    || !runtimeCandidate
+    || !commitPattern.test(runtimeCandidate)
+    || !runtimeDeploymentId
+    || !deploymentIdPattern.test(runtimeDeploymentId)
+    || !runtimeDeploymentHost
+    || runtimeDeploymentHost !== runtimeDeploymentHost.toLowerCase()
+    || !hostPattern.test(runtimeDeploymentHost)
+    || !runtimeProductionHost
+    || runtimeProductionHost !== runtimeProductionHost.toLowerCase()
+    || !hostPattern.test(runtimeProductionHost)
+    || !runtimeProjectId
+    || !projectIdPattern.test(runtimeProjectId)
+  ) {
+    return { active: false, code: "RUNTIME_IDENTITY_INVALID" };
+  }
+
+  let binding: Record<keyof typeof launchScopeActivationEnvironmentKeys, string | null>;
+  if (providedEnvironment === undefined) {
+    const snapshot = readLaunchActivationChannelSnapshot();
+    const epochNow = Date.now();
+    const snapshotEpochAge = snapshot ? epochNow - snapshot.checkedAtEpochMs : null;
+    if (
+      !snapshot
+      || snapshot.validUntilMonotonicMs <= performance.now()
+      || snapshotEpochAge === null
+      || snapshotEpochAge < -1_000
+      || snapshotEpochAge >= 30_000
+    ) {
+      snapshot?.requestRefresh();
+      return { active: false, code: "ACTIVATION_CHANNEL_UNAVAILABLE" };
+    }
+    if (snapshot.state === "OFF") return { active: false, code: "ACTIVATION_CHANNEL_OFF" };
+    if (snapshot.state !== "ACTIVE" || !snapshot.binding) {
+      return { active: false, code: "ACTIVATION_CHANNEL_INVALID" };
+    }
+    const expectedBindingKeys = Object.keys(launchScopeActivationEnvironmentKeys).sort();
+    const actualBindingKeys = Object.keys(snapshot.binding).sort();
+    if (
+      actualBindingKeys.length !== expectedBindingKeys.length
+      || !actualBindingKeys.every((key, index) => key === expectedBindingKeys[index])
+    ) {
+      return { active: false, code: "ACTIVATION_BINDING_INVALID" };
+    }
+    binding = Object.fromEntries(
+      expectedBindingKeys.map((key) => [key, snapshot.binding?.[key] ?? null]),
+    ) as Record<keyof typeof launchScopeActivationEnvironmentKeys, string | null>;
+  } else {
+    const value = (key: keyof typeof launchScopeActivationEnvironmentKeys) =>
+      exactEnvironmentValue(env, launchScopeActivationEnvironmentKeys[key]);
+    binding = Object.fromEntries(
+      Object.keys(launchScopeActivationEnvironmentKeys).map((key) => [
+        key,
+        value(key as keyof typeof launchScopeActivationEnvironmentKeys),
+      ]),
+    ) as Record<keyof typeof launchScopeActivationEnvironmentKeys, string | null>;
+  }
+  const digests = [
+    binding.decisionSha256,
+    binding.documentBundleSha256,
+    binding.finalAttestationSha256,
+    binding.policySha256,
+    binding.receiptSha256,
+    binding.releaseGateMatrixSha256,
+    binding.trustAnchorSha256,
+  ];
+  const activationNotBefore = canonicalTimestamp(binding.activationNotBefore);
+  const activationExpiresAt = canonicalTimestamp(binding.activationExpiresAt);
+  if (
+    !Object.values(binding).every(Boolean)
+    || !digests.every((digest) => digestPattern.test(digest ?? ""))
+    || binding.contract !== launchScopeProductionActivationContract
+    || binding.decision !== "GO"
+    || binding.policyVersion !== launchScopePolicyVersion
+    || binding.policySha256 !== launchScopePolicySha256
+    || binding.decisionSha256 !== launchScopeDecisionSha256
+    || activationNotBefore === null
+    || activationExpiresAt === null
+    || activationExpiresAt <= activationNotBefore
+    || activationExpiresAt - activationNotBefore > 30 * 60 * 1_000
+    || !canonicalPositiveIntegerPattern.test(binding.activationGeneration ?? "")
+    || Number(binding.activationGeneration) < launchScopeProductionMinimumActivationGeneration
+    || !canonicalNonNegativeIntegerPattern.test(binding.flagsRevisionFloor ?? "")
+    || !flagsEnvironmentPattern.test(binding.flagsEnvironment ?? "")
+    || binding.flagsEnvironment !== launchScopeProductionFlagsEnvironment
+    || !commitPattern.test(binding.candidateCommit ?? "")
+    || !deploymentIdPattern.test(binding.evidenceDeploymentId ?? "")
+    || !deploymentIdPattern.test(binding.productionDeploymentId ?? "")
+    || !hostPattern.test(binding.evidenceDeploymentHost ?? "")
+    || !hostPattern.test(binding.productionDeploymentHost ?? "")
+    || !projectIdPattern.test(binding.projectId ?? "")
+    || !hostPattern.test(binding.productionHost ?? "")
+  ) {
+    return { active: false, code: "ACTIVATION_BINDING_INVALID" };
+  }
+  if (
+    binding.candidateCommit !== runtimeCandidate
+    || binding.productionDeploymentHost !== runtimeDeploymentHost
+    || binding.productionDeploymentId !== runtimeDeploymentId
+    || binding.productionHost !== runtimeProductionHost
+    || binding.projectId !== runtimeProjectId
+  ) {
+    return { active: false, code: "ACTIVATION_BINDING_MISMATCH" };
+  }
+  if (
+    providedEnvironment === undefined
+    && (
+      Date.now() < activationNotBefore
+      || Date.now() >= activationExpiresAt
+    )
+  ) {
+    return { active: false, code: "ACTIVATION_LEASE_INACTIVE" };
+  }
+  return {
+    active: true,
+    binding: Object.freeze(binding as LaunchScopeProductionActivationBinding),
+  };
+}
+
 export type LaunchScopeSurface = keyof typeof launchScopePolicy;
 
 const unknownLaunchScopeRule: LaunchScopeRule = Object.freeze({
@@ -234,6 +537,14 @@ export function evaluateLaunchScope(
       rule,
     };
   }
+  if (typeof window !== "undefined") {
+    return {
+      allowed: false,
+      code: "LAUNCH_SCOPE_RUNTIME_UNSAFE",
+      decision: rule.decision,
+      rule,
+    };
+  }
   const vercelEnvironment = process.env.VERCEL_ENV?.trim().toLowerCase() ?? "";
   const ambiguousVercelRuntime =
     process.env.VERCEL === "1" &&
@@ -248,7 +559,16 @@ export function evaluateLaunchScope(
       rule,
     };
   }
-  if (vercelEnvironment === "production" && String(launchScopePolicyApproval) !== "SIGNED") {
+  const productionActivationRequired =
+    vercelEnvironment === "production"
+    || (
+      process.env.NODE_ENV?.trim().toLowerCase() === "production"
+      && vercelEnvironment !== "preview"
+    );
+  if (
+    productionActivationRequired
+    && !resolveLaunchScopeProductionActivation().active
+  ) {
     return {
       allowed: false,
       code: "LAUNCH_SCOPE_UNSIGNED",

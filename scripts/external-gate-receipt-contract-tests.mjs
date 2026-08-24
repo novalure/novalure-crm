@@ -3,16 +3,22 @@ import {
   generateKeyPairSync,
   sign as createDetachedSignature,
 } from "node:crypto";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { tmpdir } from "node:os";
 
 import {
-  accessibilityManualAcceptanceRecordType,
+  accessibilityApprovalRoles,
+  accessibilityManualObservationIdsByCheck,
   accessibilityRequiredManualCheckIds,
-  validateAccessibilityManualAcceptanceReceipt,
+  validateAccessibilityApprovalReceipts,
 } from "./lib/accessibility-manual-acceptance-receipt.mjs";
+import {
+  a11yFixtureLifecycleRecordType,
+  a11yRetainedTableNames,
+} from "./lib/a11y-fixture-lifecycle-evidence.mjs";
 import {
   companyProfileApprovalRecordType,
   companyProfileSnapshotRecordType,
@@ -29,6 +35,11 @@ import {
   verifyExternalGateReceipt,
 } from "./lib/external-gate-receipts.mjs";
 import {
+  canonicalJson as runtimeCanonicalJson,
+  externalGateReceiptRoles as runtimeExternalGateReceiptRoles,
+  verifyExternalGateReceipt as verifyRuntimeExternalGateReceipt,
+} from "./lib/external-gate-receipts-runtime.mjs";
+import {
   operationalGateSpecifications,
   validateOperationalGateReceipt,
   validateOperationalGateReceipts,
@@ -38,8 +49,10 @@ import {
   protectedWorkflowArtifactManifestRecordType,
   protectedWorkflowEvidenceFiles,
   protectedWorkflowProvenanceRecordType,
+  validateProtectedWorkflowArtifactTar,
   validateProtectedWorkflowProvenanceReceipt,
   validateVerifiedGitHubAttestationOutput,
+  withIdentityCheckedExecutableCopy,
 } from "./lib/protected-workflow-provenance-receipt.mjs";
 
 const runtime = Object.freeze({
@@ -50,6 +63,7 @@ const runtime = Object.freeze({
   gitBranch: "codex/go-live-remediation-20260822",
   productionMutationPerformed: false,
 });
+const databaseProjectId = "weathered-term-98273025";
 
 const keyRoles = [...externalGateReceiptRoles, "product"];
 const keys = Object.fromEntries(keyRoles.map((role) => {
@@ -75,7 +89,7 @@ const anchor = Object.freeze({
   schemaVersion: 1,
   trustAnchorId: "ta_novalure_gate_receipts_20260823",
 });
-const anchorSource = `${JSON.stringify(anchor, null, 2)}\n`;
+const anchorSource = canonicalJson(anchor);
 const anchorDigest = sha256(anchorSource);
 const trustContext = Object.freeze({ anchor, expectedSha256: anchorDigest });
 
@@ -122,13 +136,15 @@ function buildReceipt({
 function accessibilityFixture() {
   const individualEvidence = accessibilityRequiredManualCheckIds.map((checkId, index) => ({
     checkId,
-    contexts: [`context ${index + 1} desktop mobile assistive technology`],
+    contexts: checkId === "public-form-and-funnel-submit-flow"
+      ? ["public-form", "public-funnel"]
+      : [`context ${index + 1} desktop mobile assistive technology`],
     languages: ["de", "en"],
-    observations: [{
-      evidenceSha256: sha256(`accessibility-observation-${index}`),
-      id: `observation.${index + 1}`,
+    observations: accessibilityManualObservationIdsByCheck[checkId].map((id, observationIndex) => ({
+      evidenceSha256: sha256(`accessibility-observation-${index}-${observationIndex}`),
+      id,
       status: "PASS",
-    }],
+    })),
     recordType: "NOVALURE_ACCESSIBILITY_MANUAL_CHECK_EVIDENCE",
     result: "PASS",
     runtime: { ...runtime },
@@ -141,7 +157,13 @@ function accessibilityFixture() {
     sha256: sha256(canonicalJson(document)),
   }));
   const matrix = {
-    approvals: [{ owner: "plain strings are not trusted", signature: "not-a-security-boundary" }],
+    approvals: accessibilityApprovalRoles.map((entry) => ({
+      owner: null,
+      role: entry.approvalRole,
+      signature: null,
+      signedAt: null,
+      status: "READY_FOR_EXTERNAL_SIGNATURE",
+    })),
     manualChecks: manualCheckDigests.map((entry) => ({
       evidence: {
         documentSha256: entry.sha256,
@@ -154,24 +176,95 @@ function accessibilityFixture() {
     })),
     schemaVersion: 2,
     standard: "WCAG 2.2 Level AA",
-    status: "SIGNED",
+    status: "READY_FOR_EXTERNAL_SIGNATURE",
   };
   const automatedEvidence = {
+    automatedSourceSha256: sha256("accessibility-browser-source"),
     automatedSubsetPassed: true,
     automatedTechnicalPassed: true,
+    browser: "chromium",
+    cleanup: { browserClosed: true, complete: true, sessionLogoutFailures: 0 },
     coverage: { complete: true },
+    endedAt: "2026-08-23T21:30:00.000Z",
+    evidenceDigest: sha256("accessibility-automated-evidence"),
+    executionBlocker: null,
+    executionScope: { publicAndCrmBusinessData: "HTTP_WRITE_GUARD_ENFORCED" },
     expectedSha: runtime.candidateCommit,
+    generatedAt: "2026-08-23T21:30:00.000Z",
     matrix: { failed: 0, passed: 1 },
+    mode: "RELEASE_GATE",
     productionMutationPerformed: false,
     releaseSurfaceManifestVerified: true,
     results: [{ outcome: "PASS" }],
     runtimeIdentity: { attestationComplete: true },
     schemaVersion: 4,
+    startedAt: "2026-08-23T20:30:00.000Z",
     targetHost: runtime.deploymentHost,
     unsafeHttpWriteGuard: { complete: true },
+    wcagStandard: "WCAG 2.2 AA automated subset plus signed manual acceptance",
   };
-  const payload = {
+  const retainedInventory = (phase) => {
+    const tables = Object.fromEntries(a11yRetainedTableNames.map((name) => [name, {
+      digest: sha256(`${name}-${phase}`),
+      rowCount: phase === "before" ? 1 : 2,
+    }]));
+    return {
+      digest: sha256(canonicalJson(tables)),
+      rowCount: Object.values(tables).reduce((sum, table) => sum + table.rowCount, 0),
+      tables,
+    };
+  };
+  const cleanupScope = (label, count) => ({
+    auditCount: 1,
+    batchFingerprint: `sha256:${sha256(`${label}-batch`)}`,
+    createdObjectCount: count,
+    deletedObjectCount: count,
+    executedCount: 1,
+    ledgerCount: count,
+    liveCascadeCount: 0,
+    liveRegisteredCount: 0,
+    unexpectedLedgerCount: 0,
+  });
+  const fixtureLifecycle = {
+    browserEvidence: {
+      fileName: "a11y-browser-matrix.json",
+      sha256: automatedEvidence.automatedSourceSha256,
+      sidecarFileName: "a11y-browser-matrix.json.sha256",
+      sidecarSha256: sha256("accessibility-browser-sidecar"),
+      sizeBytes: 4_096,
+    },
+    candidateCommit: runtime.candidateCommit,
+    cleanup: {
+      crossTenant: cleanupScope("cross-tenant", 0),
+      primary: cleanupScope("primary", 3),
+      remainingBatchObjectCount: 0,
+      residualLiveObjectCount: 0,
+      status: "PASS",
+    },
+    completedAt: "2026-08-23T21:30:00.000Z",
+    database: {
+      operationalAfter: { digest: "7".repeat(64), rowCount: 10 },
+      operationalBefore: { digest: "7".repeat(64), rowCount: 10 },
+      retainedAfter: retainedInventory("after"),
+      retainedBefore: retainedInventory("before"),
+      targetDigest: `sha256:${sha256("preview-database-target")}`,
+    },
+    deploymentHost: runtime.deploymentHost,
+    deploymentId: runtime.deploymentId,
+    gitBranch: runtime.gitBranch,
+    neonBranchId: runtime.databaseBranchId,
+    neonProjectId: databaseProjectId,
+    productionMutationPerformed: false,
+    recordType: a11yFixtureLifecycleRecordType,
+    runId: "a11y-run-12345678-1234-4123-8123-123456789012",
+    schemaVersion: 1,
+    status: "PASS",
+  };
+  const fixtureLifecycleSha256 = sha256(canonicalJson(fixtureLifecycle));
+  const payloadBase = {
     automatedEvidenceSha256: sha256(canonicalJson(automatedEvidence)),
+    databaseProjectId,
+    fixtureLifecycleSha256,
     individualEvidenceBundleSha256: sha256(canonicalJson(manualCheckDigests)),
     manualCheckDigests,
     matrixSha256: sha256(canonicalJson(matrix)),
@@ -179,22 +272,84 @@ function accessibilityFixture() {
   };
   return {
     automatedEvidence,
+    databaseProjectId,
     expectedAutomatedEvidence: structuredClone(automatedEvidence),
+    fixtureLifecycle,
+    fixtureLifecycleSha256,
     individualEvidence,
     matrix,
-    payload,
+    payloadBase,
   };
 }
 
+function accessibilityApprovalReceipts(fixture) {
+  return Object.fromEntries(accessibilityApprovalRoles.map((expected) => [
+    expected.receiptRole,
+    buildReceipt({
+      payload: {
+        approval: "APPROVED",
+        approvalRole: expected.approvalRole,
+        ...fixture.payloadBase,
+      },
+      recordType: expected.recordType,
+      role: expected.receiptRole,
+    }),
+  ]));
+}
+
+function writeTarText(header, offset, length, value) {
+  const encoded = Buffer.from(value, "ascii");
+  assert.ok(encoded.length < length);
+  encoded.copy(header, offset);
+}
+
+function writeTarOctal(header, offset, length, value) {
+  const encoded = `${value.toString(8).padStart(length - 1, "0")}\0`;
+  assert.equal(encoded.length, length);
+  header.write(encoded, offset, length, "ascii");
+}
+
+function buildUstarArtifact(entries) {
+  const blocks = [];
+  for (const entry of [...entries].sort((left, right) => left.name.localeCompare(right.name))) {
+    const contents = Buffer.from(entry.contents);
+    const header = Buffer.alloc(512);
+    writeTarText(header, 0, 100, entry.name);
+    writeTarOctal(header, 100, 8, 0o400);
+    writeTarOctal(header, 108, 8, 0);
+    writeTarOctal(header, 116, 8, 0);
+    writeTarOctal(header, 124, 12, contents.length);
+    writeTarOctal(header, 136, 12, 0);
+    header.fill(0x20, 148, 156);
+    header[156] = 0x30;
+    header.write("ustar\0", 257, 6, "ascii");
+    header.write("00", 263, 2, "ascii");
+    writeTarOctal(header, 329, 8, 0);
+    writeTarOctal(header, 337, 8, 0);
+    const checksum = header.reduce((sum, value) => sum + value, 0);
+    header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
+    blocks.push(header, contents);
+    const remainder = contents.length % 512;
+    if (remainder !== 0) blocks.push(Buffer.alloc(512 - remainder));
+  }
+  blocks.push(Buffer.alloc(1024));
+  return Buffer.concat(blocks);
+}
+
 function workflowFixture() {
-  const artifactDigest = sha256("protected-workflow-artifact");
+  const artifactEntries = protectedWorkflowEvidenceFiles.map((name, index) => ({
+    contents: Buffer.from(`protected-workflow-file-${index}`, "utf8"),
+    name,
+  }));
+  const artifactBytes = buildUstarArtifact(artifactEntries);
+  const artifactDigest = sha256(artifactBytes);
   const artifactManifest = {
     artifactDigest,
     artifactName: `exact-preview-two-tenant-${runtime.candidateCommit}.tar`,
-    files: protectedWorkflowEvidenceFiles.map((name, index) => ({
+    files: artifactEntries.map(({ contents, name }) => ({
       name,
-      sha256: sha256(`protected-workflow-file-${index}`),
-      sizeBytes: 1_024 + index,
+      sha256: sha256(contents),
+      sizeBytes: contents.length,
     })),
     recordType: protectedWorkflowArtifactManifestRecordType,
     schemaVersion: 1,
@@ -272,6 +427,7 @@ function workflowFixture() {
     runtime: { ...runtime },
   };
   return {
+    artifactBytes,
     artifactDigest,
     artifactManifest,
     attestationBundle,
@@ -355,6 +511,13 @@ function companyProfileFixture() {
 }
 
 test("external trust context accepts a role union and the loader requires an exact out-of-repository digest", async () => {
+  assert.deepEqual(runtimeExternalGateReceiptRoles, externalGateReceiptRoles);
+  assert.equal(runtimeCanonicalJson(anchor), canonicalJson(anchor));
+  const runtimeSource = readFileSync(
+    new URL("./lib/external-gate-receipts-runtime.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(runtimeSource, /node:fs|node:child_process|\bfetch\s*\(/u);
   assert.doesNotThrow(() => validateExternalGateTrustContext(trustContext, {
     requiredRoles: externalGateReceiptRoles,
   }));
@@ -377,6 +540,18 @@ test("external trust context accepts a role union and the loader requires an exa
     }),
     /EXTERNAL_GATE_TRUST_ANCHOR_DIGEST_MISMATCH/u,
   );
+  const nonCanonicalSource = JSON.stringify(anchor);
+  const nonCanonicalPath = path.join(directory, "anchor-pretty.json");
+  await writeFile(nonCanonicalPath, nonCanonicalSource, "utf8");
+  await assert.rejects(
+    loadExternalGateTrustContext({
+      anchorPath: nonCanonicalPath,
+      expectedSha256: sha256(nonCanonicalSource),
+      repositoryRoot: process.cwd(),
+      requiredRoles: externalGateReceiptRoles,
+    }),
+    /EXTERNAL_GATE_TRUST_ANCHOR_NOT_CANONICAL/u,
+  );
 });
 
 test("detached receipts reject self-assertion, wrong keys, sparse content and payload tampering", () => {
@@ -387,6 +562,12 @@ test("detached receipts reject self-assertion, wrong keys, sparse content and pa
     role: "accessibility-owner",
   });
   assert.doesNotThrow(() => verifyExternalGateReceipt({
+    expectedRecordType: recordType,
+    expectedRole: "accessibility-owner",
+    receipt,
+    trustContext,
+  }));
+  assert.doesNotThrow(() => verifyRuntimeExternalGateReceipt({
     expectedRecordType: recordType,
     expectedRole: "accessibility-owner",
     receipt,
@@ -412,6 +593,19 @@ test("detached receipts reject self-assertion, wrong keys, sparse content and pa
     trustContext,
   }), /EXTERNAL_GATE_RECEIPT_SIGNATURE_VERIFICATION_FAILED/u);
 
+  const impossibleCalendarDate = buildReceipt({
+    payload: { result: "PASS" },
+    recordType,
+    role: "accessibility-owner",
+    signedAt: "2026-02-31T00:00:00.000Z",
+  });
+  assert.throws(() => verifyExternalGateReceipt({
+    expectedRecordType: recordType,
+    expectedRole: "accessibility-owner",
+    receipt: impossibleCalendarDate,
+    trustContext,
+  }), /EXTERNAL_GATE_RECEIPT_SIGNED_AT_INVALID/u);
+
   const sparse = structuredClone(receipt);
   delete sparse.payloadSha256;
   assert.throws(() => verifyExternalGateReceipt({
@@ -431,56 +625,185 @@ test("detached receipts reject self-assertion, wrong keys, sparse content and pa
   }), /EXTERNAL_GATE_RECEIPT_PAYLOAD_DIGEST_MISMATCH/u);
 });
 
-test("accessibility requires full matrix and individual digests plus an external owner signature", () => {
+test("accessibility requires exact manual inventories and three independently signed approvals", () => {
+  const expectedPublicSubmitInventory = ["form", "funnel"].flatMap((surface) =>
+    ["de", "en"].flatMap((language) =>
+      ["desktop", "mobile", "reflow-400"].flatMap((profile) =>
+        ["validation", "success"].map(
+          (state) => `public-submit.${surface}.${language}.${profile}.${state}`,
+        ))));
+  assert.deepEqual(
+    accessibilityManualObservationIdsByCheck["public-form-and-funnel-submit-flow"],
+    expectedPublicSubmitInventory,
+  );
+  assert.equal(expectedPublicSubmitInventory.length, 24);
   const fixture = accessibilityFixture();
-  const receipt = buildReceipt({
-    payload: fixture.payload,
-    recordType: accessibilityManualAcceptanceRecordType,
-    role: "accessibility-owner",
-  });
-  const result = validateAccessibilityManualAcceptanceReceipt({
+  const approvalReceipts = accessibilityApprovalReceipts(fixture);
+  const result = validateAccessibilityApprovalReceipts({
     ...fixture,
-    receipt,
+    approvalReceipts,
     runtime,
     trustContext,
   });
   assert.equal(result.status, "VERIFIED");
   assert.equal(result.manualCheckCount, accessibilityRequiredManualCheckIds.length);
+  assert.equal(result.signatureCount, accessibilityApprovalRoles.length);
 
-  assert.throws(() => validateAccessibilityManualAcceptanceReceipt({
+  assert.throws(() => validateAccessibilityApprovalReceipts({
     ...fixture,
-    receipt,
+    approvalReceipts,
     runtime,
     trustContext: null,
   }), /EXTERNAL_GATE_TRUST_CONTEXT_REQUIRED/u);
 
   const tamperedEvidence = structuredClone(fixture.individualEvidence);
   tamperedEvidence[0].observations[0].evidenceSha256 = "f".repeat(64);
-  assert.throws(() => validateAccessibilityManualAcceptanceReceipt({
+  assert.throws(() => validateAccessibilityApprovalReceipts({
     ...fixture,
+    approvalReceipts,
     individualEvidence: tamperedEvidence,
-    receipt,
     runtime,
     trustContext,
   }), /ACCESSIBILITY_MATRIX_MANUAL_EVIDENCE_DIGEST_MISMATCH/u);
 
-  const sparsePayload = structuredClone(fixture.payload);
+  const sparsePayload = structuredClone(fixture.payloadBase);
   sparsePayload.manualCheckDigests.pop();
-  const sparseReceipt = buildReceipt({
-    payload: sparsePayload,
-    recordType: accessibilityManualAcceptanceRecordType,
-    role: "accessibility-owner",
+  const firstRole = accessibilityApprovalRoles[0];
+  const sparseReceipts = structuredClone(approvalReceipts);
+  sparseReceipts[firstRole.receiptRole] = buildReceipt({
+    payload: {
+      approval: "APPROVED",
+      approvalRole: firstRole.approvalRole,
+      ...sparsePayload,
+    },
+    recordType: firstRole.recordType,
+    role: firstRole.receiptRole,
   });
-  assert.throws(() => validateAccessibilityManualAcceptanceReceipt({
+  assert.throws(() => validateAccessibilityApprovalReceipts({
     ...fixture,
-    receipt: sparseReceipt,
+    approvalReceipts: sparseReceipts,
     runtime,
     trustContext,
-  }), /ACCESSIBILITY_MANUAL_ACCEPTANCE_CHECK_DIGESTS_MISMATCH/u);
+  }), /ACCESSIBILITY_APPROVAL_CHECK_DIGESTS_MISMATCH/u);
+
+  const missingRole = structuredClone(approvalReceipts);
+  delete missingRole[accessibilityApprovalRoles[2].receiptRole];
+  assert.throws(() => validateAccessibilityApprovalReceipts({
+    ...fixture,
+    approvalReceipts: missingRole,
+    runtime,
+    trustContext,
+  }), /ACCESSIBILITY_APPROVAL_RECEIPTS_KEYS_INVALID/u);
+
+  const swappedRoles = structuredClone(approvalReceipts);
+  [
+    swappedRoles[accessibilityApprovalRoles[0].receiptRole],
+    swappedRoles[accessibilityApprovalRoles[1].receiptRole],
+  ] = [
+    swappedRoles[accessibilityApprovalRoles[1].receiptRole],
+    swappedRoles[accessibilityApprovalRoles[0].receiptRole],
+  ];
+  assert.throws(() => validateAccessibilityApprovalReceipts({
+    ...fixture,
+    approvalReceipts: swappedRoles,
+    runtime,
+    trustContext,
+  }), /EXTERNAL_GATE_RECEIPT_(?:TYPE|ROLE)_MISMATCH/u);
+
+  const incompleteSubmit = structuredClone(fixture.individualEvidence);
+  incompleteSubmit.at(-1).observations.pop();
+  assert.throws(() => validateAccessibilityApprovalReceipts({
+    ...fixture,
+    approvalReceipts,
+    individualEvidence: incompleteSubmit,
+    runtime,
+    trustContext,
+  }), /ACCESSIBILITY_MANUAL_OBSERVATION_INVENTORY_INVALID/u);
+
+  const genericObservation = structuredClone(fixture.individualEvidence);
+  genericObservation[1].observations[0].id = "observation.generic-pass";
+  assert.throws(() => validateAccessibilityApprovalReceipts({
+    ...fixture,
+    approvalReceipts,
+    individualEvidence: genericObservation,
+    runtime,
+    trustContext,
+  }), /ACCESSIBILITY_MANUAL_OBSERVATION_INVENTORY_INVALID/u);
+});
+
+test("the pinned GitHub CLI executes only through an identity-checked private copy", () => {
+  const executableBytes = Buffer.from("pinned-cli-contract-fixture", "utf8");
+  const expectedSha256 = sha256(executableBytes);
+  const trustedRootBytes = Buffer.from('{"trustedRoot":"contract-fixture"}\n', "utf8");
+  const trustedRootInput = {
+    bytes: trustedRootBytes,
+    expectedSha256: sha256(trustedRootBytes),
+    key: "trustedRoot",
+    maximumBytes: 4 * 1024 * 1024,
+    name: "sigstore-trusted-root.jsonl",
+  };
+  assert.deepEqual(
+    withIdentityCheckedExecutableCopy({
+      executableBytes,
+      expectedSha256,
+      inputFiles: [trustedRootInput],
+      operation(snapshot) {
+        return {
+          cli: sha256(readFileSync(snapshot.executablePath)),
+          trustedRoot: sha256(readFileSync(snapshot.inputPaths.trustedRoot)),
+        };
+      },
+    }),
+    { cli: expectedSha256, trustedRoot: trustedRootInput.expectedSha256 },
+  );
+  assert.throws(
+    () => withIdentityCheckedExecutableCopy({
+      executableBytes,
+      expectedSha256,
+      operation(snapshot) {
+        const originalPath = `${snapshot.executablePath}.original`;
+        renameSync(snapshot.executablePath, originalPath);
+        writeFileSync(snapshot.executablePath, "substituted-cli", { flag: "wx", mode: 0o500 });
+      },
+    }),
+    /PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_CHANGED/u,
+  );
+  assert.throws(
+    () => withIdentityCheckedExecutableCopy({
+      executableBytes,
+      expectedSha256,
+      inputFiles: [trustedRootInput],
+      operation(snapshot) {
+        const originalPath = `${snapshot.inputPaths.trustedRoot}.original`;
+        renameSync(snapshot.inputPaths.trustedRoot, originalPath);
+        writeFileSync(snapshot.inputPaths.trustedRoot, '{"trustedRoot":"substituted"}\n', {
+          flag: "wx",
+          mode: 0o400,
+        });
+      },
+    }),
+    /PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_CHANGED/u,
+  );
 });
 
 test("protected workflow provenance binds cryptographically verified GitHub claims to the signed receipt", () => {
   const fixture = workflowFixture();
+  assert.equal(
+    fixture.verificationOutput[0].verificationResult.statement.subject[0].digest.sha256,
+    sha256(fixture.artifactBytes),
+  );
+  assert.deepEqual(
+    validateProtectedWorkflowArtifactTar({
+      artifactBytes: fixture.artifactBytes,
+      artifactManifest: fixture.artifactManifest,
+    }),
+    {
+      artifactDigest: fixture.artifactDigest,
+      memberCount: protectedWorkflowEvidenceFiles.length,
+      memberNames: [...protectedWorkflowEvidenceFiles].sort((left, right) => left.localeCompare(right)),
+      status: "VERIFIED",
+    },
+  );
   assert.equal(fixture.verifiedClaims.github.runId, "123456789012");
   assert.equal(fixture.verifiedClaims.github.runAttempt, 2);
   const receipt = buildReceipt({
@@ -511,6 +834,45 @@ test("protected workflow provenance binds cryptographically verified GitHub clai
   assert.throws(
     () => validateProtectedWorkflowProvenanceReceipt({ ...input, artifactManifest: sparseManifest }),
     /PROTECTED_WORKFLOW_ARTIFACT_FILE_COUNT_INVALID/u,
+  );
+
+  const memberDigestMismatch = structuredClone(fixture.artifactManifest);
+  memberDigestMismatch.files[0].sha256 = sha256("manifest-member-substitution");
+  assert.throws(
+    () => validateProtectedWorkflowArtifactTar({
+      artifactBytes: fixture.artifactBytes,
+      artifactManifest: memberDigestMismatch,
+    }),
+    /PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_DIGEST_MISMATCH/u,
+  );
+
+  const memberSizeMismatch = structuredClone(fixture.artifactManifest);
+  memberSizeMismatch.files[0].sizeBytes += 1;
+  assert.throws(
+    () => validateProtectedWorkflowArtifactTar({
+      artifactBytes: fixture.artifactBytes,
+      artifactManifest: memberSizeMismatch,
+    }),
+    /PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_SIZE_MISMATCH/u,
+  );
+
+  const unexpectedMemberBytes = buildUstarArtifact([
+    ...protectedWorkflowEvidenceFiles.map((name, index) => ({
+      contents: Buffer.from(`protected-workflow-file-${index}`, "utf8"),
+      name,
+    })),
+    { contents: Buffer.from("not-allowlisted", "utf8"), name: "unexpected-evidence.json" },
+  ]);
+  const unexpectedMemberManifest = {
+    ...structuredClone(fixture.artifactManifest),
+    artifactDigest: sha256(unexpectedMemberBytes),
+  };
+  assert.throws(
+    () => validateProtectedWorkflowArtifactTar({
+      artifactBytes: unexpectedMemberBytes,
+      artifactManifest: unexpectedMemberManifest,
+    }),
+    /PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_INVENTORY_INVALID/u,
   );
 
   const localEnvironmentPayload = structuredClone(fixture.payload);

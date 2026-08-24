@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { validateReleaseDocumentCandidateState } from "./final-preview-release-attestation-contract.mjs";
+import {
+  validateReleaseDocumentCandidateState,
+  verifyLegalManifestCandidateSources,
+} from "./final-preview-release-attestation-contract.mjs";
 
 const manifest = JSON.parse(
   await readFile("docs/audit/2026-08-23/legal-content-manifest.json", "utf8"),
@@ -18,17 +22,33 @@ const [finalPreviewAttestation, releaseSurfaceManifest, releaseGateMatrix] = awa
   readFile("docs/audit/2026-08-23/release-gate-matrix.json", "utf8").then(JSON.parse),
 ]);
 
-async function sha256(path) {
-  return createHash("sha256").update(await readFile(path)).digest("hex");
+function readGit(args, { encoding = "utf8" } = {}) {
+  const result = spawnSync("git", args, { encoding, maxBuffer: 16 * 1024 * 1024 });
+  assert.equal(result.status, 0, String(result.stderr ?? ""));
+  return result.stdout;
 }
 
-test("legal manifest hashes every frozen source byte-for-byte", async () => {
-  assert.equal(await sha256(manifest.sharedFacts.path), manifest.sharedFacts.sha256);
+test("legal manifest hashes every candidate Git blob byte-for-byte", async () => {
+  const candidateCommit = String(readGit(["rev-parse", "--verify", "HEAD"])).trim();
+  const sourceSha256 = (path) => createHash("sha256")
+    .update(readGit(["show", `${candidateCommit}:${path}`], { encoding: null }))
+    .digest("hex");
+  assert.equal(sourceSha256(manifest.sharedFacts.path), manifest.sharedFacts.sha256);
   for (const entry of [...manifest.pages, ...manifest.routeAliases, ...manifest.functionalContracts]) {
     for (const source of entry.sourceFiles) {
-      assert.equal(await sha256(source.path), source.sha256, source.path);
+      assert.equal(sourceSha256(source.path), source.sha256, source.path);
     }
   }
+  assert.deepEqual(
+    await verifyLegalManifestCandidateSources({ candidateCommit, legalContentManifest: manifest }),
+    { candidateCommit, sourceCount: 11, status: "PASS" },
+  );
+  const tampered = structuredClone(manifest);
+  tampered.pages[0].sourceFiles[0].sha256 = "0".repeat(64);
+  await assert.rejects(
+    verifyLegalManifestCandidateSources({ candidateCommit, legalContentManifest: tampered }),
+    /FINAL_ATTESTATION_LEGAL_SOURCE_DIGEST_MISMATCH/u,
+  );
 });
 
 test("every required route has independent DE and EN render evidence without fabricated approval", () => {

@@ -25,6 +25,7 @@ import {
 } from "./lib/public-runtime-preview-e2e.mjs";
 import {
   publicRuntimeArtifactFiles,
+  publicRuntimeParentBaseArtifactFile,
   publicRuntimeProofObservations,
 } from "./lib/public-runtime-protected-receipt.mjs";
 
@@ -379,8 +380,14 @@ export async function stageProtectedPublicEvidence(evidence, expected, {
       && evidence.databaseAttestation?.status === "PASS"
       && evidence.databaseAttestation?.freshBatch === true
       && evidence.databaseAttestation?.isQa === true
-      && evidence.databaseAttestation?.qaBatchId === expected.qaBatchId,
+      && evidence.databaseAttestation?.qaBatchId === expected.qaBatchId
+      && sha256Pattern.test(evidence.databaseAttestation?.contentFingerprintDigest),
     "PROTECTED_PUBLIC_PARENT_EVIDENCE_INVALID",
+  );
+  invariant(
+    !Object.hasOwn(evidence, "protectedWorkflowArtifactManifest")
+      && !Object.hasOwn(evidence, "protectedWorkflowReceipt"),
+    "PROTECTED_PUBLIC_PARENT_EVIDENCE_REFERENCE_INVALID",
   );
   const cleanupDigest = validateCleanup(evidence.cleanup, expected);
   exactInventory(
@@ -397,9 +404,11 @@ export async function stageProtectedPublicEvidence(evidence, expected, {
   const root = await mkdtemp(path.join(resolvedRunnerTemp, "novalure-public-evidence-"));
   await chmod(root, 0o700);
   for (const name of publicRuntimeArtifactFiles) {
-    const value = name === "public-form-funnel-cleanup.json"
-      ? evidence.cleanup
-      : proofPayloads.get(name.slice(0, -".json".length));
+    const value = name === publicRuntimeParentBaseArtifactFile
+      ? evidence
+      : name === "public-form-funnel-cleanup.json"
+        ? evidence.cleanup
+        : proofPayloads.get(name.slice(0, -".json".length));
     invariant(value, "PROTECTED_PUBLIC_ARTIFACT_VALUE_MISSING");
     await writeExactRegularFile(path.join(root, name), canonicalJson(value));
   }

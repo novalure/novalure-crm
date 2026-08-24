@@ -5,7 +5,10 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import { validateAccessibilityManualAcceptanceReceipt } from "./lib/accessibility-manual-acceptance-receipt.mjs";
+import {
+  accessibilityApprovalRoles,
+  validateAccessibilityApprovalReceipts,
+} from "./lib/accessibility-manual-acceptance-receipt.mjs";
 import { validateCompanyProfileApprovalReceipt } from "./lib/company-profile-approval-receipt.mjs";
 import { loadExternalGateTrustContext } from "./lib/external-gate-receipts.mjs";
 import { validateOperationalGateReceipt } from "./lib/operational-gate-receipts.mjs";
@@ -15,16 +18,20 @@ import {
 } from "./lib/protected-workflow-provenance-receipt.mjs";
 
 const allowedArguments = new Set([
+  "--approval-receipts",
   "--artifact",
   "--artifact-manifest",
   "--attestation-bundle",
   "--automated-evidence",
+  "--database-project-id",
   "--expected-artifact-digest",
   "--expected-sigstore-trusted-root-sha256",
   "--expected-source",
   "--expected-trust-anchor-sha256",
   "--expected-workflow-ref",
   "--expected-workflow-sha",
+  "--fixture-lifecycle",
+  "--fixture-lifecycle-sha256",
   "--github-cli",
   "--individual-evidence",
   "--kind",
@@ -83,27 +90,45 @@ export async function externalGateReceiptVerifyMain(argv = process.argv.slice(2)
   const args = parseArgs(argv);
   const kind = required(args, "--kind");
   const runtime = await readBoundedJson(required(args, "--runtime"), "EXTERNAL_GATE_RUNTIME");
-  const receipt = await readBoundedJson(required(args, "--receipt"), "EXTERNAL_GATE_RECEIPT");
+  const approvalReceipts = kind === "accessibility"
+    ? await readBoundedJson(
+      required(args, "--approval-receipts"),
+      "EXTERNAL_GATE_APPROVAL_RECEIPTS",
+    )
+    : null;
+  const receipt = kind === "accessibility"
+    ? null
+    : await readBoundedJson(required(args, "--receipt"), "EXTERNAL_GATE_RECEIPT");
   const trustContext = await loadExternalGateTrustContext({
     anchorPath: path.resolve(required(args, "--trust-anchor")),
     expectedSha256: required(args, "--expected-trust-anchor-sha256"),
     repositoryRoot: process.cwd(),
-    requiredRoles: [receipt.role],
+    requiredRoles: kind === "accessibility"
+      ? accessibilityApprovalRoles.map((entry) => entry.receiptRole)
+      : [receipt.role],
   });
 
   let result;
   if (kind === "accessibility") {
-    result = validateAccessibilityManualAcceptanceReceipt({
-      automatedEvidence: await readBoundedJson(
+    const automatedEvidence = await readBoundedJson(
         required(args, "--automated-evidence"),
         "EXTERNAL_GATE_AUTOMATED_EVIDENCE",
+      );
+    result = validateAccessibilityApprovalReceipts({
+      approvalReceipts,
+      automatedEvidence,
+      databaseProjectId: required(args, "--database-project-id"),
+      expectedAutomatedEvidence: automatedEvidence,
+      fixtureLifecycle: await readBoundedJson(
+        required(args, "--fixture-lifecycle"),
+        "EXTERNAL_GATE_FIXTURE_LIFECYCLE",
       ),
+      fixtureLifecycleSha256: required(args, "--fixture-lifecycle-sha256"),
       individualEvidence: await readBoundedJson(
         required(args, "--individual-evidence"),
         "EXTERNAL_GATE_INDIVIDUAL_EVIDENCE",
       ),
       matrix: await readBoundedJson(required(args, "--matrix"), "EXTERNAL_GATE_MATRIX"),
-      receipt,
       runtime,
       trustContext,
     });

@@ -8,6 +8,8 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 
 export const externalGateReceiptRoles = Object.freeze([
   "accessibility-owner",
+  "accessibility-product-owner",
+  "accessibility-release-owner",
   "blob-migration-attestor",
   "github-actions-attestor",
   "observability-owner",
@@ -15,9 +17,19 @@ export const externalGateReceiptRoles = Object.freeze([
   "cleanup-owner",
   "supply-chain-owner",
   "company-profile-approver",
-  "provider-acceptance-attestor",
+  "provider-resend-domain-owner",
+  "provider-calendar-owner",
+  "provider-final-cleanup-attestor",
   "performance-manual-owner",
   "performance-rum-attestor",
+  "performance-budget-product",
+  "performance-budget-engineering",
+  "performance-budget-operations",
+  "launch-activation-attestor",
+  "production-funnel-token-cutover-attestor",
+  "production-cutover-dba",
+  "production-cutover-platform-operations",
+  "production-cutover-release-observer",
 ]);
 
 export const externalGateTrustAnchorRecordType =
@@ -77,10 +89,16 @@ export function requireSha256(value, code) {
 }
 
 export function requireIsoTimestamp(value, code) {
+  const parsed = typeof value === "string" ? new Date(value) : null;
+  const canonicalValue = typeof value === "string" && !value.includes(".")
+    ? value.replace(/Z$/u, ".000Z")
+    : value;
   invariant(
     typeof value === "string"
       && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value)
-      && !Number.isNaN(Date.parse(value)),
+      && parsed !== null
+      && !Number.isNaN(parsed.getTime())
+      && parsed.toISOString() === canonicalValue,
     code,
   );
   return value;
@@ -220,6 +238,29 @@ export function validateExternalGateTrustContext(
   return trustContext;
 }
 
+export function assertExternalGateRoleIndependence(trustContext, requiredRoles) {
+  validateExternalGateTrustContext(trustContext, { requiredRoles });
+  const signerSubjects = new Set();
+  const publicKeyFingerprints = new Set();
+  for (const role of requiredRoles) {
+    const key = trustContext.anchor.keys.find((candidate) => candidate.role === role);
+    invariant(key, "EXTERNAL_GATE_TRUST_REQUIRED_ROLE_MISSING");
+    const publicKey = validatePublicKey(key);
+    const publicKeyFingerprint = sha256(publicKey.export({ format: "der", type: "spki" }));
+    invariant(
+      !signerSubjects.has(key.signerSubject),
+      "EXTERNAL_GATE_TRUST_SIGNER_SUBJECT_REUSED",
+    );
+    invariant(
+      !publicKeyFingerprints.has(publicKeyFingerprint),
+      "EXTERNAL_GATE_TRUST_PUBLIC_KEY_REUSED",
+    );
+    signerSubjects.add(key.signerSubject);
+    publicKeyFingerprints.add(publicKeyFingerprint);
+  }
+  return trustContext;
+}
+
 function isOutsideDirectory(parent, candidate) {
   const pathFromParent = relative(parent, candidate);
   return pathFromParent.startsWith(`..${sep}`) || pathFromParent === ".." || isAbsolute(pathFromParent);
@@ -259,6 +300,10 @@ export async function loadExternalGateTrustContext({
   } catch {
     invariant(false, "EXTERNAL_GATE_TRUST_ANCHOR_JSON_INVALID");
   }
+  invariant(
+    source.toString("utf8") === canonicalJson(anchor),
+    "EXTERNAL_GATE_TRUST_ANCHOR_NOT_CANONICAL",
+  );
   return Object.freeze(validateExternalGateTrustContext(
     { anchor, expectedSha256 },
     { requiredRoles },

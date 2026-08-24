@@ -43,16 +43,19 @@ export async function register() {
     { assertCsrfConfiguration },
     { assertPublicSubmissionAbuseConfiguration },
     { assertAuthSecurityConfiguration },
+    { initializeProductionLaunchActivation },
   ] = await Promise.all([
     import("@/lib/integrations/calendar-oauth-state"),
     import("@/lib/security/csrf"),
     import("@/lib/security/public-submission-abuse"),
     import("@/lib/auth/auth-security"),
+    import("@/lib/launch-activation-runtime.server"),
   ]);
   assertOAuthStateSecretConfigured();
   assertCsrfConfiguration();
   assertPublicSubmissionAbuseConfiguration();
   assertAuthSecurityConfiguration();
+  await initializeProductionLaunchActivation();
 
   console.info(JSON.stringify({
     commitSha: safeLogToken(process.env.VERCEL_GIT_COMMIT_SHA, 40),

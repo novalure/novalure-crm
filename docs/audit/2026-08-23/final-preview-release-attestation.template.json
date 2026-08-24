@@ -123,6 +123,16 @@
       "statusJsonPointer": null
     },
     {
+      "id": "production-funnel-token-cutover",
+      "requiredForGo": true,
+      "status": "NOT_RUN",
+      "path": null,
+      "sidecarPath": null,
+      "sha256": null,
+      "candidateJsonPointer": null,
+      "statusJsonPointer": null
+    },
+    {
       "id": "accessibility-browser",
       "requiredForGo": true,
       "status": "NOT_RUN",

@@ -209,7 +209,15 @@ test("localized i18n exports keep matching de/en key structure", () => {
 });
 
 test("public geotargeting offers only launch-approved de/en while Spanish remains centrally off", () => {
-  const launchScope = loadTranspiledExports("src/lib/launch-scope.ts");
+  const launchScope = loadTranspiledExports("src/lib/launch-scope.ts", {
+    "./launch-activation-channel.shared.mjs": {
+      readLaunchActivationChannelSnapshot: () => null,
+    },
+    "./launch-activation-contract.shared.mjs": {
+      launchActivationMinimumGeneration: 2,
+      launchActivationProductionFlagsEnvironment: "production",
+    },
+  });
   const {
     isPublicLanguageLaunchEnabled,
     publicLanguageRequestHeaderName,

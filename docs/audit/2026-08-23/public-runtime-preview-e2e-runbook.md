@@ -8,7 +8,7 @@ Stand: 23.08.2026
 
 Production-Origins, Production-Datenbankziele, Kunden-Workspaces und nicht deploymentgebundene Batches werden vor der ersten Mutation abgewiesen. Datenbank-URL, beide Session-Cookies und ein optionaler Vercel-Share-Zugang werden nur als begrenztes stdin-JSON akzeptiert. Diese Werte dürfen weder in Argumenten, temporären Dateien, Logs noch in Evidenzen erscheinen.
 
-Der einzige freigabefähige Ausführungsweg ist der manuell gestartete, auf `main` geschützte Job `protected-preview-public-runtime` in `.github/workflows/livegang-e2e.yml`. Er verwendet den exakt gepinnten Trusted-Harness-SHA, checkt den Candidate separat aus, erzeugt ein eigenes deterministisches Public-Artefakt und lässt es durch GitHub Artifact Attestations/OIDC attestieren. Das Four-File-Two-Tenant-Artefakt darf dafür nicht wiederverwendet werden.
+Der einzige freigabefähige Ausführungsweg ist der manuell gestartete, auf `main` geschützte Job `protected-preview-public-runtime` in `.github/workflows/livegang-e2e.yml`. Er verwendet den exakt gepinnten Trusted-Harness-SHA, checkt den Candidate separat aus, erzeugt ein eigenes deterministisches Public-Artefakt und lässt es durch GitHub Artifact Attestations/OIDC attestieren. Das fünfteilige Two-Tenant-Artefakt einschließlich seines kanonischen Parent-Base-Dokuments darf dafür nicht wiederverwendet werden.
 
 ## Capability schema v2
 
@@ -100,7 +100,7 @@ Audit-, Rate-Limit-, CSRF- und Idempotency-Zeilen sind absichtlich retained und 
 
 ## Geschützte Evidenz
 
-Der Candidate-Runner schreibt zunächst `public-runtime-preview-evidence.json` samt SHA-256-Sidecar. Der Trusted-Harness validiert PASS, Candidate-/Deployment-/Batch-Bindung, Beobachtungsreihenfolge, mindestens 15 Minuten Proof-Alter, genau-einmal Persistenz, Tokenrotation und Cleanup und staged danach exakt sechs Single-Link-Dateien:
+Der Candidate-Runner schreibt zunächst `public-runtime-preview-evidence.json` samt SHA-256-Sidecar. Der Trusted-Harness validiert PASS, Candidate-/Deployment-/Batch-Bindung, Beobachtungsreihenfolge, mindestens 15 Minuten Proof-Alter, genau-einmal Persistenz, Tokenrotation und Cleanup und staged danach exakt sieben Single-Link-Dateien:
 
 - `public-form-long-proof-refresh.json`
 - `public-form-live-submission.json`
@@ -108,8 +108,9 @@ Der Candidate-Runner schreibt zunächst `public-runtime-preview-evidence.json` s
 - `public-funnel-live-submission.json`
 - `funnel-publish-token-rotation.json`
 - `public-form-funnel-cleanup.json`
+- `public-runtime-parent-base.json`
 
-Diese sechs Dateien werden in lexikografischer Reihenfolge in ein separates deterministisches POSIX-Tar geschrieben. Manifest, Tar und Sidecars werden unveränderlich erzeugt; `actions/attest` ist auf eine exakte Commit-SHA gepinnt. Das Sigstore-Bundle wird als eigene read-only Evidence eingefroren und zusammen mit den sechs Dateien hochgeladen. Der finale Verifier verlangt die lokale kryptografische GitHub/Sigstore-Verifikation des exakten Artifact-Subjects; selbst deklarierte Issuer-/Subject-/Digest-Werte sind kein PASS-Ersatz.
+Diese sieben Dateien werden in lexikografischer Reihenfolge in ein separates deterministisches POSIX-Tar geschrieben. `public-runtime-parent-base.json` enthält das vollständige, secret-geprüfte Parent-Dokument ohne das erst danach erzeugte Workflow-Manifest und Receipt. Manifest, Tar und Sidecars werden unveränderlich erzeugt; `actions/attest` ist auf eine exakte Commit-SHA gepinnt. Das Sigstore-Bundle wird als eigene read-only Evidence eingefroren und zusammen mit den sieben Dateien hochgeladen. Der finale Verifier rekonstruiert die referenzfreie Parent-Basis aus dem finalen Gate-Dokument, vergleicht Digest und Bytegröße und verlangt die lokale kryptografische GitHub/Sigstore-Verifikation des exakten Artifact-Subjects; selbst deklarierte Issuer-/Subject-/Digest-Werte sind kein PASS-Ersatz.
 
 URLs, Cookies, Datenbank-Zugangsdaten, E-Mail-Adressen und rohe Publish-Tokens werden vom Evidenz-Validator abgewiesen. In Evidenzen erscheinen nur Statuscodes, kanonische Digests, sichere IDs/Fingerprints und bounded Metadaten.
 
@@ -119,4 +120,4 @@ URLs, Cookies, Datenbank-Zugangsdaten, E-Mail-Adressen und rohe Publish-Tokens w
 - `1`: Target-, Capability-, HTTP-, Datenbank-, Proof-, Rotation-, Isolation-, Cleanup- oder Evidenzvertrag fehlgeschlagen.
 - `2`: ausschließlich für einen expliziten `BLOCKED`-Status reserviert; darf nie in einen finalen PASS umgedeutet werden.
 
-Ein lokaler grüner Test ersetzt keinen geschützten echten Preview-Lauf. Vor GO müssen zwei neue deploymentgebundene Batches provisioniert, der geschützte Job auf dem exakten finalen Candidate ausgeführt und das resultierende sechs-Datei-Artefakt samt Sigstore-Bundle durch den finalen Release-Verifier akzeptiert werden.
+Ein lokaler grüner Test ersetzt keinen geschützten echten Preview-Lauf. Vor GO müssen zwei neue deploymentgebundene Batches provisioniert, der geschützte Job auf dem exakten finalen Candidate ausgeführt und das resultierende Sieben-Datei-Artefakt samt Sigstore-Bundle durch den finalen Release-Verifier akzeptiert werden.

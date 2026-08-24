@@ -1,13 +1,19 @@
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   closeSync,
   constants as fsConstants,
   fstatSync,
+  fsyncSync,
   lstatSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   realpathSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
@@ -27,11 +33,13 @@ export const protectedWorkflowProvenanceRecordType =
   "NOVALURE_GITHUB_ARTIFACT_ATTESTATION_RECEIPT";
 export const protectedWorkflowArtifactManifestRecordType =
   "NOVALURE_PROTECTED_WORKFLOW_ARTIFACT_MANIFEST";
+export const twoTenantParentBaseArtifactFile = "two-tenant-parent-base.json";
 export const protectedWorkflowEvidenceFiles = Object.freeze([
   "execute-two-tenant-e2e.json",
   "execute-two-tenant-e2e.sha256",
   "preflight-two-tenant-e2e.json",
   "preflight-two-tenant-e2e.sha256",
+  twoTenantParentBaseArtifactFile,
 ]);
 
 export const githubArtifactAttestationAction =
@@ -59,6 +67,8 @@ const maximumBundleBytes = 16 * 1024 * 1024;
 const maximumCliBytes = 128 * 1024 * 1024;
 const maximumTrustedRootBytes = 4 * 1024 * 1024;
 const maximumVerifierOutputBytes = 32 * 1024 * 1024;
+const tarBlockBytes = 512;
+const tarEndMarkerBytes = tarBlockBytes * 2;
 const cryptographicallyVerifiedAttestations = new WeakSet();
 
 function invariant(condition, code) {
@@ -115,9 +125,174 @@ function validateArtifactManifest(manifest, expectedArtifactDigest, {
   return manifest;
 }
 
+function validateExpectedEvidenceFiles(expectedEvidenceFiles) {
+  invariant(
+    Array.isArray(expectedEvidenceFiles)
+      && expectedEvidenceFiles.length > 0
+      && expectedEvidenceFiles.length <= 32
+      && new Set(expectedEvidenceFiles).size === expectedEvidenceFiles.length
+      && expectedEvidenceFiles.every((name) => /^[A-Za-z0-9][A-Za-z0-9._-]{1,179}$/u.test(name)),
+    "PROTECTED_WORKFLOW_EXPECTED_EVIDENCE_FILES_INVALID",
+  );
+  return [...expectedEvidenceFiles].sort((left, right) => left.localeCompare(right));
+}
+
+function isZeroFilled(bytes) {
+  return bytes.every((value) => value === 0);
+}
+
+function parseTarText(field, code) {
+  const terminator = field.indexOf(0);
+  const end = terminator === -1 ? field.length : terminator;
+  invariant(
+    terminator === -1 || isZeroFilled(field.subarray(terminator)),
+    code,
+  );
+  const valueBytes = field.subarray(0, end);
+  invariant(
+    valueBytes.every((value) => value >= 0x20 && value <= 0x7e),
+    code,
+  );
+  return valueBytes.toString("ascii");
+}
+
+function parseTarOctal(field, code) {
+  invariant((field[0] & 0x80) === 0, code);
+  const source = field.toString("ascii").replaceAll("\0", "").trim();
+  invariant(/^[0-7]+$/u.test(source), code);
+  const value = Number.parseInt(source, 8);
+  invariant(Number.isSafeInteger(value) && value >= 0, code);
+  return value;
+}
+
+function validateTarHeaderChecksum(header) {
+  const recorded = parseTarOctal(
+    header.subarray(148, 156),
+    "PROTECTED_WORKFLOW_ARTIFACT_TAR_CHECKSUM_INVALID",
+  );
+  const checksumHeader = Buffer.from(header);
+  checksumHeader.fill(0x20, 148, 156);
+  const actual = checksumHeader.reduce((sum, value) => sum + value, 0);
+  invariant(actual === recorded, "PROTECTED_WORKFLOW_ARTIFACT_TAR_CHECKSUM_INVALID");
+}
+
+export function validateProtectedWorkflowArtifactTar({
+  artifactBytes,
+  artifactManifest,
+  expectedEvidenceFiles = protectedWorkflowEvidenceFiles,
+  expectedManifestRecordType = protectedWorkflowArtifactManifestRecordType,
+}) {
+  invariant(
+    Buffer.isBuffer(artifactBytes)
+      && artifactBytes.length >= tarEndMarkerBytes
+      && artifactBytes.length <= maximumArtifactBytes
+      && artifactBytes.length % tarBlockBytes === 0,
+    "PROTECTED_WORKFLOW_ARTIFACT_TAR_SIZE_INVALID",
+  );
+  const expectedNames = validateExpectedEvidenceFiles(expectedEvidenceFiles);
+  const artifactDigest = sha256(artifactBytes);
+  validateArtifactManifest(artifactManifest, artifactDigest, {
+    expectedEvidenceFiles: expectedNames,
+    expectedRecordType: expectedManifestRecordType,
+  });
+  const manifestByName = new Map(artifactManifest.files.map((entry) => [entry.name, entry]));
+  const observedNames = [];
+  let offset = 0;
+  let terminated = false;
+  while (offset + tarBlockBytes <= artifactBytes.length) {
+    const header = artifactBytes.subarray(offset, offset + tarBlockBytes);
+    if (isZeroFilled(header)) {
+      invariant(
+        offset + tarEndMarkerBytes <= artifactBytes.length
+          && isZeroFilled(artifactBytes.subarray(offset)),
+        "PROTECTED_WORKFLOW_ARTIFACT_TAR_TERMINATOR_INVALID",
+      );
+      terminated = true;
+      break;
+    }
+    validateTarHeaderChecksum(header);
+    invariant(
+      header.subarray(257, 263).equals(Buffer.from("ustar\0", "ascii"))
+        && header.subarray(263, 265).equals(Buffer.from("00", "ascii")),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_FORMAT_INVALID",
+    );
+    const name = parseTarText(
+      header.subarray(0, 100),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_NAME_INVALID",
+    );
+    const prefix = parseTarText(
+      header.subarray(345, 500),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_NAME_INVALID",
+    );
+    invariant(
+      prefix === "" && expectedNames.includes(name),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_INVENTORY_INVALID",
+    );
+    invariant(
+      !observedNames.includes(name),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_DUPLICATED",
+    );
+    const typeFlag = header[156];
+    invariant(
+      (typeFlag === 0 || typeFlag === 0x30)
+        && parseTarText(
+          header.subarray(157, 257),
+          "PROTECTED_WORKFLOW_ARTIFACT_TAR_LINK_NAME_INVALID",
+        ) === "",
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_TYPE_INVALID",
+    );
+    const sizeBytes = parseTarOctal(
+      header.subarray(124, 136),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_SIZE_INVALID",
+    );
+    const manifestEntry = manifestByName.get(name);
+    invariant(
+      manifestEntry && sizeBytes === manifestEntry.sizeBytes,
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_SIZE_MISMATCH",
+    );
+    const contentStart = offset + tarBlockBytes;
+    const contentEnd = contentStart + sizeBytes;
+    invariant(
+      contentEnd <= artifactBytes.length - tarEndMarkerBytes,
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_TRUNCATED",
+    );
+    const paddedContentEnd = Math.ceil(contentEnd / tarBlockBytes) * tarBlockBytes;
+    invariant(
+      paddedContentEnd <= artifactBytes.length - tarEndMarkerBytes
+        && isZeroFilled(artifactBytes.subarray(contentEnd, paddedContentEnd)),
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_PADDING_INVALID",
+    );
+    invariant(
+      sha256(artifactBytes.subarray(contentStart, contentEnd)) === manifestEntry.sha256,
+      "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_DIGEST_MISMATCH",
+    );
+    observedNames.push(name);
+    offset = paddedContentEnd;
+  }
+  invariant(terminated, "PROTECTED_WORKFLOW_ARTIFACT_TAR_TERMINATOR_INVALID");
+  invariant(
+    observedNames.length === expectedNames.length
+      && observedNames.every((name, index) => name === expectedNames[index]),
+    "PROTECTED_WORKFLOW_ARTIFACT_TAR_MEMBER_INVENTORY_INVALID",
+  );
+  return Object.freeze({
+    artifactDigest,
+    memberCount: observedNames.length,
+    memberNames: Object.freeze(observedNames),
+    status: "VERIFIED",
+  });
+}
+
 function sameResolvedPath(left, right) {
   if (process.platform === "win32") return left.toLowerCase() === right.toLowerCase();
   return left === right;
+}
+
+function sameFilesystemIdentity(left, right) {
+  return left.dev === right.dev
+    && left.ino === right.ino
+    && left.size === right.size
+    && left.nlink === right.nlink;
 }
 
 function readBoundedRegularFile(filePath, { code, maximumBytes }) {
@@ -157,12 +332,29 @@ function readBoundedRegularFile(filePath, { code, maximumBytes }) {
     invariant(
       openedState.isFile()
         && openedState.nlink === 1
-        && openedState.size === state.size
+        && sameFilesystemIdentity(openedState, state)
         && openedState.size > 0
         && openedState.size <= maximumBytes,
       `${code}_FILE_CHANGED_DURING_READ`,
     );
-    return Object.freeze({ bytes: readFileSync(descriptor), path: realPath });
+    const bytes = readFileSync(descriptor);
+    const afterState = fstatSync(descriptor);
+    invariant(
+      bytes.length === openedState.size
+        && sameFilesystemIdentity(openedState, afterState)
+        && openedState.mtimeMs === afterState.mtimeMs,
+      `${code}_FILE_CHANGED_DURING_READ`,
+    );
+    return Object.freeze({
+      bytes,
+      identity: Object.freeze({
+        dev: openedState.dev,
+        ino: openedState.ino,
+        nlink: openedState.nlink,
+        size: openedState.size,
+      }),
+      path: realPath,
+    });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith(code)) throw error;
     invariant(false, `${code}_UNREADABLE`);
@@ -466,8 +658,229 @@ function sanitizedVerifierEnvironment() {
   return environment;
 }
 
-function executePinnedGitHubCli(executablePath, args, code) {
-  const result = spawnSync(executablePath, args, {
+function validateExecutableSnapshotRoot(snapshot) {
+  let state;
+  let realPath;
+  try {
+    state = lstatSync(snapshot.rootPath);
+    realPath = realpathSync.native(snapshot.rootPath);
+  } catch {
+    invariant(false, "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_ROOT_UNREADABLE");
+  }
+  invariant(
+    state.isDirectory()
+      && !state.isSymbolicLink()
+      && state.dev === snapshot.rootIdentity.dev
+      && state.ino === snapshot.rootIdentity.ino
+      && sameResolvedPath(realPath, snapshot.rootPath),
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_ROOT_CHANGED",
+  );
+}
+
+function validateExecutableSnapshot(snapshot) {
+  validateExecutableSnapshotRoot(snapshot);
+  const executable = readBoundedRegularFile(snapshot.executablePath, {
+    code: "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT",
+    maximumBytes: maximumCliBytes,
+  });
+  invariant(
+    sameResolvedPath(executable.path, snapshot.executablePath)
+      && sameFilesystemIdentity(executable.identity, snapshot.executableIdentity)
+      && sha256(executable.bytes) === snapshot.executableSha256,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_CHANGED",
+  );
+  for (const input of snapshot.inputs) {
+    const file = readBoundedRegularFile(input.path, {
+      code: "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT",
+      maximumBytes: input.maximumBytes,
+    });
+    invariant(
+      sameResolvedPath(file.path, input.path)
+        && sameFilesystemIdentity(file.identity, input.identity)
+        && sha256(file.bytes) === input.sha256,
+      "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_CHANGED",
+    );
+  }
+  return executable;
+}
+
+function cleanupExecutableSnapshot(snapshot) {
+  validateExecutableSnapshotRoot(snapshot);
+  rmSync(snapshot.rootPath, { force: true, recursive: true });
+}
+
+export function withIdentityCheckedExecutableCopy({
+  executableBytes,
+  expectedSha256,
+  inputFiles = [],
+  operation,
+}) {
+  invariant(
+    Buffer.isBuffer(executableBytes)
+      && executableBytes.length > 0
+      && executableBytes.length <= maximumCliBytes,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_BYTES_INVALID",
+  );
+  requireSha256(expectedSha256, "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_DIGEST_INVALID");
+  invariant(
+    sha256(executableBytes) === expectedSha256,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_DIGEST_MISMATCH",
+  );
+  invariant(
+    Array.isArray(inputFiles) && inputFiles.length <= 8,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUTS_INVALID",
+  );
+  const normalizedInputs = inputFiles.map((input) => {
+    invariant(
+      input
+        && typeof input === "object"
+        && Buffer.isBuffer(input.bytes)
+        && input.bytes.length > 0
+        && Number.isSafeInteger(input.maximumBytes)
+        && input.maximumBytes > 0
+        && input.maximumBytes <= maximumArtifactBytes
+        && input.bytes.length <= input.maximumBytes
+        && /^[A-Za-z][A-Za-z0-9_-]{1,63}$/u.test(input.key ?? "")
+        && /^[A-Za-z0-9][A-Za-z0-9._-]{1,179}$/u.test(input.name ?? ""),
+      "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_INVALID",
+    );
+    requireSha256(
+      input.expectedSha256,
+      "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_DIGEST_INVALID",
+    );
+    invariant(
+      sha256(input.bytes) === input.expectedSha256,
+      "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_DIGEST_MISMATCH",
+    );
+    return Object.freeze({
+      bytes: input.bytes,
+      key: input.key,
+      maximumBytes: input.maximumBytes,
+      name: input.name,
+      sha256: input.expectedSha256,
+    });
+  });
+  invariant(
+    new Set(normalizedInputs.map((input) => input.key)).size === normalizedInputs.length
+      && new Set(normalizedInputs.map((input) => input.name)).size === normalizedInputs.length,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUTS_DUPLICATED",
+  );
+  invariant(typeof operation === "function", "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_OPERATION_REQUIRED");
+  const rootPath = realpathSync.native(mkdtempSync(path.join(tmpdir(), "novalure-gh-cli-")));
+  chmodSync(rootPath, 0o700);
+  const rootState = lstatSync(rootPath);
+  invariant(
+    rootState.isDirectory() && !rootState.isSymbolicLink(),
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_ROOT_INVALID",
+  );
+  const executableName = process.platform === "win32" ? "gh.exe" : "gh";
+  invariant(
+    normalizedInputs.every((input) => input.name !== executableName),
+    "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_NAME_COLLISION",
+  );
+  const executablePath = path.join(rootPath, executableName);
+  let descriptor;
+  let snapshot;
+  try {
+    descriptor = openSync(
+      executablePath,
+      fsConstants.O_WRONLY
+        | fsConstants.O_CREAT
+        | fsConstants.O_EXCL
+        | (fsConstants.O_NOFOLLOW ?? 0),
+      0o500,
+    );
+    writeFileSync(descriptor, executableBytes);
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = undefined;
+    chmodSync(executablePath, 0o500);
+    const executable = readBoundedRegularFile(executablePath, {
+      code: "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT",
+      maximumBytes: maximumCliBytes,
+    });
+    invariant(
+      sha256(executable.bytes) === expectedSha256,
+      "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_DIGEST_MISMATCH",
+    );
+    const stagedInputs = [];
+    for (const input of normalizedInputs) {
+      const inputPath = path.join(rootPath, input.name);
+      descriptor = openSync(
+        inputPath,
+        fsConstants.O_WRONLY
+          | fsConstants.O_CREAT
+          | fsConstants.O_EXCL
+          | (fsConstants.O_NOFOLLOW ?? 0),
+        0o400,
+      );
+      writeFileSync(descriptor, input.bytes);
+      fsyncSync(descriptor);
+      closeSync(descriptor);
+      descriptor = undefined;
+      chmodSync(inputPath, 0o400);
+      const staged = readBoundedRegularFile(inputPath, {
+        code: "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT",
+        maximumBytes: input.maximumBytes,
+      });
+      invariant(
+        sha256(staged.bytes) === input.sha256,
+        "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_INPUT_DIGEST_MISMATCH",
+      );
+      stagedInputs.push(Object.freeze({
+        identity: staged.identity,
+        key: input.key,
+        maximumBytes: input.maximumBytes,
+        path: staged.path,
+        sha256: input.sha256,
+      }));
+    }
+    snapshot = Object.freeze({
+      executableIdentity: executable.identity,
+      executablePath: executable.path,
+      executableSha256: expectedSha256,
+      inputPaths: Object.freeze(Object.fromEntries(stagedInputs.map((input) => [input.key, input.path]))),
+      inputs: Object.freeze(stagedInputs),
+      rootIdentity: Object.freeze({ dev: rootState.dev, ino: rootState.ino }),
+      rootPath,
+    });
+    validateExecutableSnapshot(snapshot);
+    let result;
+    let failure = null;
+    try {
+      result = operation(snapshot);
+      invariant(
+        !result || typeof result.then !== "function",
+        "PROTECTED_WORKFLOW_GITHUB_CLI_SNAPSHOT_ASYNC_OPERATION_PROHIBITED",
+      );
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      validateExecutableSnapshot(snapshot);
+    } catch (error) {
+      failure = error;
+    }
+    if (failure) throw failure;
+    return result;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+    if (snapshot) cleanupExecutableSnapshot(snapshot);
+    else {
+      const currentRoot = lstatSync(rootPath);
+      if (
+        currentRoot.isDirectory()
+        && !currentRoot.isSymbolicLink()
+        && currentRoot.dev === rootState.dev
+        && currentRoot.ino === rootState.ino
+      ) rmSync(rootPath, { force: true, recursive: true });
+    }
+  }
+}
+
+function executePinnedGitHubCli(executableSnapshot, args, code) {
+  const executable = validateExecutableSnapshot(executableSnapshot);
+  const result = spawnSync(executable.path, args, {
     encoding: "utf8",
     env: sanitizedVerifierEnvironment(),
     maxBuffer: maximumVerifierOutputBytes,
@@ -475,6 +888,7 @@ function executePinnedGitHubCli(executablePath, args, code) {
     timeout: 120_000,
     windowsHide: true,
   });
+  validateExecutableSnapshot(executableSnapshot);
   invariant(!result.error && result.status === 0 && result.signal === null, code);
   return result.stdout;
 }
@@ -492,14 +906,7 @@ export function verifyGitHubArtifactAttestation({
   sigstoreTrustedRootPath,
 }) {
   const identity = parseWorkflowIdentity(expectedWorkflowRef, expectedWorkflowSha);
-  invariant(
-    Array.isArray(expectedEvidenceFiles)
-      && expectedEvidenceFiles.length > 0
-      && expectedEvidenceFiles.length <= 32
-      && new Set(expectedEvidenceFiles).size === expectedEvidenceFiles.length
-      && expectedEvidenceFiles.every((name) => /^[A-Za-z0-9][A-Za-z0-9._-]{1,179}$/u.test(name)),
-    "PROTECTED_WORKFLOW_EXPECTED_EVIDENCE_FILES_INVALID",
-  );
+  validateExpectedEvidenceFiles(expectedEvidenceFiles);
   requireSafeText(
     expectedManifestRecordType,
     "PROTECTED_WORKFLOW_EXPECTED_MANIFEST_TYPE_INVALID",
@@ -521,6 +928,12 @@ export function verifyGitHubArtifactAttestation({
     sha256(artifact.bytes) === artifactManifest.artifactDigest,
     "PROTECTED_WORKFLOW_ARTIFACT_BYTES_DIGEST_MISMATCH",
   );
+  validateProtectedWorkflowArtifactTar({
+    artifactBytes: artifact.bytes,
+    artifactManifest,
+    expectedEvidenceFiles,
+    expectedManifestRecordType,
+  });
   const bundle = readBoundedRegularFile(attestationBundlePath, {
     code: "PROTECTED_WORKFLOW_ATTESTATION_BUNDLE",
     maximumBytes: maximumBundleBytes,
@@ -550,47 +963,76 @@ export function verifyGitHubArtifactAttestation({
   const githubCliPlatform = `${process.platform}-${process.arch}`;
   const githubCliSha256 = sha256(githubCli.bytes);
   validateCliPin(githubCliPlatform, githubCliSha256);
-  const versionOutput = executePinnedGitHubCli(
-    githubCli.path,
-    ["version"],
-    "PROTECTED_WORKFLOW_GITHUB_CLI_VERSION_EXECUTION_FAILED",
-  );
-  invariant(
-    new RegExp(`^gh version ${githubArtifactAttestationCliVersion.replaceAll(".", "\\.")} \\(`, "u")
-      .test(versionOutput),
-    "PROTECTED_WORKFLOW_GITHUB_CLI_VERSION_MISMATCH",
-  );
-  const output = executePinnedGitHubCli(githubCli.path, [
-    "attestation",
-    "verify",
-    artifact.path,
-    "--bundle",
-    bundle.path,
-    "--custom-trusted-root",
-    trustedRoot.path,
-    "--repo",
-    identity.repository,
-    "--signer-repo",
-    identity.repository,
-    "--signer-workflow",
-    `github.com/${identity.repository}/${identity.workflowPath}`,
-    "--signer-digest",
-    identity.workflowSha,
-    "--source-digest",
-    identity.workflowSha,
-    "--source-ref",
-    identity.sourceRef,
-    "--cert-identity",
-    identity.certificateIdentity,
-    "--cert-oidc-issuer",
-    githubArtifactAttestationOidcIssuer,
-    "--deny-self-hosted-runners",
-    "--no-public-good",
-    "--predicate-type",
-    githubArtifactAttestationPredicateType,
-    "--format",
-    "json",
-  ], "PROTECTED_WORKFLOW_ATTESTATION_CRYPTOGRAPHIC_VERIFICATION_FAILED");
+  const output = withIdentityCheckedExecutableCopy({
+    executableBytes: githubCli.bytes,
+    expectedSha256: githubCliSha256,
+    inputFiles: [
+      {
+        bytes: artifact.bytes,
+        expectedSha256: artifactManifest.artifactDigest,
+        key: "artifact",
+        maximumBytes: maximumArtifactBytes,
+        name: artifactManifest.artifactName,
+      },
+      {
+        bytes: bundle.bytes,
+        expectedSha256: sha256(bundle.bytes),
+        key: "bundle",
+        maximumBytes: maximumBundleBytes,
+        name: "attestation-bundle.json",
+      },
+      {
+        bytes: trustedRoot.bytes,
+        expectedSha256: expectedSigstoreTrustedRootSha256,
+        key: "trustedRoot",
+        maximumBytes: maximumTrustedRootBytes,
+        name: "sigstore-trusted-root.jsonl",
+      },
+    ],
+    operation(executableSnapshot) {
+      const versionOutput = executePinnedGitHubCli(
+        executableSnapshot,
+        ["version"],
+        "PROTECTED_WORKFLOW_GITHUB_CLI_VERSION_EXECUTION_FAILED",
+      );
+      invariant(
+        new RegExp(`^gh version ${githubArtifactAttestationCliVersion.replaceAll(".", "\\.")} \\(`, "u")
+          .test(versionOutput),
+        "PROTECTED_WORKFLOW_GITHUB_CLI_VERSION_MISMATCH",
+      );
+      return executePinnedGitHubCli(executableSnapshot, [
+        "attestation",
+        "verify",
+        executableSnapshot.inputPaths.artifact,
+        "--bundle",
+        executableSnapshot.inputPaths.bundle,
+        "--custom-trusted-root",
+        executableSnapshot.inputPaths.trustedRoot,
+        "--repo",
+        identity.repository,
+        "--signer-repo",
+        identity.repository,
+        "--signer-workflow",
+        `github.com/${identity.repository}/${identity.workflowPath}`,
+        "--signer-digest",
+        identity.workflowSha,
+        "--source-digest",
+        identity.workflowSha,
+        "--source-ref",
+        identity.sourceRef,
+        "--cert-identity",
+        identity.certificateIdentity,
+        "--cert-oidc-issuer",
+        githubArtifactAttestationOidcIssuer,
+        "--deny-self-hosted-runners",
+        "--no-public-good",
+        "--predicate-type",
+        githubArtifactAttestationPredicateType,
+        "--format",
+        "json",
+      ], "PROTECTED_WORKFLOW_ATTESTATION_CRYPTOGRAPHIC_VERIFICATION_FAILED");
+    },
+  });
   let verificationOutput;
   try {
     verificationOutput = JSON.parse(output);

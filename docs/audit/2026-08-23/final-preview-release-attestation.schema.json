@@ -105,14 +105,15 @@
     },
     "gateEvidence": {
       "type": "array",
-      "minItems": 11,
-      "maxItems": 11,
+      "minItems": 12,
+      "maxItems": 12,
       "prefixItems": [
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "database-recovery" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "two-tenant-rbac-crud" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "preview-blob-lifecycle" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "provider-boundaries" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "public-form-funnel" } } }] },
+        { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "production-funnel-token-cutover" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "accessibility-browser" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "performance" } } }] },
         { "allOf": [{ "$ref": "#/$defs/gateEvidence" }, { "properties": { "id": { "const": "observability" } } }] },

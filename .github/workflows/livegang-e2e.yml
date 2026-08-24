@@ -140,6 +140,7 @@ jobs:
             execute-two-tenant-e2e.sha256
             preflight-two-tenant-e2e.json
             preflight-two-tenant-e2e.sha256
+            two-tenant-parent-base.json
           )
           test "${#evidence_files[@]}" -eq "${#expected[@]}"
           test "${evidence_files[*]}" = "${expected[*]}"
@@ -167,6 +168,8 @@ jobs:
           test ! -L "$EVIDENCE_ROOT"
           provenance_root="$(mktemp -d "$RUNNER_TEMP/novalure-provenance-XXXXXXXX")"
           chmod 0700 "$provenance_root"
+          snapshot_root="$provenance_root/subject-snapshot"
+          mkdir -m 0700 "$snapshot_root"
           artifact_name="exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
           artifact_path="$provenance_root/$artifact_name"
           manifest_path="$provenance_root/protected-workflow-artifact-manifest.json"
@@ -175,22 +178,34 @@ jobs:
             execute-two-tenant-e2e.sha256
             preflight-two-tenant-e2e.json
             preflight-two-tenant-e2e.sha256
+            two-tenant-parent-base.json
           )
+          mapfile -t source_files < <(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          test "${#source_files[@]}" -eq "${#expected[@]}"
+          test "${source_files[*]}" = "${expected[*]}"
           for evidence in "${expected[@]}"; do
             test -f "$EVIDENCE_ROOT/$evidence"
             test ! -L "$EVIDENCE_ROOT/$evidence"
             test "$(stat -c '%h' "$EVIDENCE_ROOT/$evidence")" = "1"
+            cp --no-dereference -- "$EVIDENCE_ROOT/$evidence" "$snapshot_root/$evidence"
+            test -f "$snapshot_root/$evidence"
+            test ! -L "$snapshot_root/$evidence"
+            test "$(stat -c '%h' "$snapshot_root/$evidence")" = "1"
+            chmod 0400 "$snapshot_root/$evidence"
           done
+          mapfile -t snapshot_files < <(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          test "${#snapshot_files[@]}" -eq "${#expected[@]}"
+          test "${snapshot_files[*]}" = "${expected[*]}"
+          chmod 0500 "$snapshot_root"
           (
-            cd "$EVIDENCE_ROOT"
+            cd "$snapshot_root"
             LC_ALL=C tar \
-              --format=posix \
+              --format=ustar \
               --sort=name \
               --mtime='@0' \
               --owner=0 \
               --group=0 \
               --numeric-owner \
-              --pax-option=delete=atime,delete=ctime \
               -cf "$artifact_path" \
               -- "${expected[@]}"
           )
@@ -200,7 +215,8 @@ jobs:
           artifact_digest="$(sha256sum -- "$artifact_path" | cut -d ' ' -f 1)"
           PROVENANCE_ARTIFACT_DIGEST="$artifact_digest" \
           PROVENANCE_ARTIFACT_NAME="$artifact_name" \
-          PROVENANCE_EVIDENCE_ROOT="$EVIDENCE_ROOT" \
+          PROVENANCE_ARTIFACT_PATH="$artifact_path" \
+          PROVENANCE_EVIDENCE_ROOT="$snapshot_root" \
           PROVENANCE_MANIFEST_PATH="$manifest_path" \
           node --input-type=module <<'NODE'
           import {
@@ -213,12 +229,14 @@ jobs:
           } from "node:fs";
           import { createHash } from "node:crypto";
           import path from "node:path";
+          import { validateProtectedWorkflowArtifactTar } from "./scripts/lib/protected-workflow-provenance-receipt.mjs";
 
           const names = [
             "execute-two-tenant-e2e.json",
             "execute-two-tenant-e2e.sha256",
             "preflight-two-tenant-e2e.json",
             "preflight-two-tenant-e2e.sha256",
+            "two-tenant-parent-base.json",
           ];
           const root = process.env.PROVENANCE_EVIDENCE_ROOT;
           const files = names.map((name) => {
@@ -240,6 +258,12 @@ jobs:
             recordType: "NOVALURE_PROTECTED_WORKFLOW_ARTIFACT_MANIFEST",
             schemaVersion: 1,
           };
+          validateProtectedWorkflowArtifactTar({
+            artifactBytes: readFileSync(process.env.PROVENANCE_ARTIFACT_PATH),
+            artifactManifest: manifest,
+            expectedEvidenceFiles: names,
+            expectedManifestRecordType: manifest.recordType,
+          });
           const descriptor = openSync(
             process.env.PROVENANCE_MANIFEST_PATH,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
@@ -326,6 +350,7 @@ jobs:
             ${{ steps.protected_qa.outputs.evidence_root }}/preflight-two-tenant-e2e.sha256
             ${{ steps.protected_qa.outputs.evidence_root }}/execute-two-tenant-e2e.json
             ${{ steps.protected_qa.outputs.evidence_root }}/execute-two-tenant-e2e.sha256
+            ${{ steps.protected_qa.outputs.evidence_root }}/two-tenant-parent-base.json
             ${{ steps.provenance_subject.outputs.artifact_path }}
             ${{ steps.provenance_subject.outputs.artifact_sha256_path }}
             ${{ steps.provenance_subject.outputs.manifest_path }}
@@ -368,6 +393,7 @@ jobs:
 
   protected-preview-public-runtime:
     name: Execute and attest exact protected Public Form/Funnel QA
+    needs: protected-preview-two-tenant
     runs-on: ubuntu-latest
     environment: go-live-preview
     timeout-minutes: 75
@@ -460,7 +486,7 @@ jobs:
           NOVALURE_QA_PUBLIC_RUNTIME_INPUT_B64: ${{ secrets.NOVALURE_QA_PUBLIC_RUNTIME_INPUT_B64 }}
         run: node scripts/qa-protected-public-action-runner.mjs
 
-      - name: Verify the exact six-file Public evidence allowlist
+      - name: Verify the exact seven-file Public evidence allowlist
         shell: bash
         env:
           EVIDENCE_ROOT: ${{ steps.protected_public.outputs.evidence_root }}
@@ -480,6 +506,7 @@ jobs:
             public-form-long-proof-refresh.json
             public-funnel-live-submission.json
             public-funnel-long-proof-refresh.json
+            public-runtime-parent-base.json
           )
           test "${#evidence_files[@]}" -eq "${#expected[@]}"
           test "${evidence_files[*]}" = "${expected[*]}"
@@ -504,6 +531,8 @@ jobs:
           esac
           provenance_root="$(mktemp -d "$RUNNER_TEMP/novalure-public-provenance-XXXXXXXX")"
           chmod 0700 "$provenance_root"
+          snapshot_root="$provenance_root/subject-snapshot"
+          mkdir -m 0700 "$snapshot_root"
           artifact_name="public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
           artifact_path="$provenance_root/$artifact_name"
           manifest_path="$provenance_root/public-runtime-artifact-manifest.json"
@@ -514,17 +543,34 @@ jobs:
             public-form-long-proof-refresh.json
             public-funnel-live-submission.json
             public-funnel-long-proof-refresh.json
+            public-runtime-parent-base.json
           )
+          mapfile -t source_files < <(find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          test "${#source_files[@]}" -eq "${#expected[@]}"
+          test "${source_files[*]}" = "${expected[*]}"
+          for evidence in "${expected[@]}"; do
+            test -f "$EVIDENCE_ROOT/$evidence"
+            test ! -L "$EVIDENCE_ROOT/$evidence"
+            test "$(stat -c '%h' "$EVIDENCE_ROOT/$evidence")" = "1"
+            cp --no-dereference -- "$EVIDENCE_ROOT/$evidence" "$snapshot_root/$evidence"
+            test -f "$snapshot_root/$evidence"
+            test ! -L "$snapshot_root/$evidence"
+            test "$(stat -c '%h' "$snapshot_root/$evidence")" = "1"
+            chmod 0400 "$snapshot_root/$evidence"
+          done
+          mapfile -t snapshot_files < <(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type f -links 1 -printf '%f\n' | LC_ALL=C sort)
+          test "${#snapshot_files[@]}" -eq "${#expected[@]}"
+          test "${snapshot_files[*]}" = "${expected[*]}"
+          chmod 0500 "$snapshot_root"
           (
-            cd "$EVIDENCE_ROOT"
+            cd "$snapshot_root"
             LC_ALL=C tar \
-              --format=posix \
+              --format=ustar \
               --sort=name \
               --mtime='@0' \
               --owner=0 \
               --group=0 \
               --numeric-owner \
-              --pax-option=delete=atime,delete=ctime \
               -cf "$artifact_path" \
               -- "${expected[@]}"
           )
@@ -534,7 +580,8 @@ jobs:
           artifact_digest="$(sha256sum -- "$artifact_path" | cut -d ' ' -f 1)"
           PROVENANCE_ARTIFACT_DIGEST="$artifact_digest" \
           PROVENANCE_ARTIFACT_NAME="$artifact_name" \
-          PROVENANCE_EVIDENCE_ROOT="$EVIDENCE_ROOT" \
+          PROVENANCE_ARTIFACT_PATH="$artifact_path" \
+          PROVENANCE_EVIDENCE_ROOT="$snapshot_root" \
           PROVENANCE_MANIFEST_PATH="$manifest_path" \
           node --input-type=module <<'NODE'
           import {
@@ -547,6 +594,7 @@ jobs:
           } from "node:fs";
           import { createHash } from "node:crypto";
           import path from "node:path";
+          import { validateProtectedWorkflowArtifactTar } from "./scripts/lib/protected-workflow-provenance-receipt.mjs";
 
           const names = [
             "funnel-publish-token-rotation.json",
@@ -555,6 +603,7 @@ jobs:
             "public-form-long-proof-refresh.json",
             "public-funnel-live-submission.json",
             "public-funnel-long-proof-refresh.json",
+            "public-runtime-parent-base.json",
           ];
           const root = process.env.PROVENANCE_EVIDENCE_ROOT;
           const files = names.map((name) => {
@@ -576,6 +625,12 @@ jobs:
             recordType: "NOVALURE_PUBLIC_RUNTIME_ARTIFACT_MANIFEST",
             schemaVersion: 1,
           };
+          validateProtectedWorkflowArtifactTar({
+            artifactBytes: readFileSync(process.env.PROVENANCE_ARTIFACT_PATH),
+            artifactManifest: manifest,
+            expectedEvidenceFiles: names,
+            expectedManifestRecordType: manifest.recordType,
+          });
           const descriptor = openSync(
             process.env.PROVENANCE_MANIFEST_PATH,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
@@ -664,6 +719,7 @@ jobs:
             ${{ steps.protected_public.outputs.evidence_root }}/public-form-long-proof-refresh.json
             ${{ steps.protected_public.outputs.evidence_root }}/public-funnel-live-submission.json
             ${{ steps.protected_public.outputs.evidence_root }}/public-funnel-long-proof-refresh.json
+            ${{ steps.protected_public.outputs.evidence_root }}/public-runtime-parent-base.json
             ${{ steps.public_provenance_subject.outputs.artifact_path }}
             ${{ steps.public_provenance_subject.outputs.artifact_sha256_path }}
             ${{ steps.public_provenance_subject.outputs.manifest_path }}

@@ -5,7 +5,7 @@
   "testedDeployment": null,
   "sharedFacts": {
     "path": "src/lib/legal.ts",
-    "sha256": "50da69eaeea760ddcd42ba7bf487959733ea91517d41c4c337ad45f250f12e1c"
+    "sha256": "90fa65c850720cf46eac2ba1ca915e584497258ff0596d6596bf61df1516978d"
   },
   "pages": [
     {
@@ -14,7 +14,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "December 2025",
       "sourceFiles": [
-        {"path": "src/app/imprint/page.tsx", "sha256": "baf437839de3284a632fa7cca927cf4972c1fe1e17eca928b36f1df1124819aa"}
+        {"path": "src/app/imprint/page.tsx", "sha256": "63ab3bc61dd4c6d21fb56b3298c15ef5ef9d4b0ff90200c764db1123b07b7604"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/imprint?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -27,7 +27,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
       "sourceFiles": [
-        {"path": "src/app/privacy/page.tsx", "sha256": "454cc95b1152747071f89c7b61233506c0a288c44a32312d5eca87bf6d03a4dd"}
+        {"path": "src/app/privacy/page.tsx", "sha256": "52a41be4dc3822fa67e672a3614ff1acfe571436f7a0e1dd186d96184b126206"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/privacy?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -40,7 +40,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
       "sourceFiles": [
-        {"path": "src/app/terms/page.tsx", "sha256": "92b339b502c6ca2b093a3d034d10d1b0f84077888b54e30dbbdaf99df1fa700e"}
+        {"path": "src/app/terms/page.tsx", "sha256": "916918b948ee2844fa9f3a0ac1009e839e0e94af167838743e58874ec728e842"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/terms?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -53,7 +53,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
       "sourceFiles": [
-        {"path": "src/app/cookies/page.tsx", "sha256": "f3943532a163b477ed6c6c08cc876501de0d5de10770ef5d94854619e096e596"}
+        {"path": "src/app/cookies/page.tsx", "sha256": "db77d99c95ce1f35eb176fcc333340d521612aa461133db8b9161d6e808890e5"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/cookies?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -66,7 +66,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
       "sourceFiles": [
-        {"path": "src/app/data-deletion/page.tsx", "sha256": "ed4a318073eb1232f9fccc1f24cc14764e1800d71183196329ad59ce0091f556"}
+        {"path": "src/app/data-deletion/page.tsx", "sha256": "0123b90cb4bb7bd47fdf3d74718b44f4bd706ffc198312f90a4ae907b12d6b64"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/data-deletion?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -79,7 +79,7 @@
       "languages": ["de", "en"],
       "lastUpdated": "20 May 2026",
       "sourceFiles": [
-        {"path": "src/app/meta/page.tsx", "sha256": "d52794182a635d7b766787480f49d01fcbd0e2bf8a16872223dcc36e2519b00c"}
+        {"path": "src/app/meta/page.tsx", "sha256": "0477a8799a25d561d9b3f8d25bfdd345ae4702d01a769059e81e37bff4e3822e"}
       ],
       "renderedVariants": [
         {"language": "de", "path": "/meta?lang=de", "testedUrl": null, "renderedContentSha256": null, "renderStatus": "PENDING_CAPTURE", "legalStatus": "PENDING", "legalOwner": null, "approvedAt": null},
@@ -107,7 +107,7 @@
       "canonicalRoute": "/data-deletion",
       "contract": "Re-export the canonical page and metadata without independent legal copy.",
       "sourceFiles": [
-        {"path": "src/app/datadeletion/page.tsx", "sha256": "61e950edb85c26bd7a79ace5127cbe2df4991e4fd4f5f1a3f34e0d28b22252e6"}
+        {"path": "src/app/datadeletion/page.tsx", "sha256": "3f4b5a737f8dfcf40d6fd6d5ee81da6bdd88183498f6e3a48484a80bce22ecdd"}
       ],
       "technicalStatus": "VERIFIED_ALIAS",
       "legalStatus": "PENDING",

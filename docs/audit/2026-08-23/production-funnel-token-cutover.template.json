@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "recordType": "NOVALURE_PRODUCTION_FUNNEL_TOKEN_CUTOVER_EVIDENCE",
+  "status": "PENDING",
+  "mode": null,
+  "candidateCommit": null,
+  "policy": null,
+  "productionTarget": null,
+  "inventory": null,
+  "entries": [],
+  "startedAt": null,
+  "completedAt": null,
+  "productionMutationPerformed": false,
+  "receipt": null
+}

@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.novalure-crm.app/schemas/production-funnel-token-cutover-v1.json",
+  "title": "Authoritative production funnel publish-token cutover evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordType",
+    "status",
+    "mode",
+    "candidateCommit",
+    "policy",
+    "productionTarget",
+    "inventory",
+    "entries",
+    "startedAt",
+    "completedAt",
+    "productionMutationPerformed",
+    "receipt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "recordType": { "const": "NOVALURE_PRODUCTION_FUNNEL_TOKEN_CUTOVER_EVIDENCE" },
+    "status": { "enum": ["PENDING", "PASS"] },
+    "mode": {
+      "anyOf": [
+        { "enum": ["ROTATED", "AUTHORITATIVE_EMPTY"] },
+        { "type": "null" }
+      ]
+    },
+    "candidateCommit": { "$ref": "#/$defs/nullableCommit" },
+    "policy": {
+      "anyOf": [{ "$ref": "#/$defs/policy" }, { "type": "null" }]
+    },
+    "productionTarget": {
+      "anyOf": [{ "$ref": "#/$defs/productionTarget" }, { "type": "null" }]
+    },
+    "inventory": {
+      "anyOf": [{ "$ref": "#/$defs/inventory" }, { "type": "null" }]
+    },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "startedAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "completedAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "productionMutationPerformed": { "type": "boolean" },
+    "receipt": {
+      "anyOf": [{ "$ref": "#/$defs/receipt" }, { "type": "null" }]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PENDING" } } },
+      "then": {
+        "properties": {
+          "mode": { "type": "null" },
+          "candidateCommit": { "type": "null" },
+          "policy": { "type": "null" },
+          "productionTarget": { "type": "null" },
+          "inventory": { "type": "null" },
+          "entries": { "maxItems": 0 },
+          "startedAt": { "type": "null" },
+          "completedAt": { "type": "null" },
+          "productionMutationPerformed": { "const": false },
+          "receipt": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "PASS" } } },
+      "then": {
+        "properties": {
+          "mode": { "enum": ["ROTATED", "AUTHORITATIVE_EMPTY"] },
+          "candidateCommit": { "$ref": "#/$defs/commit" },
+          "policy": { "$ref": "#/$defs/policy" },
+          "productionTarget": { "$ref": "#/$defs/productionTarget" },
+          "inventory": { "$ref": "#/$defs/inventory" },
+          "startedAt": { "$ref": "#/$defs/timestamp" },
+          "completedAt": { "$ref": "#/$defs/timestamp" },
+          "receipt": { "$ref": "#/$defs/receipt" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "ROTATED" } } },
+      "then": {
+        "properties": {
+          "entries": { "minItems": 1 },
+          "productionMutationPerformed": { "const": true },
+          "inventory": {
+            "properties": {
+              "authoritativeEmpty": { "const": false },
+              "emptyReasonCode": { "type": "null" },
+              "totalAffectedFunnels": { "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "AUTHORITATIVE_EMPTY" } } },
+      "then": {
+        "properties": {
+          "entries": { "maxItems": 0 },
+          "productionMutationPerformed": { "const": false },
+          "inventory": {
+            "properties": {
+              "authoritativeEmpty": { "const": true },
+              "emptyReasonCode": { "const": "NO_PREEXISTING_PUBLISHED_FUNNEL_CAPABILITIES" },
+              "totalAffectedFunnels": { "const": 0 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "nullableCommit": {
+      "anyOf": [{ "$ref": "#/$defs/commit" }, { "type": "null" }]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "nullableTimestamp": {
+      "anyOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyVersion", "policySha256", "decisionSha256"],
+      "properties": {
+        "policyVersion": { "type": "string", "minLength": 1 },
+        "policySha256": { "$ref": "#/$defs/digest" },
+        "decisionSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "productionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "databaseName",
+        "neonBranchId",
+        "neonProjectId",
+        "productionHost",
+        "vercelDeploymentHost",
+        "vercelDeploymentId",
+        "vercelProjectId"
+      ],
+      "properties": {
+        "databaseName": { "const": "neondb" },
+        "neonBranchId": { "const": "br-snowy-fog-aldx77v8" },
+        "neonProjectId": { "const": "misty-cloud-70835427" },
+        "productionHost": { "const": "www.novalure-crm.app" },
+        "vercelDeploymentHost": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\\.vercel\\.app$"
+        },
+        "vercelDeploymentId": {
+          "type": "string",
+          "pattern": "^dpl_[A-Za-z0-9]{20,80}$"
+        },
+        "vercelProjectId": { "const": "prj_R32Okl6AHijTohvuKmryuTLjWMsk" }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observedAt",
+        "inventoryQuerySha256",
+        "sourceArtifactSha256",
+        "entriesSha256",
+        "totalAffectedFunnels",
+        "authoritativeEmpty",
+        "emptyReasonCode"
+      ],
+      "properties": {
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "inventoryQuerySha256": { "$ref": "#/$defs/digest" },
+        "sourceArtifactSha256": { "$ref": "#/$defs/digest" },
+        "entriesSha256": { "$ref": "#/$defs/digest" },
+        "totalAffectedFunnels": { "type": "integer", "minimum": 0 },
+        "authoritativeEmpty": { "type": "boolean" },
+        "emptyReasonCode": {
+          "anyOf": [
+            { "const": "NO_PREEXISTING_PUBLISHED_FUNNEL_CAPABILITIES" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "linkObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilitySha256", "checkedAt", "evidenceSha256", "httpStatus", "outcome"],
+      "properties": {
+        "capabilitySha256": { "$ref": "#/$defs/digest" },
+        "checkedAt": { "$ref": "#/$defs/timestamp" },
+        "evidenceSha256": { "$ref": "#/$defs/digest" },
+        "httpStatus": { "enum": [200, 404] },
+        "outcome": { "enum": ["PASS", "NOT_FOUND"] }
+      }
+    },
+    "proofObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilitySha256", "checkedAt", "errorCode", "evidenceSha256", "httpStatus", "outcome", "proofSha256"],
+      "properties": {
+        "capabilitySha256": { "$ref": "#/$defs/digest" },
+        "checkedAt": { "$ref": "#/$defs/timestamp" },
+        "errorCode": {
+          "anyOf": [{ "const": "funnel_publication_stale" }, { "type": "null" }]
+        },
+        "evidenceSha256": { "$ref": "#/$defs/digest" },
+        "httpStatus": { "enum": [200, 409] },
+        "outcome": { "enum": ["PASS", "REJECTED"] },
+        "proofSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspaceId",
+        "funnelId",
+        "revisionBefore",
+        "revisionAfter",
+        "priorCapabilitySha256",
+        "replacementCapabilitySha256",
+        "priorProofSha256",
+        "replacementProofSha256",
+        "priorProofCapturedAt",
+        "rotatedAt",
+        "nonCapabilityStateSha256Before",
+        "nonCapabilityStateSha256After",
+        "observations"
+      ],
+      "properties": {
+        "workspaceId": { "$ref": "#/$defs/uuid" },
+        "funnelId": { "$ref": "#/$defs/uuid" },
+        "revisionBefore": { "type": "integer", "minimum": 0 },
+        "revisionAfter": { "type": "integer", "minimum": 1 },
+        "priorCapabilitySha256": { "$ref": "#/$defs/digest" },
+        "replacementCapabilitySha256": { "$ref": "#/$defs/digest" },
+        "priorProofSha256": { "$ref": "#/$defs/digest" },
+        "replacementProofSha256": { "$ref": "#/$defs/digest" },
+        "priorProofCapturedAt": { "$ref": "#/$defs/timestamp" },
+        "rotatedAt": { "$ref": "#/$defs/timestamp" },
+        "nonCapabilityStateSha256Before": { "$ref": "#/$defs/digest" },
+        "nonCapabilityStateSha256After": { "$ref": "#/$defs/digest" },
+        "observations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["oldLink", "newLink", "newProof", "oldProof"],
+          "properties": {
+            "oldLink": { "$ref": "#/$defs/linkObservation" },
+            "newLink": { "$ref": "#/$defs/linkObservation" },
+            "newProof": { "$ref": "#/$defs/proofObservation" },
+            "oldProof": { "$ref": "#/$defs/proofObservation" }
+          }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "recordType",
+        "receiptId",
+        "role",
+        "signerSubject",
+        "keyId",
+        "signedAt",
+        "payload",
+        "payloadSha256",
+        "signatureAlgorithm",
+        "detachedSignature",
+        "trustAnchorId",
+        "trustAnchorSha256",
+        "signatureReference"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "recordType": { "const": "NOVALURE_PRODUCTION_FUNNEL_TOKEN_CUTOVER_RECEIPT" },
+        "receiptId": { "type": "string", "pattern": "^grc_[a-f0-9]{32,64}$" },
+        "role": { "const": "production-funnel-token-cutover-attestor" },
+        "signerSubject": { "type": "string", "pattern": "^subject:[A-Za-z0-9][A-Za-z0-9._:@/-]{7,240}$" },
+        "keyId": { "type": "string", "pattern": "^key_[A-Za-z0-9_-]{8,120}$" },
+        "signedAt": { "$ref": "#/$defs/timestamp" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attestationDecision",
+            "candidateCommit",
+            "completedAt",
+            "evidenceSha256",
+            "inventorySha256",
+            "mode",
+            "policy",
+            "productionMutationPerformed",
+            "productionTarget",
+            "totalAffectedFunnels"
+          ],
+          "properties": {
+            "attestationDecision": { "enum": ["ROTATION_VERIFIED", "AUTHORITATIVE_EMPTY_VERIFIED"] },
+            "candidateCommit": { "$ref": "#/$defs/commit" },
+            "completedAt": { "$ref": "#/$defs/timestamp" },
+            "evidenceSha256": { "$ref": "#/$defs/digest" },
+            "inventorySha256": { "$ref": "#/$defs/digest" },
+            "mode": { "enum": ["ROTATED", "AUTHORITATIVE_EMPTY"] },
+            "policy": { "$ref": "#/$defs/policy" },
+            "productionMutationPerformed": { "type": "boolean" },
+            "productionTarget": { "$ref": "#/$defs/productionTarget" },
+            "totalAffectedFunnels": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "payloadSha256": { "$ref": "#/$defs/digest" },
+        "signatureAlgorithm": { "const": "Ed25519" },
+        "detachedSignature": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$" },
+        "trustAnchorId": { "type": "string", "pattern": "^ta_[A-Za-z0-9_-]{8,120}$" },
+        "trustAnchorSha256": { "$ref": "#/$defs/digest" },
+        "signatureReference": { "type": "string", "pattern": "^urn:novalure:gate-receipt:v1:" }
+      }
+    }
+  }
+}

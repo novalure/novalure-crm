@@ -566,7 +566,7 @@ test("evidence is redacted, immutable-on-write and paired with a valid sha256 si
     const result = await runPreviewBlobLifecycle(config, { fetchImpl: server.fetchImpl });
     const written = await writePreviewBlobLifecycleEvidence(config, result.evidence);
     const evidence = await readFile(path.join(written.directory, "preview-blob-lifecycle.json"), "utf8");
-    const sidecar = await readFile(path.join(written.directory, "preview-blob-lifecycle.sha256"), "utf8");
+    const sidecar = await readFile(path.join(written.directory, "preview-blob-lifecycle.json.sha256"), "utf8");
     const digest = createHash("sha256").update(evidence).digest("hex");
     assert.equal(sidecar, `${digest}  preview-blob-lifecycle.json\n`);
     await assert.rejects(

@@ -12,6 +12,8 @@ import {
   qaProtectedActionBundleRequiredNames,
   stageQaEvidenceForUpload,
 } from "./qa-protected-preview-action-runner.mjs";
+import { canonicalJson } from "./lib/qa-two-tenant-matrix.mjs";
+import { twoTenantParentBaseArtifactFile } from "./lib/protected-workflow-provenance-receipt.mjs";
 
 const bundleHeader = "# Generated Preview-only QA fixture. Gitignored. Never commit or print this file.";
 
@@ -56,9 +58,9 @@ test("bundle parser rejects noncanonical, duplicate, missing and unexpected vari
   assert.equal(qaProtectedActionBundleAllowedNames.includes("NOVALURE_QA_ALLOW_LOCAL"), false);
 });
 
-async function createEvidencePair(directory, mode, expected) {
+async function createEvidencePair(directory, mode, expected, overrides = {}) {
   const name = `${mode}-two-tenant-e2e.json`;
-  const serialized = JSON.stringify({
+  const document = {
     commit: expected.candidateSha,
     mode,
     productionMutationPerformed: false,
@@ -78,13 +80,15 @@ async function createEvidencePair(directory, mode, expected) {
       workflowRef: expected.workflowRef,
       workflowSha: expected.trustedHarnessSha,
     },
-  });
+    ...overrides,
+  };
+  const serialized = JSON.stringify(document);
   const digest = createHash("sha256").update(serialized).digest("hex");
   await writeFile(path.join(directory, name), serialized, { flag: "wx" });
   await writeFile(path.join(directory, `${mode}-two-tenant-e2e.sha256`), `${digest}  ${name}\n`, { flag: "wx" });
 }
 
-test("only four verified single-link evidence files are staged outside the workspace", async () => {
+test("four source files plus a canonical referenceless parent base are staged outside the workspace", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "novalure-action-runner-test-"));
   try {
     const workspace = path.join(root, "workspace");
@@ -116,18 +120,68 @@ test("only four verified single-link evidence files are staged outside the works
       "execute-two-tenant-e2e.sha256",
       "preflight-two-tenant-e2e.json",
       "preflight-two-tenant-e2e.sha256",
+      twoTenantParentBaseArtifactFile,
     ]);
     for (const name of staged.names) {
       const state = await stat(path.join(staged.root, name));
       assert.equal(state.isFile(), true);
       assert.equal(state.nlink, 1);
-      assert.deepEqual(
-        await readFile(path.join(staged.root, name)),
-        await readFile(path.join(source, name)),
-      );
+      if (name === twoTenantParentBaseArtifactFile) {
+        const execute = JSON.parse(await readFile(path.join(source, "execute-two-tenant-e2e.json"), "utf8"));
+        assert.equal(await readFile(path.join(staged.root, name), "utf8"), canonicalJson(execute));
+        assert.equal(Object.hasOwn(execute, "protectedWorkflowArtifactManifest"), false);
+        assert.equal(Object.hasOwn(execute, "protectedWorkflowReceipt"), false);
+      } else {
+        assert.deepEqual(
+          await readFile(path.join(staged.root, name)),
+          await readFile(path.join(source, name)),
+        );
+      }
     }
   } finally {
     await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("parent-base producer rejects secret-shaped keys and pre-existing provenance references", async (t) => {
+  const expected = {
+    branchId: "br-isolated-preview",
+    candidateBranch: "codex/exact-preview",
+    candidateSha: "9".repeat(40),
+    deploymentId: "dpl_ExactPreviewDeployment1",
+    previewHost: "novalure-exact.vercel.app",
+    trustedHarnessSha: "8".repeat(40),
+    workflowRef: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
+  };
+  for (const entry of [
+    { expectedError: /Secret-shaped evidence key is forbidden/u, overrides: { leakedSecret: "must-not-stage" } },
+    {
+      expectedError: /must not contain protected workflow references/u,
+      overrides: { protectedWorkflowReceipt: { forged: true } },
+    },
+  ]) {
+    await t.test(String(entry.expectedError), async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "novalure-action-runner-parent-reject-"));
+      try {
+        const workspace = path.join(root, "workspace");
+        const runnerTemp = path.join(root, "runner-temp");
+        const evidenceDirectory = "artifacts/qa/exact-run";
+        const source = path.join(workspace, evidenceDirectory);
+        await mkdir(source, { recursive: true });
+        await mkdir(runnerTemp);
+        await createEvidencePair(source, "preflight", expected);
+        await createEvidencePair(source, "execute", expected, entry.overrides);
+        await assert.rejects(
+          stageQaEvidenceForUpload(
+            { evidenceDirectory, ...expected },
+            { runnerTemp, workspace },
+          ),
+          entry.expectedError,
+        );
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    });
   }
 });
 

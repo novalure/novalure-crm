@@ -42,9 +42,48 @@ function assertProtectedAttestationProducer(workflow) {
   assert.match(workflow, /steps\.github_attestation\.outputs\.bundle-path/u);
   assert.match(workflow, /github-artifact-attestation\.sigstore\.json/u);
   assert.match(workflow, /protected-workflow-artifact-manifest\.json/u);
-  assert.match(workflow, /--format=posix/u);
+  assert.equal(
+    (workflow.match(/--format=ustar/gu) ?? []).length,
+    2,
+    "PROTECTED_WORKFLOW_USTAR_FORMAT_REQUIRED",
+  );
   assert.match(workflow, /--sort=name/u);
+  assert.equal(
+    (workflow.match(/snapshot_root="\$provenance_root\/subject-snapshot"/gu) ?? []).length,
+    2,
+    "PROTECTED_WORKFLOW_SINGLE_SNAPSHOT_ROOT_REQUIRED",
+  );
+  assert.equal(
+    (workflow.match(/PROVENANCE_EVIDENCE_ROOT="\$snapshot_root"/gu) ?? []).length,
+    2,
+    "PROTECTED_WORKFLOW_MANIFEST_MUST_USE_SNAPSHOT",
+  );
+  assert.equal(
+    (workflow.match(/cd "\$snapshot_root"/gu) ?? []).length,
+    2,
+    "PROTECTED_WORKFLOW_TAR_MUST_USE_SNAPSHOT",
+  );
+  assert.equal(
+    (workflow.match(/validateProtectedWorkflowArtifactTar/gu) ?? []).length,
+    4,
+    "PROTECTED_WORKFLOW_LOCAL_TAR_MEMBER_VERIFICATION_REQUIRED",
+  );
+  assert.equal(
+    (workflow.match(/cp --no-dereference -- "\$EVIDENCE_ROOT\/\$evidence" "\$snapshot_root\/\$evidence"/gu) ?? []).length,
+    2,
+    "PROTECTED_WORKFLOW_EXCLUSIVE_SNAPSHOT_COPY_REQUIRED",
+  );
+  assert.doesNotMatch(
+    workflow,
+    /PROVENANCE_EVIDENCE_ROOT="\$EVIDENCE_ROOT"/u,
+    "PROTECTED_WORKFLOW_MANIFEST_SOURCE_MUST_NOT_BE_LIVE_EVIDENCE_ROOT",
+  );
   assert.match(workflow, /protected-preview-public-runtime:/u, "PROTECTED_PUBLIC_PRODUCER_JOB_REQUIRED");
+  assert.match(
+    workflow,
+    /protected-preview-public-runtime:\s*\n\s+name:[^\n]+\n\s+needs: protected-preview-two-tenant/u,
+    "PROTECTED_PUBLIC_JOB_MUST_FOLLOW_TWO_TENANT",
+  );
   assert.match(
     workflow,
     /node scripts\/qa-protected-public-action-runner\.mjs/u,
@@ -66,6 +105,7 @@ function assertProtectedAttestationProducer(workflow) {
     "public-form-long-proof-refresh.json",
     "public-funnel-live-submission.json",
     "public-funnel-long-proof-refresh.json",
+    "public-runtime-parent-base.json",
   ]) {
     assert.match(workflow, new RegExp(name.replaceAll(".", "\\."), "u"));
   }
@@ -105,6 +145,7 @@ test("manual protected E2E keeps secrets fileless and uploads an immutable attes
   const workflow = read("../.github/workflows/livegang-e2e.yml");
   const runner = read("./qa-protected-preview-action-runner.mjs");
   const attestation = read("./final-preview-release-attestation-contract.mjs");
+  const provenanceVerifier = read("./lib/protected-workflow-provenance-receipt.mjs");
   assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:/mu);
   assert.match(workflow, /environment: go-live-preview/u);
   assert.match(workflow, /ref:\s*\$\{\{ inputs\.trusted_harness_sha \}\}/u);
@@ -121,6 +162,7 @@ test("manual protected E2E keeps secrets fileless and uploads an immutable attes
     "preflight-two-tenant-e2e.sha256",
     "execute-two-tenant-e2e.json",
     "execute-two-tenant-e2e.sha256",
+    "two-tenant-parent-base.json",
   ]) {
     assert.equal((workflow.match(new RegExp(name.replaceAll(".", "\\."), "gu")) ?? []).length >= 2, true);
   }
@@ -147,6 +189,26 @@ test("manual protected E2E keeps secrets fileless and uploads an immutable attes
   assert.match(publicRunner, /PROTECTED_PUBLIC_BATCH_POLICY_INVALID/u);
   assert.match(attestation, /workflowTrust\.trustedHarnessSha === runtime\.trustedHarnessSha/u);
   assert.match(attestation, /FINAL_ATTESTATION_TWO_TENANT_TRUSTED_WORKFLOW_RECEIPT_INVALID/u);
+  assert.match(
+    provenanceVerifier,
+    /export function verifyGitHubArtifactAttestation\([\s\S]+validateProtectedWorkflowArtifactTar\(\{[\s\S]+artifactBytes: artifact\.bytes/u,
+    "PROTECTED_WORKFLOW_FINAL_VERIFIER_MUST_VALIDATE_TAR_MEMBERS",
+  );
+  assert.match(
+    provenanceVerifier,
+    /withIdentityCheckedExecutableCopy\(\{[\s\S]+executableBytes: githubCli\.bytes[\s\S]+executePinnedGitHubCli\(executableSnapshot/u,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_PRIVATE_COPY_REQUIRED",
+  );
+  assert.doesNotMatch(
+    provenanceVerifier,
+    /executePinnedGitHubCli\(\s*githubCli\.path/u,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_CHECKED_PATH_MUST_NOT_BE_EXECUTED",
+  );
+  assert.match(
+    provenanceVerifier,
+    /inputFiles:\s*\[[\s\S]+bytes: artifact\.bytes[\s\S]+bytes: bundle\.bytes[\s\S]+bytes: trustedRoot\.bytes[\s\S]+"verify",\s*executableSnapshot\.inputPaths\.artifact,\s*"--bundle",\s*executableSnapshot\.inputPaths\.bundle,\s*"--custom-trusted-root",\s*executableSnapshot\.inputPaths\.trustedRoot/u,
+    "PROTECTED_WORKFLOW_GITHUB_CLI_INPUT_SNAPSHOT_REQUIRED",
+  );
   assertImmutableActions(workflow);
 });
 
@@ -182,5 +244,39 @@ test("protected workflow contract rejects a missing OIDC permission or attestati
       ),
     ),
     /PROTECTED_PUBLIC_PRODUCER_RUNNER_REQUIRED/u,
+  );
+  assert.throws(
+    () => assertProtectedAttestationProducer(
+      workflow.replace("needs: protected-preview-two-tenant", "needs: []"),
+    ),
+    /PROTECTED_PUBLIC_JOB_MUST_FOLLOW_TWO_TENANT/u,
+  );
+  assert.throws(
+    () => assertProtectedAttestationProducer(
+      workflow.replace(
+        'PROVENANCE_EVIDENCE_ROOT="$snapshot_root"',
+        'PROVENANCE_EVIDENCE_ROOT="$EVIDENCE_ROOT"',
+      ),
+    ),
+    /PROTECTED_WORKFLOW_MANIFEST_MUST_USE_SNAPSHOT/u,
+  );
+  assert.throws(
+    () => assertProtectedAttestationProducer(
+      workflow.replace('cd "$snapshot_root"', 'cd "$EVIDENCE_ROOT"'),
+    ),
+    /PROTECTED_WORKFLOW_TAR_MUST_USE_SNAPSHOT/u,
+  );
+  assert.throws(
+    () => assertProtectedAttestationProducer(workflow.replace("--format=ustar", "--format=posix")),
+    /PROTECTED_WORKFLOW_USTAR_FORMAT_REQUIRED/u,
+  );
+});
+
+test("protected-main harness updates cannot trigger an automatic Production deployment", () => {
+  const vercel = JSON.parse(read("../vercel.json"));
+  assert.equal(
+    vercel.git?.deploymentEnabled?.main,
+    false,
+    "main must stay deployment-disabled until the separately verified SHA is explicitly promoted",
   );
 });

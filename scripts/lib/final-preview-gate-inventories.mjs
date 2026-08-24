@@ -185,9 +185,7 @@ const a11yAuthenticatedProfiles = Object.freeze([
 ]);
 const a11yFixtureRoutes = Object.freeze([
   "public-form-page",
-  "public-form-submit-result",
   "public-funnel-page",
-  "public-funnel-submit-result",
   "password-reset-result",
 ]);
 

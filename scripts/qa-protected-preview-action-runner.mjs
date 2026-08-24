@@ -15,13 +15,21 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 
-import { qaTwoTenantRequiredEnvironment } from "./lib/qa-two-tenant-matrix.mjs";
+import {
+  assertEvidenceContainsNoSecrets,
+  canonicalJson,
+  qaTwoTenantRequiredEnvironment,
+} from "./lib/qa-two-tenant-matrix.mjs";
+import {
+  protectedWorkflowEvidenceFiles,
+  twoTenantParentBaseArtifactFile,
+} from "./lib/protected-workflow-provenance-receipt.mjs";
 import { validateProtectedPreviewWorkflowContract } from "./qa-protected-preview-workflow-contract.mjs";
 
 const bundleHeader = "# Generated Preview-only QA fixture. Gitignored. Never commit or print this file.";
 const maximumEncodedBytes = 512 * 1024;
 const maximumDecodedBytes = 256 * 1024;
-const evidenceNames = Object.freeze([
+const sourceEvidenceNames = Object.freeze([
   "preflight-two-tenant-e2e.json",
   "preflight-two-tenant-e2e.sha256",
   "execute-two-tenant-e2e.json",
@@ -284,10 +292,12 @@ function validateEvidencePair(jsonName, jsonBytes, digestBytes, expectedMode, ex
   ) {
     throw new Error(`${jsonName} does not contain a passing candidate-bound QA evidence record.`);
   }
+  assertEvidenceContainsNoSecrets(evidence);
   const digest = createHash("sha256").update(jsonBytes).digest("hex");
   if (digestBytes.toString("utf8") !== `${digest}  ${jsonName}\n`) {
     throw new Error(`${jsonName} digest sidecar does not match the exact evidence bytes.`);
   }
+  return evidence;
 }
 
 export async function stageQaEvidenceForUpload(config, options = {}) {
@@ -306,7 +316,7 @@ export async function stageQaEvidenceForUpload(config, options = {}) {
   }
 
   const source = Object.fromEntries(await Promise.all(
-    evidenceNames.map(async (name) => [name, await readExactRegularFile(path.join(sourceDirectory, name))]),
+    sourceEvidenceNames.map(async (name) => [name, await readExactRegularFile(path.join(sourceDirectory, name))]),
   ));
   validateEvidencePair(
     "preflight-two-tenant-e2e.json",
@@ -315,13 +325,23 @@ export async function stageQaEvidenceForUpload(config, options = {}) {
     "preflight",
     config,
   );
-  validateEvidencePair(
+  const executeEvidence = validateEvidencePair(
     "execute-two-tenant-e2e.json",
     source["execute-two-tenant-e2e.json"],
     source["execute-two-tenant-e2e.sha256"],
     "execute",
     config,
   );
+  if (
+    Object.hasOwn(executeEvidence, "protectedWorkflowArtifactManifest")
+    || Object.hasOwn(executeEvidence, "protectedWorkflowReceipt")
+  ) {
+    throw new Error("Two-tenant parent evidence must not contain protected workflow references.");
+  }
+  const stagedSource = {
+    ...source,
+    [twoTenantParentBaseArtifactFile]: Buffer.from(canonicalJson(executeEvidence), "utf8"),
+  };
 
   const stagingDirectory = await mkdtemp(path.join(runnerTemp, "novalure-qa-public-"));
   await chmod(stagingDirectory, 0o700);
@@ -329,15 +349,15 @@ export async function stageQaEvidenceForUpload(config, options = {}) {
   if (!stagingState.isDirectory() || stagingState.isSymbolicLink()) {
     throw new Error("QA public evidence staging directory is unsafe.");
   }
-  for (const name of evidenceNames) {
-    await writeExactRegularFile(path.join(stagingDirectory, name), source[name]);
+  for (const name of protectedWorkflowEvidenceFiles) {
+    await writeExactRegularFile(path.join(stagingDirectory, name), stagedSource[name]);
   }
   const realStaging = await realpath(stagingDirectory);
   if (!isInside(await realpath(runnerTemp), realStaging)) {
     throw new Error("QA public evidence staging escaped RUNNER_TEMP.");
   }
   return Object.freeze({
-    names: evidenceNames,
+    names: protectedWorkflowEvidenceFiles,
     root: stagingDirectory,
   });
 }

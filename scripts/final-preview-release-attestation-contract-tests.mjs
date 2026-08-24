@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign as signDetached } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,11 +12,13 @@ import {
   assertFinalPreviewRecoveryGoResult,
   buildExternalApprovalSigningPayload,
   buildFinalPreviewDocumentBundleSha256,
+  buildPerformanceTechnicalEvidenceSha256,
   finalPreviewDocumentBindings,
   finalPreviewGateBindings,
   finalPreviewGateIds,
   finalPerformanceBudgetPolicy,
   observedFinalPreviewGateStatus,
+  readApprovalTrustContext,
   releaseApprovalRoles,
   validateExternalApprovalArtifact,
   validateApprovalTrustAnchor,
@@ -43,10 +45,14 @@ import {
   sha256 as gateSha256,
 } from "./lib/external-gate-receipts.mjs";
 import {
-  accessibilityManualAcceptanceRecordType,
-  accessibilityManualAcceptanceRole,
+  accessibilityApprovalRoles,
+  accessibilityManualObservationIdsByCheck,
   accessibilityRequiredManualCheckIds,
 } from "./lib/accessibility-manual-acceptance-receipt.mjs";
+import {
+  a11yFixtureLifecycleRecordType,
+  a11yRetainedTableNames,
+} from "./lib/a11y-fixture-lifecycle-evidence.mjs";
 import {
   companyProfileApprovalRecordType,
   companyProfileApprovalRole,
@@ -54,6 +60,8 @@ import {
 } from "./lib/company-profile-approval-receipt.mjs";
 import { operationalGateSpecifications } from "./lib/operational-gate-receipts.mjs";
 import {
+  performanceBudgetApprovalRecordType,
+  performanceBudgetApprovalRoles,
   performanceManualAcceptanceRecordType,
   performanceManualAcceptanceRole,
   performanceManualGateIds,
@@ -61,12 +69,16 @@ import {
   performanceRumAcceptanceRole,
 } from "./lib/performance-acceptance-receipts.mjs";
 import {
+  buildProviderAcceptanceReceiptBundleSha256,
   providerAcceptanceRecordType,
-  providerAcceptanceRole,
+  providerFinalCleanupRecordType,
+  providerFinalCleanupRole,
   requiredProviderAcceptances,
 } from "./lib/provider-acceptance-receipts.mjs";
+import { providerFailClosedScenarios } from "./lib/provider-fail-closed-preview.mjs";
 import {
   publicRuntimeArtifactFiles,
+  publicRuntimeParentBaseArtifactFile,
   publicRuntimeProofObservations,
   publicRuntimeWorkflowRecordType,
   publicRuntimeWorkflowRole,
@@ -78,6 +90,7 @@ import {
   protectedWorkflowEvidenceFiles,
   protectedWorkflowProvenanceRecordType,
   protectedWorkflowProvenanceRole,
+  twoTenantParentBaseArtifactFile,
 } from "./lib/protected-workflow-provenance-receipt.mjs";
 import {
   blobLegacyMigrationRecordType,
@@ -202,19 +215,48 @@ function completeTwoTenantEvidence(runtime) {
   const identity = exactRuntimeIdentity(runtime);
   const remaining = Object.fromEntries(twoTenantCleanupResourceTypes.map((key) => [key, 0]));
   const artifactDigest = "a".repeat(64);
+  const workflowRef = "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main";
+  const workflowUri = `https://github.com/${workflowRef}`;
+  const parentBase = {
+    cleanup: ["A", "B"].map((tenant) => ({ planDigest: "d".repeat(64), remaining, tenant })),
+    commit: runtime.candidateCommit,
+    mode: "execute",
+    productionMutationPerformed: false,
+    requests: [],
+    results: twoTenantExpectedResultIds.map((id) => ({ id, status: "pass" })),
+    runtime: identity,
+    schema: gateBinding("two-tenant-rbac-crud").schemaValue,
+    summary: { failed: 0, passed: twoTenantExpectedResultIds.length, requests: 0 },
+    targets: ["A", "B"].map((tenant) => ({
+      branch: `sha256:${createHash("sha256").update(identity.databaseBranchId).digest("hex").slice(0, 16)}`,
+      tenant,
+    })),
+    workflowTrust: {
+      candidateSha: runtime.candidateCommit,
+      schema: "novalure.qa.protected-workflow-trust.v1",
+      trustedHarnessSha: runtime.trustedHarnessSha,
+      workflowRef,
+      workflowSha: runtime.trustedHarnessSha,
+    },
+  };
+  const canonicalParentBase = canonicalGateJson(parentBase);
   const protectedWorkflowArtifactManifest = {
     artifactDigest,
     artifactName: `exact-preview-two-tenant-${runtime.candidateCommit}.tar`,
-    files: protectedWorkflowEvidenceFiles.map((name, index) => ({
-      name,
-      sha256: String((index % 8) + 1).repeat(64),
-      sizeBytes: 1_000 + index,
-    })),
+    files: protectedWorkflowEvidenceFiles.map((name, index) => name === twoTenantParentBaseArtifactFile
+      ? {
+          name,
+          sha256: gateSha256(canonicalParentBase),
+          sizeBytes: Buffer.byteLength(canonicalParentBase, "utf8"),
+        }
+      : {
+          name,
+          sha256: String((index % 8) + 1).repeat(64),
+          sizeBytes: 1_000 + index,
+        }),
     recordType: protectedWorkflowArtifactManifestRecordType,
     schemaVersion: 1,
   };
-  const workflowRef = "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main";
-  const workflowUri = `https://github.com/${workflowRef}`;
   const protectedWorkflowReceipt = externalGateReceipt(
     protectedWorkflowProvenanceRole,
     protectedWorkflowProvenanceRecordType,
@@ -268,28 +310,9 @@ function completeTwoTenantEvidence(runtime) {
     },
   );
   return {
-    cleanup: ["A", "B"].map((tenant) => ({ planDigest: "d".repeat(64), remaining, tenant })),
-    commit: runtime.candidateCommit,
-    mode: "execute",
-    productionMutationPerformed: false,
+    ...parentBase,
     protectedWorkflowArtifactManifest,
     protectedWorkflowReceipt,
-    requests: [],
-    results: twoTenantExpectedResultIds.map((id) => ({ id, status: "pass" })),
-    runtime: identity,
-    schema: gateBinding("two-tenant-rbac-crud").schemaValue,
-    summary: { failed: 0, passed: twoTenantExpectedResultIds.length, requests: 0 },
-    targets: ["A", "B"].map((tenant) => ({
-      branch: `sha256:${createHash("sha256").update(identity.databaseBranchId).digest("hex").slice(0, 16)}`,
-      tenant,
-    })),
-    workflowTrust: {
-      candidateSha: runtime.candidateCommit,
-      schema: "novalure.qa.protected-workflow-trust.v1",
-      trustedHarnessSha: runtime.trustedHarnessSha,
-      workflowRef,
-      workflowSha: runtime.trustedHarnessSha,
-    },
   };
 }
 
@@ -440,9 +463,54 @@ function completeProviderEvidence(runtime) {
     }])),
   };
   const databasePostconditionSha256 = gateSha256(canonicalGateJson(databaseWritePostcondition));
+  const scenarios = new Map(providerFailClosedScenarios.map((entry) => [entry.id, entry]));
+  const rawSource = {
+    candidate: {
+      commitSha: runtime.candidateCommit,
+      databaseBranchFingerprint: `sha256:${"1".repeat(16)}`,
+      databaseBranchId: runtime.databaseBranchId,
+      deploymentHost: runtime.deploymentHost,
+      deploymentId: runtime.deploymentId,
+      gitRef: runtime.branch,
+      previewOriginFingerprint: `sha256:${"2".repeat(16)}`,
+    },
+    cleanup: {
+      databaseCleanup: "NOT_REQUIRED",
+      externalSessionCreatedByRunner: false,
+      inMemoryCookieJar: "CLEARED_IN_FINALLY",
+      status: "COMPLETE",
+    },
+    completedAt: "2026-08-25T19:59:00.000Z",
+    databaseWritePostcondition,
+    httpTechnicalStatus: "PASS",
+    productionMutationPerformed: false,
+    providerSideEffectPostcondition: {
+      codeOrderAndHttpGate: "PASS",
+      independentProviderLogs: "UNPROVEN",
+      reasonCode: "INDEPENDENT_PROVIDER_LOGS_NOT_COLLECTED",
+    },
+    releaseGateStatus: "BLOCKED",
+    requests: providerExpectedRequestIds.map((id) => {
+      const identityRequest = id === "identity.session" || id === "identity.runtime";
+      const scenario = scenarios.get(id);
+      return {
+        code: identityRequest
+          ? id === "identity.session" ? "SESSION_SCOPE_MATCH" : "RUNTIME_IDENTITY_MATCH"
+          : "LAUNCH_SCOPE_OFF",
+        csrf: identityRequest ? "not-applicable" : scenario.csrf,
+        id,
+        method: identityRequest ? "GET" : scenario.method,
+        status: identityRequest ? 200 : 503,
+      };
+    }),
+    schemaVersion: gateBinding("provider-boundaries").schemaValue,
+    startedAt: "2026-08-25T19:58:00.000Z",
+  };
+  const sourceArtifactSha256 = "d".repeat(64);
+  const sourceCollectorSha256 = gateSha256(canonicalGateJson(rawSource));
   const providerAcceptanceReceipts = Object.entries(requiredProviderAcceptances).map(([acceptanceId, contract], index) => {
     const providerName = contract.providers[0];
-    return externalGateReceipt(providerAcceptanceRole, providerAcceptanceRecordType, {
+    return externalGateReceipt(contract.receiptRole, providerAcceptanceRecordType, {
       acceptanceId,
       artifactSha256: String((index % 8) + 1).repeat(64),
       databasePostconditionSha256,
@@ -461,43 +529,84 @@ function completeProviderEvidence(runtime) {
         providerLogArtifactSha256: "b".repeat(64),
         providerName,
       },
+      postAcceptance: {
+        cleanupEvidenceSha256: String(((index + 3) % 8) + 1).repeat(64),
+        completedAt: "2026-08-25T20:31:00.000Z",
+        databaseEvidenceSha256: String(((index + 4) % 8) + 1).repeat(64),
+        residualLiveObjectCount: 0,
+        status: "PASS",
+      },
+      qaTargetApproval: {
+        approvedAt: "2026-08-25T19:59:30.000Z",
+        purpose: contract.targetPurpose,
+        status: "APPROVED",
+        targetFingerprint: `sha256:${"c".repeat(64)}`,
+      },
       qaTargetFingerprint: `sha256:${"c".repeat(64)}`,
       runtime: receiptRuntime,
+      sourceArtifactSha256,
+      sourceCollectorSha256,
+      sourceCompletedAt: rawSource.completedAt,
     });
   });
+  const evidenceManifest = providerAcceptanceReceipts.map((receipt) => ({
+    acceptanceArtifactSha256: receipt.payload.artifactSha256,
+    acceptanceId: receipt.payload.acceptanceId,
+    cleanupEvidenceSha256: receipt.payload.postAcceptance.cleanupEvidenceSha256,
+    databaseEvidenceSha256: receipt.payload.postAcceptance.databaseEvidenceSha256,
+    providerAccountFingerprint: receipt.payload.providerIdentity.providerAccountFingerprint,
+    providerLogArtifactSha256: receipt.payload.providerIdentity.providerLogArtifactSha256,
+    qaTargetFingerprint: receipt.payload.qaTargetFingerprint,
+    receiptId: receipt.receiptId,
+    receiptRole: receipt.role,
+  }));
+  const providerFinalCleanupReceipt = externalGateReceipt(
+    providerFinalCleanupRole,
+    providerFinalCleanupRecordType,
+    {
+      acceptanceReceiptBundleSha256: buildProviderAcceptanceReceiptBundleSha256(providerAcceptanceReceipts),
+      cleanupWindow: {
+        completedAt: "2026-08-25T21:01:00.000Z",
+        startedAt: "2026-08-25T21:00:00.000Z",
+      },
+      databaseResidualEvidenceSha256: "5".repeat(64),
+      externalProviderSessionCount: 0,
+      providerResidualEvidenceSha256: "6".repeat(64),
+      qaBatchInventorySha256: "7".repeat(64),
+      residualLiveObjectCount: 0,
+      runtime: receiptRuntime,
+      sourceArtifactSha256,
+      sourceCollectorSha256,
+      status: "PASS",
+    },
+    "2026-08-25T21:02:00.000Z",
+  );
   return {
-    candidate: {
-      commitSha: runtime.candidateCommit,
-      databaseBranchId: "br-lucky-heart-alrm9dlw",
-      deploymentHost: runtime.deploymentHost,
-      deploymentId: runtime.deploymentId,
-      gitRef: runtime.branch,
-    },
+    ...rawSource,
     collectionMode: "LIVE_PROVIDER_ACCEPTANCE",
-    cleanup: {
-      databaseCleanup: "NOT_REQUIRED",
-      externalSessionCreatedByRunner: false,
-      inMemoryCookieJar: "CLEARED_IN_FINALLY",
-      status: "COMPLETE",
+    completedAt: "2026-08-25T21:02:00.000Z",
+    providerAcceptanceAssembly: {
+      acceptanceIds: providerAcceptanceReceipts.map((receipt) => receipt.payload.acceptanceId),
+      acceptanceCompletedAt: "2026-08-25T21:00:00.000Z",
+      acceptanceReceiptBundleSha256: buildProviderAcceptanceReceiptBundleSha256(providerAcceptanceReceipts),
+      databasePostconditionSha256,
+      evidenceManifest,
+      receiptPayloadSha256: providerAcceptanceReceipts.map((receipt) => receipt.payloadSha256),
+      finalCleanupReceiptPayloadSha256: providerFinalCleanupReceipt.payloadSha256,
+      sourceArtifactSha256,
+      sourceCollectorSha256,
+      sourceCompletedAt: rawSource.completedAt,
+      sourceIndependentProviderLogs: "UNPROVEN",
+      sourceReleaseGateStatus: "BLOCKED",
     },
-    databaseWritePostcondition,
-    httpTechnicalStatus: "PASS",
-    productionMutationPerformed: false,
     providerSideEffectPostcondition: {
       codeOrderAndHttpGate: "PASS",
       independentProviderLogs: "PASS",
       reasonCode: null,
     },
     providerAcceptanceReceipts,
+    providerFinalCleanupReceipt,
     releaseGateStatus: "PASS",
-    requests: providerExpectedRequestIds.map((id) => ({
-      code: id.startsWith("identity.")
-        ? id === "identity.session" ? "SESSION_SCOPE_MATCH" : "RUNTIME_IDENTITY_MATCH"
-        : "LAUNCH_SCOPE_OFF",
-      id,
-      status: id.startsWith("identity.") ? 200 : 503,
-    })),
-    schemaVersion: gateBinding("provider-boundaries").schemaValue,
   };
 }
 
@@ -587,20 +696,7 @@ function completePublicEvidence(runtime) {
           },
     status: "PASS",
   }));
-  const protectedWorkflowReceipt = externalGateReceipt(publicRuntimeWorkflowRole, publicRuntimeWorkflowRecordType, {
-    artifactDigest: protectedWorkflowArtifactManifest.artifactDigest,
-    artifactManifestSha256: gateSha256(canonicalGateJson(protectedWorkflowArtifactManifest)),
-    attestationBundleSha256: "b".repeat(64),
-    cleanupInventorySha256,
-    githubRunId: "123456789012",
-    proofInventorySha256: gateSha256(canonicalGateJson(proofs)),
-    qaBatchId,
-    runtime: gateReceiptRuntime(runtime),
-    trustedHarnessSha: runtime.trustedHarnessSha,
-    workflowRef: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
-    workflowSha: runtime.trustedHarnessSha,
-  });
-  return {
+  const parentBase = {
     blockedProofs: [],
     candidate: {
       deploymentHost: runtime.deploymentHost,
@@ -621,26 +717,49 @@ function completePublicEvidence(runtime) {
     mutationGate: { reasonCode: null, status: "PASS" },
     productionMutationPerformed: false,
     proofs,
-    protectedWorkflowArtifactManifest,
-    protectedWorkflowReceipt,
     releaseGateStatus: "PASS",
     requests: publicExpectedReadOnlyRequestIds.map((id) => ({ id, status: statuses[id] })),
     schemaVersion: gateBinding("public-form-funnel").schemaValue,
+  };
+  const canonicalParentBase = canonicalGateJson(parentBase);
+  const parentBaseArtifact = artifactByName.get(publicRuntimeParentBaseArtifactFile);
+  parentBaseArtifact.sha256 = gateSha256(canonicalParentBase);
+  parentBaseArtifact.sizeBytes = Buffer.byteLength(canonicalParentBase, "utf8");
+  const protectedWorkflowReceipt = externalGateReceipt(publicRuntimeWorkflowRole, publicRuntimeWorkflowRecordType, {
+    artifactDigest: protectedWorkflowArtifactManifest.artifactDigest,
+    artifactManifestSha256: gateSha256(canonicalGateJson(protectedWorkflowArtifactManifest)),
+    attestationBundleSha256: "b".repeat(64),
+    cleanupInventorySha256,
+    githubRunId: "123456789012",
+    proofInventorySha256: gateSha256(canonicalGateJson(proofs)),
+    qaBatchId,
+    runtime: gateReceiptRuntime(runtime),
+    trustedHarnessSha: runtime.trustedHarnessSha,
+    workflowRef: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
+    workflowSha: runtime.trustedHarnessSha,
+  });
+  return {
+    ...parentBase,
+    protectedWorkflowArtifactManifest,
+    protectedWorkflowReceipt,
   };
 }
 
 function completeA11yEvidence(runtime) {
   const surfaceCount = (surface) => a11yExpectedResultKeys.filter((key) => key.startsWith(`${surface}|`)).length;
   const receiptRuntime = gateReceiptRuntime(runtime);
+  const databaseProjectId = "weathered-term-98273025";
   const individualEvidence = accessibilityRequiredManualCheckIds.map((checkId, index) => ({
     checkId,
-    contexts: [`context ${index + 1} desktop mobile assistive technology`],
+    contexts: checkId === "public-form-and-funnel-submit-flow"
+      ? ["public-form", "public-funnel"]
+      : [`context ${index + 1} desktop mobile assistive technology`],
     languages: ["de", "en"],
-    observations: [{
-      evidenceSha256: String((index % 8) + 1).repeat(64),
-      id: `observation.${index + 1}`,
+    observations: accessibilityManualObservationIdsByCheck[checkId].map((id, observationIndex) => ({
+      evidenceSha256: gateSha256(`${checkId}-${observationIndex}`),
+      id,
       status: "PASS",
-    }],
+    })),
     recordType: "NOVALURE_ACCESSIBILITY_MANUAL_CHECK_EVIDENCE",
     result: "PASS",
     runtime: receiptRuntime,
@@ -653,6 +772,13 @@ function completeA11yEvidence(runtime) {
     sha256: gateSha256(canonicalGateJson(entry)),
   }));
   const manualMatrix = {
+    approvals: accessibilityApprovalRoles.map((entry) => ({
+      owner: null,
+      role: entry.approvalRole,
+      signature: null,
+      signedAt: null,
+      status: "READY_FOR_EXTERNAL_SIGNATURE",
+    })),
     manualChecks: manualCheckDigests.map((entry) => ({
       evidence: {
         documentSha256: entry.sha256,
@@ -665,7 +791,7 @@ function completeA11yEvidence(runtime) {
     })),
     schemaVersion: 2,
     standard: "WCAG 2.2 Level AA",
-    status: "SIGNED",
+    status: "READY_FOR_EXTERNAL_SIGNATURE",
   };
   const coverage = {
     authenticated: { complete: true, expected: surfaceCount("authenticated"), observed: surfaceCount("authenticated") },
@@ -702,55 +828,144 @@ function completeA11yEvidence(runtime) {
     expected: exactRuntimeIdentity(runtime),
     expectedAttestationCount: 8,
   };
+  const automatedSourceSha256 = gateSha256("a11y-browser-raw-source");
+  const cleanup = { browserClosed: true, complete: true, sessionLogoutFailures: 0 };
+  const executionScope = {
+    authSideEffects: "LOGIN_CHALLENGE_MFA_VERIFICATION_AUDIT_AND_SESSION_WRITES_EXPECTED",
+    mfaEnrollment: "PROHIBITED",
+    publicAndCrmBusinessData: "HTTP_WRITE_GUARD_ENFORCED",
+    sessionCleanupRequired: true,
+  };
   const unsafeHttpWriteGuard = { blockedAttemptCount: 0, complete: true };
   const automatedEvidence = {
+    automatedSourceSha256,
     automatedSubsetPassed: true,
     automatedTechnicalPassed: true,
+    browser: "chromium",
+    cleanup: structuredClone(cleanup),
     coverage: structuredClone(coverage),
+    endedAt: "2026-08-25T20:30:00.000Z",
+    evidenceDigest: gateSha256("a11y-browser-evidence"),
+    executionBlocker: null,
+    executionScope: structuredClone(executionScope),
     expectedSha: runtime.candidateCommit,
+    generatedAt: "2026-08-25T20:30:00.000Z",
     matrix: structuredClone(resultMatrix),
+    mode: "RELEASE_GATE",
     productionMutationPerformed: false,
     releaseSurfaceManifestVerified: true,
     results: structuredClone(results),
     runtimeIdentity: structuredClone(runtimeIdentity),
     schemaVersion: 4,
+    startedAt: "2026-08-25T19:30:00.000Z",
     targetHost: runtime.deploymentHost,
     unsafeHttpWriteGuard: structuredClone(unsafeHttpWriteGuard),
+    wcagStandard: "WCAG 2.2 AA automated subset plus signed manual acceptance",
   };
-  const manualReceipt = externalGateReceipt(
-    accessibilityManualAcceptanceRole,
-    accessibilityManualAcceptanceRecordType,
-    {
+  const retainedInventory = (phase) => {
+    const tables = Object.fromEntries(a11yRetainedTableNames.map((name) => [name, {
+      digest: gateSha256(`${name}-${phase}`),
+      rowCount: phase === "before" ? 1 : 2,
+    }]));
+    return {
+      digest: gateSha256(canonicalGateJson(tables)),
+      rowCount: Object.values(tables).reduce((sum, table) => sum + table.rowCount, 0),
+      tables,
+    };
+  };
+  const cleanupScope = (label, count) => ({
+    auditCount: 1,
+    batchFingerprint: `sha256:${gateSha256(`${label}-batch`)}`,
+    createdObjectCount: count,
+    deletedObjectCount: count,
+    executedCount: 1,
+    ledgerCount: count,
+    liveCascadeCount: 0,
+    liveRegisteredCount: 0,
+    unexpectedLedgerCount: 0,
+  });
+  const fixtureLifecycle = {
+    browserEvidence: {
+      fileName: "a11y-browser-matrix.json",
+      sha256: automatedSourceSha256,
+      sidecarFileName: "a11y-browser-matrix.json.sha256",
+      sidecarSha256: gateSha256("a11y-browser-sidecar"),
+      sizeBytes: 4_096,
+    },
+    candidateCommit: runtime.candidateCommit,
+    cleanup: {
+      crossTenant: cleanupScope("cross-tenant", 0),
+      primary: cleanupScope("primary", 3),
+      remainingBatchObjectCount: 0,
+      residualLiveObjectCount: 0,
+      status: "PASS",
+    },
+    completedAt: "2026-08-25T20:30:00.000Z",
+    database: {
+      operationalAfter: { digest: "7".repeat(64), rowCount: 10 },
+      operationalBefore: { digest: "7".repeat(64), rowCount: 10 },
+      retainedAfter: retainedInventory("after"),
+      retainedBefore: retainedInventory("before"),
+      targetDigest: `sha256:${gateSha256("preview-database-target")}`,
+    },
+    deploymentHost: runtime.deploymentHost,
+    deploymentId: runtime.deploymentId,
+    gitBranch: runtime.branch,
+    neonBranchId: runtime.databaseBranchId,
+    neonProjectId: databaseProjectId,
+    productionMutationPerformed: false,
+    recordType: a11yFixtureLifecycleRecordType,
+    runId: "a11y-run-12345678-1234-4123-8123-123456789012",
+    schemaVersion: 1,
+    status: "PASS",
+  };
+  const fixtureLifecycleSha256 = gateSha256(canonicalGateJson(fixtureLifecycle));
+  const approvalReceipts = Object.fromEntries(accessibilityApprovalRoles.map((expected) => [
+    expected.receiptRole,
+    externalGateReceipt(expected.receiptRole, expected.recordType, {
+      approval: "APPROVED",
+      approvalRole: expected.approvalRole,
       automatedEvidenceSha256: gateSha256(canonicalGateJson(automatedEvidence)),
+      databaseProjectId,
+      fixtureLifecycleSha256,
       individualEvidenceBundleSha256: gateSha256(canonicalGateJson(manualCheckDigests)),
       manualCheckDigests,
       matrixSha256: gateSha256(canonicalGateJson(manualMatrix)),
       runtime: receiptRuntime,
-    },
-  );
+    }),
+  ]));
   return {
     acceptance: {
       contractComplete: true,
       manualAcceptancePassed: true,
-      manualCheckCount: 12,
-      manualPassCount: 12,
+      manualCheckCount: accessibilityRequiredManualCheckIds.length,
+      manualPassCount: accessibilityRequiredManualCheckIds.length,
       matrixSigned: true,
-      signatureCount: 4,
+      signatureCount: accessibilityApprovalRoles.length,
       signaturesComplete: true,
       status: "SIGNED",
     },
+    automatedSourceSha256,
     automatedSubsetPassed: true,
     automatedTechnicalPassed: true,
-    cleanup: { browserClosed: true, complete: true, sessionLogoutFailures: 0 },
+    browser: "chromium",
+    cleanup,
     coverage,
+    endedAt: automatedEvidence.endedAt,
+    evidenceDigest: automatedEvidence.evidenceDigest,
     executionBlocker: null,
+    executionScope,
     expectedSha: runtime.candidateCommit,
+    generatedAt: automatedEvidence.generatedAt,
     matrix: resultMatrix,
     manualAcceptance: {
+      approvalReceipts,
       automatedEvidence,
+      databaseProjectId,
+      fixtureLifecycle,
+      fixtureLifecycleSha256,
       individualEvidence,
       matrix: manualMatrix,
-      receipt: manualReceipt,
     },
     mode: "RELEASE_GATE",
     productionMutationPerformed: false,
@@ -759,8 +974,10 @@ function completeA11yEvidence(runtime) {
     results,
     runtimeIdentity,
     schemaVersion: gateBinding("accessibility-browser").schemaValue,
+    startedAt: automatedEvidence.startedAt,
     targetHost: runtime.deploymentHost,
     unsafeHttpWriteGuard,
+    wcagStandard: automatedEvidence.wcagStandard,
   };
 }
 
@@ -768,52 +985,23 @@ function completePerformanceEvidence(runtime) {
   const expected = exactRuntimeIdentity(runtime);
   const policySha256 = createHash("sha256").update(canonicalJson(finalPerformanceBudgetPolicy)).digest("hex");
   const receiptRuntime = gateReceiptRuntime(runtime);
-  const manualAcceptanceReceipt = externalGateReceipt(
-    performanceManualAcceptanceRole,
-    performanceManualAcceptanceRecordType,
-    {
-      artifactSha256: "c".repeat(64),
-      budgetPolicySha256: policySha256,
-      manualGates: performanceManualGateIds.map((id, index) => ({
-        evidenceSha256: String((index % 8) + 1).repeat(64),
-        id,
-        status: "PASS",
-      })),
-      observationWindow: {
-        completedAt: "2026-08-25T20:30:00.000Z",
-        startedAt: "2026-08-25T20:00:00.000Z",
-      },
-      runtime: receiptRuntime,
-    },
-  );
-  const realUserMonitoringReceipt = externalGateReceipt(
-    performanceRumAcceptanceRole,
-    performanceRumAcceptanceRecordType,
-    {
-      artifactSha256: "d".repeat(64),
-      budgetPolicySha256: policySha256,
-      metrics: {
-        cumulativeLayoutShiftP75: 0.02,
-        interactionToNextPaintP75Ms: 100,
-        largestContentfulPaintP75Ms: 1_500,
-      },
-      observationWindow: {
-        completedAt: "2026-08-25T20:30:00.000Z",
-        startedAt: "2026-08-24T20:30:00.000Z",
-      },
-      providerIdentity: {
-        datasetFingerprint: `sha256:${"e".repeat(64)}`,
-        projectFingerprint: `sha256:${"f".repeat(64)}`,
-        providerName: "VERCEL_SPEED_INSIGHTS",
-      },
-      runtime: receiptRuntime,
-      sampleCount: 250,
-    },
-  );
-  return {
+  const evidence = {
     authenticatedCoverageComplete: true,
     baseOrigin: `https://${runtime.deploymentHost}`,
     budgetApprovalStatus: "SIGNED",
+    budgetApprovalReceipts: Object.fromEntries(performanceBudgetApprovalRoles.map((expected) => [
+      expected.approvalRole,
+      externalGateReceipt(
+        expected.receiptRole,
+        performanceBudgetApprovalRecordType,
+        {
+          approval: "APPROVED",
+          approvalRole: expected.approvalRole,
+          budgetPolicySha256: policySha256,
+          runtime: receiptRuntime,
+        },
+      ),
+    ])),
     budgetPolicySha256: policySha256,
     cleanup: { browserProfileRemoved: true, complete: true, qaSessionLogout: "LOGGED_OUT" },
     executionBlocker: null,
@@ -824,11 +1012,9 @@ function completePerformanceEvidence(runtime) {
       screenReader: "PASS",
       zoomAndReflow: "PASS",
     },
-    manualAcceptanceReceipt,
     productionMutationPerformed: false,
     publicCoverageComplete: true,
     realUserMonitoring: { status: "PASS" },
-    realUserMonitoringReceipt,
     releasePassed: true,
     results: performanceExpectedResultKeys.map((key) => {
       const [surface, route, language, profile, temperature] = key.split("|");
@@ -838,8 +1024,10 @@ function completePerformanceEvidence(runtime) {
         language,
         metrics: {
           cumulativeLayoutShift: 0.01,
+          interactionToNextPaint: null,
           largestContentfulPaint: 1_000,
           totalBlockingTime: 50,
+          totalByteWeight: 200_000,
         },
         passed: true,
         profile,
@@ -864,6 +1052,50 @@ function completePerformanceEvidence(runtime) {
     signaturesPresent: true,
     technicalPassed: true,
   };
+  evidence.technicalEvidenceSha256 = buildPerformanceTechnicalEvidenceSha256(evidence);
+  const manualAcceptanceReceipt = externalGateReceipt(
+    performanceManualAcceptanceRole,
+    performanceManualAcceptanceRecordType,
+    {
+      artifactSha256: evidence.technicalEvidenceSha256,
+      budgetPolicySha256: policySha256,
+      manualGates: performanceManualGateIds.map((id, index) => ({
+        evidenceSha256: String((index % 8) + 1).repeat(64),
+        id,
+        status: "PASS",
+      })),
+      observationWindow: {
+        completedAt: "2026-08-25T20:30:00.000Z",
+        startedAt: "2026-08-25T20:00:00.000Z",
+      },
+      runtime: receiptRuntime,
+    },
+  );
+  const realUserMonitoringReceipt = externalGateReceipt(
+    performanceRumAcceptanceRole,
+    performanceRumAcceptanceRecordType,
+    {
+      artifactSha256: evidence.technicalEvidenceSha256,
+      budgetPolicySha256: policySha256,
+      metrics: {
+        cumulativeLayoutShiftP75: 0.02,
+        interactionToNextPaintP75Ms: 100,
+        largestContentfulPaintP75Ms: 1_500,
+      },
+      observationWindow: {
+        completedAt: "2026-08-25T20:30:00.000Z",
+        startedAt: "2026-08-24T20:30:00.000Z",
+      },
+      providerIdentity: {
+        datasetFingerprint: `sha256:${"e".repeat(64)}`,
+        projectFingerprint: `sha256:${"f".repeat(64)}`,
+        providerName: "VERCEL_SPEED_INSIGHTS",
+      },
+      runtime: receiptRuntime,
+      sampleCount: 250,
+    },
+  );
+  return { ...evidence, manualAcceptanceReceipt, realUserMonitoringReceipt };
 }
 
 function completeCompanyProfileApproval(attestation) {
@@ -987,7 +1219,7 @@ function git(root, args) {
   return String(result.stdout ?? "").trim();
 }
 
-async function createProvenanceRepository() {
+async function createProvenanceRepository({ evidenceCodeDrift = false } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "novalure-attestation-git-"));
   git(root, ["init", "-q"]);
   git(root, ["config", "user.email", "attestation-tests@novalure.invalid"]);
@@ -995,6 +1227,7 @@ async function createProvenanceRepository() {
   await writeFile(path.join(root, "baseline.txt"), "baseline\n", "utf8");
   git(root, ["add", "baseline.txt"]);
   git(root, ["commit", "-q", "-m", "baseline"]);
+  const candidateCommit = git(root, ["rev-parse", "HEAD"]);
 
   const runId = "run-20260823T210000Z-bbbbbbbbbbbb";
   const runDirectory = `docs/audit/2026-08-23/final-evidence/runs/${runId}`;
@@ -1003,12 +1236,16 @@ async function createProvenanceRepository() {
   await mkdir(path.join(root, ...runDirectory.split("/")), { recursive: true });
   await writeFile(path.join(root, ...evidencePath.split("/")), "{\"status\":\"PASS\"}\n", "utf8");
   await writeFile(path.join(root, ...sidecarPath.split("/")), `${"a".repeat(64)}  evidence.json\n`, "utf8");
+  if (evidenceCodeDrift) {
+    await mkdir(path.join(root, "src"), { recursive: true });
+    await writeFile(path.join(root, "src", "unexpected-runtime-change.ts"), "export const drift = true;\n", "utf8");
+    git(root, ["add", "src/unexpected-runtime-change.ts"]);
+  }
   git(root, ["add", runDirectory]);
   git(root, ["commit", "-q", "-m", "freeze evidence"]);
   const evidenceCommit = git(root, ["rev-parse", "HEAD"]);
 
   const attestationPath = `${runDirectory}/final-preview-release-attestation.json`;
-  const laterOnlyPath = `${runDirectory}/later-only.json`;
   const attestation = {
     documents: [{ path: evidencePath, sidecarPath }],
     evidenceProvenance: {
@@ -1020,16 +1257,16 @@ async function createProvenanceRepository() {
     gateEvidence: [],
     signatures: {},
     status: "EVIDENCE_FROZEN",
+    runtime: { candidateCommit },
   };
   await writeFile(
     path.join(root, ...attestationPath.split("/")),
     `${JSON.stringify(attestation, null, 2)}\n`,
     "utf8",
   );
-  await writeFile(path.join(root, ...laterOnlyPath.split("/")), "{\"later\":true}\n", "utf8");
   git(root, ["add", runDirectory]);
   git(root, ["commit", "-q", "-m", "track attestation"]);
-  return { attestation, attestationPath, evidencePath, laterOnlyPath, root };
+  return { attestation, attestationPath, candidateCommit, evidencePath, root };
 }
 
 const [template, schema, releaseSurfaceManifest, releaseGateMatrix, legalContentManifest, verifierSource] =
@@ -1117,10 +1354,15 @@ function signatureFor(fixture, role, overrides = {}) {
   return signature;
 }
 
-function signedFixture({ allGatesPass = false, decision = "CONDITIONAL_GO" } = {}) {
+function signedFixture({ allGatesPass = false, decision = "CONDITIONAL_GO", documentDigests = {} } = {}) {
   const fixture = frozenFixture();
   fixture.decision = decision;
   if (allGatesPass) fixture.gateEvidence.forEach((_, index) => bindGate(fixture, index, "PASS"));
+  for (const [documentId, digest] of Object.entries(documentDigests)) {
+    const binding = fixture.documents.find((entry) => entry.id === documentId);
+    assert.ok(binding, `Unknown final document binding: ${documentId}`);
+    binding.sha256 = digest;
+  }
   fixture.approvalTrust = {
     trustAnchorId,
     trustAnchorSha256,
@@ -1351,6 +1593,40 @@ test("SIGNED approvals require the out-of-repository Ed25519 trust anchor and re
     () => validateFinalPreviewReleaseAttestation(wrongDigest, { trustContext }),
     /FINAL_ATTESTATION_TRUST_ANCHOR_DIGEST_MISMATCH/u,
   );
+});
+
+test("approval trust-anchor loading pins one bounded external file and rejects hardlink aliases", async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "novalure-release-trust-anchor-"));
+  try {
+    const anchorPath = path.join(directory, "release-trust-anchor.json");
+    await writeFile(anchorPath, trustAnchorSource, { encoding: "utf8", flag: "wx" });
+    const loaded = await readApprovalTrustContext({
+      approvalTrustAnchorPath: anchorPath,
+      expectedApprovalTrustAnchorSha256: trustAnchorSha256,
+    });
+    assert.equal(loaded.anchor.trustAnchorId, trustAnchor.trustAnchorId);
+    assert.equal(loaded.expectedSha256, trustAnchorSha256);
+
+    const aliasPath = path.join(directory, "release-trust-anchor-alias.json");
+    try {
+      await link(anchorPath, aliasPath);
+    } catch (error) {
+      if (["EPERM", "EACCES", "ENOTSUP"].includes(error?.code)) {
+        t.diagnostic(`Hardlinks are unavailable (${error.code}).`);
+        return;
+      }
+      throw error;
+    }
+    await assert.rejects(
+      readApprovalTrustContext({
+        approvalTrustAnchorPath: aliasPath,
+        expectedApprovalTrustAnchorSha256: trustAnchorSha256,
+      }),
+      /FINAL_ATTESTATION_TRUST_ANCHOR_NOT_BOUNDED_SINGLE_LINK_FILE/u,
+    );
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 });
 
 test("external approval content and digest are verified fail closed", async () => {
@@ -1607,6 +1883,30 @@ test("two-tenant PASS fails closed without the locally verified artifact and Sig
   );
 });
 
+test("two-tenant final evidence is bound to the referenceless canonical parent artifact", () => {
+  const runtime = gateRuntime();
+  const binding = gateBinding("two-tenant-rbac-crud");
+  const document = completeTwoTenantEvidence(runtime);
+  const parentBase = Object.fromEntries(
+    Object.entries(document).filter(([key]) =>
+      !["protectedWorkflowArtifactManifest", "protectedWorkflowReceipt"].includes(key)),
+  );
+  const canonicalParentBase = canonicalGateJson(parentBase);
+  const parentArtifact = document.protectedWorkflowArtifactManifest.files.find(
+    (entry) => entry.name === twoTenantParentBaseArtifactFile,
+  );
+  assert.equal(Object.hasOwn(parentBase, "protectedWorkflowArtifactManifest"), false);
+  assert.equal(Object.hasOwn(parentBase, "protectedWorkflowReceipt"), false);
+  assert.equal(parentArtifact.sha256, gateSha256(canonicalParentBase));
+  assert.equal(parentArtifact.sizeBytes, Buffer.byteLength(canonicalParentBase, "utf8"));
+
+  document.results[0].status = "fail";
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, document, runtime, { trustContext }),
+    /FINAL_ATTESTATION_TWO_TENANT_PARENT_BASE_DIGEST_MISMATCH/u,
+  );
+});
+
 test("public runtime PASS fails closed without its own locally verified artifact and Sigstore bundle", () => {
   const runtime = gateRuntime();
   const binding = gateBinding("public-form-funnel");
@@ -1659,7 +1959,7 @@ test("provider PASS cannot be relabelled from the fail-closed collector or forge
   sparseProviderReceipt.providerAcceptanceReceipts.pop();
   assert.throws(
     () => observedFinalPreviewGateStatus(binding, sparseProviderReceipt, runtime, { trustContext }),
-    /PROVIDER_ACCEPTANCE_INVENTORY_COUNT_INVALID/u,
+    /FINAL_ATTESTATION_PROVIDER_ASSEMBLY_INVENTORY_MISMATCH/u,
   );
 
   const sameCountContentMutation = completeProviderEvidence(runtime);
@@ -1676,7 +1976,7 @@ test("provider PASS cannot be relabelled from the fail-closed collector or forge
   reboundTable.afterFingerprint = `sha256:${"e".repeat(64)}`;
   assert.throws(
     () => observedFinalPreviewGateStatus(binding, replayedReceiptsAgainstDifferentSnapshot, runtime, { trustContext }),
-    /PROVIDER_ACCEPTANCE_DATABASE_DIGEST_MISMATCH/u,
+    /FINAL_ATTESTATION_PROVIDER_ASSEMBLY_SOURCE_INVALID/u,
   );
 });
 
@@ -1781,6 +2081,13 @@ test("public form/funnel PASS requires the exact protected workflow batch, artif
     () => observedFinalPreviewGateStatus(binding, tamperedArtifact, runtime, { trustContext }),
     /PUBLIC_RUNTIME_WORKFLOW_ARTIFACT_MISMATCH/u,
   );
+
+  const tamperedParentBase = completePublicEvidence(runtime);
+  tamperedParentBase.databaseAttestation.contentFingerprintDigest = "b".repeat(64);
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, tamperedParentBase, runtime, { trustContext }),
+    /PUBLIC_RUNTIME_PARENT_BASE_DIGEST_MISMATCH/u,
+  );
 });
 
 test("Blob Legacy PASS recomputes non-empty candidate/store-bound migration evidence", () => {
@@ -1875,6 +2182,21 @@ test("performance PASS recomputes budgets and requires independently signed Manu
     /FINAL_ATTESTATION_PERFORMANCE_RESULT_NOT_PASS/u,
   );
 
+  const replacedTechnicalEvidence = completePerformanceEvidence(runtime);
+  replacedTechnicalEvidence.results[0].metrics.totalByteWeight += 1;
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, replacedTechnicalEvidence, runtime, { trustContext }),
+    /FINAL_ATTESTATION_PERFORMANCE_TECHNICAL_EVIDENCE_DIGEST_MISMATCH/u,
+  );
+
+  const replayedReceipts = completePerformanceEvidence(runtime);
+  replayedReceipts.results[0].metrics.totalByteWeight += 1;
+  replayedReceipts.technicalEvidenceSha256 = buildPerformanceTechnicalEvidenceSha256(replayedReceipts);
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, replayedReceipts, runtime, { trustContext }),
+    /PERFORMANCE_MANUAL_ARTIFACT_DIGEST_MISMATCH/u,
+  );
+
   const tamperedManual = completePerformanceEvidence(runtime);
   tamperedManual.manualAcceptanceReceipt.payload.manualGates[0].evidenceSha256 = "0".repeat(64);
   assert.throws(
@@ -1894,9 +2216,32 @@ test("performance PASS recomputes budgets and requires independently signed Manu
     () => observedFinalPreviewGateStatus(binding, sparseRum, runtime, { trustContext }),
     /PERFORMANCE_RUM_SAMPLE_COUNT_INVALID/u,
   );
+
+  const missingBudgetOwner = completePerformanceEvidence(runtime);
+  delete missingBudgetOwner.budgetApprovalReceipts.operations;
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, missingBudgetOwner, runtime, { trustContext }),
+    /FINAL_ATTESTATION_PERFORMANCE_BUDGET_APPROVAL_RECEIPTS_KEYS_INVALID/u,
+  );
+
+  const roleSwappedBudgetOwners = completePerformanceEvidence(runtime);
+  [
+    roleSwappedBudgetOwners.budgetApprovalReceipts.product,
+    roleSwappedBudgetOwners.budgetApprovalReceipts.engineering,
+  ] = [
+    roleSwappedBudgetOwners.budgetApprovalReceipts.engineering,
+    roleSwappedBudgetOwners.budgetApprovalReceipts.product,
+  ];
+  assert.throws(
+    () => observedFinalPreviewGateStatus(binding, roleSwappedBudgetOwners, runtime, { trustContext }),
+    /EXTERNAL_GATE_RECEIPT_ROLE_MISMATCH/u,
+  );
 });
 
 test("two-tenant and accessibility PASS reject local strings without external workflow/manual receipts", () => {
+  assert.ok(a11yExpectedResultKeys.every((key) => !key.includes("-submit-result|")));
+  assert.ok(accessibilityRequiredManualCheckIds.includes("public-form-and-funnel-submit-flow"));
+
   const runtime = gateRuntime();
   const twoTenantBinding = gateBinding("two-tenant-rbac-crud");
   const selfDeclaredWorkflow = completeTwoTenantEvidence(runtime);
@@ -1908,10 +2253,33 @@ test("two-tenant and accessibility PASS reject local strings without external wo
 
   const a11yBinding = gateBinding("accessibility-browser");
   const selfDeclaredManualPass = completeA11yEvidence(runtime);
-  delete selfDeclaredManualPass.manualAcceptance.receipt;
+  delete selfDeclaredManualPass.manualAcceptance.approvalReceipts[
+    accessibilityApprovalRoles[2].receiptRole
+  ];
   assert.throws(
     () => observedFinalPreviewGateStatus(a11yBinding, selfDeclaredManualPass, runtime, { trustContext }),
-    /FINAL_ATTESTATION_A11Y_MANUAL_ACCEPTANCE_KEYS_INVALID/u,
+    /ACCESSIBILITY_APPROVAL_RECEIPTS_KEYS_INVALID/u,
+  );
+
+  const roleSwappedApprovals = completeA11yEvidence(runtime);
+  [
+    roleSwappedApprovals.manualAcceptance.approvalReceipts[
+      accessibilityApprovalRoles[0].receiptRole
+    ],
+    roleSwappedApprovals.manualAcceptance.approvalReceipts[
+      accessibilityApprovalRoles[1].receiptRole
+    ],
+  ] = [
+    roleSwappedApprovals.manualAcceptance.approvalReceipts[
+      accessibilityApprovalRoles[1].receiptRole
+    ],
+    roleSwappedApprovals.manualAcceptance.approvalReceipts[
+      accessibilityApprovalRoles[0].receiptRole
+    ],
+  ];
+  assert.throws(
+    () => observedFinalPreviewGateStatus(a11yBinding, roleSwappedApprovals, runtime, { trustContext }),
+    /EXTERNAL_GATE_RECEIPT_(?:TYPE|ROLE)_MISMATCH/u,
   );
 
   const tamperedManualMatrix = completeA11yEvidence(runtime);
@@ -1926,6 +2294,27 @@ test("two-tenant and accessibility PASS reject local strings without external wo
   assert.throws(
     () => observedFinalPreviewGateStatus(a11yBinding, replacedOuterAutomatedMatrix, runtime, { trustContext }),
     /ACCESSIBILITY_AUTOMATED_EVIDENCE_OUTER_MISMATCH/u,
+  );
+
+  const incompleteSubmit = completeA11yEvidence(runtime);
+  incompleteSubmit.manualAcceptance.individualEvidence.at(-1).observations.pop();
+  assert.throws(
+    () => observedFinalPreviewGateStatus(a11yBinding, incompleteSubmit, runtime, { trustContext }),
+    /ACCESSIBILITY_MANUAL_OBSERVATION_INVENTORY_INVALID/u,
+  );
+
+  const outerRunRelabel = completeA11yEvidence(runtime);
+  outerRunRelabel.generatedAt = "2026-08-25T20:31:00.000Z";
+  assert.throws(
+    () => observedFinalPreviewGateStatus(a11yBinding, outerRunRelabel, runtime, { trustContext }),
+    /ACCESSIBILITY_AUTOMATED_EVIDENCE_OUTER_MISMATCH/u,
+  );
+
+  const cleanupReceiptTamper = completeA11yEvidence(runtime);
+  cleanupReceiptTamper.manualAcceptance.fixtureLifecycle.cleanup.remainingBatchObjectCount = 1;
+  assert.throws(
+    () => observedFinalPreviewGateStatus(a11yBinding, cleanupReceiptTamper, runtime, { trustContext }),
+    /A11Y_FIXTURE_LIFECYCLE_DIGEST_MISMATCH/u,
   );
 });
 
@@ -1956,25 +2345,38 @@ test("operational PASS gates require source-bound signed receipts", () => {
 });
 
 test("GO requires signed release ownership, the relationship decision and deployment-bound Legal approval", () => {
-  const attestation = signedFixture({ allGatesPass: true, decision: "GO" });
-  const surfaces = structuredClone(releaseSurfaceManifest);
-  surfaces.candidateCommit = attestation.runtime.candidateCommit;
-  surfaces.approvalStatus = "SIGNED";
   const matrix = structuredClone(releaseGateMatrix);
-  matrix.candidateCommit = attestation.runtime.candidateCommit;
-  matrix.approvalStatus = "SIGNED";
-  for (const role of signatureRoles) matrix.signatures[role] = attestation.signatures[role].signatureReference;
+  matrix.candidateCommit = "a".repeat(40);
+  matrix.approvalStatus = "READY_FOR_EXTERNAL_SIGNATURE";
+  for (const role of signatureRoles) matrix.signatures[role] = null;
   matrix.surfaces = matrix.surfaces.map((surface) => ({
     ...surface,
     owners: { legal: "legal owner", product: "product owner", technical: "technical owner" },
   }));
-  matrix.specialDecisions.unitBuyerDealRelationship.status = "SIGNED";
+  matrix.specialDecisions.unitBuyerDealRelationship.status = "READY_FOR_EXTERNAL_SIGNATURE";
   matrix.specialDecisions.unitBuyerDealRelationship.requiredSignatures = {
-    dataCompliance: attestation.signatures["data-compliance"].signatureReference,
-    engineering: attestation.signatures.engineering.signatureReference,
-    product: attestation.signatures.product.signatureReference,
-    salesOperations: attestation.signatures["sales-operations"].signatureReference,
+    dataCompliance: null,
+    engineering: null,
+    product: null,
+    salesOperations: null,
   };
+  const matrixSource = canonicalGateJson(matrix);
+  const matrixSha256 = gateSha256(matrixSource);
+  const attestation = signedFixture({
+    allGatesPass: true,
+    decision: "GO",
+    documentDigests: { "release-gate-matrix": matrixSha256 },
+  });
+  assert.equal(attestation.runtime.candidateCommit, matrix.candidateCommit);
+  assert.equal(
+    attestation.documents.find((entry) => entry.id === "release-gate-matrix").sha256,
+    matrixSha256,
+  );
+  assert.ok(signatureRoles.every((role) =>
+    attestation.signatures[role].documentBundleSha256 === attestation.documentBundleSha256));
+  const surfaces = structuredClone(releaseSurfaceManifest);
+  surfaces.candidateCommit = attestation.runtime.candidateCommit;
+  surfaces.approvalStatus = "SIGNED";
   const legal = structuredClone(legalContentManifest);
   legal.candidateCommit = attestation.runtime.candidateCommit;
   legal.approvalStatus = "APPROVED";
@@ -2014,6 +2416,88 @@ test("GO requires signed release ownership, the relationship decision and deploy
     releaseSurfaceManifest: surfaces,
     trustContext,
   }));
+  const missingPrivacyRoute = structuredClone(legal);
+  missingPrivacyRoute.pages = missingPrivacyRoute.pages.filter((page) => page.route !== "/privacy");
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: missingPrivacyRoute,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_PAGE_ROUTE_INVENTORY_COUNT_INVALID/u,
+  );
+  const missingEnglishLanguage = structuredClone(legal);
+  missingEnglishLanguage.pages[0].languages = ["de"];
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: missingEnglishLanguage,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_LANGUAGE_INVENTORY_COUNT_INVALID/u,
+  );
+  const missingEnglishVariant = structuredClone(legal);
+  missingEnglishVariant.pages[0].renderedVariants =
+    missingEnglishVariant.pages[0].renderedVariants.filter((variant) => variant.language !== "en");
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: missingEnglishVariant,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_VARIANT_LANGUAGE_INVENTORY_COUNT_INVALID/u,
+  );
+  const missingLegacyAlias = structuredClone(legal);
+  missingLegacyAlias.routeAliases = [];
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: missingLegacyAlias,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_ALIAS_INVENTORY_COUNT_INVALID/u,
+  );
+  const missingUnsubscribeConfirm = structuredClone(legal);
+  missingUnsubscribeConfirm.functionalContracts = [];
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: missingUnsubscribeConfirm,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_FUNCTIONAL_CONTRACT_INVENTORY_COUNT_INVALID/u,
+  );
+  const unsubscribeConfirmWithoutPost = structuredClone(legal);
+  unsubscribeConfirmWithoutPost.functionalContracts[0].methods = ["GET"];
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: unsubscribeConfirmWithoutPost,
+      releaseGateMatrix: matrix,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_LEGAL_FUNCTIONAL_METHOD_INVENTORY_MISMATCH/u,
+  );
+  const matrixByteMutation = structuredClone(matrix);
+  matrixByteMutation.surfaces[0].function = `${matrixByteMutation.surfaces[0].function} tampered`;
+  assert.notEqual(gateSha256(canonicalGateJson(matrixByteMutation)), matrixSha256);
   const malformedLaunchStatus = structuredClone(matrix);
   malformedLaunchStatus.surfaces[0].desiredLaunchStatus = "MAYBE";
   assert.throws(
@@ -2069,22 +2553,36 @@ test("GO requires signed release ownership, the relationship decision and deploy
       releaseSurfaceManifest: surfaces,
       trustContext,
     }),
-    /FINAL_ATTESTATION_RELEASE_MATRIX_NOT_SIGNED/u,
+    /FINAL_ATTESTATION_RELEASE_MATRIX_NOT_READY_FOR_SIGNATURE/u,
   );
 
-  const wrongRelationshipRole = structuredClone(matrix);
-  wrongRelationshipRole.specialDecisions.unitBuyerDealRelationship.requiredSignatures.salesOperations =
-    attestation.signatures.operations.signatureReference;
+  const embeddedRelationshipReference = structuredClone(matrix);
+  embeddedRelationshipReference.specialDecisions.unitBuyerDealRelationship.requiredSignatures.salesOperations =
+    attestation.signatures["sales-operations"].signatureReference;
   assert.throws(
     () => validateReleaseDocumentCandidateState({
       attestation,
       companyProfileApproval,
       legalContentManifest: legal,
-      releaseGateMatrix: wrongRelationshipRole,
+      releaseGateMatrix: embeddedRelationshipReference,
       releaseSurfaceManifest: surfaces,
       trustContext,
     }),
-    /FINAL_ATTESTATION_RELATIONSHIP_SIGNATURE_REFERENCE_MISMATCH/u,
+    /FINAL_ATTESTATION_RELATIONSHIP_EMBEDDED_SIGNATURE_FORBIDDEN/u,
+  );
+
+  const embeddedMatrixReference = structuredClone(matrix);
+  embeddedMatrixReference.signatures.product = attestation.signatures.product.signatureReference;
+  assert.throws(
+    () => validateReleaseDocumentCandidateState({
+      attestation,
+      companyProfileApproval,
+      legalContentManifest: legal,
+      releaseGateMatrix: embeddedMatrixReference,
+      releaseSurfaceManifest: surfaces,
+      trustContext,
+    }),
+    /FINAL_ATTESTATION_RELEASE_MATRIX_EMBEDDED_SIGNATURE_FORBIDDEN/u,
   );
 
   const unimplementedRelationshipLaunchOn = structuredClone(matrix);
@@ -2098,7 +2596,7 @@ test("GO requires signed release ownership, the relationship decision and deploy
       releaseSurfaceManifest: surfaces,
       trustContext,
     }),
-    /FINAL_ATTESTATION_RELATIONSHIP_DECISION_NOT_SIGNED/u,
+    /FINAL_ATTESTATION_RELATIONSHIP_DECISION_NOT_READY_FOR_SIGNATURE/u,
   );
 
   const unlockedProfile = structuredClone(companyProfileApproval);
@@ -2167,7 +2665,7 @@ test("Git provenance rejects dirty, index, untracked, wrong-commit and post-free
     try {
       const wrong = structuredClone(fixture.attestation);
       wrong.documents[0] = {
-        path: fixture.laterOnlyPath,
+        path: "baseline.txt",
         sidecarPath: fixture.attestation.documents[0].sidecarPath,
       };
       await assert.rejects(
@@ -2176,7 +2674,7 @@ test("Git provenance rejects dirty, index, untracked, wrong-commit and post-free
           attestationPath: fixture.attestationPath,
           repositoryRootPath: fixture.root,
         }),
-        /FINAL_ATTESTATION_GIT_PATH_NOT_REGULAR_BLOB/u,
+        /FINAL_ATTESTATION_EVIDENCE_COMMIT_PATHS_INVALID/u,
       );
     } finally {
       await rm(fixture.root, { force: true, recursive: true });
@@ -2196,6 +2694,42 @@ test("Git provenance rejects dirty, index, untracked, wrong-commit and post-free
           repositoryRootPath: fixture.root,
         }),
         /FINAL_ATTESTATION_GIT_BLOB_WORKTREE_MISMATCH/u,
+      );
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  await t.test("evidence commit cannot smuggle runtime or verifier changes", async () => {
+    const fixture = await createProvenanceRepository({ evidenceCodeDrift: true });
+    try {
+      await assert.rejects(
+        verifyFinalPreviewRepositoryProvenance({
+          attestation: fixture.attestation,
+          attestationPath: fixture.attestationPath,
+          repositoryRootPath: fixture.root,
+        }),
+        /FINAL_ATTESTATION_EVIDENCE_COMMIT_PATHS_INVALID/u,
+      );
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  await t.test("approval phase cannot smuggle runtime or verifier changes", async () => {
+    const fixture = await createProvenanceRepository();
+    try {
+      await mkdir(path.join(fixture.root, "scripts"), { recursive: true });
+      await writeFile(path.join(fixture.root, "scripts", "unexpected-verifier-change.mjs"), "export const drift = true;\n", "utf8");
+      git(fixture.root, ["add", "scripts/unexpected-verifier-change.mjs"]);
+      git(fixture.root, ["commit", "-q", "-m", "attempt verifier drift"]);
+      await assert.rejects(
+        verifyFinalPreviewRepositoryProvenance({
+          attestation: fixture.attestation,
+          attestationPath: fixture.attestationPath,
+          repositoryRootPath: fixture.root,
+        }),
+        /FINAL_ATTESTATION_APPROVAL_COMMIT_PATHS_INVALID/u,
       );
     } finally {
       await rm(fixture.root, { force: true, recursive: true });

@@ -796,6 +796,30 @@ test("an ambiguous Vercel runtime cannot bypass the unsigned Production boundary
   }
 });
 
+test("a self-hosted NODE_ENV production runtime cannot bypass activation", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalVercel = process.env.VERCEL;
+  const originalVercelEnv = process.env.VERCEL_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.VERCEL;
+    delete process.env.VERCEL_ENV;
+    const evaluation = evaluateLaunchScope("publicFormSubmission");
+    assert.equal(evaluation.allowed, false);
+    assert.equal(evaluation.code, "LAUNCH_SCOPE_UNSIGNED");
+
+    process.env.VERCEL_ENV = "preview";
+    assert.equal(evaluateLaunchScope("publicFormSubmission").allowed, true);
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+    if (originalVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = originalVercel;
+    if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = originalVercelEnv;
+  }
+});
+
 test("INTERNAL-ONLY surfaces require their exact product role and internal capability", () => {
   assert.equal(evaluateLaunchScope("systemDatabaseDiagnostics").allowed, false);
   assert.equal(

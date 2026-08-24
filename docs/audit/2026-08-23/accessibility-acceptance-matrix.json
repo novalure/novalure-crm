@@ -55,6 +55,7 @@
     "dynamicFixtureCoverageRequired": true,
     "blockedRowsFailRelease": true,
     "manualChecksMustAllPass": true,
+    "publicSubmitStatesRequireSignedManualEvidence": true,
     "signedApprovalsRequired": true,
     "publicOnlyDiagnosticCanRelease": false
   },
@@ -147,7 +148,7 @@
         "3.3.1",
         "4.1.3"
       ],
-      "requirement": "Every required MFA, invitation, password-reset result, authenticated Forms/Funnel/Settings and public form/funnel page-plus-submit entry must be observed. A missing or invalid action-time fixture is recorded as redacted BLOCKED and fails the release gate.",
+      "requirement": "Every required MFA, invitation, password-reset result, authenticated Forms/Funnel/Settings and public form/funnel page entry must be observed by the read-only automated runner. The real public submit success and validation states are covered by the separately bound public-runtime E2E and the required signed manual public-form-and-funnel-submit-flow evidence; they must never be synthesized by a read-only browser run. A missing or invalid action-time fixture is recorded as redacted BLOCKED and fails the release gate.",
       "required": true,
       "owner": null,
       "signature": null

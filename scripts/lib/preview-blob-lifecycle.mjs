@@ -1134,7 +1134,7 @@ export async function writePreviewBlobLifecycleEvidence(config, evidence) {
   const serialized = canonicalJson(evidence);
   const digest = createHash("sha256").update(serialized).digest("hex");
   const evidenceName = "preview-blob-lifecycle.json";
-  const digestName = "preview-blob-lifecycle.sha256";
+  const digestName = `${evidenceName}.sha256`;
   await mkdir(config.evidenceDirectory, { mode: 0o700, recursive: true });
   await writeFile(path.join(config.evidenceDirectory, evidenceName), serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
   await writeFile(

@@ -193,7 +193,7 @@ test("MFA attestation accepts only verification and rejects enrollment or worksp
   }), /Workspace selection is not an MFA verification challenge/u);
 });
 
-test("action-time public fixtures are bounded and public submissions are explicitly NOT_RUN in read-only mode", () => {
+test("action-time public fixtures stay read-only while real submit states require signed manual evidence", () => {
   for (const variable of [
     "NOVALURE_QA_A11Y_PUBLIC_FORM_URL",
     "NOVALURE_QA_A11Y_PUBLIC_FUNNEL_URL",
@@ -204,11 +204,9 @@ test("action-time public fixtures are bounded and public submissions are explici
   assert.match(source, /Public-funnel fixture must use the canonical Preview funnel route/u);
   assert.match(source, /Password-reset result fixture must use an approved result route/u);
   assert.match(source, /--read-only is mandatory/u);
-  assert.match(source, /scenario\.kind === "submit"/u);
-  assert.match(source, /read_only_public_write_prohibited/u);
-  assert.match(source, /outcome: "NOT_RUN"/u);
   assert.match(source, /blockedOrNotRun/u);
   assert.match(source, /notRun: results\.filter/u);
+  assert.doesNotMatch(source, /scenario\.kind === "submit"|read_only_public_write_prohibited|createNotRunResult/u);
   assert.doesNotMatch(source, /submitPublicFormFixture|submitPublicFunnelFixture|\/api\/forms\/submissions/u);
   assert.match(source, /blocker: "action_time_fixture_unavailable"/u);
   assert.match(source, /outcome: "BLOCKED"/u);
@@ -216,6 +214,11 @@ test("action-time public fixtures are bounded and public submissions are explici
     "public-form-page", "public-form-submit-result", "public-funnel-page",
     "public-funnel-submit-result", "password-reset-result",
   ]);
+  assert.equal(acceptanceMatrix.releaseRule.publicSubmitStatesRequireSignedManualEvidence, true);
+  assert.match(
+    acceptanceMatrix.automatedChecks.find((check) => check.id === "required-fixture-flow-coverage").requirement,
+    /separately bound public-runtime E2E.*required signed manual/u,
+  );
   assert.ok(acceptanceMatrix.scope.public.includes("reset-password-invalid-result"));
   assert.deepEqual(acceptanceMatrix.fixtureRequirements.map((requirement) => requirement.id), [
     "isolated-auth-fixture", "public-action-time-fixtures", "release-surface-manifest-contract",
@@ -280,6 +283,7 @@ test("release pass additionally requires signed manual acceptance and complete s
     check.id === "required-fixture-flow-coverage" && check.required === true));
   assert.equal(acceptanceMatrix.releaseRule.authChallengeCoverageRequired, true);
   assert.equal(acceptanceMatrix.releaseRule.dynamicFixtureCoverageRequired, true);
+  assert.equal(acceptanceMatrix.releaseRule.publicSubmitStatesRequireSignedManualEvidence, true);
   assert.ok(acceptanceMatrix.manualChecks.length >= 8);
   assert.ok(acceptanceMatrix.manualChecks.every((check) => check.required && check.status === "PENDING"));
   assert.ok(acceptanceMatrix.approvals.length >= 3);

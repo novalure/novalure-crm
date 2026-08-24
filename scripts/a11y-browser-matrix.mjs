@@ -96,11 +96,16 @@ const authenticatedProfiles = [
   { height: 800, name: "zoom-400-reflow", routes: ["dashboard", "contacts", "forms", "settings"], width: 320 },
 ];
 const publicFixtureScenarios = [
-  { fixture: "publicForm", id: "public-form-page", kind: "page" },
-  { fixture: "publicForm", id: "public-form-submit-result", kind: "submit" },
-  { fixture: "publicFunnel", id: "public-funnel-page", kind: "page" },
-  { fixture: "publicFunnel", id: "public-funnel-submit-result", kind: "submit" },
-  { fixture: "passwordResetResult", id: "password-reset-result", kind: "page" },
+  { fixture: "publicForm", id: "public-form-page" },
+  { fixture: "publicFunnel", id: "public-funnel-page" },
+  { fixture: "passwordResetResult", id: "password-reset-result" },
+];
+const requiredPublicFixtureFlowIds = [
+  "public-form-page",
+  "public-form-submit-result",
+  "public-funnel-page",
+  "public-funnel-submit-result",
+  "password-reset-result",
 ];
 const publicFixtureProfiles = [
   { height: 900, name: "desktop", routes: publicFixtureScenarios.map((scenario) => scenario.id), width: 1440 },
@@ -358,7 +363,7 @@ function evaluateAcceptanceMatrix(matrix) {
     requiredPublicScopeIds.every((route) => publicScope.includes(route)) &&
     authenticatedRoutes.every((route) => authenticatedScope.includes(route)) &&
     authChallengeScope.includes("mfa-verification") &&
-    publicFixtureScenarios.every((scenario) => publicFixtureScope.includes(scenario.id)) &&
+    requiredPublicFixtureFlowIds.every((id) => publicFixtureScope.includes(id)) &&
     languages.every((language) => languageScope.includes(language)) &&
     requiredAutomatedCheckIds.every((id) => automatedChecks.some((check) => check.id === id && check.required === true)) &&
     requiredManualCheckIds.every((id) => manualChecks.some((check) => check.id === id && check.required === true)) &&
@@ -370,6 +375,7 @@ function evaluateAcceptanceMatrix(matrix) {
     matrix.releaseRule?.dynamicFixtureCoverageRequired === true &&
     matrix.releaseRule?.blockedRowsFailRelease === true &&
     matrix.releaseRule?.manualChecksMustAllPass === true &&
+    matrix.releaseRule?.publicSubmitStatesRequireSignedManualEvidence === true &&
     matrix.releaseRule?.signedApprovalsRequired === true &&
     matrix.releaseRule?.publicOnlyDiagnosticCanRelease === false;
   return {
@@ -560,13 +566,6 @@ function createBlockedResult({ blocker, language, profile, route, status, surfac
     route,
     status,
     surface,
-  };
-}
-
-function createNotRunResult({ blocker, language, profile, route, surface }) {
-  return {
-    ...createBlockedResult({ blocker, language, profile, route, status: 0, surface }),
-    outcome: "NOT_RUN",
   };
 }
 
@@ -861,16 +860,6 @@ async function runPublicFixtureMatrix() {
       await primePreviewAccess(context, shareUrl, base);
       for (const scenario of publicFixtureScenarios) {
         for (const language of languages) {
-          if (scenario.kind === "submit") {
-            results.push(createNotRunResult({
-              blocker: "read_only_public_write_prohibited",
-              language,
-              profile,
-              route: scenario.id,
-              surface: "public-fixture",
-            }));
-            continue;
-          }
           const fixtureUrl = actionTimeFixtures[scenario.fixture];
           if (!fixtureUrl) {
             results.push(createBlockedResult({
@@ -1237,11 +1226,15 @@ await mkdir(outputDirectory, { recursive: true });
 const evidenceFileName = "a11y-browser-matrix.json";
 const evidenceSidecarFileName = "a11y-browser-matrix.json.sha256";
 const serializedEvidence = `${JSON.stringify(evidence, null, 2)}\n`;
-await writeFile(path.join(outputDirectory, evidenceFileName), serializedEvidence, "utf8");
+await writeFile(path.join(outputDirectory, evidenceFileName), serializedEvidence, {
+  encoding: "utf8",
+  flag: "wx",
+  mode: 0o600,
+});
 await writeFile(
   path.join(outputDirectory, evidenceSidecarFileName),
   `${sha256(serializedEvidence)}  ${evidenceFileName}\n`,
-  "utf8",
+  { encoding: "utf8", flag: "wx", mode: 0o600 },
 );
 
 console.log(JSON.stringify({

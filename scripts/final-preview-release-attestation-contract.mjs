@@ -2,13 +2,17 @@
 
 import { createHash, createPublicKey, verify as verifyDetachedSignature } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, open, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyRecoveryEvidenceForFinalAttestation } from "./database-recovery-evidence-verify.mjs";
 import { loadExternalRecoveryTrustAnchor } from "./database-recovery-live-evidence.mjs";
-import { validateAccessibilityManualAcceptanceReceipt } from "./lib/accessibility-manual-acceptance-receipt.mjs";
+import {
+  accessibilityApprovalRoles,
+  accessibilityRequiredManualCheckIds,
+  validateAccessibilityApprovalReceipts,
+} from "./lib/accessibility-manual-acceptance-receipt.mjs";
 import { validateCompanyProfileApprovalReceipt } from "./lib/company-profile-approval-receipt.mjs";
 import {
   externalGateReceiptRoles,
@@ -25,14 +29,27 @@ import {
   twoTenantCleanupResourceTypes,
   twoTenantExpectedResultIds,
 } from "./lib/final-preview-gate-inventories.mjs";
-import { validatePerformanceManualAcceptanceReceipt, validatePerformanceRumAcceptanceReceipt } from "./lib/performance-acceptance-receipts.mjs";
-import { validateProviderAcceptanceReceipts } from "./lib/provider-acceptance-receipts.mjs";
+import {
+  performanceBudgetApprovalRoles,
+  validatePerformanceBudgetApprovalReceipt,
+  validatePerformanceManualAcceptanceReceipt,
+  validatePerformanceRumAcceptanceReceipt,
+} from "./lib/performance-acceptance-receipts.mjs";
+import {
+  buildProviderAcceptanceReceiptBundleSha256,
+  validateProviderAcceptanceReceipts,
+  validateProviderFinalCleanupReceipt,
+} from "./lib/provider-acceptance-receipts.mjs";
+import { providerFailClosedScenarios } from "./lib/provider-fail-closed-preview.mjs";
 import {
   publicRuntimeArtifactFiles,
   validatePublicRuntimeProtectedReceipt,
 } from "./lib/public-runtime-protected-receipt.mjs";
+import { validateProductionFunnelTokenCutoverEvidence } from "./lib/production-funnel-token-cutover-receipt.mjs";
 import { validateOperationalGateReceipt } from "./lib/operational-gate-receipts.mjs";
 import {
+  protectedWorkflowEvidenceFiles,
+  twoTenantParentBaseArtifactFile,
   validateProtectedWorkflowProvenanceReceipt,
   verifyGitHubArtifactAttestation,
 } from "./lib/protected-workflow-provenance-receipt.mjs";
@@ -44,6 +61,7 @@ import {
 } from "../src/lib/launch-scope.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const maximumApprovalTrustAnchorBytes = 256 * 1024;
 const defaultAttestationPath =
   "docs/audit/2026-08-23/final-preview-release-attestation.template.json";
 
@@ -122,6 +140,14 @@ export const finalPreviewGateBindings = Object.freeze([
     statusJsonPointer: "/releaseGateStatus",
   }),
   Object.freeze({
+    candidateJsonPointer: "/candidateCommit",
+    fileName: "production-funnel-token-cutover.json",
+    id: "production-funnel-token-cutover",
+    schemaJsonPointer: "/schemaVersion",
+    schemaValue: 1,
+    statusJsonPointer: "/status",
+  }),
+  Object.freeze({
     candidateJsonPointer: "/expectedSha",
     fileName: "accessibility-browser.json",
     id: "accessibility-browser",
@@ -186,6 +212,7 @@ export const finalPerformanceBudgetPolicy = Object.freeze({
     interactionToNextPaintMaxMs: 200,
     largestContentfulPaintMaxMs: 2_500,
   }),
+  requiredApprovalRoles: Object.freeze(performanceBudgetApprovalRoles.map((entry) => entry.approvalRole)),
   schemaVersion: 1,
 });
 
@@ -231,6 +258,16 @@ const approvalKeyIdPattern = /^key_[A-Za-z0-9_-]{8,120}$/u;
 const signerSubjectPattern = /^subject:[A-Za-z0-9][A-Za-z0-9._:@/-]{7,240}$/u;
 const evidenceRunIdPattern = /^run-\d{8}T\d{6}Z-[a-f0-9]{12}$/u;
 const evidenceRunRoot = "docs/audit/2026-08-23/final-evidence/runs";
+const requiredLegalPageRoutes = Object.freeze([
+  "/cookies",
+  "/data-deletion",
+  "/imprint",
+  "/meta",
+  "/privacy",
+  "/terms",
+  "/unsubscribe",
+]);
+const requiredLegalLanguages = Object.freeze(["de", "en"]);
 
 function invariant(condition, code) {
   if (!condition) throw new Error(code);
@@ -326,24 +363,83 @@ async function resolveTrustedRepositoryRegularFile(relativePath) {
   return resolveTrustedRepositoryRegularFileAtRoot(relativePath, repositoryRoot);
 }
 
-async function resolveExternalTrustAnchorRegularFile(absolutePath) {
+function isBoundedSingleLinkRegularFile(stats) {
+  return stats.isFile()
+    && !stats.isSymbolicLink()
+    && stats.nlink === 1
+    && Number.isSafeInteger(stats.size)
+    && stats.size > 0
+    && stats.size <= maximumApprovalTrustAnchorBytes;
+}
+
+function sameOpenedFileIdentity(left, right) {
+  return left.dev === right.dev
+    && left.ino === right.ino
+    && left.mode === right.mode
+    && left.nlink === right.nlink
+    && left.size === right.size
+    && left.mtimeMs === right.mtimeMs
+    && left.ctimeMs === right.ctimeMs;
+}
+
+async function readExternalTrustAnchorRegularFile(absolutePath) {
   invariant(
     typeof absolutePath === "string" && isAbsolute(absolutePath),
     "FINAL_ATTESTATION_TRUST_ANCHOR_PATH_INVALID",
   );
   const target = resolve(absolutePath);
-  const stats = await lstat(target);
-  invariant(stats.isFile() && !stats.isSymbolicLink(), "FINAL_ATTESTATION_TRUST_ANCHOR_NOT_REGULAR");
-  const [realRepositoryRoot, realTarget] = await Promise.all([
+  const before = await lstat(target);
+  invariant(isBoundedSingleLinkRegularFile(before), "FINAL_ATTESTATION_TRUST_ANCHOR_NOT_BOUNDED_SINGLE_LINK_FILE");
+  const [realRepositoryRoot, realTargetBefore] = await Promise.all([
     realpath(repositoryRoot),
     realpath(target),
   ]);
-  const targetRelative = relative(realRepositoryRoot, realTarget);
+  const targetRelative = relative(realRepositoryRoot, realTargetBefore);
   invariant(
     targetRelative === ".." || targetRelative.startsWith(`..${sep}`),
     "FINAL_ATTESTATION_TRUST_ANCHOR_MUST_BE_EXTERNAL",
   );
-  return realTarget;
+  let handle;
+  try {
+    handle = await open(target, "r");
+    const opened = await handle.stat();
+    invariant(
+      isBoundedSingleLinkRegularFile(opened)
+        && sameOpenedFileIdentity(before, opened),
+      "FINAL_ATTESTATION_TRUST_ANCHOR_CHANGED_BEFORE_OPEN",
+    );
+    const source = Buffer.alloc(opened.size);
+    let offset = 0;
+    while (offset < source.length) {
+      const { bytesRead } = await handle.read(
+        source,
+        offset,
+        source.length - offset,
+        offset,
+      );
+      invariant(bytesRead > 0, "FINAL_ATTESTATION_TRUST_ANCHOR_CHANGED_DURING_READ");
+      offset += bytesRead;
+    }
+    const trailingByte = Buffer.alloc(1);
+    const trailingRead = await handle.read(trailingByte, 0, 1, offset);
+    invariant(trailingRead.bytesRead === 0, "FINAL_ATTESTATION_TRUST_ANCHOR_CHANGED_DURING_READ");
+    const [openedAfterRead, after, realTargetAfter] = await Promise.all([
+      handle.stat(),
+      lstat(target),
+      realpath(target),
+    ]);
+    invariant(
+      isBoundedSingleLinkRegularFile(openedAfterRead)
+        && isBoundedSingleLinkRegularFile(after)
+        && sameOpenedFileIdentity(opened, openedAfterRead)
+        && sameOpenedFileIdentity(opened, after)
+        && realTargetAfter === realTargetBefore,
+      "FINAL_ATTESTATION_TRUST_ANCHOR_CHANGED_DURING_READ",
+    );
+    return source;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 function runReadOnlyGit(args, { allowFailure = false, cwd = repositoryRoot, encoding = "utf8" } = {}) {
@@ -390,6 +486,59 @@ async function assertRepositoryFileMatchesCommit(repositoryPath, commit, reposit
   invariant(workingBytes.equals(committedBytes), "FINAL_ATTESTATION_GIT_BLOB_WORKTREE_MISMATCH");
 }
 
+export async function verifyLegalManifestCandidateSources({
+  candidateCommit,
+  legalContentManifest,
+  repositoryRootPath = repositoryRoot,
+}) {
+  invariant(isPlainObject(legalContentManifest), "FINAL_ATTESTATION_LEGAL_MANIFEST_REQUIRED");
+  invariant(isCommitSha(candidateCommit), "FINAL_ATTESTATION_LEGAL_CANDIDATE_COMMIT_INVALID");
+  invariant(
+    isPlainObject(legalContentManifest.sharedFacts),
+    "FINAL_ATTESTATION_LEGAL_SHARED_FACTS_INVALID",
+  );
+  const sourceRecords = [
+    legalContentManifest.sharedFacts,
+    ...[
+      ...(Array.isArray(legalContentManifest.pages) ? legalContentManifest.pages : []),
+      ...(Array.isArray(legalContentManifest.routeAliases) ? legalContentManifest.routeAliases : []),
+      ...(Array.isArray(legalContentManifest.functionalContracts)
+        ? legalContentManifest.functionalContracts
+        : []),
+    ].flatMap((entry) => (Array.isArray(entry?.sourceFiles) ? entry.sourceFiles : [])),
+  ];
+  const sourcePaths = sourceRecords.map((source) => source?.path);
+  invariant(
+    sourcePaths.length > 1
+      && sourcePaths.every((sourcePath) => typeof sourcePath === "string")
+      && new Set(sourcePaths).size === sourcePaths.length,
+    "FINAL_ATTESTATION_LEGAL_SOURCE_INVENTORY_INVALID",
+  );
+  for (const source of sourceRecords) {
+    assertExactKeys(source, ["path", "sha256"], "FINAL_ATTESTATION_LEGAL_SOURCE");
+    assertRepositoryRelativePath(source.path, "FINAL_ATTESTATION_LEGAL_SOURCE_PATH_INVALID");
+    invariant(isDigest(source.sha256), "FINAL_ATTESTATION_LEGAL_SOURCE_DIGEST_INVALID");
+    assertGitRegularBlob(candidateCommit, source.path, repositoryRootPath);
+    const committed = runReadOnlyGit(
+      ["show", `${candidateCommit}:${source.path}`],
+      { cwd: repositoryRootPath, encoding: null },
+    );
+    invariant(committed.status === 0, "FINAL_ATTESTATION_LEGAL_SOURCE_READ_FAILED");
+    const committedBytes = Buffer.isBuffer(committed.stdout)
+      ? committed.stdout
+      : Buffer.from(committed.stdout ?? "");
+    invariant(
+      sha256(committedBytes) === source.sha256,
+      "FINAL_ATTESTATION_LEGAL_SOURCE_DIGEST_MISMATCH",
+    );
+  }
+  return Object.freeze({
+    candidateCommit,
+    sourceCount: sourceRecords.length,
+    status: "PASS",
+  });
+}
+
 export async function verifyFinalPreviewRepositoryProvenance({
   attestation,
   attestationPath,
@@ -408,12 +557,28 @@ export async function verifyFinalPreviewRepositoryProvenance({
   invariant(status.length === 0, "FINAL_ATTESTATION_REPOSITORY_NOT_CLEAN");
   const head = gitText(["rev-parse", "--verify", "HEAD"], { cwd: repositoryRootPath }).stdout;
   invariant(isCommitSha(head), "FINAL_ATTESTATION_HEAD_INVALID");
+  const candidateCommit = attestation.runtime?.candidateCommit;
+  invariant(isCommitSha(candidateCommit), "FINAL_ATTESTATION_CANDIDATE_COMMIT_INVALID");
   const evidenceCommit = attestation.evidenceProvenance.evidenceCommit;
+  const candidateAncestry = runReadOnlyGit(
+    ["merge-base", "--is-ancestor", candidateCommit, evidenceCommit],
+    { allowFailure: true, cwd: repositoryRootPath },
+  );
+  invariant(candidateAncestry.status === 0, "FINAL_ATTESTATION_CANDIDATE_NOT_EVIDENCE_ANCESTOR");
   const ancestry = runReadOnlyGit(
     ["merge-base", "--is-ancestor", evidenceCommit, head],
     { allowFailure: true, cwd: repositoryRootPath },
   );
   invariant(ancestry.status === 0, "FINAL_ATTESTATION_EVIDENCE_COMMIT_NOT_ANCESTOR");
+
+  const evidenceParents = gitText(
+    ["rev-list", "--parents", "-n", "1", evidenceCommit],
+    { cwd: repositoryRootPath },
+  ).stdout.split(/\s+/u);
+  invariant(
+    evidenceParents.length === 2 && evidenceParents[1] === candidateCommit,
+    "FINAL_ATTESTATION_EVIDENCE_COMMIT_MUST_DIRECTLY_FOLLOW_CANDIDATE",
+  );
 
   const parent = gitText(
     ["rev-parse", "--verify", `${evidenceCommit}^`],
@@ -434,6 +599,20 @@ export async function verifyFinalPreviewRepositoryProvenance({
       .flatMap((entry) => [entry.path, entry.sidecarPath]),
   ];
   invariant(new Set(evidencePaths).size === evidencePaths.length, "FINAL_ATTESTATION_PROVENANCE_PATH_REUSED");
+  const evidenceChangedPaths = gitText([
+    "diff",
+    "--name-only",
+    "--no-renames",
+    candidateCommit,
+    evidenceCommit,
+    "--",
+  ], { cwd: repositoryRootPath }).stdout.split(/\r?\n/u).filter(Boolean);
+  invariant(
+    evidenceChangedPaths.length === evidencePaths.length
+      && new Set(evidenceChangedPaths).size === evidenceChangedPaths.length
+      && evidencePaths.every((repositoryPath) => evidenceChangedPaths.includes(repositoryPath)),
+    "FINAL_ATTESTATION_EVIDENCE_COMMIT_PATHS_INVALID",
+  );
   for (const repositoryPath of evidencePaths) {
     await assertRepositoryFileMatchesCommit(repositoryPath, evidenceCommit, repositoryRootPath);
   }
@@ -448,6 +627,20 @@ export async function verifyFinalPreviewRepositoryProvenance({
     }
   }
   invariant(new Set(headPaths).size === headPaths.length, "FINAL_ATTESTATION_HEAD_PATH_REUSED");
+  const approvalChangedPaths = gitText([
+    "diff",
+    "--name-only",
+    "--no-renames",
+    evidenceCommit,
+    head,
+    "--",
+  ], { cwd: repositoryRootPath }).stdout.split(/\r?\n/u).filter(Boolean);
+  invariant(
+    approvalChangedPaths.length === headPaths.length
+      && new Set(approvalChangedPaths).size === approvalChangedPaths.length
+      && headPaths.every((repositoryPath) => approvalChangedPaths.includes(repositoryPath)),
+    "FINAL_ATTESTATION_APPROVAL_COMMIT_PATHS_INVALID",
+  );
   for (const repositoryPath of headPaths) {
     await assertRepositoryFileMatchesCommit(repositoryPath, head, repositoryRootPath);
   }
@@ -1047,8 +1240,8 @@ export function validateReleaseDocumentCandidateState({
       "FINAL_ATTESTATION_RELEASE_SURFACE_NOT_SIGNED",
     );
     invariant(
-      releaseGateMatrix.approvalStatus === "SIGNED",
-      "FINAL_ATTESTATION_RELEASE_MATRIX_NOT_SIGNED",
+      releaseGateMatrix.approvalStatus === "READY_FOR_EXTERNAL_SIGNATURE",
+      "FINAL_ATTESTATION_RELEASE_MATRIX_NOT_READY_FOR_SIGNATURE",
     );
     assertExactKeys(
       releaseGateMatrix.signatures,
@@ -1056,9 +1249,8 @@ export function validateReleaseDocumentCandidateState({
       "FINAL_ATTESTATION_RELEASE_MATRIX_SIGNATURES",
     );
     invariant(
-      signatureRoles.every((role) =>
-        releaseGateMatrix.signatures[role] === attestation.signatures[role].signatureReference),
-      "FINAL_ATTESTATION_RELEASE_MATRIX_SIGNATURE_REFERENCE_MISMATCH",
+      signatureRoles.every((role) => releaseGateMatrix.signatures[role] === null),
+      "FINAL_ATTESTATION_RELEASE_MATRIX_EMBEDDED_SIGNATURE_FORBIDDEN",
     );
     const desiredByDecision = {
       [launchScopeDecisions.internalOnly]: "INTERNAL",
@@ -1123,9 +1315,9 @@ export function validateReleaseDocumentCandidateState({
     invariant(
       isPlainObject(relationshipDecision)
         && relationshipDecision.decision === "OFF"
-        && relationshipDecision.status === "SIGNED"
+        && relationshipDecision.status === "READY_FOR_EXTERNAL_SIGNATURE"
         && isPlainObject(relationshipDecision.requiredSignatures),
-      "FINAL_ATTESTATION_RELATIONSHIP_DECISION_NOT_SIGNED",
+      "FINAL_ATTESTATION_RELATIONSHIP_DECISION_NOT_READY_FOR_SIGNATURE",
     );
     assertExactKeys(
       relationshipDecision.requiredSignatures,
@@ -1133,10 +1325,14 @@ export function validateReleaseDocumentCandidateState({
       "FINAL_ATTESTATION_RELATIONSHIP_SIGNATURES",
     );
     invariant(
-      Object.entries(relationshipApprovalRoles).every(([role, matrixKey]) =>
-        relationshipDecision.requiredSignatures[matrixKey]
-          === attestation.signatures[role].signatureReference),
-      "FINAL_ATTESTATION_RELATIONSHIP_SIGNATURE_REFERENCE_MISMATCH",
+      Object.values(relationshipApprovalRoles).every((matrixKey) =>
+        relationshipDecision.requiredSignatures[matrixKey] === null),
+      "FINAL_ATTESTATION_RELATIONSHIP_EMBEDDED_SIGNATURE_FORBIDDEN",
+    );
+    invariant(
+      Object.keys(relationshipApprovalRoles).every((role) =>
+        attestation.signatures[role].approvalScopes.includes("UNIT_BUYER_DEAL")),
+      "FINAL_ATTESTATION_RELATIONSHIP_APPROVAL_SCOPE_MISSING",
     );
 
     const expectedPreviewOrigin = `https://${attestation.runtime.deploymentHost}`;
@@ -1153,12 +1349,41 @@ export function validateReleaseDocumentCandidateState({
       Array.isArray(legalContentManifest.pages) && legalContentManifest.pages.length > 0,
       "FINAL_ATTESTATION_LEGAL_PAGES_MISSING",
     );
+    invariant(
+      legalContentManifest.schemaVersion === 2
+        && legalContentManifest.sharedFacts?.path === "src/lib/legal.ts"
+        && isDigest(legalContentManifest.sharedFacts?.sha256),
+      "FINAL_ATTESTATION_LEGAL_MANIFEST_CONTRACT_INVALID",
+    );
+    assertExactStringInventory(
+      legalContentManifest.pages.map((page) => page?.route),
+      requiredLegalPageRoutes,
+      "FINAL_ATTESTATION_LEGAL_PAGE_ROUTE_INVENTORY",
+    );
     for (const page of legalContentManifest.pages) {
+      assertExactStringInventory(
+        page.languages,
+        requiredLegalLanguages,
+        "FINAL_ATTESTATION_LEGAL_LANGUAGE_INVENTORY",
+      );
+      invariant(
+        Array.isArray(page.sourceFiles) && page.sourceFiles.length > 0,
+        "FINAL_ATTESTATION_LEGAL_PAGE_SOURCES_MISSING",
+      );
       invariant(
         Array.isArray(page.renderedVariants) && page.renderedVariants.length > 0,
         "FINAL_ATTESTATION_LEGAL_VARIANTS_MISSING",
       );
+      assertExactStringInventory(
+        page.renderedVariants.map((variant) => variant?.language),
+        requiredLegalLanguages,
+        "FINAL_ATTESTATION_LEGAL_VARIANT_LANGUAGE_INVENTORY",
+      );
       for (const variant of page.renderedVariants) {
+        invariant(
+          variant.path === `${page.route}?lang=${variant.language}`,
+          "FINAL_ATTESTATION_LEGAL_VARIANT_PATH_INVALID",
+        );
         invariant(variant.renderStatus === "VERIFIED", "FINAL_ATTESTATION_LEGAL_RENDER_NOT_VERIFIED");
         invariant(variant.legalStatus === "APPROVED", "FINAL_ATTESTATION_LEGAL_VARIANT_NOT_APPROVED");
         invariant(
@@ -1168,16 +1393,43 @@ export function validateReleaseDocumentCandidateState({
         invariant(isIsoTimestamp(variant.approvedAt), "FINAL_ATTESTATION_LEGAL_APPROVAL_TIME_INVALID");
         invariant(isDigest(variant.renderedContentSha256), "FINAL_ATTESTATION_LEGAL_RENDER_DIGEST_INVALID");
         invariant(
-          typeof variant.testedUrl === "string"
-            && (variant.testedUrl === expectedPreviewOrigin || variant.testedUrl.startsWith(`${expectedPreviewOrigin}/`)),
+          variant.testedUrl === `${expectedPreviewOrigin}${variant.path}`,
           "FINAL_ATTESTATION_LEGAL_TESTED_URL_MISMATCH",
         );
       }
     }
-    for (const entry of [
-      ...(Array.isArray(legalContentManifest.routeAliases) ? legalContentManifest.routeAliases : []),
-      ...(Array.isArray(legalContentManifest.functionalContracts) ? legalContentManifest.functionalContracts : []),
-    ]) {
+    assertExactStringInventory(
+      legalContentManifest.routeAliases?.map((entry) => entry?.route),
+      ["/datadeletion"],
+      "FINAL_ATTESTATION_LEGAL_ALIAS_INVENTORY",
+    );
+    const dataDeletionAlias = legalContentManifest.routeAliases[0];
+    invariant(
+      dataDeletionAlias.canonicalRoute === "/data-deletion"
+        && dataDeletionAlias.technicalStatus === "VERIFIED_ALIAS"
+        && Array.isArray(dataDeletionAlias.sourceFiles)
+        && dataDeletionAlias.sourceFiles.length > 0,
+      "FINAL_ATTESTATION_LEGAL_ALIAS_CONTRACT_INVALID",
+    );
+    assertExactStringInventory(
+      legalContentManifest.functionalContracts?.map((entry) => entry?.id),
+      ["unsubscribe-confirm"],
+      "FINAL_ATTESTATION_LEGAL_FUNCTIONAL_CONTRACT_INVENTORY",
+    );
+    const unsubscribeConfirm = legalContentManifest.functionalContracts[0];
+    assertExactStringInventory(
+      unsubscribeConfirm.methods,
+      ["POST"],
+      "FINAL_ATTESTATION_LEGAL_FUNCTIONAL_METHOD_INVENTORY",
+    );
+    invariant(
+      unsubscribeConfirm.route === "/unsubscribe/confirm"
+        && unsubscribeConfirm.technicalStatus === "VERIFIED_BY_SECURITY_TESTS"
+        && Array.isArray(unsubscribeConfirm.sourceFiles)
+        && unsubscribeConfirm.sourceFiles.length > 0,
+      "FINAL_ATTESTATION_LEGAL_FUNCTIONAL_CONTRACT_INVALID",
+    );
+    for (const entry of [dataDeletionAlias, unsubscribeConfirm]) {
       invariant(entry.legalStatus === "APPROVED", "FINAL_ATTESTATION_LEGAL_CONTRACT_NOT_APPROVED");
       invariant(
         typeof entry.legalOwner === "string" && entry.legalOwner.trim(),
@@ -1265,6 +1517,22 @@ function assertTwoTenantPass(document, runtime, {
         .test(document.workflowTrust.workflowRef),
     "FINAL_ATTESTATION_TWO_TENANT_TRUSTED_WORKFLOW_RECEIPT_INVALID",
   );
+  const twoTenantParentBase = Object.fromEntries(
+    Object.entries(document).filter(([key]) =>
+      !["protectedWorkflowArtifactManifest", "protectedWorkflowReceipt"].includes(key)),
+  );
+  const canonicalParentBase = canonicalJson(twoTenantParentBase);
+  const parentBaseArtifact = document.protectedWorkflowArtifactManifest?.files?.find(
+    (entry) => entry?.name === twoTenantParentBaseArtifactFile,
+  );
+  invariant(
+    parentBaseArtifact?.sha256 === sha256(canonicalParentBase),
+    "FINAL_ATTESTATION_TWO_TENANT_PARENT_BASE_DIGEST_MISMATCH",
+  );
+  invariant(
+    parentBaseArtifact.sizeBytes === Buffer.byteLength(canonicalParentBase, "utf8"),
+    "FINAL_ATTESTATION_TWO_TENANT_PARENT_BASE_SIZE_MISMATCH",
+  );
   const receiptValidationInput = {
     artifactManifest: document.protectedWorkflowArtifactManifest,
     expectedArtifactDigest: document.protectedWorkflowArtifactManifest?.artifactDigest,
@@ -1293,6 +1561,7 @@ function assertTwoTenantPass(document, runtime, {
     artifactManifest: document.protectedWorkflowArtifactManifest,
     artifactPath: protectedWorkflowVerification.artifactPath,
     attestationBundlePath: protectedWorkflowVerification.attestationBundlePath,
+    expectedEvidenceFiles: protectedWorkflowEvidenceFiles,
     expectedSigstoreTrustedRootSha256:
       protectedWorkflowVerification.expectedSigstoreTrustedRootSha256,
     expectedWorkflowRef: document.workflowTrust.workflowRef,
@@ -1452,12 +1721,19 @@ function assertProviderPass(document, runtime, { trustContext = null } = {}) {
     providerExpectedRequestIds,
     "FINAL_ATTESTATION_PROVIDER_REQUESTS",
   );
+  const scenarioById = new Map(providerFailClosedScenarios.map((entry) => [entry.id, entry]));
   for (const request of document.requests) {
     const identityRequest = request.id === "identity.session" || request.id === "identity.runtime";
     invariant(
       identityRequest
-        ? request.status === 200 && ["SESSION_SCOPE_MATCH", "RUNTIME_IDENTITY_MATCH"].includes(request.code)
-        : request.status === 503 && request.code === "LAUNCH_SCOPE_OFF",
+        ? request.status === 200
+          && request.method === "GET"
+          && request.csrf === "not-applicable"
+          && ["SESSION_SCOPE_MATCH", "RUNTIME_IDENTITY_MATCH"].includes(request.code)
+        : request.status === 503
+          && request.code === "LAUNCH_SCOPE_OFF"
+          && request.method === scenarioById.get(request.id)?.method
+          && request.csrf === scenarioById.get(request.id)?.csrf,
       "FINAL_ATTESTATION_PROVIDER_REQUEST_RESULT_INVALID",
     );
   }
@@ -1488,6 +1764,76 @@ function assertProviderPass(document, runtime, { trustContext = null } = {}) {
     document.collectionMode === "LIVE_PROVIDER_ACCEPTANCE",
     "FINAL_ATTESTATION_PROVIDER_LIVE_ACCEPTANCE_REQUIRED",
   );
+  const assembly = document.providerAcceptanceAssembly;
+  assertExactKeys(assembly, [
+    "acceptanceIds",
+    "acceptanceCompletedAt",
+    "acceptanceReceiptBundleSha256",
+    "databasePostconditionSha256",
+    "evidenceManifest",
+    "finalCleanupReceiptPayloadSha256",
+    "receiptPayloadSha256",
+    "sourceArtifactSha256",
+    "sourceCollectorSha256",
+    "sourceCompletedAt",
+    "sourceIndependentProviderLogs",
+    "sourceReleaseGateStatus",
+  ], "FINAL_ATTESTATION_PROVIDER_ASSEMBLY");
+  invariant(
+    isDigest(assembly.sourceArtifactSha256)
+      && isDigest(assembly.sourceCollectorSha256)
+      && isDigest(assembly.acceptanceReceiptBundleSha256)
+      && isDigest(assembly.finalCleanupReceiptPayloadSha256)
+      && isIsoTimestamp(assembly.acceptanceCompletedAt)
+      && isIsoTimestamp(assembly.sourceCompletedAt)
+      && assembly.sourceIndependentProviderLogs === "UNPROVEN"
+      && assembly.sourceReleaseGateStatus === "BLOCKED"
+      && assembly.databasePostconditionSha256 === sha256(canonicalJson(database)),
+    "FINAL_ATTESTATION_PROVIDER_ASSEMBLY_SOURCE_INVALID",
+  );
+  const rawCollector = { ...document };
+  delete rawCollector.collectionMode;
+  delete rawCollector.providerAcceptanceAssembly;
+  delete rawCollector.providerAcceptanceReceipts;
+  delete rawCollector.providerFinalCleanupReceipt;
+  rawCollector.completedAt = assembly.sourceCompletedAt;
+  rawCollector.providerSideEffectPostcondition = {
+    codeOrderAndHttpGate: "PASS",
+    independentProviderLogs: "UNPROVEN",
+    reasonCode: "INDEPENDENT_PROVIDER_LOGS_NOT_COLLECTED",
+  };
+  rawCollector.releaseGateStatus = "BLOCKED";
+  invariant(
+    rawCollector.httpTechnicalStatus === "PASS"
+      && rawCollector.productionMutationPerformed === false
+      && isIsoTimestamp(rawCollector.startedAt)
+      && Date.parse(rawCollector.completedAt) >= Date.parse(rawCollector.startedAt)
+      && sha256(canonicalJson(rawCollector)) === assembly.sourceCollectorSha256,
+    "FINAL_ATTESTATION_PROVIDER_SOURCE_RECONSTRUCTION_MISMATCH",
+  );
+  const receiptPayloadSha256 = document.providerAcceptanceReceipts?.map((receipt) => receipt?.payloadSha256);
+  const acceptanceIds = document.providerAcceptanceReceipts?.map((receipt) => receipt?.payload?.acceptanceId);
+  const evidenceManifest = document.providerAcceptanceReceipts?.map((receipt) => ({
+    acceptanceArtifactSha256: receipt?.payload?.artifactSha256,
+    acceptanceId: receipt?.payload?.acceptanceId,
+    cleanupEvidenceSha256: receipt?.payload?.postAcceptance?.cleanupEvidenceSha256,
+    databaseEvidenceSha256: receipt?.payload?.postAcceptance?.databaseEvidenceSha256,
+    providerAccountFingerprint: receipt?.payload?.providerIdentity?.providerAccountFingerprint,
+    providerLogArtifactSha256: receipt?.payload?.providerIdentity?.providerLogArtifactSha256,
+    qaTargetFingerprint: receipt?.payload?.qaTargetFingerprint,
+    receiptId: receipt?.receiptId,
+    receiptRole: receipt?.role,
+  }));
+  invariant(
+    canonicalJson(assembly.acceptanceIds) === canonicalJson(acceptanceIds)
+      && canonicalJson(assembly.receiptPayloadSha256) === canonicalJson(receiptPayloadSha256)
+      && canonicalJson(assembly.evidenceManifest) === canonicalJson(evidenceManifest)
+      && assembly.acceptanceCompletedAt === [...document.providerAcceptanceReceipts]
+        .map((receipt) => receipt.signedAt)
+        .sort()
+        .at(-1),
+    "FINAL_ATTESTATION_PROVIDER_ASSEMBLY_INVENTORY_MISMATCH",
+  );
   validateProviderAcceptanceReceipts({
     databasePostcondition: database,
     receipts: document.providerAcceptanceReceipts,
@@ -1499,6 +1845,31 @@ function assertProviderPass(document, runtime, { trustContext = null } = {}) {
       gitBranch: runtime.branch,
       productionMutationPerformed: false,
     },
+    sourceArtifactSha256: assembly.sourceArtifactSha256,
+    sourceCollectorSha256: assembly.sourceCollectorSha256,
+    sourceCompletedAt: assembly.sourceCompletedAt,
+    trustContext,
+  });
+  invariant(
+    assembly.acceptanceReceiptBundleSha256
+      === buildProviderAcceptanceReceiptBundleSha256(document.providerAcceptanceReceipts)
+      && assembly.finalCleanupReceiptPayloadSha256 === document.providerFinalCleanupReceipt?.payloadSha256
+      && document.completedAt === document.providerFinalCleanupReceipt?.signedAt,
+    "FINAL_ATTESTATION_PROVIDER_FINAL_CLEANUP_BINDING_MISMATCH",
+  );
+  validateProviderFinalCleanupReceipt({
+    receipt: document.providerFinalCleanupReceipt,
+    receipts: document.providerAcceptanceReceipts,
+    runtime: {
+      candidateCommit: runtime.candidateCommit,
+      databaseBranchId: runtime.databaseBranchId,
+      deploymentHost: runtime.deploymentHost,
+      deploymentId: runtime.deploymentId,
+      gitBranch: runtime.branch,
+      productionMutationPerformed: false,
+    },
+    sourceArtifactSha256: assembly.sourceArtifactSha256,
+    sourceCollectorSha256: assembly.sourceCollectorSha256,
     trustContext,
   });
   invariant(
@@ -1571,9 +1942,14 @@ function assertPublicPass(document, runtime, {
       && document.mutationGate?.reasonCode === null,
     "FINAL_ATTESTATION_PUBLIC_MUTATION_GATE_INVALID",
   );
+  const publicRuntimeParentBase = Object.fromEntries(
+    Object.entries(document).filter(([key]) =>
+      !["protectedWorkflowArtifactManifest", "protectedWorkflowReceipt"].includes(key)),
+  );
   const publicReceiptResult = validatePublicRuntimeProtectedReceipt({
     artifactManifest: document.protectedWorkflowArtifactManifest,
     cleanup: document.cleanup,
+    parentBase: publicRuntimeParentBase,
     proofs: document.proofs,
     receipt: document.protectedWorkflowReceipt,
     runtime: {
@@ -1688,8 +2064,9 @@ function assertA11yPass(document, runtime, { trustContext = null } = {}) {
       && document.acceptance?.matrixSigned === true
       && document.acceptance?.signaturesComplete === true
       && document.acceptance?.status === "SIGNED"
+      && document.acceptance.manualCheckCount === accessibilityRequiredManualCheckIds.length
       && document.acceptance.manualCheckCount === document.acceptance.manualPassCount
-      && document.acceptance.signatureCount > 0,
+      && document.acceptance.signatureCount === accessibilityApprovalRoles.length,
     "FINAL_ATTESTATION_A11Y_ACCEPTANCE_INVALID",
   );
   invariant(
@@ -1707,28 +2084,50 @@ function assertA11yPass(document, runtime, { trustContext = null } = {}) {
   );
   assertExactKeys(
     document.manualAcceptance,
-    ["automatedEvidence", "individualEvidence", "matrix", "receipt"],
+    [
+      "approvalReceipts",
+      "automatedEvidence",
+      "databaseProjectId",
+      "fixtureLifecycle",
+      "fixtureLifecycleSha256",
+      "individualEvidence",
+      "matrix",
+    ],
     "FINAL_ATTESTATION_A11Y_MANUAL_ACCEPTANCE",
   );
-  validateAccessibilityManualAcceptanceReceipt({
+  validateAccessibilityApprovalReceipts({
+    approvalReceipts: document.manualAcceptance.approvalReceipts,
     automatedEvidence: document.manualAcceptance.automatedEvidence,
+    databaseProjectId: document.manualAcceptance.databaseProjectId,
     expectedAutomatedEvidence: {
+      automatedSourceSha256: document.automatedSourceSha256,
       automatedSubsetPassed: document.automatedSubsetPassed,
       automatedTechnicalPassed: document.automatedTechnicalPassed,
+      browser: document.browser,
+      cleanup: document.cleanup,
       coverage: document.coverage,
+      endedAt: document.endedAt,
+      evidenceDigest: document.evidenceDigest,
+      executionBlocker: document.executionBlocker,
+      executionScope: document.executionScope,
       expectedSha: document.expectedSha,
+      generatedAt: document.generatedAt,
       matrix: document.matrix,
+      mode: document.mode,
       productionMutationPerformed: document.productionMutationPerformed,
       releaseSurfaceManifestVerified: document.releaseSurfaceManifestVerified,
       results: document.results,
       runtimeIdentity: document.runtimeIdentity,
       schemaVersion: document.schemaVersion,
+      startedAt: document.startedAt,
       targetHost: document.targetHost,
       unsafeHttpWriteGuard: document.unsafeHttpWriteGuard,
+      wcagStandard: document.wcagStandard,
     },
+    fixtureLifecycle: document.manualAcceptance.fixtureLifecycle,
+    fixtureLifecycleSha256: document.manualAcceptance.fixtureLifecycleSha256,
     individualEvidence: document.manualAcceptance.individualEvidence,
     matrix: document.manualAcceptance.matrix,
-    receipt: document.manualAcceptance.receipt,
     runtime: {
       candidateCommit: runtime.candidateCommit,
       databaseBranchId: runtime.databaseBranchId,
@@ -1759,7 +2158,13 @@ export function expectedPerformanceBudgetFailures(entry) {
   );
   assertExactKeys(
     metrics,
-    ["cumulativeLayoutShift", "largestContentfulPaint", "totalBlockingTime"],
+    [
+      "cumulativeLayoutShift",
+      "interactionToNextPaint",
+      "largestContentfulPaint",
+      "totalBlockingTime",
+      "totalByteWeight",
+    ],
     "FINAL_ATTESTATION_PERFORMANCE_METRICS",
   );
   for (const score of Object.values(scores)) {
@@ -1777,7 +2182,14 @@ export function expectedPerformanceBudgetFailures(entry) {
       && metrics.cumulativeLayoutShift >= 0
       && typeof metrics.totalBlockingTime === "number"
       && Number.isFinite(metrics.totalBlockingTime)
-      && metrics.totalBlockingTime >= 0,
+      && metrics.totalBlockingTime >= 0
+      && (metrics.interactionToNextPaint === null
+        || (typeof metrics.interactionToNextPaint === "number"
+          && Number.isFinite(metrics.interactionToNextPaint)
+          && metrics.interactionToNextPaint >= 0))
+      && typeof metrics.totalByteWeight === "number"
+      && Number.isFinite(metrics.totalByteWeight)
+      && metrics.totalByteWeight > 0,
     "FINAL_ATTESTATION_PERFORMANCE_METRIC_INVALID",
   );
   invariant(
@@ -1796,6 +2208,32 @@ export function expectedPerformanceBudgetFailures(entry) {
     failures.push("bundle_regression");
   }
   return failures;
+}
+
+export function buildPerformanceTechnicalEvidenceSha256(document) {
+  invariant(isPlainObject(document), "FINAL_ATTESTATION_PERFORMANCE_DOCUMENT_INVALID");
+  return sha256(canonicalJson({
+    authenticatedCoverageComplete: document.authenticatedCoverageComplete,
+    baseOrigin: document.baseOrigin,
+    baselineProvenance: document.baselineProvenance,
+    budgetPolicySha256: document.budgetPolicySha256,
+    cleanup: document.cleanup,
+    endedAt: document.endedAt,
+    evidenceDigest: document.evidenceDigest,
+    executionBlocker: document.executionBlocker,
+    executionScope: document.executionScope,
+    expectedSha: document.expectedSha,
+    generatedAt: document.generatedAt,
+    productionMutationPerformed: document.productionMutationPerformed,
+    publicCoverageComplete: document.publicCoverageComplete,
+    results: document.results,
+    runtimeIdentity: document.runtimeIdentity,
+    schemaVersion: document.schemaVersion,
+    sessionAttestation: document.sessionAttestation,
+    startedAt: document.startedAt,
+    technicalPassed: document.technicalPassed,
+    tool: document.tool,
+  }));
 }
 
 function assertPerformancePass(document, runtime, { trustContext = null } = {}) {
@@ -1848,6 +2286,11 @@ function assertPerformancePass(document, runtime, { trustContext = null } = {}) 
       && document.realUserMonitoring?.status === "PASS",
     "FINAL_ATTESTATION_PERFORMANCE_MANUAL_OR_RUM_INVALID",
   );
+  const technicalEvidenceSha256 = buildPerformanceTechnicalEvidenceSha256(document);
+  invariant(
+    document.technicalEvidenceSha256 === technicalEvidenceSha256,
+    "FINAL_ATTESTATION_PERFORMANCE_TECHNICAL_EVIDENCE_DIGEST_MISMATCH",
+  );
   const receiptRuntime = {
     candidateCommit: runtime.candidateCommit,
     databaseBranchId: runtime.databaseBranchId,
@@ -1856,16 +2299,32 @@ function assertPerformancePass(document, runtime, { trustContext = null } = {}) 
     gitBranch: runtime.branch,
     productionMutationPerformed: false,
   };
+  assertExactKeys(
+    document.budgetApprovalReceipts,
+    finalPerformanceBudgetPolicy.requiredApprovalRoles,
+    "FINAL_ATTESTATION_PERFORMANCE_BUDGET_APPROVAL_RECEIPTS",
+  );
+  for (const approvalRole of finalPerformanceBudgetPolicy.requiredApprovalRoles) {
+    validatePerformanceBudgetApprovalReceipt({
+      approvalRole,
+      budgetPolicy: finalPerformanceBudgetPolicy,
+      receipt: document.budgetApprovalReceipts[approvalRole],
+      runtime: receiptRuntime,
+      trustContext,
+    });
+  }
   validatePerformanceManualAcceptanceReceipt({
     budgetPolicy: finalPerformanceBudgetPolicy,
     receipt: document.manualAcceptanceReceipt,
     runtime: receiptRuntime,
+    technicalEvidenceSha256,
     trustContext,
   });
   validatePerformanceRumAcceptanceReceipt({
     budgetPolicy: finalPerformanceBudgetPolicy,
     receipt: document.realUserMonitoringReceipt,
     runtime: receiptRuntime,
+    technicalEvidenceSha256,
     trustContext,
   });
 }
@@ -1961,6 +2420,15 @@ export function observedFinalPreviewGateStatus(binding, document, runtime, {
     return document.httpReadOnlyStatus === "FAIL" || document.databaseAttestation?.status === "FAIL"
       ? "FAIL"
       : "BLOCKED";
+  }
+  if (binding.id === "production-funnel-token-cutover") {
+    if (document.status !== "PASS") return document.status === "FAIL" ? "FAIL" : "BLOCKED";
+    validateProductionFunnelTokenCutoverEvidence({
+      document,
+      expectedCandidateCommit: runtime.candidateCommit,
+      trustContext,
+    });
+    return "PASS";
   }
   if (binding.id === "accessibility-browser") {
     if (
@@ -2163,7 +2631,7 @@ export async function verifyExternalApprovalArtifact({ attestation, role, signat
   });
 }
 
-async function readApprovalTrustContext({
+export async function readApprovalTrustContext({
   approvalTrustAnchorPath,
   expectedApprovalTrustAnchorSha256,
 }) {
@@ -2171,8 +2639,7 @@ async function readApprovalTrustContext({
     isDigest(expectedApprovalTrustAnchorSha256),
     "FINAL_ATTESTATION_EXPECTED_TRUST_ANCHOR_DIGEST_REQUIRED",
   );
-  const path = await resolveExternalTrustAnchorRegularFile(approvalTrustAnchorPath);
-  const source = await readFile(path);
+  const source = await readExternalTrustAnchorRegularFile(approvalTrustAnchorPath);
   const digest = sha256(source);
   invariant(
     digest === expectedApprovalTrustAnchorSha256,
@@ -2206,6 +2673,7 @@ export async function verifyFinalPreviewReleaseAttestation({
           "performance",
           "provider-boundaries",
           "public-form-funnel",
+          "production-funnel-token-cutover",
           "runtime-logs",
           "security-supply-chain",
           "two-tenant-rbac-crud",
@@ -2261,6 +2729,10 @@ export async function verifyFinalPreviewReleaseAttestation({
     releaseGateMatrix: documents.get("release-gate-matrix"),
     releaseSurfaceManifest: documents.get("release-surface-manifest"),
     trustContext,
+  });
+  await verifyLegalManifestCandidateSources({
+    candidateCommit: attestation.runtime.candidateCommit,
+    legalContentManifest: documents.get("legal-content-manifest"),
   });
   if (attestation.status === "SIGNED") {
     await Promise.all(signatureRoles.map((role) => verifyExternalApprovalArtifact({

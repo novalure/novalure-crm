@@ -542,6 +542,7 @@ const evidence = {
     bundle: budgets.bundle,
     public: budgets.public,
     realUserP75: budgets.realUserP75,
+    requiredApprovalRoles: Object.keys(budgets.requiredSignatures),
     schemaVersion: budgets.schemaVersion,
   })),
   baselineProvenance: baselineAttestation.provenance,
