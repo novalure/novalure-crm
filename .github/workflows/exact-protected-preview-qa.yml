@@ -115,6 +115,9 @@ jobs:
       - name: Install dependencies from lockfile
         run: npm ci
 
+      - name: Verify the protected Preview automation-access contract
+        run: npm run test:protected-preview-access
+
       - name: Run protected Preview QA with in-memory action secrets
         id: protected_qa
         env:

@@ -3,6 +3,11 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { neon } from "@neondatabase/serverless";
+import {
+  applyVercelAutomationBypass,
+  bindVercelAutomationBypass,
+  validateVercelAutomationBypassUrl,
+} from "./vercel-preview-access.mjs";
 
 export const publicRuntimeCapabilityPath = "/api/admin/qa-batch-capability";
 
@@ -36,9 +41,7 @@ const neonBranchPattern = /^br-[A-Za-z0-9-]{8,128}$/u;
 const neonProjectPattern = /^[A-Za-z0-9-]{8,128}$/u;
 const hostnamePattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/u;
 const sessionCookiePattern = /^novalure_session=[A-Za-z0-9._~-]{20,4096}$/u;
-const shareLandingOrigin = "https://vercel.com";
 const redirectStatuses = new Set([302, 303, 307, 308]);
-const maximumRedirects = 5;
 const productionHosts = new Set([
   "novalure-crm.app",
   "www.novalure-crm.app",
@@ -156,32 +159,13 @@ function parseDatabaseUrl(value, productionDatabaseHost) {
 }
 
 function parseShareUrl(value, previewOrigin) {
-  if (!value) return null;
-  let parsed;
+  if (!value) fail("SHARE_ACCESS_REQUIRED");
   try {
-    parsed = new URL(value);
+    validateVercelAutomationBypassUrl(value, previewOrigin);
+    return new URL(value);
   } catch {
     fail("SHARE_ACCESS_INVALID");
   }
-  if (
-    (parsed.origin !== previewOrigin && parsed.origin !== shareLandingOrigin) ||
-    parsed.username ||
-    parsed.password ||
-    parsed.hash ||
-    [...parsed.searchParams.keys()].length !== 1 ||
-    !parsed.searchParams.has("_vercel_share") ||
-    !/^[A-Za-z0-9_-]{20,512}$/u.test(parsed.searchParams.get("_vercel_share") ?? "")
-  ) {
-    fail("SHARE_ACCESS_INVALID");
-  }
-  if (parsed.origin === previewOrigin && parsed.pathname !== "/") fail("SHARE_ACCESS_INVALID");
-  if (
-    parsed.origin === shareLandingOrigin &&
-    (parsed.pathname.length > 1_024 || parsed.pathname.startsWith("//") || /[\\\u0000-\u001f\u007f]/u.test(parsed.pathname))
-  ) {
-    fail("SHARE_ACCESS_INVALID");
-  }
-  return parsed;
 }
 
 export function parsePublicRuntimeActionInput(raw) {
@@ -269,7 +253,7 @@ export function parsePublicRuntimeActionInput(raw) {
   defineSecret(input, "productionDatabaseHost", productionDatabaseHost);
   defineSecret(input, "productionOrigin", production.origin);
   defineSecret(input, "sessionCookie", sessionCookie);
-  defineSecret(input, "shareUrl", share?.toString() ?? null);
+  defineSecret(input, "shareUrl", share.toString());
   defineSecret(input, "workspaceId", workspaceId);
   return Object.freeze(input);
 }
@@ -540,38 +524,24 @@ async function boundedFetch(fetchImpl, value, init = {}) {
 }
 
 export async function bootstrapPublicRuntimeShareAccess(input, jar, fetchImpl = globalThis.fetch) {
-  if (!input.shareUrl) return { protected: false };
-  let current = new URL(input.shareUrl);
-  let reachedPreview = current.origin === input.previewOrigin;
-  for (let redirect = 0; redirect <= maximumRedirects; redirect += 1) {
-    if (current.origin !== input.previewOrigin && current.origin !== shareLandingOrigin) fail("SHARE_ACCESS_FAILED");
-    if (reachedPreview && current.origin !== input.previewOrigin) fail("SHARE_ACCESS_FAILED");
-    const headers = new Headers();
-    if (current.origin === input.previewOrigin) {
-      const cookie = jar.header();
-      if (cookie) headers.set("cookie", cookie);
-    }
-    const response = await boundedFetch(fetchImpl, current, { headers });
-    if (current.origin === input.previewOrigin) jar.storePreviewAccess(response.headers);
-    if (!redirectStatuses.has(response.status)) {
-      if (
-        current.origin !== input.previewOrigin ||
-        response.status < 200 ||
-        response.status >= 300 ||
-        !clean(response.headers.get("content-type")).toLowerCase().includes("text/html")
-      ) {
-        fail("SHARE_ACCESS_FAILED");
-      }
-      return { protected: true };
-    }
-    if (redirect === maximumRedirects) fail("SHARE_ACCESS_FAILED");
-    const location = response.headers.get("location");
-    if (!location) fail("SHARE_ACCESS_FAILED");
-    const next = new URL(location, current);
-    if (next.origin === input.previewOrigin) reachedPreview = true;
-    current = next;
+  const access = bindVercelAutomationBypass(jar, input.shareUrl, input.previewOrigin);
+  const headers = new Headers({ accept: "text/html,application/xhtml+xml" });
+  applyVercelAutomationBypass(jar, access.requestUrl, headers);
+  let response;
+  try {
+    response = await boundedFetch(fetchImpl, access.requestUrl, { headers });
+  } catch {
+    fail("SHARE_ACCESS_FAILED");
   }
-  fail("SHARE_ACCESS_FAILED");
+  if (
+    response.status < 200
+    || response.status >= 300
+    || response.headers.has("location")
+    || !clean(response.headers.get("content-type")).toLowerCase().includes("text/html")
+  ) {
+    fail("SHARE_ACCESS_FAILED");
+  }
+  return { mode: access.mode, protected: true };
 }
 
 function deterministicMissingUuid(sha) {
@@ -632,6 +602,7 @@ export async function requestExact(input, jar, fetchImpl, path, {
   const url = new URL(path, input.previewOrigin);
   if (url.origin !== input.previewOrigin) fail("HTTP_TARGET_REJECTED");
   const headers = new Headers(initialHeaders);
+  applyVercelAutomationBypass(jar, url, headers);
   const cookie = jar.header(appSessionCookie);
   if (cookie) headers.set("cookie", cookie);
   const response = await boundedFetch(fetchImpl, url, { body, headers, method });
@@ -1837,7 +1808,7 @@ export async function executePublicRuntimePreview({
     httpReadOnlyStatus: "PASS",
     mutationGate: cleanupContract,
     blockedProofs: [],
-    previewAccess: access.protected ? "SHARE_LINK" : "STANDARD",
+    previewAccess: access.mode,
     productionMutationPerformed: false,
     proofs: resultData.proofs,
     releaseGateStatus: "PASS",
