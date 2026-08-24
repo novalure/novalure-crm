@@ -464,6 +464,13 @@ test("secret scanning is immutable, full-history and least-privilege", async () 
   assert.match(workflow, /--log-opts="--all --full-history"/);
   assert.match(workflow, /"\$scanner" dir \./);
   assert.match(workflow, /--redact=100/);
+  assert.match(workflow, /--report-path="\$history_report" \|\| history_status=\$\?/);
+  assert.match(workflow, /--report-path="\$tree_report" \|\| tree_status=\$\?/);
+  assert.match(workflow, /history_findings=|\$\{scope\}_findings=/);
+  assert.match(workflow, /rule=\$\{safeText\(finding\.RuleID, 120\)\}/);
+  assert.match(workflow, /file=\$\{safeText\(finding\.File, 260\)\}/);
+  assert.match(workflow, /if \(total > 0\) process\.exitCode = 1/);
+  assert.doesNotMatch(workflow, /finding\.(?:Secret|Match)|JSON\.stringify\(findings\)/);
   assert.match(workflow, /fetch-depth:\s*0/);
   assert.match(workflow, /persist-credentials:\s*false/);
   assert.match(workflow, /permissions:\s*\n\s+contents:\s*read/);
