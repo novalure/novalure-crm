@@ -372,6 +372,40 @@ jobs:
           PROVENANCE_ROOT: ${{ steps.provenance_subject.outputs.provenance_root }}
         run: |
           set -euo pipefail
+          shopt -s dotglob nullglob
+          evidence_expected=(
+            execute-two-tenant-e2e.json
+            execute-two-tenant-e2e.sha256
+            preflight-two-tenant-e2e.json
+            preflight-two-tenant-e2e.sha256
+            two-tenant-parent-base.json
+          )
+          provenance_expected=(
+            "exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
+            "exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar.sha256"
+            github-artifact-attestation.sigstore.json
+            github-artifact-attestation.sigstore.json.sha256
+            protected-workflow-artifact-manifest.json
+            protected-workflow-artifact-manifest.json.sha256
+          )
+          snapshot_expected=("${evidence_expected[@]}")
+          is_allowed_name() {
+            local candidate="$1"
+            shift
+            local allowed
+            for allowed in "$@"; do
+              if [ "$candidate" = "$allowed" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+          assert_regular_single_link() {
+            local candidate="$1"
+            test -f "$candidate"
+            test ! -L "$candidate"
+            test "$(stat -c '%h' "$candidate")" = "1"
+          }
           if [ -n "$EVIDENCE_ROOT" ]; then
             case "$EVIDENCE_ROOT" in
               "$RUNNER_TEMP"/novalure-qa-public-*) ;;
@@ -379,8 +413,11 @@ jobs:
             esac
             test -d "$EVIDENCE_ROOT"
             test ! -L "$EVIDENCE_ROOT"
-            find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
-            rmdir "$EVIDENCE_ROOT"
+            for candidate in "$EVIDENCE_ROOT"/*; do
+              name="${candidate##*/}"
+              is_allowed_name "$name" "${evidence_expected[@]}" || exit 1
+              assert_regular_single_link "$candidate"
+            done
           fi
           if [ -n "$PROVENANCE_ROOT" ]; then
             case "$PROVENANCE_ROOT" in
@@ -389,8 +426,59 @@ jobs:
             esac
             test -d "$PROVENANCE_ROOT"
             test ! -L "$PROVENANCE_ROOT"
-            test -z "$(find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
-            find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            snapshot_root="$PROVENANCE_ROOT/subject-snapshot"
+            for candidate in "$PROVENANCE_ROOT"/*; do
+              name="${candidate##*/}"
+              if [ "$name" = "subject-snapshot" ]; then
+                test -d "$candidate"
+                test ! -L "$candidate"
+              else
+                is_allowed_name "$name" "${provenance_expected[@]}" || exit 1
+                assert_regular_single_link "$candidate"
+              fi
+            done
+            if [ -e "$snapshot_root" ] || [ -L "$snapshot_root" ]; then
+              test -d "$snapshot_root"
+              test ! -L "$snapshot_root"
+              for candidate in "$snapshot_root"/*; do
+                name="${candidate##*/}"
+                is_allowed_name "$name" "${snapshot_expected[@]}" || exit 1
+                assert_regular_single_link "$candidate"
+              done
+            fi
+          fi
+          if [ -n "$EVIDENCE_ROOT" ]; then
+            for name in "${evidence_expected[@]}"; do
+              candidate="$EVIDENCE_ROOT/$name"
+              if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                assert_regular_single_link "$candidate"
+                rm -- "$candidate"
+              fi
+            done
+            rmdir "$EVIDENCE_ROOT"
+          fi
+          if [ -n "$PROVENANCE_ROOT" ]; then
+            snapshot_root="$PROVENANCE_ROOT/subject-snapshot"
+            if [ -e "$snapshot_root" ] || [ -L "$snapshot_root" ]; then
+              test -d "$snapshot_root"
+              test ! -L "$snapshot_root"
+              chmod 0700 "$snapshot_root"
+              for name in "${snapshot_expected[@]}"; do
+                candidate="$snapshot_root/$name"
+                if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                  assert_regular_single_link "$candidate"
+                  rm -- "$candidate"
+                fi
+              done
+              rmdir "$snapshot_root"
+            fi
+            for name in "${provenance_expected[@]}"; do
+              candidate="$PROVENANCE_ROOT/$name"
+              if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                assert_regular_single_link "$candidate"
+                rm -- "$candidate"
+              fi
+            done
             rmdir "$PROVENANCE_ROOT"
           fi
 
@@ -741,6 +829,42 @@ jobs:
           PROVENANCE_ROOT: ${{ steps.public_provenance_subject.outputs.provenance_root }}
         run: |
           set -euo pipefail
+          shopt -s dotglob nullglob
+          evidence_expected=(
+            funnel-publish-token-rotation.json
+            public-form-funnel-cleanup.json
+            public-form-live-submission.json
+            public-form-long-proof-refresh.json
+            public-funnel-live-submission.json
+            public-funnel-long-proof-refresh.json
+            public-runtime-parent-base.json
+          )
+          provenance_expected=(
+            "public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar"
+            "public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar.sha256"
+            github-public-runtime-attestation.sigstore.json
+            github-public-runtime-attestation.sigstore.json.sha256
+            public-runtime-artifact-manifest.json
+            public-runtime-artifact-manifest.json.sha256
+          )
+          snapshot_expected=("${evidence_expected[@]}")
+          is_allowed_name() {
+            local candidate="$1"
+            shift
+            local allowed
+            for allowed in "$@"; do
+              if [ "$candidate" = "$allowed" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+          assert_regular_single_link() {
+            local candidate="$1"
+            test -f "$candidate"
+            test ! -L "$candidate"
+            test "$(stat -c '%h' "$candidate")" = "1"
+          }
           if [ -n "$EVIDENCE_ROOT" ]; then
             case "$EVIDENCE_ROOT" in
               "$RUNNER_TEMP"/novalure-public-evidence-*) ;;
@@ -748,8 +872,11 @@ jobs:
             esac
             test -d "$EVIDENCE_ROOT"
             test ! -L "$EVIDENCE_ROOT"
-            find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
-            rmdir "$EVIDENCE_ROOT"
+            for candidate in "$EVIDENCE_ROOT"/*; do
+              name="${candidate##*/}"
+              is_allowed_name "$name" "${evidence_expected[@]}" || exit 1
+              assert_regular_single_link "$candidate"
+            done
           fi
           if [ -n "$PROVENANCE_ROOT" ]; then
             case "$PROVENANCE_ROOT" in
@@ -758,7 +885,58 @@ jobs:
             esac
             test -d "$PROVENANCE_ROOT"
             test ! -L "$PROVENANCE_ROOT"
-            test -z "$(find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 \( -type l -o ! -type f \) -print -quit)"
-            find "$PROVENANCE_ROOT" -mindepth 1 -maxdepth 1 -type f -links 1 -delete
+            snapshot_root="$PROVENANCE_ROOT/subject-snapshot"
+            for candidate in "$PROVENANCE_ROOT"/*; do
+              name="${candidate##*/}"
+              if [ "$name" = "subject-snapshot" ]; then
+                test -d "$candidate"
+                test ! -L "$candidate"
+              else
+                is_allowed_name "$name" "${provenance_expected[@]}" || exit 1
+                assert_regular_single_link "$candidate"
+              fi
+            done
+            if [ -e "$snapshot_root" ] || [ -L "$snapshot_root" ]; then
+              test -d "$snapshot_root"
+              test ! -L "$snapshot_root"
+              for candidate in "$snapshot_root"/*; do
+                name="${candidate##*/}"
+                is_allowed_name "$name" "${snapshot_expected[@]}" || exit 1
+                assert_regular_single_link "$candidate"
+              done
+            fi
+          fi
+          if [ -n "$EVIDENCE_ROOT" ]; then
+            for name in "${evidence_expected[@]}"; do
+              candidate="$EVIDENCE_ROOT/$name"
+              if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                assert_regular_single_link "$candidate"
+                rm -- "$candidate"
+              fi
+            done
+            rmdir "$EVIDENCE_ROOT"
+          fi
+          if [ -n "$PROVENANCE_ROOT" ]; then
+            snapshot_root="$PROVENANCE_ROOT/subject-snapshot"
+            if [ -e "$snapshot_root" ] || [ -L "$snapshot_root" ]; then
+              test -d "$snapshot_root"
+              test ! -L "$snapshot_root"
+              chmod 0700 "$snapshot_root"
+              for name in "${snapshot_expected[@]}"; do
+                candidate="$snapshot_root/$name"
+                if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                  assert_regular_single_link "$candidate"
+                  rm -- "$candidate"
+                fi
+              done
+              rmdir "$snapshot_root"
+            fi
+            for name in "${provenance_expected[@]}"; do
+              candidate="$PROVENANCE_ROOT/$name"
+              if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+                assert_regular_single_link "$candidate"
+                rm -- "$candidate"
+              fi
+            done
             rmdir "$PROVENANCE_ROOT"
           fi

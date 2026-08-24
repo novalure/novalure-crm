@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   applyVercelAutomationBypass,
@@ -167,6 +168,79 @@ function sessionPreflight(overrides = {}) {
     ...overrides,
   });
 }
+
+function workflowStepBody(workflow, name) {
+  const marker = `      - name: ${name}\n`;
+  assert.equal(workflow.split(marker).length - 1, 1, `Expected exactly one ${name} step.`);
+  const start = workflow.indexOf(marker) + marker.length;
+  const nextStep = workflow.indexOf("\n      - name: ", start);
+  const nextJob = workflow.indexOf("\n  protected-preview-", start);
+  const boundaries = [nextStep, nextJob].filter((index) => index >= 0);
+  return workflow.slice(start, boundaries.length ? Math.min(...boundaries) : workflow.length);
+}
+
+test("protected workflow cleanup accepts only known single-link evidence and subject snapshots", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/exact-protected-preview-qa.yml", import.meta.url),
+    "utf8",
+  ).replaceAll("\r\n", "\n");
+  const cases = [
+    {
+      evidence: [
+        "execute-two-tenant-e2e.json",
+        "execute-two-tenant-e2e.sha256",
+        "preflight-two-tenant-e2e.json",
+        "preflight-two-tenant-e2e.sha256",
+        "two-tenant-parent-base.json",
+      ],
+      name: "Remove staged public QA and provenance evidence",
+      provenance: [
+        "exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar",
+        "exact-preview-two-tenant-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar.sha256",
+        "github-artifact-attestation.sigstore.json",
+        "github-artifact-attestation.sigstore.json.sha256",
+        "protected-workflow-artifact-manifest.json",
+        "protected-workflow-artifact-manifest.json.sha256",
+      ],
+    },
+    {
+      evidence: [
+        "funnel-publish-token-rotation.json",
+        "public-form-funnel-cleanup.json",
+        "public-form-live-submission.json",
+        "public-form-long-proof-refresh.json",
+        "public-funnel-live-submission.json",
+        "public-funnel-long-proof-refresh.json",
+        "public-runtime-parent-base.json",
+      ],
+      name: "Remove staged Public QA and provenance evidence",
+      provenance: [
+        "public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar",
+        "public-runtime-final-preview-${NOVALURE_WORKFLOW_CANDIDATE_SHA}.tar.sha256",
+        "github-public-runtime-attestation.sigstore.json",
+        "github-public-runtime-attestation.sigstore.json.sha256",
+        "public-runtime-artifact-manifest.json",
+        "public-runtime-artifact-manifest.json.sha256",
+      ],
+    },
+  ];
+
+  for (const entry of cases) {
+    const body = workflowStepBody(workflow, entry.name);
+    for (const name of [...entry.evidence, ...entry.provenance]) {
+      assert.equal(body.includes(name), true, `${entry.name} must allowlist ${name}.`);
+    }
+    assert.match(body, /snapshot_root="\$PROVENANCE_ROOT\/subject-snapshot"/u);
+    assert.match(body, /is_allowed_name "\$name" "\$\{snapshot_expected\[@\]\}" \|\| exit 1/u);
+    assert.match(body, /assert_regular_single_link/u);
+    assert.match(body, /stat -c '%h'/u);
+    assert.match(body, /chmod 0700 "\$snapshot_root"/u);
+    assert.match(body, /rmdir "\$snapshot_root"/u);
+    assert.match(body, /rm -- "\$candidate"/u);
+    assert.doesNotMatch(body, /find [^\n]* -delete/u);
+    assert.doesNotMatch(body, /\brm\s+(?:--recursive\b|-[A-Za-z]*r[A-Za-z]*\b)/u);
+  }
+});
 
 test("two-tenant preflight derives the business-session scope without the reset actor", () => {
   const tenant = {
