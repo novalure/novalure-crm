@@ -40,6 +40,26 @@ const allowedLoginErrorDiagnostics = new Set([
 ]);
 const vercelCookieNamePattern = /^_vercel_[a-zA-Z0-9_-]{1,64}$/u;
 
+export function qaBusinessActorUserIds(tenant) {
+  return Object.values(tenant.actors).map((actor) => actor.userId);
+}
+
+export function evaluateQaActiveSessionPreflight({
+  businessActorActiveSessionCount,
+  resetActorActiveSessionCount,
+  workflowTrust,
+}) {
+  const expectedResetActorActiveSessionCount = workflowTrust ? 1 : 0;
+  const businessActorsClean = businessActorActiveSessionCount === 0;
+  const resetActorClean = resetActorActiveSessionCount === expectedResetActorActiveSessionCount;
+  return Object.freeze({
+    businessActorsClean,
+    expectedResetActorActiveSessionCount,
+    ok: businessActorsClean && resetActorClean,
+    resetActorClean,
+  });
+}
+
 async function loadRequiredMigrationChecksums() {
   const entries = await Promise.all(qaRequiredMigrationVersions.map(async (version) => {
     const content = await fs.readFile(path.join(process.cwd(), "migrations", version + ".sql"), "utf8");
@@ -881,19 +901,26 @@ async function scopedRead(sql, tenant, actorId) {
       order by artifact
     `,
     transaction`
-      select count(*)::int as count
+      select
+        count(*) filter (
+          where session.workspace_user_id = any(${qaBusinessActorUserIds(tenant)}::uuid[])
+        )::int as "businessActorCount",
+        count(*) filter (
+          where session.workspace_user_id = ${tenant.resetActorUserId}::uuid
+        )::int as "resetActorCount"
       from auth_sessions session
       where session.workspace_id = ${tenant.workspaceId}::uuid
         and session.workspace_user_id = any(${[
+          ...qaBusinessActorUserIds(tenant),
           tenant.resetActorUserId,
-          ...Object.values(tenant.actors).map((actor) => actor.userId),
         ]}::uuid[])
         and session.revoked_at is null
         and session.expires_at > now()
     `,
   ], { readOnly: true });
+  const activeSessions = results[12][0] ?? {};
   return {
-    activeSessionCount: Number(results[12][0]?.count ?? -1),
+    businessActorActiveSessionCount: Number(activeSessions.businessActorCount ?? -1),
     batch: results[4][0] ?? null,
     batchObjectCount: Number(results[9][0]?.count ?? 0),
     ledgerAccess: results[6][0] ?? null,
@@ -904,6 +931,7 @@ async function scopedRead(sql, tenant, actorId) {
     launchSchemaArtifacts: results[11],
     migrations: results[5],
     project: results[2][0] ?? null,
+    resetActorActiveSessionCount: Number(activeSessions.resetActorCount ?? -1),
     tenantConstraintState: results[7][0] ?? null,
     tenantRelationViolations: results[8],
     users: results[3],
@@ -983,7 +1011,23 @@ async function verifyDatabasePreflight(config, evidence) {
     check(`${tenant.key.toLowerCase()}.db.batch_marker`, state.batch?.batchMarker === tenant.batchMarker, state.batch?.batchMarker === tenant.batchMarker, true);
     check(`${tenant.key.toLowerCase()}.db.batch_actor`, state.batch?.createdByUserId === tenant.resetActorUserId, state.batch?.createdByUserId === tenant.resetActorUserId, true);
     check(`${tenant.key.toLowerCase()}.db.batch_unused`, state.batchObjectCount === 0, state.batchObjectCount, 0);
-    check(`${tenant.key.toLowerCase()}.db.active_sessions_before_login`, state.activeSessionCount === 0, state.activeSessionCount, 0);
+    const activeSessionPreflight = evaluateQaActiveSessionPreflight({
+      businessActorActiveSessionCount: state.businessActorActiveSessionCount,
+      resetActorActiveSessionCount: state.resetActorActiveSessionCount,
+      workflowTrust: evidence.workflowTrust,
+    });
+    check(
+      `${tenant.key.toLowerCase()}.db.business_actor_active_sessions_before_login`,
+      activeSessionPreflight.businessActorsClean,
+      state.businessActorActiveSessionCount,
+      0,
+    );
+    check(
+      `${tenant.key.toLowerCase()}.db.reset_actor_active_sessions_before_business_login`,
+      activeSessionPreflight.resetActorClean,
+      state.resetActorActiveSessionCount,
+      activeSessionPreflight.expectedResetActorActiveSessionCount,
+    );
     const priorMarkerRows = Object.values(state.markerCounts).reduce((sum, count) => sum + count, 0);
     check(`${tenant.key.toLowerCase()}.db.marker_unused`, priorMarkerRows === 0, priorMarkerRows, 0);
     const userById = new Map(state.users.map((user) => [user.id, user]));

@@ -11,6 +11,8 @@ import {
 import {
   bootstrapPreviewShareCookies,
   createHttpClient,
+  evaluateQaActiveSessionPreflight,
+  qaBusinessActorUserIds,
   verifyPreviewRuntimeIdentity,
 } from "./qa-two-tenant-e2e.mjs";
 import {
@@ -156,6 +158,67 @@ function protectedWorkflowEnvironment(overrides = {}) {
   }
   return { ...env, ...overrides };
 }
+
+function sessionPreflight(overrides = {}) {
+  return evaluateQaActiveSessionPreflight({
+    businessActorActiveSessionCount: 0,
+    resetActorActiveSessionCount: 1,
+    workflowTrust: { schema: "novalure.qa.protected-workflow-trust.v1" },
+    ...overrides,
+  });
+}
+
+test("two-tenant preflight derives the business-session scope without the reset actor", () => {
+  const tenant = {
+    actors: {
+      owner: { userId: uuid(101) },
+      admin: { userId: uuid(102) },
+      member: { userId: uuid(103) },
+      customer: { userId: uuid(104) },
+    },
+    resetActorUserId: uuid(105),
+  };
+  const scopedActorIds = qaBusinessActorUserIds(tenant);
+  assert.deepEqual(scopedActorIds, [uuid(101), uuid(102), uuid(103), uuid(104)]);
+  assert.equal(scopedActorIds.includes(tenant.resetActorUserId), false);
+});
+
+test("protected two-tenant preflight accepts zero business sessions and exactly one reset session", () => {
+  assert.deepEqual(sessionPreflight(), {
+    businessActorsClean: true,
+    expectedResetActorActiveSessionCount: 1,
+    ok: true,
+    resetActorClean: true,
+  });
+});
+
+test("protected two-tenant preflight rejects an active business-actor session", () => {
+  const result = sessionPreflight({ businessActorActiveSessionCount: 1 });
+  assert.equal(result.businessActorsClean, false);
+  assert.equal(result.resetActorClean, true);
+  assert.equal(result.ok, false);
+});
+
+test("protected two-tenant preflight rejects missing or duplicate reset-actor sessions", () => {
+  for (const resetActorActiveSessionCount of [0, 2]) {
+    const result = sessionPreflight({ resetActorActiveSessionCount });
+    assert.equal(result.businessActorsClean, true);
+    assert.equal(result.resetActorClean, false);
+    assert.equal(result.ok, false);
+  }
+});
+
+test("standalone two-tenant preflight requires zero reset-actor sessions", () => {
+  const clean = sessionPreflight({ resetActorActiveSessionCount: 0, workflowTrust: null });
+  assert.equal(clean.expectedResetActorActiveSessionCount, 0);
+  assert.equal(clean.resetActorClean, true);
+  assert.equal(clean.ok, true);
+
+  const stale = sessionPreflight({ workflowTrust: null });
+  assert.equal(stale.expectedResetActorActiveSessionCount, 0);
+  assert.equal(stale.resetActorClean, false);
+  assert.equal(stale.ok, false);
+});
 
 test("automation bypass accepts only the exact Preview host, root and single query", () => {
   const receipt = validateVercelAutomationBypassUrl(bypassUrl, previewOrigin);
