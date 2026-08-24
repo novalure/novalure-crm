@@ -456,7 +456,18 @@ test("secret scanning is immutable, full-history and least-privilege", async () 
     new URL("../.github/workflows/secret-scan.yml", import.meta.url),
     "utf8",
   );
-  const gitignore = await readFile(new URL("../.gitignore", import.meta.url), "utf8");
+  const [gitignore, gitleaksIgnore, recoveryTests, a11yFixtureLifecycle, newsletterTests] =
+    await Promise.all([
+      readFile(new URL("../.gitignore", import.meta.url), "utf8"),
+      readFile(new URL("../.gitleaksignore", import.meta.url), "utf8"),
+      readFile(new URL("./database-recovery-live-evidence-tests.mjs", import.meta.url), "utf8"),
+      readFile(new URL("./lib/a11y-preview-fixture-lifecycle.mjs", import.meta.url), "utf8"),
+      readFile(new URL("./newsletter-unsubscribe-security-tests.mjs", import.meta.url), "utf8"),
+    ]);
+  const ignoredFingerprints = gitleaksIgnore
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
 
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+/);
   assert.match(workflow, /@nogoo9\/gitleaks-linux-x64@8\.30\.1-post\.3/);
@@ -479,6 +490,26 @@ test("secret scanning is immutable, full-history and least-privilege", async () 
   assert.doesNotMatch(workflow, /GITLEAKS_LICENSE|GITHUB_TOKEN|upload-artifact/);
   assert.doesNotMatch(workflow, /uses:\s*[^\s]+@(main|master|v\d+)\s*$/m);
   assert.match(gitignore, /^\*\.log$/m);
+  assert.deepEqual(ignoredFingerprints, [
+    "6aed0e807d7a5f0a8f00723cb2bed7220aeab11f:scripts/database-recovery-live-evidence-tests.mjs:generic-api-key:983",
+    "8872bd02ffd708ac534e3709482ac5fed663f5f0:scripts/lib/a11y-preview-fixture-lifecycle.mjs:generic-api-key:197",
+    "f5c8c8afb162cc1b2ca08e2fc01e823adb465cd1:scripts/newsletter-unsubscribe-security-tests.mjs:generic-api-key:25",
+  ]);
+  for (const fingerprint of ignoredFingerprints) {
+    assert.match(fingerprint, /^[a-f0-9]{40}:[A-Za-z0-9._/-]+:generic-api-key:\d+$/u);
+  }
+  assert.match(
+    recoveryTests,
+    /\["napi", "1234567890abcdefghijklmnop"\]\.join\("_"\), \/\/ gitleaks:allow -- synthetic secret-pattern rejection fixture/,
+  );
+  assert.match(
+    a11yFixtureLifecycle,
+    /A11Y_FIXTURE_PRIMARY_SCOPE_INVALID"\); \/\/ gitleaks:allow -- validation error code, not a credential/,
+  );
+  assert.match(
+    newsletterTests,
+    /qa-newsletter-unsubscribe-encryption-key-2026-with-32-bytes"; \/\/ gitleaks:allow -- deterministic test-only encryption-key fixture/,
+  );
 });
 
 test("protected Preview CI pins the trusted harness, remote candidate and immutable actions", async () => {

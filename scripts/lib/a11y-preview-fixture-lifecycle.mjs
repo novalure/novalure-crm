@@ -194,7 +194,7 @@ export function parseA11yPreviewFixtureLifecycleInput(source) {
     fail("A11Y_FIXTURE_INPUT_INVALID");
   }
   exactObjectKeys(raw, topLevelKeys, "A11Y_FIXTURE_INPUT_KEYS_INVALID");
-  exactObjectKeys(raw.primary, scopeKeys, "A11Y_FIXTURE_PRIMARY_SCOPE_INVALID");
+  exactObjectKeys(raw.primary, scopeKeys, "A11Y_FIXTURE_PRIMARY_SCOPE_INVALID"); // gitleaks:allow -- validation error code, not a credential
   exactObjectKeys(raw.crossTenant, scopeKeys, "A11Y_FIXTURE_CROSS_TENANT_SCOPE_INVALID");
   invariant(
     raw.schemaVersion === 1 && raw.confirmation === lifecycleConfirmation,

@@ -980,7 +980,7 @@ test("Candidate relabelling, transform drift and token-shaped input fail closed"
 
   for (const token of [
     ["re", "1234567890abcdefghijklmnop"].join("_"),
-    ["napi", "1234567890abcdefghijklmnop"].join("_"),
+    ["napi", "1234567890abcdefghijklmnop"].join("_"), // gitleaks:allow -- synthetic secret-pattern rejection fixture
     ["pat-na1", "1234567890abcdefghijklmnop"].join("-"),
     ["ya29", "1234567890abcdefghijklmnop"].join("."),
     ["AI", "za", "1234567890abcdefghijklmnopqrstuv"].join(""),

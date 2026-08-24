@@ -22,7 +22,7 @@ const nowSeconds = 1_800_000_000;
 
 function withTokenSecret(callback) {
   const previous = process.env.NOVALURE_AUTH_ENCRYPTION_KEY;
-  process.env.NOVALURE_AUTH_ENCRYPTION_KEY = "qa-newsletter-unsubscribe-encryption-key-2026-with-32-bytes";
+  process.env.NOVALURE_AUTH_ENCRYPTION_KEY = "qa-newsletter-unsubscribe-encryption-key-2026-with-32-bytes"; // gitleaks:allow -- deterministic test-only encryption-key fixture
   try {
     return callback();
   } finally {
