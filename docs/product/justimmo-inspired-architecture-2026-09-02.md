@@ -12,12 +12,11 @@ two-tenant browser E2E, provider acceptance, Preview deployment or Production
 smoke was performed as part of this implementation pass. Production was not
 queried or changed.
 
-The candidate has not been frozen to a final commit and the release evidence is
-not signed. `docs/audit/2026-09-02/justimmo-inspired-migration-checksums.json`
-records the frozen migration bytes using the repository's Git-clean LF byte
-contract. The byte freeze precedes the implementation commit, so its
-`candidateCommit` intentionally remains `null` until that candidate is staged
-and committed.
+The implementation candidate is frozen at
+`de42e6b7791101b11a515726f26f8676f5fdd897`. The release evidence is committed
+but not signed. `docs/audit/2026-09-02/justimmo-inspired-migration-checksums.json`
+records the migration bytes using the repository's Git-clean LF byte contract
+and verifies every stored SHA-256 and Git object ID against that exact commit.
 
 ## Product boundary
 

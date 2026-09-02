@@ -3,8 +3,8 @@
   "evidenceKind": "migration_sha256_inventory",
   "releaseSlice": "justimmo-inspired-2026-09-02",
   "capturedOn": "2026-09-02",
-  "candidateCommit": null,
-  "migrationByteFreeze": "FROZEN_PENDING_IMPLEMENTATION_COMMIT",
+  "candidateCommit": "de42e6b7791101b11a515726f26f8676f5fdd897",
+  "migrationByteFreeze": "FROZEN_AT_IMPLEMENTATION_COMMIT",
   "byteContract": {
     "mode": "GIT_CLEAN_FILTERED_BYTES",
     "gitAttributes": [

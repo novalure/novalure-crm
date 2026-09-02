@@ -47,7 +47,15 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-test("migration inventory binds exactly 080-084 to canonical Git-clean bytes", async () => {
+function gitBytesAtCommit(commit, path) {
+  return execFileSync(
+    "git",
+    ["show", `${commit}:${path}`],
+    { cwd: repositoryRoot, maxBuffer: 64 * 1024 * 1024 },
+  );
+}
+
+test("migration inventory binds exactly 080-084 to the implementation commit", async () => {
   const inventoryPath = "docs/audit/2026-09-02/justimmo-inspired-migration-checksums.json";
   const expectedPaths = [
     "migrations/080_property_export_runtime.sql",
@@ -69,8 +77,8 @@ test("migration inventory binds exactly 080-084 to canonical Git-clean bytes", a
   const inventory = JSON.parse(inventoryBytes.toString("utf8"));
   assert.deepEqual(inventory.files.map((entry) => entry.path), expectedPaths);
   assert.equal(inventory.byteContract.mode, "GIT_CLEAN_FILTERED_BYTES");
-  assert.equal(inventory.candidateCommit, null);
-  assert.equal(inventory.migrationByteFreeze, "FROZEN_PENDING_IMPLEMENTATION_COMMIT");
+  assert.match(inventory.candidateCommit, /^[a-f0-9]{40}$/u);
+  assert.equal(inventory.migrationByteFreeze, "FROZEN_AT_IMPLEMENTATION_COMMIT");
   assert.deepEqual(inventory.executionBoundary, {
     databaseExecution: "NOT_RUN",
     previewDatabaseValidation: "NOT_RUN",
@@ -78,10 +86,31 @@ test("migration inventory binds exactly 080-084 to canonical Git-clean bytes", a
     signed: false,
   });
 
+  assert.doesNotThrow(
+    () => execFileSync(
+      "git",
+      ["cat-file", "-e", `${inventory.candidateCommit}^{commit}`],
+      { cwd: repositoryRoot, stdio: "ignore" },
+    ),
+    "candidateCommit must resolve to an immutable Git commit",
+  );
+  assert.doesNotThrow(
+    () => execFileSync(
+      "git",
+      ["merge-base", "--is-ancestor", inventory.candidateCommit, "HEAD"],
+      { cwd: repositoryRoot, stdio: "ignore" },
+    ),
+    "candidateCommit must be HEAD or an ancestor of the evidence commit",
+  );
+
   for (const entry of inventory.files) {
     const bytes = canonicalGitCleanBytes(await readBytes(entry.path), entry.path);
     assert.equal(entry.byteLength, bytes.byteLength, `${entry.path} byte length drifted`);
     assert.equal(entry.sha256, sha256(bytes), `${entry.path} SHA-256 drifted`);
+
+    const candidateBytes = gitBytesAtCommit(inventory.candidateCommit, entry.path);
+    assert.equal(entry.byteLength, candidateBytes.byteLength, `${entry.path} candidate byte length drifted`);
+    assert.equal(entry.sha256, sha256(candidateBytes), `${entry.path} candidate SHA-256 drifted`);
 
     const filteredOid = execFileSync(
       "git",
@@ -93,8 +122,14 @@ test("migration inventory binds exactly 080-084 to canonical Git-clean bytes", a
       ["hash-object", "--no-filters", "--stdin"],
       { cwd: repositoryRoot, encoding: "utf8", input: bytes },
     ).trim();
+    const candidateOid = execFileSync(
+      "git",
+      ["rev-parse", `${inventory.candidateCommit}:${entry.path}`],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    ).trim();
     assert.equal(filteredOid, canonicalOid, `${entry.path} does not match its Git clean filter`);
     assert.equal(entry.gitBlobOidSha1, canonicalOid, `${entry.path} Git object ID drifted`);
+    assert.equal(entry.gitBlobOidSha1, candidateOid, `${entry.path} candidate Git object ID drifted`);
   }
 
   const expectedInventoryDigest = sha256(inventoryBytes);
