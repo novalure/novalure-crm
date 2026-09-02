@@ -23,6 +23,7 @@ import {
   canonicalJson,
   parsePublicRuntimeActionInput,
 } from "./lib/public-runtime-preview-e2e.mjs";
+import { validateVercelAutomationBypassUrl } from "./lib/vercel-preview-access.mjs";
 import {
   publicRuntimeArtifactFiles,
   publicRuntimeParentBaseArtifactFile,
@@ -152,7 +153,7 @@ export function validateProtectedPublicWorkflowInput(input, environment = proces
   );
   invariant(
     values.GITHUB_WORKFLOW_REF
-      === `${values.GITHUB_REPOSITORY}/.github/workflows/livegang-e2e.yml@refs/heads/main`,
+      === `${values.GITHUB_REPOSITORY}/.github/workflows/exact-protected-preview-qa.yml@refs/heads/main`,
     "PROTECTED_PUBLIC_WORKFLOW_REF_INVALID",
   );
   invariant(
@@ -161,6 +162,11 @@ export function validateProtectedPublicWorkflowInput(input, environment = proces
     "PROTECTED_PUBLIC_HARNESS_SHA_INVALID",
   );
   const preview = new URL(input.previewOrigin);
+  try {
+    validateVercelAutomationBypassUrl(input.shareUrl, input.previewOrigin);
+  } catch {
+    invariant(false, "PROTECTED_PUBLIC_AUTOMATION_ACCESS_REQUIRED");
+  }
   invariant(
     input.expectedGitSha === values.NOVALURE_WORKFLOW_CANDIDATE_SHA
       && input.expectedGitRef === values.NOVALURE_WORKFLOW_CANDIDATE_BRANCH
@@ -363,6 +369,10 @@ export async function stageProtectedPublicEvidence(evidence, expected, {
   runnerTemp = process.env.RUNNER_TEMP,
 } = {}) {
   assertPublicRuntimeEvidenceSafe(evidence);
+  invariant(
+    evidence?.previewAccess === "AUTOMATION_BYPASS",
+    "PROTECTED_PUBLIC_AUTOMATION_ACCESS_EVIDENCE_INVALID",
+  );
   invariant(
     evidence?.schemaVersion === 1
       && evidence.releaseGateStatus === "PASS"

@@ -34,6 +34,7 @@
     "db:recovery:verify-evidence": "node scripts/database-recovery-evidence-verify.mjs",
     "db:recovery:collect-live-evidence": "node scripts/database-recovery-live-evidence.mjs",
     "db:recovery:rehearsal": "node scripts/recovery-migration-rehearsal.mjs",
+    "test:protected-preview-access": "node --test scripts/protected-preview-access-tests.mjs",
     "test:e2e": "node --env-file-if-exists=.env.qa-two-tenant.local scripts/qa-two-tenant-e2e.mjs --execute --share-url-stdin",
     "db:migrate:public-slug-routing": "node scripts/apply-public-slug-routing-migration.mjs",
     "db:migrate:property-department": "node scripts/apply-property-department-migration.mjs",

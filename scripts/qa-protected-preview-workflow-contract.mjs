@@ -51,7 +51,7 @@ export function validateProtectedPreviewWorkflowContract(env = process.env, opti
     || expected.githubSha !== expected.trustedHarnessSha
     || expected.githubRef !== "refs/heads/main"
     || expected.githubWorkflowRef
-      !== `${expected.githubRepository}/.github/workflows/livegang-e2e.yml@refs/heads/main`
+      !== `${expected.githubRepository}/.github/workflows/exact-protected-preview-qa.yml@refs/heads/main`
   ) {
     throw new Error("The action must execute from the exact protected-main trusted harness commit.");
   }

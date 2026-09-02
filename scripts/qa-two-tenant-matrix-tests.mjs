@@ -380,8 +380,8 @@ function validProtectedWorkflowEnvironment(overrides = {}) {
     GITHUB_REF: "refs/heads/main",
     GITHUB_REPOSITORY: "novalure/novalure-crm",
     GITHUB_SHA: "c".repeat(40),
-    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
-    NOVALURE_QA_VERCEL_SHARE_URL: "https://candidate-preview.vercel.app/?_vercel_share=workflow-share-token-1234567890",
+    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/exact-protected-preview-qa.yml@refs/heads/main",
+    NOVALURE_QA_VERCEL_SHARE_URL: "https://candidate-preview.vercel.app/?x-vercel-protection-bypass=workflow-bypass-token-1234567890",
     NOVALURE_WORKFLOW_CANDIDATE_BRANCH: env.NOVALURE_QA_EXPECTED_GIT_BRANCH,
     NOVALURE_WORKFLOW_CANDIDATE_SHA: env.NOVALURE_QA_EXPECTED_GIT_SHA,
     NOVALURE_WORKFLOW_CONFIRMATION: "RUN_EXACT_PROTECTED_PREVIEW_QA",
@@ -411,7 +411,7 @@ test("manual protected-Preview workflow contract binds every dispatched identity
     { NOVALURE_WORKFLOW_NEON_PROJECT_ID: "different-preview-project" },
     { NOVALURE_WORKFLOW_NEON_BRANCH_ID: "br-different-preview" },
     { NOVALURE_WORKFLOW_PREVIEW_HOST: "other-preview.vercel.app" },
-    { NOVALURE_QA_VERCEL_SHARE_URL: "https://vercel.com/share/candidate?_vercel_share=workflow-share-token-1234567890" },
+    { NOVALURE_QA_VERCEL_SHARE_URL: "https://vercel.com/share/candidate?x-vercel-protection-bypass=workflow-bypass-token-1234567890" },
   ]) {
     assert.throws(() => validateProtectedPreviewWorkflowContract({ ...valid, ...mismatch }));
   }
@@ -437,89 +437,72 @@ test("plan mode is offline, deterministic and contains no credential values", ()
   assert.doesNotMatch(result.stdout, /unit-test-password|postgresql:\/\//);
 });
 
-test("Preview share URL validator is deployment-bound, HTTPS-only and parameter-exact", () => {
-  const baseUrl = "https://candidate.example.test";
-  const shareToken = "A_share-token-1234567890";
+test("Preview automation bypass URL is deployment-bound, HTTPS-only and parameter-exact", () => {
+  const baseUrl = "https://candidate-preview.vercel.app";
+  const shareToken = "A_bypass-token-1234567890";
   assert.equal(
-    validatePreviewShareUrl(`${baseUrl}/?_vercel_share=${shareToken}`, baseUrl).origin,
+    validatePreviewShareUrl(`${baseUrl}/?x-vercel-protection-bypass=${shareToken}`, baseUrl).origin,
     baseUrl,
-  );
-  assert.equal(
-    validatePreviewShareUrl(`https://vercel.com/share/candidate?_vercel_share=${shareToken}`, baseUrl).origin,
-    "https://vercel.com",
   );
 
   for (const invalid of [
-    `http://candidate.example.test/?_vercel_share=${shareToken}`,
-    `https://other.example.test/?_vercel_share=${shareToken}`,
-    `https://user:password@candidate.example.test/?_vercel_share=${shareToken}`,
-    `https://candidate.example.test/private?_vercel_share=${shareToken}`,
-    `https://candidate.example.test/?_vercel_share=${shareToken}&extra=1`,
-    `https://candidate.example.test/?_vercel_share=${shareToken}&_vercel_share=${shareToken}`,
-    `https://candidate.example.test/?_vercel_share=short`,
-    `https://candidate.example.test/?_vercel_share=${shareToken}#fragment`,
+    `http://candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}`,
+    `https://other-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}`,
+    `https://user:password@candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}`,
+    `https://candidate-preview.vercel.app/private?x-vercel-protection-bypass=${shareToken}`,
+    `https://candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}&extra=1`,
+    `https://candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}&x-vercel-protection-bypass=${shareToken}`,
+    `https://candidate-preview.vercel.app/?x-vercel-protection-bypass=short`,
+    `https://candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}#fragment`,
+    `https://vercel.com/share/candidate?x-vercel-protection-bypass=${shareToken}`,
   ]) {
-    assert.throws(() => validatePreviewShareUrl(invalid, baseUrl), /Preview|Vercel|share/);
+    assert.throws(() => validatePreviewShareUrl(invalid, baseUrl), /Vercel Preview automation access is invalid/);
   }
   assert.throws(
-    () => validatePreviewShareUrl(`${baseUrl}/?_vercel_share=${shareToken}`, `${baseUrl}/path?unsafe=1`),
-    /base URL must be an HTTPS origin/,
+    () => validatePreviewShareUrl(`${baseUrl}/?x-vercel-protection-bypass=${shareToken}`, `${baseUrl}/path?unsafe=1`),
+    /Vercel Preview automation access is invalid/,
   );
 });
 
-test("Preview share bootstrap keeps Vercel cookies origin-scoped and discards application cookies", async () => {
-  const baseUrl = "https://candidate.example.test";
-  const shareToken = "B_share-token-1234567890";
-  const shareUrl = `https://vercel.com/share/candidate?_vercel_share=${shareToken}`;
+test("Preview automation bootstrap sends the bypass only as a direct same-origin header", async () => {
+  const baseUrl = "https://candidate-preview.vercel.app";
+  const shareToken = "B_bypass-token-1234567890";
+  const shareUrl = `${baseUrl}/?x-vercel-protection-bypass=${shareToken}`;
   const calls = [];
-  const redirect = (location, cookies = []) => {
-    const headers = new Headers({ location });
-    for (const cookie of cookies) headers.append("set-cookie", cookie);
-    return new Response(null, { headers, status: 302 });
-  };
   const fetchImplementation = async (input, init = {}) => {
     const url = new URL(input);
     calls.push({
-      cookie: new Headers(init.headers ?? {}).get("cookie"),
+      bypass: new Headers(init.headers ?? {}).get("x-vercel-protection-bypass"),
       origin: url.origin,
       path: url.pathname,
+      query: url.search,
       redirect: init.redirect,
     });
-    if (calls.length === 1) {
-      return redirect(`${baseUrl}/?_vercel_share=${shareToken}`, [
-        "_vercel_landing=landing-cookie; Path=/; Secure; HttpOnly",
-        "novalure_session=must-not-cross; Path=/; Secure; HttpOnly",
-      ]);
-    }
-    if (calls.length === 2) {
-      return redirect("/", [
-        "_vercel_jwt=preview.jwt.value; Path=/; Secure; HttpOnly; SameSite=Lax",
-        "novalure_session=must-not-bootstrap; Path=/; Secure; HttpOnly",
-      ]);
-    }
-    return new Response("ok", { status: 200 });
+    return new Response("<!doctype html><title>Preview</title>", {
+      headers: { "content-type": "text/html; charset=utf-8" },
+      status: 200,
+    });
   };
 
-  const previewCookies = await bootstrapPreviewShareCookies(baseUrl, shareUrl, fetchImplementation);
+  const previewAccess = await bootstrapPreviewShareCookies(baseUrl, shareUrl, fetchImplementation);
   assert.deepEqual(calls, [
-    { cookie: null, origin: "https://vercel.com", path: "/share/candidate", redirect: "manual" },
-    { cookie: null, origin: baseUrl, path: "/", redirect: "manual" },
-    { cookie: "_vercel_jwt=preview.jwt.value", origin: baseUrl, path: "/", redirect: "manual" },
+    { bypass: shareToken, origin: baseUrl, path: "/", query: "", redirect: "manual" },
   ]);
-  assert.deepEqual([...previewCookies.entries()], [["_vercel_jwt", "preview.jwt.value"]]);
+  assert.equal(previewAccess instanceof Map, true);
+  assert.deepEqual([...previewAccess.entries()], []);
 });
 
-test("Preview share bootstrap rejects cross-origin redirects without exposing the share token", async () => {
-  const baseUrl = "https://candidate.example.test";
-  const shareToken = "C_share-token-1234567890";
-  const shareUrl = `${baseUrl}/?_vercel_share=${shareToken}`;
+test("Preview automation bootstrap rejects redirects without exposing the bypass token", async () => {
+  const baseUrl = "https://candidate-preview.vercel.app";
+  const shareToken = "C_bypass-token-1234567890";
+  const shareUrl = `${baseUrl}/?x-vercel-protection-bypass=${shareToken}`;
   await assert.rejects(
     bootstrapPreviewShareCookies(baseUrl, shareUrl, async () => new Response(null, {
       headers: { location: "https://attacker.example.test/collect" },
       status: 302,
     })),
     (error) => {
-      assert.match(error.message, /Cross-origin/);
+      assert.match(error.message, /Vercel Preview automation access failed/);
       assert.doesNotMatch(error.message, new RegExp(shareToken));
       return true;
     },
@@ -528,12 +511,12 @@ test("Preview share bootstrap rejects cross-origin redirects without exposing th
 
 test("share stdin is rejected before plan or config validation and its value is never printed", () => {
   const script = fileURLToPath(new URL("./qa-two-tenant-e2e.mjs", import.meta.url));
-  const shareToken = "D_share-token-1234567890";
+  const shareToken = "D_bypass-token-1234567890";
   for (const mode of ["--plan", "--validate-config"]) {
     const result = spawnSync(process.execPath, [script, mode, "--share-url-stdin"], {
       encoding: "utf8",
       env: {},
-      input: `https://candidate.example.test/?_vercel_share=${shareToken}\n`,
+      input: `https://candidate-preview.vercel.app/?x-vercel-protection-bypass=${shareToken}\n`,
       timeout: 30_000,
     });
     assert.equal(result.status, 1);

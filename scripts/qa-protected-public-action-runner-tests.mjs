@@ -28,6 +28,8 @@ const expected = Object.freeze({
   deploymentId: "dpl_12345678901234567890",
   qaBatchId: "11111111-1111-4111-8111-111111111111",
 });
+const automationBypassToken = `qa_${"B".repeat(40)}`;
+const automationBypassUrl = `https://${expected.deploymentHost}/?x-vercel-protection-bypass=${automationBypassToken}`;
 
 test("protected Public workflow binds two preprovisioned batches to its single-use policy", () => {
   const input = {
@@ -39,13 +41,14 @@ test("protected Public workflow binds two preprovisioned batches to its single-u
     expectedNeonBranchId: expected.databaseBranchId,
     expectedNeonProjectId: "weathered-term-98273025",
     previewOrigin: `https://${expected.deploymentHost}`,
+    shareUrl: automationBypassUrl,
   };
   const environment = {
     GITHUB_EVENT_NAME: "workflow_dispatch",
     GITHUB_REF: "refs/heads/main",
     GITHUB_REPOSITORY: "novalure/novalure-crm",
     GITHUB_SHA: "b".repeat(40),
-    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main",
+    GITHUB_WORKFLOW_REF: "novalure/novalure-crm/.github/workflows/exact-protected-preview-qa.yml@refs/heads/main",
     NOVALURE_WORKFLOW_CANDIDATE_BRANCH: expected.candidateBranch,
     NOVALURE_WORKFLOW_CANDIDATE_SHA: expected.candidateSha,
     NOVALURE_WORKFLOW_DEPLOYMENT_ID: expected.deploymentId,
@@ -169,6 +172,7 @@ function completeEvidence() {
     },
     httpReadOnlyStatus: "PASS",
     mutationGate: { reasonCode: null, status: "PASS" },
+    previewAccess: "AUTOMATION_BYPASS",
     productionMutationPerformed: false,
     proofs,
     releaseGateStatus: "PASS",
