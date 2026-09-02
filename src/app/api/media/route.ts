@@ -10,6 +10,9 @@ import {
   serializeMediaAsset,
 } from "@/lib/media-store";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
+import {
+  filterAccessibleContentMediaAssetIds,
+} from "@/lib/db/content-library-repositories";
 
 const privateJsonHeaders = { "cache-control": "private, no-store" };
 
@@ -26,9 +29,13 @@ export async function GET(request: Request) {
   }
 
   const media = await listWorkspaceMedia(auth.session.workspaceId);
+  const accessibleIds = await filterAccessibleContentMediaAssetIds({
+    assetIds: media.assets.map((asset) => asset.id),
+    session: auth.session,
+  });
   return NextResponse.json(
     {
-      assets: media.assets.map(serializeMediaAsset),
+      assets: media.assets.filter((asset) => accessibleIds.has(asset.id)).map(serializeMediaAsset),
       mutationsAllowed: mutationScope.allowed,
       quota: media.quota,
     },
@@ -57,14 +64,20 @@ export async function POST(request: Request) {
 
     try {
       const changedAsset = body.action === "publish"
-        ? await publishWorkspaceMedia(assetId, auth.session.workspaceId)
-        : await revokeWorkspaceMediaPublication(assetId, auth.session.workspaceId);
+        ? await publishWorkspaceMedia(assetId, auth.session)
+        : await revokeWorkspaceMediaPublication(assetId, auth.session);
       if (!changedAsset) {
         return NextResponse.json({ error: "Media asset not found." }, { headers: privateJsonHeaders, status: 404 });
       }
       return NextResponse.json({ asset: serializeMediaAsset(changedAsset) }, { headers: privateJsonHeaders });
     } catch (error) {
       if (error instanceof MediaStoreError) {
+        if (error.code === "MEDIA_ACCESS_REQUIRED") {
+          return NextResponse.json(
+            { error: "Media asset not found." },
+            { headers: privateJsonHeaders, status: 404 },
+          );
+        }
         return NextResponse.json(
           { error: error.message, code: error.code },
           { headers: privateJsonHeaders, status: statusForMediaError(error) },
@@ -93,13 +106,14 @@ export async function POST(request: Request) {
   try {
     const asset = await saveWorkspaceFile({
       alt: stringField(formData.get("alt")),
+      createdByUserId: auth.session.userId,
       file,
       folder: stringField(formData.get("folder")),
       name: stringField(formData.get("name")),
       workspaceId: auth.session.workspaceId,
     });
     const publishedAsset = isTruthy(formData.get("public"))
-      ? await publishWorkspaceMedia(asset.id, auth.session.workspaceId)
+      ? await publishWorkspaceMedia(asset.id, auth.session)
       : null;
     const media = await listWorkspaceMedia(auth.session.workspaceId);
     return NextResponse.json(
@@ -108,6 +122,12 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof MediaStoreError) {
+      if (error.code === "MEDIA_ACCESS_REQUIRED") {
+        return NextResponse.json(
+          { error: "Media asset not found." },
+          { headers: privateJsonHeaders, status: 404 },
+        );
+      }
       return NextResponse.json(
         { error: error.message, code: error.code },
         { headers: privateJsonHeaders, status: statusForMediaError(error) },

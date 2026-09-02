@@ -1224,6 +1224,7 @@ async function createProvenanceRepository({ evidenceCodeDrift = false } = {}) {
   git(root, ["init", "-q"]);
   git(root, ["config", "user.email", "attestation-tests@novalure.invalid"]);
   git(root, ["config", "user.name", "Novalure Attestation Tests"]);
+  git(root, ["config", "core.autocrlf", "false"]);
   await writeFile(path.join(root, "baseline.txt"), "baseline\n", "utf8");
   git(root, ["add", "baseline.txt"]);
   git(root, ["commit", "-q", "-m", "baseline"]);
@@ -2618,6 +2619,36 @@ test("Git provenance rejects dirty, index, untracked, wrong-commit and post-free
   await t.test("clean two-phase repository passes", async () => {
     const fixture = await createProvenanceRepository();
     try {
+      const result = await verifyFinalPreviewRepositoryProvenance({
+        attestation: fixture.attestation,
+        attestationPath: fixture.attestationPath,
+        repositoryRootPath: fixture.root,
+      });
+      assert.equal(result.evidenceCommit, fixture.attestation.evidenceProvenance.evidenceCommit);
+      assert.equal(result.status, "PASS");
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  await t.test("clean CRLF checkout expansion preserves committed evidence bytes", async () => {
+    const fixture = await createProvenanceRepository();
+    try {
+      git(fixture.root, ["config", "core.autocrlf", "true"]);
+      const checkoutPaths = [
+        fixture.evidencePath,
+        `${fixture.evidencePath}.sha256`,
+        fixture.attestationPath,
+      ];
+      for (const relativePath of checkoutPaths) {
+        const absolutePath = path.join(fixture.root, ...relativePath.split("/"));
+        const source = await readFile(absolutePath, "utf8");
+        assert.doesNotMatch(source, /\r/u);
+        await writeFile(absolutePath, source.replaceAll("\n", "\r\n"), "utf8");
+      }
+      git(fixture.root, ["add", ...checkoutPaths]);
+      assert.equal(git(fixture.root, ["status", "--porcelain=v1"]), "");
+
       const result = await verifyFinalPreviewRepositoryProvenance({
         attestation: fixture.attestation,
         attestationPath: fixture.attestationPath,

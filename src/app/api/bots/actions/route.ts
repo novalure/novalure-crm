@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { evaluateBotAction, getBotRuntimeControls } from "@/lib/bots/policy";
 import { sendBotDocument } from "@/lib/bots/provider-actions";
 import { evaluateOutboundConsent, type ConsentPolicyChannel } from "@/lib/db/consent-policy";
+import { canAccessContentMediaAsset } from "@/lib/db/content-library-repositories";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { confirmMeetingBooking } from "@/lib/db/meeting-repositories";
 import { canPersist, insertNewsletterSend, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -352,6 +353,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid media asset id" }, { status: 400 });
     }
 
+    if (!await canAccessContentMediaAsset({ assetId: mediaAssetId, reuse: true, session: auth.session })) {
+      return NextResponse.json({ error: "Media asset not found" }, { status: 404 });
+    }
+
     const mediaAsset = await findWorkspaceMediaAsset(mediaAssetId, auth.session.workspaceId);
 
     if (!mediaAsset) {
@@ -565,8 +570,8 @@ export async function POST(request: Request) {
     try {
       publishedMediaAsset = await publishWorkspaceMedia(
         existingDocumentSend.mediaAssetId,
-        auth.session.workspaceId,
-        { expiresInSeconds: botDocumentAttemptShareTtlSeconds },
+        auth.session,
+        { accessMode: "reuse", expiresInSeconds: botDocumentAttemptShareTtlSeconds },
       );
     } catch {
       await updateDocumentDeliveryAttempt({

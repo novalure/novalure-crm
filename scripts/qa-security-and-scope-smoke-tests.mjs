@@ -708,7 +708,8 @@ test("private media routes stream through the app and never redirect to Blob", a
   assert.match(privateRoute, /"cache-control": "private, no-store"/);
   assert.match(privateRoute, /findWorkspaceMediaAsset\(assetId, auth\.session\.workspaceId\)/);
   assert.match(publicRoute, /findPublicMediaAsset\(token\)/);
-  assert.match(apiRoute, /media\.assets\.map\(serializeMediaAsset\)/);
+  assert.match(apiRoute, /filterAccessibleContentMediaAssetIds/);
+  assert.match(apiRoute, /media\.assets\.filter\(\(asset\) => accessibleIds\.has\(asset\.id\)\)\.map\(serializeMediaAsset\)/);
   assert.match(apiRoute, /body\?\.action !== "publish" && body\?\.action !== "revoke"/);
 
   assert.match(expandMigration, /storage_access in \('private', 'legacy-public', 'published-public'\)/);
@@ -733,7 +734,8 @@ test("media consumers do not serialize storage URLs or persist share tokens", as
   assert.doesNotMatch(botActions, /attachedMediaAssetPublicUrl:/);
   assert.doesNotMatch(botActions, /attachedMediaAssetUrl:/);
   assert.match(botActions, /publishWorkspaceMedia\([\s\S]*?sendBotDocument\(/);
-  assert.match(botDocuments, /media\.assets\.map\(serializeMediaAsset\)/);
+  assert.match(botDocuments, /filterAccessibleContentMediaAssetIds/);
+  assert.match(botDocuments, /media\.assets\.filter\(\(asset\) => accessibleIds\.has\(asset\.id\)\)\.map\(serializeMediaAsset\)/);
   assert.doesNotMatch(botDocuments, /\n\s+documentUrl,\n\s+reason:/);
   const persistedRuntimeMetadata = botRuntime.slice(
     botRuntime.indexOf("const documentSendId = await insertBotDocumentSend"),

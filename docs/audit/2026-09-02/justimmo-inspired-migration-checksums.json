@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "migration_sha256_inventory",
+  "releaseSlice": "justimmo-inspired-2026-09-02",
+  "capturedOn": "2026-09-02",
+  "candidateCommit": null,
+  "migrationByteFreeze": "FROZEN_PENDING_IMPLEMENTATION_COMMIT",
+  "byteContract": {
+    "mode": "GIT_CLEAN_FILTERED_BYTES",
+    "gitAttributes": [
+      "*.sql text eol=lf",
+      "migrations/*.sql text eol=lf"
+    ],
+    "normalization": "Canonical evidence bytes use LF exactly as the configured Git clean filter. A CRLF-expanded checkout may be normalized to LF; bare CR bytes are rejected.",
+    "verification": "For every file, the canonical byte stream produces the same Git object ID as git hash-object with that path's attributes. SHA-256 is calculated over that canonical stream."
+  },
+  "executionBoundary": {
+    "databaseExecution": "NOT_RUN",
+    "previewDatabaseValidation": "NOT_RUN",
+    "productionMutationPerformed": false,
+    "signed": false
+  },
+  "files": [
+    {
+      "version": "080",
+      "direction": "up",
+      "path": "migrations/080_property_export_runtime.sql",
+      "byteLength": 15276,
+      "sha256": "815759576aa8c941874ea467dfaf71cab03973009ff1141ffd4708bc4d1f5c29",
+      "gitBlobOidSha1": "1ce881085d378a92fecf7a4a66020dcf6f431e93"
+    },
+    {
+      "version": "080",
+      "direction": "down",
+      "path": "migrations/080_property_export_runtime_rollback.sql",
+      "byteLength": 12905,
+      "sha256": "5c607c2b26880fb13922333c240865eb07da8fa9201a19c534e9b8b39c63b28c",
+      "gitBlobOidSha1": "5e0db81ae60ad49b16188e7fca2daf5d9d5ebe0a"
+    },
+    {
+      "version": "081",
+      "direction": "up",
+      "path": "migrations/081_broker_operations.sql",
+      "byteLength": 48716,
+      "sha256": "39328774e7b5980d3dbbe88a262bed202fae9643feac3a5846d5a2f05bf47cea",
+      "gitBlobOidSha1": "9a00135f131fa8ecfab674192929dc173bd6c515"
+    },
+    {
+      "version": "081",
+      "direction": "down",
+      "path": "migrations/081_broker_operations_rollback.sql",
+      "byteLength": 12480,
+      "sha256": "14f3c4860e8d040c05813ef063e3457971de99e2425edd5b9a3b7bdbcf136919",
+      "gitBlobOidSha1": "feeae30d371e5a8ba9265a7e3c03991a5f387ee7"
+    },
+    {
+      "version": "082",
+      "direction": "up",
+      "path": "migrations/082_content_library_privacy.sql",
+      "byteLength": 31277,
+      "sha256": "d79e2211bd8a846d123f774c288340453377c7232932f5ee5e33e2a44588c4ed",
+      "gitBlobOidSha1": "4a8c5445f967866eeb0ab215378f306738968ca2"
+    },
+    {
+      "version": "082",
+      "direction": "down",
+      "path": "migrations/082_content_library_privacy_rollback.sql",
+      "byteLength": 7409,
+      "sha256": "712abca0b4bf7d20a9df2d3ad8c72597ff7fd1aeee26ecc3a8b14dcb46420fce",
+      "gitBlobOidSha1": "6a63670e1170398df4494c9b00522d28b8492acd"
+    },
+    {
+      "version": "083",
+      "direction": "up",
+      "path": "migrations/083_list_productivity_controls.sql",
+      "byteLength": 13045,
+      "sha256": "ce4fbfca4a39971b80572d3fade2fe1d3bacaaba3d8fbdc718e68b197d2d3d97",
+      "gitBlobOidSha1": "0b833f38e2cb414faf14b99ad7fdecd074e9d6e7"
+    },
+    {
+      "version": "083",
+      "direction": "down",
+      "path": "migrations/083_list_productivity_controls_rollback.sql",
+      "byteLength": 10680,
+      "sha256": "50bf6ccecc511449e59f3dc1754f2ae3f7d7c644791ff5a09f7213b74cc2020b",
+      "gitBlobOidSha1": "b3db8e966b75378e34482320ea5b706bab878b25"
+    },
+    {
+      "version": "084",
+      "direction": "up",
+      "path": "migrations/084_media_deletion_lifecycle.sql",
+      "byteLength": 5015,
+      "sha256": "fd2fc05238f3b747f71d133759f9a0f6117da650dabc1c254554d7d16cff9907",
+      "gitBlobOidSha1": "1cdbb40e1f6da978b0ead0d0c4a0794ab4eca257"
+    },
+    {
+      "version": "084",
+      "direction": "down",
+      "path": "migrations/084_media_deletion_lifecycle_rollback.sql",
+      "byteLength": 9370,
+      "sha256": "b2ea49a08da9764548b594aa9ed57aaccc3ffd8b0472efcfd2076d7501892108",
+      "gitBlobOidSha1": "a27e50837179b3494bb2f5e2b6d16f92c8842f6f"
+    }
+  ]
+}

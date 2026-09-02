@@ -3,6 +3,10 @@ import { requirePermission } from "@/lib/auth/session";
 import { documentApprovedFromPayload, evaluateBotAction, getBotRuntimeControls } from "@/lib/bots/policy";
 import { sendBotDocument } from "@/lib/bots/provider-actions";
 import { evaluateOutboundConsent, type ConsentPolicyChannel } from "@/lib/db/consent-policy";
+import {
+  canAccessContentMediaAsset,
+  filterAccessibleContentMediaAssetIds,
+} from "@/lib/db/content-library-repositories";
 import { queryOne } from "@/lib/db/client";
 import {
   canPersist,
@@ -185,9 +189,13 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const media = await safeListWorkspaceMedia(auth.session.workspaceId);
+  const accessibleIds = await filterAccessibleContentMediaAssetIds({
+    assetIds: media.assets.map((asset) => asset.id),
+    session: auth.session,
+  });
   return NextResponse.json(
     {
-      assets: media.assets.map(serializeMediaAsset),
+      assets: media.assets.filter((asset) => accessibleIds.has(asset.id)).map(serializeMediaAsset),
       documentTypes: ["expose", "offer", "pdf", "checklist"],
       mutationsAllowed: evaluateLaunchScope("mediaBlobMutation").allowed,
       quota: media.quota,
@@ -215,7 +223,16 @@ export async function POST(request: Request) {
   const input = body as Record<string, unknown>;
   const media = await safeListWorkspaceMedia(auth.session.workspaceId);
   const mediaAssetId = typeof input.mediaAssetId === "string" ? input.mediaAssetId : "";
-  const asset = media.assets.find((item) => item.id === mediaAssetId) ?? null;
+  const candidateAsset = media.assets.find((item) => item.id === mediaAssetId) ?? null;
+  const asset = candidateAsset && await canAccessContentMediaAsset({
+    assetId: candidateAsset.id,
+    reuse: true,
+    session: auth.session,
+  }) ? candidateAsset : null;
+
+  if (mediaAssetId && !asset) {
+    return NextResponse.json({ error: "Media asset not found" }, { headers: privateJsonHeaders, status: 404 });
+  }
 
   if (!asset && !input.documentName) {
     return NextResponse.json({ error: "Missing document or media asset" }, { status: 400 });
@@ -346,7 +363,8 @@ export async function POST(request: Request) {
   let publishedAsset: Awaited<ReturnType<typeof publishWorkspaceMedia>> = null;
   if (asset) {
     try {
-      publishedAsset = await publishWorkspaceMedia(asset.id, auth.session.workspaceId, {
+      publishedAsset = await publishWorkspaceMedia(asset.id, auth.session, {
+        accessMode: "reuse",
         expiresInSeconds: botDocumentAttemptShareTtlSeconds,
       });
     } catch {

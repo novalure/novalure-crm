@@ -16,6 +16,7 @@ import { csrfFetch } from "@/lib/security/csrf-client";
 type TaskCommandCenterProps = {
   activeProjectId: string | null;
   contacts: Contact[];
+  initialSelectedTaskId?: string | null;
   language: LanguageCode;
   leads: Lead[];
   onTasksChanged?: () => Promise<void> | void;
@@ -176,6 +177,7 @@ function createDefaultTaskDraft(
 export function TaskCommandCenter({
   activeProjectId,
   contacts,
+  initialSelectedTaskId,
   language,
   leads,
   onTasksChanged,
@@ -192,7 +194,7 @@ export function TaskCommandCenter({
   const [searchTerm, setSearchTerm] = useState("");
   const [taskOverlays, setTaskOverlays] = useState<Task[]>([]);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
+  const [selectedTaskId, setSelectedTaskId] = useState(initialSelectedTaskId ?? tasks[0]?.id ?? "");
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);

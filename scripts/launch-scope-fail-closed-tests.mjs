@@ -557,29 +557,65 @@ test("authenticated bot model execution is launch-off before request parsing, CR
   assert.match(reply, /authenticated_bot_model_provider_launch_off/);
 });
 
-test("consumerless property export queue is launch-off in UI, API and repository before enqueue", () => {
+test("legacy caller-supplied preflight is removed while the isolated Preview QA sink stays explicit", () => {
   const route = readProjectFile("src/app/api/crm/properties/route.ts");
   const repository = readProjectFile("src/lib/db/property-department-repositories.ts");
   const propertyDepartment = readProjectFile("src/lib/property-department.ts");
   const commandCenter = readProjectFile("src/components/property-command-center.tsx");
+  const qaRoute = readProjectFile("src/app/api/crm/property-exports/route.ts");
+  const qaAdapters = readProjectFile("src/lib/property-export/provider-adapters.ts");
+  const qaPanel = readProjectFile("src/components/property-export-panel.tsx");
   const preflightBranch = route.slice(
     route.indexOf('if (operation === "run_preflight")'),
     route.indexOf('if (operation !== "create_property")'),
   );
-  const recordPreflight = repository.slice(repository.indexOf("export async function recordPropertyPreflightRun"));
-  const routeGuard = preflightBranch.indexOf('evaluateLaunchScope("propertyExportQueue")');
-  const repositoryGuard = recordPreflight.indexOf('evaluateLaunchScope("propertyExportQueue")');
-
-  assert.ok(routeGuard >= 0 && routeGuard < preflightBranch.indexOf("parseIdempotencyKey(request)"));
-  assert.ok(routeGuard < preflightBranch.indexOf("runPropertyChannelPreflight("));
-  assert.ok(routeGuard < preflightBranch.indexOf("recordPropertyPreflightRun({"));
-  assert.match(preflightBranch, /property_export_queue_launch_off/);
-  assert.ok(repositoryGuard >= 0 && repositoryGuard < recordPreflight.indexOf("canPersist()"));
-  assert.ok(repositoryGuard < recordPreflight.indexOf("queryOne<IdRow>("));
-  assert.match(recordPreflight, /property_export_queue_launch_off/);
+  assert.match(preflightBranch, /legacy_property_preflight_removed/);
+  assert.match(preflightBranch, /replacement: "\/api\/crm\/property-exports"/);
+  assert.match(preflightBranch, /status: 410/);
+  assert.doesNotMatch(preflightBranch, /input\.asset|runPropertyChannelPreflight|recordPropertyPreflightRun|parseIdempotencyKey/);
+  assert.doesNotMatch(repository, /recordPropertyPreflightRun|insert into property_export_jobs/);
   assert.match(propertyDepartment, /isLaunchSurfaceEnabled\("propertyExportQueue"\)/);
   assert.match(propertyDepartment, /enabled: propertyExportQueueLaunchEnabled && canPublish && canAdmin/);
-  assert.ok((commandCenter.match(/action=\{actions\.exportChannel\}/g) ?? []).length >= 2);
+  assert.ok((commandCenter.match(/action=\{actions\.exportChannel\}/g) ?? []).length >= 1);
+  assert.match(commandCenter, /PropertyExportPanel/);
+  assert.match(qaRoute, /providerKey !== PROPERTY_EXPORT_QA_PROVIDER/);
+  assert.match(qaRoute, /externalPortalLaunchOff/);
+  assert.match(qaRoute, /productionPublication: false/);
+  assert.match(qaAdapters, /vercelEnvironment === "preview"[\s\S]*NOVALURE_PROPERTY_EXPORT_QA_SINK_ENABLED === "1"/);
+  assert.doesNotMatch(qaAdapters, /fetch\s*\(/);
+  assert.match(qaPanel, /no portal delivery|kein Portalversand/);
+});
+
+test("property export queue kill scope fences enqueue, retry, cron, runner and direct claim", () => {
+  const route = readProjectFile("src/app/api/crm/property-exports/route.ts");
+  const retryRoute = readProjectFile("src/app/api/crm/property-exports/[jobId]/retry/route.ts");
+  const cronRoute = readProjectFile("src/app/api/cron/property-exports/route.ts");
+  const runner = readProjectFile("src/lib/property-export/runner.ts");
+  const repository = readProjectFile("src/lib/db/property-export-repositories.ts");
+  const post = route.slice(route.indexOf("export async function POST"));
+  const retryPost = retryRoute.slice(retryRoute.indexOf("export async function POST"));
+  const cronGet = cronRoute.slice(cronRoute.indexOf("export async function GET"));
+  const claim = repository.slice(
+    repository.indexOf("export async function claimPropertyExportJob"),
+    repository.indexOf("export async function completePropertyExportJob"),
+  );
+
+  assert.equal(launchScopePolicyApproval, "PENDING_SIGNATURE");
+  assert.equal(evaluateLaunchScope("propertyExportQueue").allowed, false);
+  assert.match(route, /propertyExportQueueLaunchOff[\s\S]*evaluateLaunchScope\("propertyExportQueue"\)/);
+  assert.ok(post.indexOf("propertyExportQueueLaunchOff()") < post.indexOf("request.json()"));
+  assert.ok(post.indexOf("propertyExportQueueLaunchOff()") < post.indexOf("enqueuePropertyExport({"));
+  assert.ok(retryPost.indexOf('evaluateLaunchScope("propertyExportQueue")') < retryPost.indexOf("retryPropertyExportJob({"));
+  assert.ok(cronGet.indexOf('evaluateLaunchScope("propertyExportQueue")') < cronGet.indexOf("createCronRun({"));
+  assert.ok(runner.indexOf('evaluateLaunchScope("propertyExportQueue")') < runner.indexOf("isPropertyExportQaSinkEnabled(env)"));
+  assert.ok(runner.indexOf('evaluateLaunchScope("propertyExportQueue")') < runner.indexOf("listDuePropertyExportJobIds({"));
+  assert.ok(claim.indexOf('evaluateLaunchScope("propertyExportQueue")') < claim.indexOf("requirePersistence()"));
+  assert.ok(claim.indexOf('evaluateLaunchScope("propertyExportQueue")') < claim.indexOf("withTenantTransaction("));
+  assert.match(claim, /status = 'active'[\s\S]*for share[\s\S]*canProcessPropertyExports/);
+  for (const source of [route, retryRoute, cronRoute]) {
+    assert.match(source, /property_export_queue_launch_off/);
+    assert.match(source, /private, no-store/);
+  }
 });
 
 test("runtime media mutations are Preview-testable and unsigned Production is fail-closed at every effect layer", () => {
@@ -616,7 +652,7 @@ test("runtime media mutations are Preview-testable and unsigned Production is fa
 
   for (const [start, end, firstEffect] of [
     ["export async function saveWorkspaceFile", "export async function findWorkspaceMediaAsset", "const sizeBytes"],
-    ["export async function publishWorkspaceMedia", "export async function revokeWorkspaceMediaShare", "findWorkspaceMediaAsset("],
+    ["export async function publishWorkspaceMedia", "export async function revokeWorkspaceMediaShare", "withTenantTransaction("],
     ["export async function revokeWorkspaceMediaShare", "export async function extendWorkspaceMediaShare", "hasDatabaseUrl()"],
     ["export async function extendWorkspaceMediaShare", "export async function revokeWorkspaceMediaPublication", "const expiresAt"],
     ["export async function revokeWorkspaceMediaPublication", "export async function getPublicMediaUrl", "hasDatabaseUrl()"],

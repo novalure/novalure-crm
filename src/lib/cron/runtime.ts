@@ -4,6 +4,7 @@ const DEFAULT_SOFT_DEADLINE_MS = 45_000;
 const CRON_ROUTE_NAMES = [
   "google-alerts",
   "meeting-reminders",
+  "property-exports",
   "property-reservations",
   "teams-alerts",
 ] as const;

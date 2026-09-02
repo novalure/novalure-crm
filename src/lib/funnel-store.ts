@@ -13,6 +13,11 @@ import {
 } from "@/lib/db/tenant-client";
 import { writeAuditLog } from "@/lib/db/runtime-repositories";
 import { buildFunnelBlueprint, type FunnelDraft, type FunnelStepDraft } from "@/lib/funnel-builder-adapter";
+import {
+  canAccessFunnelInTransaction,
+  canCreateFunnelInProjectInTransaction,
+  FunnelAccessError,
+} from "@/lib/funnel-access";
 import { assertFunnelLivePreflight } from "@/lib/funnel-live-preflight";
 import { funnelSchemaVersion, type FunnelBlueprint, type FunnelVersion } from "@/lib/funnel-schema";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
@@ -207,6 +212,7 @@ async function findFunnelDatabaseRowInTransaction(
   transaction: TenantTransaction,
   funnelId: string,
   workspaceId: string,
+  lock: "share" | "update" = "update",
 ) {
   return transaction.queryOne<FunnelStoreRow>(
     `
@@ -228,7 +234,7 @@ async function findFunnelDatabaseRowInTransaction(
       join workspaces w on w.id = f.workspace_id
       where f.id = $1::uuid
         and f.workspace_id = $2::uuid
-      for update of f
+      ${lock === "update" ? "for update of f" : "for share of f"}
     `,
     [funnelId, workspaceId],
   );
@@ -267,6 +273,10 @@ async function saveStoredFunnelToDatabase(
   expectedBlueprintRevision: number,
   auditAction: "funnel.blueprint_saved" | "funnel.version_restored",
   qaBatchId?: string,
+  locked?: {
+    existingRow: FunnelStoreRow;
+    transaction: TenantTransaction;
+  },
 ) {
   if (!evaluateLaunchScope("publicFunnelPublication").allowed) {
     throw new Error("Public funnel publication is launch-off");
@@ -277,10 +287,8 @@ async function saveStoredFunnelToDatabase(
   if (!workspaceId) throw new Error("Funnel workspace is required");
   if (!isUuid(session?.userId)) throw new Error("Authenticated funnel actor is required");
 
-  return withTenantTransaction(
-    { actorId: session.userId, workspaceId },
-    async (transaction) => {
-      if (qaBatchId) {
+  const persist = async (transaction: TenantTransaction) => {
+      if (qaBatchId && !locked) {
         await assertQaBatchForMutation(transaction, { batchId: qaBatchId, workspaceId });
         await assertQaBatchOwnsObject(transaction, {
           batchId: qaBatchId,
@@ -290,12 +298,19 @@ async function saveStoredFunnelToDatabase(
       }
       // The funnel row is locked before deriving any state. Publication credentials
       // remain database-authoritative and are never copied into a normal save payload.
-      const existingRow = await findFunnelDatabaseRowInTransaction(
+      const existingRow = locked?.existingRow ?? await findFunnelDatabaseRowInTransaction(
         transaction,
         blueprint.id,
         workspaceId,
       );
       if (!existingRow) throw new Error("Funnel not found in database");
+      if (!await canAccessFunnelInTransaction({
+        record: existingRow,
+        session,
+        transaction,
+      })) {
+        throw new FunnelAccessError();
+      }
       if (
         !Number.isSafeInteger(expectedBlueprintRevision) ||
         expectedBlueprintRevision < 0 ||
@@ -310,6 +325,12 @@ async function saveStoredFunnelToDatabase(
         blueprint.projectId,
       );
       if (!projectId) throw new Error("Funnel project not found in database");
+      if (
+        projectId !== existingRow.projectId &&
+        !await canCreateFunnelInProjectInTransaction({ projectId, session, transaction })
+      ) {
+        throw new FunnelAccessError("Funnel target project is not available in the permitted record scope");
+      }
 
       const now = new Date().toISOString();
       const safeBlueprint = sanitizeFunnelBlueprintTracking(blueprint);
@@ -390,7 +411,7 @@ async function saveStoredFunnelToDatabase(
           existingRow.id,
           workspaceId,
           projectId,
-          session.userId,
+          existingRow.ownerUserId,
           safeBlueprint.name,
           safeBlueprint.goal,
           safeBlueprint.audience,
@@ -422,13 +443,38 @@ async function saveStoredFunnelToDatabase(
         transaction,
       });
       return stored;
-    },
+  };
+
+  if (locked) return persist(locked.transaction);
+  return withTenantTransaction(
+    { actorId: session.userId, workspaceId },
+    persist,
   );
 }
 
 export async function getStoredFunnel(funnelId: string, workspaceId?: string | null) {
   if (!hasDatabaseUrl()) throw new Error("Funnel database is not configured");
   return findFunnelRow(funnelId, workspaceId);
+}
+
+export async function getStoredFunnelForSession(funnelId: string, session: AppSession) {
+  if (!hasDatabaseUrl()) throw new Error("Funnel database is not configured");
+  if (!isUuid(funnelId) || !isUuid(session.workspaceId) || !isUuid(session.userId)) return null;
+
+  return withTenantTransaction(
+    { actorId: session.userId, workspaceId: session.workspaceId },
+    async (transaction) => {
+      const row = await findFunnelDatabaseRowInTransaction(
+        transaction,
+        funnelId,
+        session.workspaceId,
+        "share",
+      );
+      if (!row) return null;
+      if (!await canAccessFunnelInTransaction({ record: row, session, transaction })) return null;
+      return toStoredFunnel(row);
+    },
+  );
 }
 
 export async function saveStoredFunnel(
@@ -459,17 +505,54 @@ export async function restoreStoredFunnelVersion(
   expectedBlueprintRevision: number,
   qaBatchId?: string,
 ) {
-  const databaseStored = await getStoredFunnel(funnelId, session.workspaceId);
-  const databaseVersion = databaseStored?.versions.find((item) => item.id === versionId);
-  if (databaseStored && databaseVersion) {
-    return saveStoredFunnel(
-      databaseVersion.blueprint,
-      `Restore ${databaseVersion.label}`,
-      session,
-      expectedBlueprintRevision,
-      "funnel.version_restored",
-      qaBatchId,
-    );
-  }
-  return null;
+  if (!hasDatabaseUrl()) throw new Error("Funnel database is not configured");
+  if (!isUuid(funnelId) || !isUuid(session.workspaceId) || !isUuid(session.userId)) return null;
+
+  return withTenantTransaction(
+    { actorId: session.userId, workspaceId: session.workspaceId },
+    async (transaction) => {
+      // Preserve the canonical QA lock order (batch ledger before domain row).
+      // `saveStoredFunnelToDatabase` reuses this transaction and therefore
+      // skips taking these locks a second time.
+      if (qaBatchId) {
+        await assertQaBatchForMutation(transaction, {
+          batchId: qaBatchId,
+          workspaceId: session.workspaceId,
+        });
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: qaBatchId,
+          object: { id: funnelId, type: "funnels" },
+          workspaceId: session.workspaceId,
+        });
+      }
+      const row = await findFunnelDatabaseRowInTransaction(
+        transaction,
+        funnelId,
+        session.workspaceId,
+      );
+      if (!row) return null;
+      if (!await canAccessFunnelInTransaction({ record: row, session, transaction })) {
+        throw new FunnelAccessError();
+      }
+      const stored = toStoredFunnel(row);
+      if (!stored) return null;
+      const databaseVersion = stored.versions.find((item) => item.id === versionId);
+      if (!databaseVersion) return null;
+      const restoredBlueprint = {
+        ...databaseVersion.blueprint,
+        id: row.id,
+        workspaceId: row.workspaceId,
+      };
+      assertFunnelLivePreflight(restoredBlueprint);
+      return saveStoredFunnelToDatabase(
+        restoredBlueprint,
+        `Restore ${databaseVersion.label}`,
+        session,
+        expectedBlueprintRevision,
+        "funnel.version_restored",
+        qaBatchId,
+        { existingRow: row, transaction },
+      );
+    },
+  );
 }

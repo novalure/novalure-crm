@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
+import { canUseBrokerProjectEditScope } from "@/lib/broker-flow/access-policy";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import {
   loadPaginatedPropertyAssets,
   loadPropertyReservations,
@@ -9,8 +11,8 @@ import {
   attachPropertyDocument,
   attachPropertyMedia,
   createSellerListingRecord,
+  loadPropertyInquiryProjectGrantIds,
   persistPropertyInquiryRoute,
-  recordPropertyPreflightRun,
   savePropertyCostItems,
   savePropertyTextBlocks,
   updatePropertyMediaOrder,
@@ -18,13 +20,13 @@ import {
   updateSellerListingRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
-import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { enforceCsrfForSession } from "@/lib/security/csrf";
+import { canAccessPropertyExports } from "@/lib/property-export/access";
 import {
   routePropertyInquiry,
-  runPropertyChannelPreflight,
   type PropertyAssetSummary,
   type PropertyInquiryRouteInput,
+  type PropertyInquiryRouteResult,
 } from "@/lib/property-department";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -56,9 +58,9 @@ function canPersistRouting(session: AppSession) {
 
 function getWriteStatus(reason: string) {
   const lower = reason.toLowerCase();
-  if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("required")) return 403;
-  if (lower.includes("not found")) return 404;
   if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
+  if (lower.includes("not found")) return 404;
+  if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("required")) return 403;
   return 503;
 }
 
@@ -84,9 +86,27 @@ function parseStatus(value: string | null) {
   return /^[a-z_]{1,50}$/i.test(status) ? status : undefined;
 }
 
-function parseIdempotencyKey(request: Request) {
-  const value = request.headers.get("idempotency-key")?.trim() ?? "";
-  return /^[A-Za-z0-9._:-]{16,160}$/.test(value) ? value : null;
+function safeCsvCell(value: unknown) {
+  const raw = value === null || value === undefined ? "" : String(value);
+  const spreadsheetSafe = /^[=+\-@\t\r]/.test(raw.trimStart()) ? `'${raw}` : raw;
+  return `"${spreadsheetSafe.replaceAll('"', '""')}"`;
+}
+
+function propertyAssetsCsv(assets: PropertyAssetSummary[]) {
+  const rows = [
+    ["id", "title", "address", "project", "status", "object_type", "area_sqm", "price"],
+    ...assets.map((asset) => [
+      asset.sellerListingId ?? asset.id,
+      asset.title,
+      asset.location,
+      asset.projectName,
+      asset.status,
+      asset.objectType,
+      asset.areaSqm ?? "",
+      asset.price ?? "",
+    ]),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(safeCsvCell).join(",")).join("\r\n")}\r\n`;
 }
 
 const propertyInquiryIdFields = [
@@ -128,11 +148,18 @@ function parsePropertyInquiry(payload: Record<string, unknown>, workspaceId: str
   return { inquiry: inquiry as PropertyInquiryRouteInput } as const;
 }
 
-async function loadCanonicalPropertyInquiryCandidates(workspaceId: string) {
-  const [firstPage, units, reservations] = await Promise.all([
-    loadPaginatedPropertyAssets(workspaceId, { limit: 200, offset: 0 }),
-    loadPropertyUnits(workspaceId),
-    loadPropertyReservations(workspaceId),
+async function loadCanonicalPropertyInquiryCandidates(session: AppSession) {
+  const workspaceWide = canViewAllWorkspaceContacts(session);
+  const assetScope = {
+    actorUserId: session.userId,
+    allowProjectEditGrants: canUseBrokerProjectEditScope(session),
+    workspaceWide,
+  };
+  const [firstPage, units, reservations, explicitProjectGrantIds] = await Promise.all([
+    loadPaginatedPropertyAssets(session.workspaceId, { ...assetScope, limit: 200, offset: 0 }),
+    loadPropertyUnits(session.workspaceId),
+    loadPropertyReservations(session.workspaceId),
+    workspaceWide ? Promise.resolve([]) : loadPropertyInquiryProjectGrantIds(session),
   ]);
   const assets = [...firstPage.assets];
   let nextOffset = firstPage.pagination.nextOffset;
@@ -140,22 +167,62 @@ async function loadCanonicalPropertyInquiryCandidates(workspaceId: string) {
 
   while (firstPage.pagination.hasMore && nextOffset !== null && !loadedOffsets.has(nextOffset)) {
     loadedOffsets.add(nextOffset);
-    const page = await loadPaginatedPropertyAssets(workspaceId, { limit: 200, offset: nextOffset });
+    const page = await loadPaginatedPropertyAssets(session.workspaceId, {
+      ...assetScope,
+      limit: 200,
+      offset: nextOffset,
+    });
     assets.push(...page.assets);
     nextOffset = page.pagination.nextOffset;
     if (!page.pagination.hasMore) break;
   }
 
+  const scopedAssets = assets.filter((asset) => (
+    asset.workspaceId === session.workspaceId &&
+    asset.kind === "property" &&
+    Boolean(asset.sellerListingId) &&
+    asset.id === `listing:${asset.sellerListingId}`
+  ));
+  const assetProjectIds = new Set(scopedAssets.map((asset) => asset.projectId).filter((id): id is string => Boolean(id)));
+  const visibleUnitIds = new Set(scopedAssets.flatMap((asset) => asset.unitIds ?? []));
+  const fullProjectIds = workspaceWide ? assetProjectIds : new Set(explicitProjectGrantIds);
+  const scopedUnits = units.filter((unit) => (
+    unit.workspaceId === session.workspaceId &&
+    (fullProjectIds.has(unit.projectId) || visibleUnitIds.has(unit.id))
+  ));
+  const allowedUnitIds = new Set([...visibleUnitIds, ...scopedUnits.map((unit) => unit.id)]);
+  const allowedProjectIds = new Set([...assetProjectIds, ...fullProjectIds]);
+
   return {
-    assets: assets.filter((asset) => (
-      asset.workspaceId === workspaceId &&
-      asset.kind === "property" &&
-      Boolean(asset.sellerListingId) &&
-      asset.id === `listing:${asset.sellerListingId}`
-    )),
-    reservations: reservations.filter((reservation) => reservation.workspaceId === workspaceId),
-    units: units.filter((unit) => unit.workspaceId === workspaceId),
+    candidates: {
+      assets: scopedAssets,
+      reservations: reservations.filter((reservation) => (
+        reservation.workspaceId === session.workspaceId && allowedUnitIds.has(reservation.unitId)
+      )),
+      units: scopedUnits,
+    },
+    scope: {
+      projectIds: allowedProjectIds,
+      propertyIds: new Set(scopedAssets.flatMap((asset) => (
+        asset.sellerListingId ? [asset.id, asset.sellerListingId] : [asset.id]
+      ))),
+      unitIds: allowedUnitIds,
+    },
   };
+}
+
+function isPropertyInquiryRouteWithinScope(
+  inquiry: PropertyInquiryRouteInput,
+  route: PropertyInquiryRouteResult,
+  scope: {
+    projectIds: ReadonlySet<string>;
+    propertyIds: ReadonlySet<string>;
+    unitIds: ReadonlySet<string>;
+  },
+) {
+  return [inquiry.projectId, route.projectId].every((id) => !id || scope.projectIds.has(id))
+    && [inquiry.propertyId, route.propertyId].every((id) => !id || scope.propertyIds.has(id))
+    && [inquiry.unitId, route.unitId].every((id) => !id || scope.unitIds.has(id));
 }
 
 export async function GET(request: Request) {
@@ -174,12 +241,69 @@ export async function GET(request: Request) {
   }
 
   const q = url.searchParams.get("q")?.trim().slice(0, 100) || null;
+  const format = url.searchParams.get("format")?.trim().toLowerCase() || null;
+  if (format && format !== "csv") {
+    return NextResponse.json({ error: "Invalid format" }, { status: 400 });
+  }
+
+  if (format === "csv") {
+    if (!canAccessPropertyExports(auth.session)) {
+      return NextResponse.json(
+        { error: "Property CSV export requires the server-side export policy." },
+        { headers: { "cache-control": "private, no-store" }, status: 403 },
+      );
+    }
+    const firstPage = await loadPaginatedPropertyAssets(auth.session.workspaceId, {
+      actorUserId: auth.session.userId,
+      allowProjectEditGrants: canUseBrokerProjectEditScope(auth.session),
+      limit: 200,
+      offset: 0,
+      projectId,
+      q,
+      status,
+      workspaceWide: canViewAllWorkspaceContacts(auth.session),
+    });
+    if (firstPage.pagination.total > 5_000) {
+      return NextResponse.json(
+        { error: "CSV export is limited to 5,000 records. Apply a narrower project, status, or search filter." },
+        { headers: { "cache-control": "private, no-store" }, status: 413 },
+      );
+    }
+    const csvAssets = [...firstPage.assets];
+    let offset = firstPage.pagination.nextOffset;
+    while (offset !== null) {
+      const page = await loadPaginatedPropertyAssets(auth.session.workspaceId, {
+        actorUserId: auth.session.userId,
+        allowProjectEditGrants: canUseBrokerProjectEditScope(auth.session),
+        limit: 200,
+        offset,
+        projectId,
+        q,
+        status,
+        workspaceWide: canViewAllWorkspaceContacts(auth.session),
+      });
+      csvAssets.push(...page.assets);
+      offset = page.pagination.nextOffset;
+    }
+    return new Response(propertyAssetsCsv(csvAssets), {
+      headers: {
+        "cache-control": "private, no-store",
+        "content-disposition": 'attachment; filename="novalure-properties.csv"',
+        "content-type": "text/csv; charset=utf-8",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+
   const result = await loadPaginatedPropertyAssets(auth.session.workspaceId, {
+    actorUserId: auth.session.userId,
+    allowProjectEditGrants: canUseBrokerProjectEditScope(auth.session),
     limit: parseIntegerParam(url.searchParams.get("limit"), 50, 1, 200),
     offset: parseIntegerParam(url.searchParams.get("offset"), 0, 0, 100_000),
     projectId,
     q,
     status,
+    workspaceWide: canViewAllWorkspaceContacts(auth.session),
   });
 
   return NextResponse.json({
@@ -217,8 +341,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
     const inquiry = parsed.inquiry;
-    const candidates = await loadCanonicalPropertyInquiryCandidates(session.workspaceId);
-    const route = routePropertyInquiry(inquiry, candidates);
+    const canonical = await loadCanonicalPropertyInquiryCandidates(session);
+    const route = routePropertyInquiry(inquiry, canonical.candidates);
+    if (!isPropertyInquiryRouteWithinScope(inquiry, route, canonical.scope)) {
+      return NextResponse.json({ error: "Property inquiry target not found." }, { status: 404 });
+    }
 
     if (!canPersistRouting(session)) {
       return NextResponse.json({
@@ -240,49 +367,15 @@ export async function POST(request: Request) {
   }
 
   if (operation === "run_preflight") {
-    const launchScope = evaluateLaunchScope("propertyExportQueue");
-    if (!launchScope.allowed) {
-      return NextResponse.json(
-        { code: launchScope.code, error: "property_export_queue_launch_off", persisted: false },
-        { headers: { "cache-control": "private, no-store" }, status: 503 },
-      );
-    }
-
-    const idempotencyKey = parseIdempotencyKey(request);
-    if (input.recordHistory !== false && !idempotencyKey) {
-      return NextResponse.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
-    }
-    const asset = asObject(input.asset) as PropertyAssetSummary;
-    const channel = typeof input.channel === "string" && input.channel.trim()
-      ? input.channel.trim()
-      : "Immobilienportal";
-    if (!asset.id || !asset.title) {
-      return NextResponse.json({ error: "Preflight asset is required" }, { status: 400 });
-    }
-
-    const preflight = runPropertyChannelPreflight(asset, channel);
-    if (!canPersistRouting(session) || input.recordHistory === false) {
-      return NextResponse.json({
-        preflight,
+    return NextResponse.json(
+      {
+        code: "legacy_property_preflight_removed",
+        error: "Legacy client-supplied preflight was removed. Use the canonical property export API.",
         persisted: false,
-        reason: "CRM write permission required to record preflight history.",
-      });
-    }
-
-    const result = await recordPropertyPreflightRun({
-      assetId: asset.sellerListingId ? `listing:${asset.sellerListingId}` : asset.id,
-      channel,
-      idempotencyKey: idempotencyKey ?? "not-persisted",
-      preflight,
-      projectId: asset.projectId,
-      session,
-    });
-
-    if (!result.persisted) {
-      return NextResponse.json({ preflight, persisted: false, reason: result.reason });
-    }
-
-    return NextResponse.json({ data: result.data, preflight, persisted: true });
+        replacement: "/api/crm/property-exports",
+      },
+      { headers: { "cache-control": "private, no-store" }, status: 410 },
+    );
   }
 
   if (operation !== "create_property") {

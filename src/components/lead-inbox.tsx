@@ -45,6 +45,7 @@ type LeadInboxProps = {
   consents: ConsentRecord[];
   contacts: Contact[];
   conversations: Conversation[];
+  initialSelectedLeadId?: string | null;
   leads: Lead[];
   language: LanguageCode;
   onLeadsChanged?: () => Promise<boolean | void> | boolean | void;
@@ -201,6 +202,7 @@ export function LeadInbox({
   consents = [],
   contacts = [],
   conversations = [],
+  initialSelectedLeadId,
   leads = [],
   language,
   onLeadsChanged,
@@ -213,7 +215,7 @@ export function LeadInbox({
   const locale = getLocale(language);
   const [sessionLeads, setSessionLeads] = useState<LocalLead[]>([]);
   const [leadOverrides, setLeadOverrides] = useState<Record<string, Partial<LocalLead>>>({});
-  const [selectedLeadId, setSelectedLeadId] = useState<string>(leads[0]?.id ?? "");
+  const [selectedLeadId, setSelectedLeadId] = useState<string>(initialSelectedLeadId ?? leads[0]?.id ?? "");
   const [activeView, setActiveView] = useState<LeadView>("queue");
   const [sortBy, setSortBy] = useState<LeadSort>("priority");
   const [searchTerm, setSearchTerm] = useState("");
@@ -256,6 +258,7 @@ export function LeadInbox({
   );
 
   const selectedLead = effectiveLeads.find((lead) => lead.id === selectedLeadId) ?? effectiveLeads[0];
+
   const activeFieldDraft = selectedLead && fieldDraft.leadId === selectedLead.id
     ? fieldDraft
     : {

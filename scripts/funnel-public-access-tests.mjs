@@ -131,7 +131,7 @@ test("test preview and submission reads remain scoped to the authenticated works
   const preview = readProjectFile("src/app/preview/[funnelId]/page.tsx");
   const submissions = readProjectFile("src/app/api/funnels/[funnelId]/submissions/route.ts");
 
-  assert.match(preview, /getStoredFunnel\(funnelId, session\.workspaceId\)/);
+  assert.match(preview, /getStoredFunnelForSession\(funnelId, session\)/);
   assert.match(preview, /session\.permissions\.includes\("funnels:write"\)/);
   assert.match(preview, /hasProductCapability\(session\.productRole, "funnels:publish"\)/);
   assert.match(preview, /canUsePublicLiveFunnel/);
@@ -140,7 +140,9 @@ test("test preview and submission reads remain scoped to the authenticated works
   assert.doesNotMatch(preview, /catch\s*(?:\([^)]*\))?\s*\{[\s\S]*?notFound\(\)/);
   assert.doesNotMatch(preview, /\?\? "local"|fixture|demoFunnel/);
 
-  assert.match(submissions, /getStoredFunnel\(funnelId, auth\?\.session\.workspaceId\)/);
+  assert.match(submissions, /requirePermissionAndProductCapability\(request, "funnels:write", "funnels:publish"\)/);
+  assert.match(submissions, /getStoredFunnelForSession\(funnelId, auth\.session\)/);
+  assert.match(submissions, /await getStoredFunnel\(funnelId\)/);
   assert.match(submissions, /isStoredFunnelPubliclyLive/);
   assert.match(submissions, /canonicalizeFunnelSubmissionPayload/);
   assert.match(submissions, /verifyPublicSubmissionProof/);

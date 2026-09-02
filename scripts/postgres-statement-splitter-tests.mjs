@@ -34,6 +34,16 @@ for (const file of [
   "migrations/076_bot_webhook_durable_processing.sql",
   "migrations/078_company_profile_approval_integrity.sql",
   "migrations/079_public_funnel_visit_role_boundary.sql",
+  "migrations/080_property_export_runtime.sql",
+  "migrations/080_property_export_runtime_rollback.sql",
+  "migrations/081_broker_operations.sql",
+  "migrations/081_broker_operations_rollback.sql",
+  "migrations/082_content_library_privacy.sql",
+  "migrations/082_content_library_privacy_rollback.sql",
+  "migrations/083_list_productivity_controls.sql",
+  "migrations/083_list_productivity_controls_rollback.sql",
+  "migrations/084_media_deletion_lifecycle.sql",
+  "migrations/084_media_deletion_lifecycle_rollback.sql",
 ]) {
   const statements = splitPostgresStatements(await readFile(file, "utf8"));
   assert.ok(statements.length > 0, `${file} should contain executable statements`);

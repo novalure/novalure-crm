@@ -10,7 +10,11 @@ import {
   getStoredFunnelSubmissionScopeResourceId,
 } from "@/lib/funnel-public-access";
 import { toPublicFunnelDto } from "@/lib/funnel-public-dto";
-import { getStoredFunnel, type StoredFunnel } from "@/lib/funnel-store";
+import {
+  getStoredFunnel,
+  getStoredFunnelForSession,
+  type StoredFunnel,
+} from "@/lib/funnel-store";
 import type { FunnelDevice } from "@/lib/funnel-schema";
 import { getFunnelDeviceLabel, getFunnelPreviewCopy, resolveLanguage } from "@/lib/i18n";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
@@ -51,7 +55,7 @@ export default async function FunnelPreviewPage({ params, searchParams }: Previe
     ) {
       notFound();
     }
-    stored = await getStoredFunnel(funnelId, session.workspaceId);
+    stored = await getStoredFunnelForSession(funnelId, session);
   } else {
     // Fail closed before the public request can read funnel data or receive a
     // submission proof when publication is disabled during a launch incident.

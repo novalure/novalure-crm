@@ -40,6 +40,8 @@ type ContactCommandCenterProps = {
   consents: ConsentRecord[];
   contacts: Contact[];
   currentUserId?: string;
+  initialSelectedContactId?: string | null;
+  initialSelectedOrganizationId?: string | null;
   language: LanguageCode;
   leads: Lead[];
   onContactsChanged?: () => Promise<void> | void;
@@ -202,6 +204,8 @@ export function ContactCommandCenter({
   consents,
   contacts,
   currentUserId,
+  initialSelectedContactId,
+  initialSelectedOrganizationId,
   language,
   leads,
   onContactsChanged,
@@ -233,7 +237,13 @@ export function ContactCommandCenter({
       ...(contactPatches[contact.id] ?? {}),
     }));
   }, [archivedContactIds, contactPatches, contacts, serverContactOverlays]);
-  const [selectedContactId, setSelectedContactId] = useState(contacts[0]?.id ?? "");
+  const [selectedContactId, setSelectedContactId] = useState(() => (
+    initialSelectedContactId ?? (
+      initialSelectedOrganizationId
+        ? contacts.find((contact) => contact.organizationId === initialSelectedOrganizationId)?.id
+        : null
+    ) ?? contacts[0]?.id ?? ""
+  ));
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState<ContactView>("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);

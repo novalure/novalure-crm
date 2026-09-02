@@ -1,6 +1,7 @@
 import type {
   AppSession,
 } from "@/lib/auth/session";
+import { canUseBrokerProjectEditScope } from "@/lib/broker-flow/access-policy";
 import type {
   CalendarEvent,
   Contact,
@@ -31,6 +32,7 @@ import type {
   Task,
 } from "@/lib/crm-types";
 import {
+  canViewAllWorkspaceContacts,
   getContactVisibilityScope,
   type ContactVisibilityScope,
 } from "@/lib/contact-access";
@@ -53,8 +55,10 @@ import {
 } from "@/lib/crm-data";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { crmTables } from "@/lib/db/schema";
+import { withTenantTransaction } from "@/lib/db/tenant-client";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { buildPropertyAssets, type PropertyAssetSummary } from "@/lib/property-department";
+import { hasProductCapability, type ProductCapability } from "@/lib/product-model";
 
 type CoreCrmData = {
   brokerMandates: BrokerMandate[];
@@ -293,6 +297,7 @@ type BuyerSearchProfileRow = {
   metadata: Record<string, unknown> | null;
   mustHaveCriteria: string[] | null;
   niceToHaveCriteria: string[] | null;
+  ownerUserId: string | null;
   projectId: string | null;
   propertyType: BuyerSearchProfile["propertyType"] | null;
   purchaseTimeline: string | null;
@@ -350,6 +355,7 @@ type EditorPreflightRunRow = {
   blockers: string[] | null;
   checks: EditorPreflightRun["checks"] | null;
   createdAt: string | Date;
+  createdByUserId: string | null;
   editorType: EditorPreflightRun["editorType"];
   entityId: string | null;
   id: string;
@@ -669,12 +675,51 @@ export type PropertyUnitPaginationResult = {
 };
 
 export type PropertyAssetPaginationOptions = {
+  actorUserId?: string | null;
+  allowProjectEditGrants?: boolean;
   limit?: number;
   offset?: number;
   projectId?: string | null;
   q?: string | null;
   status?: string | null;
+  workspaceWide?: boolean;
 };
+
+const actorScopedPropertyKeys = [
+  "brokerMandates",
+  "buyerSearchProfiles",
+  "propertyBuildings",
+  "propertyCostItems",
+  "propertyDocuments",
+  "propertyMedia",
+  "propertyReservations",
+  "propertyTextBlocks",
+  "propertyUnits",
+  "sellerListings",
+] as const satisfies CoreCrmDataKey[];
+
+type CrmActorVisibilityScope =
+  | { kind: "workspace" }
+  | {
+      allowProjectEditVisibility: boolean;
+      kind: "actor";
+      userId: string;
+    };
+
+type ActorPropertyProjectScope = {
+  customerViewProjectIds: ReadonlySet<string>;
+  editableProjectIds: ReadonlySet<string>;
+  viewableProjectIds: ReadonlySet<string>;
+};
+
+function getCrmActorVisibilityScope(session?: AppSession): CrmActorVisibilityScope {
+  if (!session || canViewAllWorkspaceContacts(session)) return { kind: "workspace" };
+  return {
+    allowProjectEditVisibility: canUseBrokerProjectEditScope(session),
+    kind: "actor",
+    userId: session.userId,
+  };
+}
 
 export type PropertyAssetPaginationResult = {
   assets: PropertyAssetSummary[];
@@ -704,6 +749,294 @@ function requireWorkspaceId(workspaceId: string | null | undefined, loaderName: 
 
 function filterWorkspaceItems<T extends { workspaceId: string }>(items: T[], workspaceId: string) {
   return items.filter((item) => item.workspaceId === workspaceId);
+}
+
+async function loadActorPropertyProjectIds(session: AppSession) {
+  const rows = await withTenantTransaction(
+    { actorId: session.userId, workspaceId: session.workspaceId },
+    (transaction) => transaction.query<{ accessKind: "edit" | "view"; projectId: string }>(
+      `
+        select permission.project_id as "projectId", 'edit'::text as "accessKind"
+        from public.project_pipeline_permissions permission
+        where permission.workspace_id = $1::uuid
+          and permission.user_id = $2::uuid
+          and permission.can_edit_deals = true
+          and $3::boolean
+        union all
+        select access.project_id as "projectId", 'view'::text as "accessKind"
+        from public.customer_project_access access
+        where access.workspace_id = $1::uuid
+          and access.user_id = $2::uuid
+          and access.status = 'active'
+          and access.can_view_project = true
+      `,
+      [
+        session.workspaceId,
+        session.userId,
+        canUseBrokerProjectEditScope(session),
+      ],
+    ),
+  );
+
+  return {
+    customerViewProjectIds: new Set(rows.filter((row) => row.accessKind === "view").map((row) => row.projectId)),
+    editableProjectIds: new Set(rows.filter((row) => row.accessKind === "edit").map((row) => row.projectId)),
+    viewableProjectIds: new Set(rows.map((row) => row.projectId)),
+  };
+}
+
+function applyActorPropertyScope(
+  data: CoreCrmData,
+  session: AppSession,
+  projectScope: ActorPropertyProjectScope,
+) {
+  if (canViewAllWorkspaceContacts(session)) return;
+
+  const actorLeadIds = new Set(
+    data.leads
+      .filter((lead) => lead.assignedToUserId === session.userId)
+      .map((lead) => lead.id),
+  );
+  const actorContactIds = new Set(data.contacts.map((contact) => contact.id));
+  const directlyVisibleListings = data.sellerListings.filter((listing) => (
+    listing.ownerUserId === session.userId || actorLeadIds.has(listing.sellerLeadId)
+  ));
+  const directlyVisibleListingIds = new Set(directlyVisibleListings.map((listing) => listing.id));
+  const visibleListings = data.sellerListings
+    .filter((listing) => (
+      directlyVisibleListingIds.has(listing.id) || projectScope.viewableProjectIds.has(listing.projectId)
+    ))
+    .map((listing) => {
+      const customerViewOnly = projectScope.customerViewProjectIds.has(listing.projectId) &&
+        !projectScope.editableProjectIds.has(listing.projectId) &&
+        !directlyVisibleListingIds.has(listing.id);
+      if (!customerViewOnly) return listing;
+      return {
+        ...listing,
+        canonicalPayload: undefined,
+        contactEmail: undefined,
+        contactName: undefined,
+        contactPhone: undefined,
+        contactUserId: undefined,
+        internalNotes: undefined,
+        ownerContactId: undefined,
+        ownerUserId: undefined,
+      };
+    });
+  const visibleListingIds = new Set(visibleListings.map((listing) => listing.id));
+  const visibleProjectIds = new Set(projectScope.viewableProjectIds);
+
+  data.sellerListings = visibleListings;
+  data.projectPipelinePermissions = data.projectPipelinePermissions.filter(
+    (permission) => permission.userId === session.userId,
+  );
+  data.brokerMandates = data.brokerMandates.filter((mandate) => (
+    (mandate.projectId ? projectScope.editableProjectIds.has(mandate.projectId) : false) ||
+    (mandate.sellerLeadId ? actorLeadIds.has(mandate.sellerLeadId) : false) ||
+    (mandate.contactId ? actorContactIds.has(mandate.contactId) : false)
+  ));
+  data.buyerSearchProfiles = data.buyerSearchProfiles.filter((profile) => (
+    profile.ownerUserId === session.userId ||
+    (profile.projectId ? projectScope.editableProjectIds.has(profile.projectId) : false) ||
+    (profile.buyerLeadId ? actorLeadIds.has(profile.buyerLeadId) : false) ||
+    (profile.contactId ? actorContactIds.has(profile.contactId) : false)
+  ));
+  const directlyVisibleUnitIds = new Set(
+    directlyVisibleListings.map((listing) => listing.unitId).filter((id): id is string => Boolean(id)),
+  );
+  data.propertyUnits = data.propertyUnits
+    .filter((item) => visibleProjectIds.has(item.projectId) || directlyVisibleUnitIds.has(item.id))
+    .map((unit) => {
+      const customerViewOnly = projectScope.customerViewProjectIds.has(unit.projectId) &&
+        !projectScope.editableProjectIds.has(unit.projectId) &&
+        !directlyVisibleUnitIds.has(unit.id);
+      if (!customerViewOnly) return unit;
+      return {
+        ...unit,
+        buyerContactId: undefined,
+        dealId: undefined,
+        reservationId: undefined,
+      };
+    });
+
+  const visibleUnitIds = new Set(data.propertyUnits.map((unit) => unit.id));
+  const visibleBuildingIds = new Set(data.propertyUnits.map((unit) => unit.buildingId));
+  data.propertyBuildings = data.propertyBuildings.filter((item) => (
+    visibleProjectIds.has(item.projectId) || visibleBuildingIds.has(item.id)
+  ));
+  const isVisiblePropertyRelation = (item: {
+    projectId?: string;
+    propertyId?: string;
+    unitId?: string;
+  }) => (
+    (item.projectId ? visibleProjectIds.has(item.projectId) : false) ||
+    (item.propertyId ? visibleListingIds.has(item.propertyId) : false) ||
+    (item.unitId ? visibleUnitIds.has(item.unitId) : false)
+  );
+
+  data.propertyCostItems = data.propertyCostItems
+    .filter(isVisiblePropertyRelation)
+    .filter((item) => (
+      !item.projectId ||
+      !projectScope.customerViewProjectIds.has(item.projectId) ||
+      projectScope.editableProjectIds.has(item.projectId) ||
+      directlyVisibleListingIds.has(item.propertyId ?? "") ||
+      item.exposeVisible
+    ))
+    .map((item) => ({ ...item, internalNote: undefined }));
+  data.propertyDocuments = data.propertyDocuments
+    .filter(isVisiblePropertyRelation)
+    .filter((item) => (
+      !item.projectId ||
+      !projectScope.customerViewProjectIds.has(item.projectId) ||
+      projectScope.editableProjectIds.has(item.projectId) ||
+      directlyVisibleListingIds.has(item.propertyId ?? "") ||
+      (["public", "channel"].includes(item.visibility) && ["approved", "sent"].includes(item.status))
+    ));
+  data.propertyMedia = data.propertyMedia
+    .filter(isVisiblePropertyRelation)
+    .filter((item) => (
+      !item.projectId ||
+      !projectScope.customerViewProjectIds.has(item.projectId) ||
+      projectScope.editableProjectIds.has(item.projectId) ||
+      directlyVisibleListingIds.has(item.propertyId ?? "") ||
+      (["public", "channel"].includes(item.visibility) && ["approved", "published"].includes(item.status))
+    ));
+  data.propertyTextBlocks = data.propertyTextBlocks
+    .filter(isVisiblePropertyRelation)
+    .filter((item) => (
+      !item.projectId ||
+      !projectScope.customerViewProjectIds.has(item.projectId) ||
+      projectScope.editableProjectIds.has(item.projectId) ||
+      directlyVisibleListingIds.has(item.propertyId ?? "") ||
+      (["public", "channel"].includes(item.visibility) && ["approved", "published"].includes(item.status))
+    ));
+  data.propertyReservations = data.propertyReservations.filter((reservation) => (
+    projectScope.editableProjectIds.has(reservation.projectId) ||
+    directlyVisibleUnitIds.has(reservation.unitId)
+  ));
+}
+
+function canReadEditorPreflightType(session: AppSession, editorType: EditorPreflightRun["editorType"]) {
+  const capabilityByType: Record<EditorPreflightRun["editorType"], ProductCapability> = {
+    bot: "bots:publish",
+    calendar: "calendar:manage",
+    funnel: "funnels:publish",
+    newsletter: "newsletter:send",
+  };
+  return hasProductCapability(session.productRole, capabilityByType[editorType]);
+}
+
+function applyActorAuxiliaryScope(
+  data: CoreCrmData,
+  session: AppSession,
+  projectScope: ActorPropertyProjectScope,
+) {
+  if (canViewAllWorkspaceContacts(session)) return;
+
+  const visibleProjectIds = new Set(data.projects.map((project) => project.id));
+  data.crmPipelines = data.crmPipelines.filter((pipeline) => (
+    !pipeline.projectId || visibleProjectIds.has(pipeline.projectId)
+  ));
+  const visiblePipelineIds = new Set(data.crmPipelines.map((pipeline) => pipeline.id));
+  data.crmPipelineStages = data.crmPipelineStages.filter((stage) => (
+    visiblePipelineIds.has(stage.pipelineId) &&
+    (!stage.projectId || visibleProjectIds.has(stage.projectId))
+  ));
+
+  if (hasProductCapability(session.productRole, "funnels:publish")) {
+    data.funnels = data.funnels.filter((funnel) => (
+      funnel.ownerUserId === session.userId ||
+      (Boolean(funnel.projectId) && projectScope.editableProjectIds.has(funnel.projectId))
+    ));
+  } else {
+    data.funnels = [];
+  }
+  const visibleFunnelIds = new Set(data.funnels.map((funnel) => funnel.id));
+  data.funnelSteps = data.funnelSteps.filter((step) => visibleFunnelIds.has(step.funnelId));
+
+  if (hasProductCapability(session.productRole, "newsletter:send")) {
+    data.newsletterCampaigns = data.newsletterCampaigns.filter((campaign) => (
+      campaign.ownerUserId === session.userId ||
+      (campaign.projectId ? projectScope.editableProjectIds.has(campaign.projectId) : false)
+    ));
+    data.newsletterSegments = data.newsletterSegments.filter((segment) => (
+      segment.projectId ? projectScope.editableProjectIds.has(segment.projectId) : false
+    ));
+  } else {
+    data.newsletterCampaigns = [];
+    data.newsletterSegments = [];
+  }
+
+  data.crmBots = hasProductCapability(session.productRole, "bots:publish")
+    ? data.crmBots.filter((bot) => (
+        bot.projectId ? projectScope.editableProjectIds.has(bot.projectId) : false
+      ))
+    : [];
+
+  data.editorPreflightRuns = data.editorPreflightRuns.filter((run) => (
+    run.createdByUserId === session.userId &&
+    canReadEditorPreflightType(session, run.editorType) &&
+    (!run.projectId || visibleProjectIds.has(run.projectId))
+  ));
+}
+
+function getSessionScopedFallbackData(data: CoreCrmDataResult, session?: AppSession) {
+  if (!session || canViewAllWorkspaceContacts(session)) return data;
+
+  const scoped: CoreCrmDataResult = {
+    ...data,
+    calendarEvents: data.calendarEvents.filter((event) => event.ownerUserId === session.userId),
+    contacts: data.contacts.filter((contact) => contact.ownerUserId === session.userId),
+    deals: data.deals.filter((deal) => deal.ownerUserId === session.userId),
+    leads: data.leads.filter((lead) => lead.assignedToUserId === session.userId),
+    projectPipelinePermissions: data.projectPipelinePermissions.filter(
+      (permission) => permission.userId === session.userId,
+    ),
+    tasks: data.tasks.filter((task) => task.ownerUserId === session.userId),
+  };
+  const editableProjectIds = new Set(
+    scoped.projectPipelinePermissions
+      .filter((permission) => (
+        canUseBrokerProjectEditScope(session) && permission.canEditDeals
+      ))
+      .map((permission) => permission.projectId),
+  );
+  applyActorPropertyScope(scoped, session, {
+    customerViewProjectIds: new Set(),
+    editableProjectIds,
+    viewableProjectIds: editableProjectIds,
+  });
+
+  const visibleProjectIds = new Set([
+    ...scoped.calendarEvents.map((event) => event.projectId),
+    ...scoped.contacts.map((contact) => contact.projectId),
+    ...scoped.deals.map((deal) => deal.projectId),
+    ...scoped.leads.map((lead) => lead.projectId),
+    ...scoped.sellerListings.map((listing) => listing.projectId),
+    ...scoped.tasks.map((task) => task.projectId),
+    ...editableProjectIds,
+  ].filter(Boolean));
+  scoped.projects = scoped.projects
+    .filter((project) => visibleProjectIds.has(project.id))
+    .map((project) => ({
+      ...project,
+      leads: scoped.leads.filter((lead) => lead.projectId === project.id).length,
+      revenue: "€0",
+    }));
+  applyActorAuxiliaryScope(scoped, session, {
+    customerViewProjectIds: new Set(),
+    editableProjectIds,
+    viewableProjectIds: editableProjectIds,
+  });
+  scoped.dailyQueue = buildDailyQueueData({
+    calendarEvents: scoped.calendarEvents,
+    contacts: scoped.contacts,
+    deals: scoped.deals,
+    leads: scoped.leads,
+    tasks: scoped.tasks,
+  });
+  return scoped;
 }
 
 export function getMockCoreCrmData(workspaceId: string): CoreCrmDataResult {
@@ -768,49 +1101,59 @@ export async function getCoreCrmData(
 ): Promise<CoreCrmDataResult> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "getCoreCrmData");
   const fallbackData = getMockCoreCrmData(scopedWorkspaceId);
+  const actorScope = getCrmActorVisibilityScope(options.session);
 
   if (!hasDatabaseUrl()) {
-    return fallbackData;
+    return getSessionScopedFallbackData(fallbackData, options.session);
   }
 
   const contactScope = options.session
     ? getContactVisibilityScope(options.session)
     : ({ kind: "workspace" } satisfies ContactVisibilityScope);
+  const moduleFallbackData = getSessionScopedFallbackData(fallbackData, options.session);
 
   const moduleResults = await Promise.all([
-    loadModule("brokerMandates", () => loadBrokerMandates(scopedWorkspaceId), fallbackData.brokerMandates),
-    loadModule("buyerSearchProfiles", () => loadBuyerSearchProfiles(scopedWorkspaceId), fallbackData.buyerSearchProfiles),
-    loadModule("calendarEvents", () => loadCalendarEvents(scopedWorkspaceId), fallbackData.calendarEvents),
-    loadModule("contacts", () => loadContacts(scopedWorkspaceId, contactScope), fallbackData.contacts),
-    loadModule("crmPipelineStages", () => loadCrmPipelineStages(scopedWorkspaceId), fallbackData.crmPipelineStages),
-    loadModule("crmPipelines", () => loadCrmPipelines(scopedWorkspaceId), fallbackData.crmPipelines),
-    loadModule("editorPreflightRuns", () => loadEditorPreflightRuns(scopedWorkspaceId), fallbackData.editorPreflightRuns),
-    loadModule("leads", () => loadLeads(scopedWorkspaceId), fallbackData.leads),
-    loadModule("deals", () => loadDeals(scopedWorkspaceId), fallbackData.deals),
-    loadModule("tasks", () => loadTasks(scopedWorkspaceId), fallbackData.tasks),
-    loadModule("projects", () => loadProjects(scopedWorkspaceId), fallbackData.projects),
-    loadModule("funnels", () => loadFunnels(scopedWorkspaceId), fallbackData.funnels),
-    loadModule("funnelSteps", () => loadFunnelSteps(scopedWorkspaceId), fallbackData.funnelSteps),
-    loadModule("newsletterSegments", () => loadNewsletterSegments(scopedWorkspaceId), fallbackData.newsletterSegments),
-    loadModule("newsletterCampaigns", () => loadNewsletterCampaigns(scopedWorkspaceId), fallbackData.newsletterCampaigns),
+    loadModule(
+      "brokerMandates",
+      () => options.session ? loadBrokerMandates(options.session) : Promise.resolve([]),
+      moduleFallbackData.brokerMandates,
+    ),
+    loadModule(
+      "buyerSearchProfiles",
+      () => options.session ? loadBuyerSearchProfiles(options.session) : Promise.resolve([]),
+      moduleFallbackData.buyerSearchProfiles,
+    ),
+    loadModule("calendarEvents", () => loadCalendarEvents(scopedWorkspaceId, actorScope), moduleFallbackData.calendarEvents),
+    loadModule("contacts", () => loadContacts(scopedWorkspaceId, contactScope), moduleFallbackData.contacts),
+    loadModule("crmPipelineStages", () => loadCrmPipelineStages(scopedWorkspaceId), moduleFallbackData.crmPipelineStages),
+    loadModule("crmPipelines", () => loadCrmPipelines(scopedWorkspaceId), moduleFallbackData.crmPipelines),
+    loadModule("editorPreflightRuns", () => loadEditorPreflightRuns(scopedWorkspaceId), moduleFallbackData.editorPreflightRuns),
+    loadModule("leads", () => loadLeads(scopedWorkspaceId, actorScope), moduleFallbackData.leads),
+    loadModule("deals", () => loadDeals(scopedWorkspaceId, actorScope), moduleFallbackData.deals),
+    loadModule("tasks", () => loadTasks(scopedWorkspaceId, actorScope), moduleFallbackData.tasks),
+    loadModule("projects", () => loadProjects(scopedWorkspaceId, actorScope), moduleFallbackData.projects),
+    loadModule("funnels", () => loadFunnels(scopedWorkspaceId), moduleFallbackData.funnels),
+    loadModule("funnelSteps", () => loadFunnelSteps(scopedWorkspaceId), moduleFallbackData.funnelSteps),
+    loadModule("newsletterSegments", () => loadNewsletterSegments(scopedWorkspaceId), moduleFallbackData.newsletterSegments),
+    loadModule("newsletterCampaigns", () => loadNewsletterCampaigns(scopedWorkspaceId), moduleFallbackData.newsletterCampaigns),
     loadModule(
       "projectPipelinePermissions",
-      () => loadProjectPipelinePermissions(scopedWorkspaceId),
-      fallbackData.projectPipelinePermissions,
+      () => loadProjectPipelinePermissions(scopedWorkspaceId, actorScope),
+      moduleFallbackData.projectPipelinePermissions,
     ),
-    loadModule("crmBots", () => loadCrmBots(scopedWorkspaceId), fallbackData.crmBots),
-    loadModule("propertyBuildings", () => loadPropertyBuildings(scopedWorkspaceId), fallbackData.propertyBuildings),
-    loadModule("propertyCostItems", () => loadPropertyCostItems(scopedWorkspaceId), fallbackData.propertyCostItems),
-    loadModule("propertyDocuments", () => loadPropertyDocuments(scopedWorkspaceId), fallbackData.propertyDocuments),
-    loadModule("propertyMedia", () => loadPropertyMedia(scopedWorkspaceId), fallbackData.propertyMedia),
-    loadModule("propertyUnits", () => loadPropertyUnits(scopedWorkspaceId), fallbackData.propertyUnits),
+    loadModule("crmBots", () => loadCrmBots(scopedWorkspaceId), moduleFallbackData.crmBots),
+    loadModule("propertyBuildings", () => loadPropertyBuildings(scopedWorkspaceId), moduleFallbackData.propertyBuildings),
+    loadModule("propertyCostItems", () => loadPropertyCostItems(scopedWorkspaceId), moduleFallbackData.propertyCostItems),
+    loadModule("propertyDocuments", () => loadPropertyDocuments(scopedWorkspaceId), moduleFallbackData.propertyDocuments),
+    loadModule("propertyMedia", () => loadPropertyMedia(scopedWorkspaceId), moduleFallbackData.propertyMedia),
+    loadModule("propertyUnits", () => loadPropertyUnits(scopedWorkspaceId), moduleFallbackData.propertyUnits),
     loadModule(
       "propertyReservations",
       () => loadPropertyReservations(scopedWorkspaceId),
-      fallbackData.propertyReservations,
+      moduleFallbackData.propertyReservations,
     ),
-    loadModule("propertyTextBlocks", () => loadPropertyTextBlocks(scopedWorkspaceId), fallbackData.propertyTextBlocks),
-    loadModule("sellerListings", () => loadSellerListings(scopedWorkspaceId), fallbackData.sellerListings),
+    loadModule("propertyTextBlocks", () => loadPropertyTextBlocks(scopedWorkspaceId), moduleFallbackData.propertyTextBlocks),
+    loadModule("sellerListings", () => loadSellerListings(scopedWorkspaceId), moduleFallbackData.sellerListings),
   ]);
 
   const data = {} as CoreCrmData;
@@ -823,6 +1166,31 @@ export async function getCoreCrmData(
     moduleSources[result.key] = result.source;
     if (result.error) moduleErrors[result.key] = result.error;
     if (result.missingTable) missingTables.add(result.missingTable);
+  }
+
+  if (options.session && !canViewAllWorkspaceContacts(options.session)) {
+    let projectScope: ActorPropertyProjectScope = {
+      customerViewProjectIds: new Set(),
+      editableProjectIds: new Set(),
+      viewableProjectIds: new Set(),
+    };
+    try {
+      projectScope = await loadActorPropertyProjectIds(options.session);
+      applyActorPropertyScope(data, options.session, projectScope);
+    } catch (error) {
+      // Owner-linked records can still be identified from the already-scoped
+      // contact and actor assignment data. Project grants fail closed.
+      applyActorPropertyScope(data, options.session, {
+        customerViewProjectIds: new Set(),
+        editableProjectIds: new Set(),
+        viewableProjectIds: new Set(),
+      });
+      const message = error instanceof Error ? error.message : "Actor property scope could not be resolved";
+      for (const key of actorScopedPropertyKeys) {
+        moduleErrors[key] = `Actor property scope failed closed: ${message}`;
+      }
+    }
+    applyActorAuxiliaryScope(data, options.session, projectScope);
   }
 
   try {
@@ -1128,8 +1496,103 @@ function buildDailyQueueData(input: {
   };
 }
 
-export async function loadProjects(workspaceId: string): Promise<Project[]> {
+export async function loadProjects(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<Project[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadProjects");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorEntityFilter = visibilityScope.kind === "actor"
+    ? `and (
+        assigned_to_user_id = $2::uuid
+        or ($3::boolean and project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = leads.workspace_id
+            and permission.project_id = leads.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  const actorDealFilter = visibilityScope.kind === "actor"
+    ? `and (
+        owner_user_id = $2::uuid
+        or ($3::boolean and project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = deals.workspace_id
+            and permission.project_id = deals.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  const actorProjectFilter = visibilityScope.kind === "actor"
+    ? `and (
+        exists (
+          select 1 from public.customer_project_access access
+          where access.workspace_id = p.workspace_id
+            and access.project_id = p.id
+            and access.user_id = $2::uuid
+            and access.status = 'active'
+            and access.can_view_project = true
+        )
+        or ($3::boolean and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = p.workspace_id
+            and permission.project_id = p.id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+        or exists (
+          select 1 from public.contacts contact
+          where contact.workspace_id = p.workspace_id
+            and contact.project_id = p.id
+            and contact.owner_user_id = $2::uuid
+            and contact.archived_at is null
+        )
+        or exists (
+          select 1 from public.leads lead
+          where lead.workspace_id = p.workspace_id
+            and lead.project_id = p.id
+            and lead.assigned_to_user_id = $2::uuid
+        )
+        or exists (
+          select 1 from public.deals deal
+          where deal.workspace_id = p.workspace_id
+            and deal.project_id = p.id
+            and deal.owner_user_id = $2::uuid
+        )
+        or exists (
+          select 1 from public.tasks task
+          where task.workspace_id = p.workspace_id
+            and task.project_id = p.id
+            and task.owner_user_id = $2::uuid
+        )
+        or exists (
+          select 1 from public.calendar_events event
+          where event.workspace_id = p.workspace_id
+            and event.project_id = p.id
+            and event.owner_user_id = $2::uuid
+        )
+        or exists (
+          select 1 from public.seller_listings listing
+          where listing.workspace_id = p.workspace_id
+            and listing.project_id = p.id
+            and (
+              listing.owner_user_id = $2::uuid
+              or exists (
+                select 1 from public.leads seller_lead
+                where seller_lead.workspace_id = listing.workspace_id
+                  and seller_lead.id = listing.seller_lead_id
+                  and seller_lead.assigned_to_user_id = $2::uuid
+              )
+            )
+        )
+      )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<ProjectRow>(
     `
     select
@@ -1152,6 +1615,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
         count(*)::int as leads
       from leads
       where workspace_id = $1
+        ${actorEntityFilter}
       group by workspace_id, project_id
     ) l on l.project_id = p.id and l.workspace_id = p.workspace_id
     left join (
@@ -1162,12 +1626,14 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
       from deals
       where workspace_id = $1
         and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+        ${actorDealFilter}
       group by workspace_id, project_id
     ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
     where p.workspace_id = $1
+      ${actorProjectFilter}
     order by p.created_at asc
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map(mapProjectRow);
@@ -1189,43 +1655,75 @@ function mapProjectRow(row: ProjectRow): Project {
   };
 }
 
-export async function loadBrokerMandates(workspaceId: string): Promise<BrokerMandate[]> {
-  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadBrokerMandates");
-  const rows = await queryRows<BrokerMandateRow>(
-    `
-    select
-      id,
-      workspace_id as "workspaceId",
-      project_id as "projectId",
-      seller_lead_id as "sellerLeadId",
-      contact_id as "contactId",
-      title,
-      address,
-      location,
-      property_type as "propertyType",
-      condition,
-      area_sqm as "areaSqm",
-      rooms,
-      year_built as "yearBuilt",
-      asking_price_cents as "askingPriceCents",
-      market_value_cents as "marketValueCents",
-      selling_timeline as "sellingTimeline",
-      motivation,
-      selling_reason as "sellingReason",
-      mandate_status as "mandateStatus",
-      mandate_type as "mandateType",
-      commission_rate as "commissionRate",
-      documents_status as "documentsStatus",
-      marketing_status as "marketingStatus",
-      expiring_broker_contract_at as "expiringBrokerContractAt",
-      metadata,
-      updated_at as "updatedAt"
-    from broker_mandates
-    where workspace_id = $1
-    order by updated_at desc
-    limit 500
-  `,
-    [scopedWorkspaceId],
+export async function loadBrokerMandates(session: AppSession): Promise<BrokerMandate[]> {
+  const scopedWorkspaceId = requireWorkspaceId(session.workspaceId, "loadBrokerMandates");
+  const rows = await withTenantTransaction(
+    { actorId: session.userId, workspaceId: scopedWorkspaceId },
+    (transaction) => transaction.query<BrokerMandateRow>(
+      `
+      select
+        mandate.id,
+        mandate.workspace_id as "workspaceId",
+        mandate.project_id as "projectId",
+        mandate.seller_lead_id as "sellerLeadId",
+        mandate.contact_id as "contactId",
+        mandate.title,
+        mandate.address,
+        mandate.location,
+        mandate.property_type as "propertyType",
+        mandate.condition,
+        mandate.area_sqm as "areaSqm",
+        mandate.rooms,
+        mandate.year_built as "yearBuilt",
+        mandate.asking_price_cents as "askingPriceCents",
+        mandate.market_value_cents as "marketValueCents",
+        mandate.selling_timeline as "sellingTimeline",
+        mandate.motivation,
+        mandate.selling_reason as "sellingReason",
+        mandate.mandate_status as "mandateStatus",
+        mandate.mandate_type as "mandateType",
+        mandate.commission_rate as "commissionRate",
+        mandate.documents_status as "documentsStatus",
+        mandate.marketing_status as "marketingStatus",
+        mandate.expiring_broker_contract_at as "expiringBrokerContractAt",
+        mandate.metadata,
+        mandate.updated_at as "updatedAt"
+      from broker_mandates mandate
+      where mandate.workspace_id = $1::uuid
+        and (
+          $2::boolean
+          or exists (
+            select 1 from leads seller_lead
+            where seller_lead.workspace_id = mandate.workspace_id
+              and seller_lead.id = mandate.seller_lead_id
+              and seller_lead.assigned_to_user_id = $3::uuid
+          )
+          or exists (
+            select 1 from contacts mandate_contact
+            where mandate_contact.workspace_id = mandate.workspace_id
+              and mandate_contact.id = mandate.contact_id
+              and mandate_contact.owner_user_id = $3::uuid
+          )
+          or (
+            $4::boolean and exists (
+              select 1 from project_pipeline_permissions permission
+              where permission.workspace_id = mandate.workspace_id
+                and permission.project_id = mandate.project_id
+                and permission.user_id = $3::uuid
+                and permission.can_edit_deals = true
+            )
+          )
+        )
+      order by mandate.updated_at desc, mandate.id
+      limit 500
+    `,
+      [
+        scopedWorkspaceId,
+        canViewAllWorkspaceContacts(session),
+        session.userId,
+        canUseBrokerProjectEditScope(session),
+      ],
+    ),
   );
 
   return rows.map((row) => ({
@@ -1258,36 +1756,70 @@ export async function loadBrokerMandates(workspaceId: string): Promise<BrokerMan
   }));
 }
 
-export async function loadBuyerSearchProfiles(workspaceId: string): Promise<BuyerSearchProfile[]> {
-  const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadBuyerSearchProfiles");
-  const rows = await queryRows<BuyerSearchProfileRow>(
-    `
-    select
-      id,
-      workspace_id as "workspaceId",
-      project_id as "projectId",
-      buyer_lead_id as "buyerLeadId",
-      contact_id as "contactId",
-      title,
-      budget_from_cents as "budgetFromCents",
-      budget_to_cents as "budgetToCents",
-      financing_status as "financingStatus",
-      desired_location as "desiredLocation",
-      property_type as "propertyType",
-      rooms,
-      area_sqm as "areaSqm",
-      must_have_criteria as "mustHaveCriteria",
-      nice_to_have_criteria as "niceToHaveCriteria",
-      purchase_timeline as "purchaseTimeline",
-      matching_status as "matchingStatus",
-      metadata,
-      updated_at as "updatedAt"
-    from buyer_search_profiles
-    where workspace_id = $1
-    order by updated_at desc
-    limit 500
-  `,
-    [scopedWorkspaceId],
+export async function loadBuyerSearchProfiles(session: AppSession): Promise<BuyerSearchProfile[]> {
+  const scopedWorkspaceId = requireWorkspaceId(session.workspaceId, "loadBuyerSearchProfiles");
+  const rows = await withTenantTransaction(
+    { actorId: session.userId, workspaceId: scopedWorkspaceId },
+    (transaction) => transaction.query<BuyerSearchProfileRow>(
+      `
+      select
+        profile.id,
+        profile.workspace_id as "workspaceId",
+        profile.project_id as "projectId",
+        profile.buyer_lead_id as "buyerLeadId",
+        profile.contact_id as "contactId",
+        profile.title,
+        profile.budget_from_cents as "budgetFromCents",
+        profile.budget_to_cents as "budgetToCents",
+        profile.financing_status as "financingStatus",
+        profile.desired_location as "desiredLocation",
+        profile.property_type as "propertyType",
+        profile.rooms,
+        profile.area_sqm as "areaSqm",
+        profile.must_have_criteria as "mustHaveCriteria",
+        profile.nice_to_have_criteria as "niceToHaveCriteria",
+        profile.owner_user_id as "ownerUserId",
+        profile.purchase_timeline as "purchaseTimeline",
+        profile.matching_status as "matchingStatus",
+        profile.metadata,
+        profile.updated_at as "updatedAt"
+      from buyer_search_profiles profile
+      where profile.workspace_id = $1::uuid
+        and (
+          $2::boolean
+          or profile.owner_user_id = $3::uuid
+          or exists (
+            select 1 from leads buyer_lead
+            where buyer_lead.workspace_id = profile.workspace_id
+              and buyer_lead.id = profile.buyer_lead_id
+              and buyer_lead.assigned_to_user_id = $3::uuid
+          )
+          or exists (
+            select 1 from contacts buyer_contact
+            where buyer_contact.workspace_id = profile.workspace_id
+              and buyer_contact.id = profile.contact_id
+              and buyer_contact.owner_user_id = $3::uuid
+          )
+          or (
+            $4::boolean and exists (
+              select 1 from project_pipeline_permissions permission
+              where permission.workspace_id = profile.workspace_id
+                and permission.project_id = profile.project_id
+                and permission.user_id = $3::uuid
+                and permission.can_edit_deals = true
+            )
+          )
+        )
+      order by profile.updated_at desc, profile.id
+      limit 500
+    `,
+      [
+        scopedWorkspaceId,
+        canViewAllWorkspaceContacts(session),
+        session.userId,
+        canUseBrokerProjectEditScope(session),
+      ],
+    ),
   );
 
   return rows.map((row) => ({
@@ -1303,6 +1835,7 @@ export async function loadBuyerSearchProfiles(workspaceId: string): Promise<Buye
     metadata: row.metadata ?? undefined,
     mustHaveCriteria: row.mustHaveCriteria ?? [],
     niceToHaveCriteria: row.niceToHaveCriteria ?? [],
+    ownerUserId: row.ownerUserId ?? undefined,
     projectId: row.projectId ?? undefined,
     propertyType: row.propertyType ?? undefined,
     purchaseTimeline: row.purchaseTimeline ?? undefined,
@@ -1389,8 +1922,60 @@ export async function loadCrmPipelineStages(workspaceId: string): Promise<CrmPip
   }));
 }
 
-export async function loadProjectPipelinePermissions(workspaceId: string): Promise<ProjectPipelinePermission[]> {
+export async function loadProjectPipelinePermissions(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<ProjectPipelinePermission[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadProjectPipelinePermissions");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorFilter = visibilityScope.kind === "actor"
+    ? `and p.user_id = $2::uuid
+       and (
+         ($3::boolean and p.can_edit_deals = true)
+         or exists (
+           select 1 from public.customer_project_access access
+           where access.workspace_id = p.workspace_id
+             and access.project_id = p.project_id
+             and access.user_id = $2::uuid
+             and access.status = 'active'
+             and access.can_view_project = true
+         )
+         or exists (
+           select 1 from public.contacts contact
+           where contact.workspace_id = p.workspace_id
+             and contact.project_id = p.project_id
+             and contact.owner_user_id = $2::uuid
+             and contact.archived_at is null
+         )
+         or exists (
+           select 1 from public.leads lead
+           where lead.workspace_id = p.workspace_id
+             and lead.project_id = p.project_id
+             and lead.assigned_to_user_id = $2::uuid
+         )
+         or exists (
+           select 1 from public.deals deal
+           where deal.workspace_id = p.workspace_id
+             and deal.project_id = p.project_id
+             and deal.owner_user_id = $2::uuid
+         )
+         or exists (
+           select 1 from public.tasks task
+           where task.workspace_id = p.workspace_id
+             and task.project_id = p.project_id
+             and task.owner_user_id = $2::uuid
+         )
+         or exists (
+           select 1 from public.calendar_events event
+           where event.workspace_id = p.workspace_id
+             and event.project_id = p.project_id
+             and event.owner_user_id = $2::uuid
+         )
+       )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<ProjectPipelinePermissionRow>(
     `
     select
@@ -1413,10 +1998,11 @@ export async function loadProjectPipelinePermissions(workspaceId: string): Promi
       on wu.id = p.user_id
      and wu.workspace_id = p.workspace_id
     where p.workspace_id = $1
+      ${actorFilter}
     order by p.project_id asc, coalesce(wu.name, wu.email, p.user_id::text) asc
     limit 1000
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map((row) => ({
@@ -1452,6 +2038,7 @@ export async function loadEditorPreflightRuns(workspaceId: string): Promise<Edit
       blockers,
       warnings,
       metadata,
+      created_by_user_id as "createdByUserId",
       created_at as "createdAt"
     from editor_preflight_runs
     where workspace_id = $1
@@ -1465,6 +2052,7 @@ export async function loadEditorPreflightRuns(workspaceId: string): Promise<Edit
     blockers: row.blockers ?? [],
     checks: row.checks ?? [],
     createdAt: toIso(row.createdAt),
+    createdByUserId: row.createdByUserId ?? undefined,
     editorType: row.editorType,
     entityId: row.entityId ?? undefined,
     id: row.id,
@@ -1616,6 +2204,43 @@ function mapSellerListingRow(row: SellerListingRow): SellerListing {
 function buildSellerListingWhereClause(workspaceId: string, options: PropertyAssetPaginationOptions) {
   const params: unknown[] = [workspaceId];
   const clauses = ["sl.workspace_id = $1::uuid"];
+
+  if (options.actorUserId) {
+    params.push(
+      options.actorUserId,
+      options.workspaceWide === true,
+      options.allowProjectEditGrants === true,
+    );
+    const actorParameter = `$${params.length - 2}`;
+    const workspaceWideParameter = `$${params.length - 1}`;
+    const projectEditParameter = `$${params.length}`;
+    clauses.push(`(
+      ${workspaceWideParameter}::boolean
+      or sl.owner_user_id = ${actorParameter}::uuid
+      or exists (
+        select 1 from leads scoped_seller_lead
+         where scoped_seller_lead.workspace_id = sl.workspace_id
+           and scoped_seller_lead.id = sl.seller_lead_id
+           and scoped_seller_lead.assigned_to_user_id = ${actorParameter}::uuid
+      )
+      or exists (
+        select 1 from project_pipeline_permissions scoped_permission
+         where scoped_permission.workspace_id = sl.workspace_id
+           and scoped_permission.project_id = sl.project_id
+           and scoped_permission.user_id = ${actorParameter}::uuid
+           and scoped_permission.can_edit_deals = true
+           and ${projectEditParameter}::boolean
+      )
+      or exists (
+        select 1 from customer_project_access scoped_customer_access
+         where scoped_customer_access.workspace_id = sl.workspace_id
+           and scoped_customer_access.project_id = sl.project_id
+           and scoped_customer_access.user_id = ${actorParameter}::uuid
+           and scoped_customer_access.status = 'active'
+           and scoped_customer_access.can_view_project = true
+      )
+    )`);
+  }
 
   if (options.projectId) {
     params.push(options.projectId);
@@ -2783,8 +3408,27 @@ export async function loadCrmBots(workspaceId: string): Promise<CrmBot[]> {
   });
 }
 
-export async function loadCalendarEvents(workspaceId: string): Promise<CalendarEvent[]> {
+export async function loadCalendarEvents(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<CalendarEvent[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadCalendarEvents");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorFilter = visibilityScope.kind === "actor"
+    ? `and (
+        owner_user_id = $2::uuid
+        or ($3::boolean and project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = calendar_events.workspace_id
+            and permission.project_id = calendar_events.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<CalendarEventRow>(
     `
     select
@@ -2805,10 +3449,11 @@ export async function loadCalendarEvents(workspaceId: string): Promise<CalendarE
       metadata
     from calendar_events
     where workspace_id = $1
+      ${actorFilter}
     order by starts_at asc
     limit 500
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map((row) => {
@@ -2901,8 +3546,27 @@ export async function loadContacts(
   }));
 }
 
-export async function loadLeads(workspaceId: string): Promise<Lead[]> {
+export async function loadLeads(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<Lead[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadLeads");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorFilter = visibilityScope.kind === "actor"
+    ? `and (
+        assigned_to_user_id = $2::uuid
+        or ($3::boolean and project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = leads.workspace_id
+            and permission.project_id = leads.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<LeadRow>(
     `
     select
@@ -2932,10 +3596,11 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
       investor_profile as "investorProfile"
     from leads
     where workspace_id = $1
+      ${actorFilter}
     order by received_at desc
     limit 500
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map((row) => ({
@@ -2966,8 +3631,27 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
   }));
 }
 
-export async function loadDeals(workspaceId: string): Promise<Deal[]> {
+export async function loadDeals(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<Deal[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadDeals");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorFilter = visibilityScope.kind === "actor"
+    ? `and (
+        owner_user_id = $2::uuid
+        or ($3::boolean and project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = deals.workspace_id
+            and permission.project_id = deals.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<DealRow>(
     `
     select
@@ -2992,10 +3676,11 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
       next_action as "nextAction"
     from deals
     where workspace_id = $1
+      ${actorFilter}
     order by updated_at desc
     limit 500
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map((row) => ({
@@ -3021,8 +3706,27 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
   }));
 }
 
-export async function loadTasks(workspaceId: string): Promise<Task[]> {
+export async function loadTasks(
+  workspaceId: string,
+  visibilityScope: CrmActorVisibilityScope = { kind: "workspace" },
+): Promise<Task[]> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "loadTasks");
+  const params: unknown[] = [scopedWorkspaceId];
+  const actorFilter = visibilityScope.kind === "actor"
+    ? `and (
+        t.owner_user_id = $2::uuid
+        or ($3::boolean and t.project_id is not null and exists (
+          select 1 from public.project_pipeline_permissions permission
+          where permission.workspace_id = t.workspace_id
+            and permission.project_id = t.project_id
+            and permission.user_id = $2::uuid
+            and permission.can_edit_deals = true
+        ))
+      )`
+    : "";
+  if (visibilityScope.kind === "actor") {
+    params.push(visibilityScope.userId, visibilityScope.allowProjectEditVisibility);
+  }
   const rows = await queryRows<TaskRow>(
     `
     select
@@ -3039,12 +3743,13 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
       t.priority,
       t.status
     from tasks t
-    left join projects p on p.id = t.project_id
+    left join projects p on p.id = t.project_id and p.workspace_id = t.workspace_id
     where t.workspace_id = $1
+      ${actorFilter}
     order by t.due_at asc nulls last, t.created_at desc
     limit 500
   `,
-    [scopedWorkspaceId],
+    params,
   );
 
   return rows.map((row) => ({

@@ -17,6 +17,11 @@ const manualCutovers = new Set([
   "074_validate_launch_tenant_relation_guards",
   "078_company_profile_approval_integrity",
   "079_public_funnel_visit_role_boundary",
+  "080_property_export_runtime",
+  "081_broker_operations",
+  "082_content_library_privacy",
+  "083_list_productivity_controls",
+  "084_media_deletion_lifecycle",
 ]);
 
 export const recoveryMigrationPlan = Object.freeze([

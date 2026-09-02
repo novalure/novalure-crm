@@ -35,6 +35,13 @@ const ledgerTable = "public.novalure_schema_migrations";
 const lockKey = 941041;
 const guardQueryTimeoutMs = 15_000;
 const migrationClientTimeoutMs = 960_000;
+const isolatedPreviewOnlyMigrationVersions = new Set([
+  "080_property_export_runtime",
+  "081_broker_operations",
+  "082_content_library_privacy",
+  "083_list_productivity_controls",
+  "084_media_deletion_lifecycle",
+]);
 const manualCutoverVersions = new Set([
   "057_bot_webhook_legacy_index_cutover",
   "060_tenant_rls_pilot_prepare",
@@ -45,6 +52,7 @@ const manualCutoverVersions = new Set([
   "074_validate_launch_tenant_relation_guards",
   "078_company_profile_approval_integrity",
   "079_public_funnel_visit_role_boundary",
+  ...isolatedPreviewOnlyMigrationVersions,
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -75,6 +83,31 @@ const migrationDependencies = new Map([
   ["077_schema_ledger_runtime_projection", "076_bot_webhook_durable_processing"],
   ["078_company_profile_approval_integrity", "036_company_profiles"],
   ["079_public_funnel_visit_role_boundary", "075_public_funnel_visit_truth"],
+  ["080_property_export_runtime", [
+    "034_property_department",
+    "050_durable_job_leasing",
+  ]],
+  ["081_broker_operations", [
+    "022_recommendation_runtime",
+    "027_broker_pipeline_preflights",
+    "034_property_department",
+    "035_property_department_content",
+  ]],
+  ["082_content_library_privacy", [
+    "051_private_media_access",
+    "060_tenant_rls_pilot_prepare",
+    "081_broker_operations",
+  ]],
+  ["083_list_productivity_controls", [
+    "023_recommendation_depth",
+    "060_tenant_rls_pilot_prepare",
+  ]],
+  ["084_media_deletion_lifecycle", [
+    "007_bot_omnichannel_agents",
+    "034_property_department",
+    "051_private_media_access",
+    "082_content_library_privacy",
+  ]],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 
@@ -636,6 +669,26 @@ function plannedMigrations(args) {
   }
 }
 
+export function validateMigrationTargetPolicy({ migrations, only, targetName }) {
+  if (targetName !== "prod" || !only) return;
+  const migration = migrations.find((candidate) => (
+    !candidate.rollback && (candidate.version === only || candidate.file === only)
+  ));
+  if (migration && isolatedPreviewOnlyMigrationVersions.has(migration.version)) {
+    throw new Error(
+      `Refusing Preview-only migration ${migration.version} on prod; promote it through a separately reviewed production release`,
+    );
+  }
+}
+
+function enforceMigrationTargetPolicy(args) {
+  try {
+    validateMigrationTargetPolicy(args);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "Migration target policy verification failed");
+  }
+}
+
 export function validateMigrationPlan({ ledgerRows, migrations, plan }) {
   resolveMigrationLedgerState({ ledgerRows, migrations });
 
@@ -762,6 +815,7 @@ async function main() {
   } = parseArgs(process.argv);
   const target = await resolveTarget(connectionStdin);
   const migrations = readMigrations();
+  enforceMigrationTargetPolicy({ migrations, only, targetName: target.name });
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {
     headCommit = assertRepositoryCommitted();

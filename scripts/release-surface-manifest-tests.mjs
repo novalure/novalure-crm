@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { access, readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import test from "node:test";
@@ -11,6 +13,7 @@ await import("./final-preview-release-attestation-contract-tests.mjs");
 const appRoot = join(process.cwd(), "src", "app");
 const sourceRoot = join(process.cwd(), "src");
 const manifestPath = "docs/audit/2026-08-23/release-surface-manifest.json";
+const manifestSidecarPath = `${manifestPath}.sha256`;
 const matrixPath = "docs/audit/2026-08-23/release-gate-matrix.json";
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const matrix = JSON.parse(await readFile(matrixPath, "utf8"));
@@ -62,6 +65,49 @@ function assertUnique(values, label) {
   assert.equal(new Set(values).size, values.length, `${label} contains duplicate values`);
 }
 
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function deterministicGitTextBytes(checkoutBytes) {
+  const canonical = Buffer.allocUnsafe(checkoutBytes.byteLength);
+  let outputIndex = 0;
+  for (let index = 0; index < checkoutBytes.byteLength; index += 1) {
+    if (checkoutBytes[index] === 0x0d) {
+      assert.equal(
+        checkoutBytes[index + 1],
+        0x0a,
+        "release surface contains a non-CRLF carriage return",
+      );
+      continue;
+    }
+    canonical[outputIndex] = checkoutBytes[index];
+    outputIndex += 1;
+  }
+  return canonical.subarray(0, outputIndex);
+}
+
+function gitObjectId(args, input = undefined) {
+  const result = spawnSync("git", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    input,
+    maxBuffer: 1_024 * 1_024,
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout.trim(), /^[a-f0-9]{40}$/u);
+  return result.stdout.trim();
+}
+
+function parseReleaseSurfaceSidecar(source) {
+  const match = source.trim().match(/^([a-f0-9]{64})  ([^\r\n]+)$/u);
+  assert.ok(match, "release surface sidecar format is invalid");
+  assert.equal(match[2], "release-surface-manifest.json");
+  return match[1];
+}
+
 async function assertPathsExist(paths, label) {
   for (const path of paths) {
     await assert.doesNotReject(access(path), `${label} references missing path ${path}`);
@@ -90,8 +136,39 @@ test("release surface manifest is an exact filesystem inventory of every routabl
   assert.deepEqual(manifest.publicLocales, ["de", "en", "es"]);
   assert.equal(pages.length, 19);
   assert.equal(nonApiRouteHandlers.length, 4);
-  assert.equal(apiRoutes.length, 90);
-  assert.equal(cronRoutes.length, 4);
+  assert.equal(apiRoutes.length, 117);
+  assert.equal(cronRoutes.length, 5);
+});
+
+test("release surface sidecar binds the exact Git-canonical bytes across CRLF checkouts", async () => {
+  const [checkoutBytes, sidecar] = await Promise.all([
+    readFile(manifestPath),
+    readFile(manifestSidecarPath, "utf8"),
+  ]);
+  const canonicalBytes = deterministicGitTextBytes(checkoutBytes);
+  const filteredObjectId = gitObjectId([
+    "hash-object",
+    `--path=${manifestPath}`,
+    "--",
+    manifestPath,
+  ]);
+  const canonicalObjectId = gitObjectId(
+    ["hash-object", "--no-filters", "--stdin"],
+    canonicalBytes,
+  );
+  assert.equal(
+    canonicalObjectId,
+    filteredObjectId,
+    "only deterministic CRLF-to-LF checkout normalization is permitted",
+  );
+
+  const expectedDigest = parseReleaseSurfaceSidecar(sidecar);
+  assert.equal(sha256(canonicalBytes), expectedDigest);
+  assert.notEqual(
+    sha256(Buffer.concat([canonicalBytes, Buffer.from(" ", "utf8")])),
+    expectedDigest,
+    "a real content change must not satisfy the frozen sidecar",
+  );
 });
 
 test("navigation inventory exactly matches the central navigation-entry map", async () => {
@@ -165,9 +242,17 @@ test("all persisted job tables and queue/background implementations are inventor
     await assertPathsExist([...job.producerFiles, ...job.consumerFiles], `queue ${job.id}`);
   }
   const propertyExport = manifest.queueAndBackgroundJobs.find((job) => job.id === "property-export-queue");
-  assert.equal(propertyExport?.implementationStatus, "ENQUEUE_ONLY_NO_CONSUMER_LAUNCH_OFF");
-  assert.deepEqual(propertyExport?.consumerFiles, []);
-  assert.deepEqual(propertyExport?.triggerRoutes, ["/api/crm/properties"]);
+  assert.equal(propertyExport?.implementationStatus, "DURABLE_LEASE_QUEUE_QA_SINK_EXTERNAL_LAUNCH_OFF");
+  assert.deepEqual(propertyExport?.consumerFiles, [
+    "src/lib/db/property-export-repositories.ts",
+    "src/lib/property-export/runner.ts",
+  ]);
+  assert.deepEqual(propertyExport?.triggerRoutes, [
+    "/api/cron/property-exports",
+    "/api/crm/properties",
+    "/api/crm/property-exports",
+    "/api/crm/property-exports/[jobId]/retry",
+  ]);
   assert.equal(propertyExport?.launchScopeKey, "propertyExportQueue");
 });
 

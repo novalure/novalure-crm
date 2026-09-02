@@ -240,14 +240,17 @@ test("property create view uses focused, grouped form sections instead of a cram
   assert.doesNotMatch(component, /xl:grid-cols-4[\s\S]{0,120}PROPERTY_FIELD_SECTIONS/);
 });
 
-test("property API supports creation, inquiry routing and preflight without mutating reservations", () => {
+test("property API supports creation and inquiry routing while legacy preflight cannot enqueue caller data", () => {
   const route = read("src/app/api/crm/properties/route.ts");
   const repository = read("src/lib/db/property-department-repositories.ts");
+  const exportRepository = read("src/lib/db/property-export-repositories.ts");
   const reservationsRoute = read("src/app/api/crm/reservations/route.ts");
 
   assert.match(route, /create_property/);
   assert.match(route, /route_inquiry/);
   assert.match(route, /run_preflight/);
+  assert.match(route, /legacy_property_preflight_removed/);
+  assert.match(route, /replacement: "\/api\/crm\/property-exports"/);
   for (const operation of [
     "update_property_core",
     "save_text_blocks",
@@ -261,7 +264,8 @@ test("property API supports creation, inquiry routing and preflight without muta
   }
   assert.match(repository, /insert into seller_listings/);
   assert.match(repository, /insert into property_inquiries/);
-  assert.match(repository, /insert into property_export_jobs/);
+  assert.doesNotMatch(repository, /insert into property_export_jobs/);
+  assert.match(exportRepository, /insert into property_export_jobs/);
   assert.match(repository, /insert into property_text_blocks/);
   assert.match(repository, /insert into property_cost_items/);
   assert.match(repository, /insert into property_media/);
@@ -449,8 +453,6 @@ test("core CRM and property loaders require explicit workspace scope", () => {
 
   for (const name of [
     "loadProjects",
-    "loadBrokerMandates",
-    "loadBuyerSearchProfiles",
     "loadSellerListings",
     "loadPropertyTextBlocks",
     "loadPropertyCostItems",
@@ -464,5 +466,12 @@ test("core CRM and property loaders require explicit workspace scope", () => {
     "loadTasks",
   ]) {
     assert.match(loader, new RegExp(`requireWorkspaceId\\(workspaceId, "${name}"\\)`), `${name} has a runtime guard`);
+  }
+  for (const name of ["loadBrokerMandates", "loadBuyerSearchProfiles"]) {
+    assert.match(
+      loader,
+      new RegExp(`requireWorkspaceId\\(session\\.workspaceId, "${name}"\\)`),
+      `${name} has a session-bound runtime guard`,
+    );
   }
 });

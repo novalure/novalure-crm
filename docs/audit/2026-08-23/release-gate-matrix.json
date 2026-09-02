@@ -220,7 +220,7 @@
     {
       "id": "runtime.cron",
       "function": "Signed Vercel Cron entrypoints and schedules",
-      "routeApiJob": ["/api/cron/google-alerts", "/api/cron/meeting-reminders", "/api/cron/property-reservations", "/api/cron/teams-alerts"],
+      "routeApiJob": ["/api/cron/google-alerts", "/api/cron/meeting-reminders", "/api/cron/property-exports", "/api/cron/property-reservations", "/api/cron/teams-alerts"],
       "currentTechnicalStatus": "CRON_SECRET_GUARDED_EFFECTS_SCOPE_GUARDED",
       "desiredLaunchStatus": "INTERNAL",
       "launchScopeKey": null,
@@ -232,7 +232,7 @@
       "inventorySelectors": [
         { "category": "apiRoutes", "prefix": "/api/cron/" },
         { "category": "cronRoutes", "prefix": "/api/cron/" },
-        { "category": "cronJobs", "values": ["google-alerts", "meeting-reminders", "property-reservations", "teams-alerts"] }
+        { "category": "cronJobs", "values": ["google-alerts", "meeting-reminders", "property-exports", "property-reservations", "teams-alerts"] }
       ]
     },
     {

@@ -334,6 +334,11 @@ test("funnel content revision survives metric timestamps and parallel saves have
         await auditTransaction.queryOne("insert into audit_logs (action) values ($1) returning id", [action]);
       },
     },
+    "@/lib/funnel-access": {
+      canAccessFunnelInTransaction: async () => true,
+      canCreateFunnelInProjectInTransaction: async () => true,
+      FunnelAccessError: class FunnelAccessError extends Error {},
+    },
     "@/lib/funnel-builder-adapter": { buildFunnelBlueprint: () => blueprint },
     "@/lib/funnel-live-preflight": { assertFunnelLivePreflight() {} },
     "@/lib/funnel-schema": { funnelSchemaVersion: 1 },

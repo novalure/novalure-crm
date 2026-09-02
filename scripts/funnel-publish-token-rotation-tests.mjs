@@ -22,6 +22,12 @@ const workspaceB = "22222222-2222-4222-8222-222222222222";
 const actorId = "33333333-3333-4333-8333-333333333333";
 const funnelId = "44444444-4444-4444-8444-444444444444";
 const projectId = "55555555-5555-4555-8555-555555555555";
+const managerSession = {
+  productRole: "workspace_admin",
+  role: "admin",
+  userId: actorId,
+  workspaceId: workspaceA,
+};
 const oldToken = "o".repeat(43);
 const firstToken = "a".repeat(43);
 const secondToken = "b".repeat(43);
@@ -65,6 +71,7 @@ const repository = await loadCommonJsTypeScript(
       assertQaBatchOwnsObject() { throw new Error("not used"); },
     },
     "@/lib/db/tenant-client": { withTenantTransaction() { throw new Error("not used"); } },
+    "@/lib/funnel-access": { canAccessFunnelInTransaction: async () => true },
   },
 );
 
@@ -94,7 +101,12 @@ function createRotationHarness(initialTracking = {}) {
         state.calls.push({ kind: "queryOne", params, sql });
         if (/from funnels[\s\S]*for update/u.test(sql)) {
           if (params[0] !== workspaceA || params[1] !== funnelId) return null;
-          return { id: funnelId, projectId, tracking: structuredClone(state.tracking) };
+          return {
+            id: funnelId,
+            ownerUserId: actorId,
+            projectId,
+            tracking: structuredClone(state.tracking),
+          };
         }
         if (/update funnels/u.test(sql)) {
           state.tracking = JSON.parse(params[2]);
@@ -110,8 +122,8 @@ function createRotationHarness(initialTracking = {}) {
 
     try {
       return await repository.rotateFunnelPublishTokenInTransaction({
-        actorUserId: actorId,
         funnelId,
+        session: managerSession,
         transaction,
         workspaceId: workspaceA,
         ...input,
@@ -244,10 +256,10 @@ test("workspace predicate blocks cross-tenant rotation before update", async () 
   };
   await assert.rejects(
     repository.rotateFunnelPublishTokenInTransaction({
-      actorUserId: actorId,
       expectedRevision: 0,
       funnelId,
       idempotencyKey: "rotation-cross-tenant",
+      session: { ...managerSession, workspaceId: workspaceB },
       tokenFactory: () => firstToken,
       transaction,
       workspaceId: workspaceB,

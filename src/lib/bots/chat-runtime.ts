@@ -12,6 +12,7 @@ import {
 } from "@/lib/bots/policy";
 import { sendBotDocument, type BotDocumentDeliveryResult } from "@/lib/bots/provider-actions";
 import { queryOne } from "@/lib/db/client";
+import { canAccessContentMediaAsset } from "@/lib/db/content-library-repositories";
 import {
   createMeetingBookingWithNotifications,
   getMeetingPageSettings,
@@ -488,7 +489,13 @@ async function resolveDocumentAsset(input: {
   if (!input.mediaAssetId) return null;
 
   const media = await listWorkspaceMedia(input.session.workspaceId);
-  return media.assets.find((asset) => asset.id === input.mediaAssetId) ?? null;
+  const asset = media.assets.find((item) => item.id === input.mediaAssetId) ?? null;
+  if (!asset) return null;
+  return await canAccessContentMediaAsset({
+    assetId: asset.id,
+    reuse: true,
+    session: input.session,
+  }) ? asset : null;
 }
 
 function getMeetingBookingPayload(
@@ -769,7 +776,8 @@ async function recordDocumentDelivery(input: {
   let publishedAsset: Awaited<ReturnType<typeof publishWorkspaceMedia>> = null;
   if (input.asset) {
     try {
-      publishedAsset = await publishWorkspaceMedia(input.asset.id, input.session.workspaceId, {
+      publishedAsset = await publishWorkspaceMedia(input.asset.id, input.session, {
+        accessMode: "reuse",
         expiresInSeconds: botDocumentAttemptShareTtlSeconds,
       });
     } catch {

@@ -5,7 +5,12 @@ import {
   runFunnelLivePreflight,
 } from "@/lib/funnel-live-preflight";
 import type { FunnelBlueprint } from "@/lib/funnel-schema";
-import { getStoredFunnel, restoreStoredFunnelVersion, saveStoredFunnel } from "@/lib/funnel-store";
+import { FunnelAccessError } from "@/lib/funnel-access";
+import {
+  getStoredFunnelForSession,
+  restoreStoredFunnelVersion,
+  saveStoredFunnel,
+} from "@/lib/funnel-store";
 import { toFunnelBlueprintResponse } from "@/lib/funnel-store-response";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
@@ -28,7 +33,7 @@ export async function GET(_request: Request, context: RouteContext) {
   let stored;
 
   try {
-    stored = await getStoredFunnel(funnelId, auth.session.workspaceId);
+    stored = await getStoredFunnelForSession(funnelId, auth.session);
   } catch {
     return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
   }
@@ -98,6 +103,9 @@ export async function PUT(request: Request, context: RouteContext) {
     } catch (error) {
       const qaError = qaBatchRuntimeErrorResponse(error);
       if (qaError) return qaError;
+      if (error instanceof FunnelAccessError) {
+        return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
+      }
       if (error instanceof FunnelLivePreflightError) {
         return NextResponse.json(
           { error: error.message, preflight: error.preflight },
@@ -128,7 +136,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
   let existing;
   try {
-    existing = await getStoredFunnel(funnelId, auth.session.workspaceId);
+    existing = await getStoredFunnelForSession(funnelId, auth.session);
   } catch {
     return NextResponse.json({ error: "Funnel database is unavailable" }, { status: 503 });
   }
@@ -147,6 +155,9 @@ export async function PUT(request: Request, context: RouteContext) {
   } catch (error) {
     const qaError = qaBatchRuntimeErrorResponse(error);
     if (qaError) return qaError;
+    if (error instanceof FunnelAccessError) {
+      return NextResponse.json({ error: text.funnelNotFound }, { status: 404 });
+    }
     if (error instanceof FunnelLivePreflightError) {
       return NextResponse.json(
         { error: error.message, preflight: error.preflight },

@@ -23,8 +23,8 @@ function errorResponse(error: unknown) {
   if (!(error instanceof FunnelPublishTokenRotationError)) {
     return privateJson({ error: "FUNNEL_PUBLICATION_ROTATION_UNAVAILABLE" }, 503);
   }
-  if (error.code === "FUNNEL_NOT_FOUND") {
-    return privateJson({ error: error.code }, 404);
+  if (error.code === "FUNNEL_NOT_FOUND" || error.code === "FUNNEL_ACCESS_DENIED") {
+    return privateJson({ error: "FUNNEL_NOT_FOUND" }, 404);
   }
   if (error.code === "PUBLICATION_REVISION_CONFLICT") {
     return privateJson({

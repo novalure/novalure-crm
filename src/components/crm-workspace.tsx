@@ -36,6 +36,8 @@ import { GovernanceCompliancePanel } from "@/components/admin/governance-complia
 import { SystemReleasesPanel } from "@/components/admin/system-releases-panel";
 import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CompanyProfileSettings } from "@/components/company-profile-settings";
+import { BrokerOperationsPanel } from "@/components/broker-operations-panel";
+import { ContentLibraryPanel } from "@/components/content-library-panel";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
 import { ContactCommandCenter } from "@/components/contact-command-center";
 import { CustomerAccessCockpit } from "@/components/customer-access-cockpit";
@@ -45,12 +47,14 @@ import { DataHygieneBoard } from "@/components/data-hygiene-board";
 import { DealPipelineWorkspace } from "@/components/deal-pipeline-workspace";
 import { FormCommandCenter } from "@/components/form-command-center";
 import { FunnelCommandCenter } from "@/components/funnel-command-center";
+import { GlobalSearchCommand } from "@/components/global-search-command";
 import { KnowledgeCommandCenter } from "@/components/knowledge-command-center";
 import { LeadInbox } from "@/components/lead-inbox";
 import { LeadSequenceCommandCenter } from "@/components/lead-sequence-command-center";
 import { MobileDailyWork, type MobileDailyPanel } from "@/components/mobile-daily-work";
 import { NewsletterCommandCenter } from "@/components/newsletter-command-center";
 import { PropertyCommandCenter } from "@/components/property-command-center";
+import { PrivacyLifecyclePanel } from "@/components/privacy-lifecycle-panel";
 import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
@@ -84,6 +88,7 @@ import type {
   WorkspaceRole,
 } from "@/lib/crm-types";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { parseCrmEntityDeepLink, type CrmEntityDeepLinkTarget } from "@/lib/list-query-state";
 import { isLaunchSurfaceEnabled } from "@/lib/launch-scope";
 import {
   createWorkspaceProductContext,
@@ -3104,6 +3109,7 @@ export function CrmWorkspace({
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
   const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
+  const [deepLinkedEntity, setDeepLinkedEntity] = useState<CrmEntityDeepLinkTarget | null>(null);
 
   const canUseWorkspaceSwitch =
     hasProductCapability(sessionProductRole, "managed-service:operate") &&
@@ -3725,6 +3731,35 @@ export function CrmWorkspace({
   }, [activeWorkspace.id, allProjects, sessionUserId]);
 
   useEffect(() => {
+    if (!scopeHydrated) return;
+
+    const syncDeepLinkFromLocation = () => {
+      const target = parseCrmEntityDeepLink(window.location.href);
+      if (!target || target.workspaceId !== activeWorkspace.id) {
+        setDeepLinkedEntity(null);
+        return;
+      }
+
+      setDeepLinkedEntity(target);
+      setPropertyFocusAssetId(target.entityType === "property" ? `listing:${target.entityId}` : undefined);
+      setUnitBoardFocusScope(target.entityType === "unit" ? {
+        key: `deep-link:${target.entityId}`,
+        label: language === "de" ? "Direkt verlinkte Einheit" : "Direct-linked unit",
+        projectId: target.projectId ?? undefined,
+        unitIds: [target.entityId],
+      } : null);
+    };
+
+    syncDeepLinkFromLocation();
+    window.addEventListener("hashchange", syncDeepLinkFromLocation);
+    window.addEventListener("popstate", syncDeepLinkFromLocation);
+    return () => {
+      window.removeEventListener("hashchange", syncDeepLinkFromLocation);
+      window.removeEventListener("popstate", syncDeepLinkFromLocation);
+    };
+  }, [activeWorkspace.id, language, scopeHydrated]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       const allowedPresetIds = initialAllowedPresetKey.split("|") as NavigationPresetId[];
       const storedPresetId = readStoredPresetId(initialPresetId, allowedPresetIds);
@@ -3997,10 +4032,17 @@ export function CrmWorkspace({
       return;
     }
 
+    setDeepLinkedEntity(null);
+    const navigationUrl = new URL(window.location.href);
+    navigationUrl.searchParams.delete("entity");
+    navigationUrl.searchParams.delete("entityId");
+    navigationUrl.searchParams.delete("tab");
+    const navigationSearch = navigationUrl.search;
+
     const nextUrl =
       nextSection === "dashboard"
-        ? `${window.location.pathname}${window.location.search}`
-        : `${window.location.pathname}${window.location.search}#${getNavigationHash(nextSection, matchingEntry)}`;
+        ? `${window.location.pathname}${navigationSearch}`
+        : `${window.location.pathname}${navigationSearch}#${getNavigationHash(nextSection, matchingEntry)}`;
     const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl !== currentUrl) {
       window.history.pushState(null, "", nextUrl);
@@ -4060,10 +4102,15 @@ export function CrmWorkspace({
     setMobileNavigationOpen(false);
     setUnitBoardFocusScope(null);
     setPropertyFocusAssetId(undefined);
+    setDeepLinkedEntity(null);
 
     if (nextScope.status === "valid") {
       writeCrmScopePreference(getBrowserCrmScopeStorage(), sessionUserId, nextScope);
-      const nextUrl = serializeCrmScopeUrl(window.location.href, nextScope);
+      const scopeUrl = new URL(window.location.href);
+      scopeUrl.searchParams.delete("entity");
+      scopeUrl.searchParams.delete("entityId");
+      scopeUrl.searchParams.delete("tab");
+      const nextUrl = serializeCrmScopeUrl(scopeUrl.toString(), nextScope);
       const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (nextUrl !== currentUrl) {
         window.history.pushState(null, "", nextUrl);
@@ -4690,6 +4737,13 @@ export function CrmWorkspace({
               workspaceName={workspaceContext.workspaceName}
             />
 
+            <GlobalSearchCommand
+              enabled={scopeHydrated && !projectScopeInvalid}
+              language={language === "de" ? "de" : "en"}
+              projectId={activeProject?.id ?? null}
+              workspaceId={activeWorkspace.id}
+            />
+
             {scopeHydrated && projectScopeInvalid ? (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
@@ -4798,19 +4852,46 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "objectsMandates" ? (
-              <ObjectMandateCommandCenter
-                brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
-                buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
-                context={workspaceContext}
-                copy={copy}
-                propertyReservations={propertyReservationRecords.filter(
-                  (reservation) => isProjectInActiveScope(reservation.projectId),
+              <section className="grid gap-4">
+                <ObjectMandateCommandCenter
+                  brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
+                  buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
+                  context={workspaceContext}
+                  copy={copy}
+                  propertyReservations={propertyReservationRecords.filter(
+                    (reservation) => isProjectInActiveScope(reservation.projectId),
+                  )}
+                  propertyUnits={propertyUnitRecords.filter(
+                    (unit) => isProjectInActiveScope(unit.projectId),
+                  )}
+                  sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
+                />
+                {activeProject ? (
+                  <BrokerOperationsPanel
+                    canManage={
+                      sessionRole !== "assistant" &&
+                      hasProductCapability(sessionProductRole, "pipeline:write")
+                    }
+                    initialSelectedClosingId={deepLinkedEntity?.entityType === "closing" ? deepLinkedEntity.entityId : null}
+                    initialTab={deepLinkedEntity?.entityType === "closing" ? "closings" : "profiles"}
+                    key={`${activeWorkspace.id}:${activeProject.id}:${deepLinkedEntity?.entityType === "closing" ? deepLinkedEntity.entityId : "default"}`}
+                    language={language === "de" ? "de" : "en"}
+                    projectId={activeProject.id}
+                    workspaceId={activeWorkspace.id}
+                  />
+                ) : (
+                  <article className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+                    <p className="font-semibold">
+                      {language === "de" ? "Projekt für Maklerprozess wählen" : "Choose a project for broker operations"}
+                    </p>
+                    <p className="mt-1">
+                      {language === "de"
+                        ? "Matching, Angebote, Besichtigungen und Abschlüsse werden immer in einem eindeutigen Projektscope bearbeitet."
+                        : "Matching, offers, viewings and closings always operate in one explicit project scope."}
+                    </p>
+                  </article>
                 )}
-                propertyUnits={propertyUnitRecords.filter(
-                  (unit) => isProjectInActiveScope(unit.projectId),
-                )}
-                sellerListings={sellerListingRecords.filter((listing) => isProjectInActiveScope(listing.projectId))}
-              />
+              </section>
             ) : null}
 
             {visibleActiveSection === "analytics" ? (
@@ -4828,14 +4909,25 @@ export function CrmWorkspace({
             {visibleActiveSection === "settings" &&
             visibleActiveNavigationEntry.id !== "systemReleases" &&
             visibleActiveNavigationEntry.id !== "governanceCompliance" ? (
-              <SettingsCommandCenter
-                context={workspaceContext}
-                copy={copy}
-                dataSource={liveCoreData.source}
-                missingTables={liveCoreData.missingTables ?? []}
-                moduleSources={liveCoreData.moduleSources}
-                profileLabel={activePresetProfile.label}
-              />
+              <section className="grid gap-4">
+                <SettingsCommandCenter
+                  context={workspaceContext}
+                  copy={copy}
+                  dataSource={liveCoreData.source}
+                  missingTables={liveCoreData.missingTables ?? []}
+                  moduleSources={liveCoreData.moduleSources}
+                  profileLabel={activePresetProfile.label}
+                />
+                <PrivacyLifecyclePanel
+                  canManage={
+                    sessionRole === "owner" ||
+                    sessionRole === "admin" ||
+                    hasProductCapability(sessionProductRole, "settings:manage")
+                  }
+                  language={language === "de" ? "de" : "en"}
+                  workspaceId={activeWorkspace.id}
+                />
+              </section>
             ) : null}
 
             {visibleActiveNavigationEntry.id === "systemReleases" ? (
@@ -4981,6 +5073,8 @@ export function CrmWorkspace({
                 consents={visibleConsents}
                 contacts={visibleContacts}
                 conversations={visibleConversations}
+                initialSelectedLeadId={deepLinkedEntity?.entityType === "lead" ? deepLinkedEntity.entityId : null}
+                key={`lead-inbox:${deepLinkedEntity?.entityType === "lead" ? deepLinkedEntity.entityId : "default"}`}
                 leads={activeLeadInboxLeads}
                 language={language}
                 onLeadsChanged={refreshCoreData}
@@ -5019,6 +5113,8 @@ export function CrmWorkspace({
                 crmPipelineStages={crmPipelineStages.filter((stage) => isProjectInActiveScope(stage.projectId))}
                 crmPipelines={crmPipelines.filter((pipeline) => isProjectInActiveScope(pipeline.projectId))}
                 deals={visibleDeals}
+                initialSelectedDealId={deepLinkedEntity?.entityType === "deal" ? deepLinkedEntity.entityId : null}
+                key={`deal-pipeline:${deepLinkedEntity?.entityType === "deal" ? deepLinkedEntity.entityId : "default"}`}
                 language={language}
                 leads={visibleLeads}
                 onDealsChanged={refreshCoreData}
@@ -5109,6 +5205,8 @@ export function CrmWorkspace({
                 <TaskCommandCenter
                   activeProjectId={activeProject?.id ?? null}
                   contacts={visibleContacts}
+                  initialSelectedTaskId={deepLinkedEntity?.entityType === "task" ? deepLinkedEntity.entityId : null}
+                  key={`task-center:${deepLinkedEntity?.entityType === "task" ? deepLinkedEntity.entityId : "default"}`}
                   language={language}
                   leads={visibleLeads}
                   onTasksChanged={async () => {
@@ -5131,6 +5229,9 @@ export function CrmWorkspace({
                   consents={visibleConsents}
                   contacts={visibleContacts}
                   currentUserId={sessionUserId}
+                  initialSelectedContactId={deepLinkedEntity?.entityType === "contact" ? deepLinkedEntity.entityId : null}
+                  initialSelectedOrganizationId={deepLinkedEntity?.entityType === "organization" ? deepLinkedEntity.entityId : null}
+                  key={`contact-center:${deepLinkedEntity?.entityType === "contact" || deepLinkedEntity?.entityType === "organization" ? deepLinkedEntity.entityId : "default"}`}
                   language={language}
                   leads={visibleLeads}
                   onContactsChanged={async () => {
@@ -5163,6 +5264,21 @@ export function CrmWorkspace({
                 language={language}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
+              />
+              <ContentLibraryPanel
+                canApprove={
+                  sessionRole === "owner" ||
+                  sessionRole === "admin" ||
+                  hasProductCapability(sessionProductRole, "settings:manage")
+                }
+                canWrite={
+                  canCreateOrEditContacts ||
+                  hasProductCapability(sessionProductRole, "workspace:operate")
+                }
+                initialDocumentId={deepLinkedEntity?.entityType === "document" ? deepLinkedEntity.entityId : null}
+                language={language === "de" ? "de" : "en"}
+                projectId={activeProject?.id ?? null}
+                workspaceId={activeWorkspace.id}
               />
             <section className="hidden gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <article className="rounded-lg border border-stone-200 bg-white p-5">

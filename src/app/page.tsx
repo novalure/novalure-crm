@@ -4,7 +4,6 @@ import { PublicCrmLanding } from "@/components/public-crm-landing";
 import { CrmWorkspace } from "@/components/crm-workspace";
 import { getSessionFromHeaders } from "@/lib/auth/session";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
-import { ensureWorkspaceProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
 import {
   getCrmLandingPageCopy,
   getLoginLegalFooterCopy,
@@ -116,11 +115,6 @@ export default async function Home({ searchParams }: HomeProps) {
     );
   }
 
-  try {
-    await ensureWorkspaceProjectDefaultPipelines({ session });
-  } catch {
-    // The workspace can render with module-level fallbacks if pipeline bootstrap is temporarily unavailable.
-  }
   const coreData = await getCoreCrmData(session.workspaceId, { session });
 
   return (

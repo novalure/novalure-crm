@@ -217,6 +217,51 @@ function requireGitCommit(root, commit, code) {
   invariant(result.status === 0 && result.stdout.trim() === commit, code);
 }
 
+function resolveHeadCommit(root) {
+  const head = gitOutput(
+    ["rev-parse", "--verify", "HEAD^{commit}"],
+    { encoding: "utf8", maximumBytes: 256, root },
+  );
+  invariant(/^[a-f0-9]{40}$/u.test(head), "RECOVERY_EVIDENCE_HEAD_INVALID");
+  return head;
+}
+
+function matchesCommittedBytesOrCrlfCheckout(worktreeSource, committedSource) {
+  if (worktreeSource.equals(committedSource)) return true;
+  // Git may materialize an LF-only tracked text blob as CRLF when core.autocrlf
+  // is enabled. Accept only that byte-for-byte expansion, while continuing to
+  // return and hash the immutable committed blob below.
+  if (committedSource.includes(0x0d)) return false;
+
+  let worktreeIndex = 0;
+  let committedIndex = 0;
+  let expandedLineEnding = false;
+  while (
+    worktreeIndex < worktreeSource.byteLength
+      && committedIndex < committedSource.byteLength
+  ) {
+    if (worktreeSource[worktreeIndex] === committedSource[committedIndex]) {
+      worktreeIndex += 1;
+      committedIndex += 1;
+      continue;
+    }
+    if (
+      worktreeSource[worktreeIndex] === 0x0d
+        && worktreeSource[worktreeIndex + 1] === 0x0a
+        && committedSource[committedIndex] === 0x0a
+    ) {
+      expandedLineEnding = true;
+      worktreeIndex += 2;
+      committedIndex += 1;
+      continue;
+    }
+    return false;
+  }
+  return expandedLineEnding
+    && worktreeIndex === worktreeSource.byteLength
+    && committedIndex === committedSource.byteLength;
+}
+
 async function requireEvidenceCheckoutBinding({ evidenceCommit, root }) {
   await assertNoRecoveryPathReparse({ root, target: root });
   requireGitCommit(root, evidenceCommit, "RECOVERY_EVIDENCE_COMMIT_NOT_FOUND");
@@ -312,7 +357,7 @@ export async function readCommittedRegularRecoveryFile({
     "RECOVERY_EVIDENCE_COMMITTED_FILE_BOUND_INVALID",
   );
   const source = gitOutput(
-    ["show", `${evidenceCommit}:${relativePath}`],
+    ["cat-file", "blob", match[2]],
     { maximumBytes, root },
   );
   invariant(source.byteLength === blobSize, "RECOVERY_EVIDENCE_COMMITTED_FILE_SIZE_MISMATCH");
@@ -323,7 +368,7 @@ export async function readCommittedRegularRecoveryFile({
       repositoryRoot: root,
     });
     invariant(
-      worktreeSource.equals(source),
+      matchesCommittedBytesOrCrlfCheckout(worktreeSource, source),
       "RECOVERY_EVIDENCE_CURRENT_WORKTREE_DRIFT",
     );
   }
@@ -563,16 +608,19 @@ async function verifyRecoveryEvidenceInternal({
       });
     }
   }
+  // Historical/PENDING verification is still bound to tracked bytes. Reading
+  // HEAD also avoids hashing a platform-specific CRLF checkout representation.
+  const artifactCommit = evidenceCommit ?? resolveHeadCommit(root);
   const manifestPath = resolveRepositoryFile(manifestRelativePath, root);
   const [manifestSource, manifestSidecar] = await Promise.all([
     readRecoveryArtifact(manifestRelativePath, {
-      evidenceCommit,
+      evidenceCommit: artifactCommit,
       maximumBytes: maximumManifestBytes,
       requireWorktreeMatch,
       root,
     }),
     readRecoveryArtifact(`${manifestRelativePath}.sha256`, {
-      evidenceCommit,
+      evidenceCommit: artifactCommit,
       maximumBytes: maximumSidecarBytes,
       requireWorktreeMatch,
       root,
@@ -679,7 +727,11 @@ async function verifyRecoveryEvidenceInternal({
       sha256: sha256(manifestSidecar),
     }),
   ];
-  const artifactReadOptions = { evidenceCommit, requireWorktreeMatch, root };
+  const artifactReadOptions = {
+    evidenceCommit: artifactCommit,
+    requireWorktreeMatch,
+    root,
+  };
   const selected = await readHashedJson(selectedEntries[0], artifactReadOptions);
   inventory.push(...selected.inventory.map((entry) => Object.freeze({
     ...entry,

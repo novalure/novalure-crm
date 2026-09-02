@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { findWorkspaceMediaAsset, MediaStoreError, readMediaAssetContent } from "@/lib/media-store";
 import { safeMediaContentDisposition } from "@/lib/media-security";
+import { canAccessContentMediaAsset } from "@/lib/db/content-library-repositories";
 
 type RouteContext = {
   params: Promise<{ assetId: string }>;
@@ -20,6 +21,9 @@ export async function GET(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;
+  if (!await canAccessContentMediaAsset({ assetId, session: auth.session })) {
+    return NextResponse.json({ error: "Media asset not found." }, { headers: privateHeaders, status: 404 });
+  }
   const asset = await findWorkspaceMediaAsset(assetId, auth.session.workspaceId);
   if (!asset) {
     return NextResponse.json({ error: "Media asset not found." }, { headers: privateHeaders, status: 404 });

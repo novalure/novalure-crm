@@ -84,7 +84,7 @@ test("blueprint API is authenticated, database-only, and fail-closed", async () 
   assert.doesNotMatch(route, /@\/lib\/crm-source/);
   assert.doesNotMatch(route, /findFunnelBlueprint/);
   assert.match(route, /requirePermissionAndProductCapability\(_request, "funnels:write", "funnels:publish"\)/);
-  assert.match(route, /getStoredFunnel\(funnelId, auth\.session\.workspaceId\)/);
+  assert.match(route, /getStoredFunnelForSession\(funnelId, auth\.session\)/);
   assert.match(route, /toFunnelBlueprintResponse\(stored\)/);
   assert.match(responseDto, /source: stored\.source/);
   assert.doesNotMatch(responseDto, /^\s*(?:tracking|publishToken|publicToken):/mu);

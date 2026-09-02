@@ -41,9 +41,17 @@ import {
   type PropertyDepartmentTabId,
   type PropertyUnitBoardScope,
 } from "@/lib/property-department";
+import { PropertyExportPanel } from "@/components/property-export-panel";
+import { ListProductivityToolbar } from "@/components/list-productivity-toolbar";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
 import { formatCurrency, formatNumber, getCrmProjectTypeLabel, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import {
+  buildCrmEntityDeepLink,
+  getPageWindow,
+  parseListQueryState,
+  serializeListQueryState,
+} from "@/lib/list-query-state";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -121,6 +129,21 @@ type PropertyCostDraft = {
   oneTimeVat: string;
   exposeVisible: boolean;
 };
+
+type PropertyListResponse = {
+  data?: { assets?: PropertyAssetSummary[] };
+  error?: string;
+  pagination?: {
+    hasMore: boolean;
+    limit: number;
+    nextOffset: number | null;
+    offset: number;
+    total: number;
+  };
+};
+
+const propertyListPageSize = 25;
+const propertyListSelectionLimit = 100;
 
 const statusStyles: Record<PropertyAssetStatus, string> = {
   draft: "border-stone-300 bg-stone-50 text-stone-700",
@@ -325,7 +348,9 @@ export function PropertyCommandCenter({
     () => buildPropertyAssets({
       brokerMandates,
       buildings,
-      projects,
+      projects: activeProjectId
+        ? projects.filter((project) => project.id === activeProjectId)
+        : projects,
       propertyCostItems,
       propertyDocuments,
       propertyMedia,
@@ -334,7 +359,7 @@ export function PropertyCommandCenter({
       sellerListings,
       units,
     }),
-    [brokerMandates, buildings, projects, propertyCostItems, propertyDocuments, propertyMedia, propertyTextBlocks, reservations, sellerListings, units],
+    [activeProjectId, brokerMandates, buildings, projects, propertyCostItems, propertyDocuments, propertyMedia, propertyTextBlocks, reservations, sellerListings, units],
   );
   const actions = useMemo(
     () => getPropertyActionStates({ language, productRole: sessionProductRole, technicalRole: sessionRole }),
@@ -346,7 +371,15 @@ export function PropertyCommandCenter({
   const [activeTab, setActiveTab] = useState<PropertyDepartmentTabId>("overview");
   const [statusFilter, setStatusFilter] = useState<PropertyAssetStatus | "all">("all");
   const [query, setQuery] = useState("");
+  const [listPage, setListPage] = useState(1);
+  const [listTotal, setListTotal] = useState(0);
+  const [listAssets, setListAssets] = useState<PropertyAssetSummary[]>([]);
+  const [listUrlHydrated, setListUrlHydrated] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState("");
+  const [listReloadToken, setListReloadToken] = useState(0);
   const [selectedAssetId, setSelectedAssetId] = useState(() => assets[0]?.id ?? "");
+  const [selectedBulkPropertyIds, setSelectedBulkPropertyIds] = useState<string[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<(typeof PROPERTY_CHANNEL_TYPES)[number]>("Immobilienportal");
   const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -407,18 +440,105 @@ export function PropertyCommandCenter({
     };
   }, []);
 
-  const filteredAssets = assets.filter((asset) => {
-    const matchesStatus = statusFilter === "all" || asset.status === statusFilter;
-    const needle = query.trim().toLowerCase();
-    const matchesQuery =
-      !needle ||
-      [asset.title, asset.location, asset.objectType, asset.projectName].some((value) => value.toLowerCase().includes(needle));
-    return matchesStatus && matchesQuery;
-  });
+  useEffect(() => {
+    function applyLocationState() {
+      const state = parseListQueryState(window.location.href, {
+        allowedFilters: ["status"],
+        allowedSorts: ["updatedAt"],
+        defaultPageSize: propertyListPageSize,
+        defaultSort: "updatedAt",
+        maxPageSize: propertyListPageSize,
+      });
+      const requestedStatus = state.filters.status?.[0];
+      setQuery(state.query);
+      setListPage(state.page);
+      setStatusFilter(requestedStatus && requestedStatus in statusStyles
+        ? requestedStatus as PropertyAssetStatus
+        : "all");
+      setListUrlHydrated(true);
+    }
+
+    applyLocationState();
+    window.addEventListener("popstate", applyLocationState);
+    return () => window.removeEventListener("popstate", applyLocationState);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "overview" || !listUrlHydrated) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setListLoading(true);
+      setListError("");
+      const params = new URLSearchParams({
+        limit: String(propertyListPageSize),
+        offset: String((listPage - 1) * propertyListPageSize),
+        workspaceId: context.workspaceId,
+      });
+      if (activeProjectId) params.set("projectId", activeProjectId);
+      if (query.trim()) params.set("q", query.trim());
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      try {
+        const response = await csrfFetch(`/api/crm/properties?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({})) as PropertyListResponse;
+        if (!response.ok) throw new Error(payload.error || "Property list could not be loaded.");
+        const nextAssets = Array.isArray(payload.data?.assets) ? payload.data.assets : [];
+        const total = Number(payload.pagination?.total ?? nextAssets.length);
+        const maxPage = Math.max(1, Math.ceil(total / propertyListPageSize));
+        if (listPage > maxPage) {
+          setListPage(maxPage);
+          return;
+        }
+        setListAssets(nextAssets);
+        setListTotal(total);
+        setSelectedAssetId((current) => nextAssets.some((asset) => asset.id === current)
+          ? current
+          : nextAssets[0]?.id ?? current);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setListAssets([]);
+        setListTotal(0);
+        setListError(error instanceof Error ? error.message : "Property list could not be loaded.");
+      } finally {
+        if (!controller.signal.aborted) setListLoading(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [activeProjectId, activeTab, context.workspaceId, listPage, listReloadToken, listUrlHydrated, query, statusFilter]);
+
+  useEffect(() => {
+    if (activeTab !== "overview" || !listUrlHydrated) return;
+    const nextUrl = serializeListQueryState(window.location.href, {
+      direction: "desc",
+      filters: statusFilter === "all" ? {} : { status: [statusFilter] },
+      page: listPage,
+      pageSize: propertyListPageSize,
+      query,
+      sort: "updatedAt",
+    });
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, [activeTab, listPage, listUrlHydrated, query, statusFilter]);
+
+  const filteredAssets = listAssets;
+  const effectiveListTotal = listTotal;
+  const pageWindow = getPageWindow({ page: listPage, pageSize: propertyListPageSize, total: effectiveListTotal });
+  const visibleBulkPropertyIds = filteredAssets
+    .map((asset) => asset.sellerListingId)
+    .filter((id): id is string => Boolean(id));
+  const allVisiblePropertiesSelected = visibleBulkPropertyIds.length > 0 &&
+    visibleBulkPropertyIds.every((id) => selectedBulkPropertyIds.includes(id));
   const focusedAssetId = initialSelectedAssetId && assets.some((asset) => asset.id === initialSelectedAssetId)
     ? initialSelectedAssetId
     : undefined;
-  const selectedAsset = assets.find((asset) => asset.id === (focusedAssetId ?? selectedAssetId)) ?? filteredAssets[0] ?? assets[0];
+  const selectedAsset = assets.find((asset) => asset.id === (focusedAssetId ?? selectedAssetId))
+    ?? filteredAssets.find((asset) => asset.id === (focusedAssetId ?? selectedAssetId))
+    ?? filteredAssets[0]
+    ?? assets[0];
   const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
   const selectedCostItems = selectedListingId ? propertyCostItems.filter((item) => item.propertyId === selectedListingId) : [];
@@ -459,6 +579,38 @@ export function PropertyCommandCenter({
     [copy.metrics.dataIssues, qualityIssues.length],
   ];
   const draftProjectName = projects.find((project) => project.id === draft.projectId)?.name ?? projectLabel;
+
+  function selectPropertyAsset(asset: PropertyAssetSummary) {
+    onClearPropertyFocus?.();
+    setSelectedAssetId(asset.id);
+    if (!asset.sellerListingId) return;
+    const nextUrl = buildCrmEntityDeepLink({
+      currentUrl: window.location.href,
+      entityId: asset.sellerListingId,
+      entityType: "property",
+      projectId: asset.projectId,
+      section: "properties",
+      workspaceId: context.workspaceId,
+    });
+    window.history.pushState(window.history.state, "", nextUrl);
+  }
+
+  function togglePropertySelection(propertyId: string, checked: boolean) {
+    setSelectedBulkPropertyIds((current) => {
+      if (!checked) return current.filter((id) => id !== propertyId);
+      if (current.includes(propertyId)) return current;
+      if (current.length >= propertyListSelectionLimit) {
+        setNotice({
+          kind: "error",
+          message: language === "de"
+            ? `Maximal ${propertyListSelectionLimit} Datensätze können gleichzeitig ausgewählt werden.`
+            : `A maximum of ${propertyListSelectionLimit} records can be selected at once.`,
+        });
+        return current;
+      }
+      return [...current, propertyId];
+    });
+  }
   const draftPreflightItems = [
     { label: copy.preflightItems.title, ready: draft.title.trim().length > 0 },
     { label: copy.preflightItems.address, ready: draft.address.trim().length > 0 },
@@ -680,10 +832,11 @@ export function PropertyCommandCenter({
         </div>
       </article>
 
-      <nav className="max-w-full overflow-x-auto rounded-lg border border-stone-200 bg-white p-2">
-        <div className="flex min-w-max gap-2">
+      <nav aria-label={language === "de" ? "Immobilienbereiche" : "Property sections"} className="max-w-full overflow-x-auto rounded-lg border border-stone-200 bg-white p-2">
+        <div className="flex min-w-max gap-2" role="tablist">
           {localizedTabs.map((tab) => (
             <button
+              aria-selected={activeTab === tab.id}
               className={`rounded-md px-3 py-2 text-sm font-semibold ${
                 activeTab === tab.id ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-stone-100"
               }`}
@@ -694,6 +847,7 @@ export function PropertyCommandCenter({
                 }
                 setActiveTab(tab.id);
               }}
+              role="tab"
               type="button"
             >
               <span className="flex flex-col leading-tight">
@@ -714,14 +868,22 @@ export function PropertyCommandCenter({
           <article className="rounded-lg border border-stone-200 bg-white p-5">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
               <input
+                aria-label={copy.filters.searchPlaceholder}
                 className="min-w-0 rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-900"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setListPage(1);
+                  setQuery(event.target.value);
+                }}
                 placeholder={copy.filters.searchPlaceholder}
                 value={query}
               />
               <select
+                aria-label={copy.filters.allStatuses}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-                onChange={(event) => setStatusFilter(event.target.value as PropertyAssetStatus | "all")}
+                onChange={(event) => {
+                  setListPage(1);
+                  setStatusFilter(event.target.value as PropertyAssetStatus | "all");
+                }}
                 value={statusFilter}
               >
                 <option value="all">{copy.filters.allStatuses}</option>
@@ -730,10 +892,122 @@ export function PropertyCommandCenter({
                 ))}
               </select>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4">
+              <ListProductivityToolbar
+                canManage={actions.publishProperty.enabled || actions.changePrice.enabled}
+                currentColumnState={["object", "status", "price", "area", "units", "inquiries"]}
+                currentQueryState={{ filters: { status: statusFilter === "all" ? [] : [statusFilter] }, query, sort: "updatedAt", direction: "desc", pageSize: 25 }}
+                entityType="property"
+                language={language === "de" ? "de" : "en"}
+                onCompleted={onPropertyChanged}
+                projectId={activeProjectId}
+                selectedIds={selectedBulkPropertyIds}
+                workspaceId={context.workspaceId}
+              />
+            </div>
+            <div aria-live="polite" className="mt-3 flex min-h-6 flex-wrap items-center justify-between gap-3 text-sm text-stone-600">
+              <span>
+                {listLoading
+                  ? (language === "de" ? "Immobilien werden geladen …" : "Loading properties …")
+                  : `${pageWindow.from}–${pageWindow.to} / ${effectiveListTotal}`}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {listError ? (
+                  <button
+                    className="min-h-11 rounded-md border border-red-300 px-3 font-semibold text-red-800"
+                    onClick={() => setListReloadToken((current) => current + 1)}
+                    type="button"
+                  >
+                    {language === "de" ? "Erneut laden" : "Retry"}
+                  </button>
+                ) : null}
+                {actions.exportChannel.enabled ? (
+                  <a
+                    className="inline-flex min-h-11 items-center rounded-md border border-stone-300 px-3 font-semibold text-slate-800"
+                    href={`/api/crm/properties?${new URLSearchParams({
+                      format: "csv",
+                      ...(activeProjectId ? { projectId: activeProjectId } : {}),
+                      ...(query.trim() ? { q: query.trim() } : {}),
+                      ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+                      workspaceId: context.workspaceId,
+                    }).toString()}`}
+                  >
+                    {language === "de" ? "CSV exportieren" : "Export CSV"}
+                  </a>
+                ) : null}
+              </div>
+            </div>
+            {listError ? <p className="mt-2 text-sm text-red-700" role="alert">{listError}</p> : null}
+            <div className="mt-4 grid gap-3 md:hidden" data-property-mobile-list>
+              {filteredAssets.map((asset) => {
+                const selected = selectedAsset?.id === asset.id;
+                const inquiryCount = routeResults.filter((item) =>
+                  item.route.propertyId === asset.id || item.route.projectId === asset.projectId
+                ).length;
+                return (
+                  <article
+                    aria-current={selected ? "true" : undefined}
+                    className={`rounded-lg border bg-white p-4 ${selected ? "border-emerald-500 ring-2 ring-emerald-100" : "border-stone-200"}`}
+                    key={asset.id}
+                  >
+                    <div className="flex min-h-11 items-center justify-between gap-3">
+                      {asset.sellerListingId ? (
+                        <label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md border border-stone-300 bg-white">
+                          <span className="sr-only">{language === "de" ? `${asset.title} auswählen` : `Select ${asset.title}`}</span>
+                          <input
+                            aria-label={language === "de" ? `${asset.title} auswählen` : `Select ${asset.title}`}
+                            checked={selectedBulkPropertyIds.includes(asset.sellerListingId)}
+                            className="h-5 w-5"
+                            onChange={(event) => {
+                              const propertyId = asset.sellerListingId;
+                              if (propertyId) togglePropertySelection(propertyId, event.target.checked);
+                            }}
+                            type="checkbox"
+                          />
+                        </label>
+                      ) : <span />}
+                      <StatusChip label={copy.statusLabels[asset.status]} status={asset.status} />
+                    </div>
+                    <button
+                      aria-pressed={selected}
+                      className="mt-2 min-h-11 w-full rounded-md px-2 py-2 text-left font-semibold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                      onClick={() => selectPropertyAsset(asset)}
+                      type="button"
+                    >
+                      <span className="block break-words">{asset.title}</span>
+                      <span className="mt-1 block break-words text-xs font-normal text-stone-500">{asset.location} · {asset.projectName}</span>
+                    </button>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-stone-500">{copy.table.price}</dt>
+                        <dd className="mt-1 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-stone-500">{copy.table.area}</dt>
+                        <dd className="mt-1 text-stone-700">{asset.areaSqm ? `${formatNumber(asset.areaSqm, language)} m2` : "-"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-stone-500">{copy.table.units}</dt>
+                        <dd className="mt-1 text-stone-700">
+                          {asset.unitCount
+                            ? `${asset.availableUnits} ${copy.unitBadges.available} · ${asset.reservedUnits} ${copy.unitBadges.reserved} · ${asset.soldUnits} ${copy.unitBadges.sold}`
+                            : "-"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-stone-500">{copy.table.inquiries}</dt>
+                        <dd className="mt-1 text-stone-700">{inquiryCount}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="mt-4 hidden overflow-x-auto md:block" data-property-desktop-table>
               <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
                 <colgroup>
-                  <col className="w-[30%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[25%]" />
                   <col className="w-[12%]" />
                   <col className="w-[14%]" />
                   <col className="w-[11%]" />
@@ -742,6 +1016,29 @@ export function PropertyCommandCenter({
                 </colgroup>
                 <thead className="text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>
+                    <th className="py-2 pr-3 font-semibold">
+                      <input
+                        aria-label={language === "de" ? "Alle sichtbaren Immobilien auswählen" : "Select all visible properties"}
+                        checked={allVisiblePropertiesSelected}
+                        className="h-5 w-5"
+                        onChange={(event) => {
+                          setSelectedBulkPropertyIds((current) => {
+                            if (!event.target.checked) return current.filter((id) => !visibleBulkPropertyIds.includes(id));
+                            const merged = [...new Set([...current, ...visibleBulkPropertyIds])];
+                            if (merged.length > propertyListSelectionLimit) {
+                              setNotice({
+                                kind: "error",
+                                message: language === "de"
+                                  ? `Maximal ${propertyListSelectionLimit} Datensätze können gleichzeitig ausgewählt werden.`
+                                  : `A maximum of ${propertyListSelectionLimit} records can be selected at once.`,
+                              });
+                            }
+                            return merged.slice(0, propertyListSelectionLimit);
+                          });
+                        }}
+                        type="checkbox"
+                      />
+                    </th>
                     <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.object}</th>
                     <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.status}</th>
                     <th className="py-2 pr-4 font-semibold whitespace-nowrap">{copy.table.price}</th>
@@ -752,17 +1049,33 @@ export function PropertyCommandCenter({
                 </thead>
                 <tbody>
                   {filteredAssets.map((asset) => (
-                    <tr
-                      className="cursor-pointer border-t border-stone-200 align-top hover:bg-stone-50"
-                      key={asset.id}
-                      onClick={() => {
-                        onClearPropertyFocus?.();
-                        setSelectedAssetId(asset.id);
-                      }}
-                    >
+                    <tr className="border-t border-stone-200 align-top hover:bg-stone-50" key={asset.id}>
+                      <td className="py-4 pr-3">
+                        {asset.sellerListingId ? (
+                          <input
+                            aria-label={language === "de" ? `${asset.title} auswählen` : `Select ${asset.title}`}
+                            checked={selectedBulkPropertyIds.includes(asset.sellerListingId)}
+                            className="h-5 w-5"
+                            onChange={(event) => {
+                              const propertyId = asset.sellerListingId;
+                              if (propertyId) togglePropertySelection(propertyId, event.target.checked);
+                            }}
+                            type="checkbox"
+                          />
+                        ) : null}
+                      </td>
                       <td className="py-3 pr-4">
-                        <p className="break-words font-semibold text-slate-950">{asset.title}</p>
-                        <p className="mt-1 break-words text-xs text-stone-500">{asset.location} · {asset.projectName}</p>
+                        <button
+                          aria-pressed={selectedAsset?.id === asset.id}
+                          className="min-h-11 w-full rounded-md px-2 py-1 text-left font-semibold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                          onClick={() => {
+                            selectPropertyAsset(asset);
+                          }}
+                          type="button"
+                        >
+                          <span className="block break-words">{asset.title}</span>
+                          <span className="mt-1 block break-words text-xs font-normal text-stone-500">{asset.location} · {asset.projectName}</span>
+                        </button>
                       </td>
                       <td className="py-3 pr-4"><StatusChip label={copy.statusLabels[asset.status]} status={asset.status} /></td>
                       <td className="py-3 pr-4 font-semibold text-slate-900">{asset.price ? formatCurrency(asset.price, language) : "-"}</td>
@@ -790,6 +1103,27 @@ export function PropertyCommandCenter({
                 </tbody>
               </table>
             </div>
+            <nav aria-label={language === "de" ? "Seitennavigation Immobilien" : "Property pagination"} className="mt-4 flex items-center justify-between gap-3">
+              <button
+                className="min-h-11 rounded-md border border-stone-300 px-4 text-sm font-semibold disabled:opacity-50"
+                disabled={!pageWindow.hasPrevious || listLoading}
+                onClick={() => setListPage((current) => Math.max(1, current - 1))}
+                type="button"
+              >
+                {language === "de" ? "Zurück" : "Previous"}
+              </button>
+              <span className="text-sm font-medium text-stone-700">
+                {language === "de" ? "Seite" : "Page"} {pageWindow.page} / {pageWindow.pageCount}
+              </span>
+              <button
+                className="min-h-11 rounded-md border border-stone-300 px-4 text-sm font-semibold disabled:opacity-50"
+                disabled={!pageWindow.hasNext || listLoading}
+                onClick={() => setListPage((current) => current + 1)}
+                type="button"
+              >
+                {language === "de" ? "Weiter" : "Next"}
+              </button>
+            </nav>
           </article>
 
           <article className="rounded-lg border border-stone-200 bg-white p-5">
@@ -816,6 +1150,30 @@ export function PropertyCommandCenter({
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      className="min-h-11 rounded-md border border-stone-300 px-3 text-sm font-semibold disabled:opacity-50"
+                      disabled={filteredAssets.findIndex((asset) => asset.id === selectedAsset.id) <= 0}
+                      onClick={() => {
+                        const index = filteredAssets.findIndex((asset) => asset.id === selectedAsset.id);
+                        if (index > 0) selectPropertyAsset(filteredAssets[index - 1]);
+                      }}
+                      type="button"
+                    >
+                      {language === "de" ? "Vorherige" : "Previous"}
+                    </button>
+                    <button
+                      className="min-h-11 rounded-md border border-stone-300 px-3 text-sm font-semibold disabled:opacity-50"
+                      disabled={filteredAssets.findIndex((asset) => asset.id === selectedAsset.id) < 0 || filteredAssets.findIndex((asset) => asset.id === selectedAsset.id) >= filteredAssets.length - 1}
+                      onClick={() => {
+                        const index = filteredAssets.findIndex((asset) => asset.id === selectedAsset.id);
+                        if (index >= 0 && index < filteredAssets.length - 1) selectPropertyAsset(filteredAssets[index + 1]);
+                      }}
+                      type="button"
+                    >
+                      {language === "de" ? "Nächste" : "Next"}
+                    </button>
+                  </div>
                   <button
                     className="min-h-11 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!selectedUnitBoardScope}
@@ -827,7 +1185,7 @@ export function PropertyCommandCenter({
                     {copy.detail.openUnits}
                   </button>
                   <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
-                  <ActionButton action={actions.changePrice} />
+                  <ActionButton action={actions.changePrice} onClick={() => setActiveTab("channels")} />
                   <ActionButton action={actions.approveDocument} onClick={() => setActiveTab("documents")} />
                 </div>
               </>
@@ -853,7 +1211,7 @@ export function PropertyCommandCenter({
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                 {notice ? (
-                  <span className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>{notice.message}</span>
+                  <span aria-live="polite" className={`rounded-md border px-3 py-2 text-sm font-semibold ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`} role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</span>
                 ) : null}
                 <button className="min-h-12 rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!actions.createProperty.enabled || saving || !draftProjects.some((project) => project.id === draft.projectId)} type="submit">
                   {saving ? copy.form.saving : actions.createProperty.label}
@@ -1283,10 +1641,11 @@ export function PropertyCommandCenter({
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Preflight</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{preflight.status}</p>
-                <div className="mt-4 grid gap-2">
-                  <ActionButton action={actions.publishProperty} />
-                  <ActionButton action={actions.exportChannel} />
-                </div>
+                <p className="mt-3 text-xs leading-5 text-stone-600">
+                  {language === "de"
+                    ? "Der serverseitige Exportbereich darunter prüft den aktuellen Datenbankstand erneut. Externe Portale bleiben ohne bestätigten Adapter deaktiviert."
+                    : "The server-side export area below re-checks the current database state. External portals remain disabled without a confirmed adapter."}
+                </p>
               </div>
               <div className="grid gap-2">
                 {preflight.checks.map((check) => (
@@ -1299,6 +1658,17 @@ export function PropertyCommandCenter({
                   </div>
                 ))}
               </div>
+            </div>
+          ) : null}
+          {selectedAsset?.sellerListingId ? (
+            <div className="mt-4">
+              <PropertyExportPanel
+                canExport={actions.exportChannel.enabled}
+                language={language}
+                propertyId={selectedAsset.sellerListingId}
+                propertyTitle={selectedAsset.title}
+                workspaceId={selectedAsset.workspaceId}
+              />
             </div>
           ) : null}
         </article>
@@ -1337,7 +1707,9 @@ export function PropertyCommandCenter({
                   type="file"
                 />
               </label>
-              <ActionButton action={actions.approveDocument} />
+              {!actions.approveDocument.enabled && actions.approveDocument.reason ? (
+                <p className="max-w-sm text-xs text-stone-600">{actions.approveDocument.reason}</p>
+              ) : null}
             </div>
           </div>
           <div className="mt-4 grid gap-4 xl:grid-cols-2">

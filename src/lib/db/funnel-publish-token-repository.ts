@@ -10,6 +10,7 @@ import {
   withTenantTransaction,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
+import { canAccessFunnelInTransaction } from "@/lib/funnel-access";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -18,6 +19,7 @@ const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{16,128}$/u;
 
 type FunnelPublicationRow = {
   id: string;
+  ownerUserId: string | null;
   projectId: string | null;
   tracking: unknown;
 };
@@ -38,6 +40,7 @@ export type FunnelPublishTokenRotationResult =
 export class FunnelPublishTokenRotationError extends Error {
   readonly code:
     | "FUNNEL_NOT_FOUND"
+    | "FUNNEL_ACCESS_DENIED"
     | "INVALID_FUNNEL_ID"
     | "INVALID_IDEMPOTENCY_KEY"
     | "INVALID_REVISION"
@@ -96,28 +99,29 @@ async function findFunnelPublicationRow(
   transaction: TenantTransaction,
   workspaceId: string,
   funnelId: string,
-  lock: boolean,
+  lock: "share" | "update",
 ) {
   return transaction.queryOne<FunnelPublicationRow>(
     `
       select
         id,
+        owner_user_id as "ownerUserId",
         project_id as "projectId",
         tracking
       from funnels
       where workspace_id = $1::uuid
         and id = $2::uuid
-      ${lock ? "for update" : ""}
+      ${lock === "update" ? "for update" : "for share"}
     `,
     [workspaceId, funnelId],
   );
 }
 
 export async function rotateFunnelPublishTokenInTransaction(input: {
-  actorUserId: string;
   expectedRevision: number;
   funnelId: string;
   idempotencyKey: string;
+  session: AppSession;
   tokenFactory?: () => string;
   transaction: TenantTransaction;
   workspaceId: string;
@@ -127,9 +131,19 @@ export async function rotateFunnelPublishTokenInTransaction(input: {
     input.transaction,
     input.workspaceId,
     input.funnelId,
-    true,
+    "update",
   );
   if (!row) throw new FunnelPublishTokenRotationError("FUNNEL_NOT_FOUND");
+  if (
+    input.workspaceId !== input.session.workspaceId ||
+    !await canAccessFunnelInTransaction({
+      record: row,
+      session: input.session,
+      transaction: input.transaction,
+    })
+  ) {
+    throw new FunnelPublishTokenRotationError("FUNNEL_ACCESS_DENIED");
+  }
 
   const tracking = asRecord(row.tracking);
   const revision = readRevision(tracking);
@@ -197,7 +211,7 @@ export async function rotateFunnelPublishTokenInTransaction(input: {
     [
       input.workspaceId,
       row.projectId,
-      input.actorUserId,
+      input.session.userId,
       input.funnelId,
       JSON.stringify({ publicationRevision: revision }),
       JSON.stringify({ publicationRevision: nextRevision }),
@@ -238,10 +252,10 @@ export async function rotateFunnelPublishToken(input: {
         });
       }
       return rotateFunnelPublishTokenInTransaction({
-        actorUserId: input.session.userId,
         expectedRevision: input.expectedRevision,
         funnelId: input.funnelId,
         idempotencyKey: input.idempotencyKey,
+        session: input.session,
         transaction,
         workspaceId: input.session.workspaceId,
       });
@@ -263,9 +277,16 @@ export async function getFunnelPublishTokenRotationStatus(input: {
         transaction,
         input.session.workspaceId,
         input.funnelId,
-        false,
+        "share",
       );
       if (!row) throw new FunnelPublishTokenRotationError("FUNNEL_NOT_FOUND");
+      if (!await canAccessFunnelInTransaction({
+        record: row,
+        session: input.session,
+        transaction,
+      })) {
+        throw new FunnelPublishTokenRotationError("FUNNEL_ACCESS_DENIED");
+      }
       return { revision: readRevision(asRecord(row.tracking)) };
     },
   );

@@ -1,15 +1,16 @@
 import type { AppSession } from "@/lib/auth/session";
+import { canUseBrokerProjectEditScope } from "@/lib/broker-flow/access-policy";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
   PropertyInquiryRouteInput,
   PropertyInquiryRouteResult,
-  PropertyPreflightResult,
 } from "@/lib/property-department";
-import { executeQuery, queryOne } from "@/lib/db/client";
+import { queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
-import { evaluateLaunchScope } from "@/lib/launch-scope";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
+import { canAccessContentMediaAsset } from "@/lib/db/content-library-repositories";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -77,7 +78,6 @@ type SellerListingRow = {
 };
 
 type IdRow = { id: string };
-type ListingProjectRow = { projectId: string | null };
 type CountRow = { count: number | string };
 type ProjectScopedEntityRow = { id: string; projectId: string | null };
 type LeadScopedEntityRow = ProjectScopedEntityRow & { contactId: string | null };
@@ -95,6 +95,289 @@ type ResolvedPropertyInquiryIds = {
 };
 
 class PropertyInquiryValidationError extends Error {}
+
+type LockedPropertyRow = {
+  id: string;
+  ownerContactId: string | null;
+  ownerUserId: string | null;
+  projectId: string | null;
+  sellerLeadId: string | null;
+};
+
+type LockedPropertyWriteScope = {
+  projectId: string | null;
+  propertyId: string | null;
+  transaction: TenantTransaction;
+  workspaceManager: boolean;
+};
+
+class PropertyWriteAccessError extends Error {}
+
+async function hasLockedProjectEditGrant(input: {
+  projectId: string | null;
+  session: AppSession;
+  transaction: TenantTransaction;
+}) {
+  if (!input.projectId || !canUseBrokerProjectEditScope(input.session)) return false;
+  const permission = await input.transaction.queryOne<{ canEditDeals: boolean }>(
+    `
+      select can_edit_deals as "canEditDeals"
+      from project_pipeline_permissions
+      where workspace_id = $1::uuid
+        and project_id = $2::uuid
+        and user_id = $3::uuid
+        and can_edit_deals = true
+      limit 1
+      for update
+    `,
+    [input.session.workspaceId, input.projectId, input.session.userId],
+  );
+  return permission?.canEditDeals === true;
+}
+
+async function assertLockedTargetProjectEdit(input: {
+  projectId: string;
+  session: AppSession;
+  transaction: TenantTransaction;
+  workspaceManager: boolean;
+}) {
+  const project = await input.transaction.queryOne<IdRow>(
+    `
+      select id
+      from projects
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+      for share
+    `,
+    [input.session.workspaceId, input.projectId],
+  );
+  if (!project) throw new PropertyWriteAccessError("Target project not found");
+  if (input.workspaceManager) return;
+  if (await hasLockedProjectEditGrant(input)) return;
+  throw new PropertyWriteAccessError("Target-project edit permission required");
+}
+
+async function isLockedPropertyOwner(input: {
+  property: LockedPropertyRow;
+  session: AppSession;
+  transaction: TenantTransaction;
+}) {
+  if (input.property.ownerUserId === input.session.userId) return true;
+
+  let leadContactId: string | null = null;
+  if (input.property.sellerLeadId) {
+    const lead = await input.transaction.queryOne<{
+      assignedToUserId: string | null;
+      contactId: string | null;
+    }>(
+      `
+        select assigned_to_user_id as "assignedToUserId", contact_id as "contactId"
+        from leads
+        where workspace_id = $1::uuid
+          and id = $2::uuid
+        limit 1
+        for share
+      `,
+      [input.session.workspaceId, input.property.sellerLeadId],
+    );
+    if (lead?.assignedToUserId === input.session.userId) return true;
+    leadContactId = lead?.contactId ?? null;
+  }
+
+  const contactIds = [...new Set([input.property.ownerContactId, leadContactId].filter((id): id is string => Boolean(id)))];
+  for (const contactId of contactIds) {
+    const contact = await input.transaction.queryOne<{ ownerUserId: string | null }>(
+      `
+        select owner_user_id as "ownerUserId"
+        from contacts
+        where workspace_id = $1::uuid
+          and id = $2::uuid
+        limit 1
+        for share
+      `,
+      [input.session.workspaceId, contactId],
+    );
+    if (contact?.ownerUserId === input.session.userId) return true;
+  }
+  return false;
+}
+
+async function assertLockedOwnerAssignment(input: {
+  desiredOwnerUserId: string | null | undefined;
+  existingOwnerUserId: string | null | undefined;
+  ownerUserIdProvided: boolean;
+  session: AppSession;
+  transaction: TenantTransaction;
+  workspaceManager: boolean;
+}) {
+  if (!input.ownerUserIdProvided) return;
+  const unauthorizedInitialAssignment = input.existingOwnerUserId === undefined
+    && Boolean(input.desiredOwnerUserId)
+    && input.desiredOwnerUserId !== input.session.userId;
+  const unauthorizedReassignment = input.existingOwnerUserId !== undefined
+    && input.desiredOwnerUserId !== input.existingOwnerUserId;
+  if ((unauthorizedInitialAssignment || unauthorizedReassignment) && !input.workspaceManager) {
+    throw new PropertyWriteAccessError("Owner reassignment requires workspace-manager permission");
+  }
+  if (!input.desiredOwnerUserId) return;
+  const owner = await input.transaction.queryOne<IdRow>(
+    `
+      select id
+      from workspace_users
+      where workspace_id = $1::uuid
+        and id = $2::uuid
+      limit 1
+      for share
+    `,
+    [input.session.workspaceId, input.desiredOwnerUserId],
+  );
+  if (!owner) throw new PropertyWriteAccessError("Owner not found in workspace");
+}
+
+async function withLockedPropertyWriteGuard<T>(input: {
+  allowProjectMove?: boolean;
+  desiredOwnerUserId?: string | null;
+  ownerUserIdProvided?: boolean;
+  propertyId?: string | null;
+  requestedProjectId?: string;
+  requireTargetProjectEdit?: boolean;
+  session: AppSession;
+}, mutation: (scope: LockedPropertyWriteScope) => Promise<T>): Promise<RepositoryWriteResult<T>> {
+  if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.session.userId)) {
+    return { persisted: false, reason: "Database persistence is not configured" };
+  }
+
+  try {
+    const data = await withTenantTransaction(
+      { actorId: input.session.userId, workspaceId: input.session.workspaceId },
+      async (transaction) => {
+        const workspaceManager = canViewAllWorkspaceContacts(input.session);
+        if (!input.propertyId) {
+          if (!input.requestedProjectId || !input.requireTargetProjectEdit) {
+            throw new PropertyWriteAccessError("Invalid target project");
+          }
+          await assertLockedTargetProjectEdit({
+            projectId: input.requestedProjectId,
+            session: input.session,
+            transaction,
+            workspaceManager,
+          });
+          await assertLockedOwnerAssignment({
+            desiredOwnerUserId: input.desiredOwnerUserId,
+            existingOwnerUserId: undefined,
+            ownerUserIdProvided: input.ownerUserIdProvided === true,
+            session: input.session,
+            transaction,
+            workspaceManager,
+          });
+          return mutation({
+            projectId: input.requestedProjectId,
+            propertyId: null,
+            transaction,
+            workspaceManager,
+          });
+        }
+
+        const property = await transaction.queryOne<LockedPropertyRow>(
+          `
+            select
+              id,
+              project_id as "projectId",
+              seller_lead_id as "sellerLeadId",
+              owner_contact_id as "ownerContactId",
+              owner_user_id as "ownerUserId"
+            from seller_listings
+            where workspace_id = $1::uuid
+              and id = $2::uuid
+            limit 1
+            for update
+          `,
+          [input.session.workspaceId, input.propertyId],
+        );
+        if (!property) throw new PropertyWriteAccessError("Property not found");
+
+        const recordOwner = workspaceManager
+          ? true
+          : await isLockedPropertyOwner({ property, session: input.session, transaction });
+        const projectEditor = workspaceManager || recordOwner
+          ? false
+          : await hasLockedProjectEditGrant({
+              projectId: property.projectId,
+              session: input.session,
+              transaction,
+            });
+        if (!workspaceManager && !recordOwner && !projectEditor) {
+          throw new PropertyWriteAccessError("Property write permission forbidden for this record");
+        }
+
+        let projectId = property.projectId;
+        if (input.requestedProjectId && input.requestedProjectId !== property.projectId) {
+          if (!input.allowProjectMove) {
+            throw new PropertyWriteAccessError("Invalid property project scope");
+          }
+          await assertLockedTargetProjectEdit({
+            projectId: input.requestedProjectId,
+            session: input.session,
+            transaction,
+            workspaceManager,
+          });
+          projectId = input.requestedProjectId;
+        }
+
+        await assertLockedOwnerAssignment({
+          desiredOwnerUserId: input.desiredOwnerUserId,
+          existingOwnerUserId: property.ownerUserId,
+          ownerUserIdProvided: input.ownerUserIdProvided === true,
+          session: input.session,
+          transaction,
+          workspaceManager,
+        });
+
+        return mutation({
+          projectId,
+          propertyId: property.id,
+          transaction,
+          workspaceManager,
+        });
+      },
+    );
+    return { data, persisted: true };
+  } catch (error) {
+    if (error instanceof PropertyWriteAccessError) {
+      return { persisted: false, reason: error.message };
+    }
+    throw error;
+  }
+}
+
+export async function loadPropertyInquiryProjectGrantIds(session: AppSession) {
+  if (!canPersist() || !isUuid(session.workspaceId) || !isUuid(session.userId)) return [];
+
+  const rows = await withTenantTransaction(
+    { actorId: session.userId, workspaceId: session.workspaceId },
+    (transaction) => transaction.query<{ projectId: string }>(
+      `select distinct scoped_grant.project_id as "projectId"
+         from (
+           select permission.project_id
+             from public.project_pipeline_permissions permission
+            where permission.workspace_id = $1::uuid
+              and permission.user_id = $2::uuid
+              and permission.can_edit_deals = true
+              and $3::boolean
+           union all
+           select access.project_id
+             from public.customer_project_access access
+            where access.workspace_id = $1::uuid
+              and access.user_id = $2::uuid
+              and access.status = 'active'
+              and access.can_view_project = true
+         ) scoped_grant`,
+      [session.workspaceId, session.userId, canUseBrokerProjectEditScope(session)],
+    ),
+  );
+  return rows.map((row) => row.projectId);
+}
 
 const allowedRegions = new Set([
   "Wien",
@@ -201,6 +484,7 @@ export async function createSellerListingRecord(input: {
   const mandateId = nullableUuid(input.property.mandateId);
   const ownerContactId = nullableUuid(input.property.ownerContactId);
   const ownerUserId = nullableUuid(input.property.ownerUserId);
+  const ownerUserIdProvided = Object.prototype.hasOwnProperty.call(input.property, "ownerUserId");
   const contactUserId = nullableUuid(input.property.contactUserId);
   const rooms = optionalNumber(input.property.rooms ?? fields["rooms.zimmer"]);
   const yearBuilt = optionalInteger(input.property.yearBuilt ?? fields["construction.baujahr"]);
@@ -254,8 +538,21 @@ export async function createSellerListingRecord(input: {
   if (!title || !address) {
     return { persisted: false, reason: "Title and address are required" };
   }
+  if (!projectId) {
+    return { persisted: false, reason: "Invalid target project" };
+  }
+  if (ownerUserIdProvided && input.property.ownerUserId !== null && input.property.ownerUserId !== "" && !ownerUserId) {
+    return { persisted: false, reason: "Invalid owner user id" };
+  }
 
-  const row = await queryOne<SellerListingRow>(
+  const result = await withLockedPropertyWriteGuard<SellerListing>({
+    desiredOwnerUserId: ownerUserId,
+    ownerUserIdProvided,
+    requestedProjectId: projectId,
+    requireTargetProjectEdit: true,
+    session: input.session,
+  }, async (scope) => {
+  const row = await scope.transaction.queryOne<SellerListingRow>(
     `
       insert into seller_listings (
         workspace_id,
@@ -430,16 +727,10 @@ export async function createSellerListingRecord(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Property could not be saved" };
+  if (!row) throw new PropertyWriteAccessError("Property could not be saved");
 
-  const listingRow = await ensureDefaultUnitForListing(row, input.session);
+  const listingRow = await ensureDefaultUnitForListing(row, input.session, scope.transaction);
   const listing = toSellerListing(listingRow);
-  await savePropertyFragments({
-    property: input.property,
-    projectId: listing.projectId,
-    propertyId: listing.id,
-    session: input.session,
-  });
   await writeAuditLog({
     action: "property.created",
     after: listing,
@@ -447,6 +738,7 @@ export async function createSellerListingRecord(input: {
     entityType: "seller_listing",
     projectId: listing.projectId,
     session: input.session,
+    transaction: scope.transaction,
   });
   await writePropertyActivityEvent({
     detail: address,
@@ -455,9 +747,19 @@ export async function createSellerListingRecord(input: {
     propertyId: listing.id,
     session: input.session,
     title: `Objekt angelegt: ${title}`,
+    transaction: scope.transaction,
   });
 
-  return { data: listing, persisted: true };
+  return listing;
+  });
+  if (!result.persisted) return result;
+  await savePropertyFragments({
+    property: input.property,
+    projectId: result.data.projectId,
+    propertyId: result.data.id,
+    session: input.session,
+  });
+  return result;
 }
 
 export async function updateSellerListingRecord(input: {
@@ -483,7 +785,26 @@ export async function updateSellerListingRecord(input: {
   const areaSqm = optionalNumber(input.property.areaSqm ?? fields["areas.wohnflaeche"]);
   const priceCents = toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]);
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
-  const row = await queryOne<SellerListingRow>(
+  const projectIdProvided = Object.prototype.hasOwnProperty.call(input.property, "projectId");
+  const requestedProjectId = projectIdProvided ? nullableUuid(input.property.projectId) : undefined;
+  const ownerUserIdProvided = Object.prototype.hasOwnProperty.call(input.property, "ownerUserId");
+  const desiredOwnerUserId = ownerUserIdProvided ? nullableUuid(input.property.ownerUserId) : undefined;
+  if (projectIdProvided && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid target project" };
+  }
+  if (ownerUserIdProvided && input.property.ownerUserId !== null && input.property.ownerUserId !== "" && !desiredOwnerUserId) {
+    return { persisted: false, reason: "Invalid owner user id" };
+  }
+
+  const result = await withLockedPropertyWriteGuard<SellerListing>({
+    allowProjectMove: true,
+    desiredOwnerUserId,
+    ownerUserIdProvided,
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
+  const row = await scope.transaction.queryOne<SellerListingRow>(
     `
       update seller_listings
       set
@@ -492,7 +813,7 @@ export async function updateSellerListingRecord(input: {
         unit_id = coalesce($5::uuid, unit_id),
         mandate_id = coalesce($6::uuid, mandate_id),
         owner_contact_id = coalesce($7::uuid, owner_contact_id),
-        owner_user_id = coalesce($8::uuid, owner_user_id),
+        owner_user_id = case when $50::boolean then $8::uuid else owner_user_id end,
         contact_user_id = coalesce($9::uuid, contact_user_id),
         title = coalesce(nullif($10, ''), title),
         address = coalesce(nullif($11, ''), address),
@@ -542,12 +863,12 @@ export async function updateSellerListingRecord(input: {
     [
       propertyId,
       input.session.workspaceId,
-      nullableUuid(input.property.projectId),
+      requestedProjectId ?? null,
       nullableUuid(input.property.sellerLeadId),
       nullableUuid(input.property.unitId),
       nullableUuid(input.property.mandateId),
       nullableUuid(input.property.ownerContactId),
-      nullableUuid(input.property.ownerUserId),
+      desiredOwnerUserId ?? null,
       nullableUuid(input.property.contactUserId),
       title,
       address,
@@ -593,19 +914,14 @@ export async function updateSellerListingRecord(input: {
         updatedByUserId: input.session.userId,
         updatedFrom: "property_department",
       }),
+      ownerUserIdProvided,
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Property not found" };
+  if (!row) throw new PropertyWriteAccessError("Property not found");
 
-  const listingRow = await ensureDefaultUnitForListing(row, input.session);
+  const listingRow = await ensureDefaultUnitForListing(row, input.session, scope.transaction);
   const listing = toSellerListing(listingRow);
-  await savePropertyFragments({
-    property: input.property,
-    projectId: listing.projectId,
-    propertyId: listing.id,
-    session: input.session,
-  });
   await writeAuditLog({
     action: "property.updated",
     after: listing,
@@ -613,9 +929,19 @@ export async function updateSellerListingRecord(input: {
     entityType: "seller_listing",
     projectId: listing.projectId,
     session: input.session,
+    transaction: scope.transaction,
   });
 
-  return { data: listing, persisted: true };
+  return listing;
+  });
+  if (!result.persisted) return result;
+  await savePropertyFragments({
+    property: input.property,
+    projectId: result.data.projectId,
+    propertyId: result.data.id,
+    session: input.session,
+  });
+  return result;
 }
 
 export async function savePropertyTextBlocks(input: {
@@ -631,9 +957,17 @@ export async function savePropertyTextBlocks(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const requestedProjectId = nullableUuid(input.projectId);
+  if (input.projectId !== undefined && input.projectId !== null && input.projectId !== "" && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid property project scope" };
+  }
   const textBlocks = asObjectArray(input.textBlocks);
-  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
+  return withLockedPropertyWriteGuard({
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
+  await scope.transaction.execute("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -645,7 +979,7 @@ export async function savePropertyTextBlocks(input: {
     const title = cleanString(block.title);
     if (!textKey || (!content && !title)) continue;
 
-    await queryOne<IdRow>(
+    await scope.transaction.queryOne<IdRow>(
       `
         insert into property_text_blocks (
           workspace_id,
@@ -667,7 +1001,7 @@ export async function savePropertyTextBlocks(input: {
       `,
       [
         input.session.workspaceId,
-        projectId,
+        scope.projectId,
         propertyId,
         textKey,
         cleanString(block.channel) || "all",
@@ -687,13 +1021,15 @@ export async function savePropertyTextBlocks(input: {
   await writePropertyActivityEvent({
     detail: `${count} Textbloecke gespeichert`,
     eventType: "property.text_blocks.saved",
-    projectId,
+    projectId: scope.projectId,
     propertyId,
     session: input.session,
     title: "Objekttexte gespeichert",
+    transaction: scope.transaction,
   });
 
-  return { data: { count }, persisted: true };
+  return { count };
+  });
 }
 
 export async function savePropertyCostItems(input: {
@@ -709,9 +1045,17 @@ export async function savePropertyCostItems(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const requestedProjectId = nullableUuid(input.projectId);
+  if (input.projectId !== undefined && input.projectId !== null && input.projectId !== "" && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid property project scope" };
+  }
   const costItems = asObjectArray(input.costItems);
-  await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid", [
+  return withLockedPropertyWriteGuard({
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
+  await scope.transaction.execute("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid", [
     input.session.workspaceId,
     propertyId,
   ]);
@@ -722,7 +1066,7 @@ export async function savePropertyCostItems(input: {
     const label = cleanString(item.label);
     if (!costKey || !label) continue;
 
-    await queryOne<IdRow>(
+    await scope.transaction.queryOne<IdRow>(
       `
         insert into property_cost_items (
           workspace_id,
@@ -770,7 +1114,7 @@ export async function savePropertyCostItems(input: {
       `,
       [
         input.session.workspaceId,
-        projectId,
+        scope.projectId,
         propertyId,
         costKey,
         cleanString(item.groupKey) || "monthly",
@@ -796,13 +1140,15 @@ export async function savePropertyCostItems(input: {
   await writePropertyActivityEvent({
     detail: `${count} Kostenpositionen gespeichert`,
     eventType: "property.cost_items.saved",
-    projectId,
+    projectId: scope.projectId,
     propertyId,
     session: input.session,
     title: "Kostenmatrix gespeichert",
+    transaction: scope.transaction,
   });
 
-  return { data: { count }, persisted: true };
+  return { count };
+  });
 }
 
 export async function attachPropertyMedia(input: {
@@ -819,21 +1165,33 @@ export async function attachPropertyMedia(input: {
   const mediaAssetId = nullableUuid(input.media.mediaAssetId);
   if (!propertyId || !mediaAssetId) return { persisted: false, reason: "Property and media asset are required" };
 
+  if (!await canAccessContentMediaAsset({ assetId: mediaAssetId, reuse: true, session: input.session })) {
+    return { persisted: false, reason: "Media asset not found" };
+  }
+
   const asset = await findWorkspaceMediaAsset(mediaAssetId, input.session.workspaceId);
   if (!asset) return { persisted: false, reason: "Media asset not found" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const requestedProjectId = nullableUuid(input.projectId);
+  if (input.projectId !== undefined && input.projectId !== null && input.projectId !== "" && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid property project scope" };
+  }
   const mediaType = cleanString(input.media.mediaType) ||
     (asset.mimeType.startsWith("image/") ? "image" : "document");
   const isCover = Boolean(input.media.isCover);
+  return withLockedPropertyWriteGuard({
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
   if (isCover) {
-    await executeQuery(
+    await scope.transaction.execute(
       "update property_media set is_cover = false where workspace_id = $1 and property_id = $2::uuid",
       [input.session.workspaceId, propertyId],
     );
   }
 
-  const row = await queryOne<IdRow>(
+  const row = await scope.transaction.queryOne<IdRow>(
     `
       insert into property_media (
         workspace_id,
@@ -855,7 +1213,7 @@ export async function attachPropertyMedia(input: {
     `,
     [
       input.session.workspaceId,
-      projectId,
+      scope.projectId,
       propertyId,
       mediaAssetId,
       mediaType,
@@ -870,18 +1228,20 @@ export async function attachPropertyMedia(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Media could not be attached" };
+  if (!row) throw new PropertyWriteAccessError("Media could not be attached");
 
   await writePropertyActivityEvent({
     detail: asset.name,
     eventType: "property.media.attached",
-    projectId,
+    projectId: scope.projectId,
     propertyId,
     session: input.session,
     title: "Bild/Medium zugeordnet",
+    transaction: scope.transaction,
   });
 
-  return { data: { id: row.id }, persisted: true };
+  return { id: row.id };
+  });
 }
 
 export async function attachPropertyDocument(input: {
@@ -898,11 +1258,23 @@ export async function attachPropertyDocument(input: {
   const mediaAssetId = nullableUuid(input.document.mediaAssetId);
   if (!propertyId || !mediaAssetId) return { persisted: false, reason: "Property and document asset are required" };
 
+  if (!await canAccessContentMediaAsset({ assetId: mediaAssetId, reuse: true, session: input.session })) {
+    return { persisted: false, reason: "Document asset not found" };
+  }
+
   const asset = await findWorkspaceMediaAsset(mediaAssetId, input.session.workspaceId);
   if (!asset) return { persisted: false, reason: "Document asset not found" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
-  const row = await queryOne<IdRow>(
+  const requestedProjectId = nullableUuid(input.projectId);
+  if (input.projectId !== undefined && input.projectId !== null && input.projectId !== "" && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid property project scope" };
+  }
+  return withLockedPropertyWriteGuard({
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
+  const row = await scope.transaction.queryOne<IdRow>(
     `
       insert into property_documents (
         workspace_id,
@@ -924,7 +1296,7 @@ export async function attachPropertyDocument(input: {
     `,
     [
       input.session.workspaceId,
-      projectId,
+      scope.projectId,
       propertyId,
       mediaAssetId,
       cleanString(input.document.title) || asset.name,
@@ -939,18 +1311,20 @@ export async function attachPropertyDocument(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Document could not be attached" };
+  if (!row) throw new PropertyWriteAccessError("Document could not be attached");
 
   await writePropertyActivityEvent({
     detail: asset.name,
     eventType: "property.document.attached",
-    projectId,
+    projectId: scope.projectId,
     propertyId,
     session: input.session,
     title: "Dokument zugeordnet",
+    transaction: scope.transaction,
   });
 
-  return { data: { id: row.id }, persisted: true };
+  return { id: row.id };
+  });
 }
 
 export async function updatePropertyMediaOrder(input: {
@@ -965,18 +1339,30 @@ export async function updatePropertyMediaOrder(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
+  return withLockedPropertyWriteGuard({ propertyId, session: input.session }, async (scope) => {
   let count = 0;
   for (const [index, item] of asObjectArray(input.mediaItems).entries()) {
     const mediaId = nullableUuid(item.id);
     if (!mediaId) continue;
     const isCover = Boolean(item.isCover);
     if (isCover) {
-      await executeQuery(
-        "update property_media set is_cover = false where workspace_id = $1 and property_id = $2::uuid and id <> $3::uuid",
+      await scope.transaction.execute(
+        `update property_media
+            set is_cover = false
+          where workspace_id = $1
+            and property_id = $2::uuid
+            and id <> $3::uuid
+            and exists (
+              select 1
+              from property_media target
+              where target.workspace_id = $1
+                and target.property_id = $2::uuid
+                and target.id = $3::uuid
+            )`,
         [input.session.workspaceId, propertyId, mediaId],
       );
     }
-    const row = await queryOne<IdRow>(
+    const row = await scope.transaction.queryOne<IdRow>(
       `
         update property_media
         set
@@ -1009,7 +1395,8 @@ export async function updatePropertyMediaOrder(input: {
     if (row) count += 1;
   }
 
-  return { data: { count }, persisted: true };
+  return { count };
+  });
 }
 
 export async function updatePropertyPriceVisibility(input: {
@@ -1027,10 +1414,18 @@ export async function updatePropertyPriceVisibility(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const requestedProjectId = nullableUuid(input.projectId);
+  if (input.projectId !== undefined && input.projectId !== null && input.projectId !== "" && !requestedProjectId) {
+    return { persisted: false, reason: "Invalid property project scope" };
+  }
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.channelPriceVisibility));
   const priceVisibility = normalizePriceVisibility(input.priceVisibility);
-  const row = await queryOne<IdRow>(
+  return withLockedPropertyWriteGuard({
+    propertyId,
+    requestedProjectId: requestedProjectId ?? undefined,
+    session: input.session,
+  }, async (scope) => {
+  const row = await scope.transaction.queryOne<IdRow>(
     `
       update seller_listings
       set
@@ -1051,16 +1446,18 @@ export async function updatePropertyPriceVisibility(input: {
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Property not found" };
+  if (!row) throw new PropertyWriteAccessError("Property not found");
 
   await persistChannelPriceOverrides({
     channelPriceVisibility,
-    projectId,
+    projectId: scope.projectId,
     propertyId,
     session: input.session,
+    transaction: scope.transaction,
   });
 
-  return { data: { id: row.id }, persisted: true };
+  return { id: row.id };
+  });
 }
 
 function strictOptionalInquiryId(value: unknown, label: string, allowListingPrefix = false) {
@@ -1497,84 +1894,6 @@ export async function persistPropertyInquiryRoute(input: {
   };
 }
 
-export async function recordPropertyPreflightRun(input: {
-  assetId?: string;
-  channel: string;
-  idempotencyKey: string;
-  preflight: PropertyPreflightResult;
-  projectId?: string | null;
-  session: AppSession;
-}): Promise<RepositoryWriteResult<{ id: string }>> {
-  if (!evaluateLaunchScope("propertyExportQueue").allowed) {
-    return { persisted: false, reason: "property_export_queue_launch_off" };
-  }
-
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
-    return { persisted: false, reason: "Database persistence is not configured" };
-  }
-
-  const propertyId = normalizeEntityId(input.assetId);
-  const projectId = nullableUuid(input.projectId);
-  const row = await queryOne<IdRow>(
-    `
-      insert into property_export_jobs (
-        workspace_id,
-        project_id,
-        property_id,
-        portal,
-        export_format,
-        status,
-        preflight_status,
-        started_by_user_id,
-        export_history,
-        metadata,
-        idempotency_key
-      )
-      values (
-        $1,
-        $2::uuid,
-        $3::uuid,
-        $4,
-        $5,
-        'queued',
-        $6,
-        $7::uuid,
-        $8::jsonb,
-        $9::jsonb,
-        $10
-      )
-      on conflict (workspace_id, idempotency_key) do update
-      set updated_at = property_export_jobs.updated_at
-      returning id
-    `,
-    [
-      input.session.workspaceId,
-      projectId,
-      propertyId,
-      input.channel,
-      input.channel === "OpenImmo Export" ? "openimmo_1_2_7c" : "canonical_channel_payload",
-      input.preflight.status,
-      nullableUuid(input.session.userId),
-      JSON.stringify([{ at: new Date().toISOString(), preflight: input.preflight }]),
-      JSON.stringify({ assetId: input.assetId ?? null, channel: input.channel }),
-      input.idempotencyKey,
-    ],
-  );
-
-  if (!row) return { persisted: false, reason: "Preflight could not be recorded" };
-
-  await writeAuditLog({
-    action: "property_preflight.recorded",
-    after: { channel: input.channel, exportJobId: row.id, preflight: input.preflight },
-    entityId: row.id,
-    entityType: "property_export_job",
-    projectId,
-    session: input.session,
-  });
-
-  return { data: { id: row.id }, persisted: true };
-}
-
 async function savePropertyFragments(input: {
   property: Record<string, unknown>;
   projectId?: string;
@@ -1627,10 +1946,12 @@ async function savePropertyFragments(input: {
 
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
   if (Object.keys(channelPriceVisibility).length) {
-    await persistChannelPriceOverrides({
+    await updatePropertyPriceVisibility({
       channelPriceVisibility,
+      priceVisibility: input.property.priceVisibility,
       projectId: input.projectId,
       propertyId: input.propertyId,
+      publicPrice: input.property.publicPrice,
       session: input.session,
     });
   }
@@ -1641,9 +1962,10 @@ async function persistChannelPriceOverrides(input: {
   projectId?: string | null;
   propertyId: string;
   session: AppSession;
+  transaction: TenantTransaction;
 }) {
   for (const [channel, priceVisibility] of Object.entries(input.channelPriceVisibility)) {
-    const existing = await queryOne<IdRow>(
+    const existing = await input.transaction.queryOne<IdRow>(
       `
         select id
         from property_channels
@@ -1656,7 +1978,7 @@ async function persistChannelPriceOverrides(input: {
     );
 
     if (existing) {
-      await queryOne<IdRow>(
+      await input.transaction.queryOne<IdRow>(
         `
           update property_channels
           set
@@ -1672,7 +1994,7 @@ async function persistChannelPriceOverrides(input: {
       continue;
     }
 
-    await queryOne<IdRow>(
+    await input.transaction.queryOne<IdRow>(
       `
         insert into property_channels (
           workspace_id,
@@ -1697,21 +2019,6 @@ async function persistChannelPriceOverrides(input: {
       ],
     );
   }
-}
-
-async function findPropertyProjectId(propertyId: string, session: AppSession) {
-  const row = await queryOne<ListingProjectRow>(
-    `
-      select project_id as "projectId"
-      from seller_listings
-      where id = $1::uuid
-        and workspace_id = $2
-      limit 1
-    `,
-    [propertyId, session.workspaceId],
-  );
-
-  return row?.projectId ?? null;
 }
 
 async function writePropertyActivityEvent(input: {
@@ -1777,7 +2084,11 @@ function listingDefaultUnitPriceCents(row: SellerListingRow) {
   return 0;
 }
 
-async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSession): Promise<SellerListingRow> {
+async function ensureDefaultUnitForListing(
+  row: SellerListingRow,
+  session: AppSession,
+  transaction: TenantTransaction,
+): Promise<SellerListingRow> {
   if (!row.projectId || !isUuid(row.projectId) || !isUuid(session.workspaceId)) return row;
 
   const unitMetadata = {
@@ -1799,7 +2110,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
   ];
 
   if (row.unitId) {
-    await queryOne<IdRow>(
+    await transaction.queryOne<IdRow>(
       `
         update property_units
         set
@@ -1820,7 +2131,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
     return row;
   }
 
-  const explicitUnitCount = await queryOne<CountRow>(
+  const explicitUnitCount = await transaction.queryOne<CountRow>(
     `
       select count(*)::int as count
       from property_units
@@ -1832,7 +2143,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
   );
   if (Number(explicitUnitCount?.count ?? 0) > 0) return row;
 
-  const unit = await queryOne<IdRow>(
+  const unit = await transaction.queryOne<IdRow>(
     `
       insert into property_units (
         workspace_id,
@@ -1867,7 +2178,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
   );
   if (!unit?.id) return row;
 
-  const refreshed = await queryOne<SellerListingRow>(
+  const refreshed = await transaction.queryOne<SellerListingRow>(
     `
       update seller_listings
       set
@@ -1894,6 +2205,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
     propertyId: row.id,
     session,
     title: "Default-Unit erstellt",
+    transaction,
     unitId: unit.id,
   });
 

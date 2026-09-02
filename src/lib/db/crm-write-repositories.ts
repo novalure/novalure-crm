@@ -40,6 +40,11 @@ import {
 import { withTenantTransaction, type TenantTransaction } from "@/lib/db/tenant-client";
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
+import {
+  canAccessFunnelInTransaction,
+  canAssignFunnelOwner,
+  canCreateFunnelInProjectInTransaction,
+} from "@/lib/funnel-access";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
 import type { QaBatchRegistrationStatus } from "@/lib/qa-batch-runtime";
 import {
@@ -2989,6 +2994,14 @@ export async function upsertFunnelDraft(input: {
         );
       }
 
+      if (existing && !await canAccessFunnelInTransaction({
+        record: existing,
+        session: input.session,
+        transaction,
+      })) {
+        return { ok: false as const, reason: "Funnel not found" };
+      }
+
       if (existing) {
         if (input.qaBatchId) {
           await assertQaBatchOwnsObject(transaction, {
@@ -3032,9 +3045,27 @@ export async function upsertFunnelDraft(input: {
         return { ok: false as const, reason: "Project is not available in this workspace" };
       }
 
+      if (
+        (!existing || existing.projectId !== projectId) &&
+        !await canCreateFunnelInProjectInTransaction({
+          projectId,
+          session: input.session,
+          transaction,
+        })
+      ) {
+        return { ok: false as const, reason: "Funnel project permission is not allowed" };
+      }
+
       const ownerUserId = cleanString(input.funnel.ownerUserId) || existing?.ownerUserId || input.session.userId;
       if (!isUuid(ownerUserId)) {
         return { ok: false as const, reason: "Valid owner is required" };
+      }
+      if (!canAssignFunnelOwner({
+        currentOwnerUserId: existing?.ownerUserId,
+        nextOwnerUserId: ownerUserId,
+        session: input.session,
+      })) {
+        return { ok: false as const, reason: "Funnel owner reassignment is not allowed" };
       }
       const owner = await transaction.queryOne<IdRow>(
         `

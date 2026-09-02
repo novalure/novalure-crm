@@ -101,6 +101,7 @@ test("production schedules are staggered and workers use shared guards", async (
       ["/api/cron/teams-alerts", "4,19,34,49 * * * *"],
       ["/api/cron/google-alerts", "9,24,39,54 * * * *"],
       ["/api/cron/property-reservations", "7 * * * *"],
+      ["/api/cron/property-exports", "12 * * * *"],
     ],
   );
 

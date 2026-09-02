@@ -391,6 +391,7 @@ export type BuyerSearchProfile = {
   metadata?: Record<string, unknown>;
   mustHaveCriteria: string[];
   niceToHaveCriteria: string[];
+  ownerUserId?: ID;
   projectId?: ID;
   propertyType?: PropertyType;
   purchaseTimeline?: string;
@@ -459,6 +460,7 @@ export type EditorPreflightRun = {
   blockers: string[];
   checks: EditorPreflightCheck[];
   createdAt: string;
+  createdByUserId?: ID;
   editorType: EditorPreflightType;
   entityId?: string;
   id: ID;

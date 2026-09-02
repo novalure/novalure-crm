@@ -42,6 +42,7 @@ type DealPipelineWorkspaceProps = {
   calendarEvents: CalendarEvent[];
   contacts: Contact[];
   deals: Deal[];
+  initialSelectedDealId?: string | null;
   language: LanguageCode;
   leads: Lead[];
   organizations: Organization[];
@@ -503,6 +504,7 @@ export function DealPipelineWorkspace({
   calendarEvents,
   contacts,
   deals,
+  initialSelectedDealId,
   language,
   leads,
   organizations,
@@ -533,7 +535,7 @@ export function DealPipelineWorkspace({
   const [persistedDealOverrides, setPersistedDealOverrides] = useState<Record<string, Deal>>({});
   const [manualDeals, setManualDeals] = useState<Deal[]>([]);
   const [stageHistory, setStageHistory] = useState<Record<string, StageHistoryEntry[]>>({});
-  const [selectedDealId, setSelectedDealId] = useState(deals[0]?.id ?? "");
+  const [selectedDealId, setSelectedDealId] = useState(initialSelectedDealId ?? deals[0]?.id ?? "");
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [leadTypeFilter, setLeadTypeFilter] = useState<LeadTypeFilter>("all");

@@ -29,6 +29,7 @@ const formB = "15151515-1515-4515-8515-151515151515";
 const inquiryId = "16161616-1616-4616-8616-161616161616";
 const activityId = "17171717-1717-4717-8717-171717171717";
 const unitOtherProject = "18181818-1818-4818-8818-181818181818";
+const foreignUnitSameProject = "20202020-2020-4020-8020-202020202020";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -63,6 +64,15 @@ async function loadCommonJsTypeScript(path, dependencyMocks) {
       if (specifier === "@/lib/launch-scope") {
         return { evaluateLaunchScope: () => ({ allowed: true }) };
       }
+      if (specifier === "@/lib/broker-flow/access-policy") {
+        return { canUseBrokerProjectEditScope: () => false };
+      }
+      if (specifier === "@/lib/contact-access") {
+        return { canViewAllWorkspaceContacts: (session) => session.role === "owner" || session.role === "admin" };
+      }
+      if (specifier === "@/lib/property-export/access") {
+        return { canAccessPropertyExports: () => false };
+      }
       if (specifier === "server-only") return {};
       if (specifier.startsWith("node:")) return nodeRequire(specifier);
       throw new Error(`Unexpected runtime import in ${path}: ${specifier}`);
@@ -71,13 +81,14 @@ async function loadCommonJsTypeScript(path, dependencyMocks) {
   return cjsModule.exports;
 }
 
-function baseSession() {
+function baseSession(overrides = {}) {
   return {
     permissions: ["crm:read", "crm:write"],
     productRole: "operator",
     role: "admin",
     userId: actorA,
     workspaceId: workspaceA,
+    ...overrides,
   };
 }
 
@@ -191,6 +202,9 @@ function createRepositoryHarness({ failActivity = false, failAudit = false } = {
       executeQuery() { throw new Error("global executeQuery must not be used"); },
       queryOne() { throw new Error("global queryOne must not be used"); },
     },
+    "@/lib/db/content-library-repositories": {
+      canAccessContentMediaAsset: async () => false,
+    },
     "@/lib/db/runtime-repositories": {
       canPersist: () => true,
       isUuid: (value) => typeof value === "string" && uuidPattern.test(value),
@@ -232,11 +246,13 @@ test("route_inquiry ignores client candidate arrays and loads canonical tenant c
   const canonicalAsset = {
     id: `listing:${propertyA}`,
     kind: "property",
+    projectId: projectA,
     sellerListingId: propertyA,
+    unitIds: [unitA],
     workspaceId: workspaceA,
   };
-  const canonicalUnit = { id: unitA, workspaceId: workspaceA };
-  const canonicalReservation = { id: activityId, workspaceId: workspaceA };
+  const canonicalUnit = { id: unitA, projectId: projectA, workspaceId: workspaceA };
+  const canonicalReservation = { id: activityId, projectId: projectA, unitId: unitA, workspaceId: workspaceA };
   const repositoryResult = baseRoute({ propertyId: canonicalAsset.id, projectId: projectA });
   const route = await loadCommonJsTypeScript("src/app/api/crm/properties/route.ts", {
     "next/server": {
@@ -245,6 +261,10 @@ test("route_inquiry ignores client candidate arrays and loads canonical tenant c
     "@/lib/auth/session": {
       getRequestSession: async () => baseSession(),
       resolveWorkspaceScopedSession: async () => { throw new Error("GET auth must not run"); },
+    },
+    "@/lib/broker-flow/access-policy": { canUseBrokerProjectEditScope: () => false },
+    "@/lib/contact-access": {
+      canViewAllWorkspaceContacts: (session) => session.role === "admin" || session.role === "owner",
     },
     "@/lib/db/crm-loaders": {
       async loadPaginatedPropertyAssets(workspaceId, options) {
@@ -268,6 +288,7 @@ test("route_inquiry ignores client candidate arrays and loads canonical tenant c
       },
     },
     "@/lib/db/property-department-repositories": {
+      async loadPropertyInquiryProjectGrantIds() { return []; },
       async persistPropertyInquiryRoute({ route: routed }) {
         return { data: { id: inquiryId, route: routed, status: "routed" }, persisted: true };
       },
@@ -303,6 +324,74 @@ test("route_inquiry ignores client candidate arrays and loads canonical tenant c
   assert.equal(loaderCalls.length, 3);
   assert.ok(loaderCalls.every((call) => call.workspaceId === workspaceA));
   assert.doesNotMatch(JSON.stringify(capturedCandidates), new RegExp(propertyB));
+});
+
+test("own-record inquiry scope rejects a foreign unit in the same project before persistence", async () => {
+  let capturedCandidates;
+  let persistCalls = 0;
+  const ownSession = baseSession({ productRole: "broker_agent", role: "agent" });
+  const canonicalAsset = {
+    id: `listing:${propertyA}`,
+    kind: "property",
+    projectId: projectA,
+    sellerListingId: propertyA,
+    unitIds: [unitA],
+    workspaceId: workspaceA,
+  };
+  const routeModule = await loadCommonJsTypeScript("src/app/api/crm/properties/route.ts", {
+    "next/server": {
+      NextResponse: { json: (body, init) => Response.json(body, init) },
+    },
+    "@/lib/auth/session": {
+      getRequestSession: async () => ownSession,
+      resolveWorkspaceScopedSession: async () => { throw new Error("GET auth must not run"); },
+    },
+    "@/lib/broker-flow/access-policy": { canUseBrokerProjectEditScope: () => false },
+    "@/lib/contact-access": { canViewAllWorkspaceContacts: () => false },
+    "@/lib/db/crm-loaders": {
+      async loadPaginatedPropertyAssets() {
+        return { assets: [canonicalAsset], pagination: { hasMore: false, nextOffset: null } };
+      },
+      async loadPropertyReservations() { return []; },
+      async loadPropertyUnits() {
+        return [
+          { id: unitA, projectId: projectA, workspaceId: workspaceA },
+          { id: foreignUnitSameProject, projectId: projectA, workspaceId: workspaceA },
+        ];
+      },
+    },
+    "@/lib/db/property-department-repositories": {
+      async loadPropertyInquiryProjectGrantIds() { return []; },
+      async persistPropertyInquiryRoute() {
+        persistCalls += 1;
+        throw new Error("out-of-scope inquiry must not persist");
+      },
+    },
+    "@/lib/product-model": { hasProductCapability: () => false },
+    "@/lib/property-department": {
+      routePropertyInquiry(inquiry, candidates) {
+        capturedCandidates = candidates;
+        return baseRoute({ projectId: projectA, unitId: inquiry.unitId });
+      },
+      runPropertyChannelPreflight() { throw new Error("preflight must not run"); },
+    },
+    "@/lib/security/csrf": { enforceCsrfForSession: async () => ({ ok: true }) },
+  });
+
+  const response = await routeModule.POST(new Request("https://crm.example.test/api/crm/properties", {
+    body: JSON.stringify({
+      inquiry: { sourceChannel: "Manual", unitId: foreignUnitSameProject },
+      operation: "route_inquiry",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  }));
+
+  assert.equal(response.status, 404);
+  assert.equal(persistCalls, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(capturedCandidates.units)), [
+    { id: unitA, projectId: projectA, workspaceId: workspaceA },
+  ]);
 });
 
 test("tenant A rejects every optional tenant B id before either domain insert", async () => {
@@ -433,11 +522,24 @@ test("source contract keeps canonical loading, tenant predicates, advisory lock,
     repository.indexOf("export async function persistPropertyInquiryRoute"),
     repository.indexOf("export async function recordPropertyPreflightRun"),
   );
+  const projectGrantLoader = repository.slice(
+    repository.indexOf("export async function loadPropertyInquiryProjectGrantIds"),
+    repository.indexOf("const allowedRegions"),
+  );
 
   assert.doesNotMatch(route, /asArray<PropertyAssetSummary>\(input\.assets\)|input\.reservations|input\.units/);
-  assert.match(route, /loadCanonicalPropertyInquiryCandidates\(session\.workspaceId\)/);
-  assert.match(route, /loadPropertyUnits\(workspaceId\)/);
-  assert.match(route, /loadPropertyReservations\(workspaceId\)/);
+  assert.match(route, /loadCanonicalPropertyInquiryCandidates\(session\)/);
+  assert.match(route, /loadPropertyUnits\(session\.workspaceId\)/);
+  assert.match(route, /loadPropertyReservations\(session\.workspaceId\)/);
+  assert.match(route, /loadPropertyInquiryProjectGrantIds\(session\)/);
+  assert.match(route, /fullProjectIds = workspaceWide \? assetProjectIds : new Set\(explicitProjectGrantIds\)/);
+  assert.match(route, /fullProjectIds\.has\(unit\.projectId\) \|\| visibleUnitIds\.has\(unit\.id\)/);
+  assert.match(route, /allowedUnitIds\.has\(reservation\.unitId\)/);
+  assert.match(route, /isPropertyInquiryRouteWithinScope\(inquiry, route, canonical\.scope\)/);
+  assert.match(projectGrantLoader, /permission\.can_edit_deals = true/);
+  assert.match(projectGrantLoader, /access\.status = 'active'/);
+  assert.match(projectGrantLoader, /access\.can_view_project = true/);
+  assert.match(projectGrantLoader, /canUseBrokerProjectEditScope\(session\)/);
   for (const table of ["projects", "seller_listings", "property_units", "contacts", "leads", "workspace_users", "funnels", "forms"]) {
     assert.match(repository, new RegExp(`from\\s+${table}[\\s\\S]{0,160}workspace_id = \\$1::uuid`, "i"));
   }

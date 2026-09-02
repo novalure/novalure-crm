@@ -458,7 +458,7 @@ test("Bounded Recovery reader rejects intermediate directory junctions", async (
   }
 });
 
-test("Committed Recovery reader rejects URL paths, symlink blobs and current-worktree drift", async () => {
+test("Committed Recovery reader accepts only CRLF checkout expansion and rejects real drift", async () => {
   const root = await mkdtemp(join(tmpdir(), "novalure-recovery-evidence-git-test-"));
   try {
     git(root, ["init"]);
@@ -470,13 +470,15 @@ test("Committed Recovery reader rejects URL paths, symlink blobs and current-wor
     git(root, ["add", relativePath]);
     git(root, ["commit", "-m", "evidence"]);
     const commit = git(root, ["rev-parse", "HEAD"]);
+    await writeFile(join(root, relativePath), "{\"status\":\"BLOCKED\"}\r\n");
+    git(root, ["diff", "--quiet", "--", relativePath]);
     const source = await readCommittedRegularRecoveryFile({
       evidenceCommit: commit,
       relativePath,
       repositoryRoot: root,
     });
     assert.equal(source.toString("utf8"), "{\"status\":\"BLOCKED\"}\n");
-    await writeFile(join(root, relativePath), "{\"status\":\"PASS\"}\n");
+    await writeFile(join(root, relativePath), "{\"status\":\"PASS\"}\r\n");
     await assert.rejects(
       readCommittedRegularRecoveryFile({
         evidenceCommit: commit,

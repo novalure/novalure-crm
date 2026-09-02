@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission, type AppSession } from "@/lib/auth/session";
+import { requirePermissionAndProductCapability, type AppSession } from "@/lib/auth/session";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -18,7 +18,7 @@ import {
   isStoredFunnelPubliclyLive,
 } from "@/lib/funnel-public-access";
 import { runFunnelLivePreflight } from "@/lib/funnel-live-preflight";
-import { getStoredFunnel } from "@/lib/funnel-store";
+import { getStoredFunnel, getStoredFunnelForSession } from "@/lib/funnel-store";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import { sanitizeFunnelSubmissionForPersistence } from "@/lib/funnel-submission-security";
 import {
@@ -370,13 +370,15 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const auth = payload.mode === "test"
-    ? await requirePermission(request, "funnels:write")
+    ? await requirePermissionAndProductCapability(request, "funnels:write", "funnels:publish")
     : null;
   if (auth && !auth.ok) return auth.response;
 
   let stored;
   try {
-    stored = await getStoredFunnel(funnelId, auth?.session.workspaceId);
+    stored = payload.mode === "test" && auth
+      ? await getStoredFunnelForSession(funnelId, auth.session)
+      : await getStoredFunnel(funnelId);
   } catch {
     return unavailableResponse();
   }

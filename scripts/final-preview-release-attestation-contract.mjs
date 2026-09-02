@@ -62,6 +62,7 @@ import {
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const maximumApprovalTrustAnchorBytes = 256 * 1024;
+const maximumRepositoryEvidenceBytes = 16 * 1024 * 1024;
 const defaultAttestationPath =
   "docs/audit/2026-08-23/final-preview-release-attestation.template.json";
 
@@ -461,29 +462,82 @@ function gitText(args, options = {}) {
   return { ...result, stdout: String(result.stdout ?? "").trim() };
 }
 
-function assertGitRegularBlob(commit, repositoryPath, repositoryRootPath) {
+function gitRegularBlobOid(commit, repositoryPath, repositoryRootPath) {
   assertRepositoryRelativePath(repositoryPath, "FINAL_ATTESTATION_GIT_PATH_INVALID");
   invariant(isCommitSha(commit), "FINAL_ATTESTATION_GIT_COMMIT_INVALID");
   const result = gitText(["ls-tree", commit, "--", repositoryPath], { cwd: repositoryRootPath });
-  const match = result.stdout.match(/^100(?:644|755) blob [a-f0-9]{40}\t([^\r\n]+)$/u);
-  invariant(match && match[1] === repositoryPath, "FINAL_ATTESTATION_GIT_PATH_NOT_REGULAR_BLOB");
+  const match = result.stdout.match(/^100(?:644|755) blob ([a-f0-9]{40})\t([^\r\n]+)$/u);
+  invariant(match && match[2] === repositoryPath, "FINAL_ATTESTATION_GIT_PATH_NOT_REGULAR_BLOB");
+  return match[1];
 }
 
-async function assertRepositoryFileMatchesCommit(repositoryPath, commit, repositoryRootPath) {
-  assertGitRegularBlob(commit, repositoryPath, repositoryRootPath);
-  const sourcePath = await resolveTrustedRepositoryRegularFileAtRoot(repositoryPath, repositoryRootPath);
-  const [workingBytes, committed] = await Promise.all([
-    readFile(sourcePath),
-    Promise.resolve(runReadOnlyGit(
-      ["show", `${commit}:${repositoryPath}`],
-      { cwd: repositoryRootPath, encoding: null },
-    )),
-  ]);
+function readCommittedGitBlob(commit, repositoryPath, repositoryRootPath) {
+  const oid = gitRegularBlobOid(commit, repositoryPath, repositoryRootPath);
+  const size = Number(gitText(
+    ["cat-file", "-s", oid],
+    { cwd: repositoryRootPath },
+  ).stdout);
+  invariant(
+    Number.isSafeInteger(size) && size > 0 && size <= maximumRepositoryEvidenceBytes,
+    "FINAL_ATTESTATION_GIT_BLOB_SIZE_INVALID",
+  );
+  const committed = runReadOnlyGit(
+    ["cat-file", "blob", oid],
+    { cwd: repositoryRootPath, encoding: null },
+  );
   invariant(committed.status === 0, "FINAL_ATTESTATION_GIT_BLOB_READ_FAILED");
   const committedBytes = Buffer.isBuffer(committed.stdout)
     ? committed.stdout
     : Buffer.from(committed.stdout ?? "");
-  invariant(workingBytes.equals(committedBytes), "FINAL_ATTESTATION_GIT_BLOB_WORKTREE_MISMATCH");
+  invariant(committedBytes.byteLength === size, "FINAL_ATTESTATION_GIT_BLOB_SIZE_MISMATCH");
+  return committedBytes;
+}
+
+function matchesCommittedBytesOrCrlfCheckout(worktreeBytes, committedBytes) {
+  if (worktreeBytes.equals(committedBytes)) return true;
+  // A checkout may expand an LF-only Git blob to CRLF. No other byte
+  // transformation is accepted, and callers continue to hash the Git blob.
+  if (committedBytes.includes(0x0d)) return false;
+
+  let worktreeIndex = 0;
+  let committedIndex = 0;
+  let expandedLineEnding = false;
+  while (
+    worktreeIndex < worktreeBytes.byteLength
+      && committedIndex < committedBytes.byteLength
+  ) {
+    if (worktreeBytes[worktreeIndex] === committedBytes[committedIndex]) {
+      worktreeIndex += 1;
+      committedIndex += 1;
+      continue;
+    }
+    if (
+      worktreeBytes[worktreeIndex] === 0x0d
+        && worktreeBytes[worktreeIndex + 1] === 0x0a
+        && committedBytes[committedIndex] === 0x0a
+    ) {
+      expandedLineEnding = true;
+      worktreeIndex += 2;
+      committedIndex += 1;
+      continue;
+    }
+    return false;
+  }
+  return expandedLineEnding
+    && worktreeIndex === worktreeBytes.byteLength
+    && committedIndex === committedBytes.byteLength;
+}
+
+async function assertRepositoryFileMatchesCommit(repositoryPath, commit, repositoryRootPath) {
+  const sourcePath = await resolveTrustedRepositoryRegularFileAtRoot(repositoryPath, repositoryRootPath);
+  const [workingBytes, committedBytes] = await Promise.all([
+    readFile(sourcePath),
+    Promise.resolve(readCommittedGitBlob(commit, repositoryPath, repositoryRootPath)),
+  ]);
+  invariant(
+    matchesCommittedBytesOrCrlfCheckout(workingBytes, committedBytes),
+    "FINAL_ATTESTATION_GIT_BLOB_WORKTREE_MISMATCH",
+  );
 }
 
 export async function verifyLegalManifestCandidateSources({
@@ -518,15 +572,11 @@ export async function verifyLegalManifestCandidateSources({
     assertExactKeys(source, ["path", "sha256"], "FINAL_ATTESTATION_LEGAL_SOURCE");
     assertRepositoryRelativePath(source.path, "FINAL_ATTESTATION_LEGAL_SOURCE_PATH_INVALID");
     invariant(isDigest(source.sha256), "FINAL_ATTESTATION_LEGAL_SOURCE_DIGEST_INVALID");
-    assertGitRegularBlob(candidateCommit, source.path, repositoryRootPath);
-    const committed = runReadOnlyGit(
-      ["show", `${candidateCommit}:${source.path}`],
-      { cwd: repositoryRootPath, encoding: null },
+    const committedBytes = readCommittedGitBlob(
+      candidateCommit,
+      source.path,
+      repositoryRootPath,
     );
-    invariant(committed.status === 0, "FINAL_ATTESTATION_LEGAL_SOURCE_READ_FAILED");
-    const committedBytes = Buffer.isBuffer(committed.stdout)
-      ? committed.stdout
-      : Buffer.from(committed.stdout ?? "");
     invariant(
       sha256(committedBytes) === source.sha256,
       "FINAL_ATTESTATION_LEGAL_SOURCE_DIGEST_MISMATCH",
@@ -2496,6 +2546,7 @@ export function observedFinalPreviewGateStatus(binding, document, runtime, {
 }
 
 async function readHashedBinding(binding, runtimeCandidateCommit, {
+  evidenceCommit = null,
   expectedGateStatus = null,
   gateDefinition = null,
   protectedWorkflowVerification = null,
@@ -2503,18 +2554,19 @@ async function readHashedBinding(binding, runtimeCandidateCommit, {
   runtime = null,
   trustContext = null,
 } = {}) {
-  const [path, sidecarPath] = await Promise.all([
+  invariant(isCommitSha(evidenceCommit), "FINAL_ATTESTATION_BINDING_EVIDENCE_COMMIT_INVALID");
+  const [path] = await Promise.all([
     resolveTrustedRepositoryRegularFile(binding.path),
     resolveTrustedRepositoryRegularFile(binding.sidecarPath),
   ]);
   const [source, sidecar] = await Promise.all([
-    readFile(path),
-    readFile(sidecarPath, "utf8"),
+    Promise.resolve(readCommittedGitBlob(evidenceCommit, binding.path, repositoryRoot)),
+    Promise.resolve(readCommittedGitBlob(evidenceCommit, binding.sidecarPath, repositoryRoot)),
   ]);
   const digest = sha256(source);
   invariant(digest === binding.sha256, "FINAL_ATTESTATION_BINDING_DIGEST_MISMATCH");
   invariant(
-    parseSidecar(sidecar, basename(path)) === digest,
+    parseSidecar(sidecar.toString("utf8"), basename(path)) === digest,
     "FINAL_ATTESTATION_BINDING_SIDECAR_MISMATCH",
   );
   const document = JSON.parse(source.toString("utf8"));
@@ -2705,11 +2757,14 @@ export async function verifyFinalPreviewReleaseAttestation({
   for (const binding of attestation.documents) {
     documents.set(
       binding.id,
-      await readHashedBinding(binding, attestation.runtime.candidateCommit),
+      await readHashedBinding(binding, attestation.runtime.candidateCommit, {
+        evidenceCommit: repositoryProvenance.evidenceCommit,
+      }),
     );
   }
   for (const binding of attestation.gateEvidence.filter((entry) => entry.status !== "NOT_RUN")) {
     await readHashedBinding(binding, attestation.runtime.candidateCommit, {
+      evidenceCommit: repositoryProvenance.evidenceCommit,
       expectedGateStatus: binding.status,
       gateDefinition: finalPreviewGateBindingById.get(binding.id),
       protectedWorkflowVerification,

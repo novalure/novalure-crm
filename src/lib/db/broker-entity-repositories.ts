@@ -1,4 +1,5 @@
 import type { AppSession } from "@/lib/auth/session";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import type { BrokerMandate, BuyerSearchProfile, Lead } from "@/lib/crm-types";
 import { queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
@@ -218,6 +219,7 @@ export async function upsertBuyerSearchProfile(input: {
             project_id = $3::uuid,
             buyer_lead_id = $4::uuid,
             contact_id = $5::uuid,
+            owner_user_id = coalesce(owner_user_id, $19::uuid),
             title = $6,
             budget_from_cents = $7::bigint,
             budget_to_cents = $8::bigint,
@@ -226,13 +228,32 @@ export async function upsertBuyerSearchProfile(input: {
             property_type = nullif($11, ''),
             rooms = $12::numeric,
             area_sqm = $13::numeric,
+            rooms_from = $12::numeric,
+            rooms_to = $12::numeric,
+            area_from_sqm = $13::numeric,
+            area_to_sqm = $13::numeric,
+            region = nullif($10, ''),
             must_have_criteria = $14::text[],
             nice_to_have_criteria = $15::text[],
             purchase_timeline = nullif($16, ''),
             matching_status = $17,
             metadata = metadata || $18::jsonb,
+            version = version + 1,
+            broker_operations_managed = true,
             updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and status <> 'archived'
+            and (
+              $20::boolean
+              or owner_user_id is null
+              or owner_user_id = $19::uuid
+              or exists (
+                select 1 from project_pipeline_permissions permission
+                where permission.workspace_id = buyer_search_profiles.workspace_id
+                  and permission.project_id = buyer_search_profiles.project_id
+                  and permission.user_id = $19::uuid
+                  and permission.can_edit_deals = true
+              )
+            )
           returning ${buyerSearchProfileReturningSql}
         `,
         buyerSearchProfileParams(input.session, input.profile, existingId),
@@ -244,6 +265,7 @@ export async function upsertBuyerSearchProfile(input: {
             project_id,
             buyer_lead_id,
             contact_id,
+            owner_user_id,
             title,
             budget_from_cents,
             budget_to_cents,
@@ -252,13 +274,24 @@ export async function upsertBuyerSearchProfile(input: {
             property_type,
             rooms,
             area_sqm,
+            rooms_from,
+            rooms_to,
+            area_from_sqm,
+            area_to_sqm,
+            region,
             must_have_criteria,
             nice_to_have_criteria,
             purchase_timeline,
             matching_status,
+            status,
+            version,
+            broker_operations_managed,
             metadata
           )
-          values ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6::bigint, $7::bigint, nullif($8, ''), nullif($9, ''), nullif($10, ''), $11::numeric, $12::numeric, $13::text[], $14::text[], nullif($15, ''), $16, $17::jsonb)
+          values ($1, $2::uuid, $3::uuid, $4::uuid, $18::uuid, $5, $6::bigint, $7::bigint,
+            nullif($8, ''), nullif($9, ''), nullif($10, ''), $11::numeric, $12::numeric,
+            $11::numeric, $11::numeric, $12::numeric, $12::numeric, nullif($9, ''),
+            $13::text[], $14::text[], nullif($15, ''), $16, 'draft', 1, true, $17::jsonb)
           returning ${buyerSearchProfileReturningSql}
         `,
         buyerSearchProfileParams(input.session, input.profile),
@@ -401,7 +434,7 @@ function brokerMandateParams(
   mandate: Partial<BrokerMandate> & Record<string, unknown>,
   existingId?: string | null,
 ) {
-  const params = [
+  const params: unknown[] = [
     existingId ?? session.workspaceId,
     existingId ? session.workspaceId : normalizeUuid(mandate.projectId),
     existingId ? normalizeUuid(mandate.projectId) : normalizeUuid(mandate.sellerLeadId),
@@ -440,7 +473,7 @@ function buyerSearchProfileParams(
   profile: Partial<BuyerSearchProfile> & Record<string, unknown>,
   existingId?: string | null,
 ) {
-  const params = [
+  const params: unknown[] = [
     existingId ?? session.workspaceId,
     existingId ? session.workspaceId : normalizeUuid(profile.projectId),
     existingId ? normalizeUuid(profile.projectId) : normalizeUuid(profile.buyerLeadId),
@@ -462,6 +495,10 @@ function buyerSearchProfileParams(
 
   if (existingId) {
     params.push(JSON.stringify(asObject(profile.metadata)));
+  }
+  params.push(session.userId);
+  if (existingId) {
+    params.push(canViewAllWorkspaceContacts(session));
   }
 
   return params;

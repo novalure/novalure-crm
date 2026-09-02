@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BlobNotFoundError, del, get, head, put } from "@vercel/blob";
+import type { AppSession } from "@/lib/auth/session";
+import { canUseBrokerProjectEditScope } from "@/lib/broker-flow/access-policy";
+import { canViewAllWorkspaceContacts } from "@/lib/contact-access";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { type TenantTransaction, withTenantTransaction } from "@/lib/db/tenant-client";
 import { evaluateLaunchScope } from "@/lib/launch-scope";
 import {
   createMediaShareToken,
@@ -10,6 +14,7 @@ import {
   hashMediaShareToken,
   mediaPublicShareScope,
 } from "@/lib/media-security";
+import { hasProductCapability } from "@/lib/product-model";
 
 export const maxImageUploadBytes = 10 * 1024 * 1024;
 export const maxMediaUploadBytes = maxImageUploadBytes;
@@ -20,6 +25,7 @@ export type MediaStorageAccess = "legacy-public" | "private" | "published-public
 export type MediaAsset = {
   id: string;
   workspaceId: string;
+  createdByUserId: string | null;
   name: string;
   originalName: string;
   folder: string;
@@ -67,6 +73,7 @@ type MediaShareRecord = {
 };
 
 export type MediaPublicationOptions = {
+  accessMode?: "mutation" | "reuse";
   expiresInSeconds?: number;
 };
 
@@ -81,6 +88,9 @@ type MediaLibrary = {
 type MediaAssetRow = Record<string, unknown> & {
   alt?: string | null;
   createdAt: string | Date;
+  createdByUserId?: string | null;
+  deletionState?: "active" | "pending";
+  deletionRequestedByUserId?: string | null;
   folder: string;
   hasActivePublicShare?: boolean | null;
   id: string;
@@ -111,6 +121,7 @@ const allowedExtensionsByMimeType = new Map<string, Set<string>>([
 ]);
 const allowedImageMimeTypes = new Set([...allowedExtensionsByMimeType.keys()].filter((value) => value.startsWith("image/")));
 const allowedMediaMimeTypes = new Set(allowedExtensionsByMimeType.keys());
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const mediaRoot = process.env.NOVALURE_MEDIA_ROOT || path.join(process.cwd(), ".data", "media");
 const uploadRoot = path.join(mediaRoot, "uploads");
 const libraryPath = path.join(mediaRoot, "library.json");
@@ -130,6 +141,9 @@ function mediaAssetSelect(alias = "ma", includeShareStatus = true) {
     ${alias}.storage_access as "storageAccess",
     ${alias}.alt,
     ${alias}.created_at as "createdAt",
+    ${alias}.created_by_user_id as "createdByUserId",
+    ${alias}.deletion_state as "deletionState",
+    ${alias}.deletion_requested_by_user_id as "deletionRequestedByUserId",
     ${alias}.is_public as "isPublic"${includeShareStatus ? `,
     exists (
       select 1
@@ -179,6 +193,7 @@ export async function listWorkspaceMedia(workspaceId: string) {
 
 export async function saveWorkspaceImage(input: {
   alt?: string;
+  createdByUserId: string;
   file: File;
   folder?: string;
   name?: string;
@@ -195,6 +210,7 @@ export async function saveWorkspaceImage(input: {
 
 export async function saveWorkspaceFile(input: {
   alt?: string;
+  createdByUserId: string;
   file: File;
   folder?: string;
   name?: string;
@@ -235,6 +251,7 @@ export async function saveWorkspaceFile(input: {
   const asset: MediaAsset = {
     id,
     workspaceId: input.workspaceId,
+    createdByUserId: input.createdByUserId,
     name: input.name?.trim() || input.file.name,
     originalName: input.file.name,
     folder,
@@ -288,6 +305,7 @@ export async function findPublicMediaAsset(publicToken: string) {
           and mas.revoked_at is null
           and mas.expires_at > now()
           and ma.is_public = true
+          and ma.deletion_state = 'active'
         limit 1
       `,
       [tokenHash, mediaPublicShareScope],
@@ -303,7 +321,9 @@ export async function findPublicMediaAsset(publicToken: string) {
 export async function findWorkspaceMediaAsset(assetId: string, workspaceId: string) {
   if (hasDatabaseUrl()) {
     const row = await queryOne<MediaAssetRow>(
-      `select ${mediaAssetSelect()} from media_assets ma where ma.id = $1 and ma.workspace_id = $2 limit 1`,
+      `select ${mediaAssetSelect()} from media_assets ma
+        where ma.id = $1 and ma.workspace_id = $2 and ma.deletion_state = 'active'
+        limit 1`,
       [assetId, workspaceId],
     );
     return row ? normalizeMediaAsset(row) : null;
@@ -313,66 +333,280 @@ export async function findWorkspaceMediaAsset(assetId: string, workspaceId: stri
   return library.assets.find((asset) => asset.id === assetId && asset.workspaceId === workspaceId) ?? null;
 }
 
+function isUuid(value: string) {
+  return uuidPattern.test(value);
+}
+
+type LockedMediaPublicationRow = MediaAssetRow & { authorized: boolean };
+
+function canManageMediaContent(session: AppSession) {
+  return session.role === "owner"
+    || session.role === "admin"
+    || hasProductCapability(session.productRole, "settings:manage");
+}
+
+function assertLocalMediaPublicationAccess(asset: MediaAsset, session: AppSession) {
+  const workspaceMediaManager = canManageMediaContent(session) || canViewAllWorkspaceContacts(session);
+  if (asset.workspaceId !== session.workspaceId || (!workspaceMediaManager && asset.createdByUserId !== session.userId)) {
+    throw new MediaStoreError("MEDIA_ACCESS_REQUIRED", "Media asset is not available for publication.");
+  }
+}
+
+/**
+ * Serializes the asset, every current reference and every row that grants the
+ * actor access before deciding whether a public share may change. Migration
+ * 084 makes new media references take a SHARE lock on the same asset, closing
+ * the other half of the reference-rebind race.
+ */
+async function lockAuthorizedMediaPublicationAsset(
+  transaction: TenantTransaction,
+  assetId: string,
+  session: AppSession,
+  accessMode: "mutation" | "reuse",
+) {
+  const contentManager = canManageMediaContent(session);
+  const workspaceMediaManager = contentManager || canViewAllWorkspaceContacts(session);
+  const row = await transaction.queryOne<LockedMediaPublicationRow>(
+    `
+      with locked_asset as materialized (
+        select ${mediaAssetSelect("ma")}
+          from media_assets ma
+         where ma.id = $4::uuid
+           and ma.workspace_id = $1
+           and ma.deletion_state = 'active'
+         for update
+      ), locked_content_refs as materialized (
+        select version.media_asset_id as "mediaAssetId",
+               document.owner_user_id as "ownerUserId"
+          from crm_content_document_versions version
+          join crm_content_documents document
+            on document.workspace_id = version.workspace_id
+           and document.id = version.document_id
+         where version.workspace_id = $1::uuid
+           and version.media_asset_id = $4::uuid
+           and exists (select 1 from locked_asset)
+         for share of version, document
+      ), locked_property_media_refs as materialized (
+        select media.media_asset_id as "mediaAssetId",
+               media.property_id as "propertyId",
+               media.unit_id as "unitId"
+          from property_media media
+         where media.workspace_id = $1::uuid
+           and media.media_asset_id = $4::uuid
+           and exists (select 1 from locked_asset)
+         for share of media
+      ), locked_property_document_refs as materialized (
+        select document.media_asset_id as "mediaAssetId",
+               document.property_id as "propertyId",
+               document.unit_id as "unitId"
+          from property_documents document
+         where document.workspace_id = $1::uuid
+           and document.media_asset_id = $4::uuid
+           and exists (select 1 from locked_asset)
+         for share of document
+      ), property_reference_targets as materialized (
+        select "propertyId", "unitId" from locked_property_media_refs
+        union
+        select "propertyId", "unitId" from locked_property_document_refs
+      ), locked_listings as materialized (
+        select listing.id, listing.owner_user_id as "ownerUserId",
+               listing.seller_lead_id as "sellerLeadId", listing.project_id as "projectId"
+          from seller_listings listing
+          join property_reference_targets target on target."propertyId" = listing.id
+         where listing.workspace_id = $1::uuid
+         for share of listing
+      ), locked_seller_leads as materialized (
+        select lead.id, lead.assigned_to_user_id as "ownerUserId"
+          from leads lead
+          join locked_listings listing on listing."sellerLeadId" = lead.id
+         where lead.workspace_id = $1::uuid
+         for share of lead
+      ), locked_units as materialized (
+        select unit.id, unit.project_id as "projectId",
+               unit.buyer_contact_id as "buyerContactId", unit.deal_id as "dealId"
+          from property_units unit
+          join property_reference_targets target on target."unitId" = unit.id
+         where unit.workspace_id = $1::uuid
+         for share of unit
+      ), locked_buyers as materialized (
+        select buyer.id, buyer.owner_user_id as "ownerUserId"
+          from contacts buyer
+          join locked_units unit on unit."buyerContactId" = buyer.id
+         where buyer.workspace_id = $1::uuid
+         for share of buyer
+      ), locked_deals as materialized (
+        select deal.id, deal.owner_user_id as "ownerUserId"
+          from deals deal
+          join locked_units unit on unit."dealId" = deal.id
+         where deal.workspace_id = $1::uuid
+         for share of deal
+      ), referenced_projects as materialized (
+        select coalesce(listing."projectId", unit."projectId") as "projectId"
+          from property_reference_targets target
+          left join locked_listings listing on listing.id = target."propertyId"
+          left join locked_units unit on unit.id = target."unitId"
+         where coalesce(listing."projectId", unit."projectId") is not null
+      ), locked_project_grants as materialized (
+        select project_grant.project_id as "projectId"
+          from project_pipeline_permissions project_grant
+          join workspace_users project_actor
+            on project_actor.workspace_id = project_grant.workspace_id
+           and project_actor.id = project_grant.user_id
+          join referenced_projects project on project."projectId" = project_grant.project_id
+         where project_grant.workspace_id = $1::uuid
+           and project_grant.user_id = $2::uuid
+           and project_grant.can_edit_deals = true
+           and project_actor.product_role in ('developer_sales', 'project_sales_member')
+           and $6::boolean
+         for share of project_grant, project_actor
+      ), locked_bot_refs as materialized (
+        select send.media_asset_id as "mediaAssetId"
+          from bot_document_sends send
+         where send.workspace_id = $1::uuid
+           and send.media_asset_id = $4::uuid
+           and exists (select 1 from locked_asset)
+         for share of send
+      ), media_references as (
+        select "mediaAssetId",
+               $3::boolean as mutable,
+               ($3::boolean or "ownerUserId" = $2::uuid) as reusable
+          from locked_content_refs
+        union all
+        select reference."mediaAssetId",
+               (
+                 $5::boolean
+                 or listing."ownerUserId" = $2::uuid
+                 or seller_lead."ownerUserId" = $2::uuid
+                 or buyer."ownerUserId" = $2::uuid
+                 or deal."ownerUserId" = $2::uuid
+                 or grant."projectId" is not null
+               ) as mutable,
+               (
+                 $5::boolean
+                 or listing."ownerUserId" = $2::uuid
+                 or seller_lead."ownerUserId" = $2::uuid
+                 or buyer."ownerUserId" = $2::uuid
+                 or deal."ownerUserId" = $2::uuid
+                 or grant."projectId" is not null
+               ) as reusable
+          from (
+            select * from locked_property_media_refs
+            union all
+            select * from locked_property_document_refs
+          ) reference
+          left join locked_listings listing on listing.id = reference."propertyId"
+          left join locked_seller_leads seller_lead on seller_lead.id = listing."sellerLeadId"
+          left join locked_units unit on unit.id = reference."unitId"
+          left join locked_buyers buyer on buyer.id = unit."buyerContactId"
+          left join locked_deals deal on deal.id = unit."dealId"
+          left join locked_project_grants grant
+            on grant."projectId" = coalesce(listing."projectId", unit."projectId")
+        union all
+        select "mediaAssetId", $5::boolean, $5::boolean from locked_bot_refs
+      ), reference_access as (
+        select count(*)::integer as "referenceCount",
+               coalesce(bool_and(mutable), false) as mutable,
+               coalesce(bool_and(reusable), false) as reusable
+          from media_references
+      )
+      select locked_asset.*,
+             case
+               when reference_access."referenceCount" > 0
+                 then case when $7::boolean then reference_access.reusable else reference_access.mutable end
+               else ($5::boolean or locked_asset."createdByUserId" = $2::uuid)
+             end as authorized
+        from locked_asset
+        cross join reference_access
+    `,
+    [
+      session.workspaceId,
+      session.userId,
+      contentManager,
+      assetId,
+      workspaceMediaManager,
+      canUseBrokerProjectEditScope(session),
+      accessMode === "reuse",
+    ],
+  );
+  if (!row) return null;
+  if (row.authorized !== true) {
+    throw new MediaStoreError("MEDIA_ACCESS_REQUIRED", "Media asset is not available for publication.");
+  }
+  return normalizeMediaAsset(row);
+}
+
 export async function publishWorkspaceMedia(
   assetId: string,
-  workspaceId: string,
+  session: AppSession,
   options: MediaPublicationOptions = {},
 ) {
   assertMediaBlobMutationAllowed();
-
-  const existingAsset = await findWorkspaceMediaAsset(assetId, workspaceId);
-  if (!existingAsset) return null;
-  storagePathname(existingAsset);
-  assertBlobAccessConfigured(existingAsset);
+  if (!isUuid(assetId)) return null;
 
   const token = createMediaShareToken();
   const tokenHash = hashMediaShareToken(token);
   const expiresAt = new Date(Date.now() + getMediaShareTtlSeconds(options.expiresInSeconds) * 1000).toISOString();
 
   if (hasDatabaseUrl()) {
-    const row = await queryOne<MediaAssetRow>(
-      `
-        with published_asset as (
-          update media_assets
-          set is_public = true,
-              public_token = null,
-              storage_access = case
-                when storage_access = 'legacy-public' then 'published-public'
-                else storage_access
-              end
-          where id = $1
-            and workspace_id = $2
-          returning *
-        ), created_share as (
-          insert into media_asset_shares (
-            asset_id, workspace_id, token_hash, scope, expires_at
-          )
-          select id, workspace_id, $3, $4, $5::timestamptz
-          from published_asset
-          returning asset_id, expires_at as "expiresAt", id as "publicShareId"
-        )
-        select
-          ${mediaAssetSelect("published_asset", false)},
-          true as "hasActivePublicShare",
-          created_share."expiresAt" as "publicShareExpiresAt",
-          created_share."publicShareId"
-        from published_asset
-        join created_share on created_share.asset_id = published_asset.id
-        limit 1
-      `,
-      [assetId, workspaceId, tokenHash, mediaPublicShareScope, expiresAt],
-    );
-    if (!row) return null;
+    return withTenantTransaction({ actorId: session.userId, workspaceId: session.workspaceId }, async (transaction) => {
+      const lockedAsset = await lockAuthorizedMediaPublicationAsset(
+        transaction,
+        assetId,
+        session,
+        options.accessMode ?? "mutation",
+      );
+      if (!lockedAsset) return null;
+      storagePathname(lockedAsset);
+      assertBlobAccessConfigured(lockedAsset);
 
-    return withTransientPublicToken(normalizeMediaAsset(row), token, {
-      expiresAt: String(row.publicShareExpiresAt),
-      id: String(row.publicShareId),
+      const row = await transaction.queryOne<MediaAssetRow>(
+        `
+          with published_asset as (
+            update media_assets
+            set is_public = true,
+                public_token = null,
+                storage_access = case
+                  when storage_access = 'legacy-public' then 'published-public'
+                  else storage_access
+                end
+            where id = $1
+              and workspace_id = $2
+              and deletion_state = 'active'
+            returning *
+          ), created_share as (
+            insert into media_asset_shares (
+              asset_id, workspace_id, token_hash, scope, expires_at
+            )
+            select id, workspace_id, $3, $4, $5::timestamptz
+            from published_asset
+            returning asset_id, expires_at as "expiresAt", id as "publicShareId"
+          )
+          select
+            ${mediaAssetSelect("published_asset", false)},
+            true as "hasActivePublicShare",
+            created_share."expiresAt" as "publicShareExpiresAt",
+            created_share."publicShareId"
+          from published_asset
+          join created_share on created_share.asset_id = published_asset.id
+          limit 1
+        `,
+        [assetId, session.workspaceId, tokenHash, mediaPublicShareScope, expiresAt],
+      );
+      if (!row) return null;
+
+      return withTransientPublicToken(normalizeMediaAsset(row), token, {
+        expiresAt: String(row.publicShareExpiresAt),
+        id: String(row.publicShareId),
+      });
     });
   }
 
   const library = await readMediaLibrary();
-  const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId);
+  const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === session.workspaceId);
   if (!asset) return null;
+  assertLocalMediaPublicationAccess(asset, session);
+  storagePathname(asset);
+  assertBlobAccessConfigured(asset);
 
   asset.isPublic = true;
   asset.hasActivePublicShare = true;
@@ -385,7 +619,7 @@ export async function publishWorkspaceMedia(
     revokedAt: null,
     scope: mediaPublicShareScope,
     tokenHash,
-    workspaceId,
+    workspaceId: session.workspaceId,
   };
   library.shares.push(share);
   await writeMediaLibrary(library);
@@ -440,6 +674,7 @@ export async function revokeWorkspaceMediaShare(
           from revoked_share
           where ma.id = revoked_share.asset_id
             and ma.workspace_id = revoked_share.workspace_id
+            and ma.deletion_state = 'active'
           returning ma.*
         )
         select
@@ -518,47 +753,55 @@ export async function extendWorkspaceMediaShare(
   return { expiresAt: share.expiresAt, id: share.id };
 }
 
-export async function revokeWorkspaceMediaPublication(assetId: string, workspaceId: string) {
+export async function revokeWorkspaceMediaPublication(assetId: string, session: AppSession) {
   assertMediaBlobMutationAllowed();
+  if (!isUuid(assetId)) return null;
 
   if (hasDatabaseUrl()) {
-    const row = await queryOne<MediaAssetRow>(
-      `
-        with unpublished_asset as (
-          update media_assets
-          set is_public = false,
-              public_token = null,
-              storage_access = case
-                when storage_access = 'published-public' then 'legacy-public'
-                else storage_access
-              end
-          where id = $1
-            and workspace_id = $2
-          returning *
-        ), revoked_shares as (
-          update media_asset_shares mas
-          set revoked_at = coalesce(mas.revoked_at, now())
+    return withTenantTransaction({ actorId: session.userId, workspaceId: session.workspaceId }, async (transaction) => {
+      const lockedAsset = await lockAuthorizedMediaPublicationAsset(transaction, assetId, session, "mutation");
+      if (!lockedAsset) return null;
+
+      const row = await transaction.queryOne<MediaAssetRow>(
+        `
+          with unpublished_asset as (
+            update media_assets
+            set is_public = false,
+                public_token = null,
+                storage_access = case
+                  when storage_access = 'published-public' then 'legacy-public'
+                  else storage_access
+                end
+            where id = $1
+              and workspace_id = $2
+              and deletion_state = 'active'
+            returning *
+          ), revoked_shares as (
+            update media_asset_shares mas
+            set revoked_at = coalesce(mas.revoked_at, now())
+            from unpublished_asset
+            where mas.asset_id = unpublished_asset.id
+              and mas.workspace_id = unpublished_asset.workspace_id
+              and mas.revoked_at is null
+            returning mas.asset_id
+          )
+          select
+            ${mediaAssetSelect("unpublished_asset", false)},
+            false as "hasActivePublicShare",
+            (select count(*) from revoked_shares) as "revokedShareCount"
           from unpublished_asset
-          where mas.asset_id = unpublished_asset.id
-            and mas.workspace_id = unpublished_asset.workspace_id
-            and mas.revoked_at is null
-          returning mas.asset_id
-        )
-        select
-          ${mediaAssetSelect("unpublished_asset", false)},
-          false as "hasActivePublicShare",
-          (select count(*) from revoked_shares) as "revokedShareCount"
-        from unpublished_asset
-        limit 1
-      `,
-      [assetId, workspaceId],
-    );
-    return row ? normalizeMediaAsset(row) : null;
+          limit 1
+        `,
+        [assetId, session.workspaceId],
+      );
+      return row ? normalizeMediaAsset(row) : null;
+    });
   }
 
   const library = await readMediaLibrary();
-  const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId);
+  const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === session.workspaceId);
   if (!asset) return null;
+  assertLocalMediaPublicationAccess(asset, session);
 
   const revokedAt = new Date().toISOString();
   asset.isPublic = false;
@@ -567,7 +810,7 @@ export async function revokeWorkspaceMediaPublication(assetId: string, workspace
   asset.publicUrl = null;
   if (asset.storageAccess === "published-public") asset.storageAccess = "legacy-public";
   for (const share of library.shares) {
-    if (share.assetId === assetId && share.workspaceId === workspaceId && !share.revokedAt) {
+    if (share.assetId === assetId && share.workspaceId === session.workspaceId && !share.revokedAt) {
       share.revokedAt = revokedAt;
     }
   }
@@ -626,31 +869,130 @@ export function mediaAssetPath(asset: MediaAsset) {
   return resolvedPath;
 }
 
-export async function deleteWorkspaceMedia(assetId: string, workspaceId: string) {
+export async function deleteWorkspaceMedia(
+  assetId: string,
+  workspaceId: string,
+  actorId?: string,
+  options: { canManagePendingDeletion?: boolean } = {},
+) {
   assertMediaBlobMutationAllowed();
 
-  const asset = hasDatabaseUrl()
-    ? await findWorkspaceMediaAsset(assetId, workspaceId)
-    : (await readMediaLibrary()).assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
-  if (!asset) return null;
-
-  // Physical storage is removed first. If this fails, metadata remains intact so
-  // the operation is observable and retryable instead of creating an orphaned Blob.
-  try {
-    await deleteStoredFile(asset);
-  } catch (error) {
-    throw new MediaStoreError("STORAGE_DELETE_FAILED", "Media storage deletion failed.", { cause: error });
-  }
-
   if (hasDatabaseUrl()) {
-    await executeQuery("delete from media_assets where id = $1 and workspace_id = $2", [assetId, workspaceId]);
+    if (!actorId) {
+      throw new MediaStoreError("MEDIA_ACCESS_REQUIRED", "An authenticated media deletion actor is required.");
+    }
+    const deletionIntent = await withTenantTransaction({ actorId, workspaceId }, async (transaction) => {
+      const locked = await transaction.queryOne<MediaAssetRow>(
+        `select ${mediaAssetSelect()}
+           from media_assets ma
+          where ma.id = $1::uuid and ma.workspace_id = $2
+          for update`,
+        [assetId, workspaceId],
+      );
+      if (!locked) return null;
+      if (
+        locked.deletionState === "pending"
+        && locked.deletionRequestedByUserId !== actorId
+        && options.canManagePendingDeletion !== true
+      ) {
+        throw new MediaStoreError(
+          "MEDIA_ACCESS_REQUIRED",
+          "Pending media deletion can be retried only by its original actor or a content manager.",
+        );
+      }
+      let markedPendingByThisAttempt = false;
+      if (locked.deletionState !== "pending") {
+        const reference = await transaction.queryOne<{ id: string }>(
+          `select referenced.id
+             from (
+               select v.id
+                 from crm_content_document_versions v
+                where v.workspace_id = $1::uuid and v.media_asset_id = $2::uuid
+               union all
+               select media.id
+                 from property_media media
+                where media.workspace_id = $1::uuid and media.media_asset_id = $2::uuid
+               union all
+               select document.id
+                 from property_documents document
+                where document.workspace_id = $1::uuid and document.media_asset_id = $2::uuid
+               union all
+               select send.id
+                 from bot_document_sends send
+                where send.workspace_id = $1::uuid and send.media_asset_id = $2::uuid
+             ) referenced
+            limit 1`,
+          [workspaceId, assetId],
+        );
+        if (reference) {
+          throw new MediaStoreError(
+            "MEDIA_IN_USE",
+            "Media is referenced by a versioned document and cannot be deleted.",
+          );
+        }
+        await transaction.execute(
+          `update media_assets
+              set deletion_state = 'pending', deletion_requested_at = now(),
+                  deletion_requested_by_user_id = $3::uuid
+            where id = $1::uuid and workspace_id = $2 and deletion_state = 'active'`,
+          [assetId, workspaceId, actorId],
+        );
+        markedPendingByThisAttempt = true;
+      }
+      return { asset: normalizeMediaAsset(locked), markedPendingByThisAttempt };
+    });
+    if (!deletionIntent) return null;
+
+    try {
+      await deleteStoredFile(deletionIntent.asset);
+    } catch (error) {
+      if (deletionIntent.markedPendingByThisAttempt) {
+        try {
+          await withTenantTransaction({ actorId, workspaceId }, (transaction) => transaction.execute(
+            `update media_assets
+                set deletion_state = 'active', deletion_requested_at = null,
+                    deletion_requested_by_user_id = null
+              where id = $1::uuid and workspace_id = $2 and deletion_state = 'pending'`,
+            [assetId, workspaceId],
+          ));
+        } catch (restoreError) {
+          throw new MediaStoreError(
+            "STORAGE_DELETE_FAILED",
+            "Media storage deletion failed and its deletion marker could not be restored.",
+            { cause: new AggregateError([error, restoreError], "Storage delete and marker restoration failed") },
+          );
+        }
+      }
+      throw new MediaStoreError("STORAGE_DELETE_FAILED", "Media storage deletion failed.", { cause: error });
+    }
+
+    try {
+      await withTenantTransaction({ actorId, workspaceId }, (transaction) => transaction.execute(
+        "delete from media_assets where id = $1::uuid and workspace_id = $2 and deletion_state = 'pending'",
+        [assetId, workspaceId],
+      ));
+    } catch (error) {
+      throw new MediaStoreError(
+        "METADATA_DELETE_PENDING",
+        "The file was removed, but its durable deletion marker still requires retry.",
+        { cause: error },
+      );
+    }
+    return deletionIntent.asset;
   } else {
     const library = await readMediaLibrary();
+    const asset = library.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
+    if (!asset) return null;
+    try {
+      await deleteStoredFile(asset);
+    } catch (error) {
+      throw new MediaStoreError("STORAGE_DELETE_FAILED", "Media storage deletion failed.", { cause: error });
+    }
     library.assets = library.assets.filter((item) => item.id !== assetId);
     library.shares = library.shares.filter((item) => item.assetId !== assetId || item.workspaceId !== workspaceId);
     await writeMediaLibrary(library);
+    return asset;
   }
-  return asset;
 }
 
 export async function mediaAssetExists(asset: MediaAsset) {
@@ -725,6 +1067,9 @@ export class MediaStoreError extends Error {
     | "LAUNCH_SCOPE_RUNTIME_UNSAFE"
     | "LAUNCH_SCOPE_UNKNOWN"
     | "LAUNCH_SCOPE_UNSIGNED"
+    | "MEDIA_ACCESS_REQUIRED"
+    | "MEDIA_IN_USE"
+    | "METADATA_DELETE_PENDING"
     | "PRIVATE_STORAGE_UNAVAILABLE"
     | "PUBLIC_STORAGE_UNAVAILABLE"
     | "STORAGE_COMPENSATION_FAILED"
@@ -861,6 +1206,7 @@ async function readWorkspaceAssets(workspaceId: string) {
         select ${mediaAssetSelect()}
         from media_assets ma
         where ma.workspace_id = $1
+          and ma.deletion_state = 'active'
         order by ma.created_at desc
       `,
       [workspaceId],
@@ -881,9 +1227,9 @@ async function persistMediaAsset(asset: MediaAsset) {
         insert into media_assets (
           id, workspace_id, name, original_name, folder, mime_type, size_bytes,
           url, relative_path, storage_provider, storage_access, alt, created_at,
-          is_public, public_token
+          is_public, public_token, created_by_user_id
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, null)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, null, $15::uuid)
       `,
       [
         asset.id,
@@ -900,6 +1246,7 @@ async function persistMediaAsset(asset: MediaAsset) {
         asset.alt ?? null,
         asset.createdAt,
         asset.isPublic,
+        asset.createdByUserId,
       ],
     );
     return;
@@ -1048,6 +1395,7 @@ function normalizeMediaAsset(asset: MediaAsset | MediaAssetRow): MediaAsset {
   const normalized: MediaAsset = {
     id: asset.id,
     workspaceId: asset.workspaceId,
+    createdByUserId: asset.createdByUserId ?? null,
     name: asset.name,
     originalName: asset.originalName,
     folder: asset.folder,

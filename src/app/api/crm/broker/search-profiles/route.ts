@@ -1,44 +1,55 @@
-import { NextResponse } from "next/server";
-import { requirePermission, requirePermissionAndProductCapability } from "@/lib/auth/session";
-import { upsertBuyerSearchProfile } from "@/lib/db/broker-entity-repositories";
-import { loadBuyerSearchProfiles } from "@/lib/db/crm-loaders";
+import { parsePagination } from "@/lib/broker-flow/contracts";
+import {
+  authorizeBrokerRead,
+  authorizeBrokerWrite,
+  brokerErrorResponse,
+  brokerJson,
+  readBrokerMutation,
+} from "@/lib/broker-flow/http";
+import { listBrokerSearchProfiles, saveBrokerSearchProfile } from "@/lib/db/broker-operations-repository";
 
-async function readJson(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "crm:read");
-  if (!auth.ok) return auth.response;
-
-  const profiles = await loadBuyerSearchProfiles(auth.session.workspaceId);
-  return NextResponse.json({ profiles, source: "database" });
+  try {
+    const auth = await authorizeBrokerRead(request);
+    if (!auth.ok) return auth.response;
+    const url = new URL(request.url);
+    const result = await listBrokerSearchProfiles({
+      contactId: url.searchParams.get("contactId"),
+      leadId: url.searchParams.get("leadId"),
+      pagination: parsePagination(url),
+      projectId: url.searchParams.get("projectId"),
+      q: url.searchParams.get("q"),
+      session: auth.session,
+      status: url.searchParams.get("status"),
+    });
+    return brokerJson({ pagination: result.pagination, persisted: true, profiles: result.items, source: "database" });
+  } catch (error) {
+    return brokerErrorResponse(error);
+  }
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermissionAndProductCapability(request, "crm:write", "pipeline:write");
-  if (!auth.ok) return auth.response;
-
-  const body = await readJson(request);
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  try {
+    const auth = await authorizeBrokerWrite(request);
+    if (!auth.ok) return auth.response;
+    const mutation = await readBrokerMutation(request);
+    const profile = mutation.body.profile && typeof mutation.body.profile === "object"
+      ? mutation.body.profile as Record<string, unknown>
+      : mutation.body;
+    const result = await saveBrokerSearchProfile({
+      idempotencyKey: mutation.idempotencyKey,
+      payload: profile,
+      session: auth.session,
+    });
+    return brokerJson(
+      { persisted: true, profile: result.data, replayed: result.replayed },
+      { status: result.httpStatus },
+    );
+  } catch (error) {
+    return brokerErrorResponse(error);
   }
-
-  const input = body as Record<string, unknown>;
-  const profile = typeof input.profile === "object" && input.profile
-    ? input.profile as Record<string, unknown>
-    : input;
-  const result = await upsertBuyerSearchProfile({ profile, session: auth.session });
-
-  if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 503 });
-  }
-
-  return NextResponse.json({ persisted: true, profile: result.data });
 }
 
 export async function PATCH(request: Request) {
