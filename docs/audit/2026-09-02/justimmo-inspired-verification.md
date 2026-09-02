@@ -5,7 +5,7 @@ Status: local candidate verified; isolated Preview acceptance and Production rel
 ## Frozen candidate
 
 - Branch: `codex/justimmo-inspired-improvements-20260902`
-- Implementation commit: `c63ad0b91362bcdb56862374b0deaa55fa8941e8`
+- Implementation commit: `daaa84838ecae9dbc22d6690914ef0bfebea6edf`
 - Scope: isolated development worktree and future isolated Preview QA only
 - Production queried or mutated: no
 - Real portal, email, calendar or customer communication sent: no

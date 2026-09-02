@@ -13,7 +13,7 @@ smoke was performed as part of this implementation pass. Production was not
 queried or changed.
 
 The implementation candidate is frozen at
-`c63ad0b91362bcdb56862374b0deaa55fa8941e8`. The release evidence is committed
+`daaa84838ecae9dbc22d6690914ef0bfebea6edf`. The release evidence is committed
 but not signed. `docs/audit/2026-09-02/justimmo-inspired-migration-checksums.json`
 records the migration bytes using the repository's Git-clean LF byte contract
 and verifies every stored SHA-256 and Git object ID against that exact commit.
