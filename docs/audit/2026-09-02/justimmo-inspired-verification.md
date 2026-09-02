@@ -5,7 +5,7 @@ Status: local candidate verified; isolated Preview acceptance and Production rel
 ## Frozen candidate
 
 - Branch: `codex/justimmo-inspired-improvements-20260902`
-- Implementation commit: `de42e6b7791101b11a515726f26f8676f5fdd897`
+- Implementation commit: `c63ad0b91362bcdb56862374b0deaa55fa8941e8`
 - Scope: isolated development worktree and future isolated Preview QA only
 - Production queried or mutated: no
 - Real portal, email, calendar or customer communication sent: no
@@ -36,18 +36,20 @@ identity, not successful Preview migration execution.
 - Funnel and legacy CRM authorization paths tightened so payload hints cannot
   widen workspace/project access.
 
-The final source review found zero remaining P1 and zero remaining P2 findings
-inside the local implementation scope.
+Three focused final re-audits found and corrected the remaining P1 ACL
+boundaries. Their final reports show zero remaining P0/P1 findings in the
+reviewed recovery, PostgreSQL role-graph and grant-contract scope. This does
+not substitute for the external acceptance gates below.
 
 ## Verification results
 
 | Check | Result |
 | --- | --- |
-| `npm run test:justimmo-improvements` | PASS, 129/129 |
-| `npm run test:integration` | PASS, 16/16 |
+| `npm run test:justimmo-improvements` | PASS |
+| `npm run test:integration` | PASS |
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS, zero warnings |
-| `npm run test:unit` | PASS; go-live suite 653 passed with one Windows-only symlink skip, database-recovery suite 40/40 |
+| `npm run test:unit` | PASS; the intentional Windows-only symlink skip remains documented |
 | `npm run security:production` | PASS, zero production dependency vulnerabilities |
 | `npm run build` | PASS, Next.js 16.3, 104 application routes/pages generated |
 | Local Axe diagnostic | PASS, 6/6 audited surfaces; zero violations, incomplete checks, blocked cross-origin requests or unexpected writes |

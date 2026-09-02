@@ -3,7 +3,7 @@
   "evidenceKind": "migration_sha256_inventory",
   "releaseSlice": "justimmo-inspired-2026-09-02",
   "capturedOn": "2026-09-02",
-  "candidateCommit": "de42e6b7791101b11a515726f26f8676f5fdd897",
+  "candidateCommit": "c63ad0b91362bcdb56862374b0deaa55fa8941e8",
   "migrationByteFreeze": "FROZEN_AT_IMPLEMENTATION_COMMIT",
   "byteContract": {
     "mode": "GIT_CLEAN_FILTERED_BYTES",
@@ -41,9 +41,9 @@
       "version": "081",
       "direction": "up",
       "path": "migrations/081_broker_operations.sql",
-      "byteLength": 48716,
-      "sha256": "39328774e7b5980d3dbbe88a262bed202fae9643feac3a5846d5a2f05bf47cea",
-      "gitBlobOidSha1": "9a00135f131fa8ecfab674192929dc173bd6c515"
+      "byteLength": 50965,
+      "sha256": "8b42be5edb5f45c9200327c2fbb1e8a3e984bcbbac8c037cd57309d8daf556e7",
+      "gitBlobOidSha1": "06e5d031c57f4347d6fc9dc32a8e04ce6f1161ff"
     },
     {
       "version": "081",
@@ -89,9 +89,9 @@
       "version": "084",
       "direction": "up",
       "path": "migrations/084_media_deletion_lifecycle.sql",
-      "byteLength": 5015,
-      "sha256": "fd2fc05238f3b747f71d133759f9a0f6117da650dabc1c254554d7d16cff9907",
-      "gitBlobOidSha1": "1cdbb40e1f6da978b0ead0d0c4a0794ab4eca257"
+      "byteLength": 5378,
+      "sha256": "51fe647913d95ca360ef30bece43f6a371a7386cea97a268a7e94ddbeefe57cd",
+      "gitBlobOidSha1": "76ec9ed9d58e9decc1b45c20cb52554fca3a143d"
     },
     {
       "version": "084",
