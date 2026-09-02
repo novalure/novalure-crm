@@ -3,6 +3,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  historicalExcludedRecoveryMigrationsV1,
+  historicalRecoveryMigrationPlanV1,
+  recoveryMigrationPlan,
+  recoveryMigrationPlanContract,
+} from "./lib/recovery-migration-plan.mjs";
 
 const baselinePath = new URL(
   "../docs/audit/2026-08-23/database-recovery-baseline.json",
@@ -48,29 +54,31 @@ test("Recovery baseline records an unchanged Production and an exact restore com
   );
 });
 
-test("Recovery plan includes discovered dependencies and keeps migration 061 separate", () => {
-  const plan = baseline.migrationRehearsal.plannedOrder;
-  assert.ok(plan.includes("060_tenant_rls_pilot_prepare"));
-  assert.ok(plan.includes("068_qa_batch_reset_safety"));
-  assert.ok(plan.includes("075_public_funnel_visit_truth"));
-  assert.ok(plan.includes("078_company_profile_approval_integrity"));
-  assert.ok(plan.includes("079_public_funnel_visit_role_boundary"));
-  assert.ok(!plan.includes("061_validate_and_activate_tenant_rls_pilot"));
+test("Historical baseline stays truthful while the current Recovery plan covers the full chain", () => {
+  const historicalPlan = baseline.migrationRehearsal.plannedOrder;
+  assert.deepEqual(historicalPlan, historicalRecoveryMigrationPlanV1);
+  assert.ok(!historicalPlan.includes("061_validate_and_activate_tenant_rls_pilot"));
   assert.ok(
     baseline.migrationRehearsal.manualCutovers.includes("078_company_profile_approval_integrity"),
   );
   assert.deepEqual(
     baseline.migrationRehearsal.explicitlyExcluded,
-    [
-      "061_validate_and_activate_tenant_rls_pilot",
-      "062_private_media_contract_cutover",
-      "065_notification_guard_search_path_hardening",
-    ],
+    historicalExcludedRecoveryMigrationsV1,
   );
-  assert.ok(plan.indexOf("060_tenant_rls_pilot_prepare") < plan.indexOf("068_qa_batch_reset_safety"));
-  assert.ok(plan.indexOf("074_validate_launch_tenant_relation_guards") < plan.indexOf("075_public_funnel_visit_truth"));
+  assert.equal(recoveryMigrationPlan.length, 22);
+  assert.equal(recoveryMigrationPlan.at(-1), "061_validate_and_activate_tenant_rls_pilot");
+  assert.ok(
+    recoveryMigrationPlan.indexOf("060_tenant_rls_pilot_prepare")
+      < recoveryMigrationPlan.indexOf("062_private_media_contract_cutover"),
+  );
+  assert.ok(
+    recoveryMigrationPlan.indexOf("082_content_library_privacy")
+      < recoveryMigrationPlan.indexOf("084_media_deletion_lifecycle"),
+  );
+  assert.equal(recoveryMigrationPlanContract, "FULL_PRODUCTION_CHAIN_057_084_RLS_LAST_V2");
   assert.match(runbook, /MIGRATION_TARGET=recovery/u);
-  assert.match(runbook, /Migrationen 061, 062 und 065 werden niemals/u);
+  assert.match(runbook, /historische 14er/u);
+  assert.match(runbook, /061.*letzte/u);
   assert.match(runbook, /--connection-stdin/u);
 });
 

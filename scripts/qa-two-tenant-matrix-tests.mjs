@@ -6,9 +6,12 @@ import test from "node:test";
 import {
   bootstrapPreviewShareCookies,
   createHttpClient,
+  evaluateRetainedBrokerRequestReconciliation,
   matchesQaRuntimeCapability,
   matchesQaRuntimeIdentity,
+  qaJustimmoPreviewSurfacePath,
   validatePreviewShareUrl,
+  verifyJustimmoPreviewReadMatrix,
   verifyPreviewRuntimeIdentity,
 } from "./qa-two-tenant-e2e.mjs";
 import {
@@ -20,12 +23,17 @@ import {
   QA_CLEANUP_CONFIRMATION,
   QA_WRITE_CONFIRMATION,
   qaLaunchSchemaArtifactNames,
+  qaJustimmoPreviewReadSurfaces,
   qaRequiredMigrationVersions,
   qaRuntimeDatabaseTargetDigest,
   qaTenantConstraintNames,
   qaTenantRelationNames,
   qaTwoTenantRequiredEnvironment,
 } from "./lib/qa-two-tenant-matrix.mjs";
+import {
+  twoTenantCleanupResourceTypes,
+  twoTenantExpectedResultIds,
+} from "./lib/final-preview-gate-inventories.mjs";
 import { validateProtectedPreviewWorkflowContract } from "./qa-protected-preview-workflow-contract.mjs";
 
 function uuid(value) {
@@ -160,11 +168,153 @@ test("scenario matrix covers both tenants, every role CRUD, isolation, persisten
       `${tenant}.persistence.relogin`,
       `${tenant}.deal.idempotency`,
       `${tenant}.deal.concurrency`,
+      `${tenant}.justimmo.broker.search_profile.create`,
+      `${tenant}.justimmo.broker.search_profile.idempotency`,
+      `${tenant}.justimmo.broker.search_profile.update`,
+      `${tenant}.justimmo.broker.search_profile.read`,
+      `${tenant}.justimmo.broker.search_profile.persistence_relogin`,
+      `${tenant}.justimmo.broker.search_profile.cross_tenant_update`,
+      `${tenant}.justimmo.broker.search_profile.cleanup`,
       `${tenant}.cleanup.dry_run`,
       `${tenant}.cleanup.execute`,
       `${tenant}.cleanup.remaining_rows`,
+      `${tenant}.db.retained_broker_requests_before_run`,
+      `${tenant}.cleanup.retained_broker_requests`,
     ]) assert(ids.has(required));
   }
+});
+
+test("retained broker request reconciliation binds the intentional two-row delta across reset", () => {
+  const empty = { count: 0, sha256: "a".repeat(64) };
+  const retained = { count: 2, sha256: "b".repeat(64) };
+  assert.equal(evaluateRetainedBrokerRequestReconciliation({
+    beforeRun: empty,
+    postMutation: retained,
+    postReset: retained,
+  }).ok, true);
+  assert.equal(evaluateRetainedBrokerRequestReconciliation({
+    beforeRun: empty,
+    postMutation: retained,
+    postReset: { ...retained, sha256: "c".repeat(64) },
+  }).ok, false);
+  assert.equal(evaluateRetainedBrokerRequestReconciliation({
+    beforeRun: { ...empty, count: 1 },
+    postMutation: retained,
+    postReset: retained,
+  }).ok, false);
+});
+
+test("Justimmo Preview matrix covers every read surface for all roles, cross-tenant access and public denial", () => {
+  const matrix = buildQaTwoTenantScenarioMatrix();
+  const ids = new Set(matrix.map((scenario) => scenario.id));
+  const frozenGateIds = new Set(twoTenantExpectedResultIds);
+  for (const tenant of ["a", "b"]) {
+    for (const surface of qaJustimmoPreviewReadSurfaces) {
+      for (const actor of ["owner", "admin", "member", "customer"]) {
+        assert(ids.has(`${tenant}.justimmo.${surface.id}.${actor}.read`));
+        assert(ids.has(`${tenant}.justimmo.${surface.id}.${actor}.cross_tenant`));
+      }
+      assert(ids.has(`${tenant}.justimmo.${surface.id}.public.read`));
+    }
+  }
+  for (const id of ids) assert(frozenGateIds.has(id), `missing final gate inventory id: ${id}`);
+  assert(twoTenantCleanupResourceTypes.includes("buyer_search_profiles"));
+  assert(twoTenantCleanupResourceTypes.includes("marker_buyer_search_profiles"));
+  for (const migration of [
+    "080_property_export_runtime",
+    "081_broker_operations",
+    "082_content_library_privacy",
+    "083_list_productivity_controls",
+    "084_media_deletion_lifecycle",
+  ]) assert(qaRequiredMigrationVersions.includes(migration));
+});
+
+test("Justimmo Preview runner performs only read probes and proves response shape, tenant denial and public denial", async () => {
+  const config = parseQaTwoTenantConfig(validEnvironment(), { requireExecution: false });
+  const evidence = { requests: [], results: [] };
+  const clients = new Map();
+  const calls = [];
+
+  function responseBody(surface, actorName, status) {
+    if (status !== 200) return { code: status === 403 ? "forbidden" : "not_found" };
+    if (surface.id === "broker.mandates") return { mandates: [], source: "database" };
+    if (surface.id === "broker.search_profiles") {
+      return { pagination: { hasMore: false, limit: 10, offset: 0, total: 0 }, persisted: true, profiles: [] };
+    }
+    if (surface.id.startsWith("broker.")) {
+      return {
+        data: [],
+        financialsVisible: surface.id === "broker.closings_commission"
+          ? actorName === "owner" || actorName === "admin"
+          : undefined,
+        pagination: { hasMore: false, limit: 10, offset: 0, total: 0 },
+        persisted: true,
+      };
+    }
+    if (surface.id === "content.documents" || surface.id === "content.templates") return { items: [] };
+    if (surface.id === "privacy.overview") {
+      return {
+        automaticHardDeleteEnabled: false,
+        dataSubjectRequests: [],
+        legalHolds: [],
+        policies: [],
+        reviews: [],
+      };
+    }
+    if (surface.id === "productivity.saved_views") return { views: [] };
+    if (surface.id === "property.exports") {
+      return { data: { jobs: [] }, mode: "preview_qa_only", persisted: true };
+    }
+    return { items: [] };
+  }
+
+  for (const tenant of config.tenants) {
+    for (const actorName of Object.keys(tenant.actors)) {
+      clients.set(`${tenant.key}:${actorName}`, {
+        async request(requestPath, options = {}) {
+          calls.push({ actorName, method: options.method ?? "GET", requestPath, tenant: tenant.key });
+          const url = new URL(requestPath, config.baseUrl);
+          const surface = qaJustimmoPreviewReadSurfaces.find((candidate) => candidate.path === url.pathname);
+          assert(surface, `unexpected read surface ${url.pathname}`);
+          const crossTenant = url.searchParams.get("workspaceId") !== tenant.workspaceId;
+          const expected = crossTenant ? 403 : surface.statuses[actorName];
+          const status = Array.isArray(expected) ? expected[0] : expected;
+          return {
+            json: responseBody(surface, actorName, status),
+            response: { status },
+            text: "",
+          };
+        },
+      });
+    }
+  }
+
+  await verifyJustimmoPreviewReadMatrix(
+    config,
+    evidence,
+    clients,
+    new Map(),
+    async (input, init = {}) => {
+      calls.push({ actorName: "public", method: init.method ?? "GET", requestPath: String(input), tenant: null });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    },
+  );
+
+  const expectedResults = config.tenants.length * qaJustimmoPreviewReadSurfaces.length * 9;
+  assert.equal(evidence.results.length, expectedResults);
+  assert.equal(evidence.results.every((result) => result.status === "pass"), true);
+  assert.equal(calls.every((call) => call.method === "GET"), true);
+  assert.equal(calls.some((call) => /\/api\/crm\/broker\/matches/.test(call.requestPath)), true);
+  assert.equal(calls.some((call) => /\/api\/crm\/property-exports/.test(call.requestPath)), true);
+
+  const guardedTenant = config.tenants[0];
+  assert.match(
+    qaJustimmoPreviewSurfacePath(
+      qaJustimmoPreviewReadSurfaces.find((surface) => surface.id === "broker.matches"),
+      guardedTenant,
+    ),
+    new RegExp(`profileId=${guardedTenant.batchId}`),
+  );
 });
 
 function validTenantRelationGateState() {
@@ -195,7 +345,7 @@ test("tenant relation gate passes only the complete checksummed, validated and c
   assert.deepEqual(result.errors, []);
 });
 
-test("tenant relation gate rejects missing launch migrations through 079 and a blank checksum", () => {
+test("tenant relation gate rejects missing launch migrations through 084 and a blank checksum", () => {
   const missing073 = validTenantRelationGateState();
   missing073.migrations = missing073.migrations.filter((migration) => migration.version !== "073_launch_tenant_relation_guards");
   assert.match(

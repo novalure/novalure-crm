@@ -1,45 +1,48 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  unlinkSync,
+} from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { readMigrationDatabaseUrlFromStdin } from "./db-migrate.mjs";
+import { Pool } from "@neondatabase/serverless";
+import {
+  assertRepositoryCommitted,
+  createMigrationPlanToken,
+  readMigrationDatabaseUrlFromStdin,
+} from "./db-migrate.mjs";
+import {
+  assertConnectedDatabaseTarget,
+  assertDatabaseTarget,
+} from "./lib/infra-targets.mjs";
+import {
+  recoveryManualCutoverMigrations,
+  recoveryMigrationPlan,
+  recoveryMigrationPlanContract,
+} from "./lib/recovery-migration-plan.mjs";
+import {
+  tenantCutoverMigrationPath,
+  tenantCutoverMigrationVersion,
+  tenantCutoverRoleProvisioningSql,
+} from "./lib/tenant-cutover-role-provisioning.mjs";
 
 const maximumChildOutputBytes = 2 * 1_024 * 1_024;
-const manualCutovers = new Set([
-  "057_bot_webhook_legacy_index_cutover",
-  "060_tenant_rls_pilot_prepare",
-  "068_qa_batch_reset_safety",
-  "074_validate_launch_tenant_relation_guards",
-  "078_company_profile_approval_integrity",
-  "079_public_funnel_visit_role_boundary",
-  "080_property_export_runtime",
-  "081_broker_operations",
-  "082_content_library_privacy",
-  "083_list_productivity_controls",
-  "084_media_deletion_lifecycle",
-]);
+const manualCutovers = new Set(recoveryManualCutoverMigrations);
+const migrationClientTimeoutMs = 960_000;
+const recoveryMigrationLockKey = 941041;
 
-export const recoveryMigrationPlan = Object.freeze([
-  "057_bot_webhook_legacy_index_cutover",
-  "060_tenant_rls_pilot_prepare",
-  "068_qa_batch_reset_safety",
-  "069_property_unit_idempotency",
-  "070_funnel_submission_idempotency_recovery",
-  "071_forms_owner_tenant_guard",
-  "072_form_submission_atomicity",
-  "073_launch_tenant_relation_guards",
-  "074_validate_launch_tenant_relation_guards",
-  "075_public_funnel_visit_truth",
-  "076_bot_webhook_durable_processing",
-  "077_schema_ledger_runtime_projection",
-  "078_company_profile_approval_integrity",
-  "079_public_funnel_visit_role_boundary",
-]);
+export { recoveryMigrationPlan } from "./lib/recovery-migration-plan.mjs";
 
 function parseArgs(argv) {
   const values = new Map();
@@ -150,9 +153,282 @@ async function runMigrationCommand({ args, databaseUrl, redact }) {
   });
 }
 
+function normalizeMigrationContent(content) {
+  return String(content).replace(/\r\n/gu, "\n");
+}
+
+export function recoveryMigrationChecksum(content) {
+  return createHash("sha256").update(normalizeMigrationContent(content)).digest("hex");
+}
+
+function requireCandidateCommit(candidateCommit) {
+  if (!/^[a-f0-9]{40}$/u.test(candidateCommit)) {
+    throw new Error("Recovery candidate commit must be an exact lowercase Git SHA-1.");
+  }
+  return candidateCommit;
+}
+
+function readCommittedMigration(candidateCommit, version) {
+  requireCandidateCommit(candidateCommit);
+  if (!recoveryMigrationPlan.includes(version)) {
+    throw new Error("Recovery migration is outside the reviewed rehearsal plan.");
+  }
+  const path = `migrations/${version}.sql`;
+  const result = spawnSync("git", ["show", `${candidateCommit}:${path}`], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    maxBuffer: 16 * 1_024 * 1_024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) {
+    throw new Error(`Committed Recovery migration is unavailable: ${version}.`);
+  }
+  const content = normalizeMigrationContent(result.stdout);
+  return Object.freeze({
+    checksum: recoveryMigrationChecksum(content),
+    content,
+    file: `${version}.sql`,
+    manualCutover: manualCutovers.has(version),
+    name: version.replace(/^\d{3}_/u, ""),
+    number: Number(version.slice(0, 3)),
+    path,
+    rollback: false,
+    version,
+  });
+}
+
+function readCommittedRecoveryPlan(candidateCommit) {
+  return recoveryMigrationPlan.map((version) => readCommittedMigration(candidateCommit, version));
+}
+
+function requireExternalPlanTokenPath(path) {
+  if (!path || !isAbsolute(path)) {
+    throw new Error("Recovery plan token path must be absolute and outside the repository.");
+  }
+  const normalized = resolve(path);
+  const repositoryRelative = relative(process.cwd(), normalized);
+  if (
+    repositoryRelative === "" ||
+    (repositoryRelative !== ".." && !repositoryRelative.startsWith(`..${sep}`))
+  ) {
+    throw new Error("Recovery plan token path must be outside the repository.");
+  }
+  return normalized;
+}
+
+function consumeRecoveryPlanToken(path, expectedToken) {
+  if (!/^[a-f0-9]{64}$/u.test(expectedToken)) {
+    throw new Error("Expected Recovery plan token is invalid.");
+  }
+  const targetPath = requireExternalPlanTokenPath(path);
+  const pathStat = lstatSync(targetPath);
+  if (!pathStat.isFile() || pathStat.size < 64 || pathStat.size > 128) {
+    throw new Error("Recovery plan token must be a small regular file.");
+  }
+  const descriptor = openSync(
+    targetPath,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+  );
+  let suppliedToken = "";
+  try {
+    const descriptorStat = fstatSync(descriptor);
+    if (
+      !descriptorStat.isFile() ||
+      descriptorStat.dev !== pathStat.dev ||
+      descriptorStat.ino !== pathStat.ino ||
+      descriptorStat.size < 64 ||
+      descriptorStat.size > 128
+    ) {
+      throw new Error("Recovery plan token changed before verification.");
+    }
+    const buffer = Buffer.alloc(129);
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0);
+    if (bytesRead > 128) {
+      throw new Error("Recovery plan token exceeds the safety limit.");
+    }
+    suppliedToken = buffer.subarray(0, bytesRead).toString("utf8").trim();
+  } finally {
+    closeSync(descriptor);
+  }
+  if (
+    !/^[a-f0-9]{64}$/u.test(suppliedToken) ||
+    !timingSafeEqual(Buffer.from(suppliedToken, "hex"), Buffer.from(expectedToken, "hex"))
+  ) {
+    throw new Error("Recovery plan token does not match commit, target, ledger, or plan.");
+  }
+  unlinkSync(targetPath);
+}
+
+async function readRecoveryLedger(client) {
+  const result = await client.query({
+    query_timeout: 15_000,
+    text: `
+      select version, name, checksum, applied_at as "appliedAt"
+      from public.novalure_schema_migrations
+      order by version asc
+    `,
+  });
+  return result.rows.map((row) => ({
+    appliedAt: row.appliedAt,
+    checksum: row.checksum,
+    name: row.name,
+    number: Number(String(row.version).slice(0, 3)),
+    version: row.version,
+  }));
+}
+
+function assertRecoveryCutoverLedger({ cutoverMigration, ledgerRows, previousMigrations }) {
+  if (
+    cutoverMigration.version !== tenantCutoverMigrationVersion ||
+    cutoverMigration.path !== tenantCutoverMigrationPath
+  ) {
+    throw new Error("Recovery tenant cutover migration identity is invalid.");
+  }
+  if (ledgerRows.some((row) => String(row.version).slice(0, 3) === "061")) {
+    throw new Error("Recovery tenant cutover migration is already present or collides in the ledger.");
+  }
+  for (const migration of previousMigrations) {
+    const matches = ledgerRows.filter((row) => row.version === migration.version);
+    if (matches.length !== 1 || matches[0].checksum !== migration.checksum) {
+      throw new Error(
+        `Recovery ledger is missing the exact committed predecessor ${migration.version}.`,
+      );
+    }
+  }
+}
+
+export async function applyTenantCutoverMigrationTransaction({
+  candidateCommit,
+  client,
+  migration,
+  prepareCutover = async () => undefined,
+}) {
+  requireCandidateCommit(candidateCommit);
+  if (
+    !client || typeof client.query !== "function" ||
+    migration?.version !== tenantCutoverMigrationVersion ||
+    migration?.path !== tenantCutoverMigrationPath ||
+    !/^[a-f0-9]{64}$/u.test(migration?.checksum ?? "") ||
+    typeof migration?.content !== "string" ||
+    typeof migration?.name !== "string" ||
+    typeof prepareCutover !== "function"
+  ) {
+    throw new Error("Recovery tenant cutover transaction input is invalid.");
+  }
+
+  await client.query("begin");
+  try {
+    await client.query("set local search_path = public");
+    await client.query("set local lock_timeout = '5s'");
+    await client.query("set local statement_timeout = '14min'");
+    await client.query("set local transaction_timeout = '15min'");
+    await prepareCutover();
+    await client.query({
+      query_timeout: migrationClientTimeoutMs,
+      text: tenantCutoverRoleProvisioningSql(candidateCommit),
+    });
+    await client.query({
+      query_timeout: migrationClientTimeoutMs,
+      text: migration.content,
+    });
+    await client.query(
+      `
+        insert into public.novalure_schema_migrations (version, name, checksum)
+        values ($1, $2, $3)
+      `,
+      [migration.version, migration.name, migration.checksum],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  }
+}
+
+async function applyRecoveryTenantCutover({
+  branchId,
+  candidateCommit,
+  databaseUrl,
+  tokenPath,
+}) {
+  requireCandidateCommit(candidateCommit);
+  if (assertRepositoryCommitted() !== candidateCommit) {
+    throw new Error("Recovery candidate changed before the tenant cutover apply.");
+  }
+  assertDatabaseTarget({
+    connectionMode: "direct",
+    databaseUrl,
+    purpose: "Recovery tenant cutover",
+    target: "recovery",
+  });
+  const committedPlan = readCommittedRecoveryPlan(candidateCommit);
+  const cutoverMigration = committedPlan.at(-1);
+  const previousMigrations = committedPlan.slice(0, -1);
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10_000,
+    idle_in_transaction_session_timeout: 960_000,
+    query_timeout: migrationClientTimeoutMs,
+  });
+  const client = await pool.connect();
+  let hasLock = false;
+
+  try {
+    const connectedTarget = await assertConnectedDatabaseTarget({
+      client,
+      connectionMode: "direct",
+      minimumServerVersionNum: 170000,
+      purpose: "Recovery tenant cutover",
+      target: "recovery",
+    });
+    if (connectedTarget.branchId !== branchId) {
+      throw new Error("Connected Recovery branch differs from the confirmed rehearsal branch.");
+    }
+    const lock = await client.query({
+      query_timeout: 15_000,
+      text: 'select pg_try_advisory_lock($1) as "acquired"',
+      values: [recoveryMigrationLockKey],
+    });
+    if (lock.rows[0]?.acquired !== true) {
+      throw new Error("Another schema migration holds the Recovery advisory lock.");
+    }
+    hasLock = true;
+
+    await applyTenantCutoverMigrationTransaction({
+      candidateCommit,
+      client,
+      migration: cutoverMigration,
+      prepareCutover: async () => {
+        if (assertRepositoryCommitted() !== candidateCommit) {
+          throw new Error("Recovery candidate changed before role provisioning.");
+        }
+        const ledgerRows = await readRecoveryLedger(client);
+        assertRecoveryCutoverLedger({ cutoverMigration, ledgerRows, previousMigrations });
+        const expectedToken = createMigrationPlanToken({
+          connectedTarget,
+          headCommit: candidateCommit,
+          ledgerRows,
+          plan: [cutoverMigration],
+        });
+        consumeRecoveryPlanToken(tokenPath, expectedToken);
+      },
+    });
+  } finally {
+    if (hasLock) {
+      await client.query({
+        query_timeout: 15_000,
+        text: "select pg_advisory_unlock($1)",
+        values: [recoveryMigrationLockKey],
+      }).catch(() => undefined);
+    }
+    client.release();
+    await pool.end();
+  }
+}
+
 async function migrationChecksum(version) {
-  const content = await readFile(join("migrations", `${version}.sql`));
-  return createHash("sha256").update(content).digest("hex");
+  const content = await readFile(join("migrations", `${version}.sql`), "utf8");
+  return recoveryMigrationChecksum(content);
 }
 
 async function removeOwnedTemporaryDirectory(directory) {
@@ -172,10 +448,20 @@ async function writeEvidence({ branchId, candidateCommit, evidenceDirectory, rec
     candidateCommit,
     environment: "RECOVERY_BRANCH_ONLY",
     finishedAt: generatedAt,
-    migration061Executed: false,
+    migration061Executed: records.some(
+      (record) => record.version === "061_validate_and_activate_tenant_rls_pilot"
+        && record.up === "PASS",
+    ),
+    migration061FinalPlanPosition:
+      recoveryMigrationPlan.at(-1) === "061_validate_and_activate_tenant_rls_pilot",
+    migration061RoleProvisioning: records.some(
+      (record) => record.version === tenantCutoverMigrationVersion
+        && record.roleProvisioning === "PASS",
+    ),
+    migrationPlanContract: recoveryMigrationPlanContract,
     productionMutationPerformed: false,
     records,
-    schemaVersion: 1,
+    schemaVersion: 2,
     startedAt,
     status,
     tool: "scripts/recovery-migration-rehearsal.mjs",
@@ -212,6 +498,8 @@ export async function recoveryMigrationRehearsalMain(argv = process.argv.slice(2
         checksum: await migrationChecksum(version),
         dryRun: "NOT_RUN",
         finishedAt: null,
+        roleProvisioning:
+          version === tenantCutoverMigrationVersion ? "NOT_RUN" : "NOT_APPLICABLE",
         startedAt: new Date().toISOString(),
         up: "NOT_RUN",
         version,
@@ -226,14 +514,31 @@ export async function recoveryMigrationRehearsalMain(argv = process.argv.slice(2
           redact,
         });
         record.dryRun = "PASS";
-        await runMigrationCommand({
-          args: ["up", `--only=${version}`, `--plan-token-file=${tokenPath}`, ...manualArgs],
-          databaseUrl,
-          redact,
-        });
+        if (version === tenantCutoverMigrationVersion) {
+          await applyRecoveryTenantCutover({
+            branchId,
+            candidateCommit,
+            databaseUrl,
+            tokenPath,
+          });
+          record.roleProvisioning = "PASS";
+        } else {
+          await runMigrationCommand({
+            args: ["up", `--only=${version}`, `--plan-token-file=${tokenPath}`, ...manualArgs],
+            databaseUrl,
+            redact,
+          });
+        }
         record.up = "PASS";
       } catch {
         record.up = record.dryRun === "PASS" ? "FAIL" : "NOT_RUN";
+        if (
+          version === tenantCutoverMigrationVersion &&
+          record.dryRun === "PASS" &&
+          record.roleProvisioning !== "PASS"
+        ) {
+          record.roleProvisioning = "FAIL";
+        }
         status = "FAIL";
         throw new Error(`Recovery migration rehearsal stopped at ${version}.`);
       } finally {

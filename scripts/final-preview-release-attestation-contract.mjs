@@ -1661,6 +1661,28 @@ function assertTwoTenantPass(document, runtime, {
       Object.values(cleanup.remaining).every((count) => count === 0),
       "FINAL_ATTESTATION_TWO_TENANT_CLEANUP_NOT_EMPTY",
     );
+    const retained = cleanup.retainedBrokerOperationRequests;
+    assertExactKeys(retained, [
+      "beforeRunCount",
+      "expectedMutationCount",
+      "ok",
+      "postMutationCount",
+      "postMutationSha256",
+      "postResetCount",
+      "postResetSha256",
+      "unchangedByReset",
+    ], "FINAL_ATTESTATION_TWO_TENANT_RETAINED_BROKER_REQUESTS");
+    invariant(
+      retained.ok === true
+        && retained.beforeRunCount === 0
+        && retained.expectedMutationCount === 2
+        && retained.postMutationCount === 2
+        && retained.postResetCount === 2
+        && retained.unchangedByReset === true
+        && isDigest(retained.postMutationSha256)
+        && retained.postMutationSha256 === retained.postResetSha256,
+      "FINAL_ATTESTATION_TWO_TENANT_RETAINED_BROKER_REQUESTS_INVALID",
+    );
   }
   invariant(Array.isArray(document.targets) && document.targets.length === 2, "FINAL_ATTESTATION_TWO_TENANT_TARGET_COUNT_INVALID");
   assertExactStringInventory(

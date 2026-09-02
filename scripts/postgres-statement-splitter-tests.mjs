@@ -23,6 +23,7 @@ assert.match(fixtureStatements[1], /perform 1;/);
 for (const file of [
   "migrations/060_tenant_rls_pilot_prepare.sql",
   "migrations/061_validate_and_activate_tenant_rls_pilot.sql",
+  "migrations/062_private_media_contract_cutover.sql",
   "migrations/068_qa_batch_reset_safety.sql",
   "migrations/069_property_unit_idempotency.sql",
   "migrations/070_funnel_submission_idempotency_recovery.sql",

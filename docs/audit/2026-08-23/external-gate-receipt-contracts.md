@@ -333,7 +333,10 @@ Operations und Release Observer auf demselben kanonischen
 `PRE_ACTIVATION_READY`-Evidence-Digest. Der vollständige Offline-Verifier
 prüft Candidate-Git-Blobs, Production-Ziel, PITR/Restore, Post-Ledger,
 Blob-Distanz, Legacy-Inventar, `vercel --prod --skip-domain`, Rollback,
-Alias-Promotion, safe-closed Smokes und Monitoring. Details und CLI-Aufruf
+eine revisionsgebundene frische `OFF`-Beobachtung, die danach liegende
+Alias-Promotion, safe-closed Smokes und Monitoring. Die drei Rollen dürfen erst
+nach dem Post-Promotion-Safe-Closed-Smoke und innerhalb von fünf Minuten nach
+Evidence-Abschluss signieren. Details und CLI-Aufruf
 stehen in `production-cutover-receipt-runbook.md`. Dieser Nachweis ist eine
 zwingende Eingabe des Launch-Aktivierungsreceipts und führt selbst keine
 Production-Aktion aus.

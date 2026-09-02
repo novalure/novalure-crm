@@ -378,10 +378,14 @@ async function readRoleEvidence(client, cutoverRef) {
   const roleResult = await client.query(`
     with tenant_role as (
       select * from pg_roles where rolname = 'novalure_tenant_app'
+    ), application_role as (
+      select * from pg_roles where rolname = 'novalure_app'
     ), direct_members as (
       select
         member_role.*,
-        pg_has_role(member_role.oid, tenant_role.oid, 'USAGE') as membership_inherited
+        membership.admin_option,
+        membership.inherit_option,
+        membership.set_option
       from pg_auth_members membership
       join tenant_role on tenant_role.oid = membership.roleid
       join pg_roles member_role on member_role.oid = membership.member
@@ -389,7 +393,7 @@ async function readRoleEvidence(client, cutoverRef) {
     select
       exists(select 1 from tenant_role) as "roleExists",
       coalesce((select
-        not rolcanlogin and not rolsuper and not rolcreatedb and not rolcreaterole
+        not rolcanlogin and not rolinherit and not rolsuper and not rolcreatedb and not rolcreaterole
           and not rolreplication and not rolbypassrls
         from tenant_role), false) as "roleSafe",
       coalesce((select
@@ -399,33 +403,188 @@ async function readRoleEvidence(client, cutoverRef) {
         shobj_description(oid, 'pg_authid') = 'novalure-tenant-cutover:' || $2
         from tenant_role), false) as "cutoverMarkerMatches",
       (select count(*)::integer from direct_members
-        where rolcanlogin and membership_inherited and not rolsuper and not rolcreatedb
+        where rolname = 'novalure_app'
+          and rolcanlogin and rolinherit and inherit_option
+          and not set_option and not admin_option and not rolsuper and not rolcreatedb
           and not rolcreaterole and not rolreplication and not rolbypassrls
       ) as "safeLoginMembers",
       (select count(*)::integer from direct_members
-        where not rolcanlogin or not membership_inherited or rolsuper or rolcreatedb
-          or rolcreaterole or rolreplication or rolbypassrls
+        where rolname <> 'novalure_app' or not rolcanlogin or not rolinherit
+          or not inherit_option or set_option or admin_option
+          or rolsuper or rolcreatedb or rolcreaterole or rolreplication or rolbypassrls
       ) as "unsafeDirectMembers",
+      (select count(*)::integer
+        from pg_auth_members membership
+        cross join application_role
+        cross join tenant_role
+        where membership.roleid = application_role.oid
+          or membership.member = tenant_role.oid
+      ) as "unsafeInheritedLoginMembers",
+      (select count(*)::integer
+        from pg_auth_members membership
+        cross join application_role
+        cross join tenant_role
+        where membership.member = application_role.oid
+          and membership.roleid <> tenant_role.oid
+      ) as "unexpectedApplicationRoleReachability",
+      exists (
+        select 1
+        from pg_database database_row
+        cross join application_role
+        cross join tenant_role
+        where database_row.datname = current_database()
+          and database_row.datdba in (application_role.oid, tenant_role.oid)
+      ) as "applicationOwnsCurrentDatabase",
+      (
+        exists (
+          select 1
+          from pg_namespace namespace
+          cross join tenant_role
+          cross join lateral aclexplode(
+            coalesce(namespace.nspacl, acldefault('n', namespace.nspowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and grant_entry.grantee = tenant_role.oid
+            and grant_entry.privilege_type = 'USAGE'
+            and not grant_entry.is_grantable
+        )
+        and not exists (
+          select 1
+          from pg_namespace namespace
+          cross join tenant_role
+          cross join application_role
+          cross join lateral aclexplode(
+            coalesce(namespace.nspacl, acldefault('n', namespace.nspowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and grant_entry.grantee <> namespace.nspowner
+            and (
+              grant_entry.is_grantable
+              or grant_entry.grantee not in (0, application_role.oid, tenant_role.oid)
+              or grant_entry.privilege_type <> 'USAGE'
+            )
+        )
+        and not exists (
+          select 1
+          from pg_namespace namespace
+          cross join tenant_role
+          cross join application_role
+          where namespace.nspname = 'public'
+            and namespace.nspowner not in (
+              select trusted_owner.oid
+              from (
+                select role_row.oid
+                from pg_roles role_row
+                where role_row.rolname = 'pg_database_owner'
+                union
+                select database_row.datdba
+                from pg_database database_row
+                where database_row.datname = current_database()
+              ) trusted_owner
+            )
+        )
+      ) as "schemaAclBoundaryExact",
       exists (
         select 1
         from pg_class relation
         join pg_namespace namespace on namespace.oid = relation.relnamespace
-        join direct_members on direct_members.oid = relation.relowner
+        cross join tenant_role
+        cross join application_role
         where namespace.nspname = 'public'
           and relation.relname = any($1::text[])
-      ) as "memberOwnsPilotTable"
+          and relation.relowner not in (
+            select trusted_owner.oid
+            from (
+              select role_row.oid
+              from pg_roles role_row
+              where role_row.rolname = 'pg_database_owner'
+              union
+              select database_row.datdba
+              from pg_database database_row
+              where database_row.datname = current_database()
+            ) trusted_owner
+          )
+      ) as "memberOwnsPilotTable",
+      coalesce((select has_schema_privilege(oid, 'public', 'USAGE') from tenant_role), false)
+        as "schemaUsage"
   `, [pilotTables, cutoverRef]);
 
   const privileges = await client.query(`
     with tenant_role as (
       select oid from pg_roles where rolname = 'novalure_tenant_app'
+    ), application_role as (
+      select oid from pg_roles where rolname = 'novalure_app'
     )
     select
       pilot.table_name as "tableName",
       coalesce(has_table_privilege((select oid from tenant_role), to_regclass('public.' || pilot.table_name), 'SELECT'), false) as "select",
       coalesce(has_table_privilege((select oid from tenant_role), to_regclass('public.' || pilot.table_name), 'INSERT'), false) as "insert",
       coalesce(has_table_privilege((select oid from tenant_role), to_regclass('public.' || pilot.table_name), 'UPDATE'), false) as "update",
-      coalesce(has_table_privilege((select oid from tenant_role), to_regclass('public.' || pilot.table_name), 'DELETE'), false) as "delete"
+      coalesce(has_table_privilege((select oid from tenant_role), to_regclass('public.' || pilot.table_name), 'DELETE'), false) as "delete",
+      exists (
+        select 1
+        from pg_class relation
+        join pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        cross join lateral aclexplode(
+          coalesce(relation.relacl, acldefault('r', relation.relowner))
+        ) grant_entry
+        where namespace.nspname = 'public'
+          and relation.relname = pilot.table_name
+          and (
+            grant_entry.is_grantable
+            or (
+              grant_entry.grantee <> relation.relowner
+              and case
+                when grant_entry.grantee = tenant_role.oid then
+                  (
+                  relation.relname = 'audit_logs'
+                  and grant_entry.privilege_type not in ('SELECT', 'INSERT')
+                  )
+                  or (
+                  relation.relname <> 'audit_logs'
+                  and grant_entry.privilege_type not in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+                  )
+                else true
+              end
+            )
+          )
+      ) as "applicationTableAclBoundaryViolation",
+      exists (
+        select 1
+        from pg_attribute attribute
+        join pg_class relation on relation.oid = attribute.attrelid
+        join pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        cross join lateral aclexplode(attribute.attacl) grant_entry
+        where namespace.nspname = 'public'
+          and relation.relname = pilot.table_name
+          and attribute.attnum > 0
+          and not attribute.attisdropped
+      ) as "applicationColumnAclBoundaryViolation",
+      exists (
+        select 1
+        from pg_class relation
+        join pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        where namespace.nspname = 'public'
+          and relation.relname = pilot.table_name
+          and relation.relowner not in (
+            select trusted_owner.oid
+            from (
+              select role_row.oid
+              from pg_roles role_row
+              where role_row.rolname = 'pg_database_owner'
+              union
+              select database_row.datdba
+              from pg_database database_row
+              where database_row.datname = current_database()
+            ) trusted_owner
+          )
+      ) as "applicationReachableOwner"
     from unnest($1::text[]) as pilot(table_name)
     order by pilot.table_name
   `, [pilotTables]);
@@ -435,12 +594,34 @@ async function readRoleEvidence(client, cutoverRef) {
 
 async function readAuditEvidence(client) {
   const result = await client.query(`
-    select
-      exists (
-        select 1 from pg_trigger
-        where tgrelid = 'audit_logs'::regclass
+    with tenant_role as (
+      select oid from pg_roles where rolname = 'novalure_tenant_app'
+    ), policy_expectation(table_oid, policy_name, command, using_predicate, check_predicate) as (
+      values
+        ('public.projects'::regclass, 'projects_tenant_actor_policy', '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')),
+        ('public.contacts'::regclass, 'contacts_tenant_actor_policy', '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')),
+        ('public.leads'::regclass, 'leads_tenant_actor_policy', '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')),
+        ('public.deals'::regclass, 'deals_tenant_actor_policy', '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')),
+        ('public.audit_logs'::regclass, 'audit_logs_tenant_select_policy', 'r',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'), ''),
+        ('public.audit_logs'::regclass, 'audit_logs_tenant_insert_policy', 'a', '',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and actor_user_id = nullif(current_setting('app.actor_id', true), '')::uuid$predicate$), '(::text)|[()[:space:]]', '', 'g'))
+    ) select
+      (
+        select count(*) = 1 from pg_trigger
+        where tgrelid = 'public.audit_logs'::regclass
           and tgname = 'audit_logs_append_only_guard'
-          and tgenabled <> 'D'
+          and tgenabled = 'O'
+          and tgtype = 58
+          and tgfoid = 'public.reject_audit_logs_mutation()'::regprocedure
           and not tgisinternal
       ) as "appendOnlyGuardEnabled",
       (select count(*)::integer from pg_policies
@@ -451,7 +632,29 @@ async function readAuditEvidence(client) {
         where schemaname = 'public'
           and tablename in ('projects', 'contacts', 'leads', 'deals')
           and policyname = tablename || '_tenant_actor_policy'
-      ) as "coreTenantPolicyCount"
+      ) as "coreTenantPolicyCount",
+      (
+        select count(*) from pg_policy
+        where polrelid = any(array[
+          'public.projects'::regclass,
+          'public.contacts'::regclass,
+          'public.leads'::regclass,
+          'public.deals'::regclass,
+          'public.audit_logs'::regclass
+        ]::oid[])
+      ) = 6 and not exists (
+        select 1
+        from policy_expectation expected
+        left join pg_policy policy
+          on policy.polrelid = expected.table_oid
+         and policy.polname = expected.policy_name
+        where policy.oid is null
+          or policy.polcmd <> expected.command
+          or not policy.polpermissive
+          or policy.polroles is distinct from array[(select oid from tenant_role)]::oid[]
+          or regexp_replace(lower(coalesce(pg_get_expr(policy.polqual, policy.polrelid, false), '')), '(::text)|[()[:space:]]', '', 'g') <> expected.using_predicate
+          or regexp_replace(lower(coalesce(pg_get_expr(policy.polwithcheck, policy.polrelid, false), '')), '(::text)|[()[:space:]]', '', 'g') <> expected.check_predicate
+      ) as "pilotPoliciesExact"
   `);
   return result.rows[0];
 }
@@ -495,6 +698,11 @@ function evaluateGates({ audit, cutoverAttested, foreignKeys, ledger, roles, ten
   );
   const zero = (value) => BigInt(value) === 0n;
   const minimalGrants = roles.privileges.every((privilege) => {
+    if (
+      privilege.applicationTableAclBoundaryViolation
+      || privilege.applicationColumnAclBoundaryViolation
+      || privilege.applicationReachableOwner
+    ) return false;
     if (!privilege.select || !privilege.insert) return false;
     if (privilege.tableName === "audit_logs") return !privilege.update && !privilege.delete;
     return privilege.update && privilege.delete;
@@ -513,13 +721,17 @@ function evaluateGates({ audit, cutoverAttested, foreignKeys, ledger, roles, ten
     minimalPilotGrants: minimalGrants,
     noPilotMismatchRows: pilotForeignKeys.every((foreignKey) => zero(foreignKey.mismatchRows)),
     noPilotNullWorkspaceRows: pilotTenantTables.every((table) => zero(table.nullRows)),
-    pilotPoliciesPresent: audit.tenantPolicyCount === 2 && audit.coreTenantPolicyCount === 4,
+    pilotPoliciesPresent: audit.tenantPolicyCount === 2 && audit.coreTenantPolicyCount === 4
+      && audit.pilotPoliciesExact,
     pilotRlsForced: pilotTenantTables.length === pilotTables.length && pilotTenantTables.every(
       (table) => table.rlsEnabled && table.rlsForced,
     ),
     prepareLedgerExact: ledgerMatches(ledger, expectedPilotMigrations[0]),
-    safeApplicationRole: roles.roleExists && roles.roleSafe && roles.safeLoginMembers > 0
-      && roles.unsafeDirectMembers === 0 && !roles.memberOwnsPilotTable,
+    safeApplicationRole: roles.roleExists && roles.roleSafe && roles.safeLoginMembers === 1
+      && roles.unsafeDirectMembers === 0 && roles.unsafeInheritedLoginMembers === 0
+      && roles.unexpectedApplicationRoleReachability === 0
+      && !roles.applicationOwnsCurrentDatabase
+      && !roles.memberOwnsPilotTable && roles.schemaUsage && roles.schemaAclBoundaryExact,
     workspaceLeadingPilotIndexes: pilotTenantTables.every(
       (table) => table.workspaceLeadingIndex,
     ) && pilotForeignKeys.every((foreignKey) => foreignKey.workspaceFkLeadingIndex),

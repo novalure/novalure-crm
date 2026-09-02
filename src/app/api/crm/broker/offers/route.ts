@@ -37,7 +37,7 @@ async function mutate(request: Request) {
   try {
     const auth = await authorizeBrokerWrite(request);
     if (!auth.ok) return auth.response;
-    const mutation = await readBrokerMutation(request);
+    const mutation = await readBrokerMutation(request, auth.session);
     const operation = cleanString(mutation.body.operation, 80) || "save";
     const result = operation === "qa_delivery"
       ? await requestBrokerOfferQaDelivery({

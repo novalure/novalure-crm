@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import { recoveryMigrationPlan } from "./recovery-migration-plan.mjs";
 
-export const recoveryQueryPackVersion = 1;
+export const recoveryQueryPackVersion = 2;
 export const recoveryExpectedProjectId = "misty-cloud-70835427";
 export const recoveryExpectedProductionBranchId = "br-snowy-fog-aldx77v8";
 export const recoveryExpectedDatabaseName = "neondb";
@@ -30,27 +31,175 @@ export const recoveryBaselineMigrationPlan = Object.freeze([
 
 const addedDefaultProjections = Object.freeze({
   approval_requests: "to_jsonb(t) - 'webhook_event_id'",
-  audit_logs: "to_jsonb(t) - 'webhook_event_id'",
+  audit_logs: "to_jsonb(t) - array['webhook_event_id', 'after']",
   bot_conversations: "to_jsonb(t) - 'webhook_event_id'",
-  bot_document_sends: "to_jsonb(t) - 'webhook_event_id'",
+  bot_document_sends: "to_jsonb(t) - array['webhook_event_id', 'metadata']",
   bot_messages: "to_jsonb(t) - 'webhook_event_id'",
   bot_tool_calls: "to_jsonb(t) - 'webhook_event_id'",
-  contact_timeline_items: "to_jsonb(t) - 'webhook_event_id'",
+  buyer_search_profiles: `to_jsonb(t) - array[
+    'organization_id', 'owner_user_id', 'expires_at', 'intent_type', 'sub_object_type',
+    'area_from_sqm', 'area_to_sqm', 'rooms_from', 'rooms_to', 'region', 'municipality',
+    'postal_code', 'radius_km', 'year_built_from', 'year_built_to', 'equipment',
+    'accessibility', 'target_yield_basis_points', 'exclusion_criteria',
+    'auto_match_enabled', 'status', 'version', 'broker_operations_managed'
+  ]`,
+  contact_timeline_items: `to_jsonb(t) - array[
+    'webhook_event_id', 'activity_type', 'lead_id', 'property_id', 'unit_id', 'deal_id',
+    'reservation_id', 'offer_id', 'viewing_id', 'closing_id', 'owner_user_id', 'version',
+    'broker_operations_managed'
+  ]`,
+  crm_bulk_runtime_batches: `to_jsonb(t) - array[
+    'actor_user_id', 'idempotency_key', 'request_sha256', 'status', 'selection_ids',
+    'payload', 'completed_at', 'error', 'updated_at'
+  ]`,
   form_submissions: "to_jsonb(t) - array['idempotency_key', 'request_hash', 'response_payload', 'claim_lease_version']",
   funnel_submissions: "to_jsonb(t) - 'idempotency_key'",
+  media_assets: `to_jsonb(t) - array[
+    'url', 'public_token', 'deletion_state', 'deletion_requested_at',
+    'deletion_requested_by_user_id', 'created_by_user_id'
+  ]`,
+  property_channels: "to_jsonb(t) - 'runtime_key'",
+  property_export_jobs: `to_jsonb(t) - array[
+    'operation', 'provider_key', 'payload_snapshot', 'payload_sha256', 'snapshot_captured_at',
+    'artifact_payload', 'artifact_sha256', 'artifact_content_type', 'artifact_filename',
+    'provider_request_id', 'provider_acknowledged_at', 'result_metadata'
+  ]`,
+  property_viewing_slots: `to_jsonb(t) - array[
+    'target_kind', 'property_id', 'timezone', 'address_mode', 'address_text', 'personal_note',
+    'internal_note', 'invitation_status', 'reminder_at', 'cancellation_reason',
+    'calendar_event_id', 'version', 'broker_operations_managed'
+  ]`,
   public_submission_idempotency: "to_jsonb(t) - 'lease_version'",
+  seller_listings: "to_jsonb(t) - 'metadata'",
+  tasks: `to_jsonb(t) - array[
+    'broker_activity_id', 'property_id', 'unit_id', 'deal_id', 'reservation_id',
+    'offer_id', 'viewing_id', 'closing_id'
+  ]`,
   workspaces: "to_jsonb(t) - 'is_qa'",
 });
 
 const createdTables = new Set([
+  "broker_closing_participants",
+  "broker_closings",
+  "broker_commission_splits",
+  "broker_offer_deliveries",
+  "broker_offer_items",
+  "broker_offer_versions",
+  "broker_offers",
+  "broker_operation_requests",
+  "broker_viewing_history",
   "bot_channel_webhook_envelopes",
+  "buyer_match_decisions",
+  "buyer_match_evaluations",
+  "crm_bulk_runtime_batch_items",
+  "crm_communication_template_versions",
+  "crm_communication_templates",
+  "crm_content_document_versions",
+  "crm_content_documents",
+  "crm_content_links",
+  "crm_recent_records",
+  "crm_safe_mutation_requests",
+  "crm_saved_views",
+  "privacy_data_subject_requests",
+  "privacy_legal_holds",
+  "privacy_retention_policies",
+  "privacy_retention_reviews",
   "property_building_idempotency",
+  "property_export_job_events",
   "property_unit_idempotency",
   "public_funnel_visit_events",
   "qa_batch_objects",
   "qa_batches",
   "qa_reset_audit_events",
 ]);
+
+const intentionalUnvalidatedRecoveryConstraintNames = Object.freeze([
+  "buyer_search_profiles_accessibility_check",
+  "buyer_search_profiles_broker_contact_fk",
+  "buyer_search_profiles_broker_lead_fk",
+  "buyer_search_profiles_broker_organization_fk",
+  "buyer_search_profiles_broker_owner_fk",
+  "buyer_search_profiles_broker_project_fk",
+  "buyer_search_profiles_broker_status_check",
+  "buyer_search_profiles_intent_type_check",
+  "buyer_search_profiles_ranges_check",
+  "contact_timeline_items_broker_activity_type_check",
+  "contact_timeline_items_broker_closing_fk",
+  "contact_timeline_items_broker_contact_fk",
+  "contact_timeline_items_broker_deal_fk",
+  "contact_timeline_items_broker_lead_fk",
+  "contact_timeline_items_broker_offer_fk",
+  "contact_timeline_items_broker_owner_fk",
+  "contact_timeline_items_broker_project_fk",
+  "contact_timeline_items_broker_property_fk",
+  "contact_timeline_items_broker_reservation_fk",
+  "contact_timeline_items_broker_unit_fk",
+  "contact_timeline_items_broker_version_check",
+  "contact_timeline_items_broker_viewing_fk",
+  "crm_bulk_runtime_batches_idempotency_shape_check",
+  "crm_bulk_runtime_batches_request_sha256_check",
+  "crm_bulk_runtime_batches_workspace_actor_fk",
+  "leads_qualifying_requires_assignee_check",
+  "property_channels_workspace_last_export_fk",
+  "property_channels_workspace_project_fk",
+  "property_channels_workspace_property_fk",
+  "property_channels_workspace_unit_fk",
+  "property_export_job_events_workspace_actor_fk",
+  "property_export_job_events_workspace_job_fk",
+  "property_export_jobs_artifact_sha256_check",
+  "property_export_jobs_payload_sha256_check",
+  "property_export_jobs_runtime_shape_check",
+  "property_export_jobs_workspace_channel_fk",
+  "property_export_jobs_workspace_project_fk",
+  "property_export_jobs_workspace_property_fk",
+  "property_export_jobs_workspace_starter_fk",
+  "property_export_jobs_workspace_unit_fk",
+  "property_viewing_slots_broker_address_mode_check",
+  "property_viewing_slots_broker_calendar_fk",
+  "property_viewing_slots_broker_contact_fk",
+  "property_viewing_slots_broker_deal_fk",
+  "property_viewing_slots_broker_invitation_status_check",
+  "property_viewing_slots_broker_lead_fk",
+  "property_viewing_slots_broker_owner_fk",
+  "property_viewing_slots_broker_project_fk",
+  "property_viewing_slots_broker_property_fk",
+  "property_viewing_slots_broker_target_check",
+  "property_viewing_slots_broker_unit_fk",
+  "property_viewing_slots_broker_version_check",
+  "tasks_broker_activity_fk",
+  "tasks_broker_closing_fk",
+  "tasks_broker_deal_fk",
+  "tasks_broker_offer_fk",
+  "tasks_broker_property_fk",
+  "tasks_broker_reservation_fk",
+  "tasks_broker_unit_fk",
+  "tasks_broker_viewing_fk",
+]);
+
+const intentionalConstraintTablePrefixes = Object.freeze([
+  "buyer_search_profiles",
+  "contact_timeline_items",
+  "crm_bulk_runtime_batches",
+  "leads",
+  "property_channels",
+  "property_export_job_events",
+  "property_export_jobs",
+  "property_viewing_slots",
+  "tasks",
+]);
+
+export const intentionalUnvalidatedRecoveryConstraints = Object.freeze(
+  intentionalUnvalidatedRecoveryConstraintNames.map((constraintName) => {
+    const tableName = intentionalConstraintTablePrefixes.find(
+      (prefix) => constraintName.startsWith(`${prefix}_`),
+    );
+    if (!tableName) throw new Error(`RECOVERY_CONSTRAINT_TABLE_UNMAPPED:${constraintName}`);
+    return Object.freeze({
+      constraintName,
+      tableName: `public.${tableName}`,
+    });
+  }),
+);
 
 const deterministicTransformProjections = Object.freeze({
   bot_channel_webhooks: `jsonb_build_object(
@@ -98,6 +247,15 @@ const deterministicTransformProjections = Object.freeze({
 const migrationTouchedTables = Object.freeze([
   "approval_requests",
   "audit_logs",
+  "broker_closing_participants",
+  "broker_closings",
+  "broker_commission_splits",
+  "broker_offer_deliveries",
+  "broker_offer_items",
+  "broker_offer_versions",
+  "broker_offers",
+  "broker_operation_requests",
+  "broker_viewing_history",
   "bot_channel_webhook_envelopes",
   "bot_channel_webhooks",
   "bot_conversations",
@@ -105,24 +263,53 @@ const migrationTouchedTables = Object.freeze([
   "bot_messages",
   "bot_tool_calls",
   "bots",
+  "buyer_match_decisions",
+  "buyer_match_evaluations",
+  "buyer_search_profiles",
+  "calendar_events",
   "company_profiles",
   "contact_timeline_items",
   "contacts",
+  "crm_bulk_runtime_batch_items",
+  "crm_bulk_runtime_batches",
+  "crm_communication_template_versions",
+  "crm_communication_templates",
+  "crm_content_document_versions",
+  "crm_content_documents",
+  "crm_content_links",
+  "crm_recent_records",
+  "crm_safe_mutation_requests",
+  "crm_saved_views",
   "deals",
   "form_submissions",
   "forms",
   "funnel_steps",
   "funnel_submissions",
   "funnels",
+  "google_notification_jobs",
+  "google_notification_targets",
   "leads",
+  "media_asset_shares",
+  "media_assets",
   "organizations",
+  "privacy_data_subject_requests",
+  "privacy_legal_holds",
+  "privacy_retention_policies",
+  "privacy_retention_reviews",
   "projects",
   "property_activity_events",
   "property_buildings",
   "property_building_idempotency",
+  "property_channels",
+  "property_documents",
+  "property_export_job_events",
+  "property_export_jobs",
   "property_inquiries",
+  "property_media",
+  "property_reservations",
   "property_unit_idempotency",
   "property_units",
+  "property_viewing_slots",
   "public_funnel_visit_events",
   "public_submission_idempotency",
   "qa_batch_objects",
@@ -130,6 +317,8 @@ const migrationTouchedTables = Object.freeze([
   "qa_reset_audit_events",
   "seller_listings",
   "tasks",
+  "teams_notification_jobs",
+  "teams_notification_targets",
   "workspace_users",
   "workspaces",
 ]);
@@ -169,8 +358,17 @@ const transformationQueries = Object.freeze({
     expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.approval_requests",
   }),
   audit_logs: Object.freeze({
-    actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id) as row from public.audit_logs",
-    expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.audit_logs",
+    actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id, 'after', after) as row from public.audit_logs",
+    expectedSql: `select jsonb_build_object(
+      'id', id,
+      'webhook_event_id', null,
+      'after', case
+        when action = 'bot.document_send.attach_media_asset'
+          and jsonb_typeof(after->'mediaAsset') = 'object'
+        then jsonb_set(after, '{mediaAsset}', (after->'mediaAsset') - 'publicToken' - 'publicUrl' - 'relativePath' - 'url' - 'workspaceId', false)
+        else after
+      end
+    ) as row from public.audit_logs`,
   }),
   bot_channel_webhooks: Object.freeze({
     actualSql: `select jsonb_build_object(
@@ -219,8 +417,8 @@ const transformationQueries = Object.freeze({
     expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.bot_conversations",
   }),
   bot_document_sends: Object.freeze({
-    actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id) as row from public.bot_document_sends",
-    expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.bot_document_sends",
+    actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id, 'metadata', metadata) as row from public.bot_document_sends",
+    expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null, 'metadata', metadata - 'asset' - 'attachedMediaAssetPublicUrl' - 'attachedMediaAssetUrl' - 'documentUrl') as row from public.bot_document_sends",
   }),
   bot_messages: Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id) as row from public.bot_messages",
@@ -229,6 +427,36 @@ const transformationQueries = Object.freeze({
   bot_tool_calls: Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id) as row from public.bot_tool_calls",
     expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.bot_tool_calls",
+  }),
+  buyer_search_profiles: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'organization_id', organization_id, 'owner_user_id', owner_user_id,
+      'expires_at', expires_at, 'intent_type', intent_type, 'sub_object_type', sub_object_type,
+      'area_from_sqm', area_from_sqm, 'area_to_sqm', area_to_sqm,
+      'rooms_from', rooms_from, 'rooms_to', rooms_to,
+      'region', region, 'municipality', municipality, 'postal_code', postal_code,
+      'radius_km', radius_km, 'year_built_from', year_built_from, 'year_built_to', year_built_to,
+      'equipment', equipment, 'accessibility', accessibility,
+      'target_yield_basis_points', target_yield_basis_points,
+      'exclusion_criteria', exclusion_criteria, 'auto_match_enabled', auto_match_enabled,
+      'status', status, 'version', version, 'broker_operations_managed', broker_operations_managed
+    ) as row from public.buyer_search_profiles`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'organization_id', null, 'owner_user_id', null,
+      'expires_at', null, 'intent_type', 'purchase', 'sub_object_type', null,
+      'area_from_sqm', area_sqm::numeric(12,2), 'area_to_sqm', area_sqm::numeric(12,2),
+      'rooms_from', rooms::numeric(5,1), 'rooms_to', rooms::numeric(5,1),
+      'region', null, 'municipality', null, 'postal_code', null,
+      'radius_km', null, 'year_built_from', null, 'year_built_to', null,
+      'equipment', array[]::text[], 'accessibility', 'none',
+      'target_yield_basis_points', null, 'exclusion_criteria', array[]::text[],
+      'auto_match_enabled', false,
+      'status', case lower(coalesce(matching_status, ''))
+        when 'active' then 'active' when 'aktiv' then 'active' when 'open' then 'active'
+        when 'paused' then 'paused' when 'expired' then 'expired'
+        when 'archived' then 'archived' else 'draft' end,
+      'version', 1, 'broker_operations_managed', false
+    ) as row from public.buyer_search_profiles`,
   }),
   company_profiles: Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'status', status, 'approved_by_user_id', approved_by_user_id, 'approved_at', approved_at) as row from public.company_profiles",
@@ -240,8 +468,32 @@ const transformationQueries = Object.freeze({
     ) as row from public.company_profiles`,
   }),
   contact_timeline_items: Object.freeze({
-    actualSql: "select jsonb_build_object('id', id, 'webhook_event_id', webhook_event_id) as row from public.contact_timeline_items",
-    expectedSql: "select jsonb_build_object('id', id, 'webhook_event_id', null) as row from public.contact_timeline_items",
+    actualSql: `select jsonb_build_object(
+      'id', id, 'webhook_event_id', webhook_event_id, 'activity_type', activity_type,
+      'lead_id', lead_id, 'property_id', property_id, 'unit_id', unit_id, 'deal_id', deal_id,
+      'reservation_id', reservation_id, 'offer_id', offer_id, 'viewing_id', viewing_id,
+      'closing_id', closing_id, 'owner_user_id', owner_user_id, 'version', version,
+      'broker_operations_managed', broker_operations_managed
+    ) as row from public.contact_timeline_items`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'webhook_event_id', null, 'activity_type', 'note',
+      'lead_id', null, 'property_id', null, 'unit_id', null, 'deal_id', null,
+      'reservation_id', null, 'offer_id', null, 'viewing_id', null,
+      'closing_id', null, 'owner_user_id', null, 'version', 1,
+      'broker_operations_managed', false
+    ) as row from public.contact_timeline_items`,
+  }),
+  crm_bulk_runtime_batches: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'actor_user_id', actor_user_id, 'idempotency_key', idempotency_key,
+      'request_sha256', request_sha256, 'status', status, 'selection_ids', selection_ids,
+      'payload', payload, 'completed_at', completed_at, 'error', error
+    ) as row from public.crm_bulk_runtime_batches`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'actor_user_id', null, 'idempotency_key', null,
+      'request_sha256', null, 'status', 'completed', 'selection_ids', '[]'::jsonb,
+      'payload', '{}'::jsonb, 'completed_at', null, 'error', null
+    ) as row from public.crm_bulk_runtime_batches`,
   }),
   form_submissions: Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'idempotency_key', idempotency_key, 'request_hash', request_hash, 'response_payload', response_payload, 'claim_lease_version', claim_lease_version) as row from public.form_submissions",
@@ -251,9 +503,76 @@ const transformationQueries = Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'idempotency_key', idempotency_key) as row from public.funnel_submissions",
     expectedSql: "select jsonb_build_object('id', id, 'idempotency_key', null) as row from public.funnel_submissions",
   }),
+  media_assets: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'url', url, 'public_token', public_token,
+      'deletion_state', deletion_state, 'deletion_requested_at', deletion_requested_at,
+      'deletion_requested_by_user_id', deletion_requested_by_user_id,
+      'created_by_user_id', created_by_user_id
+    ) as row from public.media_assets`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'url', '/api/media/files/' || id::text, 'public_token', null,
+      'deletion_state', 'active', 'deletion_requested_at', null,
+      'deletion_requested_by_user_id', null, 'created_by_user_id', null
+    ) as row from public.media_assets`,
+  }),
+  property_channels: Object.freeze({
+    actualSql: "select jsonb_build_object('id', id, 'runtime_key', runtime_key) as row from public.property_channels",
+    expectedSql: "select jsonb_build_object('id', id, 'runtime_key', null) as row from public.property_channels",
+  }),
+  property_export_jobs: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'operation', operation, 'provider_key', provider_key,
+      'payload_snapshot', payload_snapshot, 'payload_sha256', payload_sha256,
+      'snapshot_captured_at', snapshot_captured_at, 'artifact_payload', artifact_payload,
+      'artifact_sha256', artifact_sha256, 'artifact_content_type', artifact_content_type,
+      'artifact_filename', artifact_filename, 'provider_request_id', provider_request_id,
+      'provider_acknowledged_at', provider_acknowledged_at, 'result_metadata', result_metadata
+    ) as row from public.property_export_jobs`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'operation', null, 'provider_key', null,
+      'payload_snapshot', null, 'payload_sha256', null, 'snapshot_captured_at', null,
+      'artifact_payload', null, 'artifact_sha256', null, 'artifact_content_type', null,
+      'artifact_filename', null, 'provider_request_id', null,
+      'provider_acknowledged_at', null, 'result_metadata', '{}'::jsonb
+    ) as row from public.property_export_jobs`,
+  }),
+  property_viewing_slots: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'target_kind', target_kind, 'property_id', property_id, 'timezone', timezone,
+      'address_mode', address_mode, 'address_text', address_text, 'personal_note', personal_note,
+      'internal_note', internal_note, 'invitation_status', invitation_status,
+      'reminder_at', reminder_at, 'cancellation_reason', cancellation_reason,
+      'calendar_event_id', calendar_event_id, 'version', version,
+      'broker_operations_managed', broker_operations_managed
+    ) as row from public.property_viewing_slots`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'target_kind', 'unit', 'property_id', null, 'timezone', 'Europe/Vienna',
+      'address_mode', 'property', 'address_text', '', 'personal_note', '',
+      'internal_note', '', 'invitation_status', 'not_requested',
+      'reminder_at', null, 'cancellation_reason', null, 'calendar_event_id', null,
+      'version', 1, 'broker_operations_managed', false
+    ) as row from public.property_viewing_slots`,
+  }),
   public_submission_idempotency: Object.freeze({
     actualSql: "select jsonb_build_object('idempotency_hash', idempotency_hash, 'lease_version', lease_version) as row from public.public_submission_idempotency",
     expectedSql: "select jsonb_build_object('idempotency_hash', idempotency_hash, 'lease_version', 1) as row from public.public_submission_idempotency",
+  }),
+  seller_listings: Object.freeze({
+    actualSql: "select jsonb_build_object('id', id, 'metadata', metadata) as row from public.seller_listings",
+    expectedSql: "select jsonb_build_object('id', id, 'metadata', '{}'::jsonb) as row from public.seller_listings",
+  }),
+  tasks: Object.freeze({
+    actualSql: `select jsonb_build_object(
+      'id', id, 'broker_activity_id', broker_activity_id, 'property_id', property_id,
+      'unit_id', unit_id, 'deal_id', deal_id, 'reservation_id', reservation_id,
+      'offer_id', offer_id, 'viewing_id', viewing_id, 'closing_id', closing_id
+    ) as row from public.tasks`,
+    expectedSql: `select jsonb_build_object(
+      'id', id, 'broker_activity_id', null, 'property_id', null,
+      'unit_id', null, 'deal_id', null, 'reservation_id', null,
+      'offer_id', null, 'viewing_id', null, 'closing_id', null
+    ) as row from public.tasks`,
   }),
   workspaces: Object.freeze({
     actualSql: "select jsonb_build_object('id', id, 'is_qa', is_qa) as row from public.workspaces",
@@ -273,9 +592,96 @@ function canonicalize(value) {
   return value;
 }
 
+const intentionalUnvalidatedConstraintSql = intentionalUnvalidatedRecoveryConstraints
+  .map(({ constraintName, tableName }) => `('${tableName}', '${constraintName}')`)
+  .join(",\n        ");
+
+const targetMigrationOrderSql = recoveryMigrationPlan
+  .map((version, index) => `('${version}', ${index + 1})`)
+  .join(",\n        ");
+
 export const recoveryDatabaseQueryPack = Object.freeze({
   assertionQueries: Object.freeze({
-    catalogSql: `select
+    catalogSql: `with intentional_constraint(table_name, constraint_name) as (
+      values
+        ${intentionalUnvalidatedConstraintSql}
+    ), tenant_role as (
+      select * from pg_catalog.pg_roles where rolname = 'novalure_tenant_app'
+    ), application_role as (
+      select * from pg_catalog.pg_roles where rolname = 'novalure_app'
+    ), trusted_owner as (
+      select role_row.oid
+      from pg_catalog.pg_roles role_row
+      where role_row.rolname = 'pg_database_owner'
+      union
+      select database_row.datdba
+      from pg_catalog.pg_database database_row
+      where database_row.datname = pg_catalog.current_database()
+    ), pilot_privilege_expectation(table_name, privilege_type) as (
+      values
+        ('projects', 'SELECT'),
+        ('projects', 'IN' || 'SERT'),
+        ('projects', 'UP' || 'DATE'),
+        ('projects', 'DE' || 'LETE'),
+        ('contacts', 'SELECT'),
+        ('contacts', 'IN' || 'SERT'),
+        ('contacts', 'UP' || 'DATE'),
+        ('contacts', 'DE' || 'LETE'),
+        ('leads', 'SELECT'),
+        ('leads', 'IN' || 'SERT'),
+        ('leads', 'UP' || 'DATE'),
+        ('leads', 'DE' || 'LETE'),
+        ('deals', 'SELECT'),
+        ('deals', 'IN' || 'SERT'),
+        ('deals', 'UP' || 'DATE'),
+        ('deals', 'DE' || 'LETE'),
+        ('audit_logs', 'SELECT'),
+        ('audit_logs', 'IN' || 'SERT')
+    ), policy_expectation(table_oid, policy_name, command, using_predicate, check_predicate) as (
+      values
+        (
+          'public.projects'::regclass,
+          'projects_tenant_actor_policy',
+          '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')
+        ),
+        (
+          'public.contacts'::regclass,
+          'contacts_tenant_actor_policy',
+          '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')
+        ),
+        (
+          'public.leads'::regclass,
+          'leads_tenant_actor_policy',
+          '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')
+        ),
+        (
+          'public.deals'::regclass,
+          'deals_tenant_actor_policy',
+          '*',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g')
+        ),
+        (
+          'public.audit_logs'::regclass,
+          'audit_logs_tenant_select_policy',
+          'r',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and nullif(current_setting('app.actor_id', true), '')::uuid is not null$predicate$), '(::text)|[()[:space:]]', '', 'g'),
+          ''
+        ),
+        (
+          'public.audit_logs'::regclass,
+          'audit_logs_tenant_insert_policy',
+          'a',
+          '',
+          regexp_replace(lower($predicate$workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid and actor_user_id = nullif(current_setting('app.actor_id', true), '')::uuid$predicate$), '(::text)|[()[:space:]]', '', 'g')
+        )
+    ) select
       to_regclass('public.bot_channel_webhooks_workspace_message_uidx') is not null as legacy_webhook_index_present,
       to_regclass('public.bot_channel_webhooks_account_event_uidx') is not null as provider_webhook_index_present,
       exists (
@@ -288,57 +694,383 @@ export const recoveryDatabaseQueryPack = Object.freeze({
         where conrelid = 'public.company_profiles'::regclass
           and conname = 'company_profiles_approval_integrity_check'
       ), false) as company_approval_constraint_validated,
+      exists (
+        select 1 from pg_catalog.pg_constraint
+        where conrelid = 'public.media_assets'::regclass
+          and conname = 'media_assets_deletion_state_check'
+      ) as media_deletion_constraint_present,
+      coalesce((
+        select convalidated from pg_catalog.pg_constraint
+        where conrelid = 'public.media_assets'::regclass
+          and conname = 'media_assets_deletion_state_check'
+      ), false) as media_deletion_constraint_validated,
       to_regclass('public.novalure_schema_migration_checksums') is not null as migration_checksum_projection_present,
       to_regclass('public.public_funnel_visit_events') is not null as public_funnel_visit_events_present,
-      exists (
+      not exists (
         select 1
         from pg_catalog.pg_class c
         join pg_catalog.pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public'
           and c.relname in ('projects', 'contacts', 'leads', 'deals', 'audit_logs')
-          and (c.relrowsecurity or c.relforcerowsecurity)
+          and (not c.relrowsecurity or not c.relforcerowsecurity)
       ) as pilot_rls_enabled,
       coalesce((
-        select array_agg(con.conname::text order by con.conname::text)
-        from pg_catalog.pg_constraint con
-        join pg_catalog.pg_namespace n on n.oid = con.connamespace
-        where n.nspname = 'public' and not con.convalidated
-          and con.conname::text = any(array[
-            'audit_logs_workspace_actor_fk',
-            'contacts_workspace_archived_by_fk',
-            'contacts_workspace_organization_fk',
-            'contacts_workspace_owner_fk',
-            'contacts_workspace_project_fk',
-            'deals_workspace_contact_fk',
-            'deals_workspace_lead_fk',
-            'deals_workspace_organization_fk',
-            'deals_workspace_owner_fk',
-            'deals_workspace_project_fk',
-            'leads_workspace_assignee_fk',
-            'leads_workspace_contact_fk',
-            'leads_workspace_project_fk'
-          ]::text[])
-      ), array[]::text[]) as intentional_unvalidated_constraints,
+        select not rolcanlogin and not rolinherit and not rolsuper and not rolcreatedb
+          and not rolcreaterole and not rolreplication and not rolbypassrls
+        from tenant_role
+      ), false) as tenant_role_safe,
+      coalesce((
+        select shobj_description(oid, 'pg_authid')
+          ~ '^novalure-tenant-cutover:[a-f0-9]{40}$'
+        from tenant_role
+      ), false) as tenant_role_attested,
+      coalesce((
+        select shobj_description(oid, 'pg_authid')
+        from tenant_role
+      ), '') as tenant_role_attestation,
+      exists (
+        select 1
+        from pg_catalog.pg_auth_members membership
+        join tenant_role on tenant_role.oid = membership.roleid
+        join pg_catalog.pg_roles member_role on member_role.oid = membership.member
+        where member_role.rolname = 'novalure_app'
+          and member_role.rolcanlogin
+          and member_role.rolinherit
+          and not member_role.rolsuper
+          and not member_role.rolcreatedb
+          and not member_role.rolcreaterole
+          and not member_role.rolreplication
+          and not member_role.rolbypassrls
+          and membership.inherit_option
+          and not membership.set_option
+          and not membership.admin_option
+      ) as tenant_direct_login_member_present,
+      (
+        select count(*) = 1
+        from pg_catalog.pg_auth_members membership
+        join tenant_role on tenant_role.oid = membership.roleid
+      ) and exists (
+        select 1
+        from pg_catalog.pg_auth_members membership
+        join tenant_role on tenant_role.oid = membership.roleid
+        join pg_catalog.pg_roles member_role on member_role.oid = membership.member
+        where member_role.rolname = 'novalure_app'
+          and member_role.rolcanlogin
+          and member_role.rolinherit
+          and not member_role.rolsuper
+          and not member_role.rolcreatedb
+          and not member_role.rolcreaterole
+          and not member_role.rolreplication
+          and not member_role.rolbypassrls
+          and membership.inherit_option
+          and not membership.set_option
+          and not membership.admin_option
+      ) and not exists (
+        select 1
+        from pg_catalog.pg_auth_members membership
+        cross join application_role
+        cross join tenant_role
+        where membership.roleid = application_role.oid
+          or membership.member = tenant_role.oid
+          or (
+            membership.member = application_role.oid
+            and membership.roleid <> tenant_role.oid
+          )
+      ) as tenant_membership_safe,
+      not exists (
+        select 1
+        from pg_catalog.pg_database database_row
+        cross join application_role
+        cross join tenant_role
+        where database_row.datname = pg_catalog.current_database()
+          and database_row.datdba in (application_role.oid, tenant_role.oid)
+      ) as tenant_database_owner_boundary_exact,
+      not exists (
+        select 1
+        from pg_catalog.pg_class relation
+        join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        cross join lateral pg_catalog.aclexplode(
+          coalesce(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+        ) grant_entry
+        where namespace.nspname = 'public'
+          and relation.relname in ('projects', 'contacts', 'leads', 'deals', 'audit_logs')
+          and (
+            grant_entry.is_grantable
+            or (
+              grant_entry.grantee <> relation.relowner
+              and case
+                when grant_entry.grantee = tenant_role.oid then
+                  (
+                  relation.relname = 'audit_logs'
+                  and grant_entry.privilege_type not in ('SELECT', 'IN' || 'SERT')
+                  )
+                  or (
+                  relation.relname <> 'audit_logs'
+                  and grant_entry.privilege_type not in (
+                    'SELECT',
+                    'IN' || 'SERT',
+                    'UP' || 'DATE',
+                    'DE' || 'LETE'
+                  )
+                  )
+                else true
+              end
+            )
+          )
+      ) as pilot_application_table_acl_boundary_exact,
+      not exists (
+        select 1
+        from pilot_privilege_expectation expected
+        cross join tenant_role
+        where not exists (
+          select 1
+          from pg_catalog.pg_class relation
+          join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+          cross join lateral pg_catalog.aclexplode(
+            coalesce(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and relation.relname = expected.table_name
+            and grant_entry.grantee = tenant_role.oid
+            and grant_entry.privilege_type = expected.privilege_type
+            and not grant_entry.is_grantable
+        )
+      ) as pilot_tenant_table_privileges_exact,
+      not exists (
+        select 1
+        from pg_catalog.pg_attribute attribute
+        join pg_catalog.pg_class relation on relation.oid = attribute.attrelid
+        join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        cross join lateral pg_catalog.aclexplode(attribute.attacl) grant_entry
+        where namespace.nspname = 'public'
+          and relation.relname in ('projects', 'contacts', 'leads', 'deals', 'audit_logs')
+          and attribute.attnum > 0
+          and not attribute.attisdropped
+      ) as pilot_application_column_acl_boundary_exact,
+      not exists (
+        select 1
+        from pg_catalog.pg_class relation
+        join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        where namespace.nspname = 'public'
+          and relation.relname in ('projects', 'contacts', 'leads', 'deals', 'audit_logs')
+          and relation.relowner not in (select oid from trusted_owner)
+      ) as pilot_application_owner_boundary_exact,
+      (
+        not exists (
+          select 1
+          from pg_catalog.pg_class relation
+          join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+          cross join application_role
+          cross join tenant_role
+          cross join lateral pg_catalog.aclexplode(
+            coalesce(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and relation.relname in (
+              'public_funnel_visit_events',
+              'novalure_schema_migrations',
+              'novalure_schema_migration_checksums'
+            )
+            and (
+              grant_entry.is_grantable
+              or (
+                grant_entry.grantee <> relation.relowner
+                and case
+                  when relation.relname = 'public_funnel_visit_events' then not (
+                    grant_entry.grantee = application_role.oid
+                    and grant_entry.privilege_type in (
+                      'SELECT',
+                      'IN' || 'SERT',
+                      'DE' || 'LETE'
+                    )
+                  )
+                  when relation.relname = 'novalure_schema_migration_checksums' then not (
+                    grant_entry.grantee = application_role.oid
+                    and grant_entry.privilege_type = 'SELECT'
+                  )
+                  else true
+                end
+              )
+            )
+        )
+        and not exists (
+          select 1
+          from pg_catalog.pg_attribute attribute
+          join pg_catalog.pg_class relation on relation.oid = attribute.attrelid
+          join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+          cross join lateral pg_catalog.aclexplode(attribute.attacl) grant_entry
+          where namespace.nspname = 'public'
+            and relation.relname in (
+              'public_funnel_visit_events',
+              'novalure_schema_migrations',
+              'novalure_schema_migration_checksums'
+            )
+            and attribute.attnum > 0
+            and not attribute.attisdropped
+        )
+        and not exists (
+          select 1
+          from pg_catalog.pg_class relation
+          join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+          cross join application_role
+          cross join tenant_role
+          where namespace.nspname = 'public'
+            and relation.relname in (
+              'public_funnel_visit_events',
+              'novalure_schema_migrations',
+              'novalure_schema_migration_checksums'
+            )
+            and relation.relowner not in (select oid from trusted_owner)
+        )
+      ) as critical_release_object_acl_boundary_exact,
+      not exists (
+        select 1
+        from pg_catalog.pg_class relation
+        join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+        cross join tenant_role
+        cross join application_role
+        where namespace.nspname = 'public'
+          and relation.relname in ('projects', 'contacts', 'leads', 'deals', 'audit_logs')
+          and relation.relowner not in (select oid from trusted_owner)
+      ) as pilot_owners_safe,
+      coalesce((
+        select has_schema_privilege(oid, 'public', 'USAGE') from tenant_role
+      ), false) as tenant_schema_usage,
+      (
+        exists (
+          select 1
+          from pg_catalog.pg_namespace namespace
+          cross join tenant_role
+          cross join lateral pg_catalog.aclexplode(
+            coalesce(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and grant_entry.grantee = tenant_role.oid
+            and grant_entry.privilege_type = 'USAGE'
+            and not grant_entry.is_grantable
+        )
+        and not exists (
+          select 1
+          from pg_catalog.pg_namespace namespace
+          cross join tenant_role
+          cross join application_role
+          cross join lateral pg_catalog.aclexplode(
+            coalesce(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+          ) grant_entry
+          where namespace.nspname = 'public'
+            and grant_entry.grantee <> namespace.nspowner
+            and (
+              grant_entry.is_grantable
+              or grant_entry.grantee not in (0, application_role.oid, tenant_role.oid)
+              or grant_entry.privilege_type <> 'USAGE'
+            )
+        )
+        and not exists (
+          select 1
+          from pg_catalog.pg_namespace namespace
+          cross join tenant_role
+          cross join application_role
+          where namespace.nspname = 'public'
+            and namespace.nspowner not in (select oid from trusted_owner)
+        )
+      ) as tenant_schema_acl_boundary_exact,
+      (
+        select count(*)
+        from pg_catalog.pg_policy policy
+        where policy.polrelid = any(array[
+          'public.projects'::regclass,
+          'public.contacts'::regclass,
+          'public.leads'::regclass,
+          'public.deals'::regclass,
+          'public.audit_logs'::regclass
+        ]::oid[])
+      ) = 6 and not exists (
+        select 1
+        from policy_expectation expected
+        left join pg_catalog.pg_policy policy
+          on policy.polrelid = expected.table_oid
+         and policy.polname = expected.policy_name
+        where policy.oid is null
+           or policy.polcmd <> expected.command
+           or not policy.polpermissive
+           or policy.polroles is distinct from array[(select oid from tenant_role)]::oid[]
+           or regexp_replace(
+                lower(coalesce(pg_get_expr(policy.polqual, policy.polrelid, false), '')),
+                '(::text)|[()[:space:]]',
+                '',
+                'g'
+              ) <> expected.using_predicate
+           or regexp_replace(
+                lower(coalesce(pg_get_expr(policy.polwithcheck, policy.polrelid, false), '')),
+                '(::text)|[()[:space:]]',
+                '',
+                'g'
+              ) <> expected.check_predicate
+      ) as pilot_policies_exact,
+      (
+        select count(*) = 1
+        from pg_catalog.pg_trigger trigger_row
+        where trigger_row.tgrelid = 'public.audit_logs'::regclass
+          and trigger_row.tgname = 'audit_logs_append_only_guard'
+          and not trigger_row.tgisinternal
+          and trigger_row.tgenabled = 'O'
+          and trigger_row.tgtype = 58
+          and trigger_row.tgfoid = 'public.reject_audit_logs_mutation()'::regprocedure
+      ) as audit_append_only_guard_exact,
+      (
+        select count(*) = 1
+        from pg_catalog.pg_proc function_row
+        join pg_catalog.pg_language function_language on function_language.oid = function_row.prolang
+        where function_row.oid = 'public.reject_audit_logs_mutation()'::regprocedure
+          and function_language.lanname = 'plpgsql'
+          and function_row.prokind = 'f'
+          and function_row.prorettype = 'pg_catalog.trigger'::regtype
+          and function_row.pronargs = 0
+          and not function_row.prosecdef
+          and not function_row.proleakproof
+          and function_row.provolatile = 'v'
+          and function_row.proparallel = 'u'
+          and function_row.proconfig = array['search_path=pg_catalog, public, pg_temp']::text[]
+          and regexp_replace(lower(function_row.prosrc), '[[:space:]]', '', 'g')
+            = regexp_replace(lower($function_body$
+                begin
+                  raise exception using
+                    errcode = '55000',
+                    message = 'audit_logs is append-only';
+                end;
+              $function_body$), '[[:space:]]', '', 'g')
+      ) as audit_append_only_function_exact,
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'constraintName', expected.constraint_name,
+            'tableName', expected.table_name
+          ) order by expected.table_name, expected.constraint_name
+        )
+        from intentional_constraint expected
+        join pg_catalog.pg_constraint con
+          on con.conrelid = expected.table_name::regclass
+         and con.conname = expected.constraint_name
+        where not con.convalidated
+      ), '[]'::jsonb) as intentional_unvalidated_constraints,
       (
         select count(*)::integer
         from pg_catalog.pg_constraint con
         join pg_catalog.pg_namespace n on n.oid = con.connamespace
-        where n.nspname = 'public' and not con.convalidated
-          and not (con.conname::text = any(array[
-            'audit_logs_workspace_actor_fk',
-            'contacts_workspace_archived_by_fk',
-            'contacts_workspace_organization_fk',
-            'contacts_workspace_owner_fk',
-            'contacts_workspace_project_fk',
-            'deals_workspace_contact_fk',
-            'deals_workspace_lead_fk',
-            'deals_workspace_organization_fk',
-            'deals_workspace_owner_fk',
-            'deals_workspace_project_fk',
-            'leads_workspace_assignee_fk',
-            'leads_workspace_contact_fk',
-            'leads_workspace_project_fk'
-          ]::text[]))
+        where n.nspname = 'public'
+          and not con.convalidated
+          and not exists (
+            select 1
+            from intentional_constraint expected
+            where con.conrelid = expected.table_name::regclass
+              and con.conname = expected.constraint_name
+          )
       ) as unexpected_unvalidated_constraint_count`,
     companyProfileApprovalSql: `select
       exists (
@@ -371,6 +1103,36 @@ export const recoveryDatabaseQueryPack = Object.freeze({
           and (approved_by_user_id is not null or approved_at is not null)
       )::integer as stale_approval_metadata_count
       from public.company_profiles`,
+    targetMigrationOrderSql: `with target(version, expected_ordinal) as (
+      values
+        ${targetMigrationOrderSql}
+    ), matched as (
+      select target.version, target.expected_ordinal, ledger.applied_at
+      from target
+      join public.novalure_schema_migrations ledger on ledger.version = target.version
+    ), observed as (
+      select
+        version,
+        expected_ordinal,
+        applied_at,
+        row_number() over (order by applied_at, version)::integer as observed_ordinal,
+        lag(applied_at) over (order by applied_at, version) as previous_applied_at
+      from matched
+    ) select
+      coalesce(array_agg(version order by applied_at, version), array[]::text[])
+        as applied_versions,
+      count(*)::integer as target_count,
+      count(*) = ${recoveryMigrationPlan.length}
+        and bool_and(expected_ordinal = observed_ordinal)
+        and bool_and(previous_applied_at is null or applied_at > previous_applied_at)
+        as strictly_increasing,
+      count(*) = ${recoveryMigrationPlan.length}
+        and (array_agg(version order by applied_at desc, version desc))[1]
+          = '061_validate_and_activate_tenant_rls_pilot'
+        and (max(applied_at) filter (where version <> '061_validate_and_activate_tenant_rls_pilot'))
+          < (max(applied_at) filter (where version = '061_validate_and_activate_tenant_rls_pilot'))
+        as rls_cutover_last
+      from observed`,
   }),
   baselineMigrationPlan: recoveryBaselineMigrationPlan,
   catalogSql: `with objects as (
@@ -415,13 +1177,30 @@ export const recoveryDatabaseQueryPack = Object.freeze({
     where n.nspname = 'public'
     union all
     select 'policy', n.nspname, pol.polname, pol.polrelid::regclass::text || ':' || pol.polname,
-      concat_ws('|', pol.polcmd, pol.polpermissive, pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid))
+      concat_ws(
+        '|',
+        'command=' || pol.polcmd,
+        'permissive=' || pol.polpermissive::text,
+        'roles=' || array_to_string(array(
+          select case when role_oid = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(role_oid) end
+          from unnest(pol.polroles) as policy_role(role_oid)
+          order by case when role_oid = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(role_oid) end
+        ), ','),
+        'using=' || coalesce(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid, false), ''),
+        'check=' || coalesce(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid, false), '')
+      )
     from pg_catalog.pg_policy pol join pg_catalog.pg_class c on c.oid = pol.polrelid join pg_catalog.pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
     union all
     select 'trigger', n.nspname, trg.tgname,
       trg.tgrelid::regclass::text || ':' || trg.tgname,
-      pg_catalog.pg_get_triggerdef(trg.oid, true) || '|enabled=' || trg.tgenabled::text
+      concat_ws(
+        '|',
+        pg_catalog.pg_get_triggerdef(trg.oid, true),
+        'enabled=' || trg.tgenabled::text,
+        'type=' || trg.tgtype::text,
+        'function=' || trg.tgfoid::regprocedure::text
+      )
     from pg_catalog.pg_trigger trg
     join pg_catalog.pg_class c on c.oid = trg.tgrelid
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -434,17 +1213,96 @@ export const recoveryDatabaseQueryPack = Object.freeze({
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prokind in ('f','p')
   ) select kind, schema, name, identity, definition from objects order by kind, schema, identity`,
-  grantSql: `select object_type, object_name, grantee, privilege_type as privilege, is_grantable = 'YES' as grantable
+  grantSql: `select
+      object_type,
+      object_name,
+      grantee,
+      privilege,
+      bool_or(grantable) as grantable
     from (
-      select 'table'::text as object_type, table_schema || '.' || table_name as object_name, grantee, privilege_type, is_grantable
-      from information_schema.role_table_grants where table_schema = 'public'
+      select
+        case
+          when relation.relkind in ('v', 'm') then 'view'
+          when relation.relkind = 'S' then 'sequence'
+          else 'table'
+        end::text as object_type,
+        namespace.nspname || '.' || relation.relname as object_name,
+        case
+          when grant_entry.grantee = 0 then 'PUBLIC'
+          else pg_catalog.pg_get_userbyid(grant_entry.grantee)
+        end as grantee,
+        grant_entry.privilege_type as privilege,
+        grant_entry.is_grantable as grantable
+      from pg_catalog.pg_class relation
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      cross join lateral pg_catalog.aclexplode(
+        coalesce(
+          relation.relacl,
+          pg_catalog.acldefault(
+            (case when relation.relkind = 'S' then 's' else 'r' end)::"char",
+            relation.relowner
+          )
+        )
+      ) grant_entry
+      where namespace.nspname = 'public'
+        and relation.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
       union all
-      select 'column', table_schema || '.' || table_name || '.' || column_name, grantee, privilege_type, is_grantable
-      from information_schema.role_column_grants where table_schema = 'public'
+      select
+        'column',
+        namespace.nspname || '.' || relation.relname || '.' || attribute.attname,
+        case
+          when grant_entry.grantee = 0 then 'PUBLIC'
+          else pg_catalog.pg_get_userbyid(grant_entry.grantee)
+        end,
+        grant_entry.privilege_type,
+        grant_entry.is_grantable
+      from pg_catalog.pg_attribute attribute
+      join pg_catalog.pg_class relation on relation.oid = attribute.attrelid
+      join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+      cross join lateral pg_catalog.aclexplode(attribute.attacl) grant_entry
+      where namespace.nspname = 'public'
+        and attribute.attnum > 0
+        and not attribute.attisdropped
       union all
-      select 'function', routine_schema || '.' || routine_name, grantee, privilege_type, is_grantable
-      from information_schema.role_routine_grants where routine_schema = 'public'
-    ) grants order by object_type, object_name, grantee, privilege`,
+      select
+        'schema',
+        namespace.nspname,
+        case
+          when grant_entry.grantee = 0 then 'PUBLIC'
+          else pg_catalog.pg_get_userbyid(grant_entry.grantee)
+        end,
+        grant_entry.privilege_type,
+        grant_entry.is_grantable
+      from pg_catalog.pg_namespace namespace
+      cross join lateral pg_catalog.aclexplode(
+        coalesce(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+      ) grant_entry
+      where namespace.nspname = 'public'
+      union all
+      select
+        'function',
+        pg_catalog.format(
+          '%I.%I(%s)',
+          namespace.nspname,
+          function_row.proname,
+          pg_catalog.pg_get_function_identity_arguments(function_row.oid)
+        ),
+        case
+          when grant_entry.grantee = 0 then 'PUBLIC'
+          else pg_catalog.pg_get_userbyid(grant_entry.grantee)
+        end,
+        grant_entry.privilege_type,
+        grant_entry.is_grantable
+      from pg_catalog.pg_proc function_row
+      join pg_catalog.pg_namespace namespace on namespace.oid = function_row.pronamespace
+      cross join lateral pg_catalog.aclexplode(
+        coalesce(function_row.proacl, pg_catalog.acldefault('f', function_row.proowner))
+      ) grant_entry
+      where namespace.nspname = 'public'
+        and function_row.prokind in ('f', 'p')
+    ) privileges
+    group by object_type, object_name, grantee, privilege
+    order by object_type, object_name, grantee, privilege`,
   identitySql: `select current_setting('neon.project_id', true) as project_id,
     current_setting('neon.branch_id', true) as branch_id,
     current_database() as database_name,

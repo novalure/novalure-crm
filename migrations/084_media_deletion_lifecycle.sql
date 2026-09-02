@@ -12,7 +12,10 @@ alter table public.media_assets
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'media_assets_deletion_state_check'
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'public.media_assets'::regclass
+      and conname = 'media_assets_deletion_state_check'
   ) then
     alter table public.media_assets
       add constraint media_assets_deletion_state_check
@@ -24,6 +27,12 @@ begin
   end if;
 
 end $$;
+
+-- Existing deployments may contain the table-local constraint as NOT VALID.
+-- Make its enforcement state explicit and ledger-bound before any lifecycle
+-- trigger or application path can rely on it.
+alter table public.media_assets
+  validate constraint media_assets_deletion_state_check;
 
 create index if not exists media_assets_pending_deletion_idx
   on public.media_assets(workspace_id, deletion_requested_at, id)

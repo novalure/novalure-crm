@@ -140,7 +140,10 @@ test("a long-session refresh verifies the old proof and preserves its idempotenc
     refreshPublicSubmissionProof({
       action: publicSubmissionActions.form,
       nowSeconds: refreshAt,
-      proof: { ...original, signature: `x${original.signature.slice(1)}` },
+      proof: {
+        ...original,
+        signature: `${original.signature.startsWith("A") ? "B" : "A"}${original.signature.slice(1)}`,
+      },
       scope,
       secret,
     }).ok,

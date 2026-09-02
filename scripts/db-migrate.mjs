@@ -22,6 +22,25 @@ import {
   assertConnectedDatabaseTarget,
   assertDatabaseTarget,
 } from "./lib/infra-targets.mjs";
+import {
+  recoveryManualCutoverMigrations,
+} from "./lib/recovery-migration-plan.mjs";
+import {
+  loadExternalGateTrustContext,
+} from "./lib/external-gate-receipts.mjs";
+import {
+  assertProductionMigrationPromotionPinnedTrustAnchor,
+  assertVerifiedProductionMigrationPromotionEvidence,
+  loadCanonicalProductionMigrationPromotionEvidence,
+  productionMigrationPromotionMigrations,
+  productionMigrationPromotionPlanContract,
+  productionMigrationPromotionRoles,
+  verifyProductionMigrationPromotionEvidence,
+} from "./lib/production-migration-promotion-evidence.mjs";
+import {
+  tenantCutoverMigrationVersion,
+  tenantCutoverRoleProvisioningSql,
+} from "./lib/tenant-cutover-role-provisioning.mjs";
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
@@ -35,30 +54,18 @@ const ledgerTable = "public.novalure_schema_migrations";
 const lockKey = 941041;
 const guardQueryTimeoutMs = 15_000;
 const migrationClientTimeoutMs = 960_000;
-const isolatedPreviewOnlyMigrationVersions = new Set([
-  "080_property_export_runtime",
-  "081_broker_operations",
-  "082_content_library_privacy",
-  "083_list_productivity_controls",
-  "084_media_deletion_lifecycle",
-]);
-const manualCutoverVersions = new Set([
-  "057_bot_webhook_legacy_index_cutover",
-  "060_tenant_rls_pilot_prepare",
-  "061_validate_and_activate_tenant_rls_pilot",
-  "062_private_media_contract_cutover",
-  "065_notification_guard_search_path_hardening",
-  "068_qa_batch_reset_safety",
-  "074_validate_launch_tenant_relation_guards",
-  "078_company_profile_approval_integrity",
-  "079_public_funnel_visit_role_boundary",
-  ...isolatedPreviewOnlyMigrationVersions,
-]);
+const productionPromotionRequiredMigrationVersions = new Set(
+  productionMigrationPromotionMigrations.map(({ version }) => version),
+);
+const manualCutoverVersions = new Set(recoveryManualCutoverMigrations);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
   ["057_bot_webhook_legacy_index_cutover", "048_bot_webhook_integrity"],
   ["061_validate_and_activate_tenant_rls_pilot", "060_tenant_rls_pilot_prepare"],
-  ["062_private_media_contract_cutover", "051_private_media_access"],
+  ["062_private_media_contract_cutover", [
+    "051_private_media_access",
+    "060_tenant_rls_pilot_prepare",
+  ]],
   ["064_notification_provider_and_lead_assignee_integrity", "050_durable_job_leasing"],
   ["065_notification_guard_search_path_hardening", "064_notification_provider_and_lead_assignee_integrity"],
   ["066_oauth_state_workspace_user_guard", "053_oauth_state_integrity"],
@@ -160,6 +167,9 @@ function parseArgs(argv) {
   const command = args.find((arg) => !arg.startsWith("--"));
   const onlyArg = args.find((arg) => arg.startsWith("--only="));
   const planTokenFileArg = args.find((arg) => arg.startsWith("--plan-token-file="));
+  const promotionEvidenceArgs = args.filter((arg) => arg.startsWith("--production-promotion-evidence="));
+  const promotionTrustAnchorArgs = args.filter((arg) => arg.startsWith("--production-promotion-trust-anchor="));
+  const promotionTrustDigestArgs = args.filter((arg) => arg.startsWith("--production-promotion-trust-anchor-sha256="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
   const connectionStdin = args.includes("--connection-stdin");
 
@@ -169,6 +179,25 @@ function parseArgs(argv) {
 
   if (allowManualCutover && !onlyArg) {
     fail("--allow-manual-cutover requires one explicit --only=<version>");
+  }
+  if (args.includes("--allow-production-promotion")) {
+    fail("--allow-production-promotion is not an authorization; provide the externally signed Production promotion evidence bundle");
+  }
+  if (
+    promotionEvidenceArgs.length > 1
+      || promotionTrustAnchorArgs.length > 1
+      || promotionTrustDigestArgs.length > 1
+  ) {
+    fail("Production promotion evidence arguments must not be duplicated");
+  }
+  const promotionArgumentCount = Number(promotionEvidenceArgs.length > 0)
+    + Number(promotionTrustAnchorArgs.length > 0)
+    + Number(promotionTrustDigestArgs.length > 0);
+  if (promotionArgumentCount !== 0 && promotionArgumentCount !== 3) {
+    fail("Production promotion requires evidence, trust anchor, and independently supplied trust-anchor SHA-256");
+  }
+  if (promotionArgumentCount === 3 && (!allowManualCutover || !onlyArg)) {
+    fail("Production promotion evidence requires --allow-manual-cutover and one explicit --only=<version>");
   }
   if (command === "up" && !planTokenFileArg) {
     fail("up requires --plan-token-file=<absolute path> produced by a prior dry-run");
@@ -185,7 +214,93 @@ function parseArgs(argv) {
     planTokenFile: planTokenFileArg
       ? planTokenFileArg.slice("--plan-token-file=".length).trim()
       : "",
+    productionPromotionEvidence: promotionArgumentCount === 3
+      ? Object.freeze({
+        evidencePath: promotionEvidenceArgs[0].slice("--production-promotion-evidence=".length).trim(),
+        expectedTrustAnchorSha256: promotionTrustDigestArgs[0].slice("--production-promotion-trust-anchor-sha256=".length).trim(),
+        trustAnchorPath: promotionTrustAnchorArgs[0].slice("--production-promotion-trust-anchor=".length).trim(),
+      })
+      : null,
   };
+}
+
+function requiredProductionPlanVersions(version) {
+  const selectedIndex = productionMigrationPromotionMigrations.findIndex(
+    (migration) => migration.version === version,
+  );
+  if (selectedIndex < 0) return [];
+  return productionMigrationPromotionMigrations
+    .slice(0, selectedIndex)
+    .map((migration) => migration.version);
+}
+
+export function validateProductionMigrationSequence({
+  appliedVersions,
+  ledgerRows = [],
+  migrationAliases = [],
+  selectedVersion = null,
+}) {
+  const applied = appliedVersions instanceof Set
+    ? appliedVersions
+    : new Set(appliedVersions ?? []);
+  let firstMissingVersion = null;
+  for (const { version } of productionMigrationPromotionMigrations) {
+    if (!applied.has(version)) {
+      firstMissingVersion ??= version;
+      continue;
+    }
+    if (firstMissingVersion !== null) {
+      throw new Error(
+        `Invalid Production migration ledger for ${productionMigrationPromotionPlanContract}: ${version} is checksummed after missing predecessor ${firstMissingVersion}`,
+      );
+    }
+  }
+
+  const aliasByMigrationVersion = new Map(
+    migrationAliases.map(({ aliasVersion, migrationVersion }) => [migrationVersion, aliasVersion]),
+  );
+  const canonicalTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
+  let previousAppliedAt = null;
+  let previousVersion = null;
+  for (const { version } of productionMigrationPromotionMigrations) {
+    if (!applied.has(version)) break;
+    const acceptedLedgerVersions = new Set([
+      version,
+      aliasByMigrationVersion.get(version),
+    ].filter(Boolean));
+    const matchingRows = ledgerRows.filter((row) => acceptedLedgerVersions.has(row.version));
+    if (matchingRows.length !== 1) {
+      throw new Error(
+        `Invalid Production migration ledger for ${productionMigrationPromotionPlanContract}: ${version} must have exactly one timestamped ledger row`,
+      );
+    }
+    const appliedAt = matchingRows[0].appliedAt;
+    if (
+      typeof appliedAt !== "string"
+        || !canonicalTimestampPattern.test(appliedAt)
+        || !Number.isFinite(Date.parse(appliedAt))
+    ) {
+      throw new Error(
+        `Invalid Production migration ledger for ${productionMigrationPromotionPlanContract}: ${version} applied_at is not canonical UTC microsecond text`,
+      );
+    }
+    if (previousAppliedAt !== null && appliedAt <= previousAppliedAt) {
+      throw new Error(
+        `Invalid Production migration ledger for ${productionMigrationPromotionPlanContract}: ${version} applied_at must be strictly later than ${previousVersion}`,
+      );
+    }
+    previousAppliedAt = appliedAt;
+    previousVersion = version;
+  }
+
+  if (selectedVersion === null) return;
+  const missingPredecessors = requiredProductionPlanVersions(selectedVersion)
+    .filter((version) => !applied.has(version));
+  if (missingPredecessors.length) {
+    throw new Error(
+      `Refusing Production migration ${selectedVersion}: the binding ${productionMigrationPromotionPlanContract} predecessor sequence is incomplete (${missingPredecessors.join(", ")})`,
+    );
+  }
 }
 
 function resolvePlanTokenFile(path) {
@@ -347,7 +462,13 @@ export async function applyCommittedMigrationPlan({ apply, cwd = process.cwd(), 
   for (const migration of plan) await apply(migration);
 }
 
-export function createMigrationPlanToken({ connectedTarget, headCommit, ledgerRows, plan }) {
+export function createMigrationPlanToken({
+  connectedTarget,
+  headCommit,
+  ledgerRows,
+  plan,
+  productionPromotionVerification = null,
+}) {
   const payload = {
     connectedTarget: {
       branchId: connectedTarget.branchId,
@@ -367,6 +488,31 @@ export function createMigrationPlanToken({ connectedTarget, headCommit, ledgerRo
       version: migration.version,
     })),
   };
+  if (productionPromotionVerification !== null) {
+    const verified = assertVerifiedProductionMigrationPromotionEvidence(
+      productionPromotionVerification,
+    );
+    if (
+      verified.candidateCommit !== headCommit
+        || verified.migrationPlanContract !== productionMigrationPromotionPlanContract
+        || connectedTarget.target !== "prod"
+        || verified.productionTarget.neonBranchId !== connectedTarget.branchId
+        || verified.productionTarget.databaseName !== connectedTarget.databaseName
+        || verified.productionTarget.neonProjectId !== connectedTarget.projectId
+    ) {
+      throw new Error(
+        "Production promotion evidence does not match the current commit or connected target.",
+      );
+    }
+    payload.format = "novalure-migration-plan-v2-production-promotion";
+    payload.productionPromotionEvidence = {
+      documentSha256: verified.documentSha256,
+      evidenceSha256: verified.evidenceSha256,
+      migrationPlanContract: verified.migrationPlanContract,
+      migrationInventorySha256: verified.migrationInventorySha256,
+      trustAnchorSha256: verified.trustAnchorSha256,
+    };
+  }
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
@@ -460,7 +606,14 @@ async function readLedger(client) {
   const result = await client.query({
     query_timeout: guardQueryTimeoutMs,
     text: `
-    select version, name, checksum, applied_at as "appliedAt"
+    select
+      version,
+      name,
+      checksum,
+      to_char(
+        applied_at at time zone 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+      ) as "appliedAt"
     from public.novalure_schema_migrations
     order by version asc
   `,
@@ -605,16 +758,40 @@ function numberCollisions(ledgerRows, migrations, aliases) {
   });
 }
 
-export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations, only }) {
-  const { appliedVersions, checksummedVersions } = resolveMigrationLedgerState({ ledgerRows, migrations });
+export function createMigrationPlan({
+  allowManualCutover,
+  ledgerRows,
+  migrations,
+  only,
+  targetName = null,
+}) {
+  const {
+    aliases,
+    appliedVersions,
+    checksummedVersions,
+  } = resolveMigrationLedgerState({ ledgerRows, migrations });
   const hasBaseline = checksummedVersions.has(baselineVersion);
   const runnable = migrations.filter((migration) => !migration.rollback);
+
+  if (targetName === "prod") {
+    validateProductionMigrationSequence({
+      appliedVersions: checksummedVersions,
+      ledgerRows,
+      migrationAliases: aliases,
+      selectedVersion: only
+        ? runnable.find((migration) => migration.version === only || migration.file === only)?.version
+          ?? null
+        : null,
+    });
+  }
 
   if (only) {
     const migration = runnable.find((candidate) => candidate.version === only || candidate.file === only);
     if (!migration) throw new Error(`--only migration not found: ${only}`);
     if (hasBaseline && migration.number < baselineNumber) return [];
-    if (migration.manualCutover && !allowManualCutover) {
+    const productionPlanCutover = targetName === "prod"
+      && productionPromotionRequiredMigrationVersions.has(migration.version);
+    if ((migration.manualCutover || productionPlanCutover) && !allowManualCutover) {
       throw new Error(
         `Refusing manual cutover migration ${migration.version}: repeat with both --only and --allow-manual-cutover after its documented gates pass`,
       );
@@ -634,7 +811,11 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
   }
 
   const plan = runnable.filter((migration) => {
-    if (migration.manualCutover) return false;
+    if (
+      migration.manualCutover
+        || (targetName === "prod"
+          && productionPromotionRequiredMigrationVersions.has(migration.version))
+    ) return false;
     if (appliedVersions.has(migration.version)) return false;
     if (hasBaseline && migration.number < baselineNumber) return false;
     if (!hasBaseline && migration.number < baselineNumber) return false;
@@ -669,16 +850,41 @@ function plannedMigrations(args) {
   }
 }
 
-export function validateMigrationTargetPolicy({ migrations, only, targetName }) {
-  if (targetName !== "prod" || !only) return;
+export function validateMigrationTargetPolicy({
+  migrations,
+  only,
+  productionPromotionVerification = null,
+  targetName,
+}) {
+  if (!only) {
+    if (productionPromotionVerification !== null) {
+      throw new Error("Production promotion evidence requires one reviewed --only migration");
+    }
+    return;
+  }
   const migration = migrations.find((candidate) => (
     !candidate.rollback && (candidate.version === only || candidate.file === only)
   ));
-  if (migration && isolatedPreviewOnlyMigrationVersions.has(migration.version)) {
+  if (!migration || !productionPromotionRequiredMigrationVersions.has(migration.version)) {
+    if (productionPromotionVerification !== null) {
+      throw new Error(
+        `Production promotion evidence is restricted to the binding ${productionMigrationPromotionPlanContract} migration plan`,
+      );
+    }
+    return;
+  }
+  if (targetName !== "prod") {
+    if (productionPromotionVerification !== null) {
+      throw new Error("Production promotion evidence is valid only for MIGRATION_TARGET=prod");
+    }
+    return;
+  }
+  if (productionPromotionVerification === null) {
     throw new Error(
-      `Refusing Preview-only migration ${migration.version} on prod; promote it through a separately reviewed production release`,
+      `Refusing production-promotion migration ${migration.version} on prod without cryptographically verified Preview/Recovery evidence`,
     );
   }
+  assertVerifiedProductionMigrationPromotionEvidence(productionPromotionVerification);
 }
 
 function enforceMigrationTargetPolicy(args) {
@@ -784,11 +990,20 @@ function printStatus({ ledger, migrations, plan }) {
   }
 }
 
-async function applyMigration(client, migration) {
+export async function applyMigration(client, migration, {
+  headCommit = null,
+  targetName = null,
+} = {}) {
   console.log(`Applying ${migration.path}`);
   await client.query("begin");
   try {
     await client.query("set local search_path = public");
+    if (targetName === "prod" && migration.version === tenantCutoverMigrationVersion) {
+      await client.query({
+        query_timeout: migrationClientTimeoutMs,
+        text: tenantCutoverRoleProvisioningSql(headCommit),
+      });
+    }
     await client.query({ query_timeout: migrationClientTimeoutMs, text: migration.content });
     await client.query(
       `
@@ -812,10 +1027,10 @@ async function main() {
     connectionStdin,
     only,
     planTokenFile,
+    productionPromotionEvidence,
   } = parseArgs(process.argv);
   const target = await resolveTarget(connectionStdin);
   const migrations = readMigrations();
-  enforceMigrationTargetPolicy({ migrations, only, targetName: target.name });
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
   if (command === "dry-run" || command === "up") {
     headCommit = assertRepositoryCommitted();
@@ -823,6 +1038,59 @@ async function main() {
       plan: migrations.filter((migration) => !migration.rollback),
     });
   }
+  const selectedMigration = migrations.find((migration) => (
+    !migration.rollback && (migration.version === only || migration.file === only)
+  ));
+  let promotionEvidenceContext = null;
+  let productionPromotionVerification = null;
+  if (productionPromotionEvidence !== null) {
+    if (target.name !== "prod") {
+      fail("Production promotion evidence is valid only for MIGRATION_TARGET=prod");
+    }
+    if (
+      !selectedMigration
+        || !productionPromotionRequiredMigrationVersions.has(selectedMigration.version)
+    ) {
+      fail(
+        `Production promotion evidence is restricted to the binding ${productionMigrationPromotionPlanContract} migration plan`,
+      );
+    }
+    try {
+      assertProductionMigrationPromotionPinnedTrustAnchor(
+        productionPromotionEvidence.expectedTrustAnchorSha256,
+      );
+      const trustContext = await loadExternalGateTrustContext({
+        anchorPath: productionPromotionEvidence.trustAnchorPath,
+        expectedSha256: productionPromotionEvidence.expectedTrustAnchorSha256,
+        repositoryRoot: process.cwd(),
+        requiredRoles: Object.values(productionMigrationPromotionRoles),
+      });
+      const document = await loadCanonicalProductionMigrationPromotionEvidence({
+        evidencePath: productionPromotionEvidence.evidencePath,
+        repositoryRoot: process.cwd(),
+      });
+      productionPromotionVerification = verifyProductionMigrationPromotionEvidence({
+        document,
+        expectedCandidateCommit: headCommit,
+        expectedMigration: selectedMigration,
+        repositoryRoot: process.cwd(),
+        trustContext,
+      });
+      promotionEvidenceContext = Object.freeze({
+        document,
+        expectedMigration: selectedMigration,
+        trustContext,
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : "Production promotion evidence verification failed");
+    }
+  }
+  enforceMigrationTargetPolicy({
+    migrations,
+    only,
+    productionPromotionVerification,
+    targetName: target.name,
+  });
   const pool = new Pool({
     connectionString: target.databaseUrl,
     connectionTimeoutMillis: 10_000,
@@ -839,6 +1107,24 @@ async function main() {
       purpose: "schema migration",
       target: target.name,
     });
+    if (promotionEvidenceContext !== null) {
+      productionPromotionVerification = verifyProductionMigrationPromotionEvidence({
+        ...promotionEvidenceContext,
+        expectedCandidateCommit: headCommit,
+        expectedProductionTarget: {
+          databaseName: connectedTarget.databaseName,
+          neonBranchId: connectedTarget.branchId,
+          neonProjectId: connectedTarget.projectId,
+        },
+        repositoryRoot: process.cwd(),
+      });
+      enforceMigrationTargetPolicy({
+        migrations,
+        only,
+        productionPromotionVerification,
+        targetName: target.name,
+      });
+    }
     console.log("Connected database fingerprint verified");
     await client.query({
       query_timeout: guardQueryTimeoutMs,
@@ -874,13 +1160,20 @@ async function main() {
     }
 
     const ledger = await readLedger(client);
-    const plan = plannedMigrations({ allowManualCutover, ledgerRows: ledger.rows, migrations, only });
+    const plan = plannedMigrations({
+      allowManualCutover,
+      ledgerRows: ledger.rows,
+      migrations,
+      only,
+      targetName: target.name,
+    });
     assertChecksumSafety({ ledgerRows: ledger.rows, migrations, plan });
     const planToken = createMigrationPlanToken({
       connectedTarget,
       headCommit,
       ledgerRows: ledger.rows,
       plan,
+      productionPromotionVerification,
     });
 
     try {
@@ -898,7 +1191,10 @@ async function main() {
           console.log("No pending migrations.");
         } else {
           await applyCommittedMigrationPlan({
-            apply: (migration) => applyMigration(client, migration),
+            apply: (migration) => applyMigration(client, migration, {
+              headCommit,
+              targetName: target.name,
+            }),
             plan,
           });
         }
@@ -909,6 +1205,7 @@ async function main() {
           ledgerRows: nextLedger.rows,
           migrations,
           only,
+          targetName: target.name,
         });
         printStatus({ ledger: nextLedger, migrations, plan: nextPlan });
       }

@@ -218,7 +218,21 @@ function completeTwoTenantEvidence(runtime) {
   const workflowRef = "novalure/novalure-crm/.github/workflows/livegang-e2e.yml@refs/heads/main";
   const workflowUri = `https://github.com/${workflowRef}`;
   const parentBase = {
-    cleanup: ["A", "B"].map((tenant) => ({ planDigest: "d".repeat(64), remaining, tenant })),
+    cleanup: ["A", "B"].map((tenant) => ({
+      planDigest: "d".repeat(64),
+      remaining,
+      retainedBrokerOperationRequests: {
+        beforeRunCount: 0,
+        expectedMutationCount: 2,
+        ok: true,
+        postMutationCount: 2,
+        postMutationSha256: "e".repeat(64),
+        postResetCount: 2,
+        postResetSha256: "e".repeat(64),
+        unchangedByReset: true,
+      },
+      tenant,
+    })),
     commit: runtime.candidateCommit,
     mode: "execute",
     productionMutationPerformed: false,

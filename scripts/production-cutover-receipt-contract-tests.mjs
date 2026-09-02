@@ -22,12 +22,17 @@ import {
 import {
   buildProductionCutoverEvidenceSha256,
   loadCanonicalProductionCutoverDocument,
+  productionCutoverActivationFlagKey,
+  productionCutoverActivationFlagsEnvironment,
   productionCutoverDeploymentCommand,
   productionCutoverExpectedProductionHost,
   productionCutoverExpectedVercelProjectId,
+  productionCutoverExplicitCutoverVersions,
   productionCutoverMaximumFutureSkewMs,
   productionCutoverMaximumReadinessAgeMs,
+  productionCutoverMaximumReceiptSigningDelayMs,
   productionCutoverMigrations,
+  productionCutoverPostLedgerQuery,
   productionCutoverPostLedgerQuerySha256,
   productionCutoverReceiptRecordType,
   productionCutoverReceiptRoles,
@@ -38,8 +43,11 @@ import {
   verifyProductionCutoverReceiptBundle,
 } from "./lib/production-cutover-receipt.mjs";
 import {
+  productionCutoverActivationFlagKey as runtimeActivationFlagKey,
+  productionCutoverActivationFlagsEnvironment as runtimeActivationFlagsEnvironment,
   productionCutoverMaximumFutureSkewMs as runtimeMaximumFutureSkewMs,
   productionCutoverMaximumReadinessAgeMs as runtimeMaximumReadinessAgeMs,
+  productionCutoverMaximumReceiptSigningDelayMs as runtimeMaximumReceiptSigningDelayMs,
   productionCutoverReceiptRoles as runtimeReceiptRoles,
   verifyProductionCutoverReceiptBundle as verifyRuntimeProductionCutoverReceiptBundle,
 } from "./lib/production-cutover-receipt-runtime.mjs";
@@ -153,6 +161,7 @@ function signReceipt({
 export function createProductionCutoverTestFixture({
   additionalTrustKeys = [],
   nowEpochMs = Date.now(),
+  receiptFirstSignedDelayMs = 1_000,
 } = {}) {
   const verificationNowEpochMs = Math.floor(nowEpochMs / 1000) * 1000;
   const startedAtEpochMs = verificationNowEpochMs - (2 * 60 * 1000);
@@ -172,11 +181,7 @@ export function createProductionCutoverTestFixture({
   const migrations = productionCutoverMigrations.map(({ path, version }, index) => ({
     appliedAt: at((10 + index) * 1000),
     candidateBlobSha256: candidateMigrationSha256.get(path),
-    cutoverDecision: [
-      "061_validate_and_activate_tenant_rls_pilot",
-      "062_private_media_contract_cutover",
-      "065_notification_guard_search_path_hardening",
-    ].includes(version)
+    cutoverDecision: productionCutoverExplicitCutoverVersions.includes(version)
       ? "EXPLICIT_APPLIED_PASS_CUTOVER"
       : "CONTROLLED_APPLIED_PASS",
     cutoverEvidenceSha256: sha256(`cutover:${version}`),
@@ -191,7 +196,7 @@ export function createProductionCutoverTestFixture({
   }));
   const document = {
     candidateCommit: productionCutoverTestCandidateCommit,
-    completedAt: at(40 * 1000),
+    completedAt: at(50 * 1000),
     database: {
       backup: {
         capturedAt: at(1000),
@@ -203,7 +208,7 @@ export function createProductionCutoverTestFixture({
       },
       migrations,
       postLedger: {
-        capturedAt: at(27 * 1000),
+        capturedAt: at(33 * 1000),
         entries: ledgerEntries,
         entriesSha256: sha256(canonicalJson(ledgerEntries)),
         evidenceSha256: sha256("post-ledger"),
@@ -226,11 +231,21 @@ export function createProductionCutoverTestFixture({
       },
     },
     deployment: {
+      activationFlagOff: {
+        environment: productionCutoverActivationFlagsEnvironment,
+        evidenceSha256: sha256("activation-flag-off"),
+        flagKey: productionCutoverActivationFlagKey,
+        observedAt: at(44_500),
+        projectId: productionCutoverExpectedVercelProjectId,
+        readMode: "REMOTE_NO_STORE",
+        revision: 41,
+        state: "OFF",
+      },
       aliasPromotion: {
         alias: productionCutoverExpectedProductionHost,
         evidenceSha256: sha256("alias-promotion"),
         previousDeploymentId: rollback.rollbackDeploymentId,
-        promotedAt: at(37 * 1000),
+        promotedAt: at(45 * 1000),
         result: "PROMOTED_EXACT",
         sourceDeploymentId: target.stagedDeploymentId,
       },
@@ -238,7 +253,7 @@ export function createProductionCutoverTestFixture({
       domainAssignedDuringStaging: false,
       postPromotionSmoke: {
         activationState: "SAFE_CLOSED",
-        checkedAt: at(38 * 1000),
+        checkedAt: at(46 * 1000),
         deploymentHost: productionCutoverExpectedProductionHost,
         deploymentId: target.stagedDeploymentId,
         evidenceSha256: sha256("post-promotion-smoke"),
@@ -246,7 +261,7 @@ export function createProductionCutoverTestFixture({
       },
       prePromotionSmoke: {
         activationState: "SAFE_CLOSED",
-        checkedAt: at(36 * 1000),
+        checkedAt: at(44 * 1000),
         deploymentHost: target.stagedDeploymentHost,
         deploymentId: target.stagedDeploymentId,
         evidenceSha256: sha256("pre-promotion-smoke"),
@@ -257,16 +272,16 @@ export function createProductionCutoverTestFixture({
         deploymentId: rollback.rollbackDeploymentId,
         evidenceSha256: sha256("rollback"),
         status: "READY",
-        verifiedAt: at(35 * 1000),
+        verifiedAt: at(43 * 1000),
       },
-      stagedAt: at(34 * 1000),
+      stagedAt: at(42 * 1000),
       stagingEvidenceSha256: sha256("staging"),
     },
     monitoring: {
       alertDeliveryEvidenceSha256: sha256("alert-delivery"),
-      armedAt: at(31 * 1000),
+      armedAt: at(39 * 1000),
       errorIngestionEvidenceSha256: sha256("error-ingestion"),
-      readinessCheckedAt: at(33 * 1000),
+      readinessCheckedAt: at(41 * 1000),
       scope: productionCutoverStatus,
       status: "PASS",
       syntheticAlarmEvidenceSha256: sha256("synthetic-alarm"),
@@ -278,7 +293,7 @@ export function createProductionCutoverTestFixture({
     status: productionCutoverStatus,
     storage: {
       legacyMigration: {
-        completedAt: at(30 * 1000),
+        completedAt: at(38 * 1000),
         evidenceSha256: sha256("legacy-migration"),
         migratedObjectCount: 12,
         postInventorySha256: sha256("blob-post-inventory"),
@@ -286,7 +301,7 @@ export function createProductionCutoverTestFixture({
         postProductionObjectCount: 20,
         sourceInventorySha256: sha256("blob-source-inventory"),
         sourceLegacyObjectCount: 12,
-        startedAt: at(28 * 1000),
+        startedAt: at(35 * 1000),
         status: "PASS",
       },
       previewStoreFingerprintSha256: sha256("preview-blob-store"),
@@ -304,7 +319,7 @@ export function createProductionCutoverTestFixture({
       index: index + 1,
       key,
       role: key.role,
-      signedAt: at((41 + index) * 1000),
+      signedAt: at(50_000 + receiptFirstSignedDelayMs + (index * 1_000)),
       trustAnchorSha256,
     }),
   ]));
@@ -337,6 +352,18 @@ test("three independent Ed25519 roles attest one exact PRE_ACTIVATION_READY evid
   const fixture = createFixture();
   const result = verify(fixture);
   assert.equal(result.status, productionCutoverStatus);
+  assert.equal(result.activationFlagOffRevision, 41);
+  assert.equal(result.completedAt, fixture.document.completedAt);
+  assert.equal(
+    result.latestReceiptSignedAt,
+    fixture.document.receipts.releaseObserver.signedAt,
+  );
+  assert.equal(
+    result.launchReadinessValidUntil,
+    new Date(
+      Date.parse(fixture.document.startedAt) + productionCutoverMaximumReadinessAgeMs,
+    ).toISOString(),
+  );
   assert.equal(result.evidenceSha256, buildProductionCutoverEvidenceSha256(fixture.document));
   assert.deepEqual(Object.keys(result.receiptSha256ByRole).sort(), Object.keys(productionCutoverReceiptRoles).sort());
   assert.equal(new Set(Object.values(result.receiptSha256ByRole)).size, 3);
@@ -358,6 +385,9 @@ test("runtime receipt-bundle verification rechecks the complete digest without G
   assert.equal(result.evidenceSha256, buildProductionCutoverEvidenceSha256(fixture.document));
   assert.equal(runtimeMaximumFutureSkewMs, productionCutoverMaximumFutureSkewMs);
   assert.equal(runtimeMaximumReadinessAgeMs, productionCutoverMaximumReadinessAgeMs);
+  assert.equal(runtimeMaximumReceiptSigningDelayMs, productionCutoverMaximumReceiptSigningDelayMs);
+  assert.equal(runtimeActivationFlagKey, productionCutoverActivationFlagKey);
+  assert.equal(runtimeActivationFlagsEnvironment, productionCutoverActivationFlagsEnvironment);
   assert.deepEqual(runtimeReceiptRoles, productionCutoverReceiptRoles);
   const runtimeResult = verifyRuntimeProductionCutoverReceiptBundle({
     document: fixture.document,
@@ -394,7 +424,54 @@ test("runtime receipt-bundle verification rechecks the complete digest without G
   );
 });
 
-test("target, candidate checksums, post-ledger and explicit 061/062/065 cutovers fail closed", () => {
+test("Production migration inventory uses the stable 22-step order and keeps promotions explicit", () => {
+  assert.deepEqual(
+    productionCutoverMigrations.map(({ version }) => version),
+    [
+      "057_bot_webhook_legacy_index_cutover",
+      "060_tenant_rls_pilot_prepare",
+      "062_private_media_contract_cutover",
+      "065_notification_guard_search_path_hardening",
+      "068_qa_batch_reset_safety",
+      "069_property_unit_idempotency",
+      "070_funnel_submission_idempotency_recovery",
+      "071_forms_owner_tenant_guard",
+      "072_form_submission_atomicity",
+      "073_launch_tenant_relation_guards",
+      "074_validate_launch_tenant_relation_guards",
+      "075_public_funnel_visit_truth",
+      "076_bot_webhook_durable_processing",
+      "077_schema_ledger_runtime_projection",
+      "078_company_profile_approval_integrity",
+      "079_public_funnel_visit_role_boundary",
+      "080_property_export_runtime",
+      "081_broker_operations",
+      "082_content_library_privacy",
+      "083_list_productivity_controls",
+      "084_media_deletion_lifecycle",
+      "061_validate_and_activate_tenant_rls_pilot",
+    ],
+  );
+  assert.deepEqual(
+    productionCutoverExplicitCutoverVersions,
+    [
+      "061_validate_and_activate_tenant_rls_pilot",
+      "062_private_media_contract_cutover",
+      "065_notification_guard_search_path_hardening",
+      "080_property_export_runtime",
+      "081_broker_operations",
+      "082_content_library_privacy",
+      "083_list_productivity_controls",
+      "084_media_deletion_lifecycle",
+    ],
+  );
+  assert.match(
+    productionCutoverPostLedgerQuery,
+    /order by array_position\(\$1::text\[\], version\)$/u,
+  );
+});
+
+test("target, candidate checksums, post-ledger and explicit cutovers fail closed", () => {
   const mutations = [
     ["target", (document) => { document.target.neonProjectId = "weathered-term-98273025"; }, /PRODUCTION_CUTOVER_NEON_PROJECT_MISMATCH/u],
     ["checksum", (document) => { document.database.migrations[0].candidateBlobSha256 = "f".repeat(64); }, /CANDIDATE_CHECKSUM_MISMATCH/u],
@@ -428,7 +505,11 @@ test("skip-domain staging, exact alias, safe-closed smoke, rollback and time ord
   const mutations = [
     [(document) => { document.deployment.deploymentCommand = "vercel --prod"; }, /SKIP_DOMAIN_COMMAND_REQUIRED/u],
     [(document) => { document.deployment.domainAssignedDuringStaging = true; }, /DOMAIN_ASSIGNED_DURING_STAGING/u],
+    [(document) => { document.deployment.activationFlagOff.state = "ACTIVE"; }, /ACTIVATION_FLAG_NOT_OFF/u],
+    [(document) => { document.deployment.activationFlagOff.readMode = "CACHE"; }, /ACTIVATION_FLAG_READ_MODE_INVALID/u],
+    [(document) => { document.deployment.activationFlagOff.observedAt = document.deployment.prePromotionSmoke.checkedAt; }, /ACTIVATION_FLAG_OBSERVED_AT_ORDER_INVALID/u],
     [(document) => { document.deployment.aliasPromotion.alias = "other.example.com"; }, /ALIAS_MISMATCH/u],
+    [(document) => { document.deployment.aliasPromotion.promotedAt = document.deployment.activationFlagOff.observedAt; }, /ALIAS_PROMOTED_AT_ORDER_INVALID/u],
     [(document) => { document.deployment.postPromotionSmoke.activationState = "ACTIVE"; }, /POST_PROMOTION_SMOKE_ACTIVATION_NOT_SAFE_CLOSED/u],
     [(document) => { document.deployment.rollback.status = "PENDING"; }, /ROLLBACK_NOT_READY/u],
     [(document) => { document.deployment.postPromotionSmoke.checkedAt = "2026-08-24T00:00:36.000Z"; }, /POST_PROMOTION_SMOKE_CHECKED_AT_ORDER_INVALID/u],
@@ -438,6 +519,16 @@ test("skip-domain staging, exact alias, safe-closed smoke, rollback and time ord
     mutate(fixture.document);
     assert.throws(() => verify(fixture), expectedError);
   }
+});
+
+test("cutover signers must sign only after safe-closed completion and within five minutes", () => {
+  const late = createFixture({
+    receiptFirstSignedDelayMs: productionCutoverMaximumReceiptSigningDelayMs + 1,
+  });
+  assert.throws(
+    () => verify(late),
+    /PRODUCTION_CUTOVER_RECEIPT_SIGNING_WINDOW_EXCEEDED/u,
+  );
 });
 
 test("launch readiness rejects future, stale and non-strict UTC cutover evidence", () => {

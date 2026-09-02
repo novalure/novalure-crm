@@ -18,6 +18,11 @@ export const qaRequiredMigrationVersions = Object.freeze([
   "077_schema_ledger_runtime_projection",
   "078_company_profile_approval_integrity",
   "079_public_funnel_visit_role_boundary",
+  "080_property_export_runtime",
+  "081_broker_operations",
+  "082_content_library_privacy",
+  "083_list_productivity_controls",
+  "084_media_deletion_lifecycle",
 ]);
 
 export const qaTenantConstraintNames = Object.freeze([
@@ -157,6 +162,50 @@ export const qaCrudMatrix = Object.freeze([
   Object.freeze({ actor: "member", create: 200, read: 200, update: 200, delete: 403 }),
   Object.freeze({ actor: "customer", create: 403, read: 200, update: 403, delete: 403 }),
   Object.freeze({ actor: "public", create: 401, read: 401, update: 401, delete: 401 }),
+]);
+
+const standardReadStatuses = Object.freeze({
+  admin: 200,
+  customer: 200,
+  member: 200,
+  owner: 200,
+});
+
+/**
+ * Read-only probes for the Justimmo-inspired release slices. The two guarded
+ * probes deliberately use fixture ids that cannot name their target entity;
+ * they prove auth/tenant fail-closed behavior without creating export jobs or
+ * match evaluations before those mutations support atomic QA registration.
+ */
+export const qaJustimmoPreviewReadSurfaces = Object.freeze([
+  Object.freeze({ id: "broker.mandates", path: "/api/crm/broker/mandates", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.operations", path: "/api/crm/broker/operations", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.search_profiles", path: "/api/crm/broker/search-profiles", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.offers", path: "/api/crm/broker/offers", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.viewings", path: "/api/crm/broker/viewings", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.closings_commission", path: "/api/crm/broker/closings", statuses: standardReadStatuses }),
+  Object.freeze({ id: "broker.activities", path: "/api/crm/broker/activities", statuses: standardReadStatuses }),
+  Object.freeze({ id: "content.documents", path: "/api/crm/documents", statuses: standardReadStatuses }),
+  Object.freeze({ id: "content.templates", path: "/api/crm/templates", statuses: standardReadStatuses }),
+  Object.freeze({
+    id: "privacy.overview",
+    path: "/api/crm/privacy",
+    statuses: Object.freeze({ admin: 200, customer: 403, member: 403, owner: 200 }),
+  }),
+  Object.freeze({ id: "productivity.saved_views", path: "/api/crm/productivity/saved-views", statuses: standardReadStatuses }),
+  Object.freeze({ id: "search.global", path: "/api/crm/search", statuses: standardReadStatuses }),
+  Object.freeze({
+    guardedProbe: "match_profile",
+    id: "broker.matches",
+    path: "/api/crm/broker/matches",
+    statuses: Object.freeze({ admin: [403, 404], customer: [403, 404], member: [403, 404], owner: [403, 404] }),
+  }),
+  Object.freeze({
+    guardedProbe: "property_export",
+    id: "property.exports",
+    path: "/api/crm/property-exports",
+    statuses: Object.freeze({ admin: [200, 403], customer: 403, member: 403, owner: [200, 403] }),
+  }),
 ]);
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -556,10 +605,48 @@ export function buildQaTwoTenantScenarioMatrix() {
     scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.persistence.relogin`, tenant }));
     scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.deal.idempotency`, tenant }));
     scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.deal.concurrency`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 201, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.create`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 201, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.idempotency`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.update`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 409, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.version_conflict`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.read`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: 200, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.persistence_relogin`, tenant }));
+    scenarios.push(Object.freeze({ actor: "owner", expectedStatus: [403, 404], id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.cross_tenant_update`, tenant }));
+    scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: 0, id: `${tenant.toLowerCase()}.justimmo.broker.search_profile.cleanup`, tenant }));
     scenarios.push(Object.freeze({ actor: "public", expectedStatus: 200, id: `${tenant.toLowerCase()}.public.page`, tenant }));
     scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: 200, id: `${tenant.toLowerCase()}.cleanup.dry_run`, tenant }));
     scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: 200, id: `${tenant.toLowerCase()}.cleanup.execute`, tenant }));
     scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: 0, id: `${tenant.toLowerCase()}.cleanup.remaining_rows`, tenant }));
+    scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: 0, id: `${tenant.toLowerCase()}.db.retained_broker_requests_before_run`, tenant }));
+    scenarios.push(Object.freeze({ actor: "resetAdmin", expectedStatus: "reconciled", id: `${tenant.toLowerCase()}.cleanup.retained_broker_requests`, tenant }));
+    for (const surface of qaJustimmoPreviewReadSurfaces) {
+      for (const actor of Object.keys(qaActors)) {
+        scenarios.push(Object.freeze({
+          actor,
+          expectedStatus: surface.statuses[actor],
+          id: `${tenant.toLowerCase()}.justimmo.${surface.id}.${actor}.read`,
+          operation: "read",
+          surface: surface.id,
+          tenant,
+        }));
+        scenarios.push(Object.freeze({
+          actor,
+          expectedStatus: 403,
+          id: `${tenant.toLowerCase()}.justimmo.${surface.id}.${actor}.cross_tenant`,
+          operation: "cross_tenant_read",
+          surface: surface.id,
+          tenant,
+        }));
+      }
+      scenarios.push(Object.freeze({
+        actor: "public",
+        expectedStatus: 401,
+        id: `${tenant.toLowerCase()}.justimmo.${surface.id}.public.read`,
+        operation: "read",
+        surface: surface.id,
+        tenant,
+      }));
+    }
   }
   return scenarios;
 }

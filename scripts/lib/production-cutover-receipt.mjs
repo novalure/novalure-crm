@@ -17,7 +17,7 @@ import {
   recoveryExpectedProjectId,
 } from "./database-recovery-query-pack.mjs";
 
-export const productionCutoverSchemaVersion = 1;
+export const productionCutoverSchemaVersion = 2;
 export const productionCutoverRecordType =
   "NOVALURE_PRODUCTION_CUTOVER_EVIDENCE";
 export const productionCutoverReceiptRecordType =
@@ -28,8 +28,12 @@ export const productionCutoverExpectedVercelProjectId =
 export const productionCutoverExpectedProductionHost =
   "www.novalure-crm.app";
 export const productionCutoverDeploymentCommand = "vercel --prod --skip-domain";
+export const productionCutoverActivationFlagKey =
+  "novalure-production-launch-activation";
+export const productionCutoverActivationFlagsEnvironment = "production";
 export const productionCutoverMaximumFutureSkewMs = 60 * 1000;
 export const productionCutoverMaximumReadinessAgeMs = 30 * 60 * 1000;
+export const productionCutoverMaximumReceiptSigningDelayMs = 5 * 60 * 1000;
 export const productionCutoverReceiptRoles = Object.freeze({
   dba: "production-cutover-dba",
   platformOperations: "production-cutover-platform-operations",
@@ -39,7 +43,6 @@ export const productionCutoverReceiptRoles = Object.freeze({
 export const productionCutoverMigrations = Object.freeze([
   ["057_bot_webhook_legacy_index_cutover", "migrations/057_bot_webhook_legacy_index_cutover.sql"],
   ["060_tenant_rls_pilot_prepare", "migrations/060_tenant_rls_pilot_prepare.sql"],
-  ["061_validate_and_activate_tenant_rls_pilot", "migrations/061_validate_and_activate_tenant_rls_pilot.sql"],
   ["062_private_media_contract_cutover", "migrations/062_private_media_contract_cutover.sql"],
   ["065_notification_guard_search_path_hardening", "migrations/065_notification_guard_search_path_hardening.sql"],
   ["068_qa_batch_reset_safety", "migrations/068_qa_batch_reset_safety.sql"],
@@ -54,16 +57,30 @@ export const productionCutoverMigrations = Object.freeze([
   ["077_schema_ledger_runtime_projection", "migrations/077_schema_ledger_runtime_projection.sql"],
   ["078_company_profile_approval_integrity", "migrations/078_company_profile_approval_integrity.sql"],
   ["079_public_funnel_visit_role_boundary", "migrations/079_public_funnel_visit_role_boundary.sql"],
+  ["080_property_export_runtime", "migrations/080_property_export_runtime.sql"],
+  ["081_broker_operations", "migrations/081_broker_operations.sql"],
+  ["082_content_library_privacy", "migrations/082_content_library_privacy.sql"],
+  ["083_list_productivity_controls", "migrations/083_list_productivity_controls.sql"],
+  ["084_media_deletion_lifecycle", "migrations/084_media_deletion_lifecycle.sql"],
+  // RLS activation is deliberately last. Migration 068 has already removed
+  // the two audit snapshot FKs that 061 no longer validates, so the final
+  // enforced state is stable instead of being invalidated later in the chain.
+  ["061_validate_and_activate_tenant_rls_pilot", "migrations/061_validate_and_activate_tenant_rls_pilot.sql"],
 ].map(([version, path]) => Object.freeze({ path, version })));
 
 export const productionCutoverExplicitCutoverVersions = Object.freeze([
   "061_validate_and_activate_tenant_rls_pilot",
   "062_private_media_contract_cutover",
   "065_notification_guard_search_path_hardening",
+  "080_property_export_runtime",
+  "081_broker_operations",
+  "082_content_library_privacy",
+  "083_list_productivity_controls",
+  "084_media_deletion_lifecycle",
 ]);
 
 export const productionCutoverPostLedgerQuery =
-  "select version, checksum from public.novalure_schema_migrations where version = any($1::text[]) order by version";
+  "select version, checksum from public.novalure_schema_migrations where version = any($1::text[]) order by array_position($1::text[], version)";
 export const productionCutoverPostLedgerQuerySha256 = sha256(
   `${productionCutoverPostLedgerQuery}\n`,
 );
@@ -115,6 +132,12 @@ function assertLaunchReadinessFreshness(startedAt, completedAt, nowEpochMs) {
 function within(value, minimum, maximum, code) {
   const observed = timestamp(value, `${code}_INVALID`);
   invariant(observed >= minimum && observed <= maximum, `${code}_ORDER_INVALID`);
+  return observed;
+}
+
+function strictlyAfter(value, minimum, maximum, code) {
+  const observed = timestamp(value, `${code}_INVALID`);
+  invariant(observed > minimum && observed <= maximum, `${code}_ORDER_INVALID`);
   return observed;
 }
 
@@ -184,6 +207,65 @@ function assertTarget(target, expectedTarget = null) {
   }
 }
 
+function assertRuntimeActivationSequence(document, startedAt, completedAt) {
+  const deployment = document.deployment;
+  assertExactObjectKeys(deployment, [
+    "activationFlagOff",
+    "aliasPromotion",
+    "deploymentCommand",
+    "domainAssignedDuringStaging",
+    "postPromotionSmoke",
+    "prePromotionSmoke",
+    "rollback",
+    "stagedAt",
+    "stagingEvidenceSha256",
+  ], "PRODUCTION_CUTOVER_DEPLOYMENT");
+  invariant(deployment.deploymentCommand === productionCutoverDeploymentCommand, "PRODUCTION_CUTOVER_SKIP_DOMAIN_COMMAND_REQUIRED");
+  invariant(deployment.domainAssignedDuringStaging === false, "PRODUCTION_CUTOVER_DOMAIN_ASSIGNED_DURING_STAGING");
+  const stagedAt = timestamp(deployment.stagedAt, "PRODUCTION_CUTOVER_STAGED_AT_INVALID");
+  const rollbackVerifiedAt = timestamp(deployment.rollback?.verifiedAt, "PRODUCTION_CUTOVER_ROLLBACK_VERIFIED_AT_INVALID");
+  const prePromotionSmokeAt = timestamp(deployment.prePromotionSmoke?.checkedAt, "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_CHECKED_AT_INVALID");
+  invariant(stagedAt >= startedAt && stagedAt <= rollbackVerifiedAt, "PRODUCTION_CUTOVER_ROLLBACK_VERIFIED_AT_ORDER_INVALID");
+  invariant(rollbackVerifiedAt <= prePromotionSmokeAt, "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_CHECKED_AT_ORDER_INVALID");
+  invariant(deployment.rollback?.status === "READY", "PRODUCTION_CUTOVER_ROLLBACK_NOT_READY");
+  invariant(deployment.prePromotionSmoke?.activationState === "SAFE_CLOSED", "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_ACTIVATION_NOT_SAFE_CLOSED");
+  invariant(deployment.prePromotionSmoke?.result === "PASS", "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_RESULT_INVALID");
+  invariant(deployment.prePromotionSmoke?.deploymentId === document.target.stagedDeploymentId, "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_DEPLOYMENT_MISMATCH");
+  invariant(deployment.prePromotionSmoke?.deploymentHost === document.target.stagedDeploymentHost, "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE_HOST_MISMATCH");
+  const flag = deployment.activationFlagOff;
+  assertExactObjectKeys(flag, [
+    "environment",
+    "evidenceSha256",
+    "flagKey",
+    "observedAt",
+    "projectId",
+    "readMode",
+    "revision",
+    "state",
+  ], "PRODUCTION_CUTOVER_ACTIVATION_FLAG_OFF");
+  invariant(flag.environment === productionCutoverActivationFlagsEnvironment, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_ENVIRONMENT_INVALID");
+  invariant(flag.flagKey === productionCutoverActivationFlagKey, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_KEY_INVALID");
+  invariant(flag.projectId === productionCutoverExpectedVercelProjectId, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_PROJECT_INVALID");
+  invariant(flag.readMode === "REMOTE_NO_STORE", "PRODUCTION_CUTOVER_ACTIVATION_FLAG_READ_MODE_INVALID");
+  invariant(Number.isSafeInteger(flag.revision) && flag.revision > 0, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_REVISION_INVALID");
+  invariant(flag.state === "OFF", "PRODUCTION_CUTOVER_ACTIVATION_FLAG_NOT_OFF");
+  requireSha256(flag.evidenceSha256, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_EVIDENCE_INVALID");
+  const flagObservedAt = timestamp(flag.observedAt, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_OBSERVED_AT_INVALID");
+  const promotedAt = timestamp(deployment.aliasPromotion?.promotedAt, "PRODUCTION_CUTOVER_ALIAS_PROMOTED_AT_INVALID");
+  const safeClosedSmokeAt = timestamp(deployment.postPromotionSmoke?.checkedAt, "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_CHECKED_AT_INVALID");
+  invariant(prePromotionSmokeAt < flagObservedAt && flagObservedAt < promotedAt, "PRODUCTION_CUTOVER_ACTIVATION_FLAG_OBSERVED_AT_ORDER_INVALID");
+  invariant(deployment.aliasPromotion?.alias === productionCutoverExpectedProductionHost, "PRODUCTION_CUTOVER_ALIAS_MISMATCH");
+  invariant(deployment.aliasPromotion?.sourceDeploymentId === document.target.stagedDeploymentId, "PRODUCTION_CUTOVER_ALIAS_SOURCE_MISMATCH");
+  invariant(deployment.aliasPromotion?.previousDeploymentId === deployment.rollback?.deploymentId, "PRODUCTION_CUTOVER_ALIAS_PREVIOUS_MISMATCH");
+  invariant(deployment.aliasPromotion?.result === "PROMOTED_EXACT", "PRODUCTION_CUTOVER_ALIAS_RESULT_INVALID");
+  invariant(promotedAt < safeClosedSmokeAt && safeClosedSmokeAt <= completedAt, "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_CHECKED_AT_ORDER_INVALID");
+  invariant(deployment.postPromotionSmoke?.activationState === "SAFE_CLOSED", "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_ACTIVATION_NOT_SAFE_CLOSED");
+  invariant(deployment.postPromotionSmoke?.result === "PASS_SAFE_CLOSED", "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_RESULT_INVALID");
+  invariant(deployment.postPromotionSmoke?.deploymentId === document.target.stagedDeploymentId, "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_DEPLOYMENT_MISMATCH");
+  invariant(deployment.postPromotionSmoke?.deploymentHost === productionCutoverExpectedProductionHost, "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_HOST_MISMATCH");
+  return flag.revision;
+}
+
 function assertSmoke(smoke, {
   code,
   deploymentHost,
@@ -208,8 +290,57 @@ function assertSmoke(smoke, {
   return within(smoke.checkedAt, minimum, maximum, `${code}_CHECKED_AT`);
 }
 
+function assertActivationFlagOff(observation, minimum, maximum) {
+  assertExactObjectKeys(observation, [
+    "environment",
+    "evidenceSha256",
+    "flagKey",
+    "observedAt",
+    "projectId",
+    "readMode",
+    "revision",
+    "state",
+  ], "PRODUCTION_CUTOVER_ACTIVATION_FLAG_OFF");
+  invariant(
+    observation.environment === productionCutoverActivationFlagsEnvironment,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_ENVIRONMENT_INVALID",
+  );
+  invariant(
+    observation.flagKey === productionCutoverActivationFlagKey,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_KEY_INVALID",
+  );
+  invariant(
+    observation.projectId === productionCutoverExpectedVercelProjectId,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_PROJECT_INVALID",
+  );
+  invariant(
+    observation.readMode === "REMOTE_NO_STORE",
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_READ_MODE_INVALID",
+  );
+  invariant(
+    Number.isSafeInteger(observation.revision) && observation.revision > 0,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_REVISION_INVALID",
+  );
+  invariant(
+    observation.state === "OFF",
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_NOT_OFF",
+  );
+  requireSha256(
+    observation.evidenceSha256,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_EVIDENCE_INVALID",
+  );
+  const observedAt = strictlyAfter(
+    observation.observedAt,
+    minimum,
+    maximum,
+    "PRODUCTION_CUTOVER_ACTIVATION_FLAG_OBSERVED_AT",
+  );
+  return Object.freeze({ observedAt, revision: observation.revision });
+}
+
 function assertDeployment(deployment, target, startedAt, completedAt, expectedTarget) {
   assertExactObjectKeys(deployment, [
+    "activationFlagOff",
     "aliasPromotion",
     "deploymentCommand",
     "domainAssignedDuringStaging",
@@ -240,16 +371,26 @@ function assertDeployment(deployment, target, startedAt, completedAt, expectedTa
     invariant(deployment.rollback.deploymentHost === expectedTarget.rollbackDeploymentHost, "PRODUCTION_CUTOVER_EXPECTED_ROLLBACK_HOST_MISMATCH");
   }
   requireSha256(deployment.rollback.evidenceSha256, "PRODUCTION_CUTOVER_ROLLBACK_EVIDENCE_INVALID");
-  within(deployment.rollback.verifiedAt, startedAt, completedAt, "PRODUCTION_CUTOVER_ROLLBACK_VERIFIED_AT");
+  const rollbackVerifiedAt = within(
+    deployment.rollback.verifiedAt,
+    stagedAt,
+    completedAt,
+    "PRODUCTION_CUTOVER_ROLLBACK_VERIFIED_AT",
+  );
 
   const prePromotionAt = assertSmoke(deployment.prePromotionSmoke, {
     code: "PRODUCTION_CUTOVER_PRE_PROMOTION_SMOKE",
     deploymentHost: target.stagedDeploymentHost,
     deploymentId: target.stagedDeploymentId,
     maximum: completedAt,
-    minimum: stagedAt,
+    minimum: rollbackVerifiedAt,
     result: "PASS",
   });
+  const activationFlagOff = assertActivationFlagOff(
+    deployment.activationFlagOff,
+    prePromotionAt,
+    completedAt,
+  );
   assertExactObjectKeys(deployment.aliasPromotion, [
     "alias",
     "evidenceSha256",
@@ -263,14 +404,28 @@ function assertDeployment(deployment, target, startedAt, completedAt, expectedTa
   invariant(deployment.aliasPromotion.previousDeploymentId === deployment.rollback.deploymentId, "PRODUCTION_CUTOVER_ALIAS_PREVIOUS_MISMATCH");
   invariant(deployment.aliasPromotion.result === "PROMOTED_EXACT", "PRODUCTION_CUTOVER_ALIAS_RESULT_INVALID");
   requireSha256(deployment.aliasPromotion.evidenceSha256, "PRODUCTION_CUTOVER_ALIAS_EVIDENCE_INVALID");
-  const promotedAt = within(deployment.aliasPromotion.promotedAt, prePromotionAt, completedAt, "PRODUCTION_CUTOVER_ALIAS_PROMOTED_AT");
-  assertSmoke(deployment.postPromotionSmoke, {
+  const promotedAt = strictlyAfter(
+    deployment.aliasPromotion.promotedAt,
+    activationFlagOff.observedAt,
+    completedAt,
+    "PRODUCTION_CUTOVER_ALIAS_PROMOTED_AT",
+  );
+  const safeClosedSmokeAt = strictlyAfter(deployment.postPromotionSmoke.checkedAt, promotedAt, completedAt, "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE_CHECKED_AT");
+  assertSmoke({
+    ...deployment.postPromotionSmoke,
+    checkedAt: new Date(safeClosedSmokeAt).toISOString(),
+  }, {
     code: "PRODUCTION_CUTOVER_POST_PROMOTION_SMOKE",
     deploymentHost: productionCutoverExpectedProductionHost,
     deploymentId: target.stagedDeploymentId,
     maximum: completedAt,
     minimum: promotedAt,
     result: "PASS_SAFE_CLOSED",
+  });
+  return Object.freeze({
+    activationFlagOffRevision: activationFlagOff.revision,
+    promotedAt,
+    safeClosedSmokeAt,
   });
 }
 
@@ -463,6 +618,7 @@ function assertReceipts(document, trustContext, completedAt, evidenceSha256, now
   const receiptIds = new Set();
   const signatureReferences = new Set();
   const receiptSha256ByRole = {};
+  let latestReceiptSignedAt = completedAt;
   for (const [key, role] of Object.entries(productionCutoverReceiptRoles)) {
     const receipt = document.receipts[key];
     verifyExternalGateReceipt({
@@ -474,6 +630,10 @@ function assertReceipts(document, trustContext, completedAt, evidenceSha256, now
     invariant(canonicalJson(receipt.payload) === canonicalJson(expectedPayload), "PRODUCTION_CUTOVER_RECEIPT_PAYLOAD_MISMATCH");
     const signedAt = timestamp(receipt.signedAt, "PRODUCTION_CUTOVER_RECEIPT_SIGNED_AT_INVALID");
     invariant(signedAt >= completedAt, "PRODUCTION_CUTOVER_RECEIPT_PREDATES_COMPLETION");
+    invariant(
+      signedAt <= completedAt + productionCutoverMaximumReceiptSigningDelayMs,
+      "PRODUCTION_CUTOVER_RECEIPT_SIGNING_WINDOW_EXCEEDED",
+    );
     invariant(
       signedAt <= nowEpochMs + productionCutoverMaximumFutureSkewMs,
       "PRODUCTION_CUTOVER_RECEIPT_SIGNED_AT_IN_FUTURE",
@@ -487,8 +647,12 @@ function assertReceipts(document, trustContext, completedAt, evidenceSha256, now
     receiptIds.add(receipt.receiptId);
     signatureReferences.add(receipt.signatureReference);
     receiptSha256ByRole[key] = sha256(canonicalJson(receipt));
+    latestReceiptSignedAt = Math.max(latestReceiptSignedAt, signedAt);
   }
-  return Object.freeze(receiptSha256ByRole);
+  return Object.freeze({
+    latestReceiptSignedAt,
+    receiptSha256ByRole: Object.freeze(receiptSha256ByRole),
+  });
 }
 
 /**
@@ -529,6 +693,11 @@ export function verifyProductionCutoverReceiptBundle({
   invariant(completedAt >= startedAt, "PRODUCTION_CUTOVER_TIME_ORDER_INVALID");
   assertLaunchReadinessFreshness(startedAt, completedAt, verifiedAt);
   assertTarget(document.target, expectedTarget);
+  const activationFlagOffRevision = assertRuntimeActivationSequence(
+    document,
+    startedAt,
+    completedAt,
+  );
   if (expectedTarget !== null) {
     invariant(
       document.deployment?.rollback?.deploymentId === expectedTarget.rollbackDeploymentId,
@@ -540,7 +709,7 @@ export function verifyProductionCutoverReceiptBundle({
     );
   }
   const evidenceSha256 = buildProductionCutoverEvidenceSha256(document);
-  const receiptSha256ByRole = assertReceipts(
+  const receiptVerification = assertReceipts(
     document,
     trustContext,
     completedAt,
@@ -548,11 +717,19 @@ export function verifyProductionCutoverReceiptBundle({
     verifiedAt,
   );
   return Object.freeze({
+    activationFlagOffRevision,
     candidateCommit: document.candidateCommit,
+    completedAt: document.completedAt,
     evidenceSha256,
+    latestReceiptSignedAt: new Date(
+      receiptVerification.latestReceiptSignedAt,
+    ).toISOString(),
+    launchReadinessValidUntil: new Date(
+      startedAt + productionCutoverMaximumReadinessAgeMs,
+    ).toISOString(),
     productionDeploymentHost: document.target.stagedDeploymentHost,
     productionDeploymentId: document.target.stagedDeploymentId,
-    receiptSha256ByRole,
+    receiptSha256ByRole: receiptVerification.receiptSha256ByRole,
     status: productionCutoverStatus,
   });
 }

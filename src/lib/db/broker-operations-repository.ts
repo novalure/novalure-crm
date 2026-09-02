@@ -6,6 +6,11 @@ import {
   withTenantTransaction,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
+import {
+  assertQaBatchForMutation,
+  assertQaBatchOwnsObject,
+  registerQaBatchObjectsWithOwnershipGuard,
+} from "@/lib/db/qa-batch-registration-repository";
 import { canPersist, writeAuditLog } from "@/lib/db/runtime-repositories";
 import {
   canManageContent,
@@ -66,12 +71,17 @@ import {
   searchProfileTransitions,
   viewingTransitions,
 } from "@/lib/broker-flow/state-machines";
+import {
+  QaBatchRuntimeError,
+  type QaBatchRegistrationStatus,
+} from "@/lib/qa-batch-runtime";
 
 type JsonObject = Record<string, unknown>;
 
 export type BrokerMutationResult<T> = Readonly<{
   data: T;
   httpStatus: number;
+  qaBatchRegistration?: QaBatchRegistrationStatus;
   replayed: boolean;
 }>;
 
@@ -276,6 +286,11 @@ async function withIdempotentMutation<T>(input: {
   idempotencyKey: string;
   operationType: string;
   payload: unknown;
+  qaBatch?: Readonly<{
+    batchId: string;
+    existingEntityId: string | null;
+    objectType: "buyer_search_profiles";
+  }>;
   session: AppSession;
   write: (transaction: TenantTransaction) => Promise<{ data: T; entityId?: string | null; httpStatus?: number }>;
 }): Promise<BrokerMutationResult<T>> {
@@ -285,6 +300,23 @@ async function withIdempotentMutation<T>(input: {
     actorId: input.session.userId,
     workspaceId: input.session.workspaceId,
   }, async (transaction) => {
+    if (input.qaBatch) {
+      await assertQaBatchForMutation(transaction, {
+        batchId: input.qaBatch.batchId,
+        workspaceId: input.session.workspaceId,
+      });
+      if (input.qaBatch.existingEntityId) {
+        await assertQaBatchOwnsObject(transaction, {
+          batchId: input.qaBatch.batchId,
+          object: {
+            id: input.qaBatch.existingEntityId,
+            type: input.qaBatch.objectType,
+          },
+          workspaceId: input.session.workspaceId,
+        });
+      }
+    }
+
     const claimed = await transaction.queryOne<{ id: string }>(
       `
         insert into broker_operation_requests (
@@ -323,9 +355,38 @@ async function withIdempotentMutation<T>(input: {
       if (existing.responseStatus === null || existing.responsePayload === null) {
         throw new BrokerDomainError("operation_in_progress", "An identical operation is still in progress.", 409);
       }
+      let qaBatchRegistration: QaBatchRegistrationStatus | undefined;
+      if (input.qaBatch) {
+        if (!existing.entityId) {
+          throw new QaBatchRuntimeError(
+            "QA_BATCH_IDEMPOTENCY_ENTITY_MISSING",
+            "The idempotent CRM result has no registerable QA entity",
+            409,
+          );
+        }
+        if (
+          input.qaBatch.existingEntityId
+          && existing.entityId !== input.qaBatch.existingEntityId
+        ) {
+          throw new QaBatchRuntimeError(
+            "QA_BATCH_IDEMPOTENCY_ENTITY_MISMATCH",
+            "The idempotent CRM result does not match the requested QA entity",
+            409,
+          );
+        }
+        const object = { id: existing.entityId, type: input.qaBatch.objectType } as const;
+        qaBatchRegistration = await registerQaBatchObjectsWithOwnershipGuard(transaction, {
+          actorId: input.session.userId,
+          batchId: input.qaBatch.batchId,
+          objects: [object],
+          preExistingObjects: [object],
+          workspaceId: input.session.workspaceId,
+        });
+      }
       return {
         data: existing.responsePayload as T,
         httpStatus: existing.responseStatus,
+        qaBatchRegistration,
         replayed: true,
       };
     }
@@ -333,6 +394,34 @@ async function withIdempotentMutation<T>(input: {
     const written = await input.write(transaction);
     const payload = toJsonValue(written.data);
     const httpStatus = written.httpStatus ?? 200;
+    let qaBatchRegistration: QaBatchRegistrationStatus | undefined;
+    if (input.qaBatch) {
+      if (!written.entityId) {
+        throw new QaBatchRuntimeError(
+          "QA_BATCH_MUTATION_ENTITY_MISSING",
+          "The CRM mutation produced no registerable QA entity",
+          500,
+        );
+      }
+      if (
+        input.qaBatch.existingEntityId
+        && written.entityId !== input.qaBatch.existingEntityId
+      ) {
+        throw new QaBatchRuntimeError(
+          "QA_BATCH_MUTATION_ENTITY_MISMATCH",
+          "The CRM mutation result does not match the requested QA entity",
+          409,
+        );
+      }
+      const object = { id: written.entityId, type: input.qaBatch.objectType } as const;
+      qaBatchRegistration = await registerQaBatchObjectsWithOwnershipGuard(transaction, {
+        actorId: input.session.userId,
+        batchId: input.qaBatch.batchId,
+        objects: [object],
+        preExistingObjects: input.qaBatch.existingEntityId ? [object] : [],
+        workspaceId: input.session.workspaceId,
+      });
+    }
     await transaction.execute(
       `
         update broker_operation_requests
@@ -350,7 +439,7 @@ async function withIdempotentMutation<T>(input: {
         JSON.stringify(payload),
       ],
     );
-    return { data: payload as T, httpStatus, replayed: false };
+    return { data: payload as T, httpStatus, qaBatchRegistration, replayed: false };
   });
 }
 
@@ -664,6 +753,7 @@ export async function listBrokerSearchProfiles(input: {
 export async function saveBrokerSearchProfile(input: {
   idempotencyKey: string;
   payload: JsonObject;
+  qaBatchId?: string;
   session: AppSession;
 }) {
   const profileId = optionalUuid(input.payload.id, "id");
@@ -672,6 +762,11 @@ export async function saveBrokerSearchProfile(input: {
     idempotencyKey: input.idempotencyKey,
     operationType: profileId ? "broker.search_profile.update" : "broker.search_profile.create",
     payload: input.payload,
+    qaBatch: input.qaBatchId ? {
+      batchId: input.qaBatchId,
+      existingEntityId: profileId,
+      objectType: "buyer_search_profiles",
+    } : undefined,
     session: input.session,
     write: async (transaction) => {
       const existing = profileId

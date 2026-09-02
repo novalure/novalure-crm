@@ -4,6 +4,7 @@ import {
   verify as verifySignature,
 } from "node:crypto";
 import {
+  intentionalUnvalidatedRecoveryConstraints,
   recoveryBaselineMigrationPlan,
   recoveryDatabaseQueryPack,
   recoveryEvidenceTableNames,
@@ -16,47 +17,16 @@ import {
   recoveryTableQuerySpecs,
   recoveryTransformationTableNames,
 } from "./database-recovery-query-pack.mjs";
+import {
+  recoveryMigrationPlan,
+  recoveryMigrationPlanContract,
+} from "./recovery-migration-plan.mjs";
 
 export { recoveryEvidenceTableNames } from "./database-recovery-query-pack.mjs";
 
-export const excludedRecoveryMigrations = Object.freeze([
-  "061_validate_and_activate_tenant_rls_pilot",
-  "062_private_media_contract_cutover",
-  "065_notification_guard_search_path_hardening",
-]);
-
-export const recoveryEvidenceMigrationVersions = Object.freeze([
-  "057_bot_webhook_legacy_index_cutover",
-  "060_tenant_rls_pilot_prepare",
-  "068_qa_batch_reset_safety",
-  "069_property_unit_idempotency",
-  "070_funnel_submission_idempotency_recovery",
-  "071_forms_owner_tenant_guard",
-  "072_form_submission_atomicity",
-  "073_launch_tenant_relation_guards",
-  "074_validate_launch_tenant_relation_guards",
-  "075_public_funnel_visit_truth",
-  "076_bot_webhook_durable_processing",
-  "077_schema_ledger_runtime_projection",
-  "078_company_profile_approval_integrity",
-  "079_public_funnel_visit_role_boundary",
-]);
-
-export const intentionalUnvalidatedPilotConstraints = Object.freeze([
-  "audit_logs_workspace_actor_fk",
-  "contacts_workspace_archived_by_fk",
-  "contacts_workspace_organization_fk",
-  "contacts_workspace_owner_fk",
-  "contacts_workspace_project_fk",
-  "deals_workspace_contact_fk",
-  "deals_workspace_lead_fk",
-  "deals_workspace_organization_fk",
-  "deals_workspace_owner_fk",
-  "deals_workspace_project_fk",
-  "leads_workspace_assignee_fk",
-  "leads_workspace_contact_fk",
-  "leads_workspace_project_fk",
-]);
+export const excludedRecoveryMigrations = Object.freeze([]);
+export const recoveryEvidenceMigrationVersions = recoveryMigrationPlan;
+export const intentionalUnvalidatedPilotConstraints = intentionalUnvalidatedRecoveryConstraints;
 
 const maximumInventoryEntries = 20_000;
 const sha256Pattern = /^[a-f0-9]{64}$/u;
@@ -256,7 +226,7 @@ function normalizeGrantInventory(value, code) {
     );
     requireSafeText(entry.objectType, `${code}_OBJECT_TYPE_INVALID`, {
       maximumLength: 16,
-      pattern: /^(?:column|function|sequence|table|view)$/u,
+      pattern: /^(?:column|function|schema|sequence|table|view)$/u,
     });
     requireSafeText(entry.objectName, `${code}_OBJECT_NAME_INVALID`);
     requireSafeText(entry.grantee, `${code}_GRANTEE_INVALID`, {
@@ -517,9 +487,8 @@ function assertNoGrantOptionsOrColumnGrants(snapshot, objectName, code) {
   const roles = new Set(["PUBLIC", "novalure_app", "novalure_tenant_app"]);
   invariant(
     !snapshot.grantInventory.some(
-      (entry) => roles.has(entry.grantee)
-        && (entry.objectName === objectName || entry.objectName.startsWith(`${objectName}.`))
-        && (entry.grantable || entry.objectType === "column"),
+      (entry) => (entry.objectName === objectName || entry.objectName.startsWith(`${objectName}.`))
+        && (entry.grantable || (roles.has(entry.grantee) && entry.objectType === "column")),
     ),
     code,
   );
@@ -529,17 +498,59 @@ function assertMigratedCatalogAndGrants(snapshot, assertions) {
   const catalog = assertions.catalog;
   invariant(catalog.legacyWebhookIndexPresent === false, "RECOVERY_LEGACY_INDEX_ASSERTION_INVALID");
   invariant(catalog.providerWebhookIndexPresent === true, "RECOVERY_PROVIDER_INDEX_ASSERTION_INVALID");
+  invariant(
+    catalog.criticalReleaseObjectAclBoundaryExact === true,
+    "RECOVERY_CRITICAL_OBJECT_ACL_BOUNDARY_INVALID",
+  );
   invariant(catalog.companyApprovalConstraintPresent === true, "RECOVERY_APPROVAL_CONSTRAINT_MISSING");
   invariant(catalog.companyApprovalConstraintValidated === true, "RECOVERY_APPROVAL_CONSTRAINT_NOT_VALIDATED");
+  invariant(catalog.mediaDeletionConstraintPresent === true, "RECOVERY_MEDIA_DELETION_CONSTRAINT_MISSING");
+  invariant(catalog.mediaDeletionConstraintValidated === true, "RECOVERY_MEDIA_DELETION_CONSTRAINT_NOT_VALIDATED");
   invariant(catalog.migrationChecksumProjectionPresent === true, "RECOVERY_LEDGER_PROJECTION_MISSING");
   invariant(catalog.publicFunnelVisitEventsPresent === true, "RECOVERY_FUNNEL_VISIT_TABLE_MISSING");
-  invariant(catalog.pilotRlsEnabled === false, "RECOVERY_EXCLUDED_RLS_CUTOVER_ACTIVE");
+  invariant(catalog.pilotRlsEnabled === true, "RECOVERY_FINAL_RLS_CUTOVER_NOT_ACTIVE");
+  invariant(catalog.tenantRoleSafe === true, "RECOVERY_TENANT_ROLE_UNSAFE");
+  invariant(catalog.tenantRoleAttested === true, "RECOVERY_TENANT_ROLE_ATTESTATION_MISSING");
+  invariant(
+    catalog.tenantDirectLoginMemberPresent === true,
+    "RECOVERY_TENANT_DIRECT_LOGIN_MEMBER_MISSING",
+  );
+  invariant(catalog.tenantMembershipSafe === true, "RECOVERY_TENANT_MEMBERSHIP_UNSAFE");
+  invariant(
+    catalog.tenantDatabaseOwnerBoundaryExact === true,
+    "RECOVERY_TENANT_DATABASE_OWNER_BOUNDARY_INVALID",
+  );
+  invariant(
+    catalog.pilotApplicationTableAclBoundaryExact === true,
+    "RECOVERY_PILOT_APPLICATION_TABLE_ACL_BOUNDARY_INVALID",
+  );
+  invariant(
+    catalog.pilotTenantTablePrivilegesExact === true,
+    "RECOVERY_PILOT_TENANT_TABLE_PRIVILEGES_INVALID",
+  );
+  invariant(
+    catalog.pilotApplicationColumnAclBoundaryExact === true,
+    "RECOVERY_PILOT_APPLICATION_COLUMN_ACL_BOUNDARY_INVALID",
+  );
+  invariant(
+    catalog.pilotApplicationOwnerBoundaryExact === true,
+    "RECOVERY_PILOT_APPLICATION_OWNER_BOUNDARY_INVALID",
+  );
+  invariant(catalog.pilotOwnersSafe === true, "RECOVERY_PILOT_OWNER_BOUNDARY_UNSAFE");
+  invariant(catalog.tenantSchemaUsage === true, "RECOVERY_TENANT_SCHEMA_USAGE_MISSING");
+  invariant(
+    catalog.tenantSchemaAclBoundaryExact === true,
+    "RECOVERY_TENANT_SCHEMA_ACL_BOUNDARY_INVALID",
+  );
+  invariant(catalog.pilotPoliciesExact === true, "RECOVERY_PILOT_POLICY_CONTRACT_INVALID");
+  invariant(catalog.auditAppendOnlyGuardExact === true, "RECOVERY_AUDIT_GUARD_CONTRACT_INVALID");
+  invariant(catalog.auditAppendOnlyFunctionExact === true, "RECOVERY_AUDIT_FUNCTION_CONTRACT_INVALID");
   invariant(
     catalog.unexpectedUnvalidatedConstraintCount === 0,
     "RECOVERY_UNEXPECTED_UNVALIDATED_CONSTRAINTS",
   );
   assertSame(
-    [...catalog.intentionalUnvalidatedConstraints].sort(),
+    catalog.intentionalUnvalidatedConstraints,
     intentionalUnvalidatedPilotConstraints,
     "RECOVERY_INTENTIONAL_UNVALIDATED_CONSTRAINT_SET_MISMATCH",
   );
@@ -550,8 +561,15 @@ function assertMigratedCatalogAndGrants(snapshot, assertions) {
   );
   for (const required of [
     "public.bot_channel_webhooks_account_event_uidx",
+    "public.broker_operation_requests",
     "public.company_profiles_approval_integrity_check",
+    "public.media_assets_deletion_state_check",
+    "public.crm_bulk_runtime_batch_items",
+    "public.crm_content_documents",
+    "public.crm_saved_views",
+    "public.novalure_require_media_deletion_actor",
     "public.novalure_schema_migration_checksums",
+    "public.property_export_job_events",
     "public.public_funnel_visit_events",
   ]) {
     invariant(catalogHas(snapshot, required), "RECOVERY_REQUIRED_CATALOG_OBJECT_MISSING");
@@ -606,8 +624,77 @@ function assertMigratedCatalogAndGrants(snapshot, assertions) {
   );
 }
 
-function normalizeAssertions(value) {
-  assertExactKeys(value, ["catalog", "companyProfileApproval"], "RECOVERY_ASSERTIONS");
+function normalizeIntentionalConstraintTargets(value) {
+  invariant(
+    Array.isArray(value) && value.length <= 256,
+    "RECOVERY_PILOT_CONSTRAINTS_INVALID",
+  );
+  const targets = value.map((target) => {
+    assertExactKeys(
+      target,
+      ["constraintName", "tableName"],
+      "RECOVERY_PILOT_CONSTRAINT_TARGET",
+    );
+    requireSafeText(target.tableName, "RECOVERY_PILOT_CONSTRAINT_TABLE_INVALID", {
+      maximumLength: 128,
+      pattern: /^public\.[a-z_][a-z0-9_]{0,62}$/u,
+    });
+    requireSafeText(target.constraintName, "RECOVERY_PILOT_CONSTRAINT_NAME_INVALID", {
+      maximumLength: 128,
+      pattern: /^[a-z_][a-z0-9_]{0,127}$/u,
+    });
+    return {
+      constraintName: target.constraintName,
+      tableName: target.tableName,
+    };
+  }).sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right)));
+  invariant(
+    new Set(targets.map((target) => `${target.tableName}:${target.constraintName}`)).size
+      === targets.length,
+    "RECOVERY_PILOT_CONSTRAINT_TARGET_DUPLICATE",
+  );
+  return targets;
+}
+
+function normalizeTargetMigrationOrder(value) {
+  assertExactKeys(
+    value,
+    ["appliedVersions", "rlsCutoverLast", "strictlyIncreasing", "targetCount"],
+    "RECOVERY_TARGET_MIGRATION_ORDER",
+  );
+  invariant(
+    Array.isArray(value.appliedVersions)
+      && value.appliedVersions.every((version) => migrationVersionPattern.test(version)),
+    "RECOVERY_TARGET_MIGRATION_ORDER_VERSIONS_INVALID",
+  );
+  assertSame(
+    value.appliedVersions,
+    recoveryMigrationPlan,
+    "RECOVERY_TARGET_MIGRATION_ORDER_SEQUENCE_INVALID",
+  );
+  invariant(
+    value.targetCount === recoveryMigrationPlan.length,
+    "RECOVERY_TARGET_MIGRATION_ORDER_COUNT_INVALID",
+  );
+  invariant(
+    value.strictlyIncreasing === true,
+    "RECOVERY_TARGET_MIGRATION_APPLIED_AT_NOT_STRICT",
+  );
+  invariant(value.rlsCutoverLast === true, "RECOVERY_TARGET_MIGRATION_RLS_NOT_LAST");
+  return {
+    appliedVersions: [...value.appliedVersions],
+    rlsCutoverLast: value.rlsCutoverLast,
+    strictlyIncreasing: value.strictlyIncreasing,
+    targetCount: value.targetCount,
+  };
+}
+
+function normalizeAssertions(value, expectedCandidateCommit) {
+  assertExactKeys(
+    value,
+    ["catalog", "companyProfileApproval", "targetMigrationOrder"],
+    "RECOVERY_ASSERTIONS",
+  );
   assertExactKeys(
     value.companyProfileApproval,
     [
@@ -627,34 +714,86 @@ function normalizeAssertions(value) {
     [
       "companyApprovalConstraintPresent",
       "companyApprovalConstraintValidated",
+      "criticalReleaseObjectAclBoundaryExact",
+      "auditAppendOnlyFunctionExact",
+      "auditAppendOnlyGuardExact",
       "intentionalUnvalidatedConstraints",
       "legacyWebhookIndexPresent",
+      "mediaDeletionConstraintPresent",
+      "mediaDeletionConstraintValidated",
       "migrationChecksumProjectionPresent",
+      "pilotApplicationColumnAclBoundaryExact",
+      "pilotApplicationOwnerBoundaryExact",
+      "pilotApplicationTableAclBoundaryExact",
+      "pilotTenantTablePrivilegesExact",
+      "pilotOwnersSafe",
+      "pilotPoliciesExact",
       "pilotRlsEnabled",
       "providerWebhookIndexPresent",
       "publicFunnelVisitEventsPresent",
+      "tenantDirectLoginMemberPresent",
+      "tenantDatabaseOwnerBoundaryExact",
+      "tenantMembershipSafe",
+      "tenantRoleAttestation",
+      "tenantRoleAttested",
+      "tenantRoleSafe",
+      "tenantSchemaAclBoundaryExact",
+      "tenantSchemaUsage",
       "unexpectedUnvalidatedConstraintCount",
     ],
     "RECOVERY_CATALOG_ASSERTIONS",
   );
-  invariant(Array.isArray(value.catalog.intentionalUnvalidatedConstraints), "RECOVERY_PILOT_CONSTRAINTS_INVALID");
+  const intentionalUnvalidatedConstraints = normalizeIntentionalConstraintTargets(
+    value.catalog.intentionalUnvalidatedConstraints,
+  );
   invariant(
     Number.isSafeInteger(value.catalog.unexpectedUnvalidatedConstraintCount)
       && value.catalog.unexpectedUnvalidatedConstraintCount >= 0,
     "RECOVERY_UNEXPECTED_CONSTRAINT_COUNT_INVALID",
   );
+  invariant(
+    value.catalog.tenantRoleAttestation
+      === `novalure-tenant-cutover:${expectedCandidateCommit}`,
+    "RECOVERY_TENANT_ROLE_ATTESTATION_CANDIDATE_MISMATCH",
+  );
   for (const key of [
+    "auditAppendOnlyFunctionExact",
+    "auditAppendOnlyGuardExact",
     "companyApprovalConstraintPresent",
     "companyApprovalConstraintValidated",
+    "criticalReleaseObjectAclBoundaryExact",
     "legacyWebhookIndexPresent",
+    "mediaDeletionConstraintPresent",
+    "mediaDeletionConstraintValidated",
     "migrationChecksumProjectionPresent",
+    "pilotApplicationColumnAclBoundaryExact",
+    "pilotApplicationOwnerBoundaryExact",
+    "pilotApplicationTableAclBoundaryExact",
+    "pilotTenantTablePrivilegesExact",
+    "pilotOwnersSafe",
+    "pilotPoliciesExact",
     "pilotRlsEnabled",
     "providerWebhookIndexPresent",
     "publicFunnelVisitEventsPresent",
+    "tenantDirectLoginMemberPresent",
+    "tenantDatabaseOwnerBoundaryExact",
+    "tenantMembershipSafe",
+    "tenantRoleAttested",
+    "tenantRoleSafe",
+    "tenantSchemaAclBoundaryExact",
+    "tenantSchemaUsage",
   ]) {
     invariant(typeof value.catalog[key] === "boolean", "RECOVERY_CATALOG_ASSERTION_BOOLEAN_REQUIRED");
   }
-  return canonicalize(value);
+  const targetMigrationOrder = normalizeTargetMigrationOrder(value.targetMigrationOrder);
+  return canonicalize({
+    ...value,
+    catalog: {
+      ...value.catalog,
+      intentionalUnvalidatedConstraints,
+    },
+    targetMigrationOrder,
+  });
 }
 
 function normalizeSchemaDiff(value, branches) {
@@ -736,7 +875,10 @@ function normalizeTimings(value) {
 }
 
 function normalizeMigrationPlan(value) {
-  invariant(Array.isArray(value) && value.length === 14, "RECOVERY_MIGRATION_PLAN_LENGTH_INVALID");
+  invariant(
+    Array.isArray(value) && value.length === recoveryEvidenceMigrationVersions.length,
+    "RECOVERY_MIGRATION_PLAN_LENGTH_INVALID",
+  );
   const plan = value.map((migration) => {
     assertExactKeys(migration, ["checksum", "version"], "RECOVERY_MIGRATION_PLAN_ENTRY");
     invariant(migrationVersionPattern.test(migration.version), "RECOVERY_MIGRATION_PLAN_VERSION_INVALID");
@@ -1351,7 +1493,7 @@ export function buildDatabaseRecoveryLiveEvidence({
   );
 
   const plan = normalizeMigrationPlan(migrationPlan);
-  const assertions = normalizeAssertions(input.assertions);
+  const assertions = normalizeAssertions(input.assertions, input.candidateCommit);
   const timings = normalizeTimings(input.timings);
   const schemaDiff = normalizeSchemaDiff(input.schemaDiff, input.branches);
   invariant(
@@ -1542,6 +1684,7 @@ export function buildDatabaseRecoveryLiveEvidence({
     generatedAt: generated,
     migrationTransformations,
     migrationPlan: plan,
+    migrationPlanContract: recoveryMigrationPlanContract,
     passEligible,
     productionAliasOrEnvironmentChanged: false,
     productionMutationPerformed: false,
@@ -1586,6 +1729,7 @@ export function verifyDatabaseRecoveryLiveEvidence({
       "generatedAt",
       "migrationTransformations",
       "migrationPlan",
+      "migrationPlanContract",
       "passEligible",
       "productionAliasOrEnvironmentChanged",
       "productionMutationPerformed",
@@ -1603,6 +1747,10 @@ export function verifyDatabaseRecoveryLiveEvidence({
     "RECOVERY_LIVE_EVIDENCE",
   );
   invariant(evidence.candidateCommit === expectedCandidateCommit, "RECOVERY_LIVE_EVIDENCE_CANDIDATE_MISMATCH");
+  invariant(
+    evidence.migrationPlanContract === recoveryMigrationPlanContract,
+    "RECOVERY_LIVE_EVIDENCE_PLAN_CONTRACT_INVALID",
+  );
   invariant(evidence.schemaVersion === 2, "RECOVERY_LIVE_EVIDENCE_SCHEMA_UNSUPPORTED");
   invariant(evidence.status === "PASS" || evidence.status === "BLOCKED", "RECOVERY_LIVE_EVIDENCE_STATUS_INVALID");
   invariant(typeof evidence.passEligible === "boolean", "RECOVERY_LIVE_EVIDENCE_PASS_ELIGIBILITY_INVALID");

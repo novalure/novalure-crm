@@ -2,22 +2,57 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { linkSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
+  applyMigration,
   applyCommittedMigrationPlan,
   assertMigrationCommitted,
   createMigrationPlanToken,
   createMigrationPlan,
   readMigrationDatabaseUrlFromStdin,
   resolveMigrationLedgerState,
+  validateProductionMigrationSequence,
+  validateMigrationTargetPolicy,
   validateMigrationPlan,
 } from "./db-migrate.mjs";
+import {
+  buildExternalGateReceiptSigningPayload,
+  canonicalJson,
+  externalGateTrustAnchorRecordType,
+  sha256,
+} from "./lib/external-gate-receipts.mjs";
+import {
+  assertProductionMigrationPromotionPinnedTrustAnchor,
+  buildProductionMigrationPromotionEvidenceSha256,
+  buildProductionMigrationPromotionReceiptPayload,
+  loadCanonicalProductionMigrationPromotionEvidence,
+  productionMigrationPromotionEvidenceRecordType,
+  productionMigrationPromotionMigrations,
+  productionMigrationPromotionPinnedTrustAnchor,
+  productionMigrationPromotionPlanContract,
+  productionMigrationPromotionPreviewTarget,
+  productionMigrationPromotionProductionTarget,
+  productionMigrationPromotionReceiptRecordType,
+  productionMigrationPromotionRoles,
+  productionMigrationPromotionSchemaVersion,
+  productionMigrationPromotionStatus,
+  verifyProductionMigrationPromotionEvidence,
+} from "./lib/production-migration-promotion-evidence.mjs";
+import {
+  recoveryMigrationPlan,
+  recoveryMigrationPlanContract,
+} from "./lib/recovery-migration-plan.mjs";
+import {
+  tenantCutoverMigrationVersion,
+  tenantCutoverRoleProvisioningSql,
+} from "./lib/tenant-cutover-role-provisioning.mjs";
 
 const runner = await readFile(new URL("./db-migrate.mjs", import.meta.url), "utf8");
 const workflow = await readFile(
@@ -82,13 +117,614 @@ function migration(version, checksum, overrides = {}) {
   };
 }
 
-function ledgerRow(version, checksum) {
+function ledgerRow(version, checksum, appliedAt = null) {
   return {
+    ...(appliedAt === null ? {} : { appliedAt }),
     checksum,
     number: Number(version.slice(0, 3)),
     version,
   };
 }
+
+function orderedProductionLedgerRows(versions) {
+  return versions.map((version, index) => ledgerRow(
+    version,
+    `sha-${version}`,
+    `2026-09-02T12:00:${String(index).padStart(2, "0")}.000000Z`,
+  ));
+}
+
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+
+function promotionMigrationInventory(candidateCommit) {
+  return productionMigrationPromotionMigrations.map(({ path, version }) => {
+    const source = execFileSync("git", ["show", `${candidateCommit}:${path}`], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    });
+    return {
+      checksum: sha256(source.replace(/\r\n/gu, "\n")),
+      path,
+      version,
+    };
+  });
+}
+
+function promotionSigner(role, index) {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  return {
+    privateKey,
+    trustKey: {
+      algorithm: "Ed25519",
+      keyId: `key_production_promotion_${index}_20260902`,
+      publicKeyPem: publicKey.export({ format: "pem", type: "spki" }).toString(),
+      role,
+      signerSubject: `subject:novalure-production-promotion-${index}`,
+      status: "ACTIVE",
+    },
+  };
+}
+
+function signPromotionReceipt({
+  anchor,
+  index,
+  payload,
+  signedAt,
+  signer,
+  trustAnchorSha256,
+}) {
+  const payloadSha256 = sha256(canonicalJson(payload));
+  const receipt = {
+    detachedSignature: "",
+    keyId: signer.trustKey.keyId,
+    payload,
+    payloadSha256,
+    receiptId: `grc_${String(index).repeat(32)}`,
+    recordType: productionMigrationPromotionReceiptRecordType,
+    role: signer.trustKey.role,
+    schemaVersion: 1,
+    signatureAlgorithm: "Ed25519",
+    signatureReference: [
+      "urn:novalure:gate-receipt:v1",
+      anchor.trustAnchorId,
+      signer.trustKey.keyId,
+      signer.trustKey.role,
+      productionMigrationPromotionReceiptRecordType,
+      payloadSha256,
+    ].join(":"),
+    signedAt,
+    signerSubject: signer.trustKey.signerSubject,
+    trustAnchorId: anchor.trustAnchorId,
+    trustAnchorSha256,
+  };
+  receipt.detachedSignature = sign(
+    null,
+    Buffer.from(buildExternalGateReceiptSigningPayload(receipt), "utf8"),
+    signer.privateKey,
+  ).toString("base64");
+  return receipt;
+}
+
+function createPromotionEvidenceFixture({
+  previewEvidenceSeed = "preview",
+  signers: suppliedSigners = null,
+} = {}) {
+  const candidateCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  }).trim();
+  const nowEpochMs = Math.floor(Date.now() / 1_000) * 1_000;
+  const generatedAt = new Date(nowEpochMs - 60_000).toISOString();
+  const signedAt = new Date(nowEpochMs - 59_000).toISOString();
+  const migrationInventory = promotionMigrationInventory(candidateCommit);
+  const migrationInventorySha256 = sha256(canonicalJson(migrationInventory));
+  const signers = suppliedSigners ?? Object.values(productionMigrationPromotionRoles)
+    .map((role, index) => promotionSigner(role, index + 1));
+  const anchor = {
+    keys: signers.map(({ trustKey }) => trustKey),
+    recordType: externalGateTrustAnchorRecordType,
+    schemaVersion: 1,
+    trustAnchorId: "ta_production_promotion_20260902",
+  };
+  const trustAnchorSha256 = sha256(canonicalJson(anchor));
+  const document = {
+    candidateCommit,
+    generatedAt,
+    migrationInventory,
+    migrationPlanContract: productionMigrationPromotionPlanContract,
+    preview: {
+      ...productionMigrationPromotionPreviewTarget,
+      deploymentHost: "novalure-promotion-evidence.vercel.app",
+      deploymentId: "dpl_promotionevidenceabcdefghij",
+      evidenceSha256: sha256(previewEvidenceSeed),
+      migrationInventorySha256,
+      productionMutationPerformed: false,
+      status: "VERIFIED_PASS",
+    },
+    productionTarget: { ...productionMigrationPromotionProductionTarget },
+    receipts: {},
+    recordType: productionMigrationPromotionEvidenceRecordType,
+    recovery: {
+      databaseName: "neondb",
+      evidenceSha256: sha256("recovery"),
+      migrationInventorySha256,
+      neonBranchId: "br-production-promotion-recovery",
+      neonProjectId: productionMigrationPromotionProductionTarget.neonProjectId,
+      productionMutationPerformed: false,
+      status: "VERIFIED_PASS",
+    },
+    schemaVersion: productionMigrationPromotionSchemaVersion,
+    status: productionMigrationPromotionStatus,
+  };
+  const evidenceSha256 = buildProductionMigrationPromotionEvidenceSha256(document);
+  const payload = buildProductionMigrationPromotionReceiptPayload(
+    document,
+    evidenceSha256,
+    migrationInventorySha256,
+  );
+  document.receipts = Object.fromEntries(
+    Object.keys(productionMigrationPromotionRoles).map((name, index) => [
+      name,
+      signPromotionReceipt({
+        anchor,
+        index: index + 1,
+        payload,
+        signedAt,
+        signer: signers[index],
+        trustAnchorSha256,
+      }),
+    ]),
+  );
+  const trustContext = { anchor, expectedSha256: trustAnchorSha256 };
+  const expectedMigration = migrationInventory[0];
+  const verification = verifyProductionMigrationPromotionEvidence({
+    document,
+    expectedCandidateCommit: candidateCommit,
+    expectedMigration,
+    expectedProductionTarget: productionMigrationPromotionProductionTarget,
+    nowEpochMs,
+    repositoryRoot,
+    trustContext,
+  });
+  return {
+    candidateCommit,
+    document,
+    expectedMigration,
+    nowEpochMs,
+    signers,
+    trustContext,
+    verification,
+  };
+}
+
+function selectedPromotionMigration(expectedMigration) {
+  return migration(expectedMigration.version, expectedMigration.checksum, {
+    file: expectedMigration.path.slice("migrations/".length),
+    manualCutover: true,
+    path: expectedMigration.path,
+  });
+}
+
+function verifyPromotionDocument(fixture, document) {
+  return verifyProductionMigrationPromotionEvidence({
+    document,
+    expectedCandidateCommit: fixture.candidateCommit,
+    expectedMigration: fixture.expectedMigration,
+    expectedProductionTarget: productionMigrationPromotionProductionTarget,
+    nowEpochMs: fixture.nowEpochMs,
+    repositoryRoot,
+    trustContext: fixture.trustContext,
+  });
+}
+
+test("Production migration promotion requires a process-branded cryptographic verification", () => {
+  const fixture = createPromotionEvidenceFixture();
+  const promotedMigration = selectedPromotionMigration(fixture.expectedMigration);
+
+  assert.doesNotThrow(() => validateMigrationTargetPolicy({
+    migrations: [promotedMigration],
+    only: promotedMigration.version,
+    productionPromotionVerification: fixture.verification,
+    targetName: "prod",
+  }));
+  assert.throws(
+    () => validateMigrationTargetPolicy({
+      migrations: [promotedMigration],
+      only: promotedMigration.version,
+      targetName: "prod",
+    }),
+    /without cryptographically verified Preview\/Recovery evidence/,
+  );
+  assert.throws(
+    () => validateMigrationTargetPolicy({
+      migrations: [promotedMigration],
+      only: promotedMigration.version,
+      productionPromotionVerification: { ...fixture.verification },
+      targetName: "prod",
+    }),
+    /PRODUCTION_PROMOTION_CRYPTOGRAPHIC_VERIFICATION_REQUIRED/,
+  );
+  assert.doesNotThrow(() => validateMigrationTargetPolicy({
+    migrations: [promotedMigration],
+    only: promotedMigration.version,
+    targetName: "test",
+  }));
+  assert.doesNotThrow(() => validateMigrationTargetPolicy({
+    migrations: [promotedMigration],
+    only: promotedMigration.version,
+    targetName: "recovery",
+  }));
+  assert.throws(
+    () => validateMigrationTargetPolicy({
+      migrations: [promotedMigration],
+      only: promotedMigration.version,
+      productionPromotionVerification: fixture.verification,
+      targetName: "test",
+    }),
+    /valid only for MIGRATION_TARGET=prod/,
+  );
+  assert.match(runner, /--allow-production-promotion is not an authorization/);
+
+  for (const inventoryItem of fixture.document.migrationInventory) {
+    const protectedMigration = selectedPromotionMigration(inventoryItem);
+    assert.throws(
+      () => validateMigrationTargetPolicy({
+        migrations: [protectedMigration],
+        only: protectedMigration.version,
+        targetName: "prod",
+      }),
+      /without cryptographically verified Preview\/Recovery evidence/,
+    );
+    assert.doesNotThrow(() => validateMigrationTargetPolicy({
+      migrations: [protectedMigration],
+      only: protectedMigration.version,
+      productionPromotionVerification: fixture.verification,
+      targetName: "prod",
+    }));
+  }
+});
+
+test("Production promotion binds the complete recovery plan and stays blocked on the code pin", () => {
+  assert.deepEqual(
+    productionMigrationPromotionMigrations.map(({ version }) => version),
+    recoveryMigrationPlan,
+  );
+  assert.equal(productionMigrationPromotionMigrations.length, 22);
+  assert.equal(productionMigrationPromotionPlanContract, recoveryMigrationPlanContract);
+  assert.equal(
+    productionMigrationPromotionMigrations.at(-1)?.version,
+    "061_validate_and_activate_tenant_rls_pilot",
+  );
+  assert.deepEqual(productionMigrationPromotionPinnedTrustAnchor, {
+    sha256: null,
+    status: "PENDING_SECURITY_OWNER_KEY",
+  });
+  assert.throws(
+    () => assertProductionMigrationPromotionPinnedTrustAnchor("a".repeat(64)),
+    /PRODUCTION_PROMOTION_PINNED_TRUST_ANCHOR_PENDING/,
+  );
+  const trustLoader = runner.indexOf("const trustContext = await loadExternalGateTrustContext({");
+  const pinnedGuard = runner.lastIndexOf(
+    "assertProductionMigrationPromotionPinnedTrustAnchor(",
+    trustLoader,
+  );
+  assert.ok(pinnedGuard >= 0 && pinnedGuard < trustLoader);
+});
+
+test("Production migration sequence is an exact prefix and 061 requires all 21 predecessors", () => {
+  const allPredecessors = recoveryMigrationPlan.slice(0, -1);
+  assert.doesNotThrow(() => validateProductionMigrationSequence({
+    appliedVersions: new Set(allPredecessors),
+    ledgerRows: orderedProductionLedgerRows(allPredecessors),
+    selectedVersion: "061_validate_and_activate_tenant_rls_pilot",
+  }));
+  assert.throws(
+    () => validateProductionMigrationSequence({
+      appliedVersions: new Set(recoveryMigrationPlan.slice(0, 2)),
+      ledgerRows: orderedProductionLedgerRows(recoveryMigrationPlan.slice(0, 2)),
+      selectedVersion: "061_validate_and_activate_tenant_rls_pilot",
+    }),
+    /predecessor sequence is incomplete/,
+  );
+  assert.throws(
+    () => validateProductionMigrationSequence({
+      appliedVersions: new Set(["060_tenant_rls_pilot_prepare"]),
+    }),
+    /060_tenant_rls_pilot_prepare is checksummed after missing predecessor 057_bot_webhook_legacy_index_cutover/,
+  );
+
+  const completeLedger = orderedProductionLedgerRows(recoveryMigrationPlan);
+  assert.doesNotThrow(() => validateProductionMigrationSequence({
+    appliedVersions: new Set(recoveryMigrationPlan),
+    ledgerRows: completeLedger,
+  }));
+
+  const outOfOrderLedger = structuredClone(completeLedger);
+  const penultimateAppliedAt = outOfOrderLedger.at(-2).appliedAt;
+  outOfOrderLedger.at(-2).appliedAt = outOfOrderLedger.at(-1).appliedAt;
+  outOfOrderLedger.at(-1).appliedAt = penultimateAppliedAt;
+  assert.throws(
+    () => validateProductionMigrationSequence({
+      appliedVersions: new Set(recoveryMigrationPlan),
+      ledgerRows: outOfOrderLedger,
+    }),
+    /061_validate_and_activate_tenant_rls_pilot applied_at must be strictly later than 084_media_deletion_lifecycle/,
+  );
+
+  const tiedLedger = structuredClone(completeLedger);
+  tiedLedger.at(-1).appliedAt = tiedLedger.at(-2).appliedAt;
+  assert.throws(
+    () => validateProductionMigrationSequence({
+      appliedVersions: new Set(recoveryMigrationPlan),
+      ledgerRows: tiedLedger,
+    }),
+    /061_validate_and_activate_tenant_rls_pilot applied_at must be strictly later than 084_media_deletion_lifecycle/,
+  );
+
+  assert.match(
+    runner,
+    /to_char\(\s*applied_at at time zone 'UTC',\s*'YYYY-MM-DD"T"HH24:MI:SS\.US"Z"'\s*\) as "appliedAt"/,
+  );
+
+  const productionMigrations = recoveryMigrationPlan.map((version) => migration(
+    version,
+    `sha-${version}`,
+  ));
+  assert.deepEqual(createMigrationPlan({
+    ledgerRows: [],
+    migrations: productionMigrations,
+    only: "",
+    targetName: "prod",
+  }), []);
+
+  const prefixVersions = recoveryMigrationPlan.slice(0, 2);
+  const dependencyMigration = migration(
+    "048_bot_webhook_integrity",
+    "sha-048_bot_webhook_integrity",
+  );
+  const prefixMigrations = [
+    dependencyMigration,
+    ...prefixVersions.map((version) => migration(version, `sha-${version}`)),
+  ];
+  const prefixLedger = [
+    ledgerRow(
+      dependencyMigration.version,
+      dependencyMigration.checksum,
+      "2026-09-02T11:59:59.999999Z",
+    ),
+    ...orderedProductionLedgerRows(prefixVersions),
+  ];
+  assert.deepEqual(createMigrationPlan({
+    ledgerRows: prefixLedger,
+    migrations: prefixMigrations,
+    only: "",
+    targetName: "prod",
+  }), []);
+  const tiedPrefixLedger = structuredClone(prefixLedger);
+  tiedPrefixLedger.at(-1).appliedAt = tiedPrefixLedger.at(-2).appliedAt;
+  assert.throws(
+    () => createMigrationPlan({
+      ledgerRows: tiedPrefixLedger,
+      migrations: prefixMigrations,
+      only: "",
+      targetName: "prod",
+    }),
+    /060_tenant_rls_pilot_prepare applied_at must be strictly later than 057_bot_webhook_legacy_index_cutover/,
+  );
+});
+
+test("Production 061 binds its role transition to the candidate in the migration transaction", async () => {
+  const candidateCommit = "a".repeat(40);
+  const queries = [];
+  const client = {
+    async query(query, values) {
+      queries.push({
+        text: typeof query === "string" ? query : query.text,
+        values: values ?? null,
+      });
+      return { rows: [] };
+    },
+  };
+  const cutover = {
+    checksum: "b".repeat(64),
+    content: "select 'migration-061-body'",
+    name: "validate_and_activate_tenant_rls_pilot",
+    path: `migrations/${tenantCutoverMigrationVersion}.sql`,
+    version: tenantCutoverMigrationVersion,
+  };
+
+  await applyMigration(client, cutover, { headCommit: candidateCommit, targetName: "prod" });
+
+  assert.equal(queries[0].text, "begin");
+  assert.equal(queries[1].text, "set local search_path = public");
+  assert.match(queries[2].text, new RegExp(`comment on role novalure_tenant_app is 'novalure-tenant-cutover:${candidateCommit}'`, "u"));
+  assert.match(queries[2].text, /membership\.inherit_option/u);
+  assert.match(queries[2].text, /not membership\.set_option/u);
+  assert.match(queries[2].text, /not membership\.admin_option/u);
+  assert.match(
+    queries[2].text,
+    /membership\.roleid = app_role_oid[\s\S]*membership\.member = tenant_role_oid/u,
+  );
+  assert.match(
+    queries[2].text,
+    /membership\.member = app_role_oid[\s\S]*membership\.roleid <> tenant_role_oid/u,
+  );
+  assert.match(
+    queries[2].text,
+    /pg_database database_row[\s\S]*database_row\.datdba in \(app_role_oid, tenant_role_oid\)/u,
+  );
+  assert.doesNotMatch(queries[2].text, /pg_has_role/u);
+  assert.equal(queries[3].text, cutover.content);
+  assert.match(queries[4].text, /insert into public\.novalure_schema_migrations/u);
+  assert.deepEqual(queries[4].values, [cutover.version, cutover.name, cutover.checksum]);
+  assert.equal(queries[5].text, "commit");
+  assert.equal(queries.some(({ text }) => text === "rollback"), false);
+  const advisoryLock = runner.indexOf("select pg_try_advisory_lock($1)");
+  const productionApply = runner.indexOf("apply: (migration) => applyMigration(client, migration, {");
+  assert.ok(advisoryLock >= 0 && advisoryLock < productionApply);
+  assert.match(
+    runner.slice(productionApply, productionApply + 240),
+    /headCommit,[\s\S]*targetName: target\.name/u,
+  );
+  assert.throws(
+    () => tenantCutoverRoleProvisioningSql("not-a-commit"),
+    /exact candidate commit/u,
+  );
+});
+
+test("Production 061 rolls role provisioning back when migration SQL fails", async () => {
+  const candidateCommit = "c".repeat(40);
+  const queries = [];
+  const client = {
+    async query(query) {
+      const text = typeof query === "string" ? query : query.text;
+      queries.push(text);
+      if (text === "select 'migration-061-failure'") throw new Error("expected migration failure");
+      return { rows: [] };
+    },
+  };
+  const cutover = {
+    checksum: "d".repeat(64),
+    content: "select 'migration-061-failure'",
+    name: "validate_and_activate_tenant_rls_pilot",
+    path: `migrations/${tenantCutoverMigrationVersion}.sql`,
+    version: tenantCutoverMigrationVersion,
+  };
+
+  await assert.rejects(
+    applyMigration(client, cutover, { headCommit: candidateCommit, targetName: "prod" }),
+    /expected migration failure/u,
+  );
+  assert.match(queries[2], new RegExp(`novalure-tenant-cutover:${candidateCommit}`, "u"));
+  assert.equal(queries.at(-1), "rollback");
+  assert.equal(queries.includes("commit"), false);
+});
+
+test("Production promotion evidence fails closed on candidate, checksum, target, payload, or signature tampering", () => {
+  const fixture = createPromotionEvidenceFixture();
+  const cases = [
+    {
+      code: /PRODUCTION_PROMOTION_PLAN_CONTRACT_INVALID/,
+      mutate(document) { document.migrationPlanContract = "WRONG_PLAN"; },
+    },
+    {
+      code: /PRODUCTION_PROMOTION_CANDIDATE_MISMATCH/,
+      mutate(document) { document.candidateCommit = "f".repeat(40); },
+    },
+    {
+      code: /PRODUCTION_PROMOTION_MIGRATION_INVENTORY_MISMATCH/,
+      mutate(document) { document.migrationInventory[0].checksum = "f".repeat(64); },
+    },
+    {
+      code: /PRODUCTION_PROMOTION_PREVIEW_NEONPROJECTID_MISMATCH/,
+      mutate(document) { document.preview.neonProjectId = "wrong-preview-project"; },
+    },
+    {
+      code: /PRODUCTION_PROMOTION_RECOVERY_BRANCH_INVALID/,
+      mutate(document) {
+        document.recovery.neonBranchId = productionMigrationPromotionProductionTarget.neonBranchId;
+      },
+    },
+    {
+      code: /PRODUCTION_PROMOTION_RECEIPT_PAYLOAD_MISMATCH/,
+      mutate(document) { document.preview.evidenceSha256 = sha256("swapped-preview-evidence"); },
+    },
+    {
+      code: /EXTERNAL_GATE_RECEIPT_SIGNATURE_VERIFICATION_FAILED/,
+      mutate(document) {
+        const signature = document.receipts.preview.detachedSignature;
+        document.receipts.preview.detachedSignature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+      },
+    },
+  ];
+
+  for (const { code, mutate } of cases) {
+    const document = structuredClone(fixture.document);
+    mutate(document);
+    assert.throws(() => verifyPromotionDocument(fixture, document), code);
+  }
+});
+
+test("Production promotion digest is part of the migration plan token", () => {
+  const first = createPromotionEvidenceFixture({ previewEvidenceSeed: "preview-one" });
+  const second = createPromotionEvidenceFixture({
+    previewEvidenceSeed: "preview-two",
+    signers: first.signers,
+  });
+  const connectedTarget = {
+    branchId: productionMigrationPromotionProductionTarget.neonBranchId,
+    databaseName: productionMigrationPromotionProductionTarget.databaseName,
+    projectId: productionMigrationPromotionProductionTarget.neonProjectId,
+    roleName: "neondb_owner",
+    serverVersionNum: 170004,
+    target: "prod",
+  };
+  const base = {
+    connectedTarget,
+    headCommit: first.candidateCommit,
+    ledgerRows: [],
+    plan: [selectedPromotionMigration(first.expectedMigration)],
+  };
+  const firstToken = createMigrationPlanToken({
+    ...base,
+    productionPromotionVerification: first.verification,
+  });
+  const secondToken = createMigrationPlanToken({
+    ...base,
+    productionPromotionVerification: second.verification,
+  });
+
+  assert.match(firstToken, /^[a-f0-9]{64}$/);
+  assert.equal(first.verification.trustAnchorSha256, second.verification.trustAnchorSha256);
+  assert.equal(first.verification.migrationInventorySha256, second.verification.migrationInventorySha256);
+  assert.notEqual(first.verification.evidenceSha256, second.verification.evidenceSha256);
+  assert.notEqual(firstToken, secondToken, "swapping valid evidence must invalidate the dry-run token");
+  assert.throws(
+    () => createMigrationPlanToken({
+      ...base,
+      productionPromotionVerification: { ...first.verification },
+    }),
+    /PRODUCTION_PROMOTION_CRYPTOGRAPHIC_VERIFICATION_REQUIRED/,
+  );
+});
+
+test("Production promotion evidence loader accepts only canonical, single-link files outside the repository", async () => {
+  const fixture = createPromotionEvidenceFixture();
+  const tempDirectory = mkdtempSync(join(tmpdir(), "novalure-production-promotion-"));
+  const canonicalPath = join(tempDirectory, "promotion-evidence.json");
+  const secondLinkPath = join(tempDirectory, "promotion-evidence-hardlink.json");
+  const nonCanonicalPath = join(tempDirectory, "promotion-evidence-noncanonical.json");
+  try {
+    writeFileSync(canonicalPath, canonicalJson(fixture.document), "utf8");
+    assert.deepEqual(
+      await loadCanonicalProductionMigrationPromotionEvidence({
+        evidencePath: canonicalPath,
+        repositoryRoot,
+      }),
+      fixture.document,
+    );
+
+    linkSync(canonicalPath, secondLinkPath);
+    await assert.rejects(
+      () => loadCanonicalProductionMigrationPromotionEvidence({
+        evidencePath: canonicalPath,
+        repositoryRoot,
+      }),
+      /PRODUCTION_PROMOTION_EVIDENCE_NOT_BOUNDED_REGULAR_FILE/,
+    );
+
+    writeFileSync(nonCanonicalPath, JSON.stringify(fixture.document), "utf8");
+    await assert.rejects(
+      () => loadCanonicalProductionMigrationPromotionEvidence({
+        evidencePath: nonCanonicalPath,
+        repositoryRoot,
+      }),
+      /PRODUCTION_PROMOTION_EVIDENCE_NOT_CANONICAL/,
+    );
+  } finally {
+    rmSync(tempDirectory, { force: true, recursive: true });
+  }
+});
 
 test("matching numeric 051/052/053 aliases count their canonical files as applied", () => {
   const migrations = [
@@ -468,6 +1104,75 @@ test("060, 061 and DB-01 migration 068 remain manual even when alias handling is
   );
 });
 
+test("062 requires both private-media expand and append-only preparation", () => {
+  const migrations = [
+    migration("051_private_media_access", "sha-051"),
+    migration("060_tenant_rls_pilot_prepare", "sha-060", { manualCutover: true }),
+    migration("062_private_media_contract_cutover", "sha-062", { manualCutover: true }),
+  ];
+
+  assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [ledgerRow("051_private_media_access", "sha-051")],
+      migrations,
+      only: "062_private_media_contract_cutover",
+    }),
+    /required predecessor 060_tenant_rls_pilot_prepare is not checksummed in the ledger/,
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [ledgerRow("060_tenant_rls_pilot_prepare", "sha-060")],
+      migrations,
+      only: "062_private_media_contract_cutover",
+    }),
+    /required predecessor 051_private_media_access is not checksummed in the ledger/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [
+        ledgerRow("051_private_media_access", "sha-051"),
+        ledgerRow("060_tenant_rls_pilot_prepare", "sha-060"),
+      ],
+      migrations,
+      only: "062_private_media_contract_cutover",
+    }),
+    [migrations[2]],
+  );
+});
+
+test("062 opens and restores only its exact audit maintenance boundary inside the runner transaction", () => {
+  const ownerGuard = mediaContract.indexOf("audit_owner_name is distinct from current_user");
+  const triggerGuard = mediaContract.indexOf("trigger_row.tgenabled = 'O'");
+  const noForce = mediaContract.indexOf("alter table public.audit_logs no force row level security");
+  const disableGuard = mediaContract.indexOf("alter table public.audit_logs disable trigger audit_logs_append_only_guard");
+  const auditScrub = mediaContract.indexOf("update public.audit_logs");
+  const enableGuard = mediaContract.indexOf("alter table public.audit_logs enable trigger audit_logs_append_only_guard");
+  const restoreForce = mediaContract.indexOf("alter table public.audit_logs force row level security");
+  const restorationCheck = mediaContract.indexOf("failed to restore audit_logs protection state");
+
+  assert.ok(ownerGuard >= 0 && ownerGuard < triggerGuard);
+  assert.ok(triggerGuard < noForce && noForce < disableGuard);
+  assert.ok(disableGuard < auditScrub && auditScrub < enableGuard);
+  assert.ok(enableGuard < restoreForce && restoreForce < restorationCheck);
+  assert.equal((mediaContract.match(/update public\.audit_logs/giu) ?? []).length, 1);
+  assert.equal((mediaContract.match(/trigger_row\.tgenabled = 'O'/giu) ?? []).length, 2);
+  assert.match(mediaContract, /where action = 'bot\.document_send\.attach_media_asset'/i);
+  assert.match(mediaContract, /trigger_row\.tgfoid = 'public\.reject_audit_logs_mutation\(\)'::regprocedure/i);
+  assert.doesNotMatch(mediaContract, /disable trigger all/i);
+  assert.doesNotMatch(mediaContract, /disable row level security/i);
+
+  const applyStart = runner.indexOf("async function applyMigration");
+  const applyEnd = runner.indexOf("async function main", applyStart);
+  const applySource = runner.slice(applyStart, applyEnd);
+  assert.match(applySource, /await client\.query\("begin"\)/);
+  assert.match(applySource, /await client\.query\(\{ query_timeout: migrationClientTimeoutMs, text: migration\.content \}\)/);
+  assert.match(applySource, /await client\.query\("commit"\)/);
+  assert.match(applySource, /catch \(error\)[\s\S]*await client\.query\("rollback"\)[\s\S]*throw error/);
+});
+
 test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {
   assert.doesNotMatch(webhookExpand, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
   assert.match(webhookCutover, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
@@ -738,15 +1443,11 @@ test("explicit automatic migrations require their checksummed predecessors", () 
 });
 
 test("automatic migration plans exclude every release cutover phase", () => {
-  assert.match(runner, /manualCutoverVersions = new Set\(\[/);
-  assert.match(runner, /"057_bot_webhook_legacy_index_cutover"/);
-  assert.match(runner, /"060_tenant_rls_pilot_prepare"/);
-  assert.match(runner, /"061_validate_and_activate_tenant_rls_pilot"/);
-  assert.match(runner, /"062_private_media_contract_cutover"/);
-  assert.match(runner, /"065_notification_guard_search_path_hardening"/);
-  assert.match(runner, /"068_qa_batch_reset_safety"/);
-  assert.match(runner, /"078_company_profile_approval_integrity"/);
-  assert.match(runner, /"079_public_funnel_visit_role_boundary"/);
+  assert.match(runner, /manualCutoverVersions = new Set\(recoveryManualCutoverMigrations\)/);
+  assert.match(
+    runner,
+    /\["062_private_media_contract_cutover", \[[\s\S]*"051_private_media_access"[\s\S]*"060_tenant_rls_pilot_prepare"/,
+  );
   assert.match(
     runner,
     /\["068_qa_batch_reset_safety", "060_tenant_rls_pilot_prepare"\]/,
@@ -767,17 +1468,17 @@ test("automatic migration plans exclude every release cutover phase", () => {
     runner,
     /\["079_public_funnel_visit_role_boundary", "075_public_funnel_visit_truth"\]/,
   );
-  assert.match(runner, /if \(migration\.manualCutover\) return false/);
+  assert.match(runner, /targetName === "prod"[\s\S]*productionPromotionRequiredMigrationVersions\.has\(migration\.version\)/);
 });
 
 test("a manual cutover requires a single explicit version and opt-in flag", () => {
   assert.match(runner, /--allow-manual-cutover requires one explicit --only=<version>/);
-  assert.match(runner, /migration\.manualCutover && !allowManualCutover/);
+  assert.match(runner, /\(migration\.manualCutover \|\| productionPlanCutover\) && !allowManualCutover/);
   assert.match(runner, /Refusing manual cutover migration/);
   assert.match(runner, /never included automatically/);
   assert.match(
     runner,
-    /const nextPlan = plannedMigrations\(\{\s*allowManualCutover,\s*ledgerRows: nextLedger\.rows,\s*migrations,\s*only,\s*\}\)/,
+    /const nextPlan = plannedMigrations\(\{\s*allowManualCutover,\s*ledgerRows: nextLedger\.rows,\s*migrations,\s*only,\s*targetName: target\.name,\s*\}\)/,
     "post-apply verification must retain the explicit --only boundary instead of expanding to the automatic plan",
   );
 });

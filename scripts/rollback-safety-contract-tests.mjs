@@ -6,6 +6,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { splitPostgresStatements } from "./lib/postgres-statement-splitter.mjs";
+import { recoveryMigrationPlan } from "./lib/recovery-migration-plan.mjs";
+import {
+  productionMigrationPromotionMigrations,
+  productionMigrationPromotionPinnedTrustAnchor,
+} from "./lib/production-migration-promotion-evidence.mjs";
 import { createMigrationPlan, validateMigrationTargetPolicy } from "./db-migrate.mjs";
 
 const cases = [
@@ -137,14 +142,21 @@ test("migration inventory binds exactly 080-084 to the implementation commit", a
   assert.equal(sidecar, `${expectedInventoryDigest}  justimmo-inspired-migration-checksums.json`);
 });
 
-test("080-084 require one explicit manual Preview/Recovery cutover and refuse prod", async () => {
+test("the full 22-step chain rejects self-asserted Production promotion", async () => {
   const runner = await read("scripts/db-migrate.mjs");
   const rehearsal = await read("scripts/recovery-migration-rehearsal.mjs");
   for (const version of cases.map((item) => item.version).concat("081_broker_operations")) {
     assert.match(runner, new RegExp(`"${version}"`));
-    assert.match(rehearsal, new RegExp(`"${version}"`));
+    assert.ok(recoveryMigrationPlan.includes(version), `${version} must remain in the Recovery plan`);
   }
-  assert.match(runner, /\.\.\.isolatedPreviewOnlyMigrationVersions/);
+  assert.match(rehearsal, /recoveryMigrationPlan/);
+  assert.deepEqual(
+    productionMigrationPromotionMigrations.map(({ version }) => version),
+    recoveryMigrationPlan,
+  );
+  assert.equal(productionMigrationPromotionMigrations.length, 22);
+  assert.equal(productionMigrationPromotionPinnedTrustAnchor.status, "PENDING_SECURITY_OWNER_KEY");
+  assert.match(runner, /productionPromotionRequiredMigrationVersions\.has\(migration\.version\)/);
   const migration = {
     checksum: "a".repeat(64),
     file: "080_property_export_runtime.sql",
@@ -158,11 +170,39 @@ test("080-084 require one explicit manual Preview/Recovery cutover and refuse pr
   assert.deepEqual(createMigrationPlan({ ledgerRows: [], migrations: [migration], only: "" }), []);
   assert.throws(
     () => validateMigrationTargetPolicy({ migrations: [migration], only: migration.version, targetName: "prod" }),
-    /Refusing Preview-only migration 080_property_export_runtime on prod/,
+    /without cryptographically verified Preview\/Recovery evidence/,
+  );
+  assert.throws(
+    () => validateMigrationTargetPolicy({
+      migrations: [migration],
+      only: migration.version,
+      productionPromotionVerification: {
+        candidateCommit: "a".repeat(40),
+        documentSha256: "b".repeat(64),
+      },
+      targetName: "prod",
+    }),
+    /PRODUCTION_PROMOTION_CRYPTOGRAPHIC_VERIFICATION_REQUIRED/,
+  );
+  assert.throws(
+    () => validateMigrationTargetPolicy({
+      migrations: [migration],
+      only: migration.version,
+      productionPromotionVerification: {},
+      targetName: "test",
+    }),
+    /valid only for MIGRATION_TARGET=prod/,
   );
   assert.doesNotThrow(
     () => validateMigrationTargetPolicy({ migrations: [migration], only: migration.version, targetName: "test" }),
   );
+  assert.match(
+    runner,
+    /--allow-production-promotion is not an authorization/,
+  );
+  assert.match(runner, /--production-promotion-evidence=/);
+  assert.match(runner, /--production-promotion-trust-anchor=/);
+  assert.match(runner, /--production-promotion-trust-anchor-sha256=/);
 });
 
 test("081 rollback is atomic, doubly armed, RLS-independent and ledger-consistent", async () => {

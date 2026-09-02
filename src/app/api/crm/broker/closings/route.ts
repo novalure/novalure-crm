@@ -67,7 +67,7 @@ async function mutate(request: Request) {
   try {
     const auth = await authorizeBrokerWrite(request);
     if (!auth.ok) return auth.response;
-    const mutation = await readBrokerMutation(request);
+    const mutation = await readBrokerMutation(request, auth.session);
     const result = await saveBrokerClosing({
       idempotencyKey: mutation.idempotencyKey,
       payload: mutation.body.closing && typeof mutation.body.closing === "object"

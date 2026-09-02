@@ -1,6 +1,6 @@
 # Production-Launch-Aktivierungsvertrag
 
-Stand: 24.08.2026
+Stand: 02.09.2026
 
 Status: **technisch fail-closed implementiert, aber nicht aktiviert; kein Receipt und kein Trust Anchor werden im Repository behauptet**
 
@@ -22,7 +22,7 @@ Das detached Ed25519-Receipt der externen Rolle `launch-activation-attestor` tr�
 - `activationGeneration` (aktuell code-gepinnte Mindestgeneration `2`), `activationNotBefore`, `activationExpiresAt`;
 - das exakt im Code gepinnte Flags-Environment `production` und einen `flagsRevisionFloor`.
 
-Die Aktivierungs-Lease ist höchstens 30 Minuten lang. Offline-Verifier und Runtime verlangen `activationNotBefore <= now < activationExpiresAt`; abgelaufene und zukünftige Aktivierungen werden nicht als `VERIFIED` ausgegeben. Das Launch-Receipt darf höchstens 15 Minuten vor `activationNotBefore` signiert sein. Der vollständige Production-Cutover-Lauf von `startedAt` bis `completedAt` sowie seine drei Receipts müssen bei Aktivierung innerhalb des 30-Minuten-Readiness-Fensters liegen und dürfen maximal 60 Sekunden zukunftsdatiert sein. Zeitstempel sind ausschließlich reale, kanonische UTC-Werte mit Millisekunden.
+Die Aktivierungs-Lease ist höchstens 30 Minuten lang. Offline-Verifier und Runtime verlangen `activationNotBefore <= now < activationExpiresAt`; abgelaufene und zukünftige Aktivierungen werden nicht als `VERIFIED` ausgegeben. Das Launch-Receipt darf höchstens 15 Minuten vor `activationNotBefore` signiert sein, jedoch niemals vor der spätesten der drei Cutover-Signaturen. Auch `activationNotBefore` muss auf oder nach dieser spätesten Signatur liegen. Die gesamte Lease muss spätestens an `launchReadinessValidUntil` enden. Der vollständige Production-Cutover-Lauf von `startedAt` bis `completedAt` sowie seine drei Receipts müssen bei Aktivierung innerhalb des 30-Minuten-Readiness-Fensters liegen und dürfen maximal 60 Sekunden zukunftsdatiert sein. Cutover-Receipts sind zusätzlich auf höchstens fünf Minuten nach `completedAt` begrenzt. Zeitstempel sind ausschließlich reale, kanonische UTC-Werte mit Millisekunden.
 
 Ein alter GO-Umschlag ist damit an dasselbe Deployment, dieselbe Signaturgeneration und ein kurzes Zeitfenster gebunden. Es gibt in Vercel Flags keinen unabhängigen, persistenten Monotonic-Revocation-Store. `OFF` ist deshalb innerhalb der noch gültigen Lease ein reversibler Control-Plane-Toggle und kein dauerhafter Tombstone: Ein Flags-Schreibberechtigter könnte denselben noch gültigen Umschlag erneut setzen. Dauerhafter Widerruf verlangt `OFF`, das Sperren aller alten immutable Deployment-Hosts und einen neuen Candidate mit angehobener code-gepinnter Mindestgeneration. Ohne diesen Incident-Schritt bleibt das als explizite P2-Betriebsgrenze offen und darf nicht als sofortige permanente Revocation bezeichnet werden.
 
@@ -45,7 +45,7 @@ Der Root-Pin steht derzeit bewusst auf `PENDING_SECURITY_OWNER_KEY` und enthält
 
 Der einzige Flag-Key ist `novalure-production-launch-activation`; sein Code-Default ist exakt `OFF`. Projekt und Environment sind unabhängig im Code auf `prj_R32Okl6AHijTohvuKmryuTLjWMsk` und `production` gepinnt.
 
-`src/instrumentation.ts` startet den Kanal nur in der Node-Production-Runtime. Alle zehn Sekunden entsteht ein neuer `@vercel/flags-core`-Client. Er verwendet weder `flags/next`, Request-Header/Cookies, Streaming, Polling noch einen wiederverwendeten SDK-Cache. Genau ein `no-store`-Read von `/v1/datafile` wird nach zwei Sekunden abgebrochen; ausschließlich die Metrics-Kombination `source=remote`, `cacheStatus=MISS`, `mode=offline`, `connectionState=disconnected` ist zulässig. Eingebettete, gecachte, gestreamte, gepollte oder stale Daten dürfen die Aktivierung nicht erneuern. Der neue Client wird nach der reinen Evaluation sofort verworfen.
+`src/instrumentation.ts` startet den Kanal nur in der Node-Production-Runtime. Alle zehn Sekunden entsteht ein neuer `@vercel/flags-core`-Client. Er verwendet weder `flags/next`, Request-Header/Cookies, Streaming, Polling noch einen wiederverwendeten SDK-Cache. Genau ein `no-store`-Read von `/v1/datafile` wird nach zwei Sekunden abgebrochen; ausschließlich die Metrics-Kombination `source=remote`, `cacheStatus=MISS`, `mode=offline`, `connectionState=disconnected` ist zulässig. Eingebettete, gecachte, gestreamte, gepollte oder stale Daten dürfen die Aktivierung nicht erneuern. Der neue Client wird nach der reinen Evaluation sofort verworfen. Die vor der Promotion extern belegte `OFF`-Beobachtung liefert dabei den exakt gebundenen `flagsRevisionFloor`; der aktivierende Flag-Read muss eine strikt höhere Revision tragen.
 
 Ein erfolgreicher Snapshot lebt höchstens 30 Sekunden und muss sowohl nach monotoner Prozesszeit als auch nach Epoch-Zeit frisch sein; mehr als eine Sekunde Zukunftsdrift wird abgelehnt. Ein fehlgeschlagener Folge-Read veröffentlicht sofort `INVALID`; selbst ein hängender Read endet vor Ablauf des vorherigen Snapshots. Der Vercel-Read beweist eine frische HTTP-Beobachtung, nicht eine mathematisch linearisierbare Control-Plane. Revision, `configUpdatedAt`, Projekt-/Environment-Pins und die kurze Lease bilden deshalb gemeinsam den akzeptierten Fail-closed-Vertrag.
 
@@ -118,13 +118,19 @@ Der replay-fähige GO-Wert wird niemals nach stdout geschrieben. `--flags-output
 
 ## Kontrollierte Reihenfolge
 
-1. denselben Candidate mit `vercel --prod --skip-domain` staged bauen;
-2. Backup/PITR, Restore, Migrationen, Blob, Smokes, Monitoring und Rollback gegen genau dieses Deployment abschließen;
-3. Cutover-Bundle, Trust Bundle und Launch-Receipt durch die getrennten Rollen signieren;
-4. die höchstens 30-minütige Lease unmittelbar vor Promotion verifizieren und die Capability-Datei exklusiv erzeugen;
-5. Flag weiterhin auf `OFF` bestätigen, dann Alias/Promotion gemäß Cutover-Vertrag durchführen;
-6. Capability-Wert ohne Logging in das exakt gepinnte Production-Flag übernehmen und Activation-Smoke ausführen;
-7. bei jeder Abweichung zuerst Flag `OFF`, dann Rollback, alte Deployment-Erreichbarkeit sperren und Beobachtungsfenster fortführen.
+Diese Reihenfolge ist identisch mit dem Production-Cutover-Runbook und darf nicht zyklisch umgestellt werden:
+
+1. `PHASE_1_STAGE_PRECHECKS`: Candidate mit `vercel --prod --skip-domain` stagen; Backup/PITR, Restore, Migrationen, Blob, Monitoring, Rollback und Pre-Promotion-Smoke gegen exakt dieses Deployment bestehen.
+2. `PHASE_2_FLAGS_OFF`: denselben Production-Flag per frischem Remote-No-Store-Read als `OFF` beobachten und Revision plus Evidence binden.
+3. `PHASE_3_PROMOTE`: erst jetzt den exakten staged Candidate auf den Production-Alias promoten.
+4. `PHASE_4_SAFE_CLOSED_SMOKE`: über den Production-Alias Deployment-Identität und `PASS_SAFE_CLOSED` belegen.
+5. `PHASE_5_SIGN_CUTOVER`: Cutover-Evidence abschließen und innerhalb von fünf Minuten nacheinander durch DBA, Platform Operations und Release Observer signieren. Keine dieser Signaturen ist vor Promotion und Safe-Closed-Smoke gültig.
+6. `PHASE_6_ACTIVATION_LEASE`: erst nach der spätesten Cutover-Signatur das Launch-Receipt signieren, die vollständig innerhalb der Cutover-Readiness liegende Lease verifizieren und die Capability-Datei exklusiv erzeugen.
+7. `PHASE_7_FLAGS_ON`: Capability-Wert ohne Logging in das exakt gepinnte Production-Flag übernehmen; der neue Remote-Read muss `revision > flagsRevisionFloor` zeigen.
+8. `PHASE_8_ACTIVATION_SMOKE`: unmittelbar am Production-Alias Deployment-ID, aktive Launch-Bindung und alle freigegebenen `LAUNCH-ON`-/`INTERNAL-ONLY`-Smokes prüfen; danach das Beobachtungsfenster starten.
+9. Bei jeder Abweichung zuerst Flag `OFF`, dann Rollback, alte Deployment-Erreichbarkeit sperren und Incident-/Beobachtungsnachweis fortführen.
+
+`PRE_ACTIVATION_READY` endet bewusst bei Phase 5. Phase 8 ist ein realer Post-Aktivierungsnachweis und kann daher weder im Cutover-Receipt vorweggenommen noch durch eine vorab erzeugte Signatur ersetzt werden. Ohne bestandenen Activation-Smoke darf kein finales GO dokumentiert werden.
 
 ## Noch nicht erledigt
 

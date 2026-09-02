@@ -14,6 +14,7 @@ import {
   evaluateQaTenantRelationGate,
   fingerprint,
   parseQaTwoTenantConfig,
+  qaJustimmoPreviewReadSurfaces,
   qaLaunchSchemaArtifactNames,
   qaRequiredMigrationVersions,
   qaRuntimeDatabaseTargetDigest,
@@ -57,6 +58,35 @@ export function evaluateQaActiveSessionPreflight({
     expectedResetActorActiveSessionCount,
     ok: businessActorsClean && resetActorClean,
     resetActorClean,
+  });
+}
+
+export function evaluateRetainedBrokerRequestReconciliation({
+  beforeRun,
+  postMutation,
+  postReset,
+}) {
+  const digestPattern = /^[a-f0-9]{64}$/u;
+  const snapshotsValid = [beforeRun, postMutation, postReset].every(
+    (snapshot) => Number.isSafeInteger(snapshot?.count)
+      && snapshot.count >= 0
+      && digestPattern.test(String(snapshot?.sha256 ?? "")),
+  );
+  const unchangedByReset = snapshotsValid
+    && postMutation.count === postReset.count
+    && postMutation.sha256 === postReset.sha256;
+  return Object.freeze({
+    beforeRunCount: beforeRun?.count ?? null,
+    expectedMutationCount: 2,
+    ok: snapshotsValid
+      && beforeRun.count === 0
+      && postMutation.count === 2
+      && unchangedByReset,
+    postMutationCount: postMutation?.count ?? null,
+    postMutationSha256: postMutation?.sha256 ?? null,
+    postResetCount: postReset?.count ?? null,
+    postResetSha256: postReset?.sha256 ?? null,
+    unchangedByReset,
   });
 }
 
@@ -405,6 +435,127 @@ function responseStatusAllowed(response, expected) {
   return (Array.isArray(expected) ? expected : [expected]).includes(response.status);
 }
 
+export function qaJustimmoPreviewSurfacePath(surface, tenant) {
+  const url = new URL(surface.path, "https://qa-preview.invalid");
+  url.searchParams.set("workspaceId", tenant.workspaceId);
+  if (surface.id === "productivity.saved_views") {
+    url.searchParams.set("entityType", "contact");
+    url.searchParams.set("page", "1");
+    url.searchParams.set("pageSize", "10");
+  } else if (surface.id === "search.global") {
+    url.searchParams.set("q", "QA-READ-BOUNDARY");
+    url.searchParams.set("page", "1");
+    url.searchParams.set("pageSize", "10");
+  } else if (surface.guardedProbe === "match_profile") {
+    url.searchParams.set("profileId", tenant.batchId);
+    url.searchParams.set("projectId", tenant.projectId);
+    url.searchParams.set("limit", "1");
+  } else if (surface.guardedProbe === "property_export") {
+    url.searchParams.set("propertyId", tenant.batchId);
+    url.searchParams.set("limit", "1");
+  } else {
+    url.searchParams.set("limit", "10");
+  }
+  return `${url.pathname}${url.search}`;
+}
+
+function justimmoReadShapeValid(surface, actorName, result) {
+  if (result.response.status !== 200) return true;
+  if (surface.id === "broker.mandates") {
+    return Array.isArray(result.json?.mandates) && result.json?.source === "database";
+  }
+  if (surface.id === "broker.search_profiles") {
+    return Array.isArray(result.json?.profiles) && result.json?.persisted === true;
+  }
+  if (surface.id.startsWith("broker.")) {
+    if (!Array.isArray(result.json?.data) || result.json?.persisted !== true) return false;
+    if (surface.id === "broker.closings_commission") {
+      const expectedFinancials = actorName === "owner" || actorName === "admin";
+      return result.json?.financialsVisible === expectedFinancials;
+    }
+    return true;
+  }
+  if (surface.id === "content.documents" || surface.id === "content.templates") {
+    return Array.isArray(result.json?.items);
+  }
+  if (surface.id === "privacy.overview") {
+    return Array.isArray(result.json?.policies)
+      && Array.isArray(result.json?.reviews)
+      && Array.isArray(result.json?.legalHolds)
+      && Array.isArray(result.json?.dataSubjectRequests)
+      && result.json?.automaticHardDeleteEnabled === false;
+  }
+  if (surface.id === "productivity.saved_views") return Array.isArray(result.json?.views);
+  if (surface.id === "search.global") return Array.isArray(result.json?.items);
+  if (surface.id === "property.exports") {
+    return Array.isArray(result.json?.data?.jobs)
+      && result.json?.mode === "preview_qa_only"
+      && result.json?.persisted === true;
+  }
+  return false;
+}
+
+export async function verifyJustimmoPreviewReadMatrix(
+  config,
+  evidence,
+  clients,
+  previewCookies = new Map(),
+  fetchImplementation = globalThis.fetch,
+) {
+  const check = resultRecorder(evidence);
+  const publicClient = createPublicClient(config, evidence, previewCookies, fetchImplementation);
+  for (let index = 0; index < config.tenants.length; index += 1) {
+    const tenant = config.tenants[index];
+    const other = config.tenants[index === 0 ? 1 : 0];
+    for (const surface of qaJustimmoPreviewReadSurfaces) {
+      for (const actorName of Object.keys(tenant.actors)) {
+        const client = clients.get(`${tenant.key}:${actorName}`);
+        if (!client) throw new Error(`Missing authenticated ${tenant.key} ${actorName} client.`);
+        const sameTenant = await client.request(qaJustimmoPreviewSurfacePath(surface, tenant));
+        const expectedStatus = surface.statuses[actorName];
+        const shapeValid = justimmoReadShapeValid(surface, actorName, sameTenant);
+        const serialized = sameTenant.json == null ? "" : JSON.stringify(sameTenant.json) ?? "";
+        const foreignTenantIdAbsent = !serialized.includes(other.workspaceId);
+        const foreignTenantMarkerAbsent = !serialized.includes(other.batchMarker);
+        check(
+          `${tenant.key.toLowerCase()}.justimmo.${surface.id}.${actorName}.read`,
+          responseStatusAllowed(sameTenant.response, expectedStatus)
+            && shapeValid
+            && foreignTenantIdAbsent
+            && foreignTenantMarkerAbsent,
+          {
+            foreignTenantIdAbsent,
+            foreignTenantMarkerAbsent,
+            shapeValid,
+            status: sameTenant.response.status,
+          },
+          {
+            foreignTenantIdAbsent: true,
+            foreignTenantMarkerAbsent: true,
+            shapeValid: true,
+            status: expectedStatus,
+          },
+        );
+
+        const crossTenant = await client.request(qaJustimmoPreviewSurfacePath(surface, other));
+        check(
+          `${tenant.key.toLowerCase()}.justimmo.${surface.id}.${actorName}.cross_tenant`,
+          crossTenant.response.status === 403,
+          crossTenant.response.status,
+          403,
+        );
+      }
+      const anonymous = await publicClient.request(qaJustimmoPreviewSurfacePath(surface, tenant));
+      check(
+        `${tenant.key.toLowerCase()}.justimmo.${surface.id}.public.read`,
+        anonymous.response.status === 401,
+        anonymous.response.status,
+        401,
+      );
+    }
+  }
+}
+
 function markerFor(config, tenant, suffix) {
   const digest = createHash("sha256").update(`${config.runPrefix}\0${tenant.key}\0${suffix}`).digest("hex").slice(0, 12);
   return `${tenant.batchMarker}-${suffix}-${digest}`.slice(0, 180);
@@ -567,7 +718,8 @@ async function scopedRead(sql, tenant, actorId) {
     transaction`
       select
         (select count(*)::int from contacts where workspace_id = ${tenant.workspaceId}::uuid and starts_with(name, ${tenant.batchMarker})) as contacts,
-        (select count(*)::int from deals where workspace_id = ${tenant.workspaceId}::uuid and starts_with(name, ${tenant.batchMarker})) as deals
+        (select count(*)::int from deals where workspace_id = ${tenant.workspaceId}::uuid and starts_with(name, ${tenant.batchMarker})) as deals,
+        (select count(*)::int from buyer_search_profiles where workspace_id = ${tenant.workspaceId}::uuid and starts_with(title, ${tenant.batchMarker})) as "buyerSearchProfiles"
     `,
     transaction`
       select artifact, ok
@@ -925,6 +1077,7 @@ async function scopedRead(sql, tenant, actorId) {
     batchObjectCount: Number(results[9][0]?.count ?? 0),
     ledgerAccess: results[6][0] ?? null,
     markerCounts: {
+      buyerSearchProfiles: Number(results[10][0]?.buyerSearchProfiles ?? 0),
       contacts: Number(results[10][0]?.contacts ?? 0),
       deals: Number(results[10][0]?.deals ?? 0),
     },
@@ -937,6 +1090,38 @@ async function scopedRead(sql, tenant, actorId) {
     users: results[3],
     workspace: results[1][0] ?? null,
   };
+}
+
+async function retainedBrokerRequestSnapshot(sql, tenant) {
+  const rows = [];
+  for (const actor of Object.values(tenant.actors)) {
+    const results = await sql.transaction((transaction) => [
+      transaction`select set_config('app.tenant_id', ${tenant.workspaceId}, true), set_config('app.actor_id', ${actor.userId}, true)`,
+      transaction`
+        select
+          id::text as id,
+          actor_user_id::text as "actorUserId",
+          idempotency_key as "idempotencyKeyValue",
+          operation_type as "operationType",
+          request_hash as "requestHashValue",
+          coalesce(entity_type, '') as "entityType",
+          coalesce(entity_id::text, '') as "entityId",
+          response_status as "responseStatus",
+          coalesce(response_payload::text, '') as "responsePayloadValue"
+        from broker_operation_requests
+        where workspace_id = ${tenant.workspaceId}::uuid
+          and actor_user_id = ${actor.userId}::uuid
+          and starts_with(idempotency_key, ${`${tenant.batchMarker}:`})
+        order by id
+      `,
+    ], { readOnly: true });
+    rows.push(...results[1]);
+  }
+  rows.sort((left, right) => left.id.localeCompare(right.id));
+  return Object.freeze({
+    count: rows.length,
+    sha256: createHash("sha256").update(canonicalJson(rows)).digest("hex"),
+  });
 }
 
 async function remainingBatchRows(sql, tenant) {
@@ -959,6 +1144,9 @@ async function remainingBatchRows(sql, tenant) {
       select 'deals', count(*)::int
       from targets join deals on targets.resource_type = 'deals' and deals.id = targets.resource_id
       union all
+      select 'buyer_search_profiles', count(*)::int
+      from targets join buyer_search_profiles on targets.resource_type = 'buyer_search_profiles' and buyer_search_profiles.id = targets.resource_id
+      union all
       select 'deal_stage_history', count(*)::int
       from targets join deal_stage_history on targets.resource_type = 'deal_stage_history' and deal_stage_history.id = targets.resource_id
       union all
@@ -971,6 +1159,11 @@ async function remainingBatchRows(sql, tenant) {
       from deals
       where workspace_id = ${tenant.workspaceId}::uuid
         and starts_with(name, ${tenant.batchMarker})
+      union all
+      select 'marker_buyer_search_profiles', count(*)::int
+      from buyer_search_profiles
+      where workspace_id = ${tenant.workspaceId}::uuid
+        and starts_with(title, ${tenant.batchMarker})
       union all
       select 'marker_consent_records', count(*)::int
       from consent_records consent
@@ -1288,6 +1481,123 @@ async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evi
   check(`${tenant.key.toLowerCase()}.deal.owner.update`, dealUpdate.response.status === 200, dealUpdate.response.status, 200);
   owner.assertAtomicRegistration(dealUpdate, `${tenant.key} owner deal update`);
 
+  const profileTitle = markerFor(config, tenant, "search-profile-owner");
+  const profileCreatePayload = {
+    profile: {
+      budgetFromMinor: "25000000",
+      budgetToMinor: "75000000",
+      contactId: contacts.get("owner").id,
+      intentType: "purchase",
+      municipality: "Wien",
+      projectId: tenant.projectId,
+      status: "draft",
+      title: profileTitle,
+    },
+  };
+  const profileCreateKey = `${tenant.batchMarker}:owner:search-profile`;
+  const profileCreate = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}`,
+    {
+      batchMutation: true,
+      headers: { "Idempotency-Key": profileCreateKey },
+      json: profileCreatePayload,
+      method: "POST",
+    },
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.create`,
+    profileCreate.response.status === 201 && typeof profileCreate.json?.profile?.id === "string" && profileCreate.json?.replayed === false,
+    { replayed: profileCreate.json?.replayed ?? null, status: profileCreate.response.status },
+    { replayed: false, status: 201 },
+  );
+  owner.assertAtomicRegistration(profileCreate, `${tenant.key} owner search profile create`);
+
+  const profileReplay = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}`,
+    {
+      batchMutation: true,
+      headers: { "Idempotency-Key": profileCreateKey },
+      json: profileCreatePayload,
+      method: "POST",
+    },
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.idempotency`,
+    profileReplay.response.status === 201
+      && profileReplay.json?.replayed === true
+      && profileReplay.json?.profile?.id === profileCreate.json.profile.id,
+    { replayed: profileReplay.json?.replayed ?? null, sameId: profileReplay.json?.profile?.id === profileCreate.json.profile.id, status: profileReplay.response.status },
+    { replayed: true, sameId: true, status: 201 },
+  );
+  owner.assertAtomicRegistration(profileReplay, `${tenant.key} owner search profile replay`);
+
+  const updatedProfileTitle = markerFor(config, tenant, "search-profile-owner-updated");
+  const profileUpdate = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}`,
+    {
+      batchMutation: true,
+      headers: { "Idempotency-Key": `${profileCreateKey}:update` },
+      json: {
+        profile: {
+          expectedVersion: profileCreate.json.profile.version,
+          id: profileCreate.json.profile.id,
+          title: updatedProfileTitle,
+        },
+      },
+      method: "PATCH",
+    },
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.update`,
+    profileUpdate.response.status === 200
+      && profileUpdate.json?.profile?.title === updatedProfileTitle
+      && profileUpdate.json?.profile?.version === profileCreate.json.profile.version + 1,
+    { status: profileUpdate.response.status, title: profileUpdate.json?.profile?.title ?? null, version: profileUpdate.json?.profile?.version ?? null },
+    { status: 200, title: updatedProfileTitle, version: profileCreate.json.profile.version + 1 },
+  );
+  owner.assertAtomicRegistration(profileUpdate, `${tenant.key} owner search profile update`);
+
+  const staleProfileUpdate = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}`,
+    {
+      batchMutation: true,
+      headers: { "Idempotency-Key": `${profileCreateKey}:stale-update` },
+      json: {
+        profile: {
+          expectedVersion: profileCreate.json.profile.version,
+          id: profileCreate.json.profile.id,
+          title: markerFor(config, tenant, "search-profile-stale-write"),
+        },
+      },
+      method: "PATCH",
+    },
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.version_conflict`,
+    staleProfileUpdate.response.status === 409
+      && staleProfileUpdate.json?.code === "version_conflict"
+      && staleProfileUpdate.json?.persisted === false,
+    {
+      code: staleProfileUpdate.json?.code ?? null,
+      persisted: staleProfileUpdate.json?.persisted ?? null,
+      status: staleProfileUpdate.response.status,
+    },
+    { code: "version_conflict", persisted: false, status: 409 },
+  );
+
+  const profileRead = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}&projectId=${encodeURIComponent(tenant.projectId)}&q=${encodeURIComponent(updatedProfileTitle)}&limit=10`,
+  );
+  const persistedProfile = (profileRead.json?.profiles ?? []).find(
+    (profile) => profile.id === profileCreate.json.profile.id,
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.read`,
+    profileRead.response.status === 200 && persistedProfile?.title === updatedProfileTitle,
+    { found: Boolean(persistedProfile), status: profileRead.response.status },
+    { found: true, status: 200 },
+  );
+
   const freshOwner = createHttpClient(config, tenant.actors.owner, tenant, evidence, previewCookies);
   clients.set(`${tenant.key}:ownerReload`, freshOwner);
   try {
@@ -1295,6 +1605,18 @@ async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evi
     const reload = await freshOwner.request(`/api/crm/core?workspaceId=${encodeURIComponent(tenant.workspaceId)}`);
     const persistedDeal = (corePayload(reload).deals ?? []).find((deal) => deal.id === ownerDeal.id);
     check(`${tenant.key.toLowerCase()}.persistence.relogin`, persistedDeal?.probability === 61 && String(persistedDeal?.value ?? "").includes("515"), Boolean(persistedDeal), true);
+    const profileReload = await freshOwner.request(
+      `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}&projectId=${encodeURIComponent(tenant.projectId)}&q=${encodeURIComponent(updatedProfileTitle)}&limit=10`,
+    );
+    const reloadedProfile = (profileReload.json?.profiles ?? []).find(
+      (profile) => profile.id === profileCreate.json.profile.id,
+    );
+    check(
+      `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.persistence_relogin`,
+      profileReload.response.status === 200 && reloadedProfile?.title === updatedProfileTitle,
+      { found: Boolean(reloadedProfile), status: profileReload.response.status },
+      { found: true, status: 200 },
+    );
   } finally {
     await freshOwner.logout();
   }
@@ -1308,6 +1630,39 @@ async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evi
     });
     check(`${tenant.key.toLowerCase()}.cross_tenant.${actorName}.update`, responseStatusAllowed(foreignUpdate.response, [403, 404]), foreignUpdate.response.status, [403, 404]);
   }
+
+  const foreignProfileUpdate = await clients.get(`${otherTenant.key}:owner`).request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(otherTenant.workspaceId)}`,
+    {
+      headers: { "Idempotency-Key": `${otherTenant.batchMarker}:foreign-search-profile` },
+      json: {
+        profile: {
+          expectedVersion: profileUpdate.json.profile.version,
+          id: profileUpdate.json.profile.id,
+          title: "foreign",
+        },
+      },
+      method: "PATCH",
+    },
+  );
+  const profileAfterForeignAttempt = await owner.request(
+    `/api/crm/broker/search-profiles?workspaceId=${encodeURIComponent(tenant.workspaceId)}&projectId=${encodeURIComponent(tenant.projectId)}&q=${encodeURIComponent(updatedProfileTitle)}&limit=10`,
+  );
+  const unchangedProfile = (profileAfterForeignAttempt.json?.profiles ?? []).find(
+    (profile) => profile.id === profileUpdate.json.profile.id,
+  );
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.cross_tenant_update`,
+    responseStatusAllowed(foreignProfileUpdate.response, [403, 404])
+      && profileAfterForeignAttempt.response.status === 200
+      && unchangedProfile?.title === updatedProfileTitle,
+    {
+      persistedTitle: unchangedProfile?.title ?? null,
+      readStatus: profileAfterForeignAttempt.response.status,
+      writeStatus: foreignProfileUpdate.response.status,
+    },
+    { persistedTitle: updatedProfileTitle, readStatus: 200, writeStatus: [403, 404] },
+  );
 
   const customerUpdate = await customer.request(`/api/crm/contacts?workspaceId=${encodeURIComponent(tenant.workspaceId)}`, {
     batchMutation: true,
@@ -1336,8 +1691,9 @@ async function runTenantBusinessMatrix(config, tenant, otherTenant, clients, evi
   admin.assertAtomicRegistration(adminDelete, `${tenant.key} admin contact archive`);
 }
 
-async function resetTenant(tenant, client, sql, evidence) {
+async function resetTenant(tenant, client, sql, evidence, retainedBeforeRun) {
   const check = resultRecorder(evidence);
+  const retainedPostMutation = await retainedBrokerRequestSnapshot(sql, tenant);
   await client.logout();
   await client.login();
   const dryRun = await client.request("/api/admin/qa-reset", {
@@ -1386,10 +1742,36 @@ async function resetTenant(tenant, client, sql, evidence) {
   const remaining = await remainingBatchRows(sql, tenant);
   const total = Object.values(remaining).reduce((sum, count) => sum + count, 0);
   check(`${tenant.key.toLowerCase()}.cleanup.remaining_rows`, total === 0, total, 0);
+  const remainingSearchProfiles = Number(remaining.buyer_search_profiles ?? 0)
+    + Number(remaining.marker_buyer_search_profiles ?? 0);
+  check(
+    `${tenant.key.toLowerCase()}.justimmo.broker.search_profile.cleanup`,
+    remainingSearchProfiles === 0,
+    remainingSearchProfiles,
+    0,
+  );
+  const retainedPostReset = await retainedBrokerRequestSnapshot(sql, tenant);
+  const retainedBrokerOperationRequests = evaluateRetainedBrokerRequestReconciliation({
+    beforeRun: retainedBeforeRun,
+    postMutation: retainedPostMutation,
+    postReset: retainedPostReset,
+  });
+  check(
+    `${tenant.key.toLowerCase()}.cleanup.retained_broker_requests`,
+    retainedBrokerOperationRequests.ok,
+    {
+      beforeRunCount: retainedBrokerOperationRequests.beforeRunCount,
+      postMutationCount: retainedBrokerOperationRequests.postMutationCount,
+      postResetCount: retainedBrokerOperationRequests.postResetCount,
+      unchangedByReset: retainedBrokerOperationRequests.unchangedByReset,
+    },
+    { beforeRunCount: 0, postMutationCount: 2, postResetCount: 2, unchangedByReset: true },
+  );
   evidence.cleanup.push({
     deletedCounts: execute.json?.deletedCounts ?? {},
     planDigest,
     remaining,
+    retainedBrokerOperationRequests,
     tenant: tenant.key,
   });
 }
@@ -1489,18 +1871,38 @@ async function main() {
   let clients = null;
   let businessWritesStarted = false;
   let failure = null;
+  const retainedBeforeRun = new Map();
   try {
     await verifyPreviewRuntimeIdentity(config, evidence, previewCookies);
     sql = await verifyDatabasePreflight(config, evidence);
+    if (mode === "execute") {
+      const check = resultRecorder(evidence);
+      for (const tenant of config.tenants) {
+        const snapshot = await retainedBrokerRequestSnapshot(sql, tenant);
+        retainedBeforeRun.set(tenant.key, snapshot);
+        check(
+          `${tenant.key.toLowerCase()}.db.retained_broker_requests_before_run`,
+          snapshot.count === 0,
+          snapshot.count,
+          0,
+        );
+      }
+    }
     clients = new Map();
     await verifyHttpPreflight(config, evidence, clients, previewCookies);
-    if (mode !== "preflight") {
+    if (mode === "preflight") {
+      await verifyJustimmoPreviewReadMatrix(config, evidence, clients, previewCookies);
+    } else {
       businessWritesStarted = true;
       for (let index = 0; index < config.tenants.length; index += 1) {
         const tenant = config.tenants[index];
         const otherTenant = config.tenants[index === 0 ? 1 : 0];
         await runTenantBusinessMatrix(config, tenant, otherTenant, clients, evidence, previewCookies);
       }
+      // Execute-mode reads run only after both tenants have distinct persisted
+      // fixtures, so accidental foreign-record leakage cannot hide behind two
+      // empty collections.
+      await verifyJustimmoPreviewReadMatrix(config, evidence, clients, previewCookies);
     }
   } catch (error) {
     failure = error;
@@ -1509,7 +1911,13 @@ async function main() {
     if (businessWritesStarted && clients && sql) {
       for (const tenant of config.tenants) {
         try {
-          await resetTenant(tenant, clients.get(`${tenant.key}:resetAdmin`), sql, evidence);
+          await resetTenant(
+            tenant,
+            clients.get(`${tenant.key}:resetAdmin`),
+            sql,
+            evidence,
+            retainedBeforeRun.get(tenant.key),
+          );
         } catch (cleanupError) {
           evidence.results.push({ actual: "cleanup_failed", expected: "executed_and_zero", id: `${tenant.key.toLowerCase()}.cleanup.finally`, status: "fail" });
           failure ??= cleanupError;

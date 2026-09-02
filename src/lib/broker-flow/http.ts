@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
+import {
+  QaBatchRuntimeError,
+  qaBatchRuntimeErrorResponse,
+  readQaBatchMutationHeader,
+} from "@/lib/qa-batch-runtime";
 import { BrokerDomainError, asRecord, requireIdempotencyKey } from "./contracts";
 
 export async function authorizeBrokerRead(request: Request) {
@@ -10,18 +15,32 @@ export async function authorizeBrokerWrite(request: Request) {
   return resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
 }
 
-export async function readBrokerMutation(request: Request) {
+export async function readBrokerMutation(
+  request: Request,
+  session: AppSession,
+  options: { qaBatchSupported?: boolean } = {},
+) {
   const idempotencyKey = requireIdempotencyKey(request);
+  const qaBatchId = readQaBatchMutationHeader(request, session);
+  if (qaBatchId && options.qaBatchSupported !== true) {
+    throw new QaBatchRuntimeError(
+      "QA_BATCH_MUTATION_NOT_ATOMIC",
+      "This Broker mutation is not registered for atomic QA reset",
+      409,
+    );
+  }
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     throw new BrokerDomainError("invalid_json", "Request body must be valid JSON.");
   }
-  return { body: asRecord(body), idempotencyKey };
+  return { body: asRecord(body), idempotencyKey, qaBatchId };
 }
 
 export function brokerErrorResponse(error: unknown) {
+  const qaBatchResponse = qaBatchRuntimeErrorResponse(error);
+  if (qaBatchResponse) return qaBatchResponse;
   if (error instanceof BrokerDomainError) {
     return NextResponse.json(
       { code: error.code, details: error.details ?? null, error: error.message, persisted: false },

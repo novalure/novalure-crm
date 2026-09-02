@@ -58,6 +58,17 @@ test("migration 081 is additive and contains the complete provider-safe broker d
   assert.match(migration, /alter table public\.%I force row level security/);
   assert.match(migration, /broker_operation_requests_actor_policy/);
   assert.match(migration, /array\['novalure_app', 'novalure_tenant_app'\]/);
+  const constraintExistenceChecks = [
+    ...migration.matchAll(/if not exists \(select 1 from pg_constraint where ([^)]+)\) then/giu),
+  ];
+  assert.equal(constraintExistenceChecks.length, 42);
+  assert.ok(
+    constraintExistenceChecks.every(([, predicate]) =>
+      /conrelid = 'public\.(?:buyer_search_profiles|property_viewing_slots|contact_timeline_items|tasks)'::regclass/iu.test(predicate)
+        && /conname = '[a-z0-9_]+'/iu.test(predicate),
+    ),
+    "every idempotent constraint lookup must bind both the table OID and constraint name",
+  );
 });
 
 test("rollback is explicitly Preview-only and refuses silent data loss", () => {
@@ -84,6 +95,47 @@ test("every mutation route uses workspace auth, CSRF-bearing helpers and require
   assert.match(http, /resolveWorkspaceScopedSession/);
   assert.match(http, /permission: "crm:write", capability: "pipeline:write"/);
   assert.match(http, /requireIdempotencyKey/);
+});
+
+test("search-profile QA writes register their reset root inside the idempotent tenant transaction", () => {
+  const wrapperSection = repository.slice(
+    repository.indexOf("async function withIdempotentMutation"),
+    repository.indexOf("async function assertProject"),
+  );
+  const profileSection = repository.slice(
+    repository.indexOf("export async function saveBrokerSearchProfile"),
+    repository.indexOf("type CandidateRow"),
+  );
+  const profileRoutes = [routes.get("operations"), routes.get("search-profiles")];
+
+  assert.match(wrapperSection, /assertQaBatchForMutation\(transaction/);
+  assert.match(wrapperSection, /assertQaBatchOwnsObject\(transaction/);
+  assert.match(wrapperSection, /registerQaBatchObjectsWithOwnershipGuard\(transaction/);
+  assert.match(wrapperSection, /preExistingObjects: \[object\]/);
+  assert.ok(
+    wrapperSection.indexOf("assertQaBatchForMutation(transaction")
+      < wrapperSection.indexOf("const claimed = await transaction.queryOne"),
+    "the QA batch must be locked and validated before the idempotency claim",
+  );
+  assert.ok(
+    wrapperSection.lastIndexOf("registerQaBatchObjectsWithOwnershipGuard(transaction")
+      < wrapperSection.indexOf("update broker_operation_requests"),
+    "the reset root and idempotency receipt must commit in one transaction",
+  );
+  assert.match(profileSection, /qaBatchId\?: string/);
+  assert.match(profileSection, /objectType: "buyer_search_profiles"/);
+  assert.match(http, /readQaBatchMutationHeader\(request, session\)/);
+  assert.match(http, /qaBatchRuntimeErrorResponse\(error\)/);
+  assert.match(http, /QA_BATCH_MUTATION_NOT_ATOMIC/);
+  for (const route of profileRoutes) {
+    assert.match(route, /readBrokerMutation\(request, auth\.session, \{ qaBatchSupported: true \}\)/);
+    assert.match(route, /qaBatchId: mutation\.qaBatchId \?\? undefined/);
+    assert.match(route, /qaBatchSuccessHeaders\(mutation\.qaBatchId, result\.qaBatchRegistration\)/);
+  }
+  for (const name of ["activities", "closings", "matches", "offers", "viewings"]) {
+    assert.match(routes.get(name), /readBrokerMutation\(request, auth\.session\)/);
+    assert.doesNotMatch(routes.get(name), /qaBatchSupported: true/);
+  }
 });
 
 test("repository mutations are tenant-context transactional, OCC-protected and audited", () => {

@@ -17,7 +17,9 @@ const twoTenantDatabaseSuffixes = Object.freeze([
   "db.batch_marker",
   "db.batch_actor",
   "db.batch_unused",
-  "db.active_sessions_before_login",
+  "db.business_actor_active_sessions_before_login",
+  "db.reset_actor_active_sessions_before_business_login",
+  "db.retained_broker_requests_before_run",
   "db.marker_unused",
   ...actors.map((actor) => `db.actor.${actor}`),
   "db.reset_actor",
@@ -61,6 +63,13 @@ const twoTenantBusinessSuffixes = Object.freeze([
   "deal.idempotency",
   "deal.owner.update",
   "persistence.relogin",
+  "justimmo.broker.search_profile.create",
+  "justimmo.broker.search_profile.idempotency",
+  "justimmo.broker.search_profile.update",
+  "justimmo.broker.search_profile.version_conflict",
+  "justimmo.broker.search_profile.read",
+  "justimmo.broker.search_profile.persistence_relogin",
+  "justimmo.broker.search_profile.cross_tenant_update",
   ...actors.map((actor) => `cross_tenant.${actor}.update`),
   "contact.customer.update",
   "contact.public.update",
@@ -75,13 +84,43 @@ const twoTenantCleanupSuffixes = Object.freeze([
   "cleanup.dry_run",
   "cleanup.execute",
   "cleanup.remaining_rows",
+  "cleanup.retained_broker_requests",
+  "justimmo.broker.search_profile.cleanup",
 ]);
+
+const twoTenantJustimmoReadSurfaceIds = Object.freeze([
+  "broker.mandates",
+  "broker.operations",
+  "broker.search_profiles",
+  "broker.offers",
+  "broker.viewings",
+  "broker.closings_commission",
+  "broker.activities",
+  "content.documents",
+  "content.templates",
+  "privacy.overview",
+  "productivity.saved_views",
+  "search.global",
+  "broker.matches",
+  "property.exports",
+]);
+
+const twoTenantJustimmoReadSuffixes = Object.freeze(
+  twoTenantJustimmoReadSurfaceIds.flatMap((surface) => [
+    ...actors.flatMap((actor) => [
+      `justimmo.${surface}.${actor}.read`,
+      `justimmo.${surface}.${actor}.cross_tenant`,
+    ]),
+    `justimmo.${surface}.public.read`,
+  ]),
+);
 
 export const twoTenantExpectedResultIds = Object.freeze([
   "runtime.identity.pre_auth",
   ...tenants.flatMap((tenant) => [
     ...twoTenantDatabaseSuffixes.map((suffix) => `${tenant}.${suffix}`),
     ...twoTenantHttpPreflightSuffixes.map((suffix) => `${tenant}.${suffix}`),
+    ...twoTenantJustimmoReadSuffixes.map((suffix) => `${tenant}.${suffix}`),
     ...twoTenantBusinessSuffixes.map((suffix) => `${tenant}.${suffix}`),
     ...twoTenantCleanupSuffixes.map((suffix) => `${tenant}.${suffix}`),
   ]),
@@ -89,6 +128,7 @@ export const twoTenantExpectedResultIds = Object.freeze([
 ]);
 
 export const twoTenantCleanupResourceTypes = Object.freeze([
+  "buyer_search_profiles",
   "consent_records",
   "contacts",
   "deal_stage_history",
@@ -97,6 +137,7 @@ export const twoTenantCleanupResourceTypes = Object.freeze([
   "marker_contacts",
   "marker_deal_stage_history",
   "marker_deals",
+  "marker_buyer_search_profiles",
 ]);
 
 export const previewBlobExpectedCheckIds = Object.freeze([

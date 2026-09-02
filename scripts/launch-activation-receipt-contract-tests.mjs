@@ -51,7 +51,7 @@ import {
 
 const activationLeaseNotBeforeEpochMs = Date.now() - 60_000;
 const activationLeaseExpiresAtEpochMs = activationLeaseNotBeforeEpochMs + 20 * 60 * 1_000;
-const activationReceiptSignedAtEpochMs = activationLeaseNotBeforeEpochMs - 5 * 60 * 1_000;
+const activationReceiptSignedAtEpochMs = activationLeaseNotBeforeEpochMs - 10_000;
 
 const expected = Object.freeze({
   activationExpiresAt: new Date(activationLeaseExpiresAtEpochMs).toISOString(),
@@ -76,8 +76,12 @@ const expected = Object.freeze({
 });
 
 const productionCutoverVerification = Object.freeze({
+  activationFlagOffRevision: expected.flagsRevisionFloor,
   candidateCommit: expected.candidateCommit,
+  completedAt: new Date(activationLeaseNotBeforeEpochMs - 30_000).toISOString(),
   evidenceSha256: expected.productionCutoverEvidenceSha256,
+  latestReceiptSignedAt: new Date(activationLeaseNotBeforeEpochMs - 20_000).toISOString(),
+  launchReadinessValidUntil: new Date(activationLeaseExpiresAtEpochMs + 5 * 60 * 1_000).toISOString(),
   productionDeploymentHost: expected.productionDeploymentHost,
   productionDeploymentId: expected.productionDeploymentId,
   receiptSha256ByRole: Object.freeze({
@@ -142,7 +146,9 @@ function createSignedFixture(payloadOverrides = {}, options = {}) {
       launchActivationReceiptRecordType,
       payloadSha256,
     ].join(":"),
-    signedAt: new Date(activationReceiptSignedAtEpochMs).toISOString(),
+    signedAt: new Date(
+      options.signedAtEpochMs ?? activationReceiptSignedAtEpochMs,
+    ).toISOString(),
     signerSubject: trustedKey.signerSubject,
     trustAnchorId: anchor.trustAnchorId,
     trustAnchorSha256: trustContext.expectedSha256,
@@ -359,6 +365,7 @@ test("launch activation rejects a missing or stale PRE_ACTIVATION_READY cutover 
   );
   for (const [mutate, expectedError] of [
     [(value) => { value.status = "PENDING"; }, /PRODUCTION_CUTOVER_NOT_READY/u],
+    [(value) => { value.activationFlagOffRevision -= 1; }, /FLAGS_REVISION_FLOOR_MISMATCH/u],
     [(value) => { value.candidateCommit = "b".repeat(40); }, /PRODUCTION_CUTOVER_CANDIDATE_MISMATCH/u],
     [(value) => { value.productionDeploymentId = "dpl_otherproductiondeploy1234"; }, /PRODUCTION_CUTOVER_DEPLOYMENT_MISMATCH/u],
     [(value) => { value.productionDeploymentHost = "other-staged.vercel.app"; }, /PRODUCTION_CUTOVER_HOST_MISMATCH/u],
@@ -366,6 +373,8 @@ test("launch activation rejects a missing or stale PRE_ACTIVATION_READY cutover 
     [(value) => { value.receiptSha256ByRole.dba = "8".repeat(64); }, /PRODUCTION_CUTOVER_DBA_RECEIPT_MISMATCH/u],
     [(value) => { value.receiptSha256ByRole.platformOperations = "8".repeat(64); }, /PRODUCTION_CUTOVER_PLATFORM_RECEIPT_MISMATCH/u],
     [(value) => { value.receiptSha256ByRole.releaseObserver = "8".repeat(64); }, /PRODUCTION_CUTOVER_OBSERVER_RECEIPT_MISMATCH/u],
+    [(value) => { value.latestReceiptSignedAt = new Date(activationLeaseNotBeforeEpochMs + 1).toISOString(); }, /LEASE_PREDATES_CUTOVER_SIGNATURES/u],
+    [(value) => { value.launchReadinessValidUntil = new Date(activationLeaseExpiresAtEpochMs - 1).toISOString(); }, /LEASE_EXCEEDS_CUTOVER_READINESS/u],
   ]) {
     const stale = structuredClone(productionCutoverVerification);
     mutate(stale);
@@ -379,6 +388,24 @@ test("launch activation rejects a missing or stale PRE_ACTIVATION_READY cutover 
       expectedError,
     );
   }
+});
+
+test("the activation attestor signs only after all cutover roles", () => {
+  const latestCutoverSignature = Date.parse(
+    productionCutoverVerification.latestReceiptSignedAt,
+  );
+  const fixture = createSignedFixture({}, {
+    signedAtEpochMs: latestCutoverSignature - 1,
+  });
+  assert.throws(
+    () => verifyLaunchActivationReceipt({
+      expected,
+      productionCutoverVerification,
+      receipt: fixture.receipt,
+      trustContext: fixture.trustContext,
+    }),
+    /LAUNCH_ACTIVATION_RECEIPT_PREDATES_CUTOVER_SIGNATURES/u,
+  );
 });
 
 test("tampering after signing and an unrelated external trust anchor fail cryptographically", () => {
@@ -661,6 +688,10 @@ test("operations documentation and verifier keep capability output exclusive and
     new URL("../docs/audit/2026-08-23/launch-activation-receipt-contract.md", import.meta.url),
     "utf8",
   );
+  const cutoverDocumentation = readFileSync(
+    new URL("../docs/audit/2026-08-23/production-cutover-receipt-runbook.md", import.meta.url),
+    "utf8",
+  );
   const verifier = readFileSync(
     new URL("./verify-launch-activation-receipt.mjs", import.meta.url),
     "utf8",
@@ -670,6 +701,9 @@ test("operations documentation and verifier keep capability output exclusive and
   }
   assert.match(documentation, /kein Receipt[\s\S]*kein Trust Anchor/u);
   assert.match(documentation, /Deployment-ID-Fixpunkt/u);
+  const atomicPhaseOrder = /PHASE_1_STAGE_PRECHECKS[\s\S]*PHASE_2_FLAGS_OFF[\s\S]*PHASE_3_PROMOTE[\s\S]*PHASE_4_SAFE_CLOSED_SMOKE[\s\S]*PHASE_5_SIGN_CUTOVER[\s\S]*PHASE_6_ACTIVATION_LEASE[\s\S]*PHASE_7_FLAGS_ON[\s\S]*PHASE_8_ACTIVATION_SMOKE/u;
+  assert.match(documentation, atomicPhaseOrder);
+  assert.match(cutoverDocumentation, atomicPhaseOrder);
   assert.doesNotMatch(verifier, /\bfetch\s*\(|https?:\/\//u);
   assert.match(verifier, /open\(resolved, "wx", 0o600\)/u);
   assert.match(verifier, /LAUNCH_ACTIVATION_FLAGS_OUTPUT_MUST_BE_OUTSIDE_REPOSITORY/u);

@@ -227,26 +227,84 @@ test("060 prepares only the five-table pilot with NOT VALID tenant FKs and appen
   assert.match(sql, /nologin[\s\S]*nobypassrls/i);
 });
 
-test("061 validates separately, gates provider roles, applies minimal grants, and activates only the pilot", async () => {
+test("061 validates only durable relationships, gates provider roles, applies minimal grants, and activates only the pilot", async () => {
   const sql = await readFile(
     new URL("../migrations/061_validate_and_activate_tenant_rls_pilot.sql", import.meta.url),
     "utf8",
   );
-  assert.equal((sql.match(/validate constraint [a-z0-9_]+;/gi) ?? []).length, 15);
+  assert.equal((sql.match(/validate constraint [a-z0-9_]+;/gi) ?? []).length, 13);
+  assert.match(sql, /Project\/deal IDs in audit_logs are immutable snapshots/i);
+  assert.doesNotMatch(sql, /validate constraint audit_logs_workspace_project_fk/i);
+  assert.doesNotMatch(sql, /validate constraint audit_logs_workspace_deal_fk/i);
+  assert.match(sql, /validate constraint audit_logs_workspace_actor_fk/i);
   assert.equal((sql.match(/enable row level security;/gi) ?? []).length, 5);
   assert.equal((sql.match(/force row level security;/gi) ?? []).length, 5);
   for (const tableName of ["projects", "contacts", "leads", "deals", "audit_logs"]) {
     assert.match(sql, new RegExp(`alter table ${tableName} enable row level security`, "i"));
     assert.match(sql, new RegExp(`alter table ${tableName} force row level security`, "i"));
   }
-  assert.match(sql, /safe, inheriting LOGIN role directly/i);
+  assert.match(sql, /exactly one fixed novalure_app membership/i);
   assert.match(sql, /shobj_description\(tenant_role_oid, 'pg_authid'\)/i);
   assert.match(sql, /novalure-tenant-cutover:/i);
   assert.match(sql, /rolbypassrls/i);
-  assert.match(sql, /must not own pilot tables/i);
+  assert.match(
+    sql,
+    /membership\.roleid = application_role_oid[\s\S]*membership\.member = tenant_role_oid/i,
+  );
+  assert.match(
+    sql,
+    /membership\.member = application_role_oid[\s\S]*membership\.roleid <> tenant_role_oid/i,
+  );
+  assert.doesNotMatch(sql, /pg_has_role/i);
+  assert.match(
+    sql,
+    /pg_database database_row[\s\S]*database_row\.datdba in \(application_role_oid, tenant_role_oid\)/i,
+  );
+  assert.match(
+    sql,
+    /relation\.relowner not in \([\s\S]*pg_database_owner[\s\S]*database_row\.datdba/i,
+  );
+  assert.match(
+    sql,
+    /namespace\.nspowner not in \([\s\S]*pg_database_owner[\s\S]*database_row\.datdba/i,
+  );
+  assert.match(sql, /policy\.polroles <> array\[tenant_role_oid\]::oid\[\]/i);
+  assert.match(sql, /policy\.polcmd <> expected\.command/i);
+  assert.match(sql, /not policy\.polpermissive/i);
+  assert.match(sql, /pg_get_expr\(policy\.polqual, policy\.polrelid, false\)/i);
+  assert.match(sql, /trigger_row\.tgtype = 58/i);
+  assert.match(sql, /trigger_row\.tgenabled = 'O'/i);
+  assert.match(sql, /trigger_row\.tgfoid = 'public\.reject_audit_logs_mutation\(\)'::regprocedure/i);
+  assert.match(sql, /pilot tables must retain a trusted database owner/i);
+  assert.match(sql, /grant_entry\.grantee <> relation\.relowner/i);
+  assert.match(sql, /when grant_entry\.grantee = tenant_role_oid/i);
+  assert.doesNotMatch(sql, /else false/i);
+  assert.match(
+    sql,
+    /aclexplode\(attribute\.attacl\) grant_entry[\s\S]*novalure_app can reach an unexpected pilot column ACL/i,
+  );
   assert.match(sql, /grant select, insert on table audit_logs/i);
   assert.doesNotMatch(sql, /grant[^;]*(?:update|delete)[^;]*audit_logs/i);
   assert.match(sql, /revoke all on table projects, contacts, leads, deals, audit_logs from public/i);
+  assert.match(sql, /revoke all on table projects, contacts, leads, deals, audit_logs from novalure_app/i);
+  assert.match(sql, /revoke create on schema public from public/i);
+  assert.match(sql, /revoke create on schema public from novalure_app/i);
+  assert.match(sql, /revoke create on schema public from novalure_tenant_app/i);
+  assert.match(sql, /namespace\.nspacl[\s\S]*public schema ACL or owner exceeds/i);
+  assert.match(sql, /grant_entry\.grantee not in \(0, application_role_oid, tenant_role_oid\)/i);
+  assert.match(sql, /role_row\.rolname = 'pg_database_owner'/i);
+  assert.match(sql, /pg_attribute attribute[\s\S]*attribute\.attacl/i);
+  assert.match(sql, /missing a required pilot table privilege/i);
+});
+
+test("062 verifies the exact audit guard before and after its transactional maintenance window", async () => {
+  const sql = await readFile(
+    new URL("../migrations/062_private_media_contract_cutover.sql", import.meta.url),
+    "utf8",
+  );
+  assert.equal((sql.match(/trigger_row\.tgtype = 58/gi) ?? []).length, 2);
+  assert.equal((sql.match(/trigger_row\.tgenabled = 'O'/gi) ?? []).length, 2);
+  assert.equal((sql.match(/trigger_row\.tgfoid = 'public\.reject_audit_logs_mutation\(\)'::regprocedure/gi) ?? []).length, 2);
 });
 
 test("static inventory covers nullable tenants, FK/index gaps, QA row mismatches, roles, audit, and ledger", async () => {
@@ -258,6 +316,21 @@ test("static inventory covers nullable tenants, FK/index gaps, QA row mismatches
   assert.match(source, /workspaceFkLeadingIndex/);
   assert.match(source, /pg_auth_members/);
   assert.match(source, /appendOnlyGuardEnabled/);
+  assert.match(source, /unsafeInheritedLoginMembers/);
+  assert.match(source, /applicationTableAclBoundaryViolation/);
+  assert.match(source, /applicationColumnAclBoundaryViolation/);
+  assert.match(source, /applicationReachableOwner/);
+  assert.match(source, /unexpectedApplicationRoleReachability/);
+  assert.match(source, /pilotPoliciesExact/);
+  assert.match(source, /tgtype = 58/);
+  assert.match(source, /membership\.roleid = application_role\.oid/);
+  assert.match(source, /membership\.member = tenant_role\.oid/);
+  assert.match(source, /applicationOwnsCurrentDatabase/);
+  assert.match(source, /schemaAclBoundaryExact/);
+  assert.match(source, /grant_entry\.grantee not in \(0, application_role\.oid, tenant_role\.oid\)/);
+  assert.match(source, /role_row\.rolname = 'pg_database_owner'/);
+  assert.match(source, /database_row\.datdba in \(application_role\.oid, tenant_role\.oid\)/);
+  assert.doesNotMatch(source, /pg_has_role/);
   assert.match(source, /novalure_schema_migrations/);
   assert.match(source, /begin read only/i);
   assert.match(source, /assertQaTarget/);

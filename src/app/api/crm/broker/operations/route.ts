@@ -10,6 +10,7 @@ import {
   listBrokerSearchProfiles,
   saveBrokerSearchProfile,
 } from "@/lib/db/broker-operations-repository";
+import { qaBatchSuccessHeaders } from "@/lib/qa-batch-runtime";
 
 export const runtime = "nodejs";
 
@@ -37,18 +38,22 @@ async function mutate(request: Request) {
   try {
     const auth = await authorizeBrokerWrite(request);
     if (!auth.ok) return auth.response;
-    const mutation = await readBrokerMutation(request);
+    const mutation = await readBrokerMutation(request, auth.session, { qaBatchSupported: true });
     const payload = mutation.body.profile && typeof mutation.body.profile === "object"
       ? mutation.body.profile as Record<string, unknown>
       : mutation.body;
     const result = await saveBrokerSearchProfile({
       idempotencyKey: mutation.idempotencyKey,
       payload,
+      qaBatchId: mutation.qaBatchId ?? undefined,
       session: auth.session,
     });
     return brokerJson(
       { data: result.data, persisted: true, replayed: result.replayed },
-      { status: result.httpStatus },
+      {
+        headers: qaBatchSuccessHeaders(mutation.qaBatchId, result.qaBatchRegistration),
+        status: result.httpStatus,
+      },
     );
   } catch (error) {
     return brokerErrorResponse(error);

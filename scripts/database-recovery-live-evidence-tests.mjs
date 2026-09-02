@@ -35,6 +35,7 @@ import {
   writeImmutableRecoveryEvidence,
 } from "./database-recovery-live-evidence.mjs";
 import { recoveryMigrationPlan } from "./recovery-migration-rehearsal.mjs";
+import { recoveryMigrationPlanContract } from "./lib/recovery-migration-plan.mjs";
 
 const candidateCommit = "a".repeat(40);
 const projectId = recoveryExpectedProjectId;
@@ -142,8 +143,15 @@ function migratedCatalog() {
   return [
     ...baselineCatalog(),
     catalogEntry("index", "bot_channel_webhooks_account_event_uidx"),
+    catalogEntry("table", "broker_operation_requests"),
     catalogEntry("constraint", "company_profiles_approval_integrity_check"),
+    catalogEntry("table", "crm_bulk_runtime_batch_items"),
+    catalogEntry("table", "crm_content_documents"),
+    catalogEntry("table", "crm_saved_views"),
+    catalogEntry("constraint", "media_assets_deletion_state_check"),
+    catalogEntry("function", "novalure_require_media_deletion_actor"),
     catalogEntry("view", "novalure_schema_migration_checksums"),
+    catalogEntry("table", "property_export_job_events"),
     catalogEntry("table", "public_funnel_visit_events"),
   ];
 }
@@ -371,9 +379,11 @@ function verifiedProvenance(input, normalizedEvidence) {
   };
 }
 
-function fixture({ candidate = candidateCommit } = {}) {
+function fixture({ candidate = candidateCommit, migrationPlanOverride = null } = {}) {
   const baseline = structuredClone(recoveryBaselineMigrationPlan);
-  const plan = migrationPlan();
+  const plan = migrationPlanOverride === null
+    ? migrationPlan()
+    : structuredClone(migrationPlanOverride);
   const migratedLedger = [...baseline, ...plan];
   const baselineTables = tableFingerprints();
   const migratedTables = tableFingerprints("migrated");
@@ -392,14 +402,33 @@ function fixture({ candidate = candidateCommit } = {}) {
     action: "FINAL_RECOVERY_READ_ONLY_EVIDENCE",
     assertions: {
       catalog: {
+        auditAppendOnlyFunctionExact: true,
+        auditAppendOnlyGuardExact: true,
         companyApprovalConstraintPresent: true,
         companyApprovalConstraintValidated: true,
-        intentionalUnvalidatedConstraints: [...intentionalUnvalidatedPilotConstraints],
+        criticalReleaseObjectAclBoundaryExact: true,
+        intentionalUnvalidatedConstraints: structuredClone(intentionalUnvalidatedPilotConstraints),
         legacyWebhookIndexPresent: false,
+        mediaDeletionConstraintPresent: true,
+        mediaDeletionConstraintValidated: true,
         migrationChecksumProjectionPresent: true,
-        pilotRlsEnabled: false,
+        pilotApplicationColumnAclBoundaryExact: true,
+        pilotApplicationOwnerBoundaryExact: true,
+        pilotApplicationTableAclBoundaryExact: true,
+        pilotTenantTablePrivilegesExact: true,
+        pilotOwnersSafe: true,
+        pilotPoliciesExact: true,
+        pilotRlsEnabled: true,
         providerWebhookIndexPresent: true,
         publicFunnelVisitEventsPresent: true,
+        tenantDirectLoginMemberPresent: true,
+        tenantDatabaseOwnerBoundaryExact: true,
+        tenantMembershipSafe: true,
+        tenantRoleAttestation: `novalure-tenant-cutover:${candidate}`,
+        tenantRoleAttested: true,
+        tenantRoleSafe: true,
+        tenantSchemaAclBoundaryExact: true,
+        tenantSchemaUsage: true,
         unexpectedUnvalidatedConstraintCount: 0,
       },
       companyProfileApproval: {
@@ -407,6 +436,12 @@ function fixture({ candidate = candidateCommit } = {}) {
         constraintValidated: true,
         invalidApprovedCount: 0,
         staleApprovalMetadataCount: 0,
+      },
+      targetMigrationOrder: {
+        appliedVersions: [...recoveryMigrationPlan],
+        rlsCutoverLast: true,
+        strictlyIncreasing: true,
+        targetCount: recoveryMigrationPlan.length,
       },
     },
     branches: { preservedMigratedBranchId, productionBranchId, recoveryBranchId },
@@ -499,8 +534,13 @@ function fixture({ candidate = candidateCommit } = {}) {
   return { input, plan };
 }
 
-function build({ candidate = candidateCommit, schemaDiffUnavailable = false, verified = true } = {}) {
-  const { input, plan } = fixture({ candidate });
+function build({
+  candidate = candidateCommit,
+  migrationPlanOverride = null,
+  schemaDiffUnavailable = false,
+  verified = true,
+} = {}) {
+  const { input, plan } = fixture({ candidate, migrationPlanOverride });
   if (schemaDiffUnavailable) {
     input.schemaDiff.countedAsPassEvidence = false;
     input.schemaDiff.diffSha256 = null;
@@ -523,8 +563,8 @@ function build({ candidate = candidateCommit, schemaDiffUnavailable = false, ver
   });
 }
 
-function signedFixture({ candidate = candidateCommit } = {}) {
-  const value = fixture({ candidate });
+function signedFixture({ candidate = candidateCommit, migrationPlanOverride = null } = {}) {
+  const value = fixture({ candidate, migrationPlanOverride });
   const blocked = buildDatabaseRecoveryLiveEvidence({
     expectedCandidateCommit: candidate,
     generatedAt: "2026-08-23T18:12:00.000Z",
@@ -537,9 +577,13 @@ function signedFixture({ candidate = candidateCommit } = {}) {
 
 export function buildSignedRecoveryLiveEvidenceFixture({
   expectedCandidateCommit = candidateCommit,
+  migrationPlan: migrationPlanOverride = null,
 } = {}) {
   return Object.freeze({
-    evidence: build({ candidate: expectedCandidateCommit }),
+    evidence: build({
+      candidate: expectedCandidateCommit,
+      migrationPlanOverride,
+    }),
     expectedCandidateCommit,
     publicKeyPem: observerKeyPair.publicKey.export({ format: "pem", type: "spki" }),
     trustAnchor,
@@ -573,8 +617,16 @@ test("Verified receipts, exact query pack, migration delta and reset equality pr
   assert.equal(evidence.passEligible, true);
   assert.equal(evidence.provenance.controlPlane.status, "VERIFIED");
   assert.equal(evidence.queryPack.sha256, recoveryQueryPackSha256);
+  assert.equal(evidence.queryPack.version, 2);
+  assert.equal(evidence.queryPack.tableCount, 76);
+  assert.equal(evidence.queryPack.transformationCount, 21);
+  assert.equal(evidence.migrationPlanContract, recoveryMigrationPlanContract);
   assert.equal(evidence.baselineMigrationPlan.length, 19);
-  assert.equal(evidence.migrationPlan.length, 14);
+  assert.equal(evidence.migrationPlan.length, 22);
+  assert.equal(
+    evidence.migrationPlan.at(-1).version,
+    "061_validate_and_activate_tenant_rls_pilot",
+  );
   assert.equal(evidence.timings.observedPreserveReadySeconds, 29);
   assert.equal(
     verifyDatabaseRecoveryLiveEvidence({
@@ -874,17 +926,264 @@ test("Exact baseline ledger rejects same-count replacement versions and checksum
 test("Every migration-touched table is query-pack bound and transforms prevent row loss", () => {
   assert.ok(recoveryEvidenceTableNames.includes("bot_channel_webhooks"));
   assert.ok(recoveryEvidenceTableNames.includes("company_profiles"));
+  assert.ok(recoveryEvidenceTableNames.includes("google_notification_targets"));
   assert.ok(recoveryEvidenceTableNames.includes("qa_batches"));
+  assert.ok(recoveryEvidenceTableNames.includes("teams_notification_targets"));
+  assert.ok(
+    intentionalUnvalidatedPilotConstraints.some(
+      (target) => target.tableName === "public.leads"
+        && target.constraintName === "leads_qualifying_requires_assignee_check",
+    ),
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /leads_qualifying_requires_assignee_check/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /con\.conrelid = expected\.table_name::regclass[\s\S]*con\.conname = expected\.constraint_name/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /media_deletion_constraint_validated/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /pilot_policies_exact[\s\S]*audit_append_only_guard_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /member_role\.rolname = 'novalure_app'[\s\S]*membership\.inherit_option[\s\S]*not membership\.set_option[\s\S]*not membership\.admin_option/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /select count\(\*\) = 1[\s\S]*membership\.roleid = application_role\.oid[\s\S]*membership\.member = tenant_role\.oid[\s\S]*membership\.roleid <> tenant_role\.oid/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /pg_database database_row[\s\S]*database_row\.datdba in \(application_role\.oid, tenant_role\.oid\)[\s\S]*tenant_database_owner_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /trusted_owner as \([\s\S]*pg_database_owner[\s\S]*namespace\.nspacl[\s\S]*grant_entry\.grantee not in \(0, application_role\.oid, tenant_role\.oid\)[\s\S]*namespace\.nspowner not in \(select oid from trusted_owner\)[\s\S]*tenant_schema_acl_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /shobj_description\(oid, 'pg_authid'\)[\s\S]*as tenant_role_attestation/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /aclexplode\([\s\S]*grant_entry\.grantee <> relation\.relowner[\s\S]*when grant_entry\.grantee = tenant_role\.oid[\s\S]*else true[\s\S]*pilot_application_table_acl_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /pilot_privilege_expectation[\s\S]*grant_entry\.privilege_type = expected\.privilege_type[\s\S]*pilot_tenant_table_privileges_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /pg_attribute attribute[\s\S]*aclexplode\(attribute\.attacl\) grant_entry[\s\S]*pilot_application_column_acl_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /trusted_owner as \([\s\S]*pg_database_owner[\s\S]*database_row\.datdba[\s\S]*relation\.relowner not in \(select oid from trusted_owner\)[\s\S]*pilot_application_owner_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /public_funnel_visit_events[\s\S]*grant_entry\.grantee <> relation\.relowner[\s\S]*relation\.relowner not in \(select oid from trusted_owner\)[\s\S]*critical_release_object_acl_boundary_exact/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.catalogSql,
+    /\^novalure-tenant-cutover:\[a-f0-9\]\{40\}\$/u,
+  );
+  assert.match(recoveryDatabaseQueryPack.catalogSql, /roles=[\s\S]*pol\.polroles/u);
+  assert.match(recoveryDatabaseQueryPack.catalogSql, /type=[\s\S]*trg\.tgtype/u);
   assert.ok(recoveryTableQuerySpecs.every((spec) => spec.sql.startsWith("select ")));
   assert.match(recoveryDatabaseQueryPack.identitySql, /transaction_read_only/u);
+  assert.match(
+    recoveryDatabaseQueryPack.grantSql,
+    /pg_catalog\.aclexplode[\s\S]*grant_entry\.grantee = 0 then 'PUBLIC'[\s\S]*pg_attribute attribute[\s\S]*pg_proc function_row/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.grantSql,
+    /relation\.relkind = 'S' then 's' else 'r'/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.grantSql,
+    /'schema'[\s\S]*namespace\.nspacl/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.grantSql,
+    /bool_or\(grantable\)[\s\S]*group by object_type, object_name, grantee, privilege/u,
+  );
+  assert.doesNotMatch(recoveryDatabaseQueryPack.grantSql, /information_schema/u);
   assert.match(recoveryDatabaseQueryPack.transformationQueries.bot_channel_webhooks.expectedSql, /digest\(external_message_id/u);
   assert.match(recoveryDatabaseQueryPack.transformationQueries.company_profiles.expectedSql, /needs_review/u);
+  assert.match(
+    recoveryDatabaseQueryPack.transformationQueries.buyer_search_profiles.expectedSql,
+    /area_sqm::numeric\(12,2\)[\s\S]*rooms::numeric\(5,1\)/u,
+  );
 
   const { input, plan } = fixture();
   input.migrationTransformations.bot_channel_webhooks.afterRowCount += 1;
   assert.throws(
     () => buildDatabaseRecoveryLiveEvidence({ expectedCandidateCommit: candidateCommit, input, migrationPlan: plan }),
     /RECOVERY_TRANSFORMATION_bot_channel_webhooks_MIGRATED_COUNT_MISMATCH/u,
+  );
+});
+
+test("RLS, media and table-bound unvalidated-constraint assertions fail closed", () => {
+  for (const [field, code] of [
+    ["auditAppendOnlyFunctionExact", /RECOVERY_AUDIT_FUNCTION_CONTRACT_INVALID/u],
+    ["auditAppendOnlyGuardExact", /RECOVERY_AUDIT_GUARD_CONTRACT_INVALID/u],
+    ["criticalReleaseObjectAclBoundaryExact", /RECOVERY_CRITICAL_OBJECT_ACL_BOUNDARY_INVALID/u],
+    ["mediaDeletionConstraintValidated", /RECOVERY_MEDIA_DELETION_CONSTRAINT_NOT_VALIDATED/u],
+    ["pilotApplicationColumnAclBoundaryExact", /RECOVERY_PILOT_APPLICATION_COLUMN_ACL_BOUNDARY_INVALID/u],
+    ["pilotApplicationOwnerBoundaryExact", /RECOVERY_PILOT_APPLICATION_OWNER_BOUNDARY_INVALID/u],
+    ["pilotApplicationTableAclBoundaryExact", /RECOVERY_PILOT_APPLICATION_TABLE_ACL_BOUNDARY_INVALID/u],
+    ["pilotTenantTablePrivilegesExact", /RECOVERY_PILOT_TENANT_TABLE_PRIVILEGES_INVALID/u],
+    ["pilotOwnersSafe", /RECOVERY_PILOT_OWNER_BOUNDARY_UNSAFE/u],
+    ["pilotPoliciesExact", /RECOVERY_PILOT_POLICY_CONTRACT_INVALID/u],
+    ["tenantMembershipSafe", /RECOVERY_TENANT_MEMBERSHIP_UNSAFE/u],
+    ["tenantDatabaseOwnerBoundaryExact", /RECOVERY_TENANT_DATABASE_OWNER_BOUNDARY_INVALID/u],
+    ["tenantSchemaAclBoundaryExact", /RECOVERY_TENANT_SCHEMA_ACL_BOUNDARY_INVALID/u],
+    ["tenantSchemaUsage", /RECOVERY_TENANT_SCHEMA_USAGE_MISSING/u],
+  ]) {
+    const { input, plan } = fixture();
+    input.assertions.catalog[field] = false;
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input,
+        migrationPlan: plan,
+      }),
+      code,
+      field,
+    );
+  }
+
+  const { input, plan } = fixture();
+  input.assertions.catalog.intentionalUnvalidatedConstraints[0].tableName = "public.tasks";
+  assert.throws(
+    () => buildDatabaseRecoveryLiveEvidence({
+      expectedCandidateCommit: candidateCommit,
+      input,
+      migrationPlan: plan,
+    }),
+    /RECOVERY_INTENTIONAL_UNVALIDATED_CONSTRAINT_SET_MISMATCH/u,
+  );
+
+  {
+    const { input: grantInput, plan: grantPlan } = fixture();
+    for (const name of ["migratedRecovery", "preservedMigrated"]) {
+      grantInput.snapshots[name].grantInventory.push(
+        grantEntry(
+          "table",
+          "public.public_funnel_visit_events",
+          "unexpected_grantor",
+          "SELECT",
+          true,
+        ),
+      );
+    }
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input: grantInput,
+        migrationPlan: grantPlan,
+      }),
+      /RECOVERY_FUNNEL_GRANT_OPTION_OR_COLUMN_GRANT/u,
+    );
+  }
+
+  {
+    const { input: publicInput, plan: publicPlan } = fixture();
+    for (const name of ["migratedRecovery", "preservedMigrated"]) {
+      publicInput.snapshots[name].grantInventory.push(
+        grantEntry("table", "public.public_funnel_visit_events", "PUBLIC", "SELECT"),
+      );
+    }
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input: publicInput,
+        migrationPlan: publicPlan,
+      }),
+      /RECOVERY_FUNNEL_BOUNDARY_GRANTS_INVALID/u,
+    );
+  }
+
+  {
+    const { input: foreignInput, plan: foreignPlan } = fixture();
+    for (const name of ["migratedRecovery", "preservedMigrated"]) {
+      foreignInput.snapshots[name].grantInventory.push(
+        grantEntry(
+          "table",
+          "public.novalure_schema_migrations",
+          "unexpected_reader",
+          "SELECT",
+        ),
+      );
+    }
+    foreignInput.assertions.catalog.criticalReleaseObjectAclBoundaryExact = false;
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input: foreignInput,
+        migrationPlan: foreignPlan,
+      }),
+      /RECOVERY_CRITICAL_OBJECT_ACL_BOUNDARY_INVALID/u,
+    );
+  }
+});
+
+test("Recovery role evidence binds the exact candidate comment and exact membership result", () => {
+  {
+    const { input, plan } = fixture();
+    input.assertions.catalog.tenantRoleAttestation = `novalure-tenant-cutover:${"b".repeat(40)}`;
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input,
+        migrationPlan: plan,
+      }),
+      /RECOVERY_TENANT_ROLE_ATTESTATION_CANDIDATE_MISMATCH/u,
+    );
+  }
+
+  {
+    const { input, plan } = fixture();
+    input.assertions.catalog.tenantMembershipSafe = false;
+    assert.throws(
+      () => buildDatabaseRecoveryLiveEvidence({
+        expectedCandidateCommit: candidateCommit,
+        input,
+        migrationPlan: plan,
+      }),
+      /RECOVERY_TENANT_MEMBERSHIP_UNSAFE/u,
+    );
+  }
+});
+
+test("Signed recovery assertions reject target migration applied-at reordering", () => {
+  const { input, plan } = fixture();
+  [
+    input.assertions.targetMigrationOrder.appliedVersions[0],
+    input.assertions.targetMigrationOrder.appliedVersions[1],
+  ] = [
+    input.assertions.targetMigrationOrder.appliedVersions[1],
+    input.assertions.targetMigrationOrder.appliedVersions[0],
+  ];
+  assert.throws(
+    () => buildDatabaseRecoveryLiveEvidence({
+      expectedCandidateCommit: candidateCommit,
+      input,
+      migrationPlan: plan,
+    }),
+    /RECOVERY_TARGET_MIGRATION_ORDER_SEQUENCE_INVALID/u,
+  );
+  assert.match(
+    recoveryDatabaseQueryPack.assertionQueries.targetMigrationOrderSql,
+    /order by applied_at[\s\S]*061_validate_and_activate_tenant_rls_pilot/u,
   );
 });
 

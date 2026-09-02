@@ -9,6 +9,12 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadExternalRecoveryTrustAnchor } from "./database-recovery-live-evidence.mjs";
 import { verifyDatabaseRecoveryLiveEvidence } from "./lib/database-recovery-live-evidence.mjs";
+import {
+  historicalExcludedRecoveryMigrationsV1,
+  historicalRecoveryMigrationPlanV1,
+  recoveryMigrationPlan,
+  recoveryMigrationPlanContract,
+} from "./lib/recovery-migration-plan.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestRelativePath =
@@ -18,28 +24,11 @@ const maximumEvidenceBytes = 16 * 1_024 * 1_024;
 const maximumSidecarBytes = 512;
 const safeRepositoryPathPattern = /^(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/u;
 
-export const expectedRecoveryMigrationPlan = Object.freeze([
-  "057_bot_webhook_legacy_index_cutover",
-  "060_tenant_rls_pilot_prepare",
-  "068_qa_batch_reset_safety",
-  "069_property_unit_idempotency",
-  "070_funnel_submission_idempotency_recovery",
-  "071_forms_owner_tenant_guard",
-  "072_form_submission_atomicity",
-  "073_launch_tenant_relation_guards",
-  "074_validate_launch_tenant_relation_guards",
-  "075_public_funnel_visit_truth",
-  "076_bot_webhook_durable_processing",
-  "077_schema_ledger_runtime_projection",
-  "078_company_profile_approval_integrity",
-  "079_public_funnel_visit_role_boundary",
-]);
-
-export const expectedExcludedMigrations = Object.freeze([
-  "061_validate_and_activate_tenant_rls_pilot",
-  "062_private_media_contract_cutover",
-  "065_notification_guard_search_path_hardening",
-]);
+export const expectedRecoveryMigrationPlan = recoveryMigrationPlan;
+export const expectedExcludedMigrations = Object.freeze([]);
+export const historicalExpectedRecoveryMigrationPlan = historicalRecoveryMigrationPlanV1;
+export const historicalExpectedExcludedMigrations = historicalExcludedRecoveryMigrationsV1;
+const migration061Version = "061_validate_and_activate_tenant_rls_pilot";
 
 function invariant(condition, code) {
   if (!condition) throw new Error(code);
@@ -375,6 +364,23 @@ export async function readCommittedRegularRecoveryFile({
   return source;
 }
 
+async function collectCandidateMigrationPlan({ candidateCommit, root }) {
+  const plan = [];
+  for (const version of expectedRecoveryMigrationPlan) {
+    const source = await readCommittedRegularRecoveryFile({
+      evidenceCommit: candidateCommit,
+      relativePath: `migrations/${version}.sql`,
+      repositoryRoot: root,
+      requireWorktreeMatch: false,
+    });
+    plan.push(Object.freeze({
+      checksum: sha256(source.toString("utf8").replace(/\r\n/gu, "\n")),
+      version,
+    }));
+  }
+  return Object.freeze(plan);
+}
+
 async function readRecoveryArtifact(relativePath, {
   evidenceCommit = null,
   maximumBytes = maximumEvidenceBytes,
@@ -492,8 +498,16 @@ function scanForSecretMaterial(sources) {
   }
 }
 
-function validateRehearsalEvidence(evidence, manifest) {
+function validateRehearsalEvidence(evidence, manifest, candidateMigrationPlan = null) {
+  const historical = manifest.schemaVersion === 1;
+  const expectedPlan = historical
+    ? historicalExpectedRecoveryMigrationPlan
+    : expectedRecoveryMigrationPlan;
   invariant(evidence.status === "PASS", "RECOVERY_REHEARSAL_SELECTED_EVIDENCE_NOT_PASS");
+  invariant(
+    evidence.schemaVersion === manifest.schemaVersion,
+    "RECOVERY_REHEARSAL_SCHEMA_VERSION_MISMATCH",
+  );
   invariant(
     evidence.candidateCommit === manifest.candidateCommit,
     "RECOVERY_REHEARSAL_CANDIDATE_MISMATCH",
@@ -504,9 +518,25 @@ function validateRehearsalEvidence(evidence, manifest) {
   );
   invariant(evidence.environment === "RECOVERY_BRANCH_ONLY", "RECOVERY_REHEARSAL_SCOPE_INVALID");
   invariant(evidence.productionMutationPerformed === false, "RECOVERY_PRODUCTION_MUTATION_RECORDED");
-  invariant(evidence.migration061Executed === false, "RECOVERY_MIGRATION_061_RECORDED");
+  if (historical) {
+    invariant(evidence.migration061Executed === false, "RECOVERY_HISTORICAL_MIGRATION_061_RECORDED");
+  } else {
+    invariant(evidence.migration061Executed === true, "RECOVERY_MIGRATION_061_NOT_EXECUTED");
+    invariant(
+      evidence.migration061FinalPlanPosition === true,
+      "RECOVERY_MIGRATION_061_NOT_FINAL",
+    );
+    invariant(
+      evidence.migrationPlanContract === recoveryMigrationPlanContract,
+      "RECOVERY_REHEARSAL_PLAN_CONTRACT_MISMATCH",
+    );
+    invariant(
+      evidence.migration061RoleProvisioning === true,
+      "RECOVERY_MIGRATION_061_ROLE_PROVISIONING_NOT_VERIFIED",
+    );
+  }
   invariant(
-    sameArray(evidence.records?.map((record) => record.version), expectedRecoveryMigrationPlan),
+    sameArray(evidence.records?.map((record) => record.version), expectedPlan),
     "RECOVERY_REHEARSAL_PLAN_MISMATCH",
   );
   invariant(
@@ -517,10 +547,42 @@ function validateRehearsalEvidence(evidence, manifest) {
     ),
     "RECOVERY_REHEARSAL_RECORD_NOT_PASS",
   );
+  if (!historical) {
+    invariant(
+      evidence.records.every(
+        (record) => record.roleProvisioning
+          === (record.version === migration061Version ? "PASS" : "NOT_APPLICABLE"),
+      ),
+      "RECOVERY_REHEARSAL_ROLE_PROVISIONING_RECORD_INVALID",
+    );
+    invariant(
+      candidateMigrationPlan !== null
+        && JSON.stringify(evidence.records.map(({ checksum, version }) => ({ checksum, version })))
+          === JSON.stringify(candidateMigrationPlan),
+      "RECOVERY_REHEARSAL_CANDIDATE_MIGRATION_CHECKSUM_MISMATCH",
+    );
+  }
 }
 
 function validateRollbackEvidence(evidence, manifest) {
+  const historical = manifest.schemaVersion === 1;
+  const expectedPlan = historical
+    ? historicalExpectedRecoveryMigrationPlan
+    : expectedRecoveryMigrationPlan;
+  const expectedExclusions = historical
+    ? historicalExpectedExcludedMigrations
+    : expectedExcludedMigrations;
   invariant(evidence.status === "PASS", "RECOVERY_ROLLBACK_EVIDENCE_NOT_PASS");
+  invariant(
+    evidence.schemaVersion === manifest.schemaVersion,
+    "RECOVERY_ROLLBACK_SCHEMA_VERSION_MISMATCH",
+  );
+  if (!historical) {
+    invariant(
+      evidence.migrationPlanContract === recoveryMigrationPlanContract,
+      "RECOVERY_ROLLBACK_PLAN_CONTRACT_MISMATCH",
+    );
+  }
   invariant(
     evidence.candidateCommit === manifest.candidateCommit,
     "RECOVERY_ROLLBACK_CANDIDATE_MISMATCH",
@@ -531,7 +593,7 @@ function validateRollbackEvidence(evidence, manifest) {
     "RECOVERY_ROLLBACK_PRODUCTION_ENVIRONMENT_CHANGED",
   );
   invariant(
-    sameArray(evidence.explicitlyExcludedMigrations, expectedExcludedMigrations),
+    sameArray(evidence.explicitlyExcludedMigrations, expectedExclusions),
     "RECOVERY_ROLLBACK_EXCLUSION_MISMATCH",
   );
   const selectedPass = manifest.evidence.find((entry) => entry.role === "SELECTED_PASS");
@@ -553,7 +615,7 @@ function validateRollbackEvidence(evidence, manifest) {
     "RECOVERY_ROLLBACK_BRANCHES_NOT_SEPARATE",
   );
   invariant(
-    sameArray(evidence.rehearsal.appliedMigrations, expectedRecoveryMigrationPlan),
+    sameArray(evidence.rehearsal.appliedMigrations, expectedPlan),
     "RECOVERY_ROLLBACK_PLAN_MISMATCH",
   );
   invariant(evidence.reset.comparisonResult === "PASS", "RECOVERY_RESET_COMPARISON_NOT_PASS");
@@ -636,11 +698,21 @@ async function verifyRecoveryEvidenceInternal({
     manifest.schemaVersion === 1 || manifest.schemaVersion === 2,
     "RECOVERY_MANIFEST_SCHEMA_UNSUPPORTED",
   );
+  const manifestMigrationPlan = manifest.schemaVersion === 1
+    ? historicalExpectedRecoveryMigrationPlan
+    : expectedRecoveryMigrationPlan;
+  const manifestExcludedMigrations = manifest.schemaVersion === 1
+    ? historicalExpectedExcludedMigrations
+    : expectedExcludedMigrations;
   if (manifest.schemaVersion === 2) {
     invariant(evidenceCommit !== null, "RECOVERY_FINAL_EVIDENCE_COMMIT_REQUIRED");
     invariant(
       expectedCandidateCommit !== null,
       "RECOVERY_FINAL_EXPECTED_CANDIDATE_REQUIRED",
+    );
+    invariant(
+      manifest.migrationPlanContract === recoveryMigrationPlanContract,
+      "RECOVERY_MANIFEST_PLAN_CONTRACT_MISMATCH",
     );
   }
   invariant(
@@ -661,9 +733,15 @@ async function verifyRecoveryEvidenceInternal({
       root,
     });
   }
+  const candidateMigrationPlan = manifest.schemaVersion === 2
+    ? await collectCandidateMigrationPlan({
+      candidateCommit: manifest.candidateCommit,
+      root,
+    })
+    : null;
   invariant(manifest.productionMutationPerformed === false, "RECOVERY_MANIFEST_PRODUCTION_MUTATION");
   invariant(
-    sameArray(manifest.explicitlyExcludedMigrations, expectedExcludedMigrations),
+    sameArray(manifest.explicitlyExcludedMigrations, manifestExcludedMigrations),
     "RECOVERY_MANIFEST_EXCLUSION_MISMATCH",
   );
   const schemaDiffUnavailable =
@@ -738,7 +816,7 @@ async function verifyRecoveryEvidenceInternal({
     role: "SELECTED_PASS",
   })));
   sources.push(selected.source);
-  validateRehearsalEvidence(selected.json, manifest);
+  validateRehearsalEvidence(selected.json, manifest, candidateMigrationPlan);
 
   for (const entry of failedEntries) {
     invariant(entry.passEligible === false, "RECOVERY_FAILED_ATTEMPT_NOT_EXCLUDED");
@@ -771,6 +849,10 @@ async function verifyRecoveryEvidenceInternal({
       role: "FINAL_LIVE_COLLECTOR_PASS",
     })));
     sources.push(live.source);
+    invariant(
+      JSON.stringify(live.json.migrationPlan) === JSON.stringify(candidateMigrationPlan),
+      "RECOVERY_LIVE_CANDIDATE_MIGRATION_CHECKSUM_MISMATCH",
+    );
     const liveVerification = verifyDatabaseRecoveryLiveEvidence({
       evidence: live.json,
       expectedCandidateCommit: manifest.candidateCommit,
@@ -852,7 +934,7 @@ async function verifyRecoveryEvidenceInternal({
     manifestDigest,
     liveEvidenceCount: liveEntries.length,
     liveTechnicalStatus,
-    migrationCount: expectedRecoveryMigrationPlan.length,
+    migrationCount: manifestMigrationPlan.length,
     ok: true,
     passEligible: releasePassEligible,
     productionMutationPerformed: false,

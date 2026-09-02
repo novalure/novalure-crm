@@ -295,6 +295,14 @@ test("content media inherits document ACL and version references block physical 
   assert.doesNotMatch(deletionMigration, /tg_op = 'INSERT'[\s\S]{0,120}created_by_user_id is null/i);
   assert.match(deletionMigration, /creator\.workspace_id::text = new\.workspace_id/);
   assert.match(deletionMigration, /creator attribution is immutable/i);
+  assert.match(
+    deletionMigration,
+    /conrelid = 'public\.media_assets'::regclass[\s\S]{0,120}conname = 'media_assets_deletion_state_check'/i,
+  );
+  assert.match(
+    deletionMigration,
+    /alter table public\.media_assets\s+validate constraint media_assets_deletion_state_check/i,
+  );
   assert.match(deletionRollback, /^begin;[\s\S]*commit;\s*$/im);
   assert.match(deletionRollback, /pending or non-canonical media deletion evidence requires reconciliation/i);
   assert.match(deletionRollback, /media creator attribution requires reconciliation/i);

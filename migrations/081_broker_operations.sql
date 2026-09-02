@@ -122,22 +122,22 @@ where
 
 do $profile_constraints$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_status_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_status_check') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_status_check
       check (status in ('draft', 'active', 'paused', 'expired', 'archived')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_intent_type_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_intent_type_check') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_intent_type_check
       check (intent_type in ('purchase', 'rent', 'investment')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_accessibility_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_accessibility_check') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_accessibility_check
       check (accessibility in ('none', 'preferred', 'required')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_ranges_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_ranges_check') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_ranges_check
       check (
@@ -158,31 +158,31 @@ begin
         and version >= 1
       ) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_project_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_project_fk') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_project_fk
       foreign key (workspace_id, project_id) references public.projects(workspace_id, id)
       deferrable initially deferred not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_contact_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_contact_fk') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_contact_fk
       foreign key (workspace_id, contact_id) references public.contacts(workspace_id, id)
       deferrable initially deferred not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_organization_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_organization_fk') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_organization_fk
       foreign key (workspace_id, organization_id) references public.organizations(workspace_id, id)
       deferrable initially deferred not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_owner_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_owner_fk') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_owner_fk
       foreign key (workspace_id, owner_user_id) references public.workspace_users(workspace_id, id)
       deferrable initially deferred not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'buyer_search_profiles_broker_lead_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.buyer_search_profiles'::regclass and conname = 'buyer_search_profiles_broker_lead_fk') then
     alter table public.buyer_search_profiles
       add constraint buyer_search_profiles_broker_lead_fk
       foreign key (workspace_id, buyer_lead_id) references public.leads(workspace_id, id)
@@ -436,54 +436,54 @@ alter table public.property_viewing_slots
 
 do $viewing_constraints$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_address_mode_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_address_mode_check') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_address_mode_check
       check (address_mode in ('property', 'company', 'alternative', 'online')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_target_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_target_check') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_target_check
       check (
         (target_kind = 'listing' and property_id is not null and unit_id is null)
         or (target_kind = 'unit' and unit_id is not null and property_id is null)
       ) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_invitation_status_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_invitation_status_check') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_invitation_status_check
       check (invitation_status in ('not_requested', 'blocked_provider_unavailable', 'accepted', 'failed')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_version_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_version_check') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_version_check check (version >= 1) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_calendar_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_calendar_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_calendar_fk
       foreign key (workspace_id, calendar_event_id) references public.calendar_events(workspace_id, id)
       on delete set null (calendar_event_id) deferrable initially deferred not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_project_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_project_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_project_fk
       foreign key (workspace_id, project_id) references public.projects(workspace_id, id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_property_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_property_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_property_fk
       foreign key (workspace_id, property_id) references public.seller_listings(workspace_id, id) on delete set null (property_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_unit_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_unit_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_unit_fk
       foreign key (workspace_id, unit_id) references public.property_units(workspace_id, id) on delete set null (unit_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_contact_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_contact_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_contact_fk
       foreign key (workspace_id, contact_id) references public.contacts(workspace_id, id) on delete set null (contact_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_lead_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_lead_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_lead_fk
       foreign key (workspace_id, lead_id) references public.leads(workspace_id, id) on delete set null (lead_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_deal_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_deal_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_deal_fk
       foreign key (workspace_id, deal_id) references public.deals(workspace_id, id) on delete set null (deal_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'property_viewing_slots_broker_owner_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.property_viewing_slots'::regclass and conname = 'property_viewing_slots_broker_owner_fk') then
     alter table public.property_viewing_slots add constraint property_viewing_slots_broker_owner_fk
       foreign key (workspace_id, owner_user_id) references public.workspace_users(workspace_id, id) on delete set null (owner_user_id) not valid;
   end if;
@@ -662,86 +662,86 @@ alter table public.tasks
 
 do $activity_constraints$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_activity_type_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_activity_type_check') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_activity_type_check
       check (activity_type in ('call', 'email', 'viewing', 'note', 'offer', 'question', 'negotiation', 'document_sent', 'closing', 'other')) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_version_check') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_version_check') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_version_check check (version >= 1) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_offer_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_offer_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_offer_fk
       foreign key (workspace_id, offer_id) references public.broker_offers(workspace_id, id) on delete set null (offer_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_project_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_project_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_project_fk
       foreign key (workspace_id, project_id) references public.projects(workspace_id, id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_contact_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_contact_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_contact_fk
       foreign key (workspace_id, contact_id) references public.contacts(workspace_id, id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_lead_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_lead_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_lead_fk
       foreign key (workspace_id, lead_id) references public.leads(workspace_id, id) on delete set null (lead_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_property_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_property_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_property_fk
       foreign key (workspace_id, property_id) references public.seller_listings(workspace_id, id) on delete set null (property_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_unit_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_unit_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_unit_fk
       foreign key (workspace_id, unit_id) references public.property_units(workspace_id, id) on delete set null (unit_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_deal_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_deal_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_deal_fk
       foreign key (workspace_id, deal_id) references public.deals(workspace_id, id) on delete set null (deal_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_reservation_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_reservation_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_reservation_fk
       foreign key (workspace_id, reservation_id) references public.property_reservations(workspace_id, id) on delete set null (reservation_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_owner_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_owner_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_owner_fk
       foreign key (workspace_id, owner_user_id) references public.workspace_users(workspace_id, id) on delete set null (owner_user_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_viewing_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_viewing_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_viewing_fk
       foreign key (workspace_id, viewing_id) references public.property_viewing_slots(workspace_id, id) on delete set null (viewing_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'contact_timeline_items_broker_closing_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.contact_timeline_items'::regclass and conname = 'contact_timeline_items_broker_closing_fk') then
     alter table public.contact_timeline_items add constraint contact_timeline_items_broker_closing_fk
       foreign key (workspace_id, closing_id) references public.broker_closings(workspace_id, id) on delete set null (closing_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_activity_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_activity_fk') then
     alter table public.tasks add constraint tasks_broker_activity_fk
       foreign key (workspace_id, broker_activity_id) references public.contact_timeline_items(workspace_id, id) on delete set null (broker_activity_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_property_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_property_fk') then
     alter table public.tasks add constraint tasks_broker_property_fk
       foreign key (workspace_id, property_id) references public.seller_listings(workspace_id, id) on delete set null (property_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_unit_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_unit_fk') then
     alter table public.tasks add constraint tasks_broker_unit_fk
       foreign key (workspace_id, unit_id) references public.property_units(workspace_id, id) on delete set null (unit_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_deal_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_deal_fk') then
     alter table public.tasks add constraint tasks_broker_deal_fk
       foreign key (workspace_id, deal_id) references public.deals(workspace_id, id) on delete set null (deal_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_reservation_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_reservation_fk') then
     alter table public.tasks add constraint tasks_broker_reservation_fk
       foreign key (workspace_id, reservation_id) references public.property_reservations(workspace_id, id) on delete set null (reservation_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_offer_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_offer_fk') then
     alter table public.tasks add constraint tasks_broker_offer_fk
       foreign key (workspace_id, offer_id) references public.broker_offers(workspace_id, id) on delete set null (offer_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_viewing_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_viewing_fk') then
     alter table public.tasks add constraint tasks_broker_viewing_fk
       foreign key (workspace_id, viewing_id) references public.property_viewing_slots(workspace_id, id) on delete set null (viewing_id) not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_broker_closing_fk') then
+  if not exists (select 1 from pg_constraint where conrelid = 'public.tasks'::regclass and conname = 'tasks_broker_closing_fk') then
     alter table public.tasks add constraint tasks_broker_closing_fk
       foreign key (workspace_id, closing_id) references public.broker_closings(workspace_id, id) on delete set null (closing_id) not valid;
   end if;

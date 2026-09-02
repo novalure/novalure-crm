@@ -169,8 +169,12 @@ function validateReceiptPayload(payload, expected) {
 
 function validateProductionCutoverVerification(verification, expected) {
   assertExactObjectKeys(verification, [
+    "activationFlagOffRevision",
     "candidateCommit",
+    "completedAt",
     "evidenceSha256",
+    "latestReceiptSignedAt",
+    "launchReadinessValidUntil",
     "productionDeploymentHost",
     "productionDeploymentId",
     "receiptSha256ByRole",
@@ -182,6 +186,43 @@ function validateProductionCutoverVerification(verification, expected) {
     "releaseObserver",
   ], "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_RECEIPTS");
   invariant(verification.status === productionCutoverStatus, "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_NOT_READY");
+  invariant(
+    Number.isSafeInteger(verification.activationFlagOffRevision)
+      && verification.activationFlagOffRevision > 0,
+    "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_FLAG_REVISION_INVALID",
+  );
+  invariant(
+    verification.activationFlagOffRevision === expected.flagsRevisionFloor,
+    "LAUNCH_ACTIVATION_FLAGS_REVISION_FLOOR_MISMATCH",
+  );
+  const cutoverCompletedAt = Date.parse(requireIsoTimestamp(
+    verification.completedAt,
+    "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_COMPLETED_AT_INVALID",
+  ));
+  const latestReceiptSignedAt = Date.parse(requireIsoTimestamp(
+    verification.latestReceiptSignedAt,
+    "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_LATEST_RECEIPT_AT_INVALID",
+  ));
+  const launchReadinessValidUntil = Date.parse(requireIsoTimestamp(
+    verification.launchReadinessValidUntil,
+    "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_READINESS_UNTIL_INVALID",
+  ));
+  invariant(
+    latestReceiptSignedAt >= cutoverCompletedAt
+      && launchReadinessValidUntil > latestReceiptSignedAt,
+    "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_CHRONOLOGY_INVALID",
+  );
+  const activationNotBefore = Date.parse(expected.activationNotBefore);
+  const activationExpiresAt = Date.parse(expected.activationExpiresAt);
+  invariant(
+    activationNotBefore >= latestReceiptSignedAt,
+    "LAUNCH_ACTIVATION_LEASE_PREDATES_CUTOVER_SIGNATURES",
+  );
+  invariant(
+    activationNotBefore < launchReadinessValidUntil
+      && activationExpiresAt <= launchReadinessValidUntil,
+    "LAUNCH_ACTIVATION_LEASE_EXCEEDS_CUTOVER_READINESS",
+  );
   invariant(verification.candidateCommit === expected.candidateCommit, "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_CANDIDATE_MISMATCH");
   invariant(verification.productionDeploymentId === expected.productionDeploymentId, "LAUNCH_ACTIVATION_PRODUCTION_CUTOVER_DEPLOYMENT_MISMATCH");
   invariant(
@@ -276,6 +317,10 @@ export function verifyLaunchActivationReceipt({
     trustContext,
   });
   const receiptSignedAt = Date.parse(receipt.signedAt);
+  invariant(
+    receiptSignedAt >= Date.parse(productionCutoverVerification.latestReceiptSignedAt),
+    "LAUNCH_ACTIVATION_RECEIPT_PREDATES_CUTOVER_SIGNATURES",
+  );
   invariant(
     receiptSignedAt >= activationNotBefore - launchActivationMaximumIssuanceLeadMs
       && receiptSignedAt <= activationNotBefore + launchActivationClockSkewMs,

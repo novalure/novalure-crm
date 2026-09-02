@@ -39,8 +39,12 @@ type RuntimeTrustContext = Readonly<{
 }>;
 
 type RuntimeProductionCutoverVerification = Readonly<{
+  activationFlagOffRevision: number;
   candidateCommit: string;
+  completedAt: string;
   evidenceSha256: string;
+  latestReceiptSignedAt: string;
+  launchReadinessValidUntil: string;
   productionDeploymentHost: string;
   productionDeploymentId: string;
   receiptSha256ByRole: Readonly<Record<string, string>>;

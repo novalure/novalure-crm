@@ -13,12 +13,15 @@ import {
   collectRecoveryEvidenceInventory,
   expectedExcludedMigrations,
   expectedRecoveryMigrationPlan,
+  historicalExpectedExcludedMigrations,
+  historicalExpectedRecoveryMigrationPlan,
   readBoundedRegularRecoveryFile,
   readCommittedRegularRecoveryFile,
   verifyRecoveryEvidence,
   verifyRecoveryEvidenceForFinalAttestation,
 } from "./database-recovery-evidence-verify.mjs";
 import { buildSignedRecoveryLiveEvidenceFixture } from "./database-recovery-live-evidence-tests.mjs";
+import { recoveryMigrationPlanContract } from "./lib/recovery-migration-plan.mjs";
 
 const manifestPath = new URL(
   "../docs/audit/2026-08-23/database-recovery-evidence-manifest.json",
@@ -70,8 +73,14 @@ test("Evidence manifest separates the selected PASS from all failed attempts", (
   assert.equal(selected[0].passEligible, true);
   assert.match(selected[0].sha256, /^[a-f0-9]{64}$/u);
   assert.ok(failed.every((entry) => entry.passEligible === false));
-  assert.deepEqual(manifest.explicitlyExcludedMigrations, expectedExcludedMigrations);
-  assert.deepEqual(rollback.rehearsal.appliedMigrations, expectedRecoveryMigrationPlan);
+  assert.deepEqual(manifest.explicitlyExcludedMigrations, historicalExpectedExcludedMigrations);
+  assert.deepEqual(rollback.rehearsal.appliedMigrations, historicalExpectedRecoveryMigrationPlan);
+  assert.deepEqual(expectedExcludedMigrations, []);
+  assert.equal(expectedRecoveryMigrationPlan.length, 22);
+  assert.equal(
+    expectedRecoveryMigrationPlan.at(-1),
+    "061_validate_and_activate_tenant_rls_pilot",
+  );
 });
 
 test("Rollback contract binds distinct preserved/reset branches to equal data fingerprints", () => {
@@ -186,7 +195,11 @@ async function writeHashedJson(root, relativePath, value) {
   return Object.freeze({ path: relativePath, sha256: digest, sidecarPath });
 }
 
-async function createFinalRecoveryRepository({ candidateMode = "ancestor" } = {}) {
+async function createFinalRecoveryRepository({
+  candidateMigrationMode = "complete",
+  candidateMode = "ancestor",
+  rehearsalRoleProvisioningMode = "valid",
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), "novalure-recovery-final-verifier-"));
   try {
     git(root, ["init"]);
@@ -195,7 +208,16 @@ async function createFinalRecoveryRepository({ candidateMode = "ancestor" } = {}
     await writeFile(join(root, "runtime.js"), "export const runtime = 'candidate';\n", {
       flag: "wx",
     });
-    git(root, ["add", "runtime.js"]);
+    await mkdir(join(root, "migrations"));
+    const candidateMigrationPlan = [];
+    for (const [index, version] of expectedRecoveryMigrationPlan.entries()) {
+      const source = `-- synthetic committed candidate migration ${version}\nselect ${index + 1};\n`;
+      candidateMigrationPlan.push({ checksum: sha256(source), version });
+      if (candidateMigrationMode !== "missing-last" || index < expectedRecoveryMigrationPlan.length - 1) {
+        await writeFile(join(root, "migrations", `${version}.sql`), source, { flag: "wx" });
+      }
+    }
+    git(root, ["add", "."]);
     git(root, ["commit", "-m", "runtime candidate"]);
     const runtimeCandidateCommit = git(root, ["rev-parse", "HEAD"]);
 
@@ -207,19 +229,45 @@ async function createFinalRecoveryRepository({ candidateMode = "ancestor" } = {}
       candidateCommit = git(root, ["commit-tree", emptyTree, "-m", "unrelated candidate"]);
     }
 
+    const evidenceMigrationPlan = candidateMigrationMode === "checksum-mismatch"
+      ? candidateMigrationPlan.map((entry, index) => index === 0
+        ? { ...entry, checksum: sha256("deliberately mismatched candidate migration") }
+        : entry)
+      : candidateMigrationPlan;
     const signed = buildSignedRecoveryLiveEvidenceFixture({
       expectedCandidateCommit: candidateCommit,
+      migrationPlan: evidenceMigrationPlan,
     });
     const live = signed.evidence;
-    const selectedManifestEntry = manifest.evidence.find(
-      (entry) => entry.role === "SELECTED_PASS",
-    );
-    const selected = JSON.parse(await readFile(
-      resolve(process.cwd(), selectedManifestEntry.path),
-      "utf8",
-    ));
-    selected.candidateCommit = candidateCommit;
-    selected.branchId = live.branches.recoveryBranchId;
+    const selected = {
+      branchId: live.branches.recoveryBranchId,
+      candidateCommit,
+      environment: "RECOVERY_BRANCH_ONLY",
+      finishedAt: "2026-08-23T18:08:00.000Z",
+      migration061Executed: true,
+      migration061FinalPlanPosition: true,
+      migration061RoleProvisioning: rehearsalRoleProvisioningMode !== "top-level-false",
+      migrationPlanContract: recoveryMigrationPlanContract,
+      productionMutationPerformed: false,
+      records: live.migrationPlan.map((migration, index) => ({
+        checksum: migration.checksum,
+        dryRun: "PASS",
+        finishedAt: `2026-08-23T18:07:${String(index + 20).padStart(2, "0")}.000Z`,
+        startedAt: `2026-08-23T18:06:${String(index + 20).padStart(2, "0")}.000Z`,
+        up: "PASS",
+        version: migration.version,
+        roleProvisioning: migration.version === "061_validate_and_activate_tenant_rls_pilot"
+          ? "PASS"
+          : "NOT_APPLICABLE",
+      })),
+      schemaVersion: 2,
+      startedAt: "2026-08-23T18:01:00.000Z",
+      status: "PASS",
+      tool: "scripts/recovery-migration-rehearsal.mjs",
+    };
+    if (rehearsalRoleProvisioningMode === "record-invalid") {
+      selected.records[0].roleProvisioning = "PASS";
+    }
     const selectedFile = await writeHashedJson(root, "evidence/selected.json", selected);
 
     const failedFiles = [];
@@ -233,7 +281,11 @@ async function createFinalRecoveryRepository({ candidateMode = "ancestor" } = {}
     }
 
     const finalRollback = structuredClone(rollback);
+    finalRollback.schemaVersion = 2;
     finalRollback.candidateCommit = candidateCommit;
+    finalRollback.explicitlyExcludedMigrations = [];
+    finalRollback.migrationPlanContract = recoveryMigrationPlanContract;
+    finalRollback.rehearsal.appliedMigrations = [...expectedRecoveryMigrationPlan];
     finalRollback.rehearsal.selectedEvidencePath = selectedFile.path;
     finalRollback.rehearsal.selectedEvidenceSha256 = selectedFile.sha256;
     finalRollback.rehearsal.sourceBranchIdAtExecution = live.branches.recoveryBranchId;
@@ -253,6 +305,10 @@ async function createFinalRecoveryRepository({ candidateMode = "ancestor" } = {}
     finalManifest.status = "CURRENT_SHA_REHEARSAL_AND_RESET_PASS";
     finalManifest.candidateCommit = candidateCommit;
     finalManifest.signatureStatus = "VERIFIED";
+    finalManifest.curationRule =
+      "Exactly one complete 22-migration dependency-safe PASS is current release evidence.";
+    finalManifest.explicitlyExcludedMigrations = [];
+    finalManifest.migrationPlanContract = recoveryMigrationPlanContract;
     finalManifest.evidence = [
       { ...selectedFile, passEligible: true, role: "SELECTED_PASS" },
       ...failedFiles.map((entry) => ({
@@ -409,6 +465,56 @@ test("Final signed Recovery evidence returns PASS only for the bound clean Evide
     );
   } finally {
     await removeTemporaryRecoveryRepository(fixture.root);
+  }
+});
+
+test("Final Recovery evidence is bound to every migration blob in the candidate commit", async () => {
+  for (const [candidateMigrationMode, errorPattern] of [
+    ["missing-last", /RECOVERY_EVIDENCE_COMMITTED_FILE_NOT_REGULAR/u],
+    ["checksum-mismatch", /RECOVERY_REHEARSAL_CANDIDATE_MIGRATION_CHECKSUM_MISMATCH/u],
+  ]) {
+    const fixture = await createFinalRecoveryRepository({ candidateMigrationMode });
+    try {
+      await assert.rejects(
+        verifyRecoveryEvidence({
+          evidenceCommit: fixture.evidenceCommit,
+          expectedCandidateCommit: fixture.candidateCommit,
+          repositoryRoot: fixture.root,
+          trustAnchor: fixture.trustAnchor,
+        }),
+        errorPattern,
+      );
+    } finally {
+      await removeTemporaryRecoveryRepository(fixture.root);
+    }
+  }
+});
+
+test("Final Recovery verifier requires exact migration 061 role-provisioning evidence", async () => {
+  for (const [rehearsalRoleProvisioningMode, errorPattern] of [
+    [
+      "top-level-false",
+      /RECOVERY_MIGRATION_061_ROLE_PROVISIONING_NOT_VERIFIED/u,
+    ],
+    [
+      "record-invalid",
+      /RECOVERY_REHEARSAL_ROLE_PROVISIONING_RECORD_INVALID/u,
+    ],
+  ]) {
+    const fixture = await createFinalRecoveryRepository({ rehearsalRoleProvisioningMode });
+    try {
+      await assert.rejects(
+        verifyRecoveryEvidence({
+          evidenceCommit: fixture.evidenceCommit,
+          expectedCandidateCommit: fixture.candidateCommit,
+          repositoryRoot: fixture.root,
+          trustAnchor: fixture.trustAnchor,
+        }),
+        errorPattern,
+      );
+    } finally {
+      await removeTemporaryRecoveryRepository(fixture.root);
+    }
   }
 });
 
