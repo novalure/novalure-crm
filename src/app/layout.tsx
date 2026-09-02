@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#d9ecff",
+  themeColor: "#faf9f7",
 };
 
 async function getInitialLanguage(): Promise<PublicLanguageCode> {

@@ -133,7 +133,7 @@ function buildDocumentEmail(input: SendBotDocumentInput) {
       `<p>${safeContactName},</p>`,
       `<p>hier ist das angefragte Dokument: <strong>${safeDocumentName}</strong>.</p>`,
       safeUrl
-        ? `<p><a href="${safeUrl}" style="display:inline-block;background:#ffd43b;border:1px solid #e4b900;color:#211800;padding:10px 18px;border-radius:999px;font-weight:800;text-decoration:none;">Dokument öffnen</a></p>`
+        ? `<p><a href="${safeUrl}" style="display:inline-block;background:#2d68f0;border:1px solid #1e4fc2;color:#ffffff;padding:10px 18px;border-radius:999px;font-weight:800;text-decoration:none;">Dokument öffnen</a></p>`
         : `<p>Das Dokument wurde freigegeben und wird vom Team bereitgestellt.</p>`,
       `<p>Viele Gruesse<br>Novalure CRM</p>`,
     ].join(""),

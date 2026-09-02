@@ -802,7 +802,7 @@ export function FormCommandCenter({
 
   if (isFormEditorMode) {
     return (
-      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#faf9f7] text-slate-950">
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex min-w-0 items-start gap-3">
@@ -972,7 +972,7 @@ export function FormCommandCenter({
             </div>
           </aside>
 
-          <main className="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-[#f8fafc] p-4">
+          <main className="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-[#f3f0ea] p-4">
             <div className="mx-auto grid max-w-[760px] gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white p-3">
                 <div>

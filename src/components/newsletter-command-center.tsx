@@ -1407,7 +1407,7 @@ const liveNewsletterMessage =
 
   if (isBuilderMode) {
     return (
-      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#faf9f7] text-slate-950">
         <header className="shrink-0 border-b border-stone-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">

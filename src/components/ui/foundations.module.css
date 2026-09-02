@@ -41,12 +41,12 @@
 
 .buttonPrimary {
   background: var(--nl-blue);
-  box-shadow: 0 14px 32px rgb(255 212 59 / 22%);
-  color: #211800;
+  box-shadow: 0 14px 32px rgb(45 104 240 / 22%);
+  color: #ffffff;
 }
 
 .buttonPrimary:hover:not(:disabled) {
-  background: var(--nl-gold-hover);
+  background: var(--nl-blue-dark);
 }
 
 .buttonSecondary {
@@ -67,7 +67,7 @@
 
 .buttonGhost:hover:not(:disabled) {
   background: var(--nl-blue-tint);
-  color: var(--nl-gold-text);
+  color: var(--nl-blue-dark);
 }
 
 .buttonDanger {
@@ -279,8 +279,8 @@
 
 .statusInfo {
   background: var(--nl-blue-tint);
-  border-color: #ead36a;
-  color: var(--nl-gold-text);
+  border-color: var(--nl-blue);
+  color: var(--nl-blue-dark);
 }
 
 .statusInfo .statusMarker {
@@ -344,8 +344,8 @@
 
 .noticeInfo {
   background: var(--nl-blue-tint);
-  border-color: #ead36a;
-  color: var(--nl-gold-text);
+  border-color: var(--nl-blue);
+  color: var(--nl-blue-dark);
 }
 
 .noticeSuccess {
