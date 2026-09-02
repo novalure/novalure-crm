@@ -1,12 +1,14 @@
 # Justimmo-inspired implementation verification
 
-Status: local candidate verified; isolated Preview acceptance and Production release remain open
+Status: code verified and exact Preview deployment ready; protected Preview acceptance and Production release remain open
 
 ## Frozen candidate
 
 - Branch: `codex/justimmo-inspired-improvements-20260902`
 - Implementation commit: `daaa84838ecae9dbc22d6690914ef0bfebea6edf`
-- Scope: isolated development worktree and future isolated Preview QA only
+- Evidence commit verified by pinned CI: `1e2c569f9f51ea080582d68f065de9ff58e93ed7`
+- Protected evidence Preview: `dpl_4dJNPsqhKXPfiKwSipVw4tRsGBer` (`READY`)
+- Scope: isolated development worktree and protected Preview QA only
 - Production queried or mutated: no
 - Real portal, email, calendar or customer communication sent: no
 - Evidence signature: not signed
@@ -67,11 +69,12 @@ invoice, signed contract or provider receipt.
 
 ## Reproducibility exception
 
-`npm run ci:toolchain` correctly failed because the repository pins Node.js
-`24.14.0`, while the available host runtime is `24.18.0` and the bundled
-runtime is `24.19.0`. `package.json` accepts Node 24, but the exact pin remains
-an unresolved release-reproducibility gate. Run CI and final build with the
-pinned runtime instead of weakening the pin.
+`npm run ci:toolchain` correctly fails on this workstation because the
+repository pins Node.js `24.14.0` while the available host runtime is
+`24.18.0`. The read-only GitHub workflow for evidence commit `1e2c569...`
+installed the exact `24.14.0` runtime and passed Unit/contract tests,
+Integration, Typecheck, Lint, Production build, dependency vulnerability,
+license, SBOM and CodeQL gates. The pin was not weakened.
 
 The Vercel CLI is not installed and this checkout is not linked through a
 local `.vercel/project.json`. Install it with `npm i -g vercel` to enable
@@ -84,7 +87,7 @@ isolated Preview acceptance run.
    ledger/checksums, and execute restore plus guarded rollback rehearsal.
 2. Run real persistence/reload/OCC/cleanup E2E with two isolated QA tenants and
    the complete role/project matrix.
-3. Deploy the exact implementation SHA to a protected Preview environment and
+3. Complete protected Preview acceptance on the READY evidence deployment and
    prove that Preview database and private Blob resources are isolated from
    Production, including legacy object migration and reconciliation.
 4. Complete portal certification plus Resend/password-reset/invitation and
@@ -99,9 +102,7 @@ isolated Preview acceptance run.
    it in a separate controlled cutover with concurrency and rollback evidence.
 8. Obtain Legal, company-profile, Product and Launch ON/OFF/INTERNAL signatures;
    freeze the resulting acceptance evidence and release attestation.
-9. Resolve the exact Node.js toolchain pin and obtain green CI for the frozen
-   SHA.
-10. Only after all prior gates pass: perform SHA-identical promotion, controlled
+9. Only after all prior gates pass: perform SHA-identical promotion, controlled
     Production migrations/backup validation, Production smoke, rollback
     readiness and the signed observation window.
 

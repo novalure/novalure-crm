@@ -1,8 +1,8 @@
 # Justimmo-inspired gap matrix
 
-Status: implementation gap review, 2026-09-02. Local evidence exists, but the
-candidate is not frozen or signed and no remote acceptance is inferred from this
-matrix.
+Status: implementation gap review, 2026-09-02. The implementation candidate is
+frozen in Git and its exact protected Preview build is READY, but the evidence
+is not externally signed and no remote acceptance is inferred from this matrix.
 
 | Capability | Implemented in the local candidate | Local evidence boundary | Explicitly deferred / still open |
 | --- | --- | --- | --- |
