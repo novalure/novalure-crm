@@ -453,6 +453,10 @@ test("the standalone verifier requires a canonical receipt and an external diges
   };
   const cutoverFixture = createProductionCutoverTestFixture({
     additionalTrustKeys: [launchTrustKey],
+    // Bind both signed fixtures to one deterministic clock. Letting the cutover
+    // helper read a later wall clock can place its final signature after the
+    // already-created activation receipt on fast Linux CI runners.
+    nowEpochMs: activationLeaseNotBeforeEpochMs,
   });
   const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
   const cutoverVerification = verifyProductionCutoverEvidence({
@@ -530,6 +534,10 @@ test("the standalone verifier requires a canonical receipt and an external diges
       assert.match(
         result.stderr,
         /LAUNCH_ACTIVATION_FLAGS_OUTPUT_WINDOWS_PRIVATE_ACL_UNVERIFIED/u,
+      );
+      assert.doesNotMatch(
+        result.stderr,
+        /LAUNCH_ACTIVATION_RECEIPT_PREDATES_CUTOVER_SIGNATURES/u,
       );
       assert.equal(result.stdout, "");
       assert.throws(() => readFileSync(flagsOutputPath), /ENOENT/u);
