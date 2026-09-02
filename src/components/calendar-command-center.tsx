@@ -1253,7 +1253,7 @@ export function CalendarCommandCenter({
     shortBookingUrl,
   )}`;
   const embedCode = `<iframe src="${trackedBookingUrl}" title="${shareConfig.buttonLabel}" style="width:100%;min-height:${shareConfig.height}px;border:0;border-radius:12px;overflow:hidden" loading="lazy"></iframe>`;
-  const buttonCode = `<a href="${trackedBookingUrl}" style="display:inline-flex;align-items:center;justify-content:center;border:1px solid #e4b900;border-radius:999px;background:#ffd43b;color:#211800;padding:12px 18px;text-decoration:none;font-weight:800" target="_blank" rel="noreferrer">${shareConfig.buttonLabel}</a>`;
+  const buttonCode = `<a href="${trackedBookingUrl}" style="display:inline-flex;align-items:center;justify-content:center;border:1px solid #1e4fc2;border-radius:999px;background:#2d68f0;color:#ffffff;padding:12px 18px;text-decoration:none;font-weight:800" target="_blank" rel="noreferrer">${shareConfig.buttonLabel}</a>`;
   const messageTemplate = text.share.messageTemplate(trackedBookingUrl);
   const qrPayload = text.share.qrPayload(shortBookingUrl, qrImageUrl);
   const shareArtifacts: Record<MeetingShareMode, string> = {
@@ -1706,7 +1706,7 @@ export function CalendarCommandCenter({
 
   if (meetingBuilderOpen) {
     return (
-      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
+      <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#faf9f7] text-slate-950">
         <header className="shrink-0 border-b border-blue-100 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-start gap-3">

@@ -1,8 +1,8 @@
 .stage {
   align-items: center;
   background:
-    radial-gradient(circle at 50% 20%, rgb(255 212 59 / 14%), transparent 32rem),
-    #07080b;
+    radial-gradient(circle at 50% 20%, rgb(45 104 240 / 18%), transparent 32rem),
+    #33302b;
   display: flex;
   justify-content: center;
   min-height: 100vh;
@@ -10,7 +10,7 @@
 }
 
 .desktopStage {
-  background: #07080b;
+  background: #33302b;
   height: 100vh;
   overflow: hidden;
   width: 100%;
@@ -28,7 +28,7 @@
 }
 
 .device {
-  background: #f4f6fa;
+  background: #faf9f7;
   border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 2rem;
   box-shadow: 0 2rem 5rem rgb(0 0 0 / 48%);
@@ -38,7 +38,7 @@
 }
 
 .frame {
-  background: #f4f6fa;
+  background: #faf9f7;
   border: 0;
   display: block;
   height: 100%;

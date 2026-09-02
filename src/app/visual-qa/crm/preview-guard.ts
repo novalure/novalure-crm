@@ -1,4 +1,4 @@
-const visualQaBranch = "codex/go-live-remediation-2026-08-11";
+const visualQaBranch = "codex/justimmo-inspired-improvements-20260902";
 
 export function isVisualQaDeployment() {
   return (

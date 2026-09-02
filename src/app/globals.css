@@ -1,6 +1,5 @@
 @import "react-grid-layout/css/styles.css";
 @import "react-resizable/css/styles.css";
-@import "@fontsource-variable/inter";
 @import "tailwindcss";
 @import "../styles/novalure-tokens.css";
 @import "../styles/crm-theme.css";
@@ -92,7 +91,7 @@ main.min-h-screen {
 }
 
 .login-auth-input:focus {
-  border-color: var(--nl-gold-strong) !important;
+  border-color: var(--nl-blue-dark) !important;
   box-shadow: var(--nl-focus-ring) !important;
 }
 
@@ -106,8 +105,8 @@ main.min-h-screen {
 }
 
 .login-auth-submit:hover {
-  background: var(--nl-gold-hover) !important;
-  border-color: var(--nl-gold-strong) !important;
+  background: var(--nl-blue-dark) !important;
+  border-color: var(--nl-blue-dark) !important;
 }
 
 .password-visibility-input::-ms-clear,
@@ -116,7 +115,7 @@ main.min-h-screen {
 }
 
 .react-grid-item.react-grid-placeholder {
-  background: var(--nl-gold) !important;
+  background: var(--nl-blue) !important;
   opacity: 0.18;
 }
 
@@ -126,7 +125,7 @@ main.min-h-screen {
 
 .react-grid-item.react-grid-placeholder {
   border-radius: 8px;
-  background: var(--nl-gold) !important;
+  background: var(--nl-blue) !important;
   opacity: 0.18;
 }
 

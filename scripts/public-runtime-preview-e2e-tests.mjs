@@ -24,6 +24,8 @@ const crossTenantWorkspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const crossTenantBatchId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const crossTenantActorUserId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const previewOrigin = "https://candidate-novalure.vercel.app";
+const automationBypassToken = `qa_${"B".repeat(40)}`;
+const automationBypassUrl = `${previewOrigin}/?x-vercel-protection-bypass=${automationBypassToken}`;
 const sessionCookie = `novalure_session=${"p".repeat(48)}`;
 const crossTenantSessionCookie = `novalure_session=${"x".repeat(48)}`;
 const workspacePublicKey = "f".repeat(32);
@@ -88,6 +90,7 @@ function action(overrides = {}) {
     productionDatabaseHost: "ep-production.aws.neon.tech",
     productionOrigin: "https://www.novalure-crm.app",
     sessionCookie,
+    shareUrl: automationBypassUrl,
     workspaceId,
     ...overrides,
   }));
@@ -214,6 +217,14 @@ function createHarness(options = {}) {
       queryKeys: [...url.searchParams.keys()].sort(),
       scope,
     });
+
+    if (url.pathname === "/" && method === "GET") {
+      assert.equal(headers.get("x-vercel-protection-bypass"), automationBypassToken);
+      return new Response("<!doctype html><title>Preview</title>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+        status: 200,
+      });
+    }
 
     if (url.pathname === "/api/admin/qa-batch-capability") {
       assert.ok(scope === "primary" || scope === "secondary");

@@ -40,11 +40,11 @@ function textToEmailHtml(input: { body: string; title: string }) {
     .join("");
 
   return `
-    <div style="margin:0;padding:32px;background:#f4f6fa;font-family:Inter,Arial,sans-serif;color:#07080b">
-      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #dde3ec;border-radius:8px;padding:28px;box-shadow:0 18px 60px rgba(8,13,24,.08)">
-        <p style="margin:0 0 10px;color:#6b5200;font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase">Novalure Meeting</p>
+    <div style="margin:0;padding:32px;background:#faf9f7;font-family:Figtree,Arial,sans-serif;color:#33302b">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e3ded5;border-radius:8px;padding:28px;box-shadow:0 18px 60px rgba(51,48,43,.08)">
+        <p style="margin:0 0 10px;color:#1e4fc2;font-size:12px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase">Novalure Meeting</p>
         <h1 style="margin:0 0 20px;font-size:24px;line-height:1.25">${escapeHtml(input.title)}</h1>
-        <div style="font-size:15px;line-height:1.65;color:#667085">${paragraphs}</div>
+        <div style="font-size:15px;line-height:1.65;color:#6f6a63">${paragraphs}</div>
       </div>
     </div>
   `;

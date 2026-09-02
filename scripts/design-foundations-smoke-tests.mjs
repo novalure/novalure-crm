@@ -26,7 +26,7 @@ function contrastRatio(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-test("Inter is bundled for the CRM while the established public theme remains available", async () => {
+test("self-hosted Figtree drives the CRM and public runtime", async () => {
   const [fonts, globals, layout] = await Promise.all([
     read("src/app/fonts.ts"),
     read("src/app/globals.css"),
@@ -38,11 +38,12 @@ test("Inter is bundled for the CRM while the established public theme remains av
   assert.match(fonts, /weight: "400 800"/);
   assert.match(fonts, /variable: "--font-figtree"/);
   assert.match(layout, /className=\{`\$\{figtree\.variable\} h-full`\}/);
-  assert.match(layout, /themeColor: "#d9ecff"/);
-  assert.match(globals, /@import "@fontsource-variable\/inter"/);
+  assert.match(layout, /themeColor: "#faf9f7"/);
+  assert.doesNotMatch(globals, /@fontsource-variable\/inter/);
   assert.match(globals, /--font-sans: var\(--font-figtree\), system-ui, sans-serif/);
   assert.match(globals, /font-family: var\(--font-figtree\), system-ui, sans-serif/);
-  assert.match(await read("src/styles/crm-theme.css"), /font-family: "Inter Variable", Inter/);
+  assert.match(await read("src/styles/crm-theme.css"), /font-family: var\(--font-figtree\), system-ui, sans-serif/);
+  assert.match(await read("src/styles/public-runtime.css"), /font-family: var\(--font-figtree\), system-ui, sans-serif/);
 });
 
 test("current Novalure website tokens drive the authenticated CRM theme", async () => {
@@ -53,18 +54,21 @@ test("current Novalure website tokens drive the authenticated CRM theme", async 
   ]);
 
   const requiredTokens = {
-    "--nl-ink": "#07080b",
-    "--nl-graphite": "#111318",
-    "--nl-steel": "#1b2029",
-    "--nl-mist": "#f4f6fa",
+    "--nl-ink": "#33302b",
+    "--nl-graphite": "#272522",
+    "--nl-steel": "#4b4741",
+    "--nl-mist": "#faf9f7",
     "--nl-surface": "#ffffff",
-    "--nl-muted": "#667085",
-    "--nl-tertiary": "#667085",
-    "--nl-gold": "#ffd43b",
-    "--nl-gold-strong": "#e4b900",
-    "--nl-focus-outline": "#8a6800",
+    "--nl-surface-soft": "#f3f0ea",
+    "--nl-muted": "#6f6a63",
+    "--nl-tertiary": "#8a837a",
+    "--nl-blue": "#2d68f0",
+    "--nl-blue-dark": "#1e4fc2",
+    "--nl-blue-tint": "#e9f0fe",
+    "--nl-focus-outline": "#1e4fc2",
     "--nl-green": "#42d39b",
-    "--nl-border": "#dde3ec",
+    "--nl-divider": "#ede9e2",
+    "--nl-border": "#e3ded5",
     "--nl-success-text": "#176344",
     "--nl-warning-text": "#76531d",
     "--nl-danger-text": "#8a3026",
@@ -79,21 +83,90 @@ test("current Novalure website tokens drive the authenticated CRM theme", async 
   assert.match(globals, /--background: var\(--nl-bg\)/);
   assert.doesNotMatch(globals, /--background: #d9ecff/);
   assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\]/);
-  assert.match(crmTheme, /var\(--nl-gold\)/);
+  assert.match(crmTheme, /var\(--nl-blue\)/);
   assert.match(crmTheme, /var\(--nl-graphite\)/);
+  assert.doesNotMatch(crmTheme, /var\(--nl-gold/);
+  assert.match(tokens, /--nl-gold: var\(--nl-blue\);/);
+});
+
+test("embedded, exported and immersive CRM surfaces share the website brand", async () => {
+  const [
+    calendar,
+    crmWorkspace,
+    dashboard,
+    embedRoute,
+    formCenter,
+    formRenderer,
+    funnelCenter,
+    icon,
+    meetingRoute,
+    meetingRunner,
+    newsletterCenter,
+    passwordReset,
+    publicRuntime,
+  ] = await Promise.all([
+    read("src/components/calendar-command-center.tsx"),
+    read("src/components/crm-workspace.tsx"),
+    read("src/components/dashboard-overview.tsx"),
+    read("src/app/forms/embed/route.ts"),
+    read("src/components/form-command-center.tsx"),
+    read("src/components/form-renderer.tsx"),
+    read("src/components/funnel-command-center.tsx"),
+    read("src/app/icon.svg"),
+    read("src/app/api/meetings/notifications/route.ts"),
+    read("src/lib/meetings/notification-runner.ts"),
+    read("src/components/newsletter-command-center.tsx"),
+    read("src/lib/auth/password-reset.ts"),
+    read("src/styles/public-runtime.css"),
+  ]);
+
+  const legacyBrandPattern = /font-family:Inter|#ffd43b|#e4b900|#7a5e00|#07080b|#111318|#f4f6fa|#dde3ec|#f8fafc|#667085|#d9ecff/i;
+  for (const source of [
+    calendar,
+    crmWorkspace,
+    dashboard,
+    embedRoute,
+    formCenter,
+    formRenderer,
+    funnelCenter,
+    icon,
+    meetingRoute,
+    meetingRunner,
+    newsletterCenter,
+    passwordReset,
+    publicRuntime,
+  ]) {
+    assert.doesNotMatch(source, legacyBrandPattern);
+  }
+
+  assert.match(formRenderer, /font-family:Figtree/);
+  assert.match(formRenderer, /background:#2d68f0;color:#fff/);
+  assert.match(embedRoute, /font-family:Figtree/);
+  assert.match(meetingRoute, /background:#faf9f7[\s\S]*font-family:Figtree/);
+  assert.match(meetingRunner, /background:#faf9f7[\s\S]*font-family:Figtree/);
+  assert.match(passwordReset, /font-family:Figtree/);
+  assert.match(crmWorkspace, /bg-\[#faf9f7\]/);
+  assert.match(formCenter, /bg-\[#faf9f7\]/);
+  assert.match(funnelCenter, /bg-\[#faf9f7\]/);
+  assert.match(newsletterCenter, /bg-\[#faf9f7\]/);
+  assert.match(calendar, /bg-\[#faf9f7\]/);
+  assert.match(dashboard, /PDF_EXPORT_BACKGROUND = "#faf9f7"/);
+  assert.match(icon, /fill="#faf9f7"/);
+  assert.match(icon, /stroke="#2d68f0"/);
+  assert.match(icon, /fill="#1e4fc2"/);
 });
 
 test("required text and status token pairs meet WCAG AA contrast", () => {
   const pairs = [
-    ["#211800", "#ffd43b"],
-    ["#ffffff", "#111318"],
-    ["#07080b", "#ffffff"],
-    ["#667085", "#ffffff"],
-    ["#667085", "#f4f6fa"],
+    ["#ffffff", "#2d68f0"],
+    ["#ffffff", "#272522"],
+    ["#33302b", "#ffffff"],
+    ["#6f6a63", "#ffffff"],
+    ["#6f6a63", "#faf9f7"],
     ["#176344", "#edfff6"],
     ["#76531d", "#fbf1df"],
     ["#8a3026", "#fff1ef"],
-    ["#6b5200", "#fff8d6"],
+    ["#1e4fc2", "#e9f0fe"],
   ];
 
   for (const [foreground, background] of pairs) {
@@ -121,7 +194,7 @@ test("CRM controls preserve sizing utilities while the public site keeps its est
   assert.doesNotMatch(formRule, /\bwidth:\s*100%/);
   assert.doesNotMatch(formRule, /\bmin-width:\s*0/);
   assert.match(crmTheme, /:where\(\.crm-app\) :where\([\s\S]*?\{\s*min-width: 0;\s*\}/);
-  assert.match(crmTheme, /input::placeholder,[\s\S]*?color: var\(--nl-tertiary\) !important;[\s\S]*?opacity: 1;/);
+  assert.match(crmTheme, /input::placeholder,[\s\S]*?color: var\(--nl-muted\) !important;[\s\S]*?opacity: 1;/);
   assert.match(publicLanding, /--nl-bg: #faf9f7;/);
   assert.match(publicLanding, /--nl-tertiary: #8a837a;/);
   assert.match(publicLanding, /--nl-blue: #2d68f0;/);
@@ -180,10 +253,10 @@ test("CRM shell primitives override the generic utility palette", async () => {
 
 test("focus outline meets the WCAG non-text contrast threshold on light and dark CRM surfaces", () => {
   const focusPairs = [
-    ["#8a6800", "#ffffff"],
-    ["#8a6800", "#f4f6fa"],
-    ["#8a6800", "#07080b"],
-    ["#8a6800", "#111318"],
+    ["#1e4fc2", "#ffffff"],
+    ["#1e4fc2", "#faf9f7"],
+    ["#e9f0fe", "#33302b"],
+    ["#e9f0fe", "#272522"],
   ];
 
   for (const [foreground, background] of focusPairs) {
@@ -242,7 +315,7 @@ test("visual QA renders mock CRM data only on the exact protected preview branch
 
   assert.match(guard, /process\.env\.VERCEL_ENV === "preview"/);
   assert.match(guard, /process\.env\.VERCEL_GIT_COMMIT_REF === visualQaBranch/);
-  assert.match(guard, /codex\/go-live-remediation-2026-08-11/);
+  assert.match(guard, /codex\/justimmo-inspired-improvements-20260902/);
   assert.match(page, /notFound\(\)/);
   assert.doesNotMatch(page, /CrmWorkspace/);
   assert.doesNotMatch(page, /getMockCoreCrmData/);

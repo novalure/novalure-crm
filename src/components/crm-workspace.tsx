@@ -4166,7 +4166,7 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="crm-app min-h-screen max-w-full overflow-hidden bg-[#f4f6fa] text-slate-950" lang={language}>
+    <main className="crm-app min-h-screen max-w-full overflow-hidden bg-[#faf9f7] text-slate-950" lang={language}>
       <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
           aria-hidden={mobileNavigationOpen ? true : undefined}

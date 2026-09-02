@@ -29,6 +29,8 @@ import { a11yRetainedTableNames } from "./lib/a11y-fixture-lifecycle-evidence.mj
 const candidateSha = "a".repeat(40);
 const deploymentId = `dpl_${"D".repeat(24)}`;
 const previewOrigin = "https://novalure-a11y-candidate.vercel.app";
+const automationBypassToken = `qa_${"S".repeat(40)}`;
+const automationBypassUrl = `${previewOrigin}/?x-vercel-protection-bypass=${automationBypassToken}`;
 const primaryBatchId = "33333333-3333-4333-8333-333333333333";
 const crossTenantBatchId = "44444444-4444-4444-8444-444444444444";
 const primaryWorkspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -64,7 +66,7 @@ function validRawInput(overrides = {}) {
     productionNeonProjectId: "misty-cloud-70835427",
     productionOrigin: "https://www.novalure-crm.app",
     schemaVersion: 1,
-    shareUrl: "",
+    shareUrl: automationBypassUrl,
     ...overrides,
   };
 }
@@ -129,12 +131,12 @@ test("lifecycle input is strict, final-candidate bound and preserves an explicit
   );
 });
 
-test("share handoff accepts only a tokenized URL on the exact Preview origin", () => {
-  const input = validInput({ shareUrl: `${previewOrigin}/?_vercel_share=${"S".repeat(32)}` });
-  assert.equal(input.shareUrl, `${previewOrigin}/?_vercel_share=${"S".repeat(32)}`);
+test("share handoff accepts only an automation-bypass URL on the exact Preview origin", () => {
+  const input = validInput();
+  assert.equal(input.shareUrl, automationBypassUrl);
   assert.throws(
-    () => validInput({ shareUrl: `https://vercel.com/some/share?_vercel_share=${"S".repeat(32)}` }),
-    /A11Y_FIXTURE_SHARE_HANDOFF_INVALID/u,
+    () => validInput({ shareUrl: `https://vercel.com/some/share?x-vercel-protection-bypass=${automationBypassToken}` }),
+    /A11Y_FIXTURE_INPUT_SCOPE_INVALID/u,
   );
 });
 
@@ -405,6 +407,16 @@ function lifecycleStubs({
           };
         },
       }),
+      fetchImpl: async (value, init = {}) => {
+        const url = new URL(value);
+        const headers = new Headers(init.headers ?? {});
+        assert.equal(url.href, `${previewOrigin}/`);
+        assert.equal(headers.get("x-vercel-protection-bypass"), automationBypassToken);
+        return new Response("<!doctype html><title>Preview</title>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+          status: 200,
+        });
+      },
       lifecycleEvidenceWriter: async (_outputDirectory, document) => {
         events.push("write-lifecycle-evidence");
         return {
@@ -460,7 +472,7 @@ function lifecycleStubs({
         return {
           publicFormUrl: `${previewOrigin}/forms/public/a11y`,
           publicFunnelUrl: `${previewOrigin}/preview/fixture?mode=live&token=${publishToken}`,
-          shareUrl: "",
+          shareUrl: automationBypassUrl,
         };
       },
       targetInspector: async () => events.push("target-preflight"),

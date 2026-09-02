@@ -1,31 +1,32 @@
 :root {
-  /* Current novalure.eu visual system (ink / graphite / gold / green). */
-  --nl-ink: #07080b;
-  --nl-graphite: #111318;
-  --nl-steel: #1b2029;
-  --nl-mist: #f4f6fa;
-  --nl-gold: #ffd43b;
-  --nl-gold-strong: #e4b900;
-  --nl-gold-hover: #ffe06b;
-  --nl-gold-text: #6b5200;
+  /* Shared novalure-crm.app palette: warm neutrals, graphite ink and Novalure blue. */
+  --nl-ink: #33302b;
+  --nl-graphite: #272522;
+  --nl-steel: #4b4741;
+  --nl-mist: #faf9f7;
+  --nl-blue: #2d68f0;
+  --nl-blue-dark: #1e4fc2;
+  --nl-blue-tint: #e9f0fe;
+  /* Compatibility aliases for older components; the product no longer renders gold actions. */
+  --nl-gold: var(--nl-blue);
+  --nl-gold-strong: var(--nl-blue-dark);
+  --nl-gold-hover: var(--nl-blue-dark);
+  --nl-gold-text: var(--nl-blue-dark);
   --nl-green: #42d39b;
 
   --nl-bg: var(--nl-mist);
   --nl-surface: #ffffff;
-  --nl-surface-soft: #f8fafc;
-  --nl-muted: #667085;
-  --nl-tertiary: #667085;
-  --nl-blue: var(--nl-gold);
-  --nl-blue-dark: var(--nl-gold-strong);
-  --nl-blue-tint: #fff8d6;
-  --nl-amber: #d79a00;
-  --nl-amber-tint: #fff7df;
-  --nl-divider: #e7ebf1;
-  --nl-border: #dde3ec;
-  --nl-neutral: #eef1f6;
-  --nl-row-divider: #edf0f4;
-  --nl-progress-track: #e4e8ef;
-  --nl-disabled: #98a2b3;
+  --nl-surface-soft: #f3f0ea;
+  --nl-muted: #6f6a63;
+  --nl-tertiary: #8a837a;
+  --nl-amber: #e9a23b;
+  --nl-amber-tint: #fbf1df;
+  --nl-divider: #ede9e2;
+  --nl-border: #e3ded5;
+  --nl-neutral: #f3f0ea;
+  --nl-row-divider: #ede9e2;
+  --nl-progress-track: #e3ded5;
+  --nl-disabled: #8a837a;
 
   --nl-success-bg: #edfff6;
   --nl-success-border: #a8d7c2;
@@ -37,11 +38,11 @@
   --nl-danger-border: #e9b9b3;
   --nl-danger-text: #8a3026;
 
-  --nl-shadow-card: 0 1px 2px rgb(8 13 24 / 3%), 0 10px 30px rgb(8 13 24 / 6%);
-  --nl-shadow-raised: 0 2px 4px rgb(8 13 24 / 4%), 0 18px 60px rgb(8 13 24 / 9%);
-  --nl-shadow-menu: 0 28px 80px rgb(8 13 24 / 20%);
-  --nl-focus-outline: #8a6800;
-  --nl-focus-ring: 0 0 0 4px rgb(255 212 59 / 24%);
+  --nl-shadow-card: 0 1px 2px rgb(51 48 43 / 3%), 0 10px 30px rgb(51 48 43 / 6%);
+  --nl-shadow-raised: 0 2px 4px rgb(51 48 43 / 4%), 0 18px 60px rgb(51 48 43 / 9%);
+  --nl-shadow-menu: 0 28px 80px rgb(51 48 43 / 20%);
+  --nl-focus-outline: #1e4fc2;
+  --nl-focus-ring: 0 0 0 4px rgb(45 104 240 / 24%);
 
   --nl-control-height: 50px;
   --nl-control-height-compact: 44px;
