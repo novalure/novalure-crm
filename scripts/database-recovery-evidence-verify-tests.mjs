@@ -464,6 +464,7 @@ test("Committed Recovery reader accepts only CRLF checkout expansion and rejects
     git(root, ["init"]);
     git(root, ["config", "user.email", "recovery-test@example.invalid"]);
     git(root, ["config", "user.name", "Recovery Test"]);
+    git(root, ["config", "core.autocrlf", "true"]);
     const relativePath = "evidence/recovery.json";
     await mkdir(join(root, "evidence"));
     await writeFile(join(root, relativePath), "{\"status\":\"BLOCKED\"}\n", { flag: "wx" });
