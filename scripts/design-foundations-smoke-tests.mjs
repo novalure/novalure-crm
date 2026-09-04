@@ -4,6 +4,11 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
+function cssRuleBody(css, selector) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return css.match(new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? "";
+}
+
 function relativeLuminance(hex) {
   const channels = hex
     .replace("#", "")
@@ -84,7 +89,44 @@ test("current Novalure website tokens drive the authenticated CRM theme", async 
   assert.doesNotMatch(globals, /--background: #d9ecff/);
   assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\]/);
   assert.match(crmTheme, /var\(--nl-blue\)/);
-  assert.match(crmTheme, /var\(--nl-graphite\)/);
+
+  const shellRules = {
+    ".crm-app [data-crm-sidebar]": /background: rgb\(250 249 247 \/ 98%\) !important;/,
+    ".crm-app [data-crm-header]": /background: rgb\(250 249 247 \/ 92%\) !important;/,
+    ".crm-app [data-crm-mobile-bar]": /background: rgb\(250 249 247 \/ 94%\);/,
+    ".crm-app [data-crm-mobile-drawer]": /background: var\(--nl-bg\);/,
+  };
+
+  for (const [selector, expectedBackground] of Object.entries(shellRules)) {
+    const body = cssRuleBody(crmTheme, selector);
+    assert.ok(body, `${selector} must exist`);
+    assert.match(body, expectedBackground);
+    assert.doesNotMatch(
+      body,
+      /background(?:-image)?:\s*[^;]*(?:var\(--nl-(?:ink|graphite|steel)\)|rgb\(7 8 11)/,
+    );
+  }
+
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-header-title]"),
+    /color: var\(--nl-ink\) !important;/,
+  );
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-nav-item][data-active=\"true\"]"),
+    /background: var\(--nl-blue\) !important;[\s\S]*color: #ffffff !important;/,
+  );
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-nav-item]"),
+    /background: transparent !important;[\s\S]*color: var\(--nl-muted\) !important;/,
+  );
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-mobile-drawer]"),
+    /background: var\(--nl-bg\);[\s\S]*color: var\(--nl-ink\);/,
+  );
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-header-actions] select"),
+    /background: var\(--nl-surface\) !important;[\s\S]*color: var\(--nl-ink\) !important;/,
+  );
   assert.doesNotMatch(crmTheme, /var\(--nl-gold/);
   assert.match(tokens, /--nl-gold: var\(--nl-blue\);/);
 });
@@ -93,6 +135,7 @@ test("embedded, exported and immersive CRM surfaces share the website brand", as
   const [
     calendar,
     crmWorkspace,
+    crmTheme,
     dashboard,
     embedRoute,
     formCenter,
@@ -107,6 +150,7 @@ test("embedded, exported and immersive CRM surfaces share the website brand", as
   ] = await Promise.all([
     read("src/components/calendar-command-center.tsx"),
     read("src/components/crm-workspace.tsx"),
+    read("src/styles/crm-theme.css"),
     read("src/components/dashboard-overview.tsx"),
     read("src/app/forms/embed/route.ts"),
     read("src/components/form-command-center.tsx"),
@@ -146,6 +190,16 @@ test("embedded, exported and immersive CRM surfaces share the website brand", as
   assert.match(meetingRunner, /background:#faf9f7[\s\S]*font-family:Figtree/);
   assert.match(passwordReset, /font-family:Figtree/);
   assert.match(crmWorkspace, /bg-\[#faf9f7\]/);
+  assert.match(crmWorkspace, /data-crm-wordmark/);
+  assert.doesNotMatch(crmWorkspace, /src="\/novalure-logo\.svg"/);
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-wordmark]"),
+    /font-size: 20px;[\s\S]*font-weight: 800;/,
+  );
+  assert.match(
+    cssRuleBody(crmTheme, ".crm-app [data-crm-badge]"),
+    /font-size: 11px;[\s\S]*font-weight: 700;/,
+  );
   assert.match(formCenter, /bg-\[#faf9f7\]/);
   assert.match(funnelCenter, /bg-\[#faf9f7\]/);
   assert.match(newsletterCenter, /bg-\[#faf9f7\]/);
@@ -244,7 +298,7 @@ test("CRM shell primitives override the generic utility palette", async () => {
   );
   assert.match(crmTheme, /\.crm-app \[data-crm-sidebar\] \{/);
   assert.match(crmTheme, /\.crm-app \[data-crm-header\] \{/);
-  assert.match(crmTheme, /\[data-crm-projects\] summary \{\s*color: #ffffff !important;/);
+  assert.match(crmTheme, /\[data-crm-projects\] summary \{\s*color: var\(--nl-ink\) !important;/);
   assert.match(
     crmTheme,
     /\.crm-app \[role="dialog"\]:where\(:not\(\[data-crm-mobile-drawer\]\)\)/,

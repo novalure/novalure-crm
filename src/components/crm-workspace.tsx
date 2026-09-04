@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   automations,
@@ -1095,14 +1094,9 @@ function CrmBrand({ compact = false }: { compact?: boolean }) {
 
   return (
     <span data-crm-brand>
-      <Image
-        alt="NovaLure — we create success"
-        data-crm-logo
-        height={55}
-        src="/novalure-logo.svg"
-        unoptimized
-        width={150}
-      />
+      <span data-crm-wordmark>
+        Novalure<span aria-hidden="true">.</span>
+      </span>
       <span data-crm-badge>CRM</span>
     </span>
   );
