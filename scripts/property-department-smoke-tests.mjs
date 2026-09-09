@@ -228,8 +228,8 @@ test("property create view uses focused, grouped form sections instead of a cram
 
   assert.match(component, /sticky top-3/);
   assert.match(component, /propertyInputClass = "min-h-12/);
-  assert.match(component, /propertyTextareaClass = `\$\{propertyInputClass\} min-h-\[168px\]/);
-  assert.match(component, /min-h-\[240px\]/);
+  assert.match(component, /PropertyTextEditor/);
+  assert.match(read("src/styles/crm-theme.css"), /property-writing-surface[^}]+min-height: 360px/);
   assert.match(component, /defaultOpenPropertyDetailSections/);
   assert.match(component, /md:grid-cols-2 2xl:grid-cols-3/);
   assert.doesNotMatch(component, /xl:grid-cols-4[\s\S]{0,120}PROPERTY_FIELD_SECTIONS/);

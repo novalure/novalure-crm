@@ -409,6 +409,29 @@
   opacity: 1;
 }
 
+/* Writing controls must not inherit the compact, single-line control height. */
+.crm-app textarea { min-height: 120px; }
+.crm-app .property-editor { min-width: 0; border: 1px solid var(--nl-border); border-radius: 12px; background: #fff; overflow: hidden; }
+.crm-app .property-editor-heading, .crm-app .property-editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--nl-divider); }
+.crm-app .property-editor-heading { justify-content: space-between; }
+.crm-app .property-editor button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--nl-border); border-radius: 8px; font-size: 14px; }
+.crm-app .property-editor button[aria-pressed="true"] { background: #e4edff !important; color: #193d8b !important; border-color: #3157c5 !important; }
+.crm-app .property-writing-surface { min-height: 360px; max-height: 650px; overflow-y: auto; resize: vertical; padding: 20px; font-size: 16px; line-height: 1.7; color: #242824; outline-offset: -3px; }
+.crm-app .property-writing-surface p { margin: 0 0 1em; }
+.crm-app .property-writing-surface h2 { font-size: 1.5em !important; line-height: 1.35; margin: 1em 0 .5em; }
+.crm-app .property-writing-surface ul { list-style: disc; padding-left: 1.8em; }
+.crm-app .property-writing-surface ol { list-style: decimal; padding-left: 1.8em; }
+.crm-app .property-writing-surface li p { margin-bottom: .3em; }
+.crm-app .property-editor-footer { padding: 10px 16px; border-top: 1px solid var(--nl-divider); font-size: 13px; color: var(--nl-muted); }
+.crm-app .property-editor-expanded { position: fixed; inset: 12px; z-index: 200; display: flex; flex-direction: column; box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%); }
+.crm-app .property-editor-expanded > .tiptap { flex: 1; min-height: 0; overflow: auto; }
+.crm-app .property-editor-expanded > div:has(> .property-writing-surface) { flex: 1; min-height: 0; overflow: auto; }
+.crm-app .property-editor-expanded .property-writing-surface { min-height: 100%; max-height: none; resize: none; }
+.crm-app [data-crm-context] { padding: 10px 14px !important; }
+.crm-app [data-crm-header-title] { max-width: none; font-size: 1.6rem !important; }
+.crm-app [data-crm-quickbar] { margin-top: 8px !important; padding-top: 8px !important; }
+.crm-app [data-crm-quickbar] > div:first-child { display: none; }
+
 .crm-app input[type="checkbox"],
 .crm-app input[type="radio"] {
   accent-color: var(--nl-blue);

@@ -26,6 +26,7 @@ export type PropertyDepartmentTabId =
   | "inquiries"
   | "channels"
   | "documents"
+  | "texts"
   | "matching"
   | "quality"
   | "activity";
@@ -37,7 +38,8 @@ export const PROPERTY_DEPARTMENT_TABS: Array<{ id: PropertyDepartmentTabId; labe
   { id: "reservations", label: "Reservierungen" },
   { id: "inquiries", label: "Anfragen" },
   { id: "channels", label: "Vermarktung / Kanäle" },
-  { id: "documents", label: "Dokumente / Exposé" },
+  { id: "texts", label: "Texte & Exposé" },
+  { id: "documents", label: "Bilder & Dokumente" },
   { id: "matching", label: "Käufer- und Investorenmatching" },
   { id: "quality", label: "Datenqualität" },
   { id: "activity", label: "Aktivitäten / Historie" },

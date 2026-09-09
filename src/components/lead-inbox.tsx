@@ -276,7 +276,7 @@ export function LeadInbox({
       effectiveLeads.map((lead) => {
         const contact = contacts.find((item) => item.id === lead.contactId);
         const project = projects.find((item) => item.id === lead.projectId);
-        const owner = users.find((item) => item.id === lead.assignedToUserId);
+        const owner = users.find((item) => item.id === lead.assignedToUserId && item.status === "active");
         const leadConsents = consents.filter((consent) => consent.contactId === lead.contactId);
         const leadConversations = conversations.filter(
           (conversation) => conversation.leadId === lead.id || conversation.contactId === lead.contactId,
@@ -323,7 +323,7 @@ export function LeadInbox({
           (activeView === "queue" && item.lead.status !== "Archiviert" && item.lead.status !== "Übergabe") ||
           (activeView === "hot" && item.lead.score >= 85 && item.lead.status !== "Archiviert") ||
           (activeView === "due" && item.slaMinutes <= 120 && item.lead.status !== "Archiviert") ||
-          (activeView === "unassigned" && !item.lead.assignedToUserId && item.lead.status !== "Archiviert") ||
+          (activeView === "unassigned" && !item.owner && item.lead.status !== "Archiviert") ||
           (activeView === "handover" && item.lead.status === "Übergabe") ||
           (activeView === "archived" && item.lead.status === "Archiviert");
 
@@ -372,7 +372,7 @@ export function LeadInbox({
     { id: "queue", label: text.queue, count: decoratedLeads.filter((item) => item.lead.status !== "Archiviert" && item.lead.status !== "Übergabe").length },
     { id: "hot", label: text.hot, count: hotLeadCount },
     { id: "due", label: text.due, count: dueLeadCount },
-    { id: "unassigned", label: text.unassignedView, count: decoratedLeads.filter((item) => !item.lead.assignedToUserId && item.lead.status !== "Archiviert").length },
+    { id: "unassigned", label: text.unassignedView, count: decoratedLeads.filter((item) => !item.owner && item.lead.status !== "Archiviert").length },
     { id: "handover", label: text.handover, count: handoverCount },
     { id: "archived", label: text.archived, count: decoratedLeads.filter((item) => item.lead.status === "Archiviert").length },
     { id: "all", label: text.all, count: decoratedLeads.length },
@@ -1487,6 +1487,7 @@ export function LeadInbox({
                       value={activeFieldDraft.assignedToUserId}
                     >
                       <option value="">{text.unassigned}</option>
+                      {activeFieldDraft.assignedToUserId && !assignableUsers.some((user) => user.id === activeFieldDraft.assignedToUserId) && <option value={activeFieldDraft.assignedToUserId}>{language === "de" ? "Zuständigkeit prüfen (nicht verfügbar)" : "Review assignment (unavailable)"}</option>}
                       {users.map((user) => (
                         <option disabled={user.status !== "active"} key={user.id} value={user.id}>
                           {user.name}{user.status !== "active" ? ` (${user.status})` : ""}

@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import type { PropertyEditorValue } from "./property-text-editor";
+const PropertyTextEditor = dynamic(() => import("./property-text-editor").then((module) => module.PropertyTextEditor));
+const PropertyTextWorkspace = dynamic(() => import("./property-text-workspace").then((module) => module.PropertyTextWorkspace));
 import type {
   BrokerMandate,
   BuyerSearchProfile,
@@ -104,6 +108,7 @@ type PropertyDraft = {
   rooms: string;
   subObjectType: string;
   textBlocks: Record<string, string>;
+  textDocuments: Record<string, PropertyEditorValue["document"]>;
   title: string;
   usageType: string;
   yearBuilt: string;
@@ -227,8 +232,24 @@ const propertyPanelClass = "rounded-lg border border-stone-200 bg-white p-5";
 const propertyFieldClass = "grid min-w-0 gap-2 text-sm font-semibold text-slate-700";
 const propertyInputClass = "min-h-12 w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-base font-medium leading-6 text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 const propertySelectClass = `${propertyInputClass} pr-9`;
-const propertyTextareaClass = `${propertyInputClass} min-h-[168px] resize-y align-top`;
-const defaultOpenPropertyDetailSections = new Set(["location", "areas", "costs", "energy"]);
+const defaultOpenPropertyDetailSections = new Set(["energy"]);
+
+// Core fields are edited above; keeping a second input would create conflicting values.
+const duplicateCoreFields = new Set([
+  "location.Bundesland", "areas.Wohnfläche", "rooms.Zimmer", "construction.Baujahr",
+  "classification.Objektart", "classification.Unterobjektart", "costs.Kaufpreis", "costs.Mietpreis brutto",
+  "costs.Betriebskosten", "costs.Heizkosten", "costs.Sonstige Kosten", "costs.Kaution",
+  "costs.Provision Miete", "costs.Provision Kauf", "costs.Grunderwerbsteuer",
+  "costs.Grundbucheintragung", "costs.Vertragserrichtung", "costs.Vergebührung",
+]);
+
+function categoryLabel(category: string, language: LanguageCode) {
+  if (language !== "de") return category.replaceAll("_", " ");
+  return ({ cover: "Titelbild", exterior: "Außenansicht", interior: "Innenansicht", floorplan: "Grundriss",
+    surroundings: "Umgebung", detail: "Detail", construction: "Baufortschritt", expose: "Exposé",
+    energy_certificate: "Energieausweis", land_register: "Grundbuch", contract: "Vertrag", approval: "Freigabe",
+    proof: "Nachweis", internal: "Intern" } as Record<string, string>)[category] ?? category;
+}
 
 function PropertyFormSection({
   children,
@@ -252,6 +273,7 @@ function toTextBlocks(draft: PropertyDraft) {
   return PROPERTY_TEXT_FIELDS.map((field, index) => ({
     channel: field.channel,
     content: draft.textBlocks[field.key] ?? "",
+    metadata: { editorDocument: draft.textDocuments[field.key] },
     position: index,
     status: field.key === "internal" ? "approved" : "draft",
     textKey: field.key,
@@ -320,7 +342,7 @@ export function PropertyCommandCenter({
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
-  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language), [language]);
+  const localizedFieldSections = useMemo(() => getPropertyFieldSections(language).map((section) => ({ ...section, fields: section.fields.filter((field) => !duplicateCoreFields.has(`${section.id}.${field.key}`)) })).filter((section) => section.fields.length), [language]);
   const assets = useMemo(
     () => buildPropertyAssets({
       brokerMandates,
@@ -344,6 +366,7 @@ export function PropertyCommandCenter({
     ? projects.filter((project) => project.id === activeProjectId)
     : projects;
   const [activeTab, setActiveTab] = useState<PropertyDepartmentTabId>("overview");
+  const [savedTextDrafts, setSavedTextDrafts] = useState<Record<string, Record<string, PropertyEditorValue> | undefined>>({});
   const [statusFilter, setStatusFilter] = useState<PropertyAssetStatus | "all">("all");
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState(() => assets[0]?.id ?? "");
@@ -385,6 +408,7 @@ export function PropertyCommandCenter({
     rooms: "",
     subObjectType: "",
     textBlocks: createTextDrafts(),
+    textDocuments: {},
     title: "",
     usageType: "residential",
     yearBuilt: "",
@@ -465,10 +489,11 @@ export function PropertyCommandCenter({
     }));
   }
 
-  function updateTextBlock(key: string, value: string) {
+  function updateTextBlock(key: string, value: PropertyEditorValue) {
     setDraft((current) => ({
       ...current,
-      textBlocks: { ...current.textBlocks, [key]: value },
+      textBlocks: { ...current.textBlocks, [key]: value.text },
+      textDocuments: { ...current.textDocuments, [key]: value.document },
     }));
   }
 
@@ -619,6 +644,7 @@ export function PropertyCommandCenter({
         publicPrice: "",
         rooms: "",
         textBlocks: createTextDrafts(),
+        textDocuments: {},
         title: "",
       }));
       await onPropertyChanged?.();
@@ -653,7 +679,7 @@ export function PropertyCommandCenter({
             <ActionButton action={actions.exportChannel} onClick={() => setActiveTab("channels")} />
           </div>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
           {metrics.map(([label, value]) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={label}>
               <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
@@ -831,7 +857,7 @@ export function PropertyCommandCenter({
                   {draft.title.trim() || copy.form.newProperty}
                 </h4>
                 <p className="mt-1 text-sm leading-6 text-stone-600">
-                  Preflight {draftReadyCount}/{draftPreflightItems.length}: {nextDraftIssue}
+                  {copy.form.preflight} {draftReadyCount}/{draftPreflightItems.length}: {nextDraftIssue}
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -954,6 +980,19 @@ export function PropertyCommandCenter({
                 </div>
               </PropertyFormSection>
 
+              <PropertyFormSection
+                description={copy.form.textDescription}
+                title={copy.form.texts}
+              >
+                <div className="grid gap-5" id="property-draft-texts">
+                  {PROPERTY_TEXT_FIELDS.map((field) => (
+                    <PropertyTextEditor key={field.key} label={copy.textFields[field.key] ?? field.label} language={language}
+                      value={{ text: draft.textBlocks[field.key] ?? "", document: draft.textDocuments[field.key] }}
+                      onChange={(value) => updateTextBlock(field.key, value)} disabled={saving} />
+                  ))}
+                </div>
+              </PropertyFormSection>
+
               <PropertyFormSection title={copy.form.pricesCosts}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <label className={propertyFieldClass}>
@@ -995,24 +1034,6 @@ export function PropertyCommandCenter({
                         })}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </PropertyFormSection>
-
-              <PropertyFormSection
-                description={copy.form.textDescription}
-                title={copy.form.texts}
-              >
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {PROPERTY_TEXT_FIELDS.map((field) => (
-                    <label className={`${propertyFieldClass} ${field.key === "expose" ? "lg:col-span-2" : ""}`} key={field.key}>
-                      <span>{copy.textFields[field.key] ?? field.label}</span>
-                      <textarea
-                        className={`${propertyTextareaClass} ${field.key === "expose" ? "min-h-[240px]" : ""}`}
-                        onChange={(event) => updateTextBlock(field.key, event.target.value)}
-                        value={draft.textBlocks[field.key] ?? ""}
-                      />
-                    </label>
                   ))}
                 </div>
               </PropertyFormSection>
@@ -1264,7 +1285,7 @@ export function PropertyCommandCenter({
           {preflight ? (
             <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">Preflight</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">{copy.form.preflight}</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{preflight.status}</p>
                 <div className="mt-4 grid gap-2">
                   <ActionButton action={actions.publishProperty} />
@@ -1284,6 +1305,19 @@ export function PropertyCommandCenter({
               </div>
             </div>
           ) : null}
+        </article>
+      ) : null}
+
+      {activeTab === "texts" ? (
+        selectedListingId && selectedAsset ? <PropertyTextWorkspace key={selectedListingId} propertyId={selectedListingId} projectId={selectedAsset.projectId}
+          title={selectedAsset.title} blocks={selectedTextBlocks} language={language} canEdit={actions.createProperty.enabled} onSaved={onPropertyChanged}
+          initialDraft={savedTextDrafts[selectedListingId]} onDraftChange={(values) => setSavedTextDrafts((current) => ({ ...current, [selectedListingId]: values }))} /> :
+        <article className={propertyPanelClass}>
+          <h4 className="text-xl font-semibold">{language === "de" ? "Texte & Exposé" : "Texts & exposé"}</h4>
+          <p className="my-3">{language === "de" ? "Textentwurf für ein neues Einzelobjekt. Ergänze anschließend die Objektdaten und speichere das Objekt. Für bestehende Texte wähle ein Einzelobjekt in der Übersicht." : "Text draft for a new property. Complete the property details and save the property afterwards. Select an existing property in the overview to edit saved texts."}</p>
+          <button className="min-h-11 rounded-md bg-slate-950 px-4 py-2 font-semibold text-white" type="button" onClick={() => setActiveTab("create")}>{language === "de" ? "Objektdaten ergänzen & speichern" : "Complete property details & save"}</button>
+          <div className="mt-5 grid gap-5">{PROPERTY_TEXT_FIELDS.map((field) => <PropertyTextEditor key={field.key} label={copy.textFields[field.key] ?? field.label} language={language}
+            value={{ text: draft.textBlocks[field.key] ?? "", document: draft.textDocuments[field.key] }} onChange={(value) => updateTextBlock(field.key, value)} disabled={saving} />)}</div>
         </article>
       ) : null}
 
@@ -1323,11 +1357,12 @@ export function PropertyCommandCenter({
               <ActionButton action={actions.approveDocument} />
             </div>
           </div>
+          {!selectedAsset?.sellerListingId && <p className="mt-3 text-sm" role="status">{language === "de" ? "Uploads sind erst für ein gespeichertes Einzelobjekt verfügbar. Bitte wähle ein Objekt in der Übersicht aus oder lege eines an." : "Uploads require a saved property. Select a property in the overview or create one first."}</p>}
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <section className="grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
                 {PROPERTY_MEDIA_CATEGORIES.map((category) => (
-                  <span className="rounded-md bg-stone-50 px-2 py-1" key={category}>{category}</span>
+                  <span className="rounded-md bg-stone-50 px-2 py-1" key={category}>{categoryLabel(category, language)}</span>
                 ))}
               </div>
               <div className="grid gap-2">
@@ -1340,7 +1375,7 @@ export function PropertyCommandCenter({
                     />
                     <span className="min-w-0">
                       <strong className="block break-words text-sm text-slate-950">{media.title || media.assetName}</strong>
-                      <span className="mt-1 block text-xs font-semibold text-stone-500">{media.category} / {media.visibility}</span>
+                      <span className="mt-1 block text-xs font-semibold text-stone-500">{categoryLabel(media.category, language)} / {getCrmSystemTextLabel(media.visibility, language)}</span>
                       <span className="mt-1 block text-xs text-stone-600">{media.isCover ? copy.subviews.coverImage : copy.subviews.gallery} / {copy.subviews.position} {media.position}</span>
                     </span>
                     <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{media.status}</span>
@@ -1353,7 +1388,7 @@ export function PropertyCommandCenter({
             <section className="grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
                 {PROPERTY_DOCUMENT_CATEGORIES.map((category) => (
-                  <span className="rounded-md bg-stone-50 px-2 py-1" key={category}>{category}</span>
+                  <span className="rounded-md bg-stone-50 px-2 py-1" key={category}>{categoryLabel(category, language)}</span>
                 ))}
               </div>
               <div className="grid gap-2">
@@ -1361,7 +1396,7 @@ export function PropertyCommandCenter({
                   <div className="grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 sm:grid-cols-[minmax(0,1fr)_120px]" key={document.id}>
                     <span className="min-w-0">
                       <strong className="block break-words text-sm text-slate-950">{document.title || document.assetName}</strong>
-                      <span className="mt-1 block text-xs font-semibold text-stone-500">{document.category} / {document.visibility}</span>
+                      <span className="mt-1 block text-xs font-semibold text-stone-500">{categoryLabel(document.category, language)} / {getCrmSystemTextLabel(document.visibility, language)}</span>
                       <span className="mt-1 block text-xs text-stone-600">{document.requiredForPublication ? copy.subviews.requiredForPublication : copy.subviews.optional}{document.publicUrl ? ` / ${copy.subviews.public}` : ""}</span>
                     </span>
                     <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{document.status}</span>

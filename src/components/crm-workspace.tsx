@@ -2087,11 +2087,10 @@ function WorkspaceContextBar({
     [contextCopy.area, areaLabel],
     [contextCopy.dataScope, dataScopeLabel],
   ];
-  const breadcrumbItems = [workspaceName, projectLabel, profileLabel, areaLabel];
+  const breadcrumbItems = [workspaceName, projectLabel, areaLabel];
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-sm" data-crm-context>
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{contextCopy.label}</p>
       <nav aria-label={contextCopy.label} className="mt-1" data-crm-breadcrumb>
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold text-slate-950">
           {breadcrumbItems.map((item, index) => (
@@ -2107,13 +2106,13 @@ function WorkspaceContextBar({
           ))}
         </ol>
       </nav>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+      <details className="mt-2 text-xs"><summary className="cursor-pointer">{contextCopy.label}</summary><div className="mt-2 flex flex-wrap gap-2">
         {chips.map(([label, value]) => (
           <span className="rounded-md bg-stone-50 px-2.5 py-1.5 font-semibold text-stone-700" data-crm-context-chip key={label}>
             {label}: <span className="text-slate-950">{value}</span>
           </span>
         ))}
-      </div>
+      </div></details>
     </section>
   );
 }
@@ -4522,9 +4521,7 @@ export function CrmWorkspace({
                   ref={pageTitleRef}
                   tabIndex={-1}
                 >
-                  {activeProject
-                    ? copy.header.projectHeadline(activeProject.type)
-                    : copy.header.defaultHeadline}
+                  {activeAreaLabel}
                 </h1>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end" data-crm-header-actions>

@@ -5,7 +5,7 @@ import type {
   PropertyInquiryRouteResult,
   PropertyPreflightResult,
 } from "@/lib/property-department";
-import { executeQuery, queryOne } from "@/lib/db/client";
+import { executeQuery, getSqlClient, queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
 
@@ -613,12 +613,19 @@ export async function savePropertyTextBlocks(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  const listing = await queryOne<ListingProjectRow>(
+    'select project_id as "projectId" from seller_listings where id = $1::uuid and workspace_id = $2',
+    [propertyId, input.session.workspaceId],
+  );
+  if (!listing) return { persisted: false, reason: "Property not found in workspace" };
+  const projectId = listing.projectId;
   const textBlocks = asObjectArray(input.textBlocks);
-  await executeQuery("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
+  const sql = getSqlClient();
+  const queries = [sql.query("select id from seller_listings where id = $1::uuid and workspace_id = $2 for update", [propertyId, input.session.workspaceId])];
+  queries.push(sql.query("delete from property_text_blocks where workspace_id = $1 and property_id = $2::uuid", [
     input.session.workspaceId,
     propertyId,
-  ]);
+  ]));
 
   let count = 0;
   for (const [index, block] of textBlocks.entries()) {
@@ -627,7 +634,7 @@ export async function savePropertyTextBlocks(input: {
     const title = cleanString(block.title);
     if (!textKey || (!content && !title)) continue;
 
-    await queryOne<IdRow>(
+    queries.push(sql.query(
       `
         insert into property_text_blocks (
           workspace_id,
@@ -662,9 +669,11 @@ export async function savePropertyTextBlocks(input: {
         index,
         JSON.stringify(asPlainObject(block.metadata)),
       ],
-    );
+    ));
     count += 1;
   }
+
+  await sql.transaction(queries);
 
   await writePropertyActivityEvent({
     detail: `${count} Textbloecke gespeichert`,
