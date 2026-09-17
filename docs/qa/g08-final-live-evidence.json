@@ -1,0 +1,2116 @@
+{
+  "format": "novalure-g08-final-live-verification-v1",
+  "exportedAt": "2026-09-17T20:45:49.902Z",
+  "status": "PASS",
+  "scope": "Isolated synthetic Preview-to-Preview verification only",
+  "crm": {
+    "repository": "novalure/novalure-crm",
+    "branch": "codex/crm-sales-readiness-high-gaps",
+    "pullRequest": 63,
+    "commit": "137c796534d60cd0c5be69097632076c817295ee",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "environment": "preview",
+    "deploymentId": "dpl_G9XNizikjr2hmwr4VX4FCaurQebP",
+    "deploymentStatus": "READY",
+    "deploymentUrl": "https://novalure-1h0rjkzj2-novalure.vercel.app",
+    "branchOrigin": "https://novalure-crm-git-codex-crm-sales-readiness-high-gaps-novalure.vercel.app",
+    "deploymentIdentityVerifiedAt": "2026-09-17T20:17:16.475Z"
+  },
+  "evelyn": {
+    "repository": "novalure/evelyn",
+    "pullRequest": 4,
+    "commit": "56e26c2b063319813076a3bc181473f484b1d490",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "environment": "preview",
+    "previewOrigin": "https://evelyn-hrc1fof30-novalure.vercel.app",
+    "sourceRepositoryModified": false,
+    "deployment": {
+      "status": "PASS",
+      "checkedAt": "2026-09-17T20:26:37.215Z",
+      "id": "dpl_3QqVWDeuP5Y2xJLtfAij1jVYupX9",
+      "state": "READY",
+      "target": null,
+      "source": "cli",
+      "deployedCommit": "2a74334e418fb1da346f7b033fc4e94cce303a1c",
+      "reviewedCommit": "56e26c2b063319813076a3bc181473f484b1d490",
+      "sourceRepositoryClean": true,
+      "runtimeSourceIdentical": true,
+      "changedPaths": [
+        "README.md",
+        "docs/README.md",
+        "docs/testing/evidence/phase-2b1-infrastructure.json",
+        "docs/testing/evidence/phase-2b1-live-preview.json",
+        "docs/testing/evidence/phase-2b1-local.json",
+        "docs/testing/phase-2b-results.md"
+      ],
+      "evelynDeploymentChanged": false
+    }
+  },
+  "githubCi": {
+    "status": "PASS",
+    "commit": "137c796534d60cd0c5be69097632076c817295ee",
+    "runs": [
+      {
+        "id": 35269720280,
+        "name": "Secret scan",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/35269720280"
+      },
+      {
+        "id": 35269720455,
+        "name": "Go-live quality gates",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/novalure/novalure-crm/actions/runs/35269720455"
+      }
+    ]
+  },
+  "localRegression": {
+    "status": "PASS",
+    "node": "24.14.0",
+    "npm": "11.9.0",
+    "baseline": {
+      "passed": 450,
+      "total": 450
+    },
+    "g08": {
+      "client": 26,
+      "database": 12,
+      "routeSecurity": 13
+    },
+    "disjointCounts": {
+      "unit": 236,
+      "integration": 25,
+      "migrationDb": 46,
+      "rbacSecurity": 87,
+      "workflow": 61,
+      "contract": 26,
+      "e2e": 20,
+      "total": 501
+    },
+    "total": {
+      "passed": 501,
+      "total": 501
+    },
+    "quality": {
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "build": "PASS",
+      "securityReview": "NO_REMAINING_CONFIRMED_HIGH_OR_CRITICAL_SOURCE_FINDING"
+    },
+    "dependencyAudit": {
+      "status": "PASS",
+      "vulnerabilities": 0
+    },
+    "secretScan": {
+      "staged": "PASS",
+      "history": "PASS",
+      "commits": 133,
+      "newExceptions": 0,
+      "unchangedHistoricalExactExceptions": 6
+    }
+  },
+  "sourceManifest": {
+    "commit": "137c796534d60cd0c5be69097632076c817295ee",
+    "fileCount": 505,
+    "sourceDigest": "706a5bc30877a8ad4a634dad7d9ee0335795d587ee697add1f022e1e1eb99295",
+    "perFileHashesOmitted": true
+  },
+  "live": {
+    "status": "PASS",
+    "startedAt": "2026-09-17T20:17:24.554Z",
+    "finishedAt": "2026-09-17T20:27:01.001Z",
+    "tenantId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+    "syntheticOnly": true,
+    "externalEffect": false,
+    "ownerStepsPerformedBy": "separate_test_owner_session_outside_crm",
+    "checks": [
+      {
+        "name": "exact-origin CRM Preview deployment-protection access",
+        "status": "PASS"
+      },
+      {
+        "name": "actual CRM browser password and MFA authentication",
+        "status": "PASS"
+      },
+      {
+        "name": "separate Evelyn Test-Owner authentication",
+        "status": "PASS"
+      },
+      {
+        "name": "live invalid service identity: Owner session and invalid service credentials cannot replace CRM workload authentication",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow A contact to accepted offer, stopped follow-up and won deal",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow A rejected offer stops follow-up and records lost deal",
+        "status": "PASS"
+      },
+      {
+        "name": "independent accepted synthetic offer for action immutability",
+        "status": "PASS"
+      },
+      {
+        "name": "authenticated Flow A UI renders persisted accepted offer outcome",
+        "status": "PASS"
+      },
+      {
+        "name": "CRM registers immutable full-value contract action",
+        "status": "PASS"
+      },
+      {
+        "name": "missing approval reference blocks CRM before registration",
+        "status": "PASS"
+      },
+      {
+        "name": "real CRM Preview creates Evelyn PENDING request with two required steps and idempotent retry",
+        "status": "PASS"
+      },
+      {
+        "name": "live CRM rejects scope overrides and Evelyn rejects an unknown reference",
+        "status": "PASS"
+      },
+      {
+        "name": "pending approval blocks CRM verification and synthetic execution",
+        "status": "PASS"
+      },
+      {
+        "name": "separate Test-Owner Step 1 still denies CRM verification",
+        "status": "PASS"
+      },
+      {
+        "name": "separate reauthenticated Test-Owner Step 2 enables fresh CRM Verify",
+        "status": "PASS"
+      },
+      {
+        "name": "verified synthetic execution has one effect across retries and rejects a new execution identity",
+        "status": "PASS"
+      },
+      {
+        "name": "second independent action obtains its own two-step approval",
+        "status": "PASS"
+      },
+      {
+        "name": "amount revision invalidates old approval and blocks CRM execution",
+        "status": "PASS"
+      },
+      {
+        "name": "matching cross-system correlation and authenticated CRM project audit",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B project, unit, buyer qualification, handover, viewing, reservation and sale",
+        "status": "PASS"
+      },
+      {
+        "name": "authenticated Preview UI has no uncaught browser exceptions",
+        "status": "PASS"
+      }
+    ],
+    "checkCounts": {
+      "passed": 21,
+      "total": 21
+    },
+    "actions": [
+      {
+        "actionId": "bd1def2e-a8bf-40b3-a0da-a0de6477c076",
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "actionVersion": 1,
+        "actionHash": "78ed508f4c5243e14e60110ed043b8103342aa21793a40af466b3ee83fa3e679",
+        "approvalReference": "f41f4976-3db5-4e80-84bf-09d9b5bc3e49",
+        "executionId": "03f47810-4525-4ceb-ae9d-f55710a25e6a"
+      },
+      {
+        "actionId": "da8787f2-578b-4d6e-9996-8094682f2088",
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "actionVersion": 1,
+        "actionHash": "13ec07320c1683ee69094c86fb30c20971dfb21fe6357ca8ca9a5787e32968a0",
+        "approvalReference": "b47fc200-c402-42bc-9afb-c4a5c1441cb2",
+        "revised": {
+          "actionVersion": 2,
+          "actionHash": "f6da627d69f57675811c5819f1af7bf28c79c428444ccb147076743412915492",
+          "approvalReference": "1e0aba7a-f944-4569-b2dd-cbea8e91ad76",
+          "amount": 2037100
+        }
+      }
+    ],
+    "audit": [
+      {
+        "actionId": "bd1def2e-a8bf-40b3-a0da-a0de6477c076",
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "serviceId": "crm-preview",
+        "sourceProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "events": [
+          {
+            "eventId": "91ab25d2-ac2e-41f6-90aa-565bd17f7c56",
+            "type": "ApprovalRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "c775ed0d-22a1-41f5-85ea-cc11255c0997",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "7026250a-52b0-4b2d-ac5d-0251acdac32a",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "INVALID"
+          },
+          {
+            "eventId": "dc4686b9-39e1-4193-bf92-fc82f537b840",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "f886a523-ad59-49ca-a50e-f94acf7c0717",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "939506ee-8f90-4d43-abf5-de7b47253d65",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "d7d2b4dd-698b-4386-80c6-73c048e822a4",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "cc2ad95f-93c0-4ae9-be03-d41cf3c6850c",
+            "type": "ChallengeIssued",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "285769b9-0fd7-4fc7-9fd6-4a048f922737",
+            "type": "Step1Approved",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "STEP_1_APPROVED"
+          },
+          {
+            "eventId": "3a4bd8ea-9ba8-4d18-bae3-489550c88d23",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "cbbff17a-7a47-4cfa-8979-6b8cf940931e",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "4407e4c5-506d-4375-aa6a-f60aed59a15a",
+            "type": "ChallengeIssued",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "STEP_1_APPROVED"
+          },
+          {
+            "eventId": "3492cd01-3197-4a80-9482-1b7282e926a8",
+            "type": "Step2Approved",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "APPROVED"
+          },
+          {
+            "eventId": "f805ab1b-4ece-4e65-be28-f31d835d36af",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "1f3083f3-bbb6-4747-8e7a-6a311833c9ba",
+            "type": "VerificationSucceeded",
+            "actorId": "crm-preview",
+            "status": "VALID"
+          },
+          {
+            "eventId": "75cdf6ad-5d45-4e02-9126-7f8d7afcdff5",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "5c6dddf8-1a4d-4cc7-aada-e665c0a0d07b",
+            "type": "VerificationSucceeded",
+            "actorId": "crm-preview",
+            "status": "VALID"
+          },
+          {
+            "eventId": "4a13c7ff-3131-4042-a629-82afd83f7dda",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "2594a321-8cf1-47f6-b9f4-d1cc32110d77",
+            "type": "VerificationSucceeded",
+            "actorId": "crm-preview",
+            "status": "VALID"
+          },
+          {
+            "eventId": "2d8d49ef-3320-46bb-8cdc-bb63796e44fa",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "682665a5-9032-4f50-83c0-c50f5eb1a826",
+            "type": "VerificationSucceeded",
+            "actorId": "crm-preview",
+            "status": "VALID"
+          }
+        ]
+      },
+      {
+        "actionId": "da8787f2-578b-4d6e-9996-8094682f2088",
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "serviceId": "crm-preview",
+        "sourceProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "events": [
+          {
+            "eventId": "36aa300d-6652-4314-9819-78d082334c28",
+            "type": "ApprovalRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "415c306c-97cc-4f2f-a2e1-78fcb682ce64",
+            "type": "ChallengeIssued",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "95b9f1b0-5adb-4326-893f-5f376177912b",
+            "type": "Step1Approved",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "STEP_1_APPROVED"
+          },
+          {
+            "eventId": "f66142b2-4a4a-4fea-b466-13382d47cae6",
+            "type": "ChallengeIssued",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "STEP_1_APPROVED"
+          },
+          {
+            "eventId": "ad98fc7b-3911-45e7-b302-7e57352fc7a1",
+            "type": "Step2Approved",
+            "actorId": "01300ca3-3df2-4229-8fd3-c82b74cf19d2",
+            "status": "APPROVED"
+          },
+          {
+            "eventId": "3d552c99-3c91-49ec-b82f-0947ac664bd0",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "875cd9ac-3e2c-4b95-b91c-5407de135ffe",
+            "type": "VerificationSucceeded",
+            "actorId": "crm-preview",
+            "status": "VALID"
+          },
+          {
+            "eventId": "d896f2ca-9211-4931-837e-828de8cbd2f4",
+            "type": "ApprovalInvalidated",
+            "actorId": "crm-preview",
+            "status": "INVALIDATED"
+          },
+          {
+            "eventId": "25270ebd-a684-4a5e-9284-09e96a9fc5f5",
+            "type": "ApprovalRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "978b62dc-09a6-4462-9513-a5ec34211031",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "6ac950ad-c2f6-43c0-b932-2541ef907d31",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "VERSION_MISMATCH"
+          },
+          {
+            "eventId": "f6766e08-8af1-45f6-a1eb-dc659ee60b59",
+            "type": "VerificationRequested",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          },
+          {
+            "eventId": "f3e351a8-29c6-4f71-b062-90c57d93f6b0",
+            "type": "VerificationFailed",
+            "actorId": "crm-preview",
+            "status": "PENDING"
+          }
+        ]
+      }
+    ],
+    "g08AndOwnerHttp": [
+      {
+        "system": "evelyn-owner",
+        "path": "/api/login",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/v1/approvals/verify",
+        "method": "POST",
+        "httpStatus": 401,
+        "code": "SERVICE_AUTH_REQUIRED"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/v1/approvals/verify",
+        "method": "POST",
+        "httpStatus": 401,
+        "code": "SERVICE_AUTH_DENIED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "auditReference": "12fefc70-4f76-4b16-9337-d77fd858bdc1"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "APPROVAL_REFERENCE_REQUIRED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "APPROVAL_REFERENCE_REQUIRED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "auditReference": "8ce9a2d9-42ba-4cf7-babb-1d43ac19ad05",
+        "result": "PENDING"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "auditReference": "8ce9a2d9-42ba-4cf7-babb-1d43ac19ad05",
+        "result": "PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 400,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "UNKNOWN_FIELD"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 400,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "UNKNOWN_FIELD"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 400,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "UNKNOWN_FIELD"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 400,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "UNKNOWN_FIELD"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 403,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_QA_SCOPE_DENIED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_INVALID"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_PENDING"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/reauth",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/challenge",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/decision",
+        "method": "POST",
+        "httpStatus": 200,
+        "result": "STEP_1_APPROVED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/reauth",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/challenge",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/decision",
+        "method": "POST",
+        "httpStatus": 200,
+        "result": "APPROVED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "result": "VALID"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "result": "VALID"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "auditReference": "37b446cc-a16b-46b4-a9da-241856f0968b"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "auditReference": "37b446cc-a16b-46b4-a9da-241856f0968b"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "EVELYN_ALREADY_EXECUTED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "code": "IDEMPOTENCY_CONFLICT"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "auditReference": "ee4d0375-329a-4f71-be9d-4cd3b76e4b5a"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "auditReference": "a3788c8a-9cd1-4949-9e6f-65b02e18db6e",
+        "result": "PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/reauth",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/challenge",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/decision",
+        "method": "POST",
+        "httpStatus": 200,
+        "result": "STEP_1_APPROVED"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/reauth",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/challenge",
+        "method": "POST",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/decision",
+        "method": "POST",
+        "httpStatus": 200,
+        "result": "APPROVED"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "result": "VALID"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "auditReference": "29254c62-8b7e-495c-bfbd-0a4e4097e06e"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 200,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "auditReference": "f534056c-7d76-4ec4-8398-0d47df34da4f",
+        "result": "PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "code": "EVELYN_VERSION_MISMATCH"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "code": "APPROVAL_REFERENCE_MISMATCH"
+      },
+      {
+        "system": "crm",
+        "path": "/api/crm/evelyn-contracts",
+        "method": "POST",
+        "httpStatus": 409,
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "code": "EVELYN_PENDING"
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/overview",
+        "method": "GET",
+        "httpStatus": 200
+      },
+      {
+        "system": "evelyn-owner",
+        "path": "/api/logout",
+        "method": "POST",
+        "httpStatus": 200
+      }
+    ],
+    "routineCrmHttpSummary": [
+      {
+        "system": "crm",
+        "method": "GET",
+        "path": "/api/crm/core",
+        "httpStatus": 200,
+        "count": 4
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/contacts",
+        "httpStatus": 200,
+        "count": 4
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/leads",
+        "httpStatus": 200,
+        "count": 4
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/deals",
+        "httpStatus": 200,
+        "count": 3
+      },
+      {
+        "system": "crm",
+        "method": "GET",
+        "path": "/api/crm/offers",
+        "httpStatus": 200,
+        "count": 36
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/offers",
+        "httpStatus": 200,
+        "count": 18
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/units",
+        "httpStatus": 200,
+        "count": 1
+      },
+      {
+        "system": "crm",
+        "method": "GET",
+        "path": "/api/crm/property-sales",
+        "httpStatus": 200,
+        "count": 5
+      },
+      {
+        "system": "crm",
+        "method": "POST",
+        "path": "/api/crm/property-sales",
+        "httpStatus": 200,
+        "count": 10
+      }
+    ],
+    "totalObservedHttpRequests": 136,
+    "flowA": [
+      {
+        "label": "accepted",
+        "offerVersion": 6,
+        "revision": 1,
+        "totalNetCents": 2037000,
+        "status": "ACCEPTED",
+        "followUpStatus": "STOPPED",
+        "expectedDealStage": "Gewonnen",
+        "contactId": "86fd494d-3e78-4553-9a6f-53c19abf2167",
+        "leadId": "bffa1c1b-28ca-4180-aea6-0efa4cdd32a7",
+        "dealId": "c79046a8-2e09-4bcc-92cc-88b9d9dd9aeb",
+        "offerId": "18dfbbcf-399d-4a0e-96d9-1671e8ebdcba",
+        "organizationId": "ed407111-4880-4d0e-a510-957531a8fbe6",
+        "approvalReference": "10cf5341-0653-4483-908f-499d16a6761b",
+        "contentDigest": "fb1a195515fd015f0f981df36038b7bfed504ea07af529eb2e8b1327f8809ce9"
+      },
+      {
+        "label": "rejected",
+        "offerVersion": 6,
+        "revision": 1,
+        "totalNetCents": 2037000,
+        "status": "REJECTED",
+        "followUpStatus": "STOPPED",
+        "expectedDealStage": "Verloren",
+        "contactId": "a5d02305-ed2f-407b-9bee-210a01c622a6",
+        "leadId": "3d9182af-9622-4f1a-baf3-3115a6dd43de",
+        "dealId": "d4a3577c-2c44-4f42-bce5-b8df21cfb375",
+        "offerId": "e32dbdb4-922d-4cbb-b8d7-ad25a26a1f33",
+        "organizationId": "424601f0-98c2-4b27-b626-32852d5b192b",
+        "approvalReference": "9632ac02-8886-45f7-8eac-0260a248121b",
+        "contentDigest": "17d19edfa1c5662e44520cf09cae515993ec50af2fa19380ffab4434baa8889a"
+      },
+      {
+        "label": "immutability",
+        "offerVersion": 6,
+        "revision": 1,
+        "totalNetCents": 2037000,
+        "status": "ACCEPTED",
+        "followUpStatus": "STOPPED",
+        "expectedDealStage": "Gewonnen",
+        "contactId": "5cb456d7-5fea-4c12-bf69-08f5dfa7122a",
+        "leadId": "ecea93b7-923c-4eb9-a04e-d809f5f03e25",
+        "dealId": "66482191-74c8-4631-8c57-dbd474f439fc",
+        "offerId": "1d92d4b3-6d30-45d6-b560-9a56e5313013",
+        "organizationId": "82c11f69-5f20-42cb-9e02-64edf6be84ea",
+        "approvalReference": "760423cf-7bad-46c1-a644-624fcc2c3210",
+        "contentDigest": "f0315f07ad8f1fe856d1eed48184363d6e6c5ec7d7ff147ecd93bac9828faadd"
+      }
+    ],
+    "flowB": {
+      "projectId": "7e35654f-6c51-46ae-a1aa-d5df54b7e794",
+      "buyerLeadId": "d05689c9-b03f-4784-b63d-56ac37faba96",
+      "unitId": "3260efe7-84d6-4f07-b562-7ecfffb0cb97",
+      "reservationId": "dd34a2bb-9ce2-4b43-b878-30d7fc4a2215",
+      "status": "sold"
+    }
+  },
+  "independentLiveDatabase": {
+    "status": "PASS",
+    "startedAt": "2026-09-17T20:27:25.094Z",
+    "completedAt": "2026-09-17T20:27:27.791Z",
+    "target": {
+      "project": "weathered-term-98273025",
+      "branch": "br-spring-snow-alupo8u4",
+      "database": "qa_g08_pr63_20260917",
+      "runtimeRole": "g24_qa_20260917_r3",
+      "workspaceId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b"
+    },
+    "readOnlyTransaction": true,
+    "databaseWrites": 0,
+    "productionAccess": false,
+    "liveReportSha256": "7dad72b7282db617fd36e4afda48b2755df286cf5d37b433af231aee885dcdeb",
+    "checks": [
+      {
+        "name": "verified_client_tls_and_hostname",
+        "status": "PASS"
+      },
+      {
+        "name": "exact_neon_project_branch_database_role_read_only",
+        "status": "PASS"
+      },
+      {
+        "name": "persisted_synthetic_fixture_identity_and_scope",
+        "status": "PASS"
+      },
+      {
+        "name": "exact_preview_allowlist",
+        "status": "PASS"
+      },
+      {
+        "name": "unprivileged_runtime_role",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_immutable_scope",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_trusted_accepted_offer_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_unique_offer_lineage",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_revision_count_and_initial_total",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_revision_1_canonical_hash_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_approval_receipts_bound",
+        "status": "PASS"
+      },
+      {
+        "name": "exactly_one_first_contract_execution",
+        "status": "PASS"
+      },
+      {
+        "name": "execution_is_bound_synthetic_receipt_only",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_immutable_scope",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_trusted_accepted_offer_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_unique_offer_lineage",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_revision_count_and_initial_total",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_revision_1_canonical_hash_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_revision_2_canonical_hash_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "approved_action_change_has_distinct_revision_and_hash",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_approval_receipts_bound",
+        "status": "PASS"
+      },
+      {
+        "name": "revision_requires_new_approval_reference",
+        "status": "PASS"
+      },
+      {
+        "name": "zero_changed_contract_executions",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_crm_audit_actor_scope_correlation",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_request_and_valid_verification_audit",
+        "status": "PASS"
+      },
+      {
+        "name": "pending_denials_and_single_execution_audit",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_evelyn_audit_correlation_chain",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_crm_command_receipt_audit_domain_event_chain",
+        "status": "PASS"
+      },
+      {
+        "name": "action_1_http_audit_references_resolve",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_crm_audit_actor_scope_correlation",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_request_and_valid_verification_audit",
+        "status": "PASS"
+      },
+      {
+        "name": "changed_action_denials_persisted",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_evelyn_audit_correlation_chain",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_crm_command_receipt_audit_domain_event_chain",
+        "status": "PASS"
+      },
+      {
+        "name": "action_2_http_audit_references_resolve",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_accepted_persisted_scope_and_response",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_accepted_deal_and_company_lifecycle",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_accepted_single_manual_delivery_evidence",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_accepted_followups_stopped",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_rejected_persisted_scope_and_response",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_rejected_deal_and_company_lifecycle",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_rejected_single_manual_delivery_evidence",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_rejected_followups_stopped",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_immutability_persisted_scope_and_response",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_immutability_deal_and_company_lifecycle",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_immutability_single_manual_delivery_evidence",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_a_immutability_followups_stopped",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_b_qualified_priority_handover_sold_inventory",
+        "status": "PASS"
+      },
+      {
+        "name": "flow_b_one_handover_completed_viewing_authorized_reservation_and_sale",
+        "status": "PASS"
+      },
+      {
+        "name": "transaction_remained_read_only",
+        "status": "PASS"
+      }
+    ],
+    "checkCounts": {
+      "total": 50,
+      "passed": 50,
+      "failed": 0
+    },
+    "actions": [
+      {
+        "revisions": 1,
+        "approvals": 1,
+        "executions": 1,
+        "crmEventCount": 8,
+        "commandAuditCount": 13,
+        "actionId": "bd1def2e-a8bf-40b3-a0da-a0de6477c076",
+        "offerId": "18dfbbcf-399d-4a0e-96d9-1671e8ebdcba",
+        "correlationId": "2f082152-e59a-41d1-97d3-4f4506f6513d",
+        "crmEventIds": [
+          "c8646d74-7128-4fef-9fb3-21d3432780fb",
+          "d5ec1da7-39cf-479c-955b-3669540398f8",
+          "c9ad1151-e12c-49b1-b13b-d301baf4dab1",
+          "0f5a8ecd-c871-4da1-9b2d-395ad2fd2f99",
+          "53390562-1b9e-406c-8f5a-f70dd122acfd",
+          "bc7d47ce-d413-4fd5-94f3-5a55b821b9ea",
+          "671e17de-af04-4277-ab8b-aa16d877b099",
+          "3d405391-5632-4734-b57f-c9c78aaf204c"
+        ],
+        "evelynEventIds": [
+          "91ab25d2-ac2e-41f6-90aa-565bd17f7c56",
+          "c775ed0d-22a1-41f5-85ea-cc11255c0997",
+          "7026250a-52b0-4b2d-ac5d-0251acdac32a",
+          "dc4686b9-39e1-4193-bf92-fc82f537b840",
+          "f886a523-ad59-49ca-a50e-f94acf7c0717",
+          "939506ee-8f90-4d43-abf5-de7b47253d65",
+          "d7d2b4dd-698b-4386-80c6-73c048e822a4",
+          "cc2ad95f-93c0-4ae9-be03-d41cf3c6850c",
+          "285769b9-0fd7-4fc7-9fd6-4a048f922737",
+          "3a4bd8ea-9ba8-4d18-bae3-489550c88d23",
+          "cbbff17a-7a47-4cfa-8979-6b8cf940931e",
+          "4407e4c5-506d-4375-aa6a-f60aed59a15a",
+          "3492cd01-3197-4a80-9482-1b7282e926a8",
+          "f805ab1b-4ece-4e65-be28-f31d835d36af",
+          "1f3083f3-bbb6-4747-8e7a-6a311833c9ba",
+          "75cdf6ad-5d45-4e02-9126-7f8d7afcdff5",
+          "5c6dddf8-1a4d-4cc7-aada-e665c0a0d07b",
+          "4a13c7ff-3131-4042-a629-82afd83f7dda",
+          "2594a321-8cf1-47f6-b9f4-d1cc32110d77",
+          "2d8d49ef-3320-46bb-8cdc-bb63796e44fa",
+          "682665a5-9032-4f50-83c0-c50f5eb1a826"
+        ]
+      },
+      {
+        "revisions": 2,
+        "approvals": 2,
+        "executions": 0,
+        "crmEventCount": 5,
+        "commandAuditCount": 10,
+        "actionId": "da8787f2-578b-4d6e-9996-8094682f2088",
+        "offerId": "1d92d4b3-6d30-45d6-b560-9a56e5313013",
+        "correlationId": "a4500dee-ba13-4150-85e7-fc7870a7bc6c",
+        "crmEventIds": [
+          "cfd56ccf-41c8-4397-89f6-4e2ce98e4f9d",
+          "5eabc055-06ee-4437-b7f5-a31a93b39651",
+          "8512da38-78e5-419c-bb12-4c86466ee4ea",
+          "4cd82390-6089-4343-b4bc-3a72863b31f8",
+          "1df24492-22f4-4e81-aba6-230933e1ce8b"
+        ],
+        "evelynEventIds": [
+          "36aa300d-6652-4314-9819-78d082334c28",
+          "415c306c-97cc-4f2f-a2e1-78fcb682ce64",
+          "95b9f1b0-5adb-4326-893f-5f376177912b",
+          "f66142b2-4a4a-4fea-b466-13382d47cae6",
+          "ad98fc7b-3911-45e7-b302-7e57352fc7a1",
+          "3d552c99-3c91-49ec-b82f-0947ac664bd0",
+          "875cd9ac-3e2c-4b95-b91c-5407de135ffe",
+          "d896f2ca-9211-4931-837e-828de8cbd2f4",
+          "25270ebd-a684-4a5e-9284-09e96a9fc5f5",
+          "978b62dc-09a6-4462-9513-a5ec34211031",
+          "6ac950ad-c2f6-43c0-b932-2541ef907d31",
+          "f6766e08-8af1-45f6-a1eb-dc659ee60b59",
+          "f3e351a8-29c6-4f71-b062-90c57d93f6b0"
+        ]
+      }
+    ],
+    "flowA": [
+      {
+        "label": "accepted",
+        "outcome": "ACCEPTED",
+        "companyLifecycle": "Kunde",
+        "deliveryCount": 1,
+        "openFollowups": 0,
+        "dealId": "c79046a8-2e09-4bcc-92cc-88b9d9dd9aeb",
+        "offerId": "18dfbbcf-399d-4a0e-96d9-1671e8ebdcba",
+        "organizationId": "ed407111-4880-4d0e-a510-957531a8fbe6"
+      },
+      {
+        "label": "rejected",
+        "outcome": "REJECTED",
+        "companyLifecycle": "Lead",
+        "deliveryCount": 1,
+        "openFollowups": 0,
+        "dealId": "d4a3577c-2c44-4f42-bce5-b8df21cfb375",
+        "offerId": "e32dbdb4-922d-4cbb-b8d7-ad25a26a1f33",
+        "organizationId": "424601f0-98c2-4b27-b626-32852d5b192b"
+      },
+      {
+        "label": "immutability",
+        "outcome": "ACCEPTED",
+        "companyLifecycle": "Kunde",
+        "deliveryCount": 1,
+        "openFollowups": 0,
+        "dealId": "66482191-74c8-4631-8c57-dbd474f439fc",
+        "offerId": "1d92d4b3-6d30-45d6-b560-9a56e5313013",
+        "organizationId": "82c11f69-5f20-42cb-9e02-64edf6be84ea"
+      }
+    ],
+    "flowB": {
+      "projectId": "7e35654f-6c51-46ae-a1aa-d5df54b7e794",
+      "buyerLeadId": "d05689c9-b03f-4784-b63d-56ac37faba96",
+      "unitId": "3260efe7-84d6-4f07-b562-7ecfffb0cb97",
+      "reservationId": "dd34a2bb-9ce2-4b43-b878-30d7fc4a2215",
+      "unitStatus": "sold",
+      "handovers": 1,
+      "completedViewings": 1,
+      "sales": 1
+    }
+  },
+  "qaPreparation": {
+    "status": "PASS",
+    "startedAt": "2026-09-17T20:02:12.196Z",
+    "completedAt": "2026-09-17T20:04:49.758Z",
+    "target": {
+      "project": "weathered-term-98273025",
+      "branch": "br-spring-snow-alupo8u4",
+      "sourceDatabase": "qa_g24_pr63_20260917_r3",
+      "database": "qa_g08_pr63_20260917",
+      "runtimeRole": "g24_qa_20260917_r3",
+      "workspaceId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b"
+    },
+    "archiveSha256": "7b891ca8e38b60129ba70e636030c76779a8e108b2de8c11566dccd1f8ad319c",
+    "historicalSourceSnapshotHash": "46931e215d933d169b011bbcdbaa535ed30b97f52a3d8534b4a288347b63542b",
+    "migration086Sha256": "31609898bb8ed86e46a350c2262e91e361cb199b946509253705ecf75fc6af81",
+    "actualSourceBeforeHash": "8e598cf92f0e5962d2b003fabea316365c2079b8b54b4c5071866f6a8c058e26",
+    "actualSourceAfterHash": "8e598cf92f0e5962d2b003fabea316365c2079b8b54b4c5071866f6a8c058e26",
+    "sourceDefaultAclFingerprint": "4689e1665b7738ef07765378f0c16dd8ff787af9a2ad05a4967b57de94f0e449",
+    "reviewedSourceDefaultGrantAdditions": [
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "S",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "SELECT",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "S",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "UPDATE",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "S",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "USAGE",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "DELETE",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "INSERT",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "MAINTAIN",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "REFERENCES",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "SELECT",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "TRIGGER",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "TRUNCATE",
+        "is_grantable": true
+      },
+      {
+        "owner": "cloud_admin",
+        "schema": "public",
+        "defaclobjtype": "r",
+        "grantee": "neon_superuser",
+        "grantor": "cloud_admin",
+        "privilege_type": "UPDATE",
+        "is_grantable": true
+      }
+    ],
+    "checks": [
+      "verified_qa_config_and_g24_pass_evidence",
+      "pinned_archive_hash",
+      "pinned_migration_hash",
+      "all_source_data_ledger_and_other_catalog_equal_original",
+      "exact_11_provider_default_acl_additions_only",
+      "runtime_has_no_provider_role_path",
+      "exact_target_and_verified_tls",
+      "new_target_empty",
+      "restored_ledger_matches",
+      "all_restored_data_digests_match",
+      "exact_tenant_absent",
+      "no_preseeded_sessions",
+      "migration_086_and_ledger_committed_atomically_with_fixture",
+      "synthetic_owner_without_session_or_mfa",
+      "exact_preview_allowlist_seeded",
+      "runtime_least_privilege",
+      "source_snapshot_unchanged_after"
+    ],
+    "nativeRestoreVersion": "pg_restore (PostgreSQL) 18.6",
+    "nativeRestore": "PASS",
+    "nativeRestoreTimeoutSeconds": 900,
+    "resumedVerifiedEmptyTarget": true,
+    "existingDatabasesDroppedOrReset": false,
+    "sourceDatabaseModified": false,
+    "providerRolesModified": false,
+    "productionAccess": 0,
+    "sessionsSeeded": 0,
+    "mfaSeeded": 0,
+    "syntheticOnly": true,
+    "runtime": {
+      "status": "PASS",
+      "role": "g24_qa_20260917_r3",
+      "owner": false,
+      "bypassRls": false,
+      "schemaCreate": false,
+      "defaultContextRows": 0
+    },
+    "fixture": {
+      "workspaceId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "tenantId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "userId": "0e452e88-a427-4d43-92b9-b7ac06cf3b74",
+      "projectId": "7e35654f-6c51-46ae-a1aa-d5df54b7e794",
+      "pipelineId": "db14be26-8fd3-40f2-a5e8-c2be0f0c23a8",
+      "developerId": "68cb69db-6c20-4cca-aabf-e8f9b94aa39a",
+      "developerContactId": "270dd6c9-4d65-4287-88d6-732c603fa121"
+    }
+  },
+  "previewProtection": {
+    "crmDeploymentType": "all_except_custom_domains",
+    "evelynDeploymentType": "all",
+    "crmOidc": {
+      "enabled": true,
+      "issuerMode": "team"
+    },
+    "evelynOidc": {
+      "enabled": true,
+      "issuerMode": "team"
+    },
+    "trustedCrmSource": {
+      "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "fromEnvironment": "preview",
+      "toEnvironment": "preview"
+    },
+    "sameRepositoryCiTrust": false,
+    "branchConfiguration": {
+      "entryCount": 10,
+      "branch": "codex/crm-sales-readiness-high-gaps",
+      "target": "preview",
+      "encrypted": true,
+      "environmentValuesExported": false
+    },
+    "productionUnchanged": true
+  },
+  "finalInfrastructureVerification": {
+    "status": "PASS",
+    "checkedAt": "2026-09-17T20:25:30.295Z",
+    "readOnly": true,
+    "httpMethods": [
+      "GET"
+    ],
+    "apiCalls": 2,
+    "comparedSnapshots": [
+      "infrastructure-before.json",
+      "infrastructure-configured.json"
+    ],
+    "exactConfiguredMetadataUnchanged": true,
+    "checks": [
+      {
+        "name": "crm_project_and_team_identity",
+        "status": "PASS"
+      },
+      {
+        "name": "crm_production_target_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "crm_sso_protection_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "crm_team_oidc_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "evelyn_project_and_team_identity",
+        "status": "PASS"
+      },
+      {
+        "name": "evelyn_production_target_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "evelyn_sso_protection_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "evelyn_team_oidc_unchanged",
+        "status": "PASS"
+      },
+      {
+        "name": "only_expected_crm_preview_to_evelyn_preview_trust_added",
+        "status": "PASS"
+      },
+      {
+        "name": "existing_evelyn_self_qa_trust_preserved",
+        "status": "PASS"
+      },
+      {
+        "name": "exact_ten_crm_preview_branch_keys_and_encrypted_metadata",
+        "status": "PASS"
+      },
+      {
+        "name": "configured_env_identifiers_and_scopes_preserved",
+        "status": "PASS"
+      },
+      {
+        "name": "evelyn_branch_environment_metadata_unchanged",
+        "status": "PASS"
+      }
+    ],
+    "checkCounts": {
+      "passed": 13,
+      "total": 13
+    },
+    "projects": [
+      {
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "name": "novalure-crm",
+        "productionDeploymentId": "dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah",
+        "protection": {
+          "deploymentType": "all_except_custom_domains"
+        },
+        "oidc": {
+          "enabled": true,
+          "issuerMode": "team"
+        },
+        "branchEnvironmentMetadata": [
+          {
+            "id": "jnWwACVZYkS2ySPP",
+            "key": "CRM_EVELYN_QA_PROJECT_ID",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "cyJig8M2ZuLiH1h9",
+            "key": "CRM_EVELYN_QA_TENANT_ID",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "irfrUwWwvxS4crRK",
+            "key": "CRM_EVELYN_QA_WORKSPACE_ID",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "DEM4nzcCwKfwwqp9",
+            "key": "DATABASE_URL",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "fYOUaAO9TV91nyUS",
+            "key": "NEXT_PUBLIC_APP_URL",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "604olELXghgoQhFl",
+            "key": "NOVALURE_APP_ORIGIN",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "PF4vFT6F1sXvrv0E",
+            "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "nYqJX2sn6EguDfRa",
+            "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "JCgx3PaA1ESHngSU",
+            "key": "NOVALURE_AUTH_STRICT",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          },
+          {
+            "id": "xRkmpVeAWKFDD1tE",
+            "key": "NOVALURE_SESSION_SECRET",
+            "target": [
+              "preview"
+            ],
+            "gitBranch": "codex/crm-sales-readiness-high-gaps",
+            "type": "encrypted"
+          }
+        ]
+      },
+      {
+        "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "name": "evelyn",
+        "productionDeploymentId": null,
+        "protection": {
+          "deploymentType": "all"
+        },
+        "oidc": {
+          "enabled": true,
+          "issuerMode": "team"
+        },
+        "branchEnvironmentMetadata": []
+      }
+    ],
+    "productionUnchanged": true,
+    "credentialsExported": false,
+    "environmentValuesExported": false,
+    "decryptedEnvironmentEndpointUsed": false,
+    "privateQaFilesRead": false,
+    "limitations": [
+      "The check compares project/production-target IDs, protection, OIDC, trust rules and branch environment metadata; it does not decrypt or compare secret values.",
+      "No Vercel mutation is performed by inspect-final."
+    ]
+  },
+  "independentFinalSecurityReview": {
+    "status": "PASS",
+    "reviewedAt": "2026-09-17T20:33:30.244Z",
+    "reviewedCodeSha": "137c796534d60cd0c5be69097632076c817295ee",
+    "sourceDigest": "feb09fe36f382115d788681b7179f83c1adf438483b80f96a3fd00bfec908bdf",
+    "sourceDigestAlgorithm": "sha256(sorted path + NUL + sha256(LF-normalized UTF-8 file) + LF for tracked src/migrations/scripts/workflows and selected config files)",
+    "sourceFileCount": 504,
+    "sourceDigestSeparateFrom505FileManifest": true,
+    "reviewedSourceManifestDigest": "706a5bc30877a8ad4a634dad7d9ee0335795d587ee697add1f022e1e1eb99295",
+    "reviewedSourceManifestFileCount": 505,
+    "reviewedSourceManifestSha256": "45e6fcd3240256c9e7342220a0ef078d7859c7d0b5eb33fa80d8cb254eb22830",
+    "reviewedSourceManifestAlgorithm": "sha256(JSON.stringify(hashes)), where hashes are SHA256 of raw checkout bytes. All 505 current file hashes match, and all file contents match the reviewed commit after LF normalization.",
+    "liveReportSha256": "7dad72b7282db617fd36e4afda48b2755df286cf5d37b433af231aee885dcdeb",
+    "liveDatabaseEvidenceSha256": "4e19711548e3fb8cd7d66c97a97d44d86b23de9f67bd90b3754c46e886a0ad32",
+    "findings": {
+      "critical": 0,
+      "high": 0,
+      "scope": "No confirmed remaining Critical/High finding in reviewed CRM G08 changes and the documented scope of the 18 original High gaps."
+    },
+    "inputFiles": [
+      {
+        "file": ".npm-cache/g08/live-preview-report.json",
+        "sha256": "7dad72b7282db617fd36e4afda48b2755df286cf5d37b433af231aee885dcdeb"
+      },
+      {
+        "file": ".npm-cache/g08/live-db-evidence.json",
+        "sha256": "4e19711548e3fb8cd7d66c97a97d44d86b23de9f67bd90b3754c46e886a0ad32"
+      },
+      {
+        "file": ".npm-cache/g08/local-gates.json",
+        "sha256": "af498ae77e90b8bdb24ac03659cbabc46185421efc83ef9ecc67e7b674652d70"
+      },
+      {
+        "file": ".npm-cache/g08/github-ci-evidence.json",
+        "sha256": "10c24b95792552e4f2e3fc007632868bf3782525c47bd209114746d0848ef577"
+      },
+      {
+        "file": ".npm-cache/g08/infrastructure-before.json",
+        "sha256": "b09e22a4307cd5bdbb63aad8c5cd848b75dab9c38ff7172449afdfc6bbff4978"
+      },
+      {
+        "file": ".npm-cache/g08/infrastructure-configured.json",
+        "sha256": "60aef200fc3e375b89da5d6d1fb353af5cfbb003b09453247000c6060589dd2e"
+      },
+      {
+        "file": ".npm-cache/g08/infrastructure-final.json",
+        "sha256": "30276250c3c76d3ffed9a242d47c6be2cf51d55800983fdc65afd9b1398f7c93"
+      },
+      {
+        "file": ".npm-cache/g08/crm-ready-deployment.json",
+        "sha256": "f89dbcfff21570f1711565b19a1b4edc0c8a414d1c2f45ad192813eb2411c2c4"
+      },
+      {
+        "file": ".npm-cache/g08/evelyn-final-deployment-evidence.json",
+        "sha256": "a6bd12e2b41cb825c3e881d26b9dca617232506fb400e7b5bf3fff20646fa954"
+      },
+      {
+        "file": ".npm-cache/g08/evelyn-local-crypto-evidence.json",
+        "sha256": "719f8738e31b4a5e939789b1e466339bd8f7161ef33daabdb6ad03a3e24a67d5"
+      },
+      {
+        "file": ".npm-cache/g08/preview-db-evidence.json",
+        "sha256": "7c54e835b185450ebe14c2f48b3ee9cb8b2bf7a599323df8cd41140f0f494015"
+      },
+      {
+        "file": ".npm-cache/g08/live-preview-first-cookie-failure.json",
+        "sha256": "d04063c5db6b7237579eb676a61ab15ec33956acee950fb4781124241d62ea2e"
+      },
+      {
+        "file": ".npm-cache/g08/source-manifest.json",
+        "sha256": "45e6fcd3240256c9e7342220a0ef078d7859c7d0b5eb33fa80d8cb254eb22830"
+      }
+    ],
+    "coveredInvariants": [
+      "The platform SDK obtains server workload tokens. Evelyn signed project, team and Preview checks and the observed crm-preview audit establish source identity.",
+      "Deployment protection and application authorization are distinct. Owner cookies and invalid service credentials cannot authenticate service verification.",
+      "The client is server-only. Secrets and tokens are neither returned to the browser nor persisted in the final sanitized evidence.",
+      "Exact Preview project/runtime gates, QA tenant equal to workspace, registered project allowlist and positive project write grant are enforced.",
+      "Create uses the complete 2,037,000-cent obligation and a trusted accepted, approved CRM offer with acceptance audit.",
+      "Verify carries exactly eight fields. Nonce and JTI bind the route and canonical payload; only a strictly validated VALID response permits fresh execution.",
+      "The separate Owner session issues distinct Step 1 and Step 2 challenges with reauthentication. CRM exposes no Owner decision API.",
+      "Immutable version/hash revisions and source/action CAS after the remote call prevent an old reference from executing a changed action.",
+      "Each offer has one action lineage. Durable idempotency binds the payload; retries produce one execution, and the changed action has zero effects.",
+      "Pending, unknown and missing references, scope overrides and invalid service identities fail closed live. Fault, timing and Production identity negatives remain local tests.",
+      "Cross-system action/correlation and CRM command, receipt, audit and domain-event chains resolve to the persisted actor and project scope.",
+      "Flow A accepted/rejected statuses, company lifecycle, manual delivery and stopped follow-ups, plus Flow B sold inventory, agree with the read-only database results.",
+      "The actual Preview MFA session is Secure and HttpOnly. Localhost transport and existing authorization policy boundaries remain intact.",
+      "Production targets, protection and OIDC remain unchanged. Only exact Preview trust and ten branch Preview environment keys were configured."
+    ],
+    "originalHighGapMapping": [
+      {
+        "id": "G01",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Scoped persisted service identity",
+        "evidence": "Migration 084 and local service HTTP/DB tests; 501-test gate evidence",
+        "limitation": "Synthetic registered service principals; no real credential issuance or general Owner authority."
+      },
+      {
+        "id": "G02",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Tenant transactions and least-privilege runtime",
+        "evidence": "Local route rejection/RLS tests plus fresh QA runtime evidence",
+        "limitation": "Approved integration paths; not a universal audit of historical endpoints."
+      },
+      {
+        "id": "G03",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Read-only operational GET",
+        "evidence": "Foundation tests rerun within the 501-test gate",
+        "limitation": "Explicit repair/write processes remain separate."
+      },
+      {
+        "id": "G04",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "No operational mock fallback",
+        "evidence": "Foundation tests rerun within the 501-test gate",
+        "limitation": "Global list completeness remains G23."
+      },
+      {
+        "id": "G05",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "CAS and monotone versions",
+        "evidence": "Core and Sales local database tests and live action revisions",
+        "limitation": "Not a universal CAS guarantee for every historical entity."
+      },
+      {
+        "id": "G06",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Durable scoped command receipts",
+        "evidence": "Local HTTP/recovery tests; live request/execution retries; database receipt/audit chain",
+        "limitation": "Client pending state is tab-local; no exactly-once claim across providers."
+      },
+      {
+        "id": "G07",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Atomic unit/building ledger",
+        "evidence": "Local concurrency suite and live sold-unit evidence",
+        "limitation": "No provider-wide exactly-once guarantee."
+      },
+      {
+        "id": "G08",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Real CRM Preview to Evelyn Preview approval",
+        "evidence": "21 live checks; 50 read-only database checks; immutable revision from 2,037,000 to 2,037,100 cents; 27 separate Evelyn cryptographic tests",
+        "limitation": "Synthetic contract.send effect only; no delivery, payment or Production authorization."
+      },
+      {
+        "id": "G09",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Authorized price/status confirmations",
+        "evidence": "Local authority tests plus live Flow B and database evidence",
+        "limitation": "Synthetic documented authority; no external truth or portal proof."
+      },
+      {
+        "id": "G10",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Request separated from reservation confirmation",
+        "evidence": "Local concurrency tests; live request leaves inventory available; authorized confirmation",
+        "limitation": "No implicit authorization of legacy reservations."
+      },
+      {
+        "id": "G11",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Atomic data, receipts, audit and events",
+        "evidence": "Local audit-failure tests; live durable audit chains",
+        "limitation": "PostgreSQL atomicity; no distributed commit."
+      },
+      {
+        "id": "G12",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Canonical offer lifecycle",
+        "evidence": "Live accepted/rejected outcomes and UI; database totals, revisions, manual delivery and stopped follow-ups",
+        "limitation": "Manual synthetic delivery attestation; no email or contract delivery."
+      },
+      {
+        "id": "G13",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Authorized sale proof",
+        "evidence": "Local duplicate/concurrent sale tests; live Flow B; one persisted sale",
+        "limitation": "No notarial or external settlement proof."
+      },
+      {
+        "id": "G15",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Project/developer/contact authority",
+        "evidence": "Local permission/revocation tests plus live canonical developer project",
+        "limitation": "Synthetic mandate only; no invented real customer authority."
+      },
+      {
+        "id": "G16",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Positive project grant",
+        "evidence": "Local hidden-project/tenant denial plus source guard; live scope override denial",
+        "limitation": "Bounded service/approval paths; not exhaustive live denial across historical APIs."
+      },
+      {
+        "id": "G17",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Data context and purpose binding",
+        "evidence": "Local classification tests; forced RLS and source guard; registered synthetic Preview target",
+        "limitation": "Not a general privacy audit of historical data."
+      },
+      {
+        "id": "G24",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Neon baseline, migration and native restore",
+        "evidence": "Inherited G24 PASS plus current pinned native archive restore, source equality before/after and constrained runtime",
+        "limitation": "Same QA branch and fresh database; no Production or cross-cluster disaster-recovery proof."
+      },
+      {
+        "id": "G25",
+        "status": "CLOSED_WITHIN_DOCUMENTED_SCOPE",
+        "invariant": "Reproducible actual gates and Preview evidence",
+        "evidence": "501 CRM local tests; 2 CI runs at the exact SHA; 21 live checks; 50 read-only database checks; 13 infrastructure checks",
+        "limitation": "Counts remain separate; local injected transport is not live identity proof."
+      }
+    ],
+    "originalHighGapSummary": {
+      "total": 18,
+      "closedWithinDocumentedScope": 18,
+      "unresolvedHighInThatScope": 0
+    },
+    "remainingOriginalMediumGaps": [
+      "G14",
+      "G18",
+      "G20",
+      "G21",
+      "G22",
+      "G23",
+      "G26",
+      "G27"
+    ],
+    "limitations": [
+      "This review concerns explicitly synthetic Preview behavior and bounded integration/Sales paths. It is not a Production go-live approval.",
+      "No actual Production tokens or endpoints, business delivery or payment were tested. Production identity rejection is supported by local RS256/JWKS policy evidence.",
+      "Timeout, unreachable service, HTTP faults, malformed responses and concurrency failures are covered by local tests; they were not injected into the live Preview.",
+      "The final infrastructure check compares metadata, protection, trust and target IDs. It does not decrypt secret values.",
+      "The first Preview cookie failure at 461f42 and the source ACL/native timeout preparation failures remain preserved. Final PASS applies only to 137c796 and the final artifacts.",
+      "The reviewer independently reviewed tracked CRM/Evelyn code and live/database evidence. The ignored database preparation script authored by this reviewer was separately reviewed and executed by the root agent.",
+      "The source digest binds all listed tracked files. Focused code review and earlier scoped baseline evidence do not imply that every historical module received a line-by-line audit."
+    ],
+    "remoteMutationsByThisReview": 0,
+    "evelynCodeModified": false,
+    "productionApproved": false,
+    "mergeApproved": false
+  },
+  "independentEvelynLocalCrypto": {
+    "status": "PASS",
+    "kind": "local_crypto_signed_jwt_contract_verification",
+    "commit": "56e26c2b063319813076a3bc181473f484b1d490",
+    "nodeVersion": "v24.18.0",
+    "counts": {
+      "tests": 27,
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "countedSeparatelyFromCrm501": true,
+    "originalRepositoryUnchanged": true,
+    "controls": {
+      "ephemeralRs256TestKeys": true,
+      "injectedLocalJwks": true,
+      "networkGuard": true,
+      "fsWritesDeniedInTestProcess": true,
+      "subprocessDeniedInTestProcess": true,
+      "inheritedCredentials": false
+    },
+    "productionAccess": 0,
+    "realVercelTokensUsed": 0,
+    "remoteMutations": 0,
+    "dependencyVersions": {
+      "@vercel/oidc": "3.8.8",
+      "jose": "6.2.12",
+      "zod": "4.5.4"
+    },
+    "sources": [
+      {
+        "file": "tests/bridge-security/crm-preview-auth.test.ts",
+        "lfNormalizedSha256": "73648b2107f621ede8383cbb16b2e91a6f45c8652de87e59ba1426fb464a4616"
+      },
+      {
+        "file": "preview/service-auth.ts",
+        "lfNormalizedSha256": "b2b8e63ac47b1a192036436124d69370b2aa48cfbc128384fefd99804880c20c"
+      },
+      {
+        "file": "preview/config.ts",
+        "lfNormalizedSha256": "d107019e5dbc8f2399a81edd01b3ab6faf124ff4ff5c2c0dc0f69255f2b50c7a"
+      },
+      {
+        "file": "src/approval-bridge/model.ts",
+        "lfNormalizedSha256": "f3606c769b7f4aebfe3857337d21e4102a81815ab19759e8493668df13ca857e"
+      },
+      {
+        "file": "src/domain/integrity.ts",
+        "lfNormalizedSha256": "9037f2ae9df83e48bf9474f7c1418b3ebf9cc0d9f3e71e0cb1c6582dd2a0cab2"
+      },
+      {
+        "file": "scripts/network-guard.mjs",
+        "lfNormalizedSha256": "0b0bcf2da51bdd93c6959237d8e25c833e153a737f5d77c16c8cacf2ac86d47c"
+      }
+    ],
+    "testNames": [
+      "CRM auth: explicit preview policy authorizes only create and verify from the pinned signed source",
+      "CRM auth: missing policy preserves the disabled baseline for both capabilities",
+      "CRM auth: QA remains a distinct signed identity and never impersonates the CRM",
+      "CRM auth: create and verify JWT IDs bind different versioned routes without changing legacy verify bytes",
+      "CRM auth: production identity is denied with the explicit policy enabled",
+      "CRM auth: development identity is denied with the explicit policy enabled",
+      "CRM auth: customEnvironment identity is denied with the explicit policy enabled",
+      "CRM auth: wrongProject identity is denied with the explicit policy enabled",
+      "CRM auth: nonStringProject identity is denied with the explicit policy enabled",
+      "CRM auth: wrongTeam identity is denied with the explicit policy enabled",
+      "CRM auth: wrongIssuer identity is denied with the explicit policy enabled",
+      "CRM auth: passportIdentity identity is denied with the explicit policy enabled",
+      "CRM auth: wrongAudience identity is denied with the explicit policy enabled",
+      "CRM auth: expired identity is denied with the explicit policy enabled",
+      "CRM auth: expiredWithinClockTolerance identity is denied with the explicit policy enabled",
+      "CRM auth: exhaustedRequestTtl identity is denied with the explicit policy enabled",
+      "CRM auth: stale identity is denied with the explicit policy enabled",
+      "CRM auth: future identity is denied with the explicit policy enabled",
+      "CRM auth: notYetValid identity is denied with the explicit policy enabled",
+      "CRM auth: missingSubject identity is denied with the explicit policy enabled",
+      "CRM auth: missingJti identity is denied with the explicit policy enabled",
+      "CRM auth: missing, malformed, wrong-key and tampered tokens are rejected",
+      "CRM auth: nonce and complete create payload cannot be changed after signing",
+      "CRM auth: a correctly signed create request cannot choose another tenant or a top-level substitute",
+      "CRM auth: signed service-name and owner-role claims cannot expand capability or identity",
+      "CRM auth: malformed or widened preview policies fail closed",
+      "CRM auth: enabled policy does not relax the actual Vercel receiver production boundary"
+    ],
+    "limits": [
+      "This is local signature and application policy verification, not live Vercel identity evidence.",
+      "Signed identity negatives exercise approvals:create; positive source identity and route-domain separation cover create and verify.",
+      "These 27 Evelyn tests are recorded separately from the CRM local gate count."
+    ]
+  },
+  "preservedFailedAttempts": [
+    {
+      "kind": "initial_crm_cookie_failure",
+      "status": "BLOCKED",
+      "failedStep": "actual CRM browser password and MFA authentication",
+      "startedAt": "2026-09-17T20:07:55.814Z",
+      "finishedAt": "2026-09-17T20:08:08.704Z",
+      "checks": [
+        {
+          "name": "exact-origin CRM Preview deployment-protection access",
+          "status": "PASS"
+        },
+        {
+          "name": "actual CRM browser password and MFA authentication",
+          "status": "FAIL",
+          "reason": "REAL_SERVER_MFA_SESSION_REQUIRED"
+        }
+      ],
+      "evelynRequests": 0,
+      "contractActions": 0,
+      "diagnosis": {
+        "sessionCookiePresent": true,
+        "httpOnly": true,
+        "opaque": true,
+        "secure": false
+      },
+      "resolution": "Narrow Secure cookie transport helper; full CRM 501-test rerun before live retry"
+    },
+    {
+      "kind": "initial_source_preflight_failure",
+      "status": "FAIL",
+      "failedStage": "VERIFY_SOURCE_READ_ONLY",
+      "failureCode": "ERR_ASSERTION",
+      "startedAt": "2026-09-17T19:51:09.701Z",
+      "businessMutationsPerformed": 0
+    },
+    {
+      "kind": "initial_native_restore_timeout",
+      "status": "FAIL",
+      "failedStage": "NATIVE_RESTORE",
+      "failureCode": "PREPARATION_FAILED",
+      "startedAt": "2026-09-17T19:56:19.761Z",
+      "configuredTimeoutSeconds": 180,
+      "resolution": "Native transaction rolled back; empty target independently verified; explicit retry of the same empty target with 900-second limit; no DROP or reset"
+    }
+  ],
+  "production": {
+    "databaseChanged": false,
+    "crmDeployed": false,
+    "evelynActivated": false
+  },
+  "evidenceInputSha256": {
+    "local-gates.json": "af498ae77e90b8bdb24ac03659cbabc46185421efc83ef9ecc67e7b674652d70",
+    "live-preview-report.json": "7dad72b7282db617fd36e4afda48b2755df286cf5d37b433af231aee885dcdeb",
+    "live-db-evidence.json": "4e19711548e3fb8cd7d66c97a97d44d86b23de9f67bd90b3754c46e886a0ad32",
+    "crm-ready-deployment.json": "f89dbcfff21570f1711565b19a1b4edc0c8a414d1c2f45ad192813eb2411c2c4",
+    "infrastructure-configured.json": "60aef200fc3e375b89da5d6d1fb353af5cfbb003b09453247000c6060589dd2e",
+    "infrastructure-before.json": "b09e22a4307cd5bdbb63aad8c5cd848b75dab9c38ff7172449afdfc6bbff4978",
+    "infrastructure-final.json": "30276250c3c76d3ffed9a242d47c6be2cf51d55800983fdc65afd9b1398f7c93",
+    "github-ci-evidence.json": "10c24b95792552e4f2e3fc007632868bf3782525c47bd209114746d0848ef577",
+    "independent-final-security-review.json": "5296c527eabaa0305d6bdd6e3f3be257396d97d3037a8c95b191dab179357a3a",
+    "evelyn-final-deployment-evidence.json": "a6bd12e2b41cb825c3e881d26b9dca617232506fb400e7b5bf3fff20646fa954",
+    "preview-db-evidence.json": "7c54e835b185450ebe14c2f48b3ee9cb8b2bf7a599323df8cd41140f0f494015",
+    "evelyn-local-crypto-evidence.json": "719f8738e31b4a5e939789b1e466339bd8f7161ef33daabdb6ad03a3e24a67d5",
+    "source-manifest.json": "45e6fcd3240256c9e7342220a0ef078d7859c7d0b5eb33fa80d8cb254eb22830",
+    "live-preview-first-cookie-failure.json": "d04063c5db6b7237579eb676a61ab15ec33956acee950fb4781124241d62ea2e",
+    "preview-db-first-source-failure.json": "e61f5b9b31c9f47c40121e5b87e1eb441721a398564a89b9c0c9c7ef60fefc7e",
+    "preview-db-native-timeout-failure.json": "f339b238f66a915abe11666b32023bdda0ef28699b201541cb607ab5dc5b8a0a"
+  },
+  "limitations": [
+    "Only synthetic QA data and one Preview CRM project/tenant were exercised; this is no Production authorization.",
+    "The authorized contract effect is one CRM database receipt only. No contract, email, payment or provider delivery occurred.",
+    "Owner decisions were performed in a separate authenticated Evelyn Test-Owner session; the CRM service client cannot perform them.",
+    "Production identity and unreachable/timeout/HTTP fault negatives are local signed-policy/client tests, not claims of induced live Production or provider outages.",
+    "The 27 local signed Evelyn tests used ephemeral RSA keys and injected JWKS, not real Vercel tokens; they are separate from the 501 CRM tests.",
+    "The unchanged Evelyn deployment was built from 2a74334; reviewed source 56e26c2 differs only in the six enumerated README/documentation files, with identical runtime source. Evelyn was not redeployed.",
+    "The database restore was within the existing isolated QA branch; no cross-cluster or Production disaster-recovery claim.",
+    "No merge, Production promotion or real-customer activation is authorized by this evidence."
+  ]
+}
