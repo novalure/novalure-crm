@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
-import { assertCrmServiceContext, assertExpectedVersion, assertMoneyCents, assertProjectGrant, CrmCommandError, crmCommandErrorResponse, crmPayloadDigest, executeCrmCommand, withCrmRead, type TenantTransactionOptions } from "../src/lib/crm-command";
+import { assertCrmServiceContext, assertExpectedVersion, assertMoneyCents, assertProjectGrant, CrmCommandError, crmCommandErrorResponse, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransactionOptions } from "../src/lib/crm-command";
 import { createPropertyBuildingRecord, createPropertyUnitRecord } from "../src/lib/db/property-inventory-repositories";
 import { getCoreCrmData } from "../src/lib/db/crm-loaders";
 import { listDashboardViews, upsertDashboardView } from "../src/lib/db/crm-write-repositories";
@@ -187,4 +187,15 @@ test("security: personal dashboard is writable only by its own authorized user",
   const updated=await withCrmRead(restricted,async()=>upsertDashboardView({session:restricted,id,name:"Agent revised",projectId,filters:{},layout:[],widgets:[]}),options);assert.equal(updated.persisted,true);
   await db.admin.query("update workspace_users set role='assistant' where id=$1",[restrictedId]);
   try{await withCrmRead(restricted,async tx=>assert.equal((await tx.query("update dashboard_views set name='Forbidden assistant edit' where id=$1 returning id",[id])).length,0),options);}finally{await db.admin.query("update workspace_users set role='agent' where id=$1",[restrictedId]);}
+});
+
+test("integration: a changed correlation cannot replay or reconcile a committed command",async()=>{
+ const input=command();
+ const first=await executeCrmCommand(session,input,async()=>({verified:true}),options);
+ const changed={...input,correlationId:randomUUID()};
+ await assert.rejects(executeCrmCommand(session,changed,async()=>({verified:false}),options),rejects("IDEMPOTENCY_CONFLICT"));
+ await assert.rejects(reconcileCrmCommand(session,changed,options),rejects("IDEMPOTENCY_CONFLICT"));
+ const recovered=await reconcileCrmCommand(session,input,options);
+ assert.equal(recovered.status,"COMMITTED");
+ if(recovered.status==="COMMITTED")assert.equal(recovered.commandId,first.commandId);
 });

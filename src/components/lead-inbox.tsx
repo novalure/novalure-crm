@@ -37,7 +37,7 @@ import {
   minutesUntilLeadDeadline,
 } from "@/lib/lead-deadline";
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 
 type LeadInboxProps = {
   activeProjectId: string | null;

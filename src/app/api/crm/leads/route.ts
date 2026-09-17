@@ -1,5 +1,6 @@
+import { withCrmSalesWrite } from "@/lib/crm-sales-http";
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import type { AppSession } from "@/lib/auth/session";
 import { upsertLeadRecord } from "@/lib/db/crm-write-repositories";
 
 async function readJson(request: Request) {
@@ -48,9 +49,8 @@ function withLeadIdFromRequest(request: Request, lead: Record<string, unknown>) 
   return id ? { ...lead, id } : lead;
 }
 
-export async function POST(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
-  if (!auth.ok) return auth.response;
+async function postHandler(request: Request, session: AppSession) {
+  const auth = { session };
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -73,9 +73,8 @@ export async function POST(request: Request) {
   return NextResponse.json({ lead: result.data, persisted: true });
 }
 
-export async function PATCH(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
-  if (!auth.ok) return auth.response;
+async function patchHandler(request: Request, session: AppSession) {
+  const auth = { session };
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -96,3 +95,6 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ lead: result.data, persisted: true });
 }
+
+export const POST = withCrmSalesWrite(postHandler);
+export const PATCH = withCrmSalesWrite(patchHandler);

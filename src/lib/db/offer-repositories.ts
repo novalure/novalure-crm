@@ -1,6 +1,7 @@
+import { getOfferApprovalReference } from "./approval-reference-repositories";
 import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
-import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "@/lib/crm-command";
+import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "@/lib/crm-command";
 import { assertFreshOfferSession, assertOfferApproval, nextOfferStatus, offerDate, offerText, offerTotal, parseOfferContent, OfferValidationError, type OfferAction, type OfferContent, type OfferStatus } from "@/lib/offer-workflow";
 import { evaluateOutboundConsent } from "@/lib/db/consent-policy";
 
@@ -32,6 +33,8 @@ async function requireApproval(tx: TenantTransaction, offer: OfferRow, session: 
   const approval = await currentApproval(tx, offer);
   if (!approval || approval.decision !== "APPROVED") error("VALID_APPROVAL_REQUIRED");
   assertOfferApproval({ revision: offer.revision, digest: offer.contentDigest, approverId: approval.actorId, configuredApproverId: await approvalConfig(tx, session), approval, now: Date.now() });
+  const reference = await getOfferApprovalReference(session, approval.id);
+  if (reference.status !== "APPROVED" || reference.scope.action !== "offer.send" || reference.scope.workspaceId !== offer.workspaceId || reference.scope.projectId !== offer.projectId || reference.scope.resourceId !== offer.id || reference.scope.resourceVersion !== offer.revision || reference.scope.contentDigest !== offer.contentDigest || reference.scope.recipient !== offer.content.recipientEmail || reference.scope.totalNetCents !== Number(offer.totalNetCents) || reference.requiredSteps !== 1) error("APPROVAL_SCOPE_MISMATCH");
   if (Date.parse(offer.content.validUntil) <= Date.now()) error("OFFER_EXPIRED");
   return approval;
 }
@@ -51,7 +54,7 @@ async function readView(tx: TenantTransaction, session: AppSession, dealId: stri
   const row = await tx.queryOne<OfferRow>(`${selectOffer} where o.workspace_id=$1::uuid and o.deal_id=$2::uuid`, [session.workspaceId, dealId]);
   const approverId = await approvalConfig(tx, session);
   const deliveries = row ? await tx.query(`select id,revision,content_digest as "contentDigest",recipient_email as "recipientEmail",status,receipt_reference as "receiptReference",attested_by as "attestedBy",attested_at as "attestedAt",created_at as "createdAt" from crm_offer_deliveries where workspace_id=$1::uuid and offer_id=$2::uuid order by revision desc`, [session.workspaceId, row.id]) : [];
-  return { offer: row ? normalize(row) : null, approval: row ? await currentApproval(tx, row) : null, deliveries, approverConfigured: Boolean(approverId), canApprove: approverId === session.userId, dealVersion: Number(deal.version), deliverySemantics: "manual_attestation_only", contractExecutionEnabled: false };
+  return { approvalReference: row?.approvalId ? await getOfferApprovalReference(session, row.approvalId) : null, offer: row ? normalize(row) : null, approval: row ? await currentApproval(tx, row) : null, deliveries, approverConfigured: Boolean(approverId), canApprove: approverId === session.userId, dealVersion: Number(deal.version), deliverySemantics: "manual_attestation_only", contractExecutionEnabled: false };
 }
 export async function getOfferWorkflow(session: AppSession, dealId: string, options: TenantTransactionOptions = {}) {
   assertCrmUuid(dealId, "dealId");
@@ -64,7 +67,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
     assertCrmUuid(input.projectId, "projectId");
     if (!input.payload || typeof input.payload !== "object" || Array.isArray(input.payload)) error("INVALID_OFFER_PAYLOAD", 400);
     const expectedVersion = assertExpectedVersion(input.expectedVersion);
-    return await executeCrmCommand(session, { operation: `offer.${input.operation}`, resourceId: input.operation === "create" ? assertCrmUuid(input.dealId, "dealId") : assertCrmUuid(input.offerId, "offerId"), projectId: input.projectId, expectedVersion, idempotencyKey: input.idempotencyKey, correlationId: input.correlationId, payload: input.payload, capability: "pipeline:write" }, async (tx, context) => {
+    return await executeCrmCommand(session, offerCommandInput(input), async (tx, context) => {
       const session = context.session;
       if (input.operation === "create") {
         fields(input.payload, ["content", "leadId", "organizationName"]);
@@ -200,4 +203,11 @@ export async function assertLegacyOfferDealWrite(input: { session: AppSession; d
 export async function assertLegacyOfferMilestone(input: { session: AppSession; dealId?: string | null; milestone?: unknown }, options: TenantTransactionOptions = {}) {
   if (typeof input.milestone === "string" && ["offer_sent", "contract_sent", "contract_signed"].includes(input.milestone)) error("CANONICAL_DELIVERY_EVIDENCE_REQUIRED");
   if (input.dealId) await assertLegacyOfferDealWrite({ session: input.session, dealId: input.dealId }, options);
+}
+
+function offerCommandInput(input: OfferCommand) {
+  return { operation: `offer.${input.operation}`, resourceId: input.operation === "create" ? assertCrmUuid(input.dealId, "dealId") : assertCrmUuid(input.offerId, "offerId"), projectId: assertCrmUuid(input.projectId, "projectId"), expectedVersion: assertExpectedVersion(input.expectedVersion), idempotencyKey: input.idempotencyKey, correlationId: input.correlationId, payload: input.payload, capability: "pipeline:write" as const };
+}
+export async function reconcileOfferCommand(session: AppSession, input: OfferCommand, options: TenantTransactionOptions = {}) {
+  return reconcileCrmCommand(session, offerCommandInput(input), options);
 }

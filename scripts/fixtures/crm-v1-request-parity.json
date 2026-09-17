@@ -1,0 +1,3959 @@
+{
+  "sourceRevision": "8119798a97347eb1c96126c6a14308e158e20862",
+  "sourceHashes": {
+    "src/connectors/crm/contract.ts": "f254433090f15dc4efa19cab21afbc2456efa298bd015b6d12ad6bf9b43e30f1",
+    "src/connectors/crm/mapping.ts": "e7ff9496ee2ccdec584d515998bb1e7aa3ac2ea095f97754bf2e2aa3b73a66b0",
+    "src/domain/types.ts": "03bbbb2072ada8496336699f388fa96d06799b9970d210978fb23a80e1c0b6dc",
+    "src/security/redaction.ts": "17be1b4d73aa2e25b4a59aeaac49eaed88121989b4ff0c4b8dfab8c6dd8ed894"
+  },
+  "vectors": [
+    {
+      "label": "Read/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Read/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "Update/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "PrepareOffer/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "PrepareOffer/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareOffer/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareOffer",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "PrepareReservation/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "PrepareReservation/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "PrepareReservation",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "SendOffer/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "SendOffer/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "SendOffer",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "ConfirmReservation/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmReservation/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmReservation",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Contact",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Company",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Company",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Developer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Developer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Project",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Project",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Unit",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Unit",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/BuyerLead",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "BuyerLead",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Qualification",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Qualification",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Offer",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Offer",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Task",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Task",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Appointment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Appointment",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Viewing",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Viewing",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Reservation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Reservation",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/Sale",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Sale",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "ConfirmSale/Communication",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "Communication",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "ConfirmSale/ApprovalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "ConfirmSale",
+        "entity": "ApprovalReference",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": "sim-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:contractVersion",
+      "request": {
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:environment",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:synthetic",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:operation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:entity",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:tenantId",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:resourceId",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:actorId",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:correlationId",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:idempotencyKey",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:expectedVersion",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:approvalReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:auditReference",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:validation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "missing:patch",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:contractVersion:\"v2\"",
+      "request": {
+        "contractVersion": "v2",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:environment:\"production\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "production",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:synthetic:false",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": false,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:operation:\"Delete\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Delete",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:entity:\"Invoice\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Invoice",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:tenantId:\"native-uuid\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "native-uuid",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:actorId:\"owner\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "owner",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:resourceId:\"sim-\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:correlationId:13",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": 13,
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:idempotencyKey:null",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": null,
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:expectedVersion:0",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 0,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:expectedVersion:-1",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": -1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:expectedVersion:1.5",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1.5,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:approvalReference:\"real-approval\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": "real-approval",
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:auditReference:\"\"",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:validation:{}",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {},
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:validation:{\"status\":\"VALIDATED\",\"schemaVersion\":\"crm-integration-v1\",\"owner\":true}",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1",
+          "owner": true
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid:patch:{\"email\":\"SYNTHETIC: User\"}",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "email": "SYNTHETIC: User"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: Good name",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: Good name"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "label": "patch:Real name",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "Real name"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: passwordvalue",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: passwordvalue"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: passwd",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: passwd"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: secretvalue",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: secretvalue"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: tokenvalue",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: tokenvalue"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: api_key",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: api_key"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: credential",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: credential"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: private-key",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: private-key"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: canary",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: canary"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: sk-a",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: sk-a"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: ghp_value",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: ghp_value"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: github_pat_value",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: github_pat_value"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: AKIA",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: AKIA"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: bearer value",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: bearer value"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: a@b",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: a@b"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: https://invalid.example",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: https://invalid.example"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "patch:SYNTHETIC: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "unknown-root",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {},
+        "owner": true
+      },
+      "accepted": false
+    },
+    {
+      "label": "read-patch",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {
+          "name": "SYNTHETIC: Name"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "label": "null-update-version",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Update",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "null-root",
+      "request": null,
+      "accepted": false
+    },
+    {
+      "label": "array-root",
+      "request": [],
+      "accepted": false
+    },
+    {
+      "label": "string-root",
+      "request": "invalid",
+      "accepted": false
+    },
+    {
+      "label": "read-version",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 1,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": true
+    },
+    {
+      "label": "unsafe-large-version",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": 9007199254740992,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "uppercase-id",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-UPPER",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "VALIDATED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    },
+    {
+      "label": "invalid-validation",
+      "request": {
+        "contractVersion": "crm-integration-v1",
+        "environment": "simulation",
+        "synthetic": true,
+        "operation": "Read",
+        "entity": "Contact",
+        "tenantId": "sim-tenant",
+        "resourceId": "sim-resource",
+        "actorId": "sales",
+        "correlationId": "sim-correlation",
+        "idempotencyKey": "sim-idempotency",
+        "expectedVersion": null,
+        "approvalReference": null,
+        "auditReference": "sim-audit",
+        "validation": {
+          "status": "UNVERIFIED",
+          "schemaVersion": "crm-integration-v1"
+        },
+        "patch": {}
+      },
+      "accepted": false
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 import type { Deal, Lead, Contact } from "@/lib/crm-types";
 import type { OfferContent, OfferLine, OfferStatus } from "@/lib/offer-workflow";
 

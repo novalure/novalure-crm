@@ -150,7 +150,7 @@ export async function executeCrmCommand<T>(session: AppSession, input: CrmComman
     if (!freshSession.permissions.includes("crm:write") || !hasProductCapability(freshSession.productRole, input.capability)) throw new CrmCommandError("FORBIDDEN", "Command capability is not granted", 403);
     if (input.projectId) await assertProjectGrant(tx, freshSession, input.projectId, true);
     const { dataClassification } = await currentMember(tx, freshSession);
-    const digest = crmPayloadDigest({ contractVersion: "1", actorId: session.userId, workspaceId: session.workspaceId, operation: input.operation, resourceId: input.resourceId, projectId: input.projectId, expectedVersion: input.expectedVersion, capability: input.capability, payload: input.payload, dataClassification, purpose: "crm_sales" });
+    const digest = crmPayloadDigest({ digestVersion: 2, contractVersion: "1", correlationId: input.correlationId, actorId: session.userId, workspaceId: session.workspaceId, operation: input.operation, resourceId: input.resourceId, projectId: input.projectId, expectedVersion: input.expectedVersion, capability: input.capability, payload: input.payload, dataClassification, purpose: "crm_sales" });
     await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`crm-command:${session.workspaceId}:${input.idempotencyKey}`]);
     const existing = await tx.queryOne<{ requestHash: string; data: T; auditReference: string; commandId: string }>(`select request_hash as "requestHash", response as data, audit_reference as "auditReference", id as "commandId" from crm_command_receipts where workspace_id=$1::uuid and idempotency_key=$2`, [session.workspaceId, input.idempotencyKey]);
     if (existing) {
@@ -168,6 +168,29 @@ export async function executeCrmCommand<T>(session: AppSession, input: CrmComman
     await tx.execute(`insert into crm_domain_events(workspace_id,project_id,actor_user_id,event_type,resource_id,command_id,audit_reference,correlation_id,payload,data_classification) values($1::uuid,$2::uuid,$3::uuid,$4,$5::uuid,$6::uuid,$7::uuid,$8::uuid,$9::jsonb,$10)`, [context.workspaceId, input.projectId ?? null, context.actorId, input.operation, entityId, context.commandId, context.auditReference, input.correlationId, JSON.stringify({ contractVersion: "1", operation: input.operation, expectedVersion: input.expectedVersion ?? null }), dataClassification]);
     return { data, replayed: false, auditReference: context.auditReference, commandId: context.commandId };
   }, options);
+}
+
+/** Read-only reconciliation revalidates authority before exposing any persisted receipt. */
+export async function reconcileCrmCommand<T = unknown>(session: AppSession, input: CrmCommandInput, options: TenantTransactionOptions = {}): Promise<
+  { status: "NOT_FOUND" } | { status: "COMMITTED"; data: T; replayed: true; auditReference: string; commandId: string }
+> {
+  if (!/^[a-z][a-z0-9_.:-]{2,119}$/i.test(input.operation)) throw new CrmCommandError("INVALID_OPERATION", "Invalid command operation");
+  if (!uuidV4.test(input.idempotencyKey)) throw new CrmCommandError("IDEMPOTENCY_REQUIRED", "A UUID v4 idempotency key is required");
+  assertCrmUuid(input.correlationId, "correlationId");
+  if (input.resourceId) assertCrmUuid(input.resourceId, "resourceId");
+  if (input.projectId) assertCrmUuid(input.projectId, "projectId");
+  if (input.expectedVersion !== undefined) assertExpectedVersion(input.expectedVersion);
+  return withCrmRead(session, async (tx, freshSession) => {
+    if (!freshSession.permissions.includes("crm:write") || !hasProductCapability(freshSession.productRole,input.capability)) throw new CrmCommandError("FORBIDDEN","Command capability is not granted",403);
+    if (input.projectId) await assertProjectGrant(tx,freshSession,input.projectId,true);
+    const { dataClassification } = await currentMember(tx,freshSession);
+    const digest = crmPayloadDigest({ digestVersion: 2, contractVersion: "1", correlationId: input.correlationId, actorId: session.userId, workspaceId: session.workspaceId, operation: input.operation, resourceId: input.resourceId, projectId: input.projectId, expectedVersion: input.expectedVersion, capability: input.capability, payload: input.payload, dataClassification, purpose: "crm_sales" });
+    await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))",["crm-command:"+session.workspaceId+":"+input.idempotencyKey]);
+    const receipt=await tx.queryOne<{requestHash:string;data:T;auditReference:string;commandId:string;actorId:string;correlationId:string}>('select request_hash as "requestHash",response as data,audit_reference as "auditReference",id as "commandId",actor_user_id as "actorId",correlation_id as "correlationId" from crm_command_receipts where workspace_id=$1::uuid and idempotency_key=$2',[session.workspaceId,input.idempotencyKey]);
+    if (!receipt) return {status:"NOT_FOUND" as const};
+    if (receipt.actorId !== freshSession.userId || receipt.requestHash !== digest || receipt.correlationId !== input.correlationId) throw new CrmCommandError("IDEMPOTENCY_CONFLICT","The idempotency key belongs to a different command",409);
+    return {status:"COMMITTED" as const,data:receipt.data,replayed:true as const,auditReference:receipt.auditReference,commandId:receipt.commandId};
+  },options);
 }
 
 /** Future service vocabulary only: no token issuer, principal or external connection is enabled. */

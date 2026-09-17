@@ -1,18 +1,29 @@
 {
   "date": "2026-09-17",
   "baseline": "c3705927e2b47fc8fb0d52bfd28e5b8feff2f600",
+  "closureBaseline": "61a3d65d86834b55e5e09e7fc39c307911035cb0",
+  "evelynCommit": "8119798a97347eb1c96126c6a14308e158e20862",
   "node": "24.14.0",
   "npm": "11.9.0",
   "counts": {
-    "unit": 232,
-    "integration": 15,
-    "migrationDb": 8,
-    "rbacSecurity": 45,
-    "workflow": 52,
-    "e2e": 13,
-    "total": 365,
+    "unit": 236,
+    "integration": 25,
+    "migrationDb": 23,
+    "rbacSecurity": 74,
+    "workflow": 61,
+    "e2e": 20,
+    "total": 439,
     "failed": 0,
-    "skipped": 0
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "suiteAssignments": {
+    "unit": "232 existing + 4 client recovery",
+    "integration": "15 existing + 5 HTTP receipts + 5 actual cookie/CSRF route",
+    "migrationDb": "8 core CAS + 15 upgrade/restore",
+    "rbacSecurity": "29 foundation + 21 service + 7 approval + 17 protected-access contract",
+    "workflow": "23 offer + 24 property + 6 legacy + 8 final priorities/tenant/concurrency",
+    "e2e": "20 actual-login local browser"
   },
   "audit": {
     "info": 0,
@@ -25,14 +36,44 @@
   "browser": {
     "syntheticOnly": true,
     "providerDeliveryVerified": false,
-    "loginCredentialExchangeVerified": false,
+    "loginCredentialExchangeVerified": true,
+    "mfaEnrollmentVerified": true,
+    "authenticationTransport": "actual-login-ui",
     "results": [
       {
         "name": "anonymous login renders and protected CRM denies anonymous access",
         "status": "PASS"
       },
       {
-        "name": "persisted synthetic MFA session loads CRM without framework errors",
+        "name": "actual login rejects an incorrect password without granting a session",
+        "status": "PASS"
+      },
+      {
+        "name": "correct password requires real TOTP enrollment before CRM access",
+        "status": "PASS"
+      },
+      {
+        "name": "MFA enrollment rejects an invalid code without creating a session",
+        "status": "PASS"
+      },
+      {
+        "name": "real UI TOTP enrollment creates a server-issued authenticated MFA session",
+        "status": "PASS"
+      },
+      {
+        "name": "persisted real password and MFA session loads CRM after reload without framework errors",
+        "status": "PASS"
+      },
+      {
+        "name": "actual logout revokes the session and rejects replay of its previous cookie",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile login requires existing MFA and rejects an invalid TOTP",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile password and TOTP login creates a fresh session through the actual UI",
         "status": "PASS"
       },
       {
@@ -82,111 +123,74 @@
     ],
     "errors": []
   },
-  "sourceHashFormat": "SHA256 of UTF-8 content with CRLF normalized to LF",
+  "gateCommands": [
+    "npm run typecheck",
+    "npm run lint",
+    "npm run build",
+    "npm run test:unit",
+    "npm run test:integration",
+    "npm run test:sales",
+    "npm run test:sales:final",
+    "npm run test:sales:migrations",
+    "npm run test:protected-preview-access",
+    "npm run qa:sales:e2e",
+    "npm audit --json"
+  ],
+  "secretScan": {
+    "tool": "gitleaks 8.30.1",
+    "scope": "proposed complete file tree and HEAD/origin history",
+    "findings": 0,
+    "existingExactHistoricalFingerprintsUnchanged": true
+  },
+  "contractParity": {
+    "vectors": 166,
+    "differences": 0,
+    "fixture": "scripts/fixtures/crm-v1-request-parity.json"
+  },
+  "gaps": {
+    "closed": 16,
+    "original": 18,
+    "blocked": [
+      "G08",
+      "G24"
+    ]
+  },
+  "previewQa": "BLOCKED",
+  "productionAccess": 0,
+  "productionDeployment": false,
+  "limitations": [
+    "Only synthetic local contract/business tests; no real Evelyn/provider integration.",
+    "Client unknown-state persistence is module-memory only; no cross-tab/reload guarantee.",
+    "Two-step engine permits only local synthetic probe, not contract/payment execution.",
+    "Neon QA cutover blocked at unchanged migration 061; 080-085 not applied remotely.",
+    "Local 001 pgvector substitution and excluded manual 062 cutover.",
+    "Native restore in second database of same cluster, no cross-cluster/PITR claim."
+  ],
+  "sourceHashFormat": "SHA256 of source-file bytes with CRLF normalized to LF; docs excluded from executable-source binding",
   "sourceHashes": [
     {
-      "path": "migrations/080_crm_command_safety.sql",
-      "sha256": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e"
-    },
-    {
-      "path": "migrations/081_crm_offer_workflow.sql",
-      "sha256": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54"
-    },
-    {
-      "path": "migrations/082_crm_property_sales_workflow.sql",
-      "sha256": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb"
-    },
-    {
-      "path": "migrations/083_crm_core_cas.sql",
-      "sha256": "54a22da9d041baf688cc631b99c16a470cea13648cb19ef222fa2dbc68af80ee"
-    },
-    {
-      "path": "scripts/core-cas-tests.ts",
-      "sha256": "622172dafcd35af328154154e9df9ddf70d58d4f257b567d61cbc8afdadc4f2b"
-    },
-    {
-      "path": "scripts/crm-command-tests.ts",
-      "sha256": "f197d9778e75fe2432848c8ca4a9c5c8531c5c8fb68da93073bc92dcb8954795"
-    },
-    {
-      "path": "scripts/legacy-sales-tests.ts",
-      "sha256": "db6eccd6b8673b5922f357e9541ef265b9fd2f633dbda7d5286c1a30046a4363"
-    },
-    {
-      "path": "scripts/lib/local-sales-db.mjs",
-      "sha256": "e74feb08cdcf997ff01455af3fe556f02d6dd444843fb9d0dd614fe25521a7db"
-    },
-    {
-      "path": "scripts/lib/sales-browser-fixture.mjs",
-      "sha256": "99d707a6917bf2ee4264e2750a662e1bdb0e3eab7dae355ec6c948f4b422ce15"
-    },
-    {
-      "path": "scripts/offer-workflow-tests.ts",
-      "sha256": "4f818c955dd38e28c03db7fd935c7aa71a754186482de0a31f765798cc2cf47c"
-    },
-    {
-      "path": "scripts/property-sales-tests.ts",
-      "sha256": "669541629e4b52dd14ea4482bab9b6e2dc8ea5ebee183d62ce8e7a62e2630c90"
-    },
-    {
-      "path": "scripts/qa-sales-browser-server.mjs",
-      "sha256": "ee2aeadc8616a6a8898dee52732d806353b4ca7abe21424868f466801a756c18"
-    },
-    {
-      "path": "scripts/qa-sales-browser.mjs",
-      "sha256": "0a2ec5552b133505b1fdeb0beca0da00e4b0d8a6811437117602482b545ab6cf"
-    },
-    {
-      "path": "scripts/qa-sales-e2e.mjs",
-      "sha256": "3623c7869df4c4c80ff967fe73df4c9529134a710fb3b9139123ac4a50571004"
-    },
-    {
-      "path": "src/app/api/crm/offers/route.ts",
-      "sha256": "9cf055e6726ed2776c111bdc7f574e37fad03cc85a26fd1e0e83bf4e15a375c5"
-    },
-    {
-      "path": "src/app/api/crm/property-sales/route.ts",
-      "sha256": "b03337656d26d619e4ac539259327aa6c210c0c2f0f30a3add108480103bfc6f"
-    },
-    {
-      "path": "src/components/offer-workflow.tsx",
-      "sha256": "1e9dd55dd48afb727ccbee34468cff26681659b274953cc5c1a908210e404586"
-    },
-    {
-      "path": "src/components/property-sales-workflow.tsx",
-      "sha256": "550df07a51a2bba1ab7305b2c6836893ab9ac413ee775c7d06e27f042fb2a32f"
-    },
-    {
-      "path": "src/lib/crm-command.ts",
-      "sha256": "8628b7330f250f54335c92a77be2b501555d064c7f38109fea3518ee171c2bab"
-    },
-    {
-      "path": "src/lib/db/local-test-transport.ts",
-      "sha256": "bb9553727247842bc01c0195929955d325da095b053d93ef1adc9662b6f40319"
-    },
-    {
-      "path": "src/lib/db/offer-repositories.ts",
-      "sha256": "7030f2eaa165f5ab414717a5a577c0bc45fc2cfaa3d2e108fa2735f8fe920891"
-    },
-    {
-      "path": "src/lib/db/property-sales-repositories.ts",
-      "sha256": "809c63b7ceec92b5e55b7661c9a18d054a58674bde0fff54301427f53d733e69"
-    },
-    {
-      "path": "src/lib/db/transaction-context.ts",
-      "sha256": "f206485623e8f702beeddd1098653364f6234da61a4b60df9a92a5a6ff188f6e"
-    },
-    {
-      "path": "src/lib/offer-workflow.ts",
-      "sha256": "e1d279f0e7026477476de0467014e0a47cba53b5c313caa6989df9b6088113bd"
-    },
-    {
-      "path": "src/lib/property-sales.ts",
-      "sha256": "0936093d485d0fd7117e37e0fb6c06d2cf0ceed54bc5dc033046399f2e4acd87"
+      "path": ".github/workflows/exact-protected-preview-qa.yml",
+      "sha256": "376ced3535396c5bd20f12170d159aeaf02a32134b64eb9e201993fa7e7b086a"
     },
     {
       "path": ".github/workflows/livegang-e2e.yml",
-      "sha256": "967734edae96509fa23b77a17aaebe261f0882fa2b6b5770c0231039fb661826"
+      "sha256": "b70a39789e3073e6089737ce29e4a9e31ea5f37c6acb0d462aeb3b34b69e35e0"
+    },
+    {
+      "path": ".github/workflows/secret-scan.yml",
+      "sha256": "0c3ea544c023937e94b81943ad03c240be9356d0f753a17e49dfb3bd585e579f"
+    },
+    {
+      "path": ".gitleaksignore",
+      "sha256": "2e0f46bda520015c8829afe8dda1db6453e536427ba1ea74bb7e96f22e5a4c6c"
+    },
+    {
+      "path": ".node-version",
+      "sha256": "75daa0bc10dae1f22b2d13386b55b232adf16930d4325902f37b5033b3a7ca93"
+    },
+    {
+      "path": "eslint.config.mjs",
+      "sha256": "5c39ad170a8b4fb079293a845cef623a8599950671a29b6c29a1dff729fab388"
     },
     {
       "path": "migrations/001_initial_novalure_crm.sql",
@@ -501,12 +505,40 @@
       "sha256": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432"
     },
     {
+      "path": "migrations/080_crm_command_safety.sql",
+      "sha256": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e"
+    },
+    {
+      "path": "migrations/081_crm_offer_workflow.sql",
+      "sha256": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54"
+    },
+    {
+      "path": "migrations/082_crm_property_sales_workflow.sql",
+      "sha256": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb"
+    },
+    {
+      "path": "migrations/083_crm_core_cas.sql",
+      "sha256": "0ca41b859e15cd92c173e1da239e98c1b9c7c82f1afdb78bd04dc9eaf06e864a"
+    },
+    {
+      "path": "migrations/084_crm_contract_service_boundary.sql",
+      "sha256": "3258b3a4e99d2a78bd4cdb06ad88c9aa699fd9a1ed1dd98fd31804deeccc1a11"
+    },
+    {
+      "path": "migrations/085_crm_approval_evidence.sql",
+      "sha256": "0d2f9aa924f8199798b2af5040033c6b3579d5639652861f8980540a365759f9"
+    },
+    {
+      "path": "next.config.ts",
+      "sha256": "6eab462ca92a371229ecf9b7c8650890c173603606e51c4e7c45f124a125762e"
+    },
+    {
       "path": "package-lock.json",
       "sha256": "0b1dbbfe4772cb0e05f43485f93691f7eab733178a13fc3474fa4982f06c46d3"
     },
     {
       "path": "package.json",
-      "sha256": "17c7bd80c5f2466b6ece503cb5c76ca0bab014a8733dd958ac7c7a8179732106"
+      "sha256": "352ef0ba661cb403746927025a23595c801bc0611372ec640f30b6c4e1eb85f3"
     },
     {
       "path": "scripts/admin-navigation-smoke-tests.mjs",
@@ -553,6 +585,10 @@
       "sha256": "03ebeb156b3b4338593a0c7a8b6b1382ff4217c6554f4a66d955b78f4b6a7319"
     },
     {
+      "path": "scripts/approval-reference-tests.ts",
+      "sha256": "2ac5255cbe8838d703043bdded0db2d43b63091867adbbb5b5a80edcc837b20c"
+    },
+    {
       "path": "scripts/auth-security-tests.mjs",
       "sha256": "273fc53f67ad06645af680b4e2a6ed49478a5e2fcbcf76ac558a7eee844f2295"
     },
@@ -578,19 +614,31 @@
     },
     {
       "path": "scripts/contact-access-rbac-smoke-tests.mjs",
-      "sha256": "c7217280ae208491242b6a9b4b8557d082cc95694ad4e72123c5249543d7e2cb"
+      "sha256": "d0be78acf1ee01d0ed8ecfe089e3bde00be3e93800a8f6dc983630f821c70a52"
     },
     {
       "path": "scripts/contact-empty-state-regression-tests.mjs",
       "sha256": "2d18320dd1e36475b570ac769928168027df792b5d6c9b65b870e033b1637027"
     },
     {
+      "path": "scripts/core-cas-tests.ts",
+      "sha256": "622172dafcd35af328154154e9df9ddf70d58d4f257b567d61cbc8afdadc4f2b"
+    },
+    {
       "path": "scripts/create-local-backup.ps1",
       "sha256": "5441be27773c6fd7a962e152fd5ba25cd813fb7720ffc94228d2403510d6c12f"
     },
     {
+      "path": "scripts/crm-command-tests.ts",
+      "sha256": "1d9b1ce7bc1b6a91f157d3bb33117f8fa975cf5f3b76a5785517ed7adce76cad"
+    },
+    {
       "path": "scripts/crm-scope-persistence-smoke-tests.mjs",
       "sha256": "80d14ee7819dbbe3ad480364c96b908275c4d3b7ba22936aff5ce13bdb13dbe6"
+    },
+    {
+      "path": "scripts/crm-service-contract-tests.ts",
+      "sha256": "e5dc72b461ac766d4f389ecb14314cb6ffe5985d4f70b3f66d0996809086a357"
     },
     {
       "path": "scripts/cron-runtime-smoke-tests.mjs",
@@ -625,6 +673,10 @@
       "sha256": "7daf2b48706f500cf29c7eb92d5a407749bfa0d25fc6df7144ee818e2211c43d"
     },
     {
+      "path": "scripts/fixtures/crm-v1-request-parity.json",
+      "sha256": "f787e0e579dd804e8493d51591b7a9a36c3c4c683d13874de15546f9dda74c2e"
+    },
+    {
       "path": "scripts/i18n-localization-smoke-tests.mjs",
       "sha256": "b912b20bcdd55735a50963d04d27de74d61818b271b4db70cdbb5b1f137051d6"
     },
@@ -633,12 +685,20 @@
       "sha256": "fe314c9c8f28ae58eac1f48d4b018a11ee02bf997f7882354ef29cd58f3beea3"
     },
     {
+      "path": "scripts/legacy-sales-tests.ts",
+      "sha256": "db6eccd6b8673b5922f357e9541ef265b9fd2f633dbda7d5286c1a30046a4363"
+    },
+    {
       "path": "scripts/lib/external-gate-receipts.mjs",
       "sha256": "94acf1c210c9d7295beeec9d2606023466550f239ddd5257bd084dbcfc831003"
     },
     {
       "path": "scripts/lib/infra-targets.mjs",
       "sha256": "02662269cbb77ae825f4bcf4d7d8b4d409352aabcb5de349d1a2c89001f38676"
+    },
+    {
+      "path": "scripts/lib/local-sales-db.mjs",
+      "sha256": "e74feb08cdcf997ff01455af3fe556f02d6dd444843fb9d0dd614fe25521a7db"
     },
     {
       "path": "scripts/lib/protected-workflow-provenance-receipt.mjs",
@@ -657,6 +717,10 @@
       "sha256": "95be349c76f0f5cde6582b48a5a48ca77981b8a13914cd9ffe4e7b117c21ec77"
     },
     {
+      "path": "scripts/lib/sales-browser-fixture.mjs",
+      "sha256": "cdc6e8dbbcc245d33ff80306905879fb4971780fbfefe54490d04d0fb983b55f"
+    },
+    {
       "path": "scripts/lib/vercel-preview-access.mjs",
       "sha256": "eb21ba91951c50ca0461d27e0fcfaf4563a0ee91673129301837b74ae35dce0d"
     },
@@ -667,6 +731,10 @@
     {
       "path": "scripts/oauth-state-security-tests.mjs",
       "sha256": "78f9f6505cdc3af38444d90b5c9b5104ba1e31205d654ad9c1933e08d454720b"
+    },
+    {
+      "path": "scripts/offer-workflow-tests.ts",
+      "sha256": "262571e283a3f816aa447bf0cfa59d6b1b082b272ef618d13564fcf9ca9466f5"
     },
     {
       "path": "scripts/open-redirect-security-tests.mjs",
@@ -686,7 +754,7 @@
     },
     {
       "path": "scripts/phase0-smoke-tests.mjs",
-      "sha256": "bf4de96386caff11d8c8ad9d6a0b3662cac30d8a513cbd41f7232855526beea2"
+      "sha256": "940e9ab6bf00d5e74ab0d618e87cdf63cc92d7f5c6219afa37fab289efdeecf1"
     },
     {
       "path": "scripts/phase1-persistence-smoke-tests.mjs",
@@ -698,11 +766,11 @@
     },
     {
       "path": "scripts/phase3-rbac-smoke-tests.mjs",
-      "sha256": "b918081c9a02294ec9040d3037e76ca7d1450ec0dc0b2301858bad93caff9aaa"
+      "sha256": "0685e5fc6849971bf5f6f3593079062981363ea4ad4fb873183d94cad973eb96"
     },
     {
       "path": "scripts/phase4-validation-smoke-tests.mjs",
-      "sha256": "3fe744afcc45a00b3c5025e6fad89f886a189911bb0640a3db4751f1a47eab76"
+      "sha256": "f993759cc13756289da3035f97e9467f4d044241f65b8bfcff30fd64d13996cc"
     },
     {
       "path": "scripts/phase5-copy-smoke-tests.mjs",
@@ -723,6 +791,10 @@
     {
       "path": "scripts/property-department-smoke-tests.mjs",
       "sha256": "7691bf558e3d3193f8c00e6494250b64c212e7647c53d5982cf93cbcb9b914a0"
+    },
+    {
+      "path": "scripts/property-sales-tests.ts",
+      "sha256": "669541629e4b52dd14ea4482bab9b6e2dc8ea5ebee183d62ce8e7a62e2630c90"
     },
     {
       "path": "scripts/protected-preview-access-tests.mjs",
@@ -747,6 +819,10 @@
     {
       "path": "scripts/qa-contact-ui.mjs",
       "sha256": "776cdfd6e61bcc9193d51ea42fb885005b089d6c5f51ebd204e2e7569f8c6791"
+    },
+    {
+      "path": "scripts/qa-crm-contract-parity.mjs",
+      "sha256": "375ed5bd8f224cd4ab63f7c6c619412372a96ad3011d4ca3e5223b04c29a9439"
     },
     {
       "path": "scripts/qa-deal-idempotency.mjs",
@@ -829,6 +905,18 @@
       "sha256": "9dfbe85fc9e66fd8e8871038e6a31ecc4f9f1746884cfa47183bacc6141a22ec"
     },
     {
+      "path": "scripts/qa-sales-browser-server.mjs",
+      "sha256": "ee2aeadc8616a6a8898dee52732d806353b4ca7abe21424868f466801a756c18"
+    },
+    {
+      "path": "scripts/qa-sales-browser.mjs",
+      "sha256": "6fd85938d0110fcad6ef26ff7e479e7342b111345be594d43828570246b6dada"
+    },
+    {
+      "path": "scripts/qa-sales-e2e.mjs",
+      "sha256": "3623c7869df4c4c80ff967fe73df4c9529134a710fb3b9139123ac4a50571004"
+    },
+    {
       "path": "scripts/qa-security-and-scope-smoke-tests.mjs",
       "sha256": "c6c5e4b29e715c1ab4ea102c6ce01163bb113a9706b769317255322bb339c15c"
     },
@@ -843,6 +931,26 @@
     {
       "path": "scripts/qa-two-tenant-e2e.mjs",
       "sha256": "7e10dd3f1c474ba91e4713e5ca9b15176a1e26405392c44b6fdb5fdc2a0b8186"
+    },
+    {
+      "path": "scripts/sales-client-recovery-tests.ts",
+      "sha256": "5b2fb5a7c986fd574ae9b41d600e6f2b7c9b43d15dd937d782a657b471dc734e"
+    },
+    {
+      "path": "scripts/sales-final-negative-tests.ts",
+      "sha256": "aa6e708e1adabc4116a4e941f3c22905a9bf64f7bb1638794dc7faad1c789593"
+    },
+    {
+      "path": "scripts/sales-http-receipt-tests.ts",
+      "sha256": "e60dd20547c320894b40e1162ef742fc25fd5c4f77ceadb26983bb5b761c0292"
+    },
+    {
+      "path": "scripts/sales-migration-upgrade-tests.ts",
+      "sha256": "9506d951371521b19dc382c49cbf42b98aa378530880916f138dc4ea5f72dbc5"
+    },
+    {
+      "path": "scripts/sales-route-integration-tests.ts",
+      "sha256": "2cd9bcb0dfc3ee02ab9986d543f4d366f7e4f25dc5546be5bce9a87aecd3007e"
     },
     {
       "path": "scripts/security-headers-smoke-tests.mjs",
@@ -989,8 +1097,16 @@
       "sha256": "dcc0643d3219abd2173b07ba889fe70a98a8af4a3c846ff8354e3fdc92f599a5"
     },
     {
+      "path": "src/app/api/crm/commands/reconcile/route.ts",
+      "sha256": "11be7494e16c439f6076f4c24b43862be780ab5302f775f3551a61a0b938d090"
+    },
+    {
       "path": "src/app/api/crm/contacts/route.ts",
-      "sha256": "6899037aa0e4852470931c42e28420279d1629d9d651c9a6ccca9520f4e9e64e"
+      "sha256": "09bceae5f192e52e00e2f4f65a0add3c71699128b4c75ba18451d458bced38de"
+    },
+    {
+      "path": "src/app/api/crm/contract/v1/route.ts",
+      "sha256": "28ce4c3b0f840f7f2493ce88977afa60a65d2b79c4bd6f39b89f879f3d3f07a5"
     },
     {
       "path": "src/app/api/crm/core/route.ts",
@@ -1014,11 +1130,11 @@
     },
     {
       "path": "src/app/api/crm/deals/[dealId]/stage/route.ts",
-      "sha256": "366e539cc88df3d9137e18fdd2c19dd74b56cb6d7a733c9cafd8918c86b9b31e"
+      "sha256": "0d378aabcffb4ddd86f50debd63f67c84addb0e387471407051926737484ae4a"
     },
     {
       "path": "src/app/api/crm/deals/route.ts",
-      "sha256": "a73b8ec95887723d03e103ef6acb2a70164926c4aacf5c1eac904eefebd8f9a2"
+      "sha256": "efec743a8cc3364ff04be66d9066941fb0024367008c1c98d93f53a58c711367"
     },
     {
       "path": "src/app/api/crm/editor-preflight/route.ts",
@@ -1038,19 +1154,27 @@
     },
     {
       "path": "src/app/api/crm/leads/route.ts",
-      "sha256": "9c68c96918135fcfc4188974b387837f46507236acac786f30fbe7ef82534036"
+      "sha256": "a31f66362113553bb5b47af5e129579620e8665818bec9dae58548e1b285d2a3"
     },
     {
       "path": "src/app/api/crm/notes/route.ts",
       "sha256": "3afd30992e4b15e7940f00148f96ec6a7ccf2e6c5cf8d805de869454b030c51a"
     },
     {
+      "path": "src/app/api/crm/offers/route.ts",
+      "sha256": "9cf055e6726ed2776c111bdc7f574e37fad03cc85a26fd1e0e83bf4e15a375c5"
+    },
+    {
       "path": "src/app/api/crm/projects/route.ts",
-      "sha256": "ce7f2e6763dcb1d8746a876e3669b98fca7e538b45a4f3b069b43486d2dfb778"
+      "sha256": "b97c4472904cb435efa45a2c2d0390430888f1914a663faca2ed347d06a013b6"
     },
     {
       "path": "src/app/api/crm/properties/route.ts",
       "sha256": "6acaf4cbd35a852939b67335226805f0759dcd91502d8dadf82c85b8b836b894"
+    },
+    {
+      "path": "src/app/api/crm/property-sales/route.ts",
+      "sha256": "b03337656d26d619e4ac539259327aa6c210c0c2f0f30a3add108480103bfc6f"
     },
     {
       "path": "src/app/api/crm/recommendation-runtime/route.ts",
@@ -1062,7 +1186,7 @@
     },
     {
       "path": "src/app/api/crm/tasks/route.ts",
-      "sha256": "93d79b4742df4a4ad7b7cb385f0e1643a8cb910b654932a34ac4f021698419f0"
+      "sha256": "f615089d02271d7cdaea85df3bf5175154e6d7fa765e4fc961af7e820bed2c67"
     },
     {
       "path": "src/app/api/crm/teams-notifications/[notificationId]/retry/route.ts",
@@ -1226,7 +1350,7 @@
     },
     {
       "path": "src/app/favicon.ico",
-      "sha256": "7ee5c0eb17221a11ff38e4e15ddc51687abc6d633a514f2dd3516d8721ac3c2b"
+      "sha256": "093705051dbcd8e9def5d2867f9fcb52f9dbb3a944b6b527a25d45597069549f"
     },
     {
       "path": "src/app/fonts.ts",
@@ -1234,7 +1358,7 @@
     },
     {
       "path": "src/app/fonts/figtree-latin.woff2",
-      "sha256": "24056097852bfc78cbfacd66c2be944ddb237d8bbd0b6f4e7798aa1d9650752d"
+      "sha256": "4ba7d3d096695818fe0686be4f1e82c6b05134e18a22260336130335027462dd"
     },
     {
       "path": "src/app/forms/[slug]/[formSlug]/page.tsx",
@@ -1362,7 +1486,7 @@
     },
     {
       "path": "src/components/contact-command-center.tsx",
-      "sha256": "11d224e7da459bdb24b7a75442f491e46a60a7ba9a972e08b7d4506aba51c8e1"
+      "sha256": "5b1816bb00fe70a8be435d9cf79125970980ae50b9c5c8b6fc9d5ec510818f05"
     },
     {
       "path": "src/components/cookie-consent-button.tsx",
@@ -1374,7 +1498,7 @@
     },
     {
       "path": "src/components/crm-workspace.tsx",
-      "sha256": "487eda6e43e47bfde04dff5e14b848a598c1fec7bf73d82a0ad053743f3240cb"
+      "sha256": "4e1b43c02fb762fcf1eceee920d16405afabd811cc48b163063d234a00a35a40"
     },
     {
       "path": "src/components/customer-access-cockpit.tsx",
@@ -1394,7 +1518,7 @@
     },
     {
       "path": "src/components/deal-pipeline-workspace.tsx",
-      "sha256": "58aad7eac046290157948fa441a3ab58d4ac1648065245de0c8438e8e7de8a46"
+      "sha256": "b3ad10b920709464157c52d619bccc412938491020fcbb76e5f7c67e412f4da0"
     },
     {
       "path": "src/components/form-command-center.tsx",
@@ -1434,7 +1558,7 @@
     },
     {
       "path": "src/components/lead-inbox.tsx",
-      "sha256": "86748ebb00dc266affe0c84a287a8e5630ac4bf828a1d0f1997e71368e3c5fd0"
+      "sha256": "4dc28d7c6d5e1250a3e1e7fedc25ba07499f2cd2969a33d489035af9d068b4bf"
     },
     {
       "path": "src/components/lead-sequence-command-center.tsx",
@@ -1458,11 +1582,15 @@
     },
     {
       "path": "src/components/mobile-daily-work.tsx",
-      "sha256": "b62682d042053c1d401acd30e7fd8f65d7650f9d526230b699162b950f342a67"
+      "sha256": "2743c6b5f01028eefb866911cc0e3d6d1b4752fba8136b23ba2b59a10dfe1214"
     },
     {
       "path": "src/components/newsletter-command-center.tsx",
       "sha256": "602b1f841837fecdd541743d5476ff49e31f122e7daa4134d79a3ea78f09d319"
+    },
+    {
+      "path": "src/components/offer-workflow.tsx",
+      "sha256": "c6e2c43699a0b21f78561b6ce9574f5fb0114694b86b2603665919eec364dd80"
     },
     {
       "path": "src/components/password-visibility-input.tsx",
@@ -1471,6 +1599,10 @@
     {
       "path": "src/components/property-command-center.tsx",
       "sha256": "b250992afd7b835144e5a9293beaba9d5a852eed522d7ff52bd5832212993b8f"
+    },
+    {
+      "path": "src/components/property-sales-workflow.tsx",
+      "sha256": "550df07a51a2bba1ab7305b2c6836893ab9ac413ee775c7d06e27f042fb2a32f"
     },
     {
       "path": "src/components/public-crm-landing.module.css",
@@ -1510,7 +1642,7 @@
     },
     {
       "path": "src/components/task-command-center.tsx",
-      "sha256": "ff8e2f4fb5d48aee4354df7b1392e9d545f84060e1668c9e536b5c174dde85f0"
+      "sha256": "ef58cf442f968ec2d14652642a6e20d9aa8434ec9cda1d5cccf59df9cee5a456"
     },
     {
       "path": "src/components/ui/button.tsx",
@@ -1551,6 +1683,10 @@
     {
       "path": "src/instrumentation.ts",
       "sha256": "21d62e70be962f42da689a348c02b61630252d58360c987de9bdde91013efc05"
+    },
+    {
+      "path": "src/lib/approval-reference.ts",
+      "sha256": "c31aa9e4695ff88c6e3d4d7455f017fa3467f1be971d463cc9a554700ba18d60"
     },
     {
       "path": "src/lib/auth/app-origin.ts",
@@ -1610,7 +1746,7 @@
     },
     {
       "path": "src/lib/auth/session.ts",
-      "sha256": "a06f2bd41a5f01041f84ea290e9ee8f5cdf7796d24bddaacebc81f8690be9307"
+      "sha256": "7a8c6f63822ff4c32ddf9b7f705e6d54ff99f56fc90e1e5335fd19ddbb0dca6c"
     },
     {
       "path": "src/lib/bots/agent-tools.ts",
@@ -1653,12 +1789,24 @@
       "sha256": "ed318f9a96ba30170f72304ab74a1e23ff591e72e0268c02cfb839e8ebe7ea27"
     },
     {
+      "path": "src/lib/crm-command.ts",
+      "sha256": "1bfd978488f0eaea37180dd7efbe72e67acf0902bbb4e4f25d6abc4595a2a395"
+    },
+    {
       "path": "src/lib/crm-data.ts",
       "sha256": "9323d6dcd6ae7722698c73eba0d6e37cdff7a6aec7aa68f0a20666882e06d260"
     },
     {
+      "path": "src/lib/crm-sales-http.ts",
+      "sha256": "fb8dc0dd3de0c72f6682b61d518150843e35b0e6a28fd33083a522eb968c9319"
+    },
+    {
       "path": "src/lib/crm-scope.ts",
       "sha256": "1fc36f232b46bd61520afd9442660c8eb57421340a7c38fb91d898619d61a351"
+    },
+    {
+      "path": "src/lib/crm-service-contract.ts",
+      "sha256": "6fec9caca4e659ce0f71ec2f8d85acf0854997f373753a912398c7c1603af9ee"
     },
     {
       "path": "src/lib/crm-source.ts",
@@ -1679,6 +1827,10 @@
     {
       "path": "src/lib/db/analytics-event-repositories.ts",
       "sha256": "78f7f1543f6175f86b897325e45cba7219ac72c0dd1dbb97a597cf581419b21e"
+    },
+    {
+      "path": "src/lib/db/approval-reference-repositories.ts",
+      "sha256": "a8f87f6dde39c8024e70a3e98696669468194060313684200e937cd786f1e16c"
     },
     {
       "path": "src/lib/db/broker-entity-repositories.ts",
@@ -1706,7 +1858,7 @@
     },
     {
       "path": "src/lib/db/crm-write-repositories.ts",
-      "sha256": "a19322be1a467b34c639486338836262b8ffb819c0aa8684ddb5a512478ef990"
+      "sha256": "bc5df93cd8296d2b08150c4d784e06d37f0e248943e2dc69fc00709b33afff6c"
     },
     {
       "path": "src/lib/db/customer-access-repositories.ts",
@@ -1729,8 +1881,16 @@
       "sha256": "5bb0d0f360beeeb96490715c016cd6f4ce665a1ecfed81e48d490c2ba1bc273a"
     },
     {
+      "path": "src/lib/db/local-test-transport.ts",
+      "sha256": "bb9553727247842bc01c0195929955d325da095b053d93ef1adc9662b6f40319"
+    },
+    {
       "path": "src/lib/db/meeting-repositories.ts",
       "sha256": "703c30283723933a83be8cbbe451576f9cd4086bda57a212dd795711482936de"
+    },
+    {
+      "path": "src/lib/db/offer-repositories.ts",
+      "sha256": "53ddb54922d9e73537964404b40552937ab92bb494c750e7475c21646df19ede"
     },
     {
       "path": "src/lib/db/pipeline-default-repositories.ts",
@@ -1743,6 +1903,10 @@
     {
       "path": "src/lib/db/property-inventory-repositories.ts",
       "sha256": "63152b00958114577dbcde31121d89efb6c2387799641a1f20b3845349e65765"
+    },
+    {
+      "path": "src/lib/db/property-sales-repositories.ts",
+      "sha256": "809c63b7ceec92b5e55b7661c9a18d054a58674bde0fff54301427f53d733e69"
     },
     {
       "path": "src/lib/db/public-submission-abuse-repository.ts",
@@ -1778,7 +1942,11 @@
     },
     {
       "path": "src/lib/db/tenant-client.ts",
-      "sha256": "91f72d6db531d677e4074beb0a6d0cac7f897224eea8ab34d0c1d0624c980f6b"
+      "sha256": "a5485a89cf9b85f3b09b359b1fd65d8b4ee361250f3c92a3187817e9139cdc15"
+    },
+    {
+      "path": "src/lib/db/transaction-context.ts",
+      "sha256": "f206485623e8f702beeddd1098653364f6234da61a4b60df9a92a5a6ff188f6e"
     },
     {
       "path": "src/lib/deal-validation.ts",
@@ -1877,6 +2045,10 @@
       "sha256": "21188b690b655963d5ab0f681be2fe7dd2e8fc982f114588f2bd1c68b95e49d2"
     },
     {
+      "path": "src/lib/offer-workflow.ts",
+      "sha256": "e1d279f0e7026477476de0467014e0a47cba53b5c313caa6989df9b6088113bd"
+    },
+    {
       "path": "src/lib/onboarding-checklist.ts",
       "sha256": "6749fb341fbb3873b7d2a8142885703a009381464d921d814214052ac149377a"
     },
@@ -1891,6 +2063,10 @@
     {
       "path": "src/lib/property-department.ts",
       "sha256": "088296bcd4721df2d9b87cadedc27b84bd011d527968ebf7444918ec9cac7f06"
+    },
+    {
+      "path": "src/lib/property-sales.ts",
+      "sha256": "0936093d485d0fd7117e37e0fb6c06d2cf0ceed54bc5dc033046399f2e4acd87"
     },
     {
       "path": "src/lib/public-audit.ts",
@@ -1911,6 +2087,14 @@
     {
       "path": "src/lib/public-submission-contract.ts",
       "sha256": "9e5c417aef5e5f7fe50ed81f8f89e88d66bd9c9348f7f893314202f022d2a99a"
+    },
+    {
+      "path": "src/lib/security/crm-safe-client.ts",
+      "sha256": "67b707b7d5ca7a4f7cca8744d3eb4b076b2e86356478f40c4fcb91a9d61a4784"
+    },
+    {
+      "path": "src/lib/security/crm-sales-client.ts",
+      "sha256": "debbb4d1a039cbbcc08aade25994ce005e3c5131af06275247d330ac4bc64d78"
     },
     {
       "path": "src/lib/security/csrf-client.ts",
@@ -1951,6 +2135,10 @@
     {
       "path": "src/styles/public-runtime.css",
       "sha256": "3f2d4b948b3c5bddca9c1a55dda0c68d24303e5ecce8ad7afdf09e733bad1833"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "14d63950e172712eeed9eab3221203c630d0333bcdaff0a4616998a12092d0b0"
     }
   ]
 }

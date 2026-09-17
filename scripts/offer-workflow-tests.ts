@@ -66,6 +66,17 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
       const respond = async (accepted: boolean) => { const offer = (await view()).offer!; return command(accepted ? "accept" : "reject", { revision: offer.revision, contentDigest: offer.contentDigest, reference: "SYNTHETIC customer answer", ...(accepted ? {} : { reason: "SYNTHETIC declined" }) }); };
       return { workspaceId, userId, projectId, contactId, leadId, dealId, organizationId, session, command, view, create, approve, sent, respond };
     };
+    await t.test("real offer API view and queue consume the scope-bound approval reference", async () => {
+      const f = await makeFixture(); await f.create(); await f.approve();
+      const view = await f.view(), reference = view.approvalReference;
+      assert.ok(reference); assert.equal(reference.status, "APPROVED"); assert.equal(reference.scope.action, "offer.send");
+      assert.equal(reference.scope.resourceId, view.offer!.id); assert.equal(reference.scope.resourceVersion, view.offer!.revision);
+      assert.equal(reference.scope.contentDigest, view.offer!.contentDigest); assert.equal(reference.scope.recipient, view.offer!.content.recipientEmail);
+      assert.equal(reference.scope.totalNetCents, 2037000); assert.equal(reference.requiredSteps, 1); assert.equal(reference.contractOrPaymentAuthorized, false);
+      const result = await f.command("queue_send"); assert.equal(result.data.offer!.status, "QUEUED");
+      const delivery = (await db.admin.query("select approval_id,status from crm_offer_deliveries where offer_id=$1", [view.offer!.id])).rows[0];
+      assert.equal(delivery.approval_id, reference.id); assert.equal(delivery.status, "QUEUED");
+    });
     await t.test("draft is not sendable and cross-tenant read/write fail", async () => {
       const a = await makeFixture(), b = await makeFixture(); await a.create();
       await assert.rejects(a.command("queue_send"), /INVALID_OFFER_TRANSITION/);

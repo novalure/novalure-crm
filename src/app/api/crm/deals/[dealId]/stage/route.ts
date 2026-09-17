@@ -1,5 +1,6 @@
+import { withCrmSalesWrite } from "@/lib/crm-sales-http";
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import type { AppSession } from "@/lib/auth/session";
 import { changeDealStageRecord } from "@/lib/db/crm-write-repositories";
 
 type RouteContext = {
@@ -14,9 +15,8 @@ async function readJson(request: Request) {
   }
 }
 
-export async function POST(request: Request, context: RouteContext) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "pipeline:write" });
-  if (!auth.ok) return auth.response;
+async function postHandler(request: Request, session: AppSession, context: RouteContext) {
+  const auth = { session };
 
   const { dealId } = await context.params;
   const body = await readJson(request);
@@ -52,6 +52,9 @@ export async function POST(request: Request, context: RouteContext) {
   });
 }
 
-export async function PATCH(request: Request, context: RouteContext) {
-  return POST(request, context);
+async function patchHandler(request: Request, session: AppSession, context: RouteContext) {
+  return postHandler(request, session, context);
 }
+
+export const POST = withCrmSalesWrite(postHandler);
+export const PATCH = withCrmSalesWrite(patchHandler);

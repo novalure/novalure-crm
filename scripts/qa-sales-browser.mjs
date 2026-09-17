@@ -1,30 +1,158 @@
 import pg from "pg";
 import { seedSalesBrowser } from "./lib/sales-browser-fixture.mjs";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 let fixture=JSON.parse(await readFile('.npm-cache/qa/sales-browser-context.json','utf8'));
 if(!fixture.syntheticOnly||new URL(fixture.baseUrl).hostname!=='127.0.0.1')throw Error('Browser QA requires the isolated loopback fixture');
 if(fixture.database?.host!=='127.0.0.1')throw Error('Invalid local database fixture');
 const admin=new pg.Pool({...fixture.database,user:'qa_admin'});
-try{const fresh=await seedSalesBrowser({admin,role:fixture.database.user});fixture={...fixture,...fresh};await writeFile('.npm-cache/qa/sales-browser-context.json',JSON.stringify(fixture,null,2));}finally{await admin.end()}
+try {
+ const fresh = await seedSalesBrowser({admin,role:fixture.database.user});
+ // Discard a legacy manually seeded cookie from older ignored QA contexts.
+ fixture = {...fixture,...fresh};
+ delete fixture.cookie;
+ const sessions = await admin.query("select count(*)::int as count from auth_sessions where auth_identity_id=$1", [fixture.authIdentityId]);
+ assert.equal(sessions.rows[0].count, 0, "The login fixture must start without a session");
+ await writeFile('.npm-cache/qa/sales-browser-context.json',JSON.stringify(fixture,null,2));
+} finally { await admin.end(); }
 const browser=await chromium.launch({channel:process.env.CRM_QA_BROWSER_CHANNEL||'chrome',headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'de-AT',timezoneId:'Europe/Vienna'});
 await context.route('**/*',route=>{const u=new URL(route.request().url());return ['127.0.0.1','localhost'].includes(u.hostname)||['data:','blob:'].includes(u.protocol)?route.continue():route.abort()});
 await context.addInitScript(()=>localStorage.setItem('novalure-crm-navigation-preset-v1','realEstateBroker'));
 const page=await context.newPage(),results=[],errors=[];
 page.on('pageerror',error=>errors.push(error.message));
+page.on('response',response=>{const url=new URL(response.url());if(url.origin===fixture.baseUrl&&response.status()>=500)errors.push('HTTP '+response.status()+' '+url.pathname);});
 async function step(name,fn){try{await fn();results.push({name,status:'PASS'});console.log('PASS '+name)}catch(error){results.push({name,status:'FAIL',error:error.message});await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});throw error}}
 async function api(path,body,method='POST'){
- const response=await page.evaluate(async({path,body,method,key})=>{const csrf=await fetch('/api/auth/csrf?'+new URLSearchParams({method,path}));const token=await csrf.json();const r=await fetch(path,{method,headers:{'content-type':'application/json','x-novalure-csrf-token':token.csrfToken,'Idempotency-Key':key},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};},{path,body,method,key:randomUUID()});
+ const response=await page.evaluate(async({path,body,method,key,correlationId})=>{const csrf=await fetch('/api/auth/csrf?'+new URLSearchParams({method,path}));const token=await csrf.json();const r=await fetch(path,{method,headers:{'content-type':'application/json','x-novalure-csrf-token':token.csrfToken,'Idempotency-Key':key,'X-Correlation-Id':correlationId},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};},{path,body,method,key:randomUUID(),correlationId:randomUUID()});
  assert.ok(response.status>=200&&response.status<300,JSON.stringify(response));return response.body;
 }
+
+// Independent RFC 6238 authenticator: the key comes solely from the rendered enrollment UI.
+function authenticatorCode(secret, atMillis=Date.now()) {
+ const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+ let accumulator=0,bits=0;
+ const bytes=[];
+ for(const character of secret){
+  const value=alphabet.indexOf(character);
+  if(value<0)throw Error('Invalid synthetic enrollment key');
+  accumulator=(accumulator<<5)|value;bits+=5;
+  if(bits>=8){bits-=8;bytes.push((accumulator>>>bits)&255);accumulator&=(1<<bits)-1;}
+ }
+ const counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(atMillis/30000)));
+ const digest=createHmac('sha1',Buffer.from(bytes)).update(counter).digest();
+ const offset=digest[digest.length-1]&15;
+ return String((digest.readUInt32BE(offset)&0x7fffffff)%1000000).padStart(6,'0');
+}
+function incorrectAuthenticatorCode(secret) {
+ const now=Date.now();
+ const acceptedWindow = new Set([-1,0,1].map(offset=>authenticatorCode(secret,now+offset*30000)));
+ for(let candidate=0;candidate<1000000;candidate++){
+  const code=String(candidate).padStart(6,'0');
+  if(!acceptedWindow.has(code))return code;
+ }
+ throw Error('Cannot construct a negative authenticator code');
+}
+async function submitLoginForm(button) {
+ await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),button.click()]);
+}
+async function passwordLogin(password) {
+ await page.locator('#login-email').fill(fixture.email);
+ await page.locator('#login-password').fill(password);
+ await submitLoginForm(page.locator('form:has(#login-password) button[type=submit]'));
+}
+async function submitMfa(code) {
+ await page.locator('#login-mfa-code').fill(code);
+ await submitLoginForm(page.getByRole('button',{name:'Sicher bestätigen',exact:true}));
+}
+async function assertProtectedDenied() {
+ const response=await page.request.get(fixture.baseUrl+'/api/crm/core');
+ assert.ok([401,403].includes(response.status()), 'Incomplete authentication must not access CRM');
+ assert.ok(!(await context.cookies()).some(cookie=>cookie.name==='novalure_session'),'Incomplete authentication must not issue a session');
+}
+let totpSecret,firstSession;
+let enrollmentVerified=false,loginCredentialExchangeVerified=false;
+
 let contact,lead,deal,buyer,buyerLead,unit;
 try{
  await step('anonymous login renders and protected CRM denies anonymous access',async()=>{await page.goto(fixture.baseUrl+'/login?lang=de');await expect(page.locator('body')).toContainText(/anmelden|login/i);const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.ok([401,403].includes(r.status()));});
- await context.addCookies([{name:'novalure_session',value:fixture.cookie,url:fixture.baseUrl,httpOnly:true,sameSite:'Lax'}]);
- await step('persisted synthetic MFA session loads CRM without framework errors',async()=>{await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');await expect(page.locator('body')).toContainText('SYNTHETIC');const r=await page.request.get(fixture.baseUrl+'/api/crm/core');assert.equal(r.status(),200);});
+ await step('actual login rejects an incorrect password without granting a session',async()=>{
+  await passwordLogin(fixture.password+'-incorrect');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('#login-password')).toBeVisible();
+  await assertProtectedDenied();
+ });
+ await step('correct password requires real TOTP enrollment before CRM access',async()=>{
+  await passwordLogin(fixture.password);
+  await expect(page.locator('#login-mfa-code')).toBeVisible();
+  const key = page.locator('p').filter({has:page.locator('strong', {hasText:'TOTP-Schlüssel:'})}).locator('code');
+  await expect(key).toBeVisible();
+  totpSecret = (await key.innerText()).trim();
+  assert.ok(/^[A-Z2-7]{16,}$/.test(totpSecret), 'Login UI must provide a valid enrollment key');
+  const recoveryCodes = await page.locator('form:has(#login-mfa-code) li code').allTextContents();
+  assert.ok(recoveryCodes.length > 0, 'Enrollment UI must provide recovery codes');
+  // Synthetic codes are saved only in the ignored fixture before the UI acknowledgment.
+  await writeFile('.npm-cache/qa/sales-browser-context.json',JSON.stringify({...fixture,totpSecret,recoveryCodes},null,2));
+  await assertProtectedDenied();
+ });
+ await step('MFA enrollment rejects an invalid code without creating a session',async()=>{
+  await page.locator('input[name=recoveryCodesSaved]').check();
+  await submitMfa(incorrectAuthenticatorCode(totpSecret));
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('#login-mfa-code')).toBeVisible();
+  await assertProtectedDenied();
+ });
+ await step('real UI TOTP enrollment creates a server-issued authenticated MFA session',async()=>{
+  await page.locator('input[name=recoveryCodesSaved]').check();
+  await submitMfa(authenticatorCode(totpSecret));
+  await expect(page).not.toHaveURL(/\/login/);
+  const session = (await context.cookies()).find(cookie=>cookie.name==='novalure_session');
+  assert.ok(session?.httpOnly && session.value.startsWith('v2.'), 'Server must issue an opaque HttpOnly session');
+  firstSession = session.value;
+  assert.equal((await page.request.get(fixture.baseUrl+'/api/crm/core')).status(),200);
+  enrollmentVerified = true;
+ });
+ await step('persisted real password and MFA session loads CRM after reload without framework errors',async()=>{
+  await page.goto(fixture.baseUrl+'/?lang=de&workspaceId='+fixture.workspaceId+'&projectId=all');
+  await expect(page.locator('body')).toContainText('SYNTHETIC');
+  await page.reload();
+  assert.equal((await page.request.get(fixture.baseUrl+'/api/crm/core')).status(),200);
+ });
+ await step('actual logout revokes the session and rejects replay of its previous cookie',async()=>{
+  // Native logout performs a fetch redirect followed by router.replace/refresh.
+  // Observe its actual server response before waiting for the resulting login UI.
+  const [logout] = await Promise.all([
+   page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/logout'&&response.request().method()==='POST'),
+   page.getByRole('button',{name:'Abmelden',exact:true}).click(),
+  ]);
+  assert.equal(logout.status(),303,'Logout must revoke the session and redirect');
+  await expect(page).toHaveURL(url=>url.pathname==='/login',{timeout:30000});
+  await expect(page.locator('#login-password')).toBeVisible();
+  await assertProtectedDenied();
+  const replay = await page.request.get(fixture.baseUrl+'/api/crm/core',{headers:{Cookie:'novalure_session='+firstSession}});
+  assert.ok([401,403].includes(replay.status()), 'A revoked cookie must remain unauthorized');
+ });
+ await step('mobile login requires existing MFA and rejects an invalid TOTP',async()=>{
+  await page.setViewportSize({width:390,height:844});
+  await passwordLogin(fixture.password);
+  await expect(page.locator('#login-mfa-code')).toBeVisible();
+  assert.equal(await page.locator('input[name=recoveryCodesSaved]').count(),0, 'Enrolled account must verify, not enroll again');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2), 'Mobile login overflows horizontally');
+  await submitMfa(incorrectAuthenticatorCode(totpSecret));
+  await expect(page.getByRole('alert')).toBeVisible();
+  await assertProtectedDenied();
+ });
+ await step('mobile password and TOTP login creates a fresh session through the actual UI',async()=>{
+  await submitMfa(authenticatorCode(totpSecret));
+  await expect(page).not.toHaveURL(/\/login/);
+  const session = (await context.cookies()).find(cookie=>cookie.name==='novalure_session');
+  assert.ok(session?.httpOnly && session.value!==firstSession, 'Reauthentication must create a fresh session');
+  assert.equal((await page.request.get(fixture.baseUrl+'/api/crm/core')).status(),200);
+  loginCredentialExchangeVerified = true;
+  await page.setViewportSize({width:1440,height:1000});
+ });
  await step('Flow A creates canonical contact, lead and linked deal through authenticated CSRF APIs',async()=>{
   contact=(await api('/api/crm/contacts',{contact:{name:'SYNTHETIC Offer Customer',email:'offer-browser-'+randomUUID().replaceAll('-','')+'@example.invalid',role:'Bauträger',source:'Manual',consent:'Opt-in',projectId:fixture.projectId}})).contact;
   lead=(await api('/api/crm/leads',{lead:{contactId:contact.id,projectId:fixture.projectId,type:'Bauträger',source:'Manual',intent:'SYNTHETIC service inquiry'}})).lead;
@@ -93,4 +221,4 @@ try{
   const r=await page.request.get(fixture.baseUrl+'/api/crm/property-sales?projectId='+randomUUID());assert.ok([403,404].includes(r.status()));const w=await page.request.post(fixture.baseUrl+'/api/crm/offers',{data:{}});assert.equal(w.status(),403);
  });
  await step('no browser runtime exceptions during either workflow',async()=>assert.deepEqual(errors,[]));
-}catch(error){console.error(error.message);await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});await writeFile('.npm-cache/qa/sales-browser-failure.txt',await page.locator('body').innerText());process.exitCode=1;}finally{await writeFile('.npm-cache/qa/sales-browser-results.json',JSON.stringify({syntheticOnly:true,providerDeliveryVerified:false,loginCredentialExchangeVerified:false,results,errors},null,2));console.log(JSON.stringify({passed:results.filter(r=>r.status==='PASS').length,total:results.length}));await browser.close();}
+}catch(error){console.error(error.message);await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});await writeFile('.npm-cache/qa/sales-browser-failure.txt',await page.locator('body').innerText());process.exitCode=1;}finally{await writeFile('.npm-cache/qa/sales-browser-results.json',JSON.stringify({syntheticOnly:true,providerDeliveryVerified:false,loginCredentialExchangeVerified,mfaEnrollmentVerified:enrollmentVerified,authenticationTransport:"actual-login-ui",results,errors},null,2));console.log(JSON.stringify({passed:results.filter(r=>r.status==='PASS').length,total:results.length}));await browser.close();}

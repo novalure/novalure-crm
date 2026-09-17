@@ -240,3 +240,25 @@ export async function tenantQuery<Row extends QueryResultRow = QueryResultRow>(
     options,
   );
 }
+
+/** Isolated authentication bootstrap; the same runtime-role checks apply before any SQL. */
+export async function queryAuthenticationRows<Row extends QueryResultRow = QueryResultRow>(
+  query: string, params: readonly unknown[] = [], options: TenantTransactionOptions = {},
+): Promise<Row[]> {
+  assertTenantStatement(query);
+  const pool = options.pool ?? await getTenantPool();
+  const client = await pool.connect();
+  let begun = false;
+  let discarded = false;
+  try {
+    await assertSafeTenantDatabaseRole(client);
+    await client.query("begin"); begun = true;
+    await client.query("select set_config('app.tenant_id','',true),set_config('app.actor_id','',true)");
+    const rows = (await client.query<Row>(query, [...params])).rows;
+    await client.query("commit"); begun = false;
+    return rows;
+  } catch (error) {
+    if (begun) { try { await client.query("rollback"); } catch { client.release(true); discarded = true; begun = false; throw error; } }
+    throw error;
+  } finally { if (!discarded) client.release(); }
+}

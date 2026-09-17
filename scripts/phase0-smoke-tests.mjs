@@ -93,7 +93,7 @@ test("server-side CRM route handlers use authorization helpers", () => {
     const source = readText(route);
     assert.match(
       source,
-      /requirePermission|requireProductCapability|requirePermissionAndProductCapability|resolveWorkspaceScopedSession/,
+      /requirePermission|requireProductCapability|requirePermissionAndProductCapability|resolveWorkspaceScopedSession|withCrmSalesWrite/,
       `${route} gates access server-side`,
     );
   }

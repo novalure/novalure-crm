@@ -4552,7 +4552,7 @@ export async function updateProjectRecord(input: Parameters<typeof updateProject
 }
 
 /** Keep existing UI entry points on the same atomic scope and durable command ledger. */
-async function legacySalesCommand<T>(input: { session: AppSession; idempotencyKey?: string }, operation: string, table: "deals" | "leads", entity: { id?: string; projectId?: string; version?: number }, callback: (session: AppSession) => Promise<RepositoryWriteResult<T>>, options: TenantTransactionOptions): Promise<RepositoryWriteResult<T>> {
+async function legacySalesCommand<T>(input: { session: AppSession; idempotencyKey?: string; correlationId?: string }, operation: string, table: "deals" | "leads", entity: { id?: string; projectId?: string; version?: number }, callback: (session: AppSession) => Promise<RepositoryWriteResult<T>>, options: TenantTransactionOptions): Promise<RepositoryWriteResult<T>> {
   if (!canPersist()) return callback(input.session);
   const { session, ...payload } = input;
   const key = input.idempotencyKey;
@@ -4561,7 +4561,7 @@ async function legacySalesCommand<T>(input: { session: AppSession; idempotencyKe
   const hex = createHash("sha256").update(operation + ":" + (key ?? randomUUID())).digest("hex");
   const idempotencyKey = hex.slice(0,8) + "-" + hex.slice(8,12) + "-4" + hex.slice(13,16) + "-8" + hex.slice(17,20) + "-" + hex.slice(20,32);
   try {
-    const result = await executeCrmCommand(session, { operation: "legacy." + operation, resourceId, projectId: isUuid(entity.projectId) ? entity.projectId : undefined, expectedVersion: entity.version, idempotencyKey, correlationId: randomUUID(), payload, capability: "pipeline:write" }, async (tx, context) => {
+    const result = await executeCrmCommand(session, { operation: "legacy." + operation, resourceId, projectId: isUuid(entity.projectId) ? entity.projectId : undefined, expectedVersion: entity.version, idempotencyKey, correlationId: input.correlationId ?? idempotencyKey, payload, capability: "pipeline:write" }, async (tx, context) => {
       if (key && !resourceId) {
         const old = await tx.queryOne(`select id from ${table} where workspace_id=$1::uuid and idempotency_key=$2`, [session.workspaceId, key]);
         if (old) throw new CrmCommandError("IDEMPOTENCY_CONFLICT", "Legacy key already exists without a verifiable command digest", 409);

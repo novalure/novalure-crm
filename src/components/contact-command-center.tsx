@@ -31,7 +31,7 @@ import {
   getCrmTaskPriorityLabel,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 
 type ContactCommandCenterProps = {
   activeProjectId: string | null;

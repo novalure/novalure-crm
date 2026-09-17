@@ -11,7 +11,7 @@ import {
   getMobileDailyWorkCopy,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 
 type MobileDailySection = "leadInbox" | "tasks" | "calendar";
 export type MobileDailyPanel = "overdueSla" | "hotLeads" | "meetings" | "tasks";
