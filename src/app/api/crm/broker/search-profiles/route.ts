@@ -1,3 +1,4 @@
+import { withCrmRead, crmCommandErrorResponse } from "@/lib/crm-command";
 import { NextResponse } from "next/server";
 import { requirePermission, requirePermissionAndProductCapability } from "@/lib/auth/session";
 import { upsertBuyerSearchProfile } from "@/lib/db/broker-entity-repositories";
@@ -15,11 +16,11 @@ export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
-  const profiles = await loadBuyerSearchProfiles(auth.session.workspaceId);
+  const profiles = await withCrmRead(auth.session,()=>loadBuyerSearchProfiles(auth.session.workspaceId));
   return NextResponse.json({ profiles, source: "database" });
 }
 
-export async function POST(request: Request) {
+async function postCommand(request: Request) {
   const auth = await requirePermissionAndProductCapability(request, "crm:write", "pipeline:write");
   if (!auth.ok) return auth.response;
 
@@ -44,3 +45,5 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   return POST(request);
 }
+
+export async function POST(request:Request){try{return await postCommand(request)}catch(error){return crmCommandErrorResponse(error)}}

@@ -571,6 +571,9 @@ export async function resolveWorkspaceScopedSession(
   if (!csrf.ok) return csrf;
 
   const url = new URL(request.url);
+  if (url.searchParams.has("workspaceId") && !isUuidLike(url.searchParams.get("workspaceId"))) {
+    return { ok: false as const, response: Response.json({ error: "Invalid workspaceId", code: "INVALID_TENANT" }, { status: 400 }) };
+  }
   const requestedWorkspaceId = isUuidLike(url.searchParams.get("workspaceId"))
     ? url.searchParams.get("workspaceId")
     : null;

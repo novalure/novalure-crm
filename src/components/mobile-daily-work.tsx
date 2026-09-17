@@ -133,6 +133,7 @@ export function MobileDailyWork({
 }: MobileDailyWorkProps) {
   const text = getMobileDailyWorkCopy(language);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
+  const [savingTaskIds, setSavingTaskIds] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [nowMs, setNowMs] = useState<number | null>(null);
   const visiblePanels = useMemo(() => new Set(panels), [panels]);
@@ -266,16 +267,19 @@ export function MobileDailyWork({
   }
 
   function markTaskDone(task: Task) {
-    setCompletedTaskIds((current) =>
-      current.includes(task.id) ? current : [...current, task.id],
-    );
-    setNotice(text.notices.taskDone(task.title));
-
+    if (savingTaskIds.includes(task.id) || completedTaskIds.includes(task.id)) return;
+    setSavingTaskIds((current) => [...current, task.id]);
     void csrfFetch("/api/crm/tasks", {
-      body: JSON.stringify({ task: { ...task, status: "done" } }),
+      body: JSON.stringify({ task: { ...task, status: "done" }, expectedVersion: task.version }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
-    }).catch(() => undefined);
+    }).then(async (response) => {
+      const payload = await response.json().catch(() => ({})) as { task?: Task; error?: string };
+      if (!response.ok || !payload.task) throw new Error(payload.error || (language === "de" ? "Aufgabe konnte nicht gespeichert werden." : "Task could not be saved."));
+      setCompletedTaskIds((current) => current.includes(task.id) ? current : [...current, task.id]);
+      setNotice(text.notices.taskDone(payload.task.title));
+    }).catch((error: unknown) => setNotice(error instanceof Error ? error.message : (language === "de" ? "Speichern fehlgeschlagen." : "Save failed.")))
+      .finally(() => setSavingTaskIds((current) => current.filter((id) => id !== task.id)));
   }
 
   function renderContactActions(contact: Contact | undefined, name: string, lead?: Lead) {

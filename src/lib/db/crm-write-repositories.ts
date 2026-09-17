@@ -1,3 +1,7 @@
+import type { TenantTransactionOptions } from "@/lib/db/tenant-client";
+import { createHash, randomUUID } from "node:crypto";
+import { CrmCommandError, executeCrmCommand, withCrmRead } from "@/lib/crm-command";
+import { assertLegacyOfferDealWrite } from "@/lib/db/offer-repositories";
 import type { AppSession } from "@/lib/auth/session";
 import { canArchiveCrmObject } from "@/lib/auth/delete-permissions";
 import type {
@@ -55,6 +59,7 @@ type DashboardViewRow = {
 };
 
 type DealRow = {
+  version: number;
   closedAt: string | Date | null;
   contactId: string | null;
   expectedCloseDate: string | Date | null;
@@ -118,6 +123,7 @@ type BotPublishEvaluationRow = {
 };
 
 type ContactRow = {
+  version: number | string;
   consent: string;
   email: string | null;
   id: string;
@@ -134,10 +140,12 @@ type ContactRow = {
 };
 
 type LeadRow = {
+  version: number;
   areaSqm: number | string | null;
   assignedToUserId: string | null;
   budget: string | null;
   buyerProfile: Lead["buyerProfile"] | null;
+  salesQualification: Record<string, unknown> | null;
   contactId: string | null;
   hotStatus: boolean;
   id: string;
@@ -162,6 +170,7 @@ type LeadRow = {
 };
 
 type TaskRow = {
+  version: number | string;
   contactId: string | null;
   due: string | Date | null;
   id: string;
@@ -224,6 +233,7 @@ type CalendarEventWriteRow = {
 };
 
 type ProjectWriteRow = {
+  version: number | string;
   customerType: Project["customerType"] | null;
   defaultOperatingModel: Project["defaultOperatingModel"] | null;
   defaultPipelineId: string | null;
@@ -449,7 +459,7 @@ function validateFutureDateInput(value: unknown, field: string, allowHistorical 
   return code === "close_date_required" ? `${field} is required` : null;
 }
 
-export async function listDashboardViews(input: {
+async function listDashboardViewsInTransaction(input: {
   session: AppSession;
 }): Promise<{ source: "database" | "fallback"; views: DashboardViewRecord[]; error?: string }> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -486,7 +496,7 @@ export async function listDashboardViews(input: {
   }
 }
 
-export async function upsertDashboardView(input: {
+async function upsertDashboardViewInTransaction(input: {
   filters: unknown;
   id?: string;
   isDefault?: boolean;
@@ -632,7 +642,7 @@ export async function upsertDashboardView(input: {
   return { data: toDashboardViewRecord(row), persisted: true };
 }
 
-export async function upsertDealRecord(input: {
+async function upsertDealRecordInTransaction(input: {
   allowHistoricalCloseDate?: boolean;
   deal: Partial<Deal>;
   idempotencyKey?: string;
@@ -665,7 +675,7 @@ export async function upsertDealRecord(input: {
     ? await queryOne<DealRow>(
         `${dealSelectSql}
         where d.id = $1 and d.workspace_id = $2
-        limit 1`,
+        limit 1 for update`,
         [input.deal.id, input.session.workspaceId],
       )
     : null;
@@ -729,6 +739,9 @@ export async function upsertDealRecord(input: {
   });
   if (!writeAccess.ok) return { persisted: false, reason: writeAccess.reason };
 
+  await assertLegacyOfferDealWrite({ session: input.session, dealId: existing?.id, targetStage: stage });
+  if (existing && input.deal.version !== Number(existing.version)) throw new CrmCommandError("VERSION_CONFLICT", "Deal version changed; reload before editing", 409);
+
   const stageChanged = Boolean(existing && existing.stage !== stage);
   const closeState = resolveDealCloseState({
     existing,
@@ -758,7 +771,7 @@ export async function upsertDealRecord(input: {
         `${dealUpdateSql}
         where id = $1 and workspace_id = $2
         returning
-          id,
+          id, version,
           workspace_id as "workspaceId",
           project_id as "projectId",
           contact_id as "contactId",
@@ -850,7 +863,7 @@ export async function upsertDealRecord(input: {
           do update set
             idempotency_key = deals.idempotency_key
           returning
-            id,
+            id, version,
             workspace_id as "workspaceId",
             project_id as "projectId",
             contact_id as "contactId",
@@ -957,7 +970,7 @@ export async function upsertDealRecord(input: {
   return { data: savedDeal, persisted: true };
 }
 
-export async function listDealStageHistory(input: {
+async function listDealStageHistoryInTransaction(input: {
   dealId: string;
   session: AppSession;
 }): Promise<{ history: DealStageHistoryEntry[]; source: "database" | "fallback"; error?: string }> {
@@ -1000,13 +1013,15 @@ export async function listDealStageHistory(input: {
   }
 }
 
-export async function changeDealStageRecord(input: {
+async function changeDealStageRecordInTransaction(input: {
   dealId: string;
   reason?: string;
   reasonCategory?: unknown;
   reasonDetail?: string;
   session: AppSession;
   toStage: unknown;
+  expectedVersion?: number;
+  idempotencyKey?: string;
 }): Promise<RepositoryWriteResult<{ deal: Deal; history: DealStageHistoryEntry | null }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId) || !isUuid(input.dealId)) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
@@ -1015,7 +1030,7 @@ export async function changeDealStageRecord(input: {
   const existing = await queryOne<DealRow>(
     `${dealSelectSql}
     where d.id = $1 and d.workspace_id = $2
-    limit 1`,
+    limit 1 for update`,
     [input.dealId, input.session.workspaceId],
   );
   if (!existing) return { persisted: false, reason: "Deal not found" };
@@ -1027,6 +1042,8 @@ export async function changeDealStageRecord(input: {
   });
   if (!stageResult.ok) return { persisted: false, reason: stageResult.reason };
   const targetStage = stageResult.stage;
+  await assertLegacyOfferDealWrite({ session: input.session, dealId: existing.id, targetStage });
+  if (input.expectedVersion !== Number(existing.version)) throw new CrmCommandError("VERSION_CONFLICT", "Deal version changed; reload before editing", 409);
 
   if (existing.stage === targetStage && !cleanString(input.reason) && !cleanString(input.reasonDetail)) {
     return { data: { deal: toDeal(existing), history: null }, persisted: true };
@@ -1054,6 +1071,7 @@ export async function changeDealStageRecord(input: {
       update deals
       set
         stage = $3,
+        version = version + 1,
         lost_reason_category = $4,
         lost_reason_detail = $5,
         lost_at = $6::timestamptz,
@@ -1062,7 +1080,7 @@ export async function changeDealStageRecord(input: {
         updated_at = now()
       where id = $1 and workspace_id = $2
       returning
-        id,
+        id, version,
         workspace_id as "workspaceId",
         project_id as "projectId",
         contact_id as "contactId",
@@ -1183,7 +1201,8 @@ export async function changeDealStageRecord(input: {
   return { data: { deal: toDeal(row), history }, persisted: true };
 }
 
-export async function upsertTaskRecord(input: {
+async function upsertTaskRecordInTransaction(input: {
+  expectedVersion?: unknown;
   session: AppSession;
   task: Partial<Task> & Record<string, unknown>;
 }): Promise<RepositoryWriteResult<Task>> {
@@ -1202,6 +1221,9 @@ export async function upsertTaskRecord(input: {
         [input.task.id, input.session.workspaceId],
       )
     : null;
+  if (isUuid(input.task.id) && !existing) return { persisted: false, reason: "Task not found" };
+  const expectedVersion = input.expectedVersion ?? input.task.version;
+  if (existing && !validExpectedVersion(expectedVersion)) return { persisted: false, reason: "Invalid expectedVersion: a positive integer is required" };
   const resolvedProject = await resolveWorkspaceProjectIdForWrite({
     existingProjectId: existing?.projectId ?? null,
     fallbackProjectId: () => resolveFallbackProjectId(input.session.workspaceId),
@@ -1259,8 +1281,9 @@ export async function upsertTaskRecord(input: {
             status = $10,
             metadata = coalesce(metadata, '{}'::jsonb) || $11::jsonb,
             updated_at = now()
-          where id = $1 and workspace_id = $2
+          where id = $1 and workspace_id = $2 and version = $12
           returning
+            version,
             id,
             workspace_id as "workspaceId",
             project_id as "projectId",
@@ -1286,6 +1309,7 @@ export async function upsertTaskRecord(input: {
           input.task.priority ?? existing.priority,
           input.task.status ?? existing.status,
           JSON.stringify(taskMetadata),
+          expectedVersion,
         ],
       )
     : await queryOne<TaskRow>(
@@ -1304,6 +1328,7 @@ export async function upsertTaskRecord(input: {
           )
           values ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::timestamptz, $8, $9, $10::jsonb)
           returning
+            version,
             id,
             workspace_id as "workspaceId",
             project_id as "projectId",
@@ -1331,7 +1356,7 @@ export async function upsertTaskRecord(input: {
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Task could not be saved" };
+  if (!row) return { persisted: false, reason: existing ? "VERSION_CONFLICT: Task changed; reload before editing" : "Task could not be saved" };
 
   await Promise.all([
     writeAuditLog({
@@ -1358,7 +1383,7 @@ export async function upsertTaskRecord(input: {
   return { data: toTask(row), persisted: true };
 }
 
-export async function listNoteRecords(input: {
+async function listNoteRecordsInTransaction(input: {
   contactId?: string | null;
   leadId?: string | null;
   session: AppSession;
@@ -1399,7 +1424,7 @@ export async function listNoteRecords(input: {
   return { notes: rows.map(toNoteRecord), persisted: true };
 }
 
-export async function upsertNoteRecord(input: {
+async function upsertNoteRecordInTransaction(input: {
   note: Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<CrmNoteRecord>> {
@@ -1606,7 +1631,7 @@ export async function upsertNoteRecord(input: {
   return { data: note, persisted: true };
 }
 
-export async function listCalendarEventRecords(input: {
+async function listCalendarEventRecordsInTransaction(input: {
   contactId?: string | null;
   leadId?: string | null;
   session: AppSession;
@@ -1650,7 +1675,7 @@ export async function listCalendarEventRecords(input: {
   return { events: rows.map(toCalendarEventRecord), persisted: true };
 }
 
-export async function upsertCalendarEventRecord(input: {
+async function upsertCalendarEventRecordInTransaction(input: {
   event: Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<CalendarEvent>> {
@@ -1896,7 +1921,7 @@ export async function upsertCalendarEventRecord(input: {
   return { data: event, persisted: true };
 }
 
-export async function upsertLeadRecord(input: {
+async function upsertLeadRecordInTransaction(input: {
   idempotencyKey?: string;
   lead: Partial<Lead>;
   requireExisting?: boolean;
@@ -1925,7 +1950,7 @@ export async function upsertLeadRecord(input: {
     ? await queryOne<LeadRow>(
         `${leadSelectSql}
         where l.id = $1 and l.workspace_id = $2
-        limit 1`,
+        limit 1 for update`,
         [input.lead.id, input.session.workspaceId],
       )
     : null;
@@ -1982,6 +2007,13 @@ export async function upsertLeadRecord(input: {
   const source = (explicitSource || existing?.source || contact?.source || "Manual") as Lead["source"];
   const type = (cleanString(input.lead.type) || existing?.type || contact?.role || "Käufer") as Lead["type"];
   const hotStatus = Boolean(input.lead.hotStatus ?? existing?.hotStatus ?? score >= 80);
+  if (existing && input.lead.version !== Number(existing.version)) throw new CrmCommandError("VERSION_CONFLICT", "Lead version changed; reload before editing", 409);
+  if (["Käufer", "Investor"].includes(type) && (["Qualifiziert", "Übergabe"].includes(status) && status !== existing?.status)) throw new CrmCommandError("CANONICAL_QUALIFICATION_REQUIRED", "Use the buyer qualification and handover workflow", 409);
+  if (existing?.salesQualification && Object.keys(existing.salesQualification).length > 0) {
+    const changed = (value: unknown, prior: unknown) => value !== undefined && JSON.stringify(value) !== JSON.stringify(prior);
+    if (changed(input.lead.buyerProfile, existing.buyerProfile) || changed(input.lead.status, existing.status) || changed(input.lead.type, existing.type) || changed(input.lead.score, Number(existing.score)) || changed(input.lead.hotStatus, existing.hotStatus) || changed(input.lead.projectId, existing.projectId) || changed(input.lead.contactId, existing.contactId) || changed(input.lead.assignedToUserId, existing.assignedToUserId)) throw new CrmCommandError("CANONICAL_QUALIFICATION_REQUIRED", "Qualified buyer data must be changed through the sales workflow", 409);
+  }
+
 
   const writeAccess = await assertRecordWriteAccess({
     entityLabel: "Lead",
@@ -1997,6 +2029,7 @@ export async function upsertLeadRecord(input: {
         `
           update leads
           set
+            version = version + 1,
             project_id = $3::uuid,
             contact_id = $4::uuid,
             assigned_to_user_id = $5::uuid,
@@ -2238,8 +2271,9 @@ export async function upsertLeadRecord(input: {
   return { data: savedLead, persisted: true };
 }
 
-export async function upsertContactRecord(input: {
+async function upsertContactRecordInTransaction(input: {
   contact: Partial<Contact>;
+  expectedVersion?: unknown;
   requireExisting?: boolean;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Contact>> {
@@ -2277,6 +2311,8 @@ export async function upsertContactRecord(input: {
   if ((input.requireExisting || isUuid(input.contact.id)) && !existing) {
     return { persisted: false, reason: "Contact not found" };
   }
+  const expectedVersion = input.expectedVersion ?? input.contact.version;
+  if (existing && !validExpectedVersion(expectedVersion)) return { persisted: false, reason: "Invalid expectedVersion: a positive integer is required" };
   const normalizedEmail = cleanString(input.contact.email);
   if (normalizedEmail) {
     const duplicate = await queryOne<IdRow>(
@@ -2353,8 +2389,9 @@ export async function upsertContactRecord(input: {
             phone = nullif($12, ''),
             metadata = metadata || $13::jsonb,
             updated_at = now()
-          where c.id = $1 and c.workspace_id = $2
+          where c.id = $1 and c.workspace_id = $2 and c.version = $14 and c.archived_at is null
           returning
+            c.version,
             c.id,
             c.workspace_id as "workspaceId",
             c.project_id as "projectId",
@@ -2383,6 +2420,7 @@ export async function upsertContactRecord(input: {
           cleanString(input.contact.email),
           cleanString(input.contact.phone),
           JSON.stringify({ updatedFrom: "crm_contacts", updatedByUserId: input.session.userId }),
+          expectedVersion,
         ],
       )
     : await queryOne<ContactRow>(
@@ -2403,6 +2441,7 @@ export async function upsertContactRecord(input: {
           )
           values ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, nullif($10, ''), nullif($11, ''), $12::jsonb)
           returning
+            version,
             id,
             workspace_id as "workspaceId",
             project_id as "projectId",
@@ -2433,7 +2472,7 @@ export async function upsertContactRecord(input: {
         ],
       );
 
-  if (!row) return { persisted: false, reason: "Contact could not be saved" };
+  if (!row) return { persisted: false, reason: existing ? "VERSION_CONFLICT: Contact changed; reload before editing" : "Contact could not be saved" };
 
   await upsertConsentFromContact({
     contact: row,
@@ -2466,8 +2505,9 @@ export async function upsertContactRecord(input: {
   return { data: toContact(row), persisted: true };
 }
 
-export async function archiveContactRecord(input: {
+async function archiveContactRecordInTransaction(input: {
   contactId: string;
+  expectedVersion?: unknown;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ id: string }>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
@@ -2494,6 +2534,7 @@ export async function archiveContactRecord(input: {
     return { persisted: false, reason: "Contact not found" };
   }
 
+  if (!validExpectedVersion(input.expectedVersion)) return { persisted: false, reason: "Invalid expectedVersion: a positive integer is required" };
   const row = await queryOne<IdRow>(
     `
       update contacts
@@ -2502,7 +2543,7 @@ export async function archiveContactRecord(input: {
         archived_by_user_id = $3::uuid,
         metadata = metadata || $4::jsonb,
         updated_at = now()
-      where id = $1 and workspace_id = $2 and archived_at is null
+      where id = $1 and workspace_id = $2 and archived_at is null and version = $5
       returning id
     `,
     [
@@ -2510,10 +2551,11 @@ export async function archiveContactRecord(input: {
       input.session.workspaceId,
       normalizeWriteProjectId(input.session.userId),
       JSON.stringify({ archivedByUserId: input.session.userId, archivedFrom: "crm_contacts" }),
+      input.expectedVersion,
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Contact could not be archived" };
+  if (!row) return { persisted: false, reason: "VERSION_CONFLICT: Contact changed; reload before archiving" };
 
   await Promise.all([
     writeAuditLog({
@@ -2541,7 +2583,7 @@ export async function archiveContactRecord(input: {
   return { data: { id: row.id }, persisted: true };
 }
 
-export async function upsertFunnelDraft(input: {
+async function upsertFunnelDraftInTransaction(input: {
   funnel: Partial<Funnel> & Record<string, unknown>;
   session: AppSession;
   steps: Array<Partial<FunnelStep> & Record<string, unknown>>;
@@ -2749,7 +2791,7 @@ export async function upsertFunnelDraft(input: {
   return { data: { funnel: toFunnel(row), stepIds }, persisted: true };
 }
 
-export async function updateNewsletterCampaignStatus(input: {
+async function updateNewsletterCampaignStatusInTransaction(input: {
   campaignId?: string | null;
   contentBlocks?: unknown;
   metrics?: unknown;
@@ -2816,7 +2858,7 @@ export async function updateNewsletterCampaignStatus(input: {
   return row;
 }
 
-export async function upsertBotSetup(input: {
+async function upsertBotSetupInTransaction(input: {
   bot: Partial<CrmBot> & Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ id: string; status: string }>> {
@@ -3094,7 +3136,7 @@ async function getLatestBotPublishEvaluation(input: {
   );
 }
 
-export async function createProjectRecord(input: {
+async function createProjectRecordInTransaction(input: {
   project: Partial<Project>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Project>> {
@@ -3136,6 +3178,7 @@ export async function createProjectRecord(input: {
       )
       values ($1, $2, $3, $4, $5, $6, $7::jsonb)
       returning
+        version,
         id,
         workspace_id as "workspaceId",
         name,
@@ -3172,6 +3215,9 @@ export async function createProjectRecord(input: {
     pipelineSetup = { defaultPipelineId: row.defaultPipelineId, pipelineIds: [], stageCount: 0 };
   }
 
+  // Default-pipeline initialization can update the project; return its final version.
+  const currentVersion = await queryOne<{ version: string | number }>("select version from projects where id=$1 and workspace_id=$2", [row.id, input.session.workspaceId]);
+  if (currentVersion) row.version = currentVersion.version;
   await writeAuditLog({
     action: "project.created",
     after: { ...row, defaultPipelineId: pipelineSetup.defaultPipelineId ?? row.defaultPipelineId },
@@ -3186,8 +3232,9 @@ export async function createProjectRecord(input: {
   };
 }
 
-export async function updateProjectRecord(input: {
+async function updateProjectRecordInTransaction(input: {
   project: Partial<Project>;
+  expectedVersion?: unknown;
   session: AppSession;
 }): Promise<RepositoryWriteResult<Project>> {
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
@@ -3201,6 +3248,7 @@ export async function updateProjectRecord(input: {
   const existing = await queryOne<ProjectWriteRow>(
     `
       select
+        version,
         id,
         workspace_id as "workspaceId",
         name,
@@ -3219,6 +3267,8 @@ export async function updateProjectRecord(input: {
 
   if (!existing) return { persisted: false, reason: "Project not found" };
 
+  const expectedVersion = input.expectedVersion ?? input.project.version;
+  if (!validExpectedVersion(expectedVersion)) return { persisted: false, reason: "Invalid expectedVersion: a positive integer is required" };
   const name = cleanString(input.project.name) || existing.name;
   if (!name) return { persisted: false, reason: "Project name is required" };
 
@@ -3257,8 +3307,9 @@ export async function updateProjectRecord(input: {
         setup_defaults = $8::jsonb,
         default_pipeline_id = $9::uuid,
         updated_at = now()
-      where id = $1 and workspace_id = $2
+      where id = $1 and workspace_id = $2 and version = $10
       returning
+        version,
         id,
         workspace_id as "workspaceId",
         name,
@@ -3279,10 +3330,11 @@ export async function updateProjectRecord(input: {
       defaultOperatingModel,
       JSON.stringify(setupDefaults),
       defaultPipelineId,
+      expectedVersion,
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Project could not be saved" };
+  if (!row) return { persisted: false, reason: "VERSION_CONFLICT: Project changed; reload before editing" };
 
   await writeAuditLog({
     action: "project.updated",
@@ -3301,6 +3353,7 @@ export async function updateProjectRecord(input: {
 
 function toProjectWriteResult(row: ProjectWriteRow, defaultPipelineId = row.defaultPipelineId): Project {
   return {
+    version: Number(row.version),
     defaultPipelineId: defaultPipelineId ?? "",
     customerType: row.customerType ?? undefined,
     defaultOperatingModel: row.defaultOperatingModel ?? undefined,
@@ -3777,6 +3830,7 @@ function inferAnalyticsEntityType(input: {
 
 const contactSelectSql = `
   select
+    c.version,
     c.id,
     c.workspace_id as "workspaceId",
     c.project_id as "projectId",
@@ -3796,6 +3850,8 @@ const contactSelectSql = `
 
 const leadReturningSql = `
   id,
+  version,
+  sales_qualification as "salesQualification",
   workspace_id as "workspaceId",
   project_id as "projectId",
   contact_id as "contactId",
@@ -3829,6 +3885,7 @@ const leadSelectSql = `
 const dealSelectSql = `
   select
     d.id,
+    d.version,
     d.workspace_id as "workspaceId",
     d.project_id as "projectId",
     d.contact_id as "contactId",
@@ -3853,6 +3910,7 @@ const dealSelectSql = `
 const dealUpdateSql = `
   update deals
   set
+    version = version + 1,
     project_id = $3::uuid,
     contact_id = $4::uuid,
     organization_id = $5::uuid,
@@ -3876,6 +3934,7 @@ const dealUpdateSql = `
 
 const taskSelectSql = `
   select
+    t.version,
     t.id,
     t.workspace_id as "workspaceId",
     t.project_id as "projectId",
@@ -3934,6 +3993,7 @@ function toDealStageHistoryEntry(row: DealStageHistoryRow): DealStageHistoryEntr
 
 function toDeal(row: DealRow): Deal {
   return {
+    version: Number(row.version),
     closedAt: toIso(row.closedAt) || undefined,
     contactId: row.contactId ?? "",
     expectedCloseDate: normalizeDateOnly(row.expectedCloseDate),
@@ -3958,6 +4018,7 @@ function toDeal(row: DealRow): Deal {
 
 function toContact(row: ContactRow): Contact {
   return {
+    version: Number(row.version),
     consent: row.consent,
     email: row.email ?? undefined,
     id: row.id,
@@ -3976,6 +4037,7 @@ function toContact(row: ContactRow): Contact {
 
 function toLead(row: LeadRow): Lead {
   return {
+    version: Number(row.version),
     areaSqm: toOptionalNumber(row.areaSqm),
     assignedToUserId: row.assignedToUserId ?? undefined,
     budget: row.budget ?? undefined,
@@ -4007,6 +4069,7 @@ function toTask(row: TaskRow): Task {
   const metadata = asObject(row.metadata);
 
   return {
+    version: Number(row.version),
     contactId: row.contactId ?? undefined,
     description: typeof metadata.description === "string" ? metadata.description : undefined,
     due: toIso(row.due),
@@ -4399,4 +4462,121 @@ function toOptionalNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export async function listDashboardViews(input: Parameters<typeof listDashboardViewsInTransaction>[0]): ReturnType<typeof listDashboardViewsInTransaction> {
+  if (!canPersist()) return listDashboardViewsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => listDashboardViewsInTransaction({ ...input, session }));
+}
+
+export async function upsertDashboardView(input: Parameters<typeof upsertDashboardViewInTransaction>[0]): ReturnType<typeof upsertDashboardViewInTransaction> {
+  if (!canPersist()) return upsertDashboardViewInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertDashboardViewInTransaction({ ...input, session }));
+}
+
+export async function upsertDealRecord(input: Parameters<typeof upsertDealRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertDealRecordInTransaction> {
+  return legacySalesCommand(input, "upsertDealRecord", "deals", input.deal, (session) => upsertDealRecordInTransaction({ ...input, session }), options);
+}
+
+export async function listDealStageHistory(input: Parameters<typeof listDealStageHistoryInTransaction>[0]): ReturnType<typeof listDealStageHistoryInTransaction> {
+  if (!canPersist()) return listDealStageHistoryInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => listDealStageHistoryInTransaction({ ...input, session }));
+}
+
+export async function changeDealStageRecord(input: Parameters<typeof changeDealStageRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof changeDealStageRecordInTransaction> {
+  return legacySalesCommand(input, "changeDealStageRecord", "deals", { id: input.dealId, version: input.expectedVersion }, (session) => changeDealStageRecordInTransaction({ ...input, session }), options);
+}
+
+export async function upsertTaskRecord(input: Parameters<typeof upsertTaskRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertTaskRecordInTransaction> {
+  if (!canPersist()) return upsertTaskRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertTaskRecordInTransaction({ ...input, session }), options);
+}
+
+export async function listNoteRecords(input: Parameters<typeof listNoteRecordsInTransaction>[0]): ReturnType<typeof listNoteRecordsInTransaction> {
+  if (!canPersist()) return listNoteRecordsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => listNoteRecordsInTransaction({ ...input, session }));
+}
+
+export async function upsertNoteRecord(input: Parameters<typeof upsertNoteRecordInTransaction>[0]): ReturnType<typeof upsertNoteRecordInTransaction> {
+  if (!canPersist()) return upsertNoteRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertNoteRecordInTransaction({ ...input, session }));
+}
+
+export async function listCalendarEventRecords(input: Parameters<typeof listCalendarEventRecordsInTransaction>[0]): ReturnType<typeof listCalendarEventRecordsInTransaction> {
+  if (!canPersist()) return listCalendarEventRecordsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => listCalendarEventRecordsInTransaction({ ...input, session }));
+}
+
+export async function upsertCalendarEventRecord(input: Parameters<typeof upsertCalendarEventRecordInTransaction>[0]): ReturnType<typeof upsertCalendarEventRecordInTransaction> {
+  if (!canPersist()) return upsertCalendarEventRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertCalendarEventRecordInTransaction({ ...input, session }));
+}
+
+export async function upsertLeadRecord(input: Parameters<typeof upsertLeadRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertLeadRecordInTransaction> {
+  return legacySalesCommand(input, "upsertLeadRecord", "leads", input.lead, (session) => upsertLeadRecordInTransaction({ ...input, session }), options);
+}
+
+export async function upsertContactRecord(input: Parameters<typeof upsertContactRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertContactRecordInTransaction> {
+  if (!canPersist()) return upsertContactRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertContactRecordInTransaction({ ...input, session }), options);
+}
+
+export async function archiveContactRecord(input: Parameters<typeof archiveContactRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof archiveContactRecordInTransaction> {
+  if (!canPersist()) return archiveContactRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => archiveContactRecordInTransaction({ ...input, session }), options);
+}
+
+export async function upsertFunnelDraft(input: Parameters<typeof upsertFunnelDraftInTransaction>[0]): ReturnType<typeof upsertFunnelDraftInTransaction> {
+  if (!canPersist()) return upsertFunnelDraftInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertFunnelDraftInTransaction({ ...input, session }));
+}
+
+export async function updateNewsletterCampaignStatus(input: Parameters<typeof updateNewsletterCampaignStatusInTransaction>[0]): ReturnType<typeof updateNewsletterCampaignStatusInTransaction> {
+  if (!canPersist()) return updateNewsletterCampaignStatusInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => updateNewsletterCampaignStatusInTransaction({ ...input, session }));
+}
+
+export async function upsertBotSetup(input: Parameters<typeof upsertBotSetupInTransaction>[0]): ReturnType<typeof upsertBotSetupInTransaction> {
+  if (!canPersist()) return upsertBotSetupInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertBotSetupInTransaction({ ...input, session }));
+}
+
+export async function createProjectRecord(input: Parameters<typeof createProjectRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof createProjectRecordInTransaction> {
+  if (!canPersist()) return createProjectRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => createProjectRecordInTransaction({ ...input, session }), options);
+}
+
+export async function updateProjectRecord(input: Parameters<typeof updateProjectRecordInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof updateProjectRecordInTransaction> {
+  if (!canPersist()) return updateProjectRecordInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => updateProjectRecordInTransaction({ ...input, session }), options);
+}
+
+/** Keep existing UI entry points on the same atomic scope and durable command ledger. */
+async function legacySalesCommand<T>(input: { session: AppSession; idempotencyKey?: string }, operation: string, table: "deals" | "leads", entity: { id?: string; projectId?: string; version?: number }, callback: (session: AppSession) => Promise<RepositoryWriteResult<T>>, options: TenantTransactionOptions): Promise<RepositoryWriteResult<T>> {
+  if (!canPersist()) return callback(input.session);
+  const { session, ...payload } = input;
+  const key = input.idempotencyKey;
+  const resourceId = isUuid(entity.id) ? entity.id : undefined;
+  // Older clients accept opaque keys. Canonicalize them deterministically without losing scope.
+  const hex = createHash("sha256").update(operation + ":" + (key ?? randomUUID())).digest("hex");
+  const idempotencyKey = hex.slice(0,8) + "-" + hex.slice(8,12) + "-4" + hex.slice(13,16) + "-8" + hex.slice(17,20) + "-" + hex.slice(20,32);
+  try {
+    const result = await executeCrmCommand(session, { operation: "legacy." + operation, resourceId, projectId: isUuid(entity.projectId) ? entity.projectId : undefined, expectedVersion: entity.version, idempotencyKey, correlationId: randomUUID(), payload, capability: "pipeline:write" }, async (tx, context) => {
+      if (key && !resourceId) {
+        const old = await tx.queryOne(`select id from ${table} where workspace_id=$1::uuid and idempotency_key=$2`, [session.workspaceId, key]);
+        if (old) throw new CrmCommandError("IDEMPOTENCY_CONFLICT", "Legacy key already exists without a verifiable command digest", 409);
+      }
+      const saved = await callback(context.session);
+      if (!saved.persisted) throw new CrmCommandError("WRITE_REJECTED", saved.reason, 409);
+      return saved;
+    }, options);
+    return result.data;
+  } catch (cause) {
+    if (cause instanceof CrmCommandError) return { persisted: false, reason: cause.code + ": " + cause.message };
+    throw cause;
+  }
+}
+
+function validExpectedVersion(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }

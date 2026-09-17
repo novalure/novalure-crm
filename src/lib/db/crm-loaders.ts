@@ -52,6 +52,7 @@ import {
   tasks as mockTasks,
 } from "@/lib/crm-data";
 import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { CrmCommandError, withCrmRead } from "@/lib/crm-command";
 import { crmTables } from "@/lib/db/schema";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { buildPropertyAssets, type PropertyAssetSummary } from "@/lib/property-department";
@@ -94,6 +95,7 @@ export type CoreCrmModuleSource = "database" | "mock" | "fallback";
 export type CoreCrmModuleSources = Record<CoreCrmDataKey, CoreCrmModuleSource>;
 
 export type CoreCrmDataResult = CoreCrmData & {
+  collectionCompleteness?: "LIMITED";
   dailyQueue: DailyQueueData;
   source: "database" | "mock" | "fallback";
   error?: string;
@@ -140,6 +142,7 @@ const coreProductionKeys = [
 ] as const satisfies CoreCrmDataKey[];
 
 type ContactRow = {
+  version: number | string;
   id: string;
   workspaceId: string;
   projectId: string | null;
@@ -156,6 +159,7 @@ type ContactRow = {
 };
 
 type LeadRow = {
+  version?: number | string;
   id: string;
   workspaceId: string;
   projectId: string | null;
@@ -183,6 +187,7 @@ type LeadRow = {
 };
 
 type DealRow = {
+  version?: number | string;
   id: string;
   workspaceId: string;
   projectId: string | null;
@@ -205,6 +210,7 @@ type DealRow = {
 };
 
 type TaskRow = {
+  version: number | string;
   id: string;
   workspaceId: string;
   projectId: string | null;
@@ -238,6 +244,7 @@ type CalendarEventRow = {
 };
 
 type ProjectRow = {
+  version: number | string;
   customerType: Project["customerType"] | null;
   defaultOperatingModel: Project["defaultOperatingModel"] | null;
   defaultPipelineId: string | null;
@@ -361,6 +368,7 @@ type EditorPreflightRunRow = {
 };
 
 type PropertyBuildingRow = {
+  version?: number | string;
   address: string;
   completionDate: string | Date | null;
   floors: number | string;
@@ -371,6 +379,7 @@ type PropertyBuildingRow = {
 };
 
 type PropertyUnitRow = {
+  version?: number | string;
   areaSqm: number | string;
   buildingId: string | null;
   buyerContactId: string | null;
@@ -764,11 +773,23 @@ export async function getCoreCrmData(
   workspaceId: string,
   options: { session?: AppSession } = {},
 ): Promise<CoreCrmDataResult> {
+  if (hasDatabaseUrl()) {
+    if (!options.session || options.session.workspaceId !== workspaceId) throw new CrmCommandError("TENANT_MISMATCH", "An authenticated matching workspace is required", 403);
+    return withCrmRead(options.session, async (_tx, session) => getScopedCoreCrmData(workspaceId, { session }));
+  }
+  return getScopedCoreCrmData(workspaceId, options);
+}
+
+async function getScopedCoreCrmData(
+  workspaceId: string,
+  options: { session?: AppSession } = {},
+): Promise<CoreCrmDataResult> {
   const scopedWorkspaceId = requireWorkspaceId(workspaceId, "getCoreCrmData");
-  const fallbackData = getMockCoreCrmData(scopedWorkspaceId);
+  const fallbackData = Object.fromEntries(coreCrmDataKeys.map((key) => [key, []])) as unknown as CoreCrmData;
 
   if (!hasDatabaseUrl()) {
-    return fallbackData;
+    if (options.session?.source === "demo" && process.env.NOVALURE_DEMO_AUTH_ENABLED === "1" && process.env.NODE_ENV !== "production" && process.env.VERCEL_ENV !== "production") return getMockCoreCrmData(scopedWorkspaceId);
+    return { ...fallbackData, dailyQueue: buildDailyQueueData({ calendarEvents: [], contacts: [], deals: [], leads: [], tasks: [] }), source: "fallback", moduleSources: createModuleSources("fallback"), error: "CRM database is not configured", collectionCompleteness: "LIMITED" };
   }
 
   const contactScope = options.session
@@ -841,6 +862,7 @@ export async function getCoreCrmData(
 
   return {
     ...data,
+    collectionCompleteness: "LIMITED",
     dailyQueue: buildDailyQueueData({
       calendarEvents: data.calendarEvents,
       contacts: data.contacts,
@@ -921,7 +943,7 @@ function extractMissingRelation(message: string) {
 function attachReservationIds(units: PropertyUnit[], reservations: PropertyReservation[]) {
   const activeReservationByUnit = new Map<string, string>();
   reservations
-    .filter((reservation) => reservation.status === "hold" || reservation.status === "reserved")
+    .filter((reservation) => reservation.status === "requested" || reservation.status === "hold" || reservation.status === "reserved")
     .sort((left, right) => new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime())
     .forEach((reservation) => {
       if (!activeReservationByUnit.has(reservation.unitId)) {
@@ -1131,6 +1153,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
   const rows = await queryRows<ProjectRow>(
     `
     select
+      p.version,
       p.id,
       p.workspace_id as "workspaceId",
       p.name,
@@ -1173,6 +1196,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
 
 function mapProjectRow(row: ProjectRow): Project {
   return {
+    version: Number(row.version),
     customerType: row.customerType ?? undefined,
     defaultOperatingModel: row.defaultOperatingModel ?? undefined,
     defaultPipelineId: row.defaultPipelineId ?? "",
@@ -1800,6 +1824,7 @@ async function loadProjectsForPropertyAssets(workspaceId: string, projectIds: st
   const rows = await queryRows<ProjectRow>(
     `
     select
+      p.version,
       p.id,
       p.workspace_id as "workspaceId",
       p.name,
@@ -1858,7 +1883,8 @@ async function loadPropertyUnitsForAssetSummaries(
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
-      pu.updated_at as "updatedAt"
+      pu.updated_at as "updatedAt",
+      pu.version
     from property_units pu
     where pu.workspace_id = $1::uuid
       and (pu.project_id = any($2::uuid[]) or pu.id = any($3::uuid[]))
@@ -1927,7 +1953,8 @@ async function loadPropertyBuildingsForAssetSummaries(
       name,
       address,
       completion_date as "completionDate",
-      floors
+      floors,
+      version
     from property_buildings
     where workspace_id = $1::uuid and project_id = any($2::uuid[])
     order by name asc
@@ -1939,6 +1966,7 @@ async function loadPropertyBuildingsForAssetSummaries(
     address: row.address,
     completionDate: toDateOnly(row.completionDate),
     floors: Number(row.floors ?? 0),
+    version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
     name: row.name,
     projectId: row.projectId,
@@ -2309,7 +2337,8 @@ export async function loadPropertyBuildings(workspaceId: string): Promise<Proper
       name,
       address,
       completion_date as "completionDate",
-      floors
+      floors,
+      version
     from property_buildings
     where workspace_id = $1
     order by name asc
@@ -2319,6 +2348,7 @@ export async function loadPropertyBuildings(workspaceId: string): Promise<Proper
   );
 
   return rows.map((row) => ({
+    version: row.version === undefined ? undefined : Number(row.version),
     address: row.address,
     completionDate: toDateOnly(row.completionDate),
     floors: Number(row.floors ?? 0),
@@ -2347,7 +2377,8 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
-      pu.updated_at as "updatedAt"
+      pu.updated_at as "updatedAt",
+      pu.version
     from property_units pu
     where pu.workspace_id = $1
     order by pu.project_id, pu.unit_number asc
@@ -2361,6 +2392,7 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
 
 function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
   return {
+    version: row.version === undefined ? undefined : Number(row.version),
     areaSqm: Number(row.areaSqm ?? 0),
     buildingId: row.buildingId ?? "",
     buyerContactId: row.buyerContactId ?? undefined,
@@ -2460,7 +2492,8 @@ export async function loadPaginatedPropertyUnits(
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
       null::uuid as "reservationId",
-      pu.updated_at as "updatedAt"
+      pu.updated_at as "updatedAt",
+      pu.version
     from property_units pu
     where ${filter.whereClause}
     order by pu.project_id asc, pu.unit_number asc, pu.id asc
@@ -2849,6 +2882,7 @@ export async function loadContacts(
   const rows = await queryRows<ContactRow>(
     `
     select
+      c.version,
       c.id,
       c.workspace_id as "workspaceId",
       c.project_id as "projectId",
@@ -2872,6 +2906,7 @@ export async function loadContacts(
   );
 
   return rows.map((row) => ({
+    version: Number(row.version),
     id: row.id,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
@@ -2894,6 +2929,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
     `
     select
       id,
+      version,
       workspace_id as "workspaceId",
       project_id as "projectId",
       contact_id as "contactId",
@@ -2926,6 +2962,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
   );
 
   return rows.map((row) => ({
+    version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
@@ -2959,6 +2996,7 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
     `
     select
       id,
+      version,
       workspace_id as "workspaceId",
       project_id as "projectId",
       contact_id as "contactId",
@@ -2986,6 +3024,7 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
   );
 
   return rows.map((row) => ({
+    version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
@@ -3013,6 +3052,7 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
   const rows = await queryRows<TaskRow>(
     `
     select
+      t.version,
       t.id,
       t.workspace_id as "workspaceId",
       t.project_id as "projectId",
@@ -3035,6 +3075,7 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
   );
 
   return rows.map((row) => ({
+    version: Number(row.version),
     description: typeof row.metadata?.description === "string" ? row.metadata.description : undefined,
     id: row.id,
     workspaceId: row.workspaceId,
@@ -3109,6 +3150,7 @@ function normalizePropertyUnitStatus(value: string): PropertyUnit["status"] {
 }
 
 function normalizePropertyReservationStatus(value: string): PropertyReservation["status"] {
+  if (value === "requested") return "requested";
   if (value === "reserved") return "reserved";
   if (value === "expired") return "expired";
   if (value === "converted") return "converted";

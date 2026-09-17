@@ -539,6 +539,7 @@ export function ContactCommandCenter({
       ...current,
       [selectedContact.id]: {
         ...(current[selectedContact.id] ?? {}),
+        version: current[selectedContact.id]?.version ?? selectedContact.version,
         [field]: value,
       },
     }));
@@ -552,7 +553,7 @@ export function ContactCommandCenter({
   const persistContact = async (contact: Contact) => {
     try {
       const response = await csrfFetch("/api/crm/contacts", {
-        body: JSON.stringify({ contact }),
+        body: JSON.stringify({ contact, expectedVersion: contact.version }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -740,6 +741,8 @@ export function ContactCommandCenter({
     try {
       const response = await csrfFetch(`/api/crm/contacts?id=${encodeURIComponent(selectedContact.id)}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedVersion: selectedContact.version }),
       });
       const payload = await response.json().catch(() => null) as { error?: string } | null;
 

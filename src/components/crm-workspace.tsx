@@ -5019,6 +5019,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "units" ? (
               <UnitBoard
+                workspaceId={activeWorkspace.id}
                 buildings={propertyBuildingRecords.filter((building) => isProjectInActiveScope(building.projectId))}
                 canManage={hasProductCapability(sessionProductRole, "reservations:write")}
                 contacts={visibleContacts}

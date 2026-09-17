@@ -11,6 +11,7 @@ async function readJson(request: Request) {
 }
 
 function getTaskWriteStatus(reason: string) {
+  if (reason.includes("VERSION_CONFLICT")) return 409;
   const normalizedReason = reason.toLowerCase();
   if (
     reason.includes("not available in this workspace") ||
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const task = typeof input.task === "object" && input.task ? input.task as Record<string, unknown> : input;
-  const result = await upsertTaskRecord({ session: auth.session, task });
+  const result = await upsertTaskRecord({ session: auth.session, task, expectedVersion: input.expectedVersion });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getTaskWriteStatus(result.reason) });

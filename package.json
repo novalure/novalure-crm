@@ -17,7 +17,7 @@
     "ci:qa-target": "node scripts/qa-target-guard.mjs",
     "release:verify-vercel-env": "node --use-system-ca scripts/verify-vercel-production-env.mjs",
     "security:production": "npm audit --omit=dev --audit-level=moderate",
-    "test:unit": "node --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs scripts/lead-inbox-date-safety-tests.mjs scripts/app-role-grant-regression-tests.mjs",
+    "test:unit": "node --import tsx --test scripts/phase0-smoke-tests.mjs scripts/phase1-persistence-smoke-tests.mjs scripts/phase2-pipeline-smoke-tests.mjs scripts/phase3-rbac-smoke-tests.mjs scripts/phase4-validation-smoke-tests.mjs scripts/phase5-copy-smoke-tests.mjs scripts/phase6-bot-grounding-smoke-tests.mjs scripts/phase7-mobile-smoke-tests.mjs scripts/phase8-acceptance-smoke-tests.mjs scripts/i18n-localization-smoke-tests.mjs scripts/company-profile-settings-smoke-tests.mjs scripts/contact-access-rbac-smoke-tests.mjs scripts/contact-empty-state-regression-tests.mjs scripts/property-department-smoke-tests.mjs scripts/design-foundations-smoke-tests.mjs scripts/calendar-accessibility-smoke-tests.mjs scripts/page-metadata-localization-tests.mjs scripts/password-input-accessibility-tests.mjs scripts/touch-target-smoke-tests.mjs scripts/durable-queue-smoke-tests.mjs scripts/cron-runtime-smoke-tests.mjs scripts/database-diagnostics-smoke-tests.mjs scripts/migration-cutover-guard-tests.mjs scripts/open-redirect-security-tests.mjs scripts/security-headers-smoke-tests.mjs scripts/tenant-hardening-smoke-tests.mjs scripts/p2-11-provider-and-assignee-tests.mjs scripts/auth-security-tests.mjs scripts/admin-navigation-smoke-tests.mjs scripts/crm-scope-persistence-smoke-tests.mjs scripts/csrf-security-tests.mjs scripts/deal-input-validation-tests.mjs scripts/oauth-state-security-tests.mjs scripts/public-submission-abuse-tests.mjs scripts/bot-document-share-lifecycle-tests.mjs scripts/unit-board-price-parser-smoke-tests.mjs scripts/unit-board-state-accessibility-tests.mjs scripts/lead-inbox-date-safety-tests.mjs scripts/app-role-grant-regression-tests.mjs",
     "test:integration": "node --test scripts/qa-security-and-scope-smoke-tests.mjs",
     "test:protected-preview-access": "node --test scripts/protected-preview-access-tests.mjs",
     "test:e2e": "node scripts/qa-livegang-api.mjs",
@@ -57,7 +57,11 @@
     "qa:deal-idempotency": "node scripts/qa-deal-idempotency.mjs",
     "qa:lead-idempotency": "node scripts/qa-lead-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
-    "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs"
+    "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs",
+    "test:sales": "node --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts",
+    "qa:sales:server": "node scripts/qa-sales-browser-server.mjs",
+    "qa:sales:browser": "node scripts/qa-sales-browser.mjs",
+    "qa:sales:e2e": "node scripts/qa-sales-e2e.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -66,19 +70,24 @@
     "@vercel/blob": "2.8.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.3.0",
+    "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.3.0",
+    "eslint-config-next": "16.3.5",
+    "pg": "8.23.0",
     "tailwindcss": "^4",
+    "tsx": "4.23.13",
     "typescript": "^5"
   }
 }

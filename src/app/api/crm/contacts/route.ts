@@ -11,6 +11,7 @@ async function readJson(request: Request) {
 }
 
 function getWriteErrorStatus(reason: string) {
+  if (reason.includes("VERSION_CONFLICT")) return 409;
   const normalizedReason = reason.toLowerCase();
 
   if (
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
-  const result = await upsertContactRecord({ contact, session: auth.session });
+  const result = await upsertContactRecord({ contact, expectedVersion: input.expectedVersion, session: auth.session });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
@@ -87,6 +88,7 @@ export async function PATCH(request: Request) {
   if (input.action === "archive") {
     const result = await archiveContactRecord({
       contactId: getContactIdFromRequest(request, input),
+      expectedVersion: input.expectedVersion,
       session: auth.session,
     });
 
@@ -100,6 +102,7 @@ export async function PATCH(request: Request) {
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
   const result = await upsertContactRecord({
     contact: withContactIdFromRequest(request, contact),
+    expectedVersion: input.expectedVersion,
     requireExisting: true,
     session: auth.session,
   });
@@ -126,6 +129,7 @@ export async function DELETE(request: Request) {
 
   const result = await archiveContactRecord({
     contactId: getContactIdFromRequest(request, body),
+    expectedVersion: body?.expectedVersion,
     session: auth.session,
   });
 

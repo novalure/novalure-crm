@@ -12,6 +12,7 @@ async function readJson(request: Request) {
 
 function getDealWriteStatus(reason: string) {
   const normalizedReason = reason.toLowerCase();
+  if (/VERSION_CONFLICT|IDEMPOTENCY_CONFLICT|CANONICAL_|USE_CANONICAL_/.test(reason)) return 409;
   if (
     reason.includes("not available in this workspace") ||
     normalizedReason.includes("permission") ||

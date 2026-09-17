@@ -191,7 +191,7 @@ export function TaskCommandCenter({
   const [activeView, setActiveView] = useState<TaskView>("focus");
   const [searchTerm, setSearchTerm] = useState("");
   const [taskOverlays, setTaskOverlays] = useState<Task[]>([]);
-  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
+  const [savingTaskIds, setSavingTaskIds] = useState<string[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -213,7 +213,7 @@ export function TaskCommandCenter({
           : undefined;
         const lead = task.leadId ? leads.find((item) => item.id === task.leadId) : undefined;
         const project = projects.find((item) => item.id === task.projectId);
-        const isCompleted = completedTaskIds.includes(task.id) || task.status === "done";
+        const isCompleted = task.status === "done";
 
         return {
           task,
@@ -228,7 +228,7 @@ export function TaskCommandCenter({
             (lead ? Math.max(0, 100 - lead.score) : 30),
         };
       }),
-    [completedTaskIds, contacts, effectiveTasks, language, leads, projects],
+    [contacts, effectiveTasks, language, leads, projects],
   );
 
   const openTasks = decoratedTasks.filter((item) => !item.isCompleted);
@@ -342,31 +342,22 @@ export function TaskCommandCenter({
 
   const toggleTask = (taskId: string) => {
     const currentTask = decoratedTasks.find((item) => item.task.id === taskId);
-    const nextStatus = currentTask?.isCompleted ? "open" : "done";
-
-    setCompletedTaskIds((current) =>
-      current.includes(taskId)
-        ? current.filter((id) => id !== taskId)
-        : [...current, taskId],
-    );
-
-    if (currentTask) {
-      void csrfFetch("/api/crm/tasks", {
-        body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus } }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
+    if (!currentTask || savingTaskIds.includes(taskId)) return;
+    const nextStatus = currentTask.isCompleted ? "open" : "done";
+    setSavingTaskIds((current) => [...current, taskId]);
+    void csrfFetch("/api/crm/tasks", {
+      body: JSON.stringify({ task: { ...currentTask.task, status: nextStatus }, expectedVersion: currentTask.task.version }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { task?: Task; error?: string };
+        if (!response.ok || !payload.task) throw new Error(payload.error || text.taskCreateFailed);
+        setTaskOverlays((current) => [payload.task!, ...current.filter((task) => task.id !== payload.task!.id)]);
+        void onTasksChanged?.();
       })
-        .then(async (response) => {
-          const payload = (await response.json().catch(() => ({}))) as { task?: Task };
-          if (response.ok && payload.task) {
-            setTaskOverlays((current) => [
-              payload.task!,
-              ...current.filter((task) => task.id !== payload.task!.id),
-            ]);
-          }
-        })
-        .catch(() => undefined);
-    }
+      .catch((error: unknown) => setNotice(error instanceof Error ? error.message : text.taskCreateFailed))
+      .finally(() => setSavingTaskIds((current) => current.filter((id) => id !== taskId)));
   };
 
   const prepareTaskFollowUp = async () => {
@@ -424,7 +415,7 @@ export function TaskCommandCenter({
               { label: text.dueToday, value: dueTodayTasks.length },
               { label: text.overdue, value: overdueTasks.length },
               { label: text.highPriority, value: highPriorityTasks.length },
-              { label: text.completedHere, value: completedTaskIds.length },
+              { label: text.completedHere, value: taskOverlays.filter((task) => task.status === "done").length },
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 p-3" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>

@@ -399,6 +399,7 @@ export async function expireOverduePropertyReservations(input: {
   source?: string;
   workspaceId?: string | null;
 } = {}): Promise<ExpireOverduePropertyReservationsResult> {
+  throw new Error("AUTOMATIC_RESERVATION_EXPIRY_DISABLED: use the authorized per-reservation expiry command until a tenant-scoped job is approved.");
   if (!canPersist()) {
     return {
       checkedAt: new Date().toISOString(),
@@ -1000,6 +1001,8 @@ export async function mutateUnitReservation({
     return { persisted: false, reason: "A valid workspace and user are required." };
   }
 
+  // Legacy callers lack mandatory evidence, versions and command receipts.
+  if (input.action) return { persisted: false, reason: "Use the authorized /api/crm/property-sales workflow." };
   const action = input.action;
   const knownAction = action === "create" || action === "extend" || action === "expire" || action === "convert";
   if (!knownAction) {

@@ -1,3 +1,5 @@
+import { withCrmRead } from "@/lib/crm-command";
+import { assertLegacyOfferMilestone } from "@/lib/db/offer-repositories";
 import type { AppSession } from "@/lib/auth/session";
 import { runBotGovernanceEvaluation } from "@/lib/bots/evaluation";
 import type { CoreCrmModuleSources } from "@/lib/db/crm-loaders";
@@ -317,7 +319,7 @@ async function loadUnit(session: AppSession, unitId?: string | null) {
   );
 }
 
-export async function listRecommendationRuntimeSummary(input: {
+async function listRecommendationRuntimeSummaryInTransaction(input: {
   projectId?: string | null;
   session: AppSession;
 }): Promise<RecommendationRuntimeSummary> {
@@ -480,7 +482,7 @@ export async function listRecommendationRuntimeSummary(input: {
   };
 }
 
-export async function runFallbackAudit(input: {
+async function runFallbackAuditInTransaction(input: {
   missingTables?: string[];
   moduleSources?: Partial<CoreCrmModuleSources> | Record<string, string>;
   projectId?: string | null;
@@ -705,7 +707,7 @@ async function createFollowUpDelivery(input: {
   return { id: row.id, status };
 }
 
-export async function createProductiveFollowUpAction(input: {
+async function createProductiveFollowUpActionInTransaction(input: {
   actionType?: string | null;
   channel?: string | null;
   contactId?: string | null;
@@ -875,7 +877,7 @@ export async function createProductiveFollowUpAction(input: {
   };
 }
 
-export async function runBulkFollowUpActions(input: {
+async function runBulkFollowUpActionsInTransaction(input: {
   actionType?: string | null;
   leads?: Array<{
     channel?: string | null;
@@ -1012,7 +1014,7 @@ export async function runBulkFollowUpActions(input: {
   };
 }
 
-export async function upsertViewingSlot(input: {
+async function upsertViewingSlotInTransaction(input: {
   contactId?: string | null;
   dealId?: string | null;
   endsAt?: string | null;
@@ -1025,118 +1027,11 @@ export async function upsertViewingSlot(input: {
   status?: string | null;
   unitId?: string | null;
 }) {
-  if (!canPersist() || !isUuid(input.session.workspaceId)) {
-    return { persisted: false as const, reason: "DATABASE_URL is not configured" };
-  }
-
-  const unit = await loadUnit(input.session, input.unitId);
-  if (!unit) return { persisted: false as const, reason: "Unit was not found" };
-
-  const startsAt = normalizeDate(input.startsAt) ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const endsAt = normalizeDate(input.endsAt) ?? new Date(new Date(startsAt).getTime() + 45 * 60 * 1000).toISOString();
-  const status = ["planned", "confirmed", "completed", "cancelled", "no_show"].includes(cleanString(input.status))
-    ? cleanString(input.status)
-    : "planned";
-  const slotId = normalizeUuid(input.slotId);
-  const row = slotId
-    ? await queryOne<IdRow>(
-        `
-          update property_viewing_slots
-          set
-            contact_id = $4::uuid,
-            lead_id = $5::uuid,
-            deal_id = $6::uuid,
-            owner_user_id = $7::uuid,
-            starts_at = $8::timestamptz,
-            ends_at = $9::timestamptz,
-            status = $10,
-            note = $11,
-            metadata = metadata || $12::jsonb,
-            updated_at = now()
-          where id = $1::uuid and workspace_id = $2::uuid and unit_id = $3::uuid
-          returning id
-        `,
-        [
-          slotId,
-          input.session.workspaceId,
-          unit.id,
-          normalizeUuid(input.contactId),
-          normalizeUuid(input.leadId),
-          normalizeUuid(input.dealId),
-          normalizeUuid(input.ownerUserId) ?? normalizeUuid(input.session.userId),
-          startsAt,
-          endsAt,
-          status,
-          cleanString(input.note),
-          JSON.stringify({ updatedByUserId: input.session.userId }),
-        ],
-      )
-    : await queryOne<IdRow>(
-        `
-          insert into property_viewing_slots (
-            workspace_id,
-            project_id,
-            unit_id,
-            contact_id,
-            lead_id,
-            deal_id,
-            owner_user_id,
-            starts_at,
-            ends_at,
-            status,
-            note,
-            metadata
-          )
-          values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::timestamptz, $9::timestamptz, $10, $11, $12::jsonb)
-          returning id
-        `,
-        [
-          input.session.workspaceId,
-          unit.projectId,
-          unit.id,
-          normalizeUuid(input.contactId),
-          normalizeUuid(input.leadId),
-          normalizeUuid(input.dealId),
-          normalizeUuid(input.ownerUserId) ?? normalizeUuid(input.session.userId),
-          startsAt,
-          endsAt,
-          status,
-          cleanString(input.note),
-          JSON.stringify({ createdByUserId: input.session.userId }),
-        ],
-      );
-
-  if (!row) return { persisted: false as const, reason: "Viewing slot could not be saved" };
-
-  await Promise.all([
-    writeAuditLog({
-      action: slotId ? "viewing_slot.updated" : "viewing_slot.created",
-      after: { slotId: row.id, status, startsAt, unitId: unit.id },
-      entityId: row.id,
-      entityType: "property_viewing_slot",
-      projectId: unit.projectId,
-      session: input.session,
-    }),
-    writeCrmAnalyticsEvent({
-      contactId: normalizeUuid(input.contactId),
-      dealId: normalizeUuid(input.dealId),
-      entityId: row.id,
-      entityType: "property_viewing_slot",
-      eventType: slotId ? "viewing_slot_updated" : "viewing_slot_created",
-      leadId: normalizeUuid(input.leadId),
-      metadata: { endsAt, startsAt, status, unitId: unit.id, unitNumber: unit.unitNumber },
-      module: "meeting",
-      projectId: unit.projectId,
-      source: "project_sales_cockpit",
-      userId: input.session.userId,
-      workspaceId: input.session.workspaceId,
-    }),
-  ]);
-
-  return { data: { slotId: row.id }, persisted: true as const };
+  void input;
+  return { persisted: false as const, reason: "CANONICAL_VIEWING_REQUIRED: Use the buyer sales workflow with explicit times and version" };
 }
 
-export async function recordUnitAuditEvent(input: {
+async function recordUnitAuditEventInTransaction(input: {
   after?: Record<string, unknown> | null;
   before?: Record<string, unknown> | null;
   eventType?: string | null;
@@ -1209,7 +1104,7 @@ export async function recordUnitAuditEvent(input: {
   return { data: { auditEventId: row.id }, persisted: true as const };
 }
 
-export async function upsertOfferMilestone(input: {
+async function upsertOfferMilestoneInTransaction(input: {
   completedAt?: string | null;
   contactId?: string | null;
   dealId?: string | null;
@@ -1223,6 +1118,7 @@ export async function upsertOfferMilestone(input: {
   status?: string | null;
   unitId?: string | null;
 }) {
+  await assertLegacyOfferMilestone(input);
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false as const, reason: "DATABASE_URL is not configured" };
   }
@@ -1311,7 +1207,7 @@ export async function upsertOfferMilestone(input: {
   return { data: { milestoneId: row.id }, persisted: true as const };
 }
 
-export async function runBotAnswerQualityComparison(input: {
+async function runBotAnswerQualityComparisonInTransaction(input: {
   botId?: string | null;
   projectId?: string | null;
   session: AppSession;
@@ -1454,7 +1350,7 @@ export async function runBotAnswerQualityComparison(input: {
   return { data: { checkId: row.id }, persisted: true as const };
 }
 
-export async function runBotAnswerQualityReviews(input: {
+async function runBotAnswerQualityReviewsInTransaction(input: {
   botId?: string | null;
   projectId?: string | null;
   session: AppSession;
@@ -2093,7 +1989,7 @@ async function resolveBotQualityReviewIssue(input: {
   return rows.length;
 }
 
-export async function createConversionAnalyticsSnapshot(input: {
+async function createConversionAnalyticsSnapshotInTransaction(input: {
   from?: string | null;
   projectId?: string | null;
   session: AppSession;
@@ -2166,7 +2062,7 @@ export async function createConversionAnalyticsSnapshot(input: {
   return { data: { snapshotId: row.id }, persisted: true as const };
 }
 
-export async function runCustomerOnboardingRiskAutomation(input: {
+async function runCustomerOnboardingRiskAutomationInTransaction(input: {
   projectId?: string | null;
   session: AppSession;
 }) {
@@ -2311,7 +2207,7 @@ export async function runCustomerOnboardingRiskAutomation(input: {
   return { data: { alerts: created }, persisted: true as const };
 }
 
-export async function createDataQualityCleanupAction(input: {
+async function createDataQualityCleanupActionInTransaction(input: {
   actionType?: string | null;
   contactId?: string | null;
   duplicateContactId?: string | null;
@@ -2426,7 +2322,7 @@ async function reassignContactReferences(input: {
   return counts;
 }
 
-export async function mergeDuplicateContacts(input: {
+async function mergeDuplicateContactsInTransaction(input: {
   duplicateContactId?: string | null;
   primaryContactId?: string | null;
   reason?: string | null;
@@ -3340,12 +3236,14 @@ async function runMicrosoftBookingHealthCheck(input: { projectId?: string | null
   return { healthCheckId: row?.id ?? null };
 }
 
-export async function runAnalysisBotRecommendationCompletion(input: {
+async function runAnalysisBotRecommendationCompletionInTransaction(input: {
   missingTables?: string[];
   moduleSources?: Partial<CoreCrmModuleSources> | Record<string, string>;
   projectId?: string | null;
   session: AppSession;
 }) {
+  return { persisted: false as const, reason: "CANONICAL_SALES_REQUIRED: Analysis recommendations cannot manufacture reservations, sales or viewing evidence" };
+
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false as const, reason: "DATABASE_URL is not configured" };
   }
@@ -3439,7 +3337,7 @@ export async function runAnalysisBotRecommendationCompletion(input: {
   return { data: { errors, results, runId: finalRun?.id ?? null }, persisted: true as const };
 }
 
-export async function runModulePermissionAudit(input: {
+async function runModulePermissionAuditInTransaction(input: {
   projectId?: string | null;
   session: AppSession;
 }) {
@@ -3557,4 +3455,79 @@ export async function runModulePermissionAudit(input: {
   ]);
 
   return { data: { checks: rows }, persisted: true as const };
+}
+
+export async function listRecommendationRuntimeSummary(input: Parameters<typeof listRecommendationRuntimeSummaryInTransaction>[0]): ReturnType<typeof listRecommendationRuntimeSummaryInTransaction> {
+  if (!canPersist()) return listRecommendationRuntimeSummaryInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => listRecommendationRuntimeSummaryInTransaction({ ...input, session }));
+}
+
+export async function runFallbackAudit(input: Parameters<typeof runFallbackAuditInTransaction>[0]): ReturnType<typeof runFallbackAuditInTransaction> {
+  if (!canPersist()) return runFallbackAuditInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runFallbackAuditInTransaction({ ...input, session }));
+}
+
+export async function createProductiveFollowUpAction(input: Parameters<typeof createProductiveFollowUpActionInTransaction>[0]): ReturnType<typeof createProductiveFollowUpActionInTransaction> {
+  if (!canPersist()) return createProductiveFollowUpActionInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => createProductiveFollowUpActionInTransaction({ ...input, session }));
+}
+
+export async function runBulkFollowUpActions(input: Parameters<typeof runBulkFollowUpActionsInTransaction>[0]): ReturnType<typeof runBulkFollowUpActionsInTransaction> {
+  if (!canPersist()) return runBulkFollowUpActionsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runBulkFollowUpActionsInTransaction({ ...input, session }));
+}
+
+export async function upsertViewingSlot(input: Parameters<typeof upsertViewingSlotInTransaction>[0]): ReturnType<typeof upsertViewingSlotInTransaction> {
+  if (!canPersist()) return upsertViewingSlotInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertViewingSlotInTransaction({ ...input, session }));
+}
+
+export async function recordUnitAuditEvent(input: Parameters<typeof recordUnitAuditEventInTransaction>[0]): ReturnType<typeof recordUnitAuditEventInTransaction> {
+  if (!canPersist()) return recordUnitAuditEventInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => recordUnitAuditEventInTransaction({ ...input, session }));
+}
+
+export async function upsertOfferMilestone(input: Parameters<typeof upsertOfferMilestoneInTransaction>[0]): ReturnType<typeof upsertOfferMilestoneInTransaction> {
+  if (!canPersist()) return upsertOfferMilestoneInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => upsertOfferMilestoneInTransaction({ ...input, session }));
+}
+
+export async function runBotAnswerQualityComparison(input: Parameters<typeof runBotAnswerQualityComparisonInTransaction>[0]): ReturnType<typeof runBotAnswerQualityComparisonInTransaction> {
+  if (!canPersist()) return runBotAnswerQualityComparisonInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runBotAnswerQualityComparisonInTransaction({ ...input, session }));
+}
+
+export async function runBotAnswerQualityReviews(input: Parameters<typeof runBotAnswerQualityReviewsInTransaction>[0]): ReturnType<typeof runBotAnswerQualityReviewsInTransaction> {
+  if (!canPersist()) return runBotAnswerQualityReviewsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runBotAnswerQualityReviewsInTransaction({ ...input, session }));
+}
+
+export async function createConversionAnalyticsSnapshot(input: Parameters<typeof createConversionAnalyticsSnapshotInTransaction>[0]): ReturnType<typeof createConversionAnalyticsSnapshotInTransaction> {
+  if (!canPersist()) return createConversionAnalyticsSnapshotInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => createConversionAnalyticsSnapshotInTransaction({ ...input, session }));
+}
+
+export async function runCustomerOnboardingRiskAutomation(input: Parameters<typeof runCustomerOnboardingRiskAutomationInTransaction>[0]): ReturnType<typeof runCustomerOnboardingRiskAutomationInTransaction> {
+  if (!canPersist()) return runCustomerOnboardingRiskAutomationInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runCustomerOnboardingRiskAutomationInTransaction({ ...input, session }));
+}
+
+export async function createDataQualityCleanupAction(input: Parameters<typeof createDataQualityCleanupActionInTransaction>[0]): ReturnType<typeof createDataQualityCleanupActionInTransaction> {
+  if (!canPersist()) return createDataQualityCleanupActionInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => createDataQualityCleanupActionInTransaction({ ...input, session }));
+}
+
+export async function mergeDuplicateContacts(input: Parameters<typeof mergeDuplicateContactsInTransaction>[0]): ReturnType<typeof mergeDuplicateContactsInTransaction> {
+  if (!canPersist()) return mergeDuplicateContactsInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => mergeDuplicateContactsInTransaction({ ...input, session }));
+}
+
+export async function runAnalysisBotRecommendationCompletion(input: Parameters<typeof runAnalysisBotRecommendationCompletionInTransaction>[0]): ReturnType<typeof runAnalysisBotRecommendationCompletionInTransaction> {
+  if (!canPersist()) return runAnalysisBotRecommendationCompletionInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runAnalysisBotRecommendationCompletionInTransaction({ ...input, session }));
+}
+
+export async function runModulePermissionAudit(input: Parameters<typeof runModulePermissionAuditInTransaction>[0]): ReturnType<typeof runModulePermissionAuditInTransaction> {
+  if (!canPersist()) return runModulePermissionAuditInTransaction(input);
+  return withCrmRead(input.session, (_tx, session) => runModulePermissionAuditInTransaction({ ...input, session }));
 }

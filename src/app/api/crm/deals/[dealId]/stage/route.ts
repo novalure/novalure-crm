@@ -26,6 +26,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const input = body as Record<string, unknown>;
   const result = await changeDealStageRecord({
+    expectedVersion: typeof body.expectedVersion === "number" ? body.expectedVersion : undefined,
     dealId,
     reason: typeof input.reason === "string" ? input.reason : undefined,
     reasonCategory: input.reasonCategory,

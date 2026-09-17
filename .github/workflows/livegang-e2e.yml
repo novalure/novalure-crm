@@ -21,6 +21,8 @@ jobs:
   quality:
     name: Lockfile, lint, typecheck, tests and build
     runs-on: ubuntu-latest
+    env:
+      CRM_QA_BROWSER_CHANNEL: chromium
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,6 +53,15 @@ jobs:
 
       - name: Security and scope integration tests
         run: npm run test:integration
+
+      - name: Install local QA browser
+        run: npx playwright install chromium --with-deps
+
+      - name: Sales transactions against isolated local PostgreSQL
+        run: npm run test:sales
+
+      - name: Isolated sales browser flows
+        run: npm run qa:sales:e2e
 
       - name: Production build
         run: npm run build

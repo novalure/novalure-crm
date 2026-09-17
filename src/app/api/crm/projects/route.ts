@@ -11,6 +11,7 @@ async function readJson(request: Request) {
 }
 
 function getProjectWriteStatus(reason: string) {
+  if (reason.includes("VERSION_CONFLICT")) return 409;
   const normalizedReason = reason.toLowerCase();
   if (
     reason.includes("not available in this workspace") ||
@@ -54,7 +55,7 @@ export async function PATCH(request: Request) {
 
   const input = body as Record<string, unknown>;
   const project = typeof input.project === "object" && input.project ? input.project as Record<string, unknown> : input;
-  const result = await updateProjectRecord({ project, session: auth.session });
+  const result = await updateProjectRecord({ project, expectedVersion: input.expectedVersion, session: auth.session });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getProjectWriteStatus(result.reason) });

@@ -1,3 +1,4 @@
+import { withCrmRead } from "@/lib/crm-command";
 import { NextResponse } from "next/server";
 import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
@@ -105,13 +106,13 @@ export async function GET(request: Request) {
   }
 
   const q = url.searchParams.get("q")?.trim().slice(0, 100) || null;
-  const result = await loadPaginatedPropertyAssets(auth.session.workspaceId, {
+  const result = await withCrmRead(auth.session, () => loadPaginatedPropertyAssets(auth.session.workspaceId, {
     limit: parseIntegerParam(url.searchParams.get("limit"), 50, 1, 200),
     offset: parseIntegerParam(url.searchParams.get("offset"), 0, 0, 100_000),
     projectId,
     q,
     status,
-  });
+  }));
 
   return NextResponse.json({
     data: { assets: result.assets },

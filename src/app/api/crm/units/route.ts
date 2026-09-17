@@ -6,6 +6,7 @@ import {
   createPropertyBuildingRecord,
   createPropertyUnitRecord,
 } from "@/lib/db/property-inventory-repositories";
+import { assertCrmFields, assertProjectGrant, crmCommandErrorResponse, crmRequestMetadata, withCrmRead } from "@/lib/crm-command";
 
 const propertyUnitStatuses: PropertyUnitStatus[] = ["available", "reserved", "sold", "blocked"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -52,12 +53,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const result = await loadPaginatedPropertyUnits(auth.session.workspaceId, {
+  try {
+  const result = await withCrmRead(auth.session, async (tx, session) => {
+    if (projectId) await assertProjectGrant(tx, session, projectId);
+    return loadPaginatedPropertyUnits(session.workspaceId, {
     limit: parseIntegerParam(url.searchParams.get("limit"), 50, 1, 200),
     offset: parseIntegerParam(url.searchParams.get("offset"), 0, 0, 100_000),
     projectId,
     q: url.searchParams.get("q")?.trim().slice(0, 100) || null,
     status,
+    });
   });
 
   return NextResponse.json({
@@ -72,6 +77,7 @@ export async function GET(request: Request) {
     source: "database",
     summary: result.summary,
   });
+  } catch (error) { return crmCommandErrorResponse(error); }
 }
 
 export async function POST(request: Request) {
@@ -87,10 +93,15 @@ export async function POST(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
+  try {
+  assertCrmFields(input, ["operation","address","completionDate","floors","name","projectId","areaSqm","buildingId","floor","price","priceCents","rooms","status","unitNumber","unitId","expectedVersion","idempotencyKey","correlationId"]);
+  const meta = crmRequestMetadata(request, input);
   const operation = typeof input.operation === "string" ? input.operation : "unit";
+  if (operation !== "unit" && operation !== "building") return NextResponse.json({ error: "Invalid operation", code: "INVALID_OPERATION" }, { status: 400 });
   const result =
     operation === "building"
       ? await createPropertyBuildingRecord({
+          ...meta,
           address: input.address,
           completionDate: input.completionDate,
           floors: input.floors,
@@ -99,6 +110,9 @@ export async function POST(request: Request) {
           session: auth.session,
         })
       : await createPropertyUnitRecord({
+          ...meta,
+          unitId: input.unitId,
+          expectedVersion: input.expectedVersion,
           areaSqm: input.areaSqm,
           buildingId: input.buildingId,
           floor: input.floor,
@@ -111,9 +125,6 @@ export async function POST(request: Request) {
           unitNumber: input.unitNumber,
         });
 
-  if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: 400 });
-  }
-
-  return NextResponse.json({ data: result.data, persisted: true });
+  return NextResponse.json({ ...result, contractVersion: "1", correlationId: meta.correlationId });
+  } catch (error) { return crmCommandErrorResponse(error, request.headers.get("x-correlation-id") ?? undefined); }
 }

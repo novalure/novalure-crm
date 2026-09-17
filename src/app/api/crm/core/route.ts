@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
-import { ensureWorkspaceProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
 
 export async function GET(request: Request) {
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
@@ -9,17 +9,13 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    await ensureWorkspaceProjectDefaultPipelines({ session: auth.session });
-  } catch {
-    // Core data should still load and surface module status if pipeline setup cannot be repaired.
-  }
-
   const data = await getCoreCrmData(auth.session.workspaceId, { session: auth.session });
 
   return NextResponse.json({
     activeWorkspaceId: auth.session.workspaceId,
     activeWorkspaceName: auth.session.workspaceName,
     source: data.source,
+    collectionCompleteness: data.collectionCompleteness ?? "LIMITED",
     error: data.error ?? null,
     missingTables: data.missingTables ?? [],
     moduleErrors: data.moduleErrors ?? {},
@@ -33,4 +29,5 @@ export async function GET(request: Request) {
     },
     data,
   });
+  } catch (error) { return crmCommandErrorResponse(error); }
 }

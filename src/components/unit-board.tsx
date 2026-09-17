@@ -19,10 +19,12 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
 
 type UnitBoardProps = {
+  workspaceId: string;
   buildings: PropertyBuilding[];
   canManage: boolean;
   contacts: Contact[];
@@ -104,6 +106,7 @@ const statusStyles: Record<PropertyUnit["status"], string> = {
 };
 
 const reservationStyles: Record<PropertyReservation["status"], string> = {
+  requested: "border-violet-200 bg-violet-50 text-violet-900",
   converted: "border-emerald-200 bg-emerald-50 text-emerald-900",
   expired: "border-rose-200 bg-rose-50 text-rose-900",
   hold: "border-amber-200 bg-amber-50 text-amber-900",
@@ -167,18 +170,6 @@ function daysUntil(value: string) {
   return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
 }
 
-function defaultReservationDeadline() {
-  return new Date(Date.now() + 7 * 86_400_000).toISOString();
-}
-
-function toDateTimeLocal(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
 function fromDateTimeLocal(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -190,7 +181,7 @@ function parseDepositCents(value: string) {
 }
 
 function isActiveReservation(reservation?: PropertyReservation) {
-  return reservation?.status === "hold" || reservation?.status === "reserved";
+  return reservation?.status === "requested" || reservation?.status === "hold" || reservation?.status === "reserved";
 }
 
 function findReservation(unit: PropertyUnit, reservations: PropertyReservation[]) {
@@ -202,7 +193,7 @@ function findReservation(unit: PropertyUnit, reservations: PropertyReservation[]
 
   return reservations
     .filter((reservation) => reservation.unitId === unit.id)
-    .sort((left, right) => new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime())[0];
+    .sort((left, right) => Number(isActiveReservation(right)) - Number(isActiveReservation(left)) || new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime())[0];
 }
 
 function getBuyerMatches(
@@ -271,6 +262,7 @@ function getBuyerMatches(
 }
 
 export function UnitBoard({
+  workspaceId,
   buildings,
   canManage,
   contacts,
@@ -468,23 +460,9 @@ export function UnitBoard({
     return text.convertAction;
   }
 
-  function openWorkflow(view: UnitBoardView, action: ReservationWorkflowAction) {
+  function openWorkflow(view: UnitBoardView, action: ReservationWorkflowAction | "confirm") {
     if (!canManage) return;
-    const reservation = view.reservation;
-    setWorkflowNotice(null);
-    setWorkflowDraft({
-      action,
-      contactId: view.buyer?.id ?? reservation?.contactId ?? "",
-      contractMilestone: reservation?.contractMilestone || "not_started",
-      createTask: true,
-      dealId: view.deal?.id ?? reservation?.dealId ?? "",
-      deposit: reservation?.depositCents ? String(reservation.depositCents / 100) : "",
-      expiresAt: toDateTimeLocal(reservation?.expiresAt ?? defaultReservationDeadline()),
-      nextAction: reservation?.nextAction ?? "",
-      notifyTeams: false,
-      reservationId: reservation?.id ?? "",
-      unitId: view.unit.id,
-    });
+    openPropertySalesWorkflow({projectId:view.unit.projectId,unitId:view.unit.id,leadId:view.buyerMatches[0]?.lead.id,reservationId:view.reservation?.id,action:action==="confirm"?"reservation.confirm":action==="create"?"reservation.request":action==="convert"?"sale.confirm":action==="expire"?"reservation.expire":"reservation.extend"});
   }
 
   function openInventory(mode: Exclude<InventoryMode, null>) {
@@ -516,6 +494,10 @@ export function UnitBoard({
         body: JSON.stringify({
           operation: inventoryMode,
           ...inventoryDraft,
+          price: "0",
+          status: "available",
+          idempotencyKey: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -571,25 +553,7 @@ export function UnitBoard({
   }
 
   function createViewingSlot(view: UnitBoardView) {
-    const matchLead = view.buyerMatches[0]?.lead;
-    const startsAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-    const endsAt = new Date(new Date(startsAt).getTime() + 45 * 60 * 1000).toISOString();
-
-    return postRuntimeWorkflow(
-      `viewing:${view.unit.id}`,
-      {
-        contactId: view.buyer?.id ?? matchLead?.contactId ?? null,
-        dealId: view.deal?.id ?? null,
-        endsAt,
-        leadId: matchLead?.id ?? null,
-        note: `${text.viewingSlotAction}: ${view.unit.unitNumber}`,
-        operation: "viewing_slot",
-        startsAt,
-        status: "planned",
-        unitId: view.unit.id,
-      },
-      text.viewingSlotSaved,
-    );
+    openPropertySalesWorkflow({projectId:view.unit.projectId,unitId:view.unit.id,leadId:view.buyerMatches[0]?.lead.id,action:"viewing.save"});
   }
 
   function createOfferMilestone(view: UnitBoardView) {
@@ -712,6 +676,7 @@ export function UnitBoard({
 
   return (
     <section className="space-y-4">
+      <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={initialProjectId} onChanged={onReservationChanged} />
       <div className="rounded-lg border border-stone-200 bg-white p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -926,9 +891,10 @@ export function UnitBoard({
                   {text.price}
                   <input
                     className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-slate-900"
-                    onChange={(event) => updateInventoryDraft("price", event.target.value)}
+                    readOnly
+                    aria-label="Preis wird nach autorisierter Bestätigung übernommen"
                     type="number"
-                    value={inventoryDraft.price}
+                    value="0"
                   />
                 </label>
               </>
@@ -1443,15 +1409,15 @@ export function UnitBoard({
                       <div className="flex w-56 min-w-0 flex-col gap-2">
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canManage || unit.status !== "available" || hasActiveReservation}
-                          onClick={() => openWorkflow(view, "create")}
+                          disabled={!canManage || unit.status !== "available" || (hasActiveReservation && reservation?.status !== "requested")}
+                          onClick={() => openWorkflow(view, reservation?.status === "requested" ? "confirm" : "create")}
                           type="button"
                         >
-                          {text.reserveAction}
+                          {reservation?.status === "requested" ? text.confirmReservationAction : text.reserveAction}
                         </button>
                         <button
                           className="min-h-11 whitespace-normal break-words rounded-md border border-stone-300 px-3 py-2 text-left text-xs font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canManage || !hasActiveReservation}
+                          disabled={!canManage || reservation?.status !== "reserved"}
                           onClick={() => openWorkflow(view, "extend")}
                           type="button"
                         >
@@ -1468,7 +1434,7 @@ export function UnitBoard({
                           </button>
                           <button
                             className="min-h-11 whitespace-normal break-words rounded-md border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!canManage || !hasActiveReservation}
+                            disabled={!canManage || reservation?.status !== "reserved"}
                             onClick={() => openWorkflow(view, "convert")}
                             type="button"
                           >

@@ -17,18 +17,18 @@ type ReservationBoardProps = {
 
 const text = {
   de: {
-    active: "Aktive Reservierungen",
+    active: "Offene Anfragen und Reservierungen",
     buyer: "Käufer",
     deadline: "Reservierungsfrist",
     deposit: "Anzahlung",
-    description: "Gefilterte Ansicht für reservierte Einheiten mit Fristen, Warnungen und Status.",
+    description: "Unverbindliche Anfragen und bestätigte Reservierungen mit Fristen und Status. Anfragen im Einheitenbestand prüfen und mit Quellbeleg bestätigen.",
     empty: "Keine aktiven Reservierungen im aktuellen Projektfilter.",
     milestone: "Vertragsstand",
     nextAction: "Nächster Schritt",
     noBuyer: "Kein Kontakt",
     noDeal: "Kein Deal",
     noNextAction: "Kein nächster Schritt hinterlegt",
-    openUnits: "Einheiten / Bestand",
+    openUnits: "Anfragen prüfen / Einheiten",
     project: "Projekt",
     title: "Reservierungen",
     unit: "Einheit",
@@ -39,6 +39,7 @@ const text = {
       deposit: "Anzahlungen",
     },
     status: {
+      requested: "Anfrage (unverbindlich)",
       converted: "Umgewandelt",
       expired: "Abgelaufen",
       hold: "Hold",
@@ -54,18 +55,18 @@ const text = {
     },
   },
   en: {
-    active: "Active reservations",
+    active: "Open requests and reservations",
     buyer: "Buyer",
     deadline: "Reservation deadline",
     deposit: "Deposit",
-    description: "Filtered view for reserved units with deadlines, warnings and status.",
+    description: "Non-binding requests and confirmed reservations with deadlines and status. Review and confirm requests with source evidence in the unit inventory.",
     empty: "No active reservations match the current project filter.",
     milestone: "Contract stage",
     nextAction: "Next action",
     noBuyer: "No contact",
     noDeal: "No deal",
     noNextAction: "No next action set",
-    openUnits: "Units / inventory",
+    openUnits: "Review requests / units",
     project: "Project",
     title: "Reservations",
     unit: "Unit",
@@ -76,6 +77,7 @@ const text = {
       deposit: "Deposits",
     },
     status: {
+      requested: "Request (non-binding)",
       converted: "Converted",
       expired: "Expired",
       hold: "Hold",
@@ -110,6 +112,7 @@ const milestoneLabels = {
 } as const;
 
 const statusStyles: Record<PropertyReservation["status"], string> = {
+  requested: "border-violet-200 bg-violet-50 text-violet-900",
   converted: "border-emerald-200 bg-emerald-50 text-emerald-900",
   expired: "border-rose-200 bg-rose-50 text-rose-900",
   hold: "border-amber-200 bg-amber-50 text-amber-900",
@@ -164,13 +167,13 @@ export function ReservationBoard({
           };
         })
         .filter(({ reservation, unit }) =>
-          reservation.status === "hold" || reservation.status === "reserved" || unit?.status === "reserved",
+          reservation.status === "requested" || reservation.status === "hold" || reservation.status === "reserved" || unit?.status === "reserved",
         )
         .sort((left, right) => (left.days ?? 9999) - (right.days ?? 9999)),
     [contacts, deals, projects, reservations, units],
   );
   const warningCount = views.filter((view) => ["critical", "overdue", "warning"].includes(urgency(view.reservation, view.days))).length;
-  const unitCount = new Set(views.map((view) => view.unit?.id).filter(Boolean)).size;
+  const unitCount = new Set(views.filter((view) => view.unit?.status === "reserved").map((view) => view.unit?.id).filter(Boolean)).size;
   const depositTotal = views.reduce((sum, view) => sum + view.reservation.depositCents, 0);
   const metrics = [
     [copy.metrics.active, formatNumber(views.length, language)],

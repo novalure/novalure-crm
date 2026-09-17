@@ -37,6 +37,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { OfferWorkflow } from "@/components/offer-workflow";
 
 type DealPipelineWorkspaceProps = {
   calendarEvents: CalendarEvent[];
@@ -894,7 +895,7 @@ export function DealPipelineWorkspace({
   const persistDeal = async (deal: Deal, reason?: string) => {
     try {
       const response = await csrfFetch(`/api/crm/deals${workspaceQuery}`, {
-        body: JSON.stringify({ deal, reason }),
+        body: JSON.stringify({ deal, reason, expectedVersion: deal.version }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -918,6 +919,7 @@ export function DealPipelineWorkspace({
     try {
       const response = await csrfFetch(`/api/crm/deals/${encodeURIComponent(input.dealId)}/stage${workspaceQuery}`, {
         body: JSON.stringify({
+          expectedVersion: workingDeals.find((deal) => deal.id === input.dealId)?.version,
           reason: input.reason,
           reasonCategory: input.reasonCategory,
           reasonDetail: input.reasonDetail,
@@ -1231,6 +1233,7 @@ export function DealPipelineWorkspace({
       projectId: contact.projectId,
       contactId: contact.id,
       organizationId: contact.organizationId,
+      leadId: leads.find((lead) => lead.contactId === contact.id && lead.projectId === contact.projectId)?.id,
       ownerUserId: users[0]?.id,
       name: newDeal.name.trim() || `${contact.name} Deal`,
       stage: normalizeDealStage(createStage, orderedStageTitles),
@@ -1796,6 +1799,7 @@ export function DealPipelineWorkspace({
 
           {selectedDeal ? (
             <>
+              <OfferWorkflow key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
               <div className="mt-4 grid gap-3 text-sm">
                 {[
                   [text.stage, stageLabel(selectedDeal.stage)],
