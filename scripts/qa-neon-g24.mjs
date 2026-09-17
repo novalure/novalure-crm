@@ -13,10 +13,10 @@ import { seedG24Fixture, verifyG24Security, snapshotG24 } from './lib/g24-qa-ver
 
 const project = 'weathered-term-98273025';
 const branch = 'br-spring-snow-alupo8u4';
-const sourceName = 'qa_g24_pr63_20260917';
-const restoreName = 'qa_g24_restore_20260917';
-const runtimeRole = 'g24_qa_20260917';
-const root = path.resolve('.npm-cache/qa/g24');
+const sourceName = 'qa_g24_pr63_20260917_r2';
+const restoreName = 'qa_g24_restore_20260917_r2';
+const runtimeRole = 'g24_qa_20260917_r2';
+const root = path.resolve('.npm-cache/qa/g24-r2');
 const digest = value => createHash('sha256').update(value.replace(/\r\n/g, '\n')).digest('hex');
 const identifier = value => '"' + value.replaceAll('"', '""') + '"';
 const configPath = process.argv[2];
@@ -61,7 +61,7 @@ async function nativeTool(name, database, extraArgs) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(path|home|systemroot|windir|temp|tmp|tmpdir|userprofile|localappdata|appdata|comspec|pathext|lang|lc_all)$/i.test(key)));
   Object.assign(env, { PGHOST: url.hostname, PGPORT: url.port || '5432', PGUSER: url.username, PGPASSWORD: decodeURIComponent(url.password), PGDATABASE: database, PGSSLMODE: 'verify-full', PGSSLROOTCERT: trustedCaPath, PGCONNECT_TIMEOUT: '20' });
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['--no-password', ...extraArgs], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, extraArgs.includes('--version') ? ['--version'] : ['--no-password', ...extraArgs], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     const timer = setTimeout(() => { child.kill(); reject(new Error(name + ' exceeded remote QA timeout')); }, 180000);
     child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
@@ -73,6 +73,7 @@ const management = makePool('neondb');
 let admin, runtime, restored, restoredRuntime;
 try {
   await guard(management, 'neondb');
+  evidence.pgTools = { dump: (await nativeTool('pg_dump', sourceName, ['--version'])).trim(), restore: (await nativeTool('pg_restore', sourceName, ['--version'])).trim() };
   const existing = (await management.query('select datname from pg_database where datname=any($1::text[])', [[sourceName, restoreName]])).rows;
   assert.equal(existing.length, 0, 'Fresh databases required; never resume/repair/overwrite an existing database');
   assert.equal((await management.query('select 1 from pg_roles where rolname=$1', [runtimeRole])).rowCount, 0, 'Fresh runtime role required');
@@ -121,7 +122,6 @@ try {
   const before = await snapshotG24(admin);
   await writeFile(path.join(root, 'schema-before.json'), JSON.stringify(before, null, 2));
   const archive = path.join(root, 'g24-full.dump');
-  evidence.pgTools = { dump: (await nativeTool('pg_dump', sourceName, ['--version'])).trim(), restore: (await nativeTool('pg_restore', sourceName, ['--version'])).trim() };
   await nativeTool('pg_dump', sourceName, ['--format=custom', '--file=' + archive]);
   await management.query(`create database ${identifier(restoreName)} template template0`);
   restored = makePool(restoreName); restoredRuntime = makePool(restoreName, runtimeRole, password);
