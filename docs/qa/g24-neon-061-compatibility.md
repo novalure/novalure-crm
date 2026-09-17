@@ -55,6 +55,6 @@ Before/after snapshots compare tables, columns, constraints/FKs, indexes, RLS, p
 2. Create the explicitly authorized fresh QA branch; this run's reviewed profile is hard-pinned to its identity. Reusing a different branch requires a new reviewed profile change.
 3. Store the already authorized QA admin connection only in ignored `.npm-cache/qa/g24-private-config.json`, with projectId, branchId, databaseName, restoreDatabaseName, runtimeRole, adminUrl, branchName and branchCreatedAt. Never commit this file.
 4. Run `node scripts/qa-neon-g24.mjs .npm-cache/qa/g24-private-config.json`. The runner refuses to resume, erase or repair a pre-existing database.
-5. Inspect sanitized `.npm-cache/qa/g24-r2/evidence.json`, both catalog snapshots and native restore results. Run `npm run test:neon:061`, all existing regression suites, browser E2E, typecheck, lint, build, dependency audit and secret scans. Independently review evidence before changing G24 status.
+5. Inspect sanitized `.npm-cache/qa/g24-r3/evidence.json`, both catalog snapshots and native restore results. Run `npm run test:neon:061`, all existing regression suites, browser E2E, typecheck, lint, build, dependency audit and secret scans. Independently review evidence before changing G24 status.
 
 This task's final measured results and review verdict are recorded separately after execution; this design document alone is not a PASS assertion.

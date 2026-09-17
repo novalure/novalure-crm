@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export const neon061SourceChecksum = '0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23';
 export const neon061ProfileId = 'neon-provider-creator-admin-only-061-v1';
-export const neon061QaTarget = Object.freeze({ projectId: 'weathered-term-98273025', branchId: 'br-spring-snow-alupo8u4', databaseName: 'qa_g24_pr63_20260917_r2', runtimeRole: 'g24_qa_20260917_r2' });
+export const neon061QaTarget = Object.freeze({ projectId: 'weathered-term-98273025', branchId: 'br-spring-snow-alupo8u4', databaseName: 'qa_g24_pr63_20260917_r3', runtimeRole: 'g24_qa_20260917_r3' });
 const predecessorChecksum = 'b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf';
 const version = '061_validate_and_activate_tenant_rls_pilot';
 const pilot = ['audit_logs', 'contacts', 'deals', 'leads', 'projects'];

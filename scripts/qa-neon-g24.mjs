@@ -13,10 +13,10 @@ import { seedG24Fixture, verifyG24Security, snapshotG24 } from './lib/g24-qa-ver
 
 const project = 'weathered-term-98273025';
 const branch = 'br-spring-snow-alupo8u4';
-const sourceName = 'qa_g24_pr63_20260917_r2';
-const restoreName = 'qa_g24_restore_20260917_r2';
-const runtimeRole = 'g24_qa_20260917_r2';
-const root = path.resolve('.npm-cache/qa/g24-r2');
+const sourceName = 'qa_g24_pr63_20260917_r3';
+const restoreName = 'qa_g24_restore_20260917_r3';
+const runtimeRole = 'g24_qa_20260917_r3';
+const root = path.resolve('.npm-cache/qa/g24-r3');
 const digest = value => createHash('sha256').update(value.replace(/\r\n/g, '\n')).digest('hex');
 const identifier = value => '"' + value.replaceAll('"', '""') + '"';
 const configPath = process.argv[2];
@@ -61,7 +61,7 @@ async function nativeTool(name, database, extraArgs) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(path|home|systemroot|windir|temp|tmp|tmpdir|userprofile|localappdata|appdata|comspec|pathext|lang|lc_all)$/i.test(key)));
   Object.assign(env, { PGHOST: url.hostname, PGPORT: url.port || '5432', PGUSER: url.username, PGPASSWORD: decodeURIComponent(url.password), PGDATABASE: database, PGSSLMODE: 'verify-full', PGSSLROOTCERT: trustedCaPath, PGCONNECT_TIMEOUT: '20' });
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, extraArgs.includes('--version') ? ['--version'] : ['--no-password', ...extraArgs], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, extraArgs.includes('--version') ? ['--version'] : ['--no-password', '--dbname=' + database, ...extraArgs], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     const timer = setTimeout(() => { child.kill(); reject(new Error(name + ' exceeded remote QA timeout')); }, 180000);
     child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
