@@ -111,19 +111,19 @@ Ausgeführt am 2026-09-17 mit Node **24.14.0**, npm **11.9.0**, PostgreSQL **18.
 | Build | **PASS** — npm run build, kein Deployment |
 | Toolchain | **PASS** — npm run ci:toolchain |
 | Dependency Audit | **PASS** — npm audit --audit-level=moderate, gesamte Dependencystruktur: 0 Critical/High/Moderate/Low |
-| Secret Scan | **PASS** — Gitleaks 8.30.1, vollständige main-Historie (121 Commits) und vorgeschlagener Projektbaum; keine neuen Allowlist-Ausnahmen |
+| Secret Scan | **PASS** — Gitleaks 8.30.1, vollständige PR-Historie (122 Commits), vorgeschlagener Projektbaum und sämtliche origin-Refs (164 Commits); drei exakt begrenzte historische False-Positive-Fingerprints, siehe unten |
 | Unabhängiger Review | **PASS** für geänderten Code, Critical 0 / High 0 / Medium 0; ursprüngliche Capability-Gaps siehe Register |
 | Flow A | **PASS lokal/manuell**, Annahme und Ablehnung in DB-Tests, Annahme zusätzlich Browser |
 | Flow B | **PASS lokal**, gesamte Kette inklusive autorisierter Statuswechsel im Browser und DB |
-| Preview | Auslieferungsnachweis wird nach dem Branch-Push ergänzt; keine Produktionsauslieferung |
-| Preview QA | Noch nicht ausgeführt; kein lokales PASS als Preview-PASS deklarieren |
+| Preview | **READY, ausschließlich Preview** — siehe Abschlussabschnitt |
+| Preview QA | **PARTIAL** — Login per vorhandenem Vercel-Zugang HTTP 200; anonyme Core-API HTTP 401, keine Businessdaten; Browser erreicht Vercel-Schutzseite |
 | Production DB / Provider / echter Versand | **NOT RUN**, keine Aktivierung/Änderung |
 
 Die neuen Salesmigrationen 080–083 liefen unverändert in frischen synthetischen Clustern, einschließlich geprüfter RLS/Constraints/Append-only-Regeln und Rollback bei Teilfehlern. Der Bootstrap wendet 80 Vorwärtsdateien mit den nachstehend genannten historischen Ausnahmen an. Die Browserprüfung verwendet eine persistierte synthetische MFA-Sitzung; echter Credential-/Login-Austausch und externe Zustellung sind nicht nachgewiesen.
 
 Lokale Rohprotokolle liegen ignoriert unter .npm-cache/qa/final-*.log, final-audit.json und sales-browser-results.json. Keine Cookies, lokalen DB-Verbindungen oder generierten Auth-Werte werden eingecheckt. Der versionierte Nachweis [evelyn-crm-local-evidence.json](evelyn-crm-local-evidence.json) enthält ausschließlich Testzähler und Datei-Hashes. CI wurde um isolierte PostgreSQL- und Chromiumprüfungen erweitert; der GitHub-Lauf wird separat vom lokalen Nachweis betrachtet.
 
-Ein zusätzlich ausgeführter Scan aller lokalen Git-Refs enthielt sechs redigierte Treffer in zwei fremden, nicht in main enthaltenen Arbeitsbranches. Diese gehören nicht zur PR-Historie und wurden weder verändert noch per globaler Allowlist ausgeblendet. Der vollständige geprüfte main-Verlauf und der vorgeschlagene PR-Baum waren befundfrei.
+Ein zusätzlich ausgeführter Scan aller lokalen Git-Refs enthielt sechs redigierte Treffer in zwei fremden, nicht in main enthaltenen Arbeitsbranches. Diese gehören nicht zur PR-Historie. Drei davon lagen auch in den von GitHub mitgeladenen origin-Refs und ließen den ersten CI-Scan scheitern. Ein unabhängiger Reviewer bestätigte reine Dokumentationsprosa, einen öffentlichen Providernamen und ein synthetisches Test-Idempotenzliteral (keine UUID). .gitleaksignore dokumentiert ausschließlich die drei exakten Commit-/Datei-/Regel-/Zeilen-Fingerprints auf de42e6b; keine globale Pfad- oder Regel-Ausnahme. Danach bestand der vollständige origin-Ref-Scan (164 Commits). Die weiteren drei Treffer liegen ausschließlich in einem fremden lokalen Arbeitsbranch, der nicht zum PR oder GitHub-Checkout gehört. Alle fremden Branchdateien blieben unverändert. Der vorgeschlagene PR-Baum und seine vollständige eigene Historie sind befundfrei.
 
 ## Begrenzung der lokalen PostgreSQL- und Browsernachweise
 
@@ -142,12 +142,23 @@ Die neuen Salesmigrationen 080/081/082 und 083 bestanden im finalen autorisierte
 
 Reale Evelyn-Verbindung deaktiviert; kein Dienstprincipal ausgegeben, keine Events extern publiziert. MANUALLY_ATTESTED bedeutet menschlicher Beleg und keine geprüfte Providerzustellung. Core-/Sales-RLS, CAS und lokales E2E sind keine pauschale Freigabe aller historischen CRM-/Finance-/Providerfunktionen.
 
-Keine produktive DB verändert, kein Production Deployment, keine produktiven Kundendaten/Secrets für Tests. Evelyn und novalure-website bleiben unverändert. Änderungen gehören ausschließlich in diesen CRM-Branch. PR nicht mergen. PR-/Preview-Auslieferungsnachweis folgt im ergänzenden Abschlussabschnitt.
+Keine produktive DB verändert, kein Production Deployment, keine produktiven Kundendaten/Secrets für Tests. Evelyn und novalure-website bleiben unverändert. Änderungen gehören ausschließlich in diesen CRM-Branch. PR nicht mergen. PR und Preview sind im folgenden Abschlussabschnitt dokumentiert.
 
 **Nächster empfohlener Schritt:** Franz prüft den fertigen PR, die verbleibenden Integrations-/Produktionsvoraussetzungen und die belegte lokale Abnahme und entscheidet separat über Merge und kontrollierten weiteren Rollout. Hier nicht ausführen.
 
+## GitHub und Preview-Abschluss
+
+- PR [#63](https://github.com/novalure/novalure-crm/pull/63): OPEN, Ready for Review, **nicht gemergt**.
+- Implementierungscommit: 58b95d73ee7e620a5ec93d7ecb0efa61e8496e12. Nachfolgende Änderungen betreffen ausschließlich diesen Bericht und eng begrenzte historische Gitleaks-Triage.
+- [Preview des geprüften Implementierungsstands](https://novalure-umdrtgonn-novalure.vercel.app), Deployment dpl_ARaEcZQAPGXVmjJR8DKHQ9PcBYio: READY, target=preview. Die bestehende Gitverknüpfung hat productionBranch=main; dieser Featurebranch wurde nicht nach main übernommen.
+- Linux-GitHub-CI am Implementierungscommit: Quality (einschließlich isolierter PostgreSQL-/Chromiumabläufe und Build) PASS; Production Dependency Audit/SBOM PASS. Historischer Secret-Scan-Befund wie oben korrigiert; neuer Scan separat prüfen. Der bestehende nur manuell auslösbare externe QA-Job wurde bewusst nicht gestartet und ist im PR-Workflow SKIPPED, kein lokaler Pflicht-Test wurde übersprungen.
+- Preview-HTTP: anwendungseigene Loginseite 200 mit korrektem Novalure-Titel; anonyme Core-API 401 ohne Daten. Ein direkter Browseraufruf landet vor der App in Vercel Authentication. Kein App-Login, keine authentifizierten Preview-Salesaktionen oder Preview-Datenmigration ausgeführt; dafür ist eine nachweislich isolierte Testdatenbank mit erforderlichem Schema und Testkonto separat abzunehmen.
+- Preview QA **PARTIAL**; lokale Desktop-/Mobile-/Workflowbelege sind keine Preview-Abnahme. Die bestehenden Preview-Provider-/Datenbankwerte wurden weder ausgelesen noch geändert; reine Ziel-/Schlüsselnamenmetadaten wurden geprüft.
+- Production DB geändert: **NEIN**. Production deployed: **NEIN**. Evelyn-Verbindung: **NEIN**. Evelyn und novalure-website unverändert.
+
 ## Geänderte Dateien
 
+- .gitleaksignore
 - .github/workflows/livegang-e2e.yml
 - docs/qa/evelyn-crm-gap-remediation.md
 - docs/qa/evelyn-crm-local-evidence.json
