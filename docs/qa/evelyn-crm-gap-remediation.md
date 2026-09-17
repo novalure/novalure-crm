@@ -1,6 +1,6 @@
 # CRM Sales Readiness — Final High-Gap Closure
 
-**Stand: 2026-09-17. Gesamtstatus: BLOCKED. 16/18 ursprüngliche High-Gaps im dokumentierten lokalen Integrations-/Salesumfang geschlossen; G08 und G24 bleiben BLOCKED_WITH_PROVEN_REASON. Kein Merge, kein Production Deployment.**
+**Stand: 2026-09-17. Gesamtstatus: BLOCKED. 17/18 ursprüngliche High-Gaps im dokumentierten Integrations-/Sales- und isolierten QA-Datenbankumfang geschlossen; nur G08 bleibt BLOCKED_WITH_PROVEN_REASON. G24 ist nach dem separaten Neon-/061-Auftrag CLOSED. Kein Merge, kein Production Deployment.**
 
 Repository: novalure/novalure-crm. Branch: codex/crm-sales-readiness-high-gaps. Bestehender [Draft-PR #63](https://github.com/novalure/novalure-crm/pull/63). Ausgangspunkt dieses Abschlussauftrags: 61a3d65d86834b55e5e09e7fc39c307911035cb0; gemeinsamer PR-Basisstand c3705927e2b47fc8fb0d52bfd28e5b8feff2f600. Quelle: [ursprüngliche Evelyn Gap Analysis](https://github.com/novalure/evelyn/blob/8119798a97347eb1c96126c6a14308e158e20862/docs/integrations/crm/crm-gap-analysis.md), Tag phase-2a-crm-contract-v1, aufgelöster Commit 8119798a97347eb1c96126c6a14308e158e20862. Evelyn wurde ausschließlich gelesen.
 
@@ -13,7 +13,7 @@ REMEDIATED_AND_VERIFIED bezeichnet die konkret benannten und ausgeführten lokal
 | Gap | Finaler Status | Umsetzung und tatsächlicher Nachweis | Grenze |
 | --- | --- | --- | --- |
 | G01 | REMEDIATED_AND_VERIFIED | Migration 084, crm-service-contract.ts und /api/crm/contract/v1: gehashter widerrufbarer Principal, persistierte Tenant-/Actor-/Scope-/Ressourcenbindung, Ablauf; echte HTTP-/PostgreSQL-Negativtests. | Nur synthetische QA-Workspaces und agent/project_sales_member; kein Ownerkonto, keine reale Credential-Ausgabe. |
-| G02 | REMEDIATED_AND_VERIFIED | Alle erlaubten Contractpfade laufen über sichere Tenanttransaktionen, nicht privilegierte Runtime-Rolle und Projekt-/Feldgrenzen. Tatsächliche Requests an alle 61 historischen CRM-HTTP-Methoden mit Dienst-Bearer abgewiesen. | Begrenzter Integrationspfad. Aktivierung auf Neon bleibt durch G24 gesperrt. |
+| G02 | REMEDIATED_AND_VERIFIED | Alle erlaubten Contractpfade laufen über sichere Tenanttransaktionen, nicht privilegierte Runtime-Rolle und Projekt-/Feldgrenzen. Tatsächliche Requests an alle 61 historischen CRM-HTTP-Methoden mit Dienst-Bearer abgewiesen. | Begrenzter Integrationspfad. Isolierte Neon-QA-Datenbank nachgewiesen; keine Anwendungs- oder Produktivaktivierung. |
 | G03 | REMEDIATED_AND_VERIFIED | Core-GET/Startseite reparieren keine Pipelines; Foundation-Regression ausgeführt. | Reparatur braucht ausdrücklichen Schreibprozess. |
 | G04 | REMEDIATED_AND_VERIFIED | Keine operativen Mockdaten bei fehlgeschlagenen Core-Modulen; Fehler/Herkunft sichtbar, Regression ausgeführt. | Listen bleiben ausdrücklich LIMITED; G23. |
 | G05 | REMEDIATED_AND_VERIFIED | Atomare Versionen für Contact/Task/Project/Lead/Deal/Unit/Offer und Sales; Core-CAS, stale und parallele Updates erneut ausgeführt. | Kein universeller CAS-Vertrag sämtlicher historischer Entitäten. |
@@ -26,27 +26,27 @@ REMEDIATED_AND_VERIFIED bezeichnet die konkret benannten und ausgeführten lokal
 | G12 | REMEDIATED_AND_VERIFIED | Kanonische Angebotsakte mit Revision/Freigabe/Versandstatus/Follow-up/Kundenantwort; Annahme und Ablehnung in DB, Annahme in tatsächlicher UI. | Versand nur manuell attestiert; Vertrag/Zahlung gesperrt. |
 | G13 | REMEDIATED_AND_VERIFIED | Autorisierter Sale-Beleg bindet Unit/Reservation/Buyer/Projekt; Unit sold atomar; Doppelverkauf und parallele Bestätigung geprüft. | Kein notarieller oder externer Zustellnachweis. |
 | G15 | REMEDIATED_AND_VERIFIED | Kanonische Bauträger-/Projekt-/Ansprechpartner-Autorität; Fremd-FKs, Selbstzuweisung, Delegation und Entzug geprüft. | Keine erfundene reale Beauftragung oder Legacyfreigabe. |
-| G16 | REMEDIATED_AND_VERIFIED | Positiver Projektgrant vor freigegebenen Contract-Reads/Writes; verborgenes Projekt desselben Tenants und fremder Tenant verweigert. | Dienstboundary; historische APIs für diesen Principal geschlossen. Preview-Negativfälle wegen G24 nicht ausgeführt. |
+| G16 | REMEDIATED_AND_VERIFIED | Positiver Projektgrant vor freigegebenen Contract-Reads/Writes; verborgenes Projekt desselben Tenants und fremder Tenant verweigert. | Dienstboundary; historische APIs für diesen Principal geschlossen. Preview-App-Negativfälle weiterhin NOT VERIFIED; SQL-Negativfälle auf neuer Neon-QA bestanden. |
 | G17 | REMEDIATED_AND_VERIFIED | Persistierte Datenbereichs-, Sensitivitäts-, Domain- und Zweckbindung; private/interne/unbekannte oder abweichende Kontexte abgewiesen. Communication nur über engen authentifizierten DB-Helper. | Kein allgemeines Privacy-Audit sämtlicher Bestandsdaten. |
-| G24 | BLOCKED_WITH_PROVEN_REASON | Provider-Katalog und Schemaledger der neuen isolierten QA-Datenbank tatsächlich erhoben; 061 scheitert am providerverwalteten Rollenmitglied. Sichere Runtime-Rolle separat nachgewiesen. | 080–085 auf Neon nicht angewendet; kein sicherer Preview-Cutover, keine authentifizierte Preview-QA. |
-| G25 | REMEDIATED_AND_VERIFIED | Aktuelle reale lokale PostgreSQL-, HTTP-, Recovery-, Parallelitäts- und Browserläufe am geprüften Quellstand. Nachweisdatei mit normalisierten Quellhashes. | Lokaler synthetischer Nachweis; Preview bleibt eigenständiges gesperrtes Gate. |
+| G24 | REMEDIATED_AND_VERIFIED | Neuer isolierter Neon-Branch, 83/83 Forward-SQL-Dateien einschließlich sicher behandelter unveränderter 061 und 080–085; 46/46 Sicherheitschecks vor und nach tatsächlichem nativen Restore, vollständige Katalog-/Datenhash-Gleichheit, unabhängiger Review PASS. | Frische QA-Datenbanken, kein Production-/Cross-Cluster-DR-/Preview-App-Nachweis; Original-062 nur im geprüften Fresh-build-Pfad vor 060. |
+| G25 | REMEDIATED_AND_VERIFIED | Aktuelle reale lokale PostgreSQL-, HTTP-, Recovery-, Parallelitäts- und Browserläufe am geprüften Quellstand. Nachweisdatei mit normalisierten Quellhashes. | Lokaler synthetischer Nachweis plus gesonderter Neon-DB-/Restore-Nachweis; Preview-App bleibt eigenständiges nicht ausgeführtes Gate. |
 
 ## Ausgeführte Abschlussgates
 
-Ausgeführt mit Node **24.14.0**, npm **11.9.0**, PostgreSQL **18.4**, nativen Restore-Clients **18.6** und lokalem Chrome. **439/439 PASS, 0 failed, 0 skipped, 0 cancelled.**
+Ausgeführt mit Node **24.14.0**, npm **11.9.0**, PostgreSQL **18.4**, nativen Restore-Clients **18.6** und lokalem Chrome. **450/450 PASS, 0 failed, 0 skipped, 0 cancelled.** Die bestehenden 439 Tests liefen erneut; hinzu kommen 11 echte PostgreSQL-Tests für 061. Separat: **46/46 + 46/46 Neon-Sicherheitschecks** vor/nach Restore.
 
 | Prüfung | Ergebnis und disjunkte Zuordnung |
 | --- | --- |
 | Unit | **236/236 PASS**: 232 bestehende Regressionen + 4 Client-Recovery |
 | Integration | **25/25 PASS**: 15 bestehende + 5 HTTP-Receipts + 5 tatsächliche Cookie-/CSRF-Routen |
-| Migration/DB | **23/23 PASS**: 8 Core-CAS + 15 Upgrade/Restore |
+| Migration/DB | **34/34 PASS**: 8 Core-CAS + 15 Upgrade/Restore + 11 Neon-061-Kompatibilität/Rollengrenzen |
 | RBAC/Security | **74/74 PASS**: 29 Foundation + 21 Dienstvertrag + 7 Approval + 17 Protected-Access-Contracttests |
 | Workflow | **61/61 PASS**: 23 Offer + 24 Property-Sales + 6 Legacy + 8 zusätzliche Prioritäts-/Tenant-/Statusrennen |
 | E2E | **20/20 PASS**: tatsächlicher Passwort-/MFA-Login, Mobile, Logout/Session-Replay und beide Salesflows |
 | Typecheck / Lint / Build / Toolchain | **PASS**; Build lokal, kein Deployment |
 | Dependency Audit | **PASS**, alle Dependencies: 0 Critical/High/Moderate/Low |
 | Secret Scan | **PASS**, vorgeschlagener Dateibaum und origin-/PR-Historie; keine neuen Ausnahmen |
-| Security Review | **PASS** für geprüfte Änderungen, keine neuen Critical/High-Codebefunde; G08/G24 bleiben offen |
+| Security Review | **PASS** für geprüfte Änderungen, keine neuen Critical/High-Codebefunde; G24-DB-/Security-Review PASS, nur G08 bleibt offen |
 | Evelyn Contract Compatibility | **PASS im gepinnten Simulationsumfang**, 166 repräsentative Schemafälle ohne Abweichung; keine reale Integration |
 | Preview QA / Preview Flow A / Preview Flow B | **BLOCKED / NOT VERIFIED / NOT VERIFIED** |
 
@@ -68,14 +68,14 @@ Zahlen sind disjunkt nach ausgeführten Testsuites zugeordnet. Node zählt test(
 
 ## Migrationen 080–085 und Restore
 
-| Migration | Lokaler Nachweis | Neon/Production |
+| Migration | Lokaler Nachweis | Neon QA / Production |
 | --- | --- | --- |
-| 080 | Reihenfolge, realistischer Vorzustand, fremde Legacy-FKs, atomarer Rollback, sichere Rollen/RLS/Receipts/Audit PASS. | Nicht angewendet. |
-| 081 | Pre-080 verweigert; Legacy/NULL und unveränderliche Revision/FKs/Indizes/Constraints; Rollback PASS. | Nicht angewendet. |
-| 082 | Legacy/NULL, Authority-/Reservation-/Sale-/Viewing-Constraints, RLS, Rollback PASS. | Nicht angewendet. |
-| 083 | Inneres BEGIN/COMMIT entfernt: Runner besitzt Transaktion. Injizierter SQL- und Ledgerfehler rollen Schema plus Ledger zurück; monotone Version PASS. | Nicht angewendet. |
-| 084 | Echte lokale Dienstauthentifizierung, immutable Bindings, beschränkter Communication-Helper, negative SQL-/HTTP-Tests PASS. | Nicht angewendet. |
-| 085 | Echte lokale synthetische Approval-Persistenz, RLS/FKs, unveränderliche Evidenz, Race/Replay/Scopeprüfung PASS. | Nicht angewendet. |
+| 080 | Reihenfolge, realistischer Vorzustand, fremde Legacy-FKs, atomarer Rollback, sichere Rollen/RLS/Receipts/Audit PASS. | Neue isolierte QA PASS; Production unverändert. |
+| 081 | Pre-080 verweigert; Legacy/NULL und unveränderliche Revision/FKs/Indizes/Constraints; Rollback PASS. | Neue isolierte QA PASS; Production unverändert. |
+| 082 | Legacy/NULL, Authority-/Reservation-/Sale-/Viewing-Constraints, RLS, Rollback PASS. | Neue isolierte QA PASS; Production unverändert. |
+| 083 | Inneres BEGIN/COMMIT entfernt: Runner besitzt Transaktion. Injizierter SQL- und Ledgerfehler rollen Schema plus Ledger zurück; monotone Version PASS. | Neue isolierte QA PASS; Production unverändert. |
+| 084 | Echte lokale Dienstauthentifizierung, immutable Bindings, beschränkter Communication-Helper, negative SQL-/HTTP-Tests PASS. | Neue isolierte QA PASS; Production unverändert. |
+| 085 | Echte lokale synthetische Approval-Persistenz, RLS/FKs, unveränderliche Evidenz, Race/Replay/Scopeprüfung PASS. | Neue isolierte QA PASS; Production unverändert. |
 
 080–083: 15/15 Upgrade-/Rollback-/Restoretests. Direkte Wiederholung scheitert ausdrücklich und atomar; der tatsächliche Migrationsplan überspringt korrekt ledgerierte Dateien und stoppt bei verändertem Checksum. Vollständiger nativer pg_dump/pg_restore-Roundtrip (Client 18.6, Server 18.4) in zweite leere Datenbank desselben isolierten Clusters: Katalog, Ledger, Businessdaten, RLS, Audit-Unveränderlichkeit und CAS erneut geprüft. Kein Cross-Cluster-Rollenrestore, PITR oder Produktions-DR behauptet.
 
@@ -83,29 +83,33 @@ Drei historische NOT VALID-Constraints bleiben zunächst unvalidiert. Eine synth
 
 Lokaler Harness: 001 benötigt mangels pgvector eine dokumentierte lokale Vektorersetzung; 062 ist ein manueller Media-Cutover und bleibt aus dem generischen Vorwärtsbootstrap ausgeschlossen. Diese Ausnahmen sind keine Prüfung von pgvector/RAG oder Media-Cutover. 080–085 laufen unverändert. Alle lokalen Daten sind synthetisch; keine Produktionsverbindungszeichenfolge wird übernommen.
 
-## Separater Infrastrukturblocker: Neon 061 / Preview
+## G24 abgeschlossen: Neon 061, vollständiger Neuaufbau und Restore
 
-Der vorhandene Testprojektzugang wurde verwendet. Eine neue Branchanlage scheiterte am bestehenden Branchlimit. Stattdessen wurde in QA-Projekt weathered-term-98273025, Branch br-odd-pine-al1qxm0x, ausschließlich die **neue leere Datenbank qa_sales_pr63_20260917** angelegt. Keine fremden Tabellen oder Kundendaten wurden kopiert. Original-DDL 001–060 lief dort, inklusive originaler pgvector-Erweiterung; Ledger und Rollenmetadaten sind im [bereinigten Provider-Nachweis](evelyn-crm-qa-cutover-evidence.json) enthalten.
+**G24 CLOSED.** [Technische Begründung und Reproduktion](g24-neon-061-compatibility.md), [vollständiger bereinigter Abschlussnachweis](g24-neon-final-evidence.json). Geprüfter Codecommit: `e9be2a434a323525d9bf77e8088acc1dfd0cf5f3`.
 
-061 stoppt mit `novalure_tenant_app has an unsafe or non-LOGIN direct member`. Die Mitgliedschaft neondb_owner → novalure_tenant_app wurde durch cloud_admin mit ADMIN OPTION angelegt. INHERIT/SET sind false, die Mitgliedschaft besteht aber und wird vom historischen Gate verworfen; der privilegierte Creator darf den providerverwalteten Grant nicht entfernen. Ein QA-only REVOKE entfernte den Grant nachweislich nicht. Keine weiteren Rollenmanipulationen, kein Abschwächen/Überspringen von 061, keine gefälschten Checksums und kein privilegierter Runtime-Ersatz wurden vorgenommen. Franz bestätigte ausdrücklich, dies als eigenen Infrastrukturblocker zu behandeln.
+Nach ausdrücklicher Benutzerfreigabe wurde ausschließlich der archivierte QA-Snapshot `br-purple-forest-aliovp71` gelöscht, um das vorhandene Branchlimit freizugeben. Neuer isolierter QA-Branch `br-spring-snow-alupo8u4` im Testprojekt `weathered-term-98273025`; erfolgreiche neue Datenbanken `qa_g24_pr63_20260917_r3` und `qa_g24_restore_20260917_r3`. Keine andere bestehende Branch oder Production-Datenbank verändert.
 
-Die neue Runtime-Rolle sales_pr63_20260917 ist LOGIN, NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE, NOREPLICATION. Das allein ersetzt keinen erfolgreichen Cutover. **080–085 remote nicht angewendet. Vercel-Datenbank-/Providerwerte unverändert.** Die authentifizierte Preview-QA und Preview-Flows A/B sind deshalb BLOCKED / NOT VERIFIED. Vorhandene generische Preview-Providerwerte wurden nicht für Tests verwendet. Das Fehlen der benötigten Secrets im bestehenden go-live-preview-GitHub-Environment ist zusätzlich dokumentiert, nicht durch neue Secrets kaschiert.
+Ursache: 061 verwirft die automatische PostgreSQL-Creator-Mitgliedschaft als vermeintlichen Runtime-Zugriff. Die historische Datei und ihre Sourcechecksumme bleiben unverändert. Ausschließlich zwei Guard-Prädikate behandeln die nachgewiesene ADMIN-only-Kante des bereits privilegierten Migrationseigentümers gesondert. Reale Runtime-Rollen bleiben unprivilegiert; keine bestehende Provider-Rolle oder Provider-Mitgliedschaft wurde manipuliert. Neue QA-Rollen erzeugen erwartungsgemäß neue automatische Creator-Kanten. Atomare append-only Metadaten unterscheiden Originalsource und tatsächlich ausgeführtes SQL samt Commit, Plan und Ziel.
 
-Bestehendes Vercel-Projekt prj_R32Okl6AHijTohvuKmryuTLjWMsk; Production-Branch main. Vorherige Preview des Ausgangscommits: [61a3d65 Preview](https://novalure-leewiltg6-novalure.vercel.app), READY. Aktualisierung dieses Featurebranch-PR erfolgt ausschließlich nach lokalen PASS-Gates. Exakte neue Deployment-/CI-Metadaten werden im GitHub-Abschluss ergänzt; keine authentifizierte Preview-Abnahme wird daraus abgeleitet.
+Alle **83 Forward-SQL-Dateien** wurden tatsächlich ausgeführt, inklusive originalem pgvector, 062 sowie 061 und 080–085. 062 läuft im frischen, vor Anwendungsanbindung geprüften Seedzustand vor 060; Audit-Schutz wird weder deaktiviert noch umgangen. Der finale r3-Lauf benötigte **0 manuelle Datenbankreparaturen**. Zwei vorherige Aufruffehler der nativen CLI-Hülle (Versionsargumentfolge; fehlendes explizites Restore-Ziel) sind korrigiert; ihre Läufe bleiben ausdrücklich FAIL dokumentiert und wurden nicht nachträglich umetikettiert. Jeder Neulauf verwendete neue leere Datenbanken und eine neue Runtime-Rolle.
+
+Native Clients 18.6 auf Neon PostgreSQL 17.11: echter vollständiger pg_dump/pg_restore in zweite neue Datenbank. Verglichen: 143 Relationen, 2238 Spalten, 993 Constraints darunter 559 FKs, 497 Indizes, 102 Policies, 177 Funktionen, 74 Trigger, 42 Ledgerzeilen sowie 141 Datentabellen mit 118 Zeilen. Vollständiger kanonischer Snapshot vor/nach Restore identisch: `46931e215d933d169b011bbcdbaa535ed30b97f52a3d8534b4a288347b63542b`. **46/46 Sicherheitschecks vor und 46/46 nach Restore PASS**, einschließlich Default Deny, Tenant-/Projektgrenzen, CAS, Audit-/Receipt-Unveränderlichkeit, Rollen und RLS. Unabhängiger Ergebnisreview PASS.
+
+Die [frühere Blocker-Evidenz](evelyn-crm-qa-cutover-evidence.json) bleibt als historischer Nachweis erhalten. Vercel-Verbindungswerte und alle Anwendungsumgebungen unverändert; keine authentifizierte Preview-App-QA oder reale Evelyn-Verbindung behauptet. Restore gilt innerhalb derselben isolierten Branch mit bereits vorhandenen globalen Rollen; kein Cross-Cluster-/PITR-/Production-DR-Nachweis und keine allgemeine Legacy-Kundendaten-Upgradefreigabe.
 
 ## Unabhängiger Review und verbleibende Risiken
 
-Ein Nichtautor der Dienst-/G06-/Approvalimplementierung prüfte die sieben Restlücken einzeln. G01/G02/G06/G16/G17 CLOSED; G08/G24 NOT CLOSED. Eigener unabhängiger lokaler Testlauf 28/28 PASS (Dienstvertrag 19, echte Cookie-/CSRF-Routen 5, Client-Recovery 4) vor der letzten ergänzten Contractparitätsprüfung. Keine neuen Critical-/High-Codebefunde. Root prüfte separat die vom Reviewer verfassten Migrations-/Browserharnessänderungen und führte die Abschlussgates aus. Review ist keine authentifizierte Preview-Abnahme.
+Ein Nichtautor der Dienst-/G06-/Approvalimplementierung prüfte die sieben Restlücken einzeln. Im damaligen Abschluss G01/G02/G06/G16/G17 CLOSED, G08/G24 NOT CLOSED. Der nachfolgende unabhängige G24-DB-/Security-Review bestätigt jetzt G24 CLOSED; G08 unverändert offen. Eigener unabhängiger lokaler Testlauf 28/28 PASS (Dienstvertrag 19, echte Cookie-/CSRF-Routen 5, Client-Recovery 4) vor der letzten ergänzten Contractparitätsprüfung. Keine neuen Critical-/High-Codebefunde. Root prüfte separat die vom Reviewer verfassten Migrations-/Browserharnessänderungen und führte die Abschlussgates aus. Review ist keine authentifizierte Preview-Abnahme.
 
 Offene ursprüngliche Medium-Gaps: **8** — G14 Company-Lifecycle allgemein; G18 externe versionierte Outbox/Consumer; G20 Kalender-/Appointment-Zuordnung; G21 generischer Kommunikations-/Deliveryvertrag; G22 globale Legacyfehlersemantik; G23 globale Cursor-/Vollständigkeit; G26 Provider-/Cron-/Deploymentbetrieb; G27 umfassende historische Geld-/Steuersemantik. G19 ist für Flow B geschlossen. Diese Grenzen dürfen vor späterer realer Automation nicht als pauschal unkritisch oder als Go-live-PASS behandelt werden. Der aktuelle Gesamtstatus bleibt ohnehin BLOCKED.
 
-Weitere konkrete Grenzen: keine tab-/reloadübergreifende Unknown-Recovery; keine echte Mail-/WhatsApp-/Telefonie-/Portal-/Evelyn-Verbindung; keine Vertrags-/Zahlungsautomatisierung; keine tatsächliche Autorisierung realer Bauträger aus synthetischen Fixtures; keine Produktions-/Providerzustellungsprüfung. Keine offene neue Critical-Schwachstelle behauptet; zwei ursprüngliche High-Voraussetzungen offen.
+Weitere konkrete Grenzen: keine tab-/reloadübergreifende Unknown-Recovery; keine echte Mail-/WhatsApp-/Telefonie-/Portal-/Evelyn-Verbindung; keine Vertrags-/Zahlungsautomatisierung; keine tatsächliche Autorisierung realer Bauträger aus synthetischen Fixtures; keine Produktions-/Providerzustellungsprüfung. Keine offene neue Critical-Schwachstelle behauptet; eine ursprüngliche High-Voraussetzung offen: G08.
 
 ## Secretprüfung, Dateien und externe Änderungen
 
-Gitleaks prüft den vorgeschlagenen vollständigen Dateibaum einschließlich neuer Dateien und die eigene/origin-Historie. Ignorierte QA-Credentials, Cookies, .env und lokale Datenbanken sind nicht Bestandteil des PR. Bestehende exakte historische False-Positive-Fingerprints bleiben unverändert; keine neue breite Ausnahme. [Lokaler Nachweis](evelyn-crm-local-evidence.json) enthält ausschließlich Zähler, Testresultate, Grenzen und Quellhashes. Rohlogs liegen ignoriert unter .npm-cache/qa/closure-*.
+Gitleaks prüft den vorgeschlagenen vollständigen Dateibaum einschließlich neuer Dateien und die eigene/origin-Historie. Ignorierte QA-Credentials, Cookies, .env und lokale Datenbanken sind nicht Bestandteil des PR. Bestehende exakte historische False-Positive-Fingerprints bleiben unverändert; keine neue breite Ausnahme. [Aktueller G24-Nachweis](g24-neon-final-evidence.json) enthält 450 lokale Tests, reale Neon-/Restore-Ergebnisse und 497 geprüfte Quellhashes. Der [frühere lokale Nachweis](evelyn-crm-local-evidence.json) bleibt historischer Stand von f64337e. Aktuelle Rohlogs liegen ignoriert unter .npm-cache/qa/g24-*; frühere closure-Logs bleiben erhalten.
 
-Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**94**). Schwerpunkt: Command-/Auth-/Contract-/Approvalgrenzen, sechs CRM-Routen, sieben UI-Aufrufer, Migrationen 080–085, ausführbare lokale DB-/HTTP-/Browserprüfungen und diese Dokumentation.
+Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**100**). G24 ergänzt ausschließlich QA-Migrationsbehandlung, Verifikations-/Restore-Harness, Tests, CI und Dokumentation; keine neuen Anwendungsfunktionen.
 
 - `.github/workflows/livegang-e2e.yml`
 - `.gitleaksignore`
@@ -113,6 +117,8 @@ Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**94**). Schwerpu
 - `docs/qa/evelyn-crm-gap-remediation.md`
 - `docs/qa/evelyn-crm-local-evidence.json`
 - `docs/qa/evelyn-crm-qa-cutover-evidence.json`
+- `docs/qa/g24-neon-061-compatibility.md`
+- `docs/qa/g24-neon-final-evidence.json`
 - `eslint.config.mjs`
 - `migrations/080_crm_command_safety.sql`
 - `migrations/081_crm_offer_workflow.sql`
@@ -130,8 +136,11 @@ Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**94**). Schwerpu
 - `scripts/crm-service-contract-tests.ts`
 - `scripts/fixtures/crm-v1-request-parity.json`
 - `scripts/legacy-sales-tests.ts`
+- `scripts/lib/g24-qa-verification.mjs`
 - `scripts/lib/local-sales-db.mjs`
+- `scripts/lib/neon-061-compat.mjs`
 - `scripts/lib/sales-browser-fixture.mjs`
+- `scripts/neon-061-compat-tests.mjs`
 - `scripts/offer-workflow-tests.ts`
 - `scripts/phase0-smoke-tests.mjs`
 - `scripts/phase3-rbac-smoke-tests.mjs`
@@ -139,6 +148,7 @@ Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**94**). Schwerpu
 - `scripts/property-department-smoke-tests.mjs`
 - `scripts/property-sales-tests.ts`
 - `scripts/qa-crm-contract-parity.mjs`
+- `scripts/qa-neon-g24.mjs`
 - `scripts/qa-sales-browser-server.mjs`
 - `scripts/qa-sales-browser.mjs`
 - `scripts/qa-sales-e2e.mjs`
@@ -202,9 +212,9 @@ Geänderte/neue Dateien im gesamten PR gegenüber origin/main (**94**). Schwerpu
 - `src/lib/security/crm-safe-client.ts`
 - `src/lib/security/crm-sales-client.ts`
 
-Änderungen ausschließlich im bestehenden CRM-PR. Evelyn und novalure-website unverändert; ursprünglicher separater CRM-Checkout mit Benutzeränderungen nicht angefasst. Keine Produktionsdatenbank verändert, kein Production Deployment, keine Promotion, kein Merge. Neue isolierte synthetische QA-Datenbank und Runtime-Rolle sind die ausdrücklich dokumentierten externen Testressourcen. Keine kostenpflichtigen Dienste aktiviert, keine externen Provider verbunden.
+Änderungen ausschließlich im bestehenden CRM-PR. Evelyn und novalure-website unverändert; ursprünglicher separater CRM-Checkout mit Benutzeränderungen nicht angefasst. Keine Produktionsdatenbank verändert, kein Production Deployment, keine Promotion, kein Merge. Neuer isolierter QA-Branch mit dokumentierten synthetischen Datenbanken und Runtime-Rollen; genau ein alter QA-Snapshot nach ausdrücklicher Benutzerfreigabe gelöscht. Keine kostenpflichtigen Dienste aktiviert, keine externen Provider verbunden.
 
-**Nächster empfohlener Schritt, nicht ausgeführt:** G08-Freigabeintegration und G24/061-Infrastruktur-Cutover in einem separat abgegrenzten Folgeauftrag klären; erst nach sicherem QA-Cutover die vollständige authentifizierte Preview-QA wiederholen. PR #63 bis dahin Draft, kein Merge.
+**Nächster empfohlener Schritt, nicht ausgeführt:** G08 Zwei-Schritt-Approval-Bridge zwischen Evelyn und CRM in einem separaten Auftrag vorbereiten. PR #63 bleibt Draft, kein Merge.
 
 ---
 

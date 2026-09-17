@@ -57,4 +57,4 @@ Before/after snapshots compare tables, columns, constraints/FKs, indexes, RLS, p
 4. Run `node scripts/qa-neon-g24.mjs .npm-cache/qa/g24-private-config.json`. The runner refuses to resume, erase or repair a pre-existing database.
 5. Inspect sanitized `.npm-cache/qa/g24-r3/evidence.json`, both catalog snapshots and native restore results. Run `npm run test:neon:061`, all existing regression suites, browser E2E, typecheck, lint, build, dependency audit and secret scans. Independently review evidence before changing G24 status.
 
-This task's final measured results and review verdict are recorded separately after execution; this design document alone is not a PASS assertion.
+Final result: **G24 CLOSED**. See [measured evidence](g24-neon-final-evidence.json): 83/83 forward migrations, 450/450 local tests, 46/46 remote security checks both before and after actual native restore, identical complete snapshots, independent DB/security review PASS. Two prior native-client invocation failures remain explicitly recorded as FAIL; the successful final run used new empty databases with no manual repair. G08 remains open.
