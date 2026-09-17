@@ -90,13 +90,14 @@ async function main() {
     report.http.push({ system, path: path.split("?")[0], method, httpStatus: response.status,
       ...(correlationId ? { correlationId } : {}),
       ...(value.status ? { result: safeCode(value.status) } : {}),
-      ...(response.body?.code ? { code: safeCode(response.body.code) } : {}),
+      ...(response.body?.code || response.body?.error ? { code: safeCode(response.body.code ?? response.body.error) } : {}),
       ...(response.body?.auditReference ? { auditReference: response.body.auditReference } : {}) });
   };
-  async function owner(path, body, method = "POST") {
+  async function owner(path, body, method = "POST", extraHeaders = {}) {
     const url = endpoint(EVELYN, path);
+    ensure(Object.keys(extraHeaders).every(name => name === "authorization"), "OWNER_EXTRA_HEADER_DENIED");
     const headers = { ...ownerHeaders, ...(method === "POST" ? { "content-type": "application/json", origin: EVELYN,
-      "sec-fetch-site": "same-origin", ...(ownerCsrf ? { "x-evelyn-csrf": ownerCsrf } : {}) } : {}) };
+      "sec-fetch-site": "same-origin", ...(ownerCsrf ? { "x-evelyn-csrf": ownerCsrf } : {}) } : {}), ...extraHeaders };
     const response = await ownerContext.fetch(url.href, { method, headers, ...(method === "POST" ? { data: JSON.stringify(body) } : {}),
       maxRedirects: 0, timeout: 30000 });
     ensure(response.status() < 300 || response.status() >= 400, "OWNER_REDIRECT_DENIED");
@@ -196,6 +197,17 @@ async function main() {
       }
       const login = successful(await owner("/api/login", { identity: "owner", password: access.evelyn.ownerPassword }), "OWNER_LOGIN");
       ensure(login.role === "OWNER" && typeof login.csrf === "string" && ownerCookie, "OWNER_SESSION_REQUIRED"); ownerCsrf = login.csrf;
+    });
+    await step("live invalid service identity: Owner session and invalid Bearer cannot replace CRM workload authentication", async () => {
+      // Genuine live negative calls through protection, with exactly eight fields.
+      // This is not a real Production-token test and does not claim one.
+      const input = { approvalReference: randomUUID(), tenantId: fixture.workspaceId, actionId: randomUUID(),
+        actionType: "contract.send", resourceId: randomUUID(), actionVersion: 1, actionHash: "0".repeat(64), correlationId: randomUUID() };
+      for (const headers of [{}, { authorization: "Bearer synthetic-invalid-service-identity" }]) {
+        const response = await owner("/api/v1/approvals/verify", input, "POST", headers);
+        ensure([401, 403].includes(response.status) && response.body.status !== "VALID"
+          && ["SERVICE_AUTH_REQUIRED", "SERVICE_AUTH_DENIED"].includes(response.body.error), "INVALID_SERVICE_IDENTITY_MUST_BE_DENIED");
+      }
     });
     const run = randomUUID().slice(0, 8);
     async function offerFlow(label, accepted) {
