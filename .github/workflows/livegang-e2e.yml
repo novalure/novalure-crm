@@ -64,6 +64,9 @@ jobs:
       - name: Final sales contract, approval, route and recovery regression
         run: npm run test:sales:final
 
+      - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
+        run: npm run test:g08
+
       - name: Protected preview access contract regression
         run: npm run test:protected-preview-access
 

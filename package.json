@@ -63,20 +63,23 @@
     "qa:sales:browser": "node scripts/qa-sales-browser.mjs",
     "qa:sales:e2e": "node scripts/qa-sales-e2e.mjs",
     "test:sales:migrations": "node --import tsx --test scripts/sales-migration-upgrade-tests.ts",
-    "test:sales:final": "node --import tsx --test scripts/crm-service-contract-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts",
-    "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs"
+    "test:sales:final": "node --conditions=react-server --import tsx --test scripts/crm-service-contract-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts",
+    "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
+    "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
     "@neondatabase/serverless": "^1.1.0",
     "@types/react-grid-layout": "^1.3.6",
     "@vercel/blob": "2.8.0",
+    "@vercel/oidc": "3.8.8",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-grid-layout": "^2.2.3"
+    "react-grid-layout": "^2.2.3",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
