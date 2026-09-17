@@ -23,8 +23,21 @@ const envelope=(extra:Record<string,unknown>={})=>({contractVersion:"crm-integra
 async function register(r:ReturnType<typeof envelope>) {
  await db.admin.query("insert into crm_service_audit_bindings(principal_id,workspace_id,audit_alias,resource_alias,request_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[principalId,w,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
 }
+/** Contract tests do not test connection pooling. Avoid idle-socket reuse across cases. */
+async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
+ const target=new URL(url);
+ if(target.origin!==new URL(baseUrl).origin)throw new Error("Test HTTP target is not the owned loopback server");
+ const headers=new Headers(init.headers);headers.set("connection","close");
+ try {
+  const response=await fetch(target,{...init,headers,signal:AbortSignal.timeout(15_000)});
+  assert.equal(response.headers.get("connection"),"close","Harness must not pool connections between test cases");
+  return response;
+ } catch(error) {
+  throw new Error("Local contract HTTP transport failed: "+(init.method??"GET")+" "+target.pathname,{cause:error});
+ }
+}
 async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>={}) {
- const response=await fetch(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token,...headers},body:JSON.stringify(r)});
+ const response=await fetchLocal(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token,...headers},body:JSON.stringify(r)});
  return {status:response.status,body:await response.json() as {projection?: {data:Record<string,unknown>;sourceId:string}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
 before(async()=>{
@@ -60,6 +73,7 @@ before(async()=>{
  }
 
  server=createServer(async(req,res)=>{
+  res.shouldKeepAlive=false;
   try {
    let body="";for await(const part of req)body+=part;
    const headers=new Headers();for(const [key,value]of Object.entries(req.headers))if(value)headers.set(key,Array.isArray(value)?value.join(","):value);
@@ -162,7 +176,7 @@ test("HTTP: every legacy CRM method rejects service bearer plus forged owner hea
  for(const [pathname,methods]of routes) {
   if(pathname==="/api/crm/contract/v1")continue;
   for(const method of Object.keys(methods)) {
-   const result=await fetch(new URL(pathname,baseUrl),{method,headers:{authorization:"Bearer "+token,"content-type":"application/json","x-novalure-role":"owner","x-novalure-user-id":actor,"x-novalure-workspace-id":w},...(["GET","HEAD"].includes(method)?{}:{body:"{}"})});
+   const result=await fetchLocal(new URL(pathname,baseUrl),{method,headers:{authorization:"Bearer "+token,"content-type":"application/json","x-novalure-role":"owner","x-novalure-user-id":actor,"x-novalure-workspace-id":w},...(["GET","HEAD"].includes(method)?{}:{body:"{}"})});
    assert.ok([401,403].includes(result.status),method+" "+pathname+" status="+result.status+" "+await result.text());checked++;
   }
  }

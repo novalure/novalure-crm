@@ -52,6 +52,8 @@ Ausgeführt mit Node **24.14.0**, npm **11.9.0**, PostgreSQL **18.4**, nativen R
 
 Der erste Browserabschlussversuch überschritt beim Logout die starre 5-Sekunden-Formularfrist. Die Prüfung wartet nun ausdrücklich auf die tatsächliche Logout-303-Antwort und Login-Navigation; Cookie-/Core-/Replay-Sperren bleiben erhalten. Der finale isolierte Wiederholungslauf bestand 20/20 ohne Browserfehler oder unerwartete lokale 5xx. Frühere Fehlerprotokolle wurden nicht als PASS umetikettiert.
 
+Ein zusätzlicher lokaler HTTP-Nachlauf meldete einmal ECONNRESET ohne HTTP-Status. Die Ursache war nicht deterministisch reproduzierbar. Der Test-Harness verwendet nun ausdrücklich geschlossene Verbindungen, einen Transporttimeout und Diagnose nur mit Methode/Pfad. Keine automatische Wiederholung, keine abgeschwächte Authentifizierungsassertion und keine Änderung des Runtime-Transports. Die Nachläufe unter Node 24.14.0 bestanden 55/55 (Foundation/Service/Receipts) und 26/26 (Service/Receipts); sie werden nicht zusätzlich zur disjunkten Gesamtzahl gezählt. Rohprotokoll: .npm-cache/qa/service-transport-pinned.log.
+
 Zahlen sind disjunkt nach ausgeführten Testsuites zugeordnet. Node zählt test()-Eltern mit Unterfällen mit. Der ursprüngliche Stand 365/365 ist historische Baseline und wird nicht als neuer Nachweis übernommen. Framework-Warnung zu automatisch erkannter ESM-Syntax im lokalen Node-Testharness ist kein fehlgeschlagener Test; keine Runtime-Modulkonfiguration wurde dafür verändert.
 
 ## Fachliche und technische Nachweise

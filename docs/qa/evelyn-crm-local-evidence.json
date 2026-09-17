@@ -638,7 +638,7 @@
     },
     {
       "path": "scripts/crm-service-contract-tests.ts",
-      "sha256": "e5dc72b461ac766d4f389ecb14314cb6ffe5985d4f70b3f66d0996809086a357"
+      "sha256": "0ca7ceba006aa635f5cb5b9f2120683281af8c08a631e5c685f680de41b82664"
     },
     {
       "path": "scripts/cron-runtime-smoke-tests.mjs",
