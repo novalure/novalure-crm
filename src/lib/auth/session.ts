@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
+import { shouldUseSecureAuthCookies } from "@/lib/auth/cookie-security";
 import { workspace as mockWorkspace, users as mockUsers } from "@/lib/crm-data";
 import { getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
 import {
@@ -890,6 +891,6 @@ export function getSessionCookieOptions(maxAge = sessionMaxAgeSeconds) {
     maxAge,
     path: "/",
     sameSite: "lax" as const,
-    secure: isProductionDeployment(),
+    secure: shouldUseSecureAuthCookies(),
   };
 }

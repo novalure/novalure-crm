@@ -1,4 +1,5 @@
 import { getLoginPageCopy, type LanguageCode } from "@/lib/i18n";
+import { shouldUseSecureAuthCookies } from "@/lib/auth/cookie-security";
 import { sendNewsletterEmail } from "@/lib/integrations/resend";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import {
@@ -72,12 +73,6 @@ export function validatePasswordResetExchangeFormToken(input: {
   return safeEqualAuthValue(signature ?? "", expectedSignature);
 }
 
-function isProductionDeployment() {
-  const vercelEnvironment = process.env.VERCEL_ENV?.trim();
-  if (vercelEnvironment) return vercelEnvironment === "production";
-  return process.env.NODE_ENV === "production";
-}
-
 export function getPasswordResetExchangeCookieOptions(maxAge = resetExchangeTtlMinutes * 60) {
   return {
     expires: maxAge <= 0 ? new Date(0) : undefined,
@@ -85,7 +80,7 @@ export function getPasswordResetExchangeCookieOptions(maxAge = resetExchangeTtlM
     maxAge,
     path: "/",
     sameSite: "lax" as const,
-    secure: isProductionDeployment(),
+    secure: shouldUseSecureAuthCookies(),
   };
 }
 
