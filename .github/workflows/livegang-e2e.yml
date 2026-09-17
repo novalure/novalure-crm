@@ -78,6 +78,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-18
 
+      - name: Neon 061 compatibility and role isolation regression
+        run: npm run test:neon:061
+
       - name: Sales schema upgrade, rollback and native restore
         run: npm run test:sales:migrations
 
