@@ -1,3 +1,4 @@
+import { withCrmRead, CrmCommandError } from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
@@ -151,7 +152,7 @@ const sellerListingReturningSql = `
   canonical_payload as "canonicalPayload"
 `;
 
-export async function createSellerListingRecord(input: {
+async function createSellerListingRecordInTransaction(input: {
   property: Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<SellerListing>> {
@@ -442,7 +443,7 @@ export async function createSellerListingRecord(input: {
   return { data: listing, persisted: true };
 }
 
-export async function updateSellerListingRecord(input: {
+async function updateSellerListingRecordInTransaction(input: {
   property: Record<string, unknown>;
   propertyId: unknown;
   session: AppSession;
@@ -600,7 +601,7 @@ export async function updateSellerListingRecord(input: {
   return { data: listing, persisted: true };
 }
 
-export async function savePropertyTextBlocks(input: {
+async function savePropertyTextBlocksInTransaction(input: {
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
@@ -678,7 +679,7 @@ export async function savePropertyTextBlocks(input: {
   return { data: { count }, persisted: true };
 }
 
-export async function savePropertyCostItems(input: {
+async function savePropertyCostItemsInTransaction(input: {
   costItems: unknown;
   projectId?: unknown;
   propertyId: unknown;
@@ -787,7 +788,7 @@ export async function savePropertyCostItems(input: {
   return { data: { count }, persisted: true };
 }
 
-export async function attachPropertyMedia(input: {
+async function attachPropertyMediaInTransaction(input: {
   media: Record<string, unknown>;
   projectId?: unknown;
   propertyId: unknown;
@@ -866,7 +867,7 @@ export async function attachPropertyMedia(input: {
   return { data: { id: row.id }, persisted: true };
 }
 
-export async function attachPropertyDocument(input: {
+async function attachPropertyDocumentInTransaction(input: {
   document: Record<string, unknown>;
   projectId?: unknown;
   propertyId: unknown;
@@ -935,7 +936,7 @@ export async function attachPropertyDocument(input: {
   return { data: { id: row.id }, persisted: true };
 }
 
-export async function updatePropertyMediaOrder(input: {
+async function updatePropertyMediaOrderInTransaction(input: {
   mediaItems: unknown;
   propertyId: unknown;
   session: AppSession;
@@ -994,7 +995,7 @@ export async function updatePropertyMediaOrder(input: {
   return { data: { count }, persisted: true };
 }
 
-export async function updatePropertyPriceVisibility(input: {
+async function updatePropertyPriceVisibilityInTransaction(input: {
   channelPriceVisibility?: unknown;
   priceVisibility?: unknown;
   projectId?: unknown;
@@ -1045,7 +1046,7 @@ export async function updatePropertyPriceVisibility(input: {
   return { data: { id: row.id }, persisted: true };
 }
 
-export async function persistPropertyInquiryRoute(input: {
+async function persistPropertyInquiryRouteInTransaction(input: {
   inquiry: PropertyInquiryRouteInput;
   route: PropertyInquiryRouteResult;
   session: AppSession;
@@ -1160,7 +1161,7 @@ export async function persistPropertyInquiryRoute(input: {
   return { data: { id: row.id, route: input.route, status }, persisted: true };
 }
 
-export async function recordPropertyPreflightRun(input: {
+async function recordPropertyPreflightRunInTransaction(input: {
   assetId?: string;
   channel: string;
   idempotencyKey: string;
@@ -1424,14 +1425,6 @@ function listingDefaultUnitNumber(listingId: string) {
   return `DEFAULT-${listingId.replace(/-/g, "").slice(0, 12).toUpperCase()}`;
 }
 
-function listingDefaultUnitPriceCents(row: SellerListingRow) {
-  for (const value of [row.targetPriceCents, row.marketValueCents, row.publicPriceCents, row.rentPriceCents]) {
-    const parsed = Number(value ?? 0);
-    if (Number.isFinite(parsed) && parsed > 0) return Math.round(parsed);
-  }
-  return 0;
-}
-
 async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSession): Promise<SellerListingRow> {
   if (!row.projectId || !isUuid(row.projectId) || !isUuid(session.workspaceId)) return row;
 
@@ -1449,7 +1442,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
     listingDefaultUnitNumber(row.id),
     toNumber(row.rooms, 0),
     toNumber(row.areaSqm, 0),
-    listingDefaultUnitPriceCents(row),
+    0, // Published unit prices require the authorized property-sales command.
     JSON.stringify(unitMetadata),
   ];
 
@@ -1461,8 +1454,8 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
           unit_number = coalesce(nullif($4, ''), unit_number),
           rooms = $5,
           area_sqm = $6,
-          price_cents = $7,
-          metadata = metadata || $8::jsonb,
+          price_cents = property_units.price_cents,
+          metadata = metadata || $7::jsonb,
           updated_at = now()
         where workspace_id = $1
           and project_id = $2::uuid
@@ -1470,7 +1463,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
           and metadata @> '{"defaultUnit": true}'::jsonb
         returning id
       `,
-      unitPayload,
+      unitPayload.filter((_, index) => index !== 6),
     );
     return row;
   }
@@ -1505,7 +1498,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
       do update set
         rooms = excluded.rooms,
         area_sqm = excluded.area_sqm,
-        price_cents = excluded.price_cents,
+        price_cents = property_units.price_cents,
         metadata = property_units.metadata || excluded.metadata,
         updated_at = now()
       returning id
@@ -1516,7 +1509,7 @@ async function ensureDefaultUnitForListing(row: SellerListingRow, session: AppSe
       listingDefaultUnitNumber(row.id),
       toNumber(row.rooms, 0),
       toNumber(row.areaSqm, 0),
-      listingDefaultUnitPriceCents(row),
+      0, // Published unit prices require the authorized property-sales command.
       JSON.stringify(unitMetadata),
     ],
   );
@@ -1763,4 +1756,54 @@ function toIso(value: string | Date | null) {
 
 function toOptionalIso(value: string | Date | null) {
   return value ? toIso(value) : undefined;
+}
+
+export async function createSellerListingRecord(input:Parameters<typeof createSellerListingRecordInTransaction>[0]):ReturnType<typeof createSellerListingRecordInTransaction>{
+ if(!canPersist())return createSellerListingRecordInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return createSellerListingRecordInTransaction({...input,session})});
+}
+
+export async function updateSellerListingRecord(input:Parameters<typeof updateSellerListingRecordInTransaction>[0]):ReturnType<typeof updateSellerListingRecordInTransaction>{
+ if(!canPersist())return updateSellerListingRecordInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return updateSellerListingRecordInTransaction({...input,session})});
+}
+
+export async function savePropertyTextBlocks(input:Parameters<typeof savePropertyTextBlocksInTransaction>[0]):ReturnType<typeof savePropertyTextBlocksInTransaction>{
+ if(!canPersist())return savePropertyTextBlocksInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return savePropertyTextBlocksInTransaction({...input,session})});
+}
+
+export async function savePropertyCostItems(input:Parameters<typeof savePropertyCostItemsInTransaction>[0]):ReturnType<typeof savePropertyCostItemsInTransaction>{
+ if(!canPersist())return savePropertyCostItemsInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return savePropertyCostItemsInTransaction({...input,session})});
+}
+
+export async function attachPropertyMedia(input:Parameters<typeof attachPropertyMediaInTransaction>[0]):ReturnType<typeof attachPropertyMediaInTransaction>{
+ if(!canPersist())return attachPropertyMediaInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return attachPropertyMediaInTransaction({...input,session})});
+}
+
+export async function attachPropertyDocument(input:Parameters<typeof attachPropertyDocumentInTransaction>[0]):ReturnType<typeof attachPropertyDocumentInTransaction>{
+ if(!canPersist())return attachPropertyDocumentInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return attachPropertyDocumentInTransaction({...input,session})});
+}
+
+export async function updatePropertyMediaOrder(input:Parameters<typeof updatePropertyMediaOrderInTransaction>[0]):ReturnType<typeof updatePropertyMediaOrderInTransaction>{
+ if(!canPersist())return updatePropertyMediaOrderInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return updatePropertyMediaOrderInTransaction({...input,session})});
+}
+
+export async function updatePropertyPriceVisibility(input:Parameters<typeof updatePropertyPriceVisibilityInTransaction>[0]):ReturnType<typeof updatePropertyPriceVisibilityInTransaction>{
+ if(!canPersist())return updatePropertyPriceVisibilityInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return updatePropertyPriceVisibilityInTransaction({...input,session})});
+}
+
+export async function persistPropertyInquiryRoute(input:Parameters<typeof persistPropertyInquiryRouteInTransaction>[0]):ReturnType<typeof persistPropertyInquiryRouteInTransaction>{
+ if(!canPersist())return persistPropertyInquiryRouteInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return persistPropertyInquiryRouteInTransaction({...input,session})});
+}
+
+export async function recordPropertyPreflightRun(input:Parameters<typeof recordPropertyPreflightRunInTransaction>[0]):ReturnType<typeof recordPropertyPreflightRunInTransaction>{
+ if(!canPersist())return recordPropertyPreflightRunInTransaction(input);
+ return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return recordPropertyPreflightRunInTransaction({...input,session})});
 }

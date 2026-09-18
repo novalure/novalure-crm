@@ -1,5 +1,6 @@
+import { withCrmSalesWrite } from "@/lib/crm-sales-http";
 import { NextResponse } from "next/server";
-import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import type { AppSession } from "@/lib/auth/session";
 import { archiveContactRecord, upsertContactRecord } from "@/lib/db/crm-write-repositories";
 
 async function readJson(request: Request) {
@@ -11,6 +12,7 @@ async function readJson(request: Request) {
 }
 
 function getWriteErrorStatus(reason: string) {
+  if (reason.includes("VERSION_CONFLICT")) return 409;
   const normalizedReason = reason.toLowerCase();
 
   if (
@@ -54,9 +56,8 @@ function withContactIdFromRequest(request: Request, contact: Record<string, unkn
   return id ? { ...contact, id } : contact;
 }
 
-export async function POST(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
-  if (!auth.ok) return auth.response;
+async function postHandler(request: Request, session: AppSession) {
+  const auth = { session };
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
-  const result = await upsertContactRecord({ contact, session: auth.session });
+  const result = await upsertContactRecord({ contact, expectedVersion: input.expectedVersion, session: auth.session });
 
   if (!result.persisted) {
     return NextResponse.json({ error: result.reason }, { status: getWriteErrorStatus(result.reason) });
@@ -74,9 +75,8 @@ export async function POST(request: Request) {
   return NextResponse.json({ contact: result.data, persisted: true });
 }
 
-export async function PATCH(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
-  if (!auth.ok) return auth.response;
+async function patchHandler(request: Request, session: AppSession) {
+  const auth = { session };
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -87,6 +87,7 @@ export async function PATCH(request: Request) {
   if (input.action === "archive") {
     const result = await archiveContactRecord({
       contactId: getContactIdFromRequest(request, input),
+      expectedVersion: input.expectedVersion,
       session: auth.session,
     });
 
@@ -100,6 +101,7 @@ export async function PATCH(request: Request) {
   const contact = typeof input.contact === "object" && input.contact ? input.contact as Record<string, unknown> : input;
   const result = await upsertContactRecord({
     contact: withContactIdFromRequest(request, contact),
+    expectedVersion: input.expectedVersion,
     requireExisting: true,
     session: auth.session,
   });
@@ -111,9 +113,8 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ contact: result.data, persisted: true });
 }
 
-export async function DELETE(request: Request) {
-  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write", capability: "settings:manage" });
-  if (!auth.ok) return auth.response;
+async function deleteHandler(request: Request, session: AppSession) {
+  const auth = { session };
 
   let body: Record<string, unknown> | null = null;
   if (request.headers.get("content-type")?.includes("application/json")) {
@@ -126,6 +127,7 @@ export async function DELETE(request: Request) {
 
   const result = await archiveContactRecord({
     contactId: getContactIdFromRequest(request, body),
+    expectedVersion: body?.expectedVersion,
     session: auth.session,
   });
 
@@ -135,3 +137,7 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ archived: true, contactId: result.data.id, persisted: true });
 }
+
+export const POST = withCrmSalesWrite(postHandler);
+export const PATCH = withCrmSalesWrite(patchHandler);
+export const DELETE = withCrmSalesWrite(deleteHandler);

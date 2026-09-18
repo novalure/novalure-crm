@@ -4,6 +4,7 @@ import {
   type QueryResult,
   type QueryResultRow,
 } from "@neondatabase/serverless";
+import { getLocalTestPool } from "./local-test-transport";
 
 export type TenantScope = Readonly<{
   actorId: string;
@@ -58,8 +59,10 @@ function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
   );
 }
 
-function getTenantPool() {
+async function getTenantPool(): Promise<TenantPool> {
   const databaseUrl = resolveTenantDatabaseUrl();
+  const local = await getLocalTestPool(databaseUrl);
+  if (local) return local as unknown as TenantPool;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is not configured for tenant transactions");
   }
@@ -124,6 +127,22 @@ async function setAndVerifyTenantContext(client: PoolClient, scope: TenantScope)
   }
 }
 
+async function assertSafeTenantDatabaseRole(client: PoolClient) {
+  const checked = await client.query<{ safe: boolean }>(`
+    select (
+      not runtime_role.rolsuper and not runtime_role.rolbypassrls
+      and not runtime_role.rolcreatedb and not runtime_role.rolcreaterole and not runtime_role.rolreplication
+      and pg_has_role(runtime_role.oid, 'novalure_tenant_app', 'USAGE')
+      and not exists (
+        select 1 from pg_class relation join pg_namespace schema on schema.oid=relation.relnamespace
+        where schema.nspname='public' and relation.relrowsecurity and relation.relkind in ('r','p')
+          and (relation.relowner=runtime_role.oid or pg_has_role(runtime_role.oid,relation.relowner,'MEMBER'))
+      )
+    ) as safe from pg_roles runtime_role where runtime_role.rolname=current_user
+  `);
+  if (checked.rows[0]?.safe !== true) throw new Error("Tenant database role is unsafe: a non-owner, non-privileged tenant runtime role is required");
+}
+
 /**
  * Runs every callback query on one checked-out connection and one transaction.
  * PostgreSQL transaction-local settings are cleared by COMMIT/ROLLBACK before
@@ -135,10 +154,12 @@ export async function withTenantTransaction<Result>(
   options: TenantTransactionOptions = {},
 ) {
   assertTenantScope(scope);
-  const pool = options.pool ?? getTenantPool();
+  const pool = options.pool ?? await getTenantPool();
   const client = await pool.connect();
   let active = false;
   let released = false;
+  let queryFailure: unknown;
+  let pendingQuery: Promise<unknown> = Promise.resolve();
 
   const runQuery = async <Row extends QueryResultRow>(
     query: string,
@@ -146,7 +167,18 @@ export async function withTenantTransaction<Result>(
   ): Promise<QueryResult<Row>> => {
     if (!active) throw new Error("Tenant transaction is no longer active");
     assertTenantStatement(query);
-    return client.query<Row>(query, [...params]);
+    const scheduled = pendingQuery.then(async () => {
+      if (!active) throw new Error("Tenant transaction is no longer active");
+      if (queryFailure) throw queryFailure;
+      return client.query<Row>(query, [...params]);
+    });
+    pendingQuery = scheduled.catch(() => undefined);
+    try {
+      return await scheduled;
+    } catch (error) {
+      queryFailure ??= error;
+      throw error;
+    }
   };
 
   const transaction: TenantTransaction = Object.freeze({
@@ -168,12 +200,17 @@ export async function withTenantTransaction<Result>(
   });
 
   try {
+    await assertSafeTenantDatabaseRole(client);
     await client.query("begin");
     await setAndVerifyTenantContext(client, scope);
     active = true;
     const result = await callback(transaction);
+    // Repositories may catch SQL failures. PostgreSQL then treats COMMIT as
+    // ROLLBACK; never return a successful business result from an aborted tx.
+    if (queryFailure) throw queryFailure;
     active = false;
-    await client.query("commit");
+    const committed = await client.query("commit");
+    if (committed.command && committed.command !== "COMMIT") throw new Error("Tenant transaction did not commit");
     return result;
   } catch (error) {
     active = false;
@@ -202,4 +239,26 @@ export async function tenantQuery<Row extends QueryResultRow = QueryResultRow>(
     (transaction) => transaction.query<Row>(query, params),
     options,
   );
+}
+
+/** Isolated authentication bootstrap; the same runtime-role checks apply before any SQL. */
+export async function queryAuthenticationRows<Row extends QueryResultRow = QueryResultRow>(
+  query: string, params: readonly unknown[] = [], options: TenantTransactionOptions = {},
+): Promise<Row[]> {
+  assertTenantStatement(query);
+  const pool = options.pool ?? await getTenantPool();
+  const client = await pool.connect();
+  let begun = false;
+  let discarded = false;
+  try {
+    await assertSafeTenantDatabaseRole(client);
+    await client.query("begin"); begun = true;
+    await client.query("select set_config('app.tenant_id','',true),set_config('app.actor_id','',true)");
+    const rows = (await client.query<Row>(query, [...params])).rows;
+    await client.query("commit"); begun = false;
+    return rows;
+  } catch (error) {
+    if (begun) { try { await client.query("rollback"); } catch { client.release(true); discarded = true; begun = false; throw error; } }
+    throw error;
+  } finally { if (!discarded) client.release(); }
 }

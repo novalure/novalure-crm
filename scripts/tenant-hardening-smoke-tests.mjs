@@ -31,6 +31,8 @@ class ReusedPoolClient {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
     this.queries.push({ params: [...params], query: normalized });
 
+    if (normalized.includes("from pg_roles runtime_role")) return result([{ safe: true }]);
+
     if (normalized === "begin") {
       assert.equal(this.active, false, "pool connection must not already have a transaction");
       this.active = true;
@@ -118,7 +120,7 @@ test("tenantQuery has no unscoped fallback and uses the transaction-bound client
   );
   assert.deepEqual(rows, [{ value: "tenant-bound" }]);
   assert.deepEqual(
-    pool.client.queries.map(({ query }) => query),
+    pool.client.queries.map(({ query }) => query).filter(query => !query.includes("from pg_roles runtime_role")),
     [
       "begin",
       "select set_config('app.tenant_id', $1, true) as \"workspaceid\", set_config('app.actor_id', $2, true) as \"actorid\"",

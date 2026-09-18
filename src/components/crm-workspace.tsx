@@ -114,7 +114,7 @@ import {
   supportedLanguages,
   type LanguageCode,
 } from "@/lib/i18n";
-import { csrfFetch } from "@/lib/security/csrf-client";
+import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 
 type DashboardSection =
   | "dashboard"
@@ -5019,6 +5019,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "units" ? (
               <UnitBoard
+                workspaceId={activeWorkspace.id}
                 buildings={propertyBuildingRecords.filter((building) => isProjectInActiveScope(building.projectId))}
                 canManage={hasProductCapability(sessionProductRole, "reservations:write")}
                 contacts={visibleContacts}

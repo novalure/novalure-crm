@@ -1,0 +1,175 @@
+{
+  "recordedAt": "2026-09-17T14:52:43.938Z",
+  "scope": "Provider catalog evidence for a newly created empty, isolated synthetic QA database. No production data queried.",
+  "target": {
+    "project_id": "weathered-term-98273025",
+    "branch_id": "br-odd-pine-al1qxm0x",
+    "database_name": "qa_sales_pr63_20260917",
+    "migration_role": "neondb_owner",
+    "postgres_version": "PostgreSQL 17.11 (8a81ecb) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit"
+  },
+  "memberships": [
+    {
+      "parent": "novalure_tenant_app",
+      "member": "neondb_owner",
+      "grantor": "cloud_admin",
+      "rolcanlogin": true,
+      "rolsuper": false,
+      "rolbypassrls": true,
+      "rolcreatedb": true,
+      "rolcreaterole": true,
+      "rolreplication": true,
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false,
+      "runtime_usage": false
+    },
+    {
+      "parent": "novalure_tenant_app",
+      "member": "sales_pr63_20260917",
+      "grantor": "neondb_owner",
+      "rolcanlogin": true,
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false,
+      "admin_option": false,
+      "inherit_option": true,
+      "set_option": true,
+      "runtime_usage": true
+    }
+  ],
+  "ledger": [
+    {
+      "version": "041_schema_ledger_baseline",
+      "name": "041_schema_ledger_baseline.sql",
+      "checksum": "24f8937ca066775e7cc93e6ea61c07798183e143c3bd0e04023f7ee7c8f93045"
+    },
+    {
+      "version": "042_teams_notification_reservation_workflow_constraint",
+      "name": "042_teams_notification_reservation_workflow_constraint.sql",
+      "checksum": "c51f01cfe6a8081e2d741b733b79ae7ddfc7795a2d86143c3b8442b69118b38f"
+    },
+    {
+      "version": "043_leads_idempotency",
+      "name": "043_leads_idempotency.sql",
+      "checksum": "a3c0f025781067cb22f1fc7c09a5b5dd14c7cd368993695a8d98a1b1f71238d6"
+    },
+    {
+      "version": "044_fk_performance_indexes",
+      "name": "044_fk_performance_indexes.sql",
+      "checksum": "e94833d9e8bf85c537a585e2f05216b33503a36eadd0154292e692bbc3bb231c"
+    },
+    {
+      "version": "045_media_schema",
+      "name": "045_media_schema.sql",
+      "checksum": "caa10d953f41f0f9a4a9351c5cea3c27a6ddc2c62cea2dfb3b63836310c6a2db"
+    },
+    {
+      "version": "046_schema_residual_reconciliation",
+      "name": "046_schema_residual_reconciliation.sql",
+      "checksum": "39b4a114922912de86192dccab8740441b92511651c33c925d5456b628535ec9"
+    },
+    {
+      "version": "047_deals_idempotency",
+      "name": "047_deals_idempotency.sql",
+      "checksum": "ef1309f10a9772ea934e401f039035dd36035014460e66daee8c38b484d3d5a6"
+    },
+    {
+      "version": "048_bot_webhook_integrity",
+      "name": "048_bot_webhook_integrity.sql",
+      "checksum": "f5993d9f44ad61f71862570a702c14a7f549269f0a30b57bc007e57b06115b9d"
+    },
+    {
+      "version": "049_property_inventory_tenant_guards",
+      "name": "049_property_inventory_tenant_guards.sql",
+      "checksum": "ffd4be362a4a25a324067c0621a3de8438d0da97d02acf41159b6e8f7eed942b"
+    },
+    {
+      "version": "050_durable_job_leasing",
+      "name": "050_durable_job_leasing.sql",
+      "checksum": "62dc4b16f770aadeb5e4557a90fe34d93d62e859494aed806d8e7a9d742f4439"
+    },
+    {
+      "version": "051_private_media_access",
+      "name": "051_private_media_access.sql",
+      "checksum": "2222942814ab1db328acee645439f9dd9ec2200be4ca3b01d133601ae1f4c12b"
+    },
+    {
+      "version": "052_validate_property_inventory_tenant_guards",
+      "name": "052_validate_property_inventory_tenant_guards.sql",
+      "checksum": "a8f10a4f62e10da8e4c099383decc3805520a1d755e1c8c2a2994f297aeb0233"
+    },
+    {
+      "version": "053_oauth_state_integrity",
+      "name": "053_oauth_state_integrity.sql",
+      "checksum": "c78f509d09ddb6ff8f6d445e60c2d06e0620c578f1e7a1995c5f8b189d881b28"
+    },
+    {
+      "version": "054_csrf_token_integrity",
+      "name": "054_csrf_token_integrity.sql",
+      "checksum": "d6cba6c9cd616c4b4a52ecc3b251f412150d479cefcd2fc71abd90de99ae5504"
+    },
+    {
+      "version": "055_public_submission_abuse_guards",
+      "name": "055_public_submission_abuse_guards.sql",
+      "checksum": "f0ddb2b3103ba7d6d70b5a41883f768831b1cffc3fc8d689254aa408ca0ac358"
+    },
+    {
+      "version": "056_auth_identity_sessions_mfa",
+      "name": "056_auth_identity_sessions_mfa.sql",
+      "checksum": "621d5c856a80ab10b4700642e53d42e821a6c7b9048ad434200df5caec66deba"
+    },
+    {
+      "version": "057_bot_webhook_legacy_index_cutover",
+      "name": "057_bot_webhook_legacy_index_cutover.sql",
+      "checksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f"
+    },
+    {
+      "version": "060_tenant_rls_pilot_prepare",
+      "name": "060_tenant_rls_pilot_prepare.sql",
+      "checksum": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf"
+    }
+  ],
+  "rls": [
+    {
+      "relname": "audit_logs",
+      "relrowsecurity": false,
+      "relforcerowsecurity": false
+    },
+    {
+      "relname": "contacts",
+      "relrowsecurity": false,
+      "relforcerowsecurity": false
+    },
+    {
+      "relname": "deals",
+      "relrowsecurity": false,
+      "relforcerowsecurity": false
+    },
+    {
+      "relname": "leads",
+      "relrowsecurity": false,
+      "relforcerowsecurity": false
+    },
+    {
+      "relname": "projects",
+      "relrowsecurity": false,
+      "relforcerowsecurity": false
+    }
+  ],
+  "blockingMigration": "061_validate_and_activate_tenant_rls_pilot.sql",
+  "blockingFileSha256": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23",
+  "failure": "novalure_tenant_app has an unsafe or non-LOGIN direct member",
+  "revokeResult": "Original cloud_admin-granted admin-only edge remains after ordinary REVOKE; no privilege bypass attempted.",
+  "salesMigrations080to085": "NOT APPLIED on Neon",
+  "previewConnectionChanged": false,
+  "productionAccess": 0,
+  "classification": "BLOCKED_WITH_PROVEN_REASON",
+  "newBranchAttempt": "Provider returned branches limit exceeded; existing authorized QA branch used with a separate new database.",
+  "historicalManualCutover": "061 remains unchanged; no old checksum relabeled, no privileged role substituted for runtime.",
+  "previewQa": "BLOCKED: the required safe schema/cutover is unavailable; no authenticated Preview Sales PASS is claimed.",
+  "originalMigrationSource": "migrations/061_validate_and_activate_tenant_rls_pilot.sql",
+  "reference": "https://www.postgresql.org/docs/17/role-attributes.html"
+}

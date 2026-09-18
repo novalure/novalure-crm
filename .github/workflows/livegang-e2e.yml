@@ -21,6 +21,9 @@ jobs:
   quality:
     name: Lockfile, lint, typecheck, tests and build
     runs-on: ubuntu-latest
+    env:
+      CRM_QA_BROWSER_CHANNEL: chromium
+      CRM_QA_PG_BIN: /usr/lib/postgresql/18/bin
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,6 +54,41 @@ jobs:
 
       - name: Security and scope integration tests
         run: npm run test:integration
+
+      - name: Install local QA browser
+        run: npx playwright install chromium --with-deps
+
+      - name: Sales transactions against isolated local PostgreSQL
+        run: npm run test:sales
+
+      - name: Final sales contract, approval, route and recovery regression
+        run: npm run test:sales:final
+
+      - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
+        run: npm run test:g08
+
+      - name: Protected preview access contract regression
+        run: npm run test:protected-preview-access
+
+      - name: Install PostgreSQL 18 restore clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-18
+
+      - name: Neon 061 compatibility and role isolation regression
+        run: npm run test:neon:061
+
+      - name: Sales schema upgrade, rollback and native restore
+        run: npm run test:sales:migrations
+
+      - name: Isolated sales browser flows
+        run: npm run qa:sales:e2e
 
       - name: Production build
         run: npm run build

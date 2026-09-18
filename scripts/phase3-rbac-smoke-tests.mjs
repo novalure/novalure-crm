@@ -146,12 +146,20 @@ test("write routes require server-side technical permission and product access g
   const newsletterRoute = readText("src/app/api/newsletter/send/route.ts");
 
   for (const route of [dealsRoute, stageRoute, leadsRoute]) {
-    assert.match(route, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "pipeline:write" \}\)/);
+    assert.match(route, /export const POST = withCrmSalesWrite\(postHandler\)/);
+    assert.match(route, /export const PATCH = withCrmSalesWrite\(patchHandler\)/);
   }
 
-  assert.match(contactsRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:read" \}\)/);
+  const wrapper = readText("src/lib/crm-sales-http.ts");
+  assert.match(wrapper, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write" \}\)/);
+  assert.match(wrapper, /leads: \{ table: "leads", entity: "lead", capability: "pipeline:write" \}/);
+  assert.match(wrapper, /deals: \{ table: "deals", entity: "deal", capability: "pipeline:write" \}/);
+  assert.match(wrapper, /contacts: \{ table: "contacts", entity: "contact", capability: "workspace:operate" \}/);
+  assert.match(contactsRoute, /export const POST = withCrmSalesWrite\(postHandler\)/);
   assert.match(contactsRoute, /upsertContactRecord/);
-  assert.match(tasksRoute, /resolveWorkspaceScopedSession\(request, \{ permission: "crm:write", capability: "workspace:operate" \}\)/);
+  assert.match(tasksRoute, /export const POST = withCrmSalesWrite\(postHandler\)/);
+  assert.match(wrapper, /tasks: \{ table: "tasks", entity: "task", capability: "workspace:operate" \}/);
+  assert.match(readText("src/lib/crm-command.ts"), /hasProductCapability\(freshSession\.productRole, input\.capability\)/);
   assert.match(newsletterRoute, /requirePermissionAndProductCapability\(request, "newsletter:send", "newsletter:send"\)/);
   assert.match(newsletterRoute, /evaluateOutboundConsent/);
 });

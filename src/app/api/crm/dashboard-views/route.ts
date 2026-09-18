@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { listDashboardViews, upsertDashboardView } from "@/lib/db/crm-write-repositories";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
 
 async function readJson(request: Request) {
   try {
@@ -24,15 +25,17 @@ function getDashboardViewWriteStatus(reason: string) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "crm:read");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
-  const payload = await listDashboardViews({ session: auth.session });
-  return NextResponse.json(payload);
+  try {
+    const payload = await listDashboardViews({ session: auth.session });
+    return NextResponse.json(payload);
+  } catch (error) { return crmCommandErrorResponse(error); }
 }
 
 export async function POST(request: Request) {
-  const auth = await requirePermission(request, "crm:write");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:write" });
   if (!auth.ok) return auth.response;
 
   const body = await readJson(request);
@@ -41,6 +44,7 @@ export async function POST(request: Request) {
   }
 
   const input = body as Record<string, unknown>;
+  try {
   const result = await upsertDashboardView({
     filters: input.filters,
     id: typeof input.id === "string" ? input.id : undefined,
@@ -57,4 +61,5 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ persisted: true, view: result.data });
+  } catch (error) { return crmCommandErrorResponse(error); }
 }

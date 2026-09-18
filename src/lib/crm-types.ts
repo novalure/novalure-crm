@@ -212,6 +212,7 @@ export type CompanyProfileVersion = {
 };
 
 export type Project = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   name: string;
@@ -233,6 +234,7 @@ export type ProjectSetupDefaults = {
 };
 
 export type Contact = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -288,6 +290,7 @@ export type ContactTimelineItem = {
 };
 
 export type Lead = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -642,6 +645,7 @@ export type PropertyDocumentItem = {
 export type PropertyUnitStatus = "available" | "reserved" | "sold" | "blocked";
 
 export type PropertyBuilding = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -652,6 +656,7 @@ export type PropertyBuilding = {
 };
 
 export type PropertyUnit = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -668,7 +673,7 @@ export type PropertyUnit = {
   updatedAt: string;
 };
 
-export type PropertyReservationStatus = "hold" | "reserved" | "expired" | "converted";
+export type PropertyReservationStatus = "requested" | "hold" | "reserved" | "expired" | "converted";
 
 export type PropertyReservation = {
   id: ID;
@@ -716,6 +721,7 @@ export type CustomerWorkspaceAccess = {
 };
 
 export type Deal = {
+  version?: number;
   closedAt?: string;
   id: ID;
   workspaceId: ID;
@@ -766,6 +772,7 @@ export type PipelineStage = {
 };
 
 export type Task = {
+  version?: number;
   id: ID;
   workspaceId: ID;
   projectId: ID;

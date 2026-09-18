@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
+import { shouldUseSecureAuthCookies } from "@/lib/auth/cookie-security";
 import { workspace as mockWorkspace, users as mockUsers } from "@/lib/crm-data";
 import { getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
 import {
@@ -136,6 +137,9 @@ export function resolveWorkspaceMembershipAccess(input: {
 }
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
+  // A CRM service credential is valid only at its dedicated contract endpoint.
+  // It must never combine with cookies or optional development identity headers.
+  if (/^Bearer\s+qa-crm-v1\./i.test(request.headers.get("authorization") ?? "")) return null;
   return getSessionFromHeaders(request.headers);
 }
 
@@ -571,6 +575,9 @@ export async function resolveWorkspaceScopedSession(
   if (!csrf.ok) return csrf;
 
   const url = new URL(request.url);
+  if (url.searchParams.has("workspaceId") && !isUuidLike(url.searchParams.get("workspaceId"))) {
+    return { ok: false as const, response: Response.json({ error: "Invalid workspaceId", code: "INVALID_TENANT" }, { status: 400 }) };
+  }
   const requestedWorkspaceId = isUuidLike(url.searchParams.get("workspaceId"))
     ? url.searchParams.get("workspaceId")
     : null;
@@ -884,6 +891,6 @@ export function getSessionCookieOptions(maxAge = sessionMaxAgeSeconds) {
     maxAge,
     path: "/",
     sameSite: "lax" as const,
-    secure: isProductionDeployment(),
+    secure: shouldUseSecureAuthCookies(),
   };
 }

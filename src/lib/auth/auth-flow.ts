@@ -1,4 +1,5 @@
 import type { AppRole } from "@/lib/auth/permissions";
+import { shouldUseSecureAuthCookies } from "@/lib/auth/cookie-security";
 import {
   createChallengeToken,
   createMfaEnrollmentPayload,
@@ -104,12 +105,6 @@ export type AuthFlowResult =
       kind: "error";
     };
 
-function isProductionDeployment() {
-  const vercelEnvironment = process.env.VERCEL_ENV?.trim();
-  if (vercelEnvironment) return vercelEnvironment === "production";
-  return process.env.NODE_ENV === "production";
-}
-
 export function getLoginChallengeCookieOptions(maxAge = challengeLifetimeMinutes * 60) {
   return {
     expires: maxAge <= 0 ? new Date(0) : undefined,
@@ -117,7 +112,7 @@ export function getLoginChallengeCookieOptions(maxAge = challengeLifetimeMinutes
     maxAge,
     path: "/",
     sameSite: "lax" as const,
-    secure: isProductionDeployment(),
+    secure: shouldUseSecureAuthCookies(),
   };
 }
 

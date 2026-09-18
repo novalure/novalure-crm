@@ -9,6 +9,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".vercel/**",
+    ".npm-cache/**",
     ".next/**",
     ".codex-worktrees/**",
     "out/**",

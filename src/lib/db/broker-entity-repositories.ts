@@ -1,3 +1,5 @@
+import { withCrmRead, assertProjectGrant, CrmCommandError, type TenantTransactionOptions } from "@/lib/crm-command";
+import { hasProductCapability } from "@/lib/product-model";
 import type { AppSession } from "@/lib/auth/session";
 import type { BrokerMandate, BuyerSearchProfile, Lead } from "@/lib/crm-types";
 import { queryOne } from "@/lib/db/client";
@@ -109,7 +111,7 @@ const buyerSearchProfileReturningSql = `
   updated_at as "updatedAt"
 `;
 
-export async function upsertBrokerMandate(input: {
+async function upsertBrokerMandateInTransaction(input: {
   mandate: Partial<BrokerMandate> & Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<BrokerMandate>> {
@@ -201,7 +203,7 @@ export async function upsertBrokerMandate(input: {
   return { data: mandate, persisted: true };
 }
 
-export async function upsertBuyerSearchProfile(input: {
+async function upsertBuyerSearchProfileInTransaction(input: {
   profile: Partial<BuyerSearchProfile> & Record<string, unknown>;
   session: AppSession;
 }): Promise<RepositoryWriteResult<BuyerSearchProfile>> {
@@ -572,4 +574,48 @@ function stringArray(value: unknown) {
 
 function asObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+/** Reuses the existing buyer profile representation inside a caller-owned transaction. */
+export async function syncBuyerSearchProfileInTransaction(
+ tx: import("@/lib/db/tenant-client").TenantTransaction,
+ input: {session:AppSession;profile:Partial<BuyerSearchProfile> & Record<string,unknown>}
+) {
+ return tx.queryOne<{id:string}>(`
+  insert into buyer_search_profiles (
+   workspace_id,project_id,buyer_lead_id,contact_id,title,budget_from_cents,budget_to_cents,
+   financing_status,desired_location,property_type,rooms,area_sqm,must_have_criteria,
+   nice_to_have_criteria,purchase_timeline,matching_status,metadata
+  ) values ($1,$2::uuid,$3::uuid,$4::uuid,$5,$6::bigint,$7::bigint,nullif($8,''),nullif($9,''),nullif($10,''),$11::numeric,$12::numeric,$13::text[],$14::text[],nullif($15,''),$16,$17::jsonb)
+  on conflict (workspace_id,buyer_lead_id) where buyer_lead_id is not null do update set
+   project_id=excluded.project_id,contact_id=excluded.contact_id,title=excluded.title,
+   budget_from_cents=excluded.budget_from_cents,budget_to_cents=excluded.budget_to_cents,
+   financing_status=excluded.financing_status,purchase_timeline=excluded.purchase_timeline,
+   metadata=buyer_search_profiles.metadata || excluded.metadata,updated_at=now()
+  returning id
+ `,buyerSearchProfileParams(input.session,input.profile));
+}
+
+export async function upsertBrokerMandate(input: Parameters<typeof upsertBrokerMandateInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertBrokerMandateInTransaction> {
+ if(!canPersist())return upsertBrokerMandateInTransaction(input);
+ return withCrmRead(input.session,async(tx,session)=>{
+  if(!session.permissions.includes("crm:write")||!hasProductCapability(session.productRole,"pipeline:write"))throw new CrmCommandError("FORBIDDEN","Broker write permission is required",403);
+  if(typeof input.mandate.projectId==="string")await assertProjectGrant(tx,session,input.mandate.projectId,true);
+  return upsertBrokerMandateInTransaction({...input,session});
+ },options);
+}
+export async function upsertBuyerSearchProfile(input: Parameters<typeof upsertBuyerSearchProfileInTransaction>[0], options: TenantTransactionOptions = {}): ReturnType<typeof upsertBuyerSearchProfileInTransaction> {
+ if(!canPersist())return upsertBuyerSearchProfileInTransaction(input);
+ return withCrmRead(input.session,async(tx,session)=>{
+  if(!session.permissions.includes("crm:write")||!hasProductCapability(session.productRole,"pipeline:write"))throw new CrmCommandError("FORBIDDEN","Buyer profile write permission is required",403);
+  if(typeof input.profile.projectId==="string")await assertProjectGrant(tx,session,input.profile.projectId,true);
+  const profileId=isUuid(input.profile.id)?input.profile.id:null;
+  const buyerLeadId=isUuid(input.profile.buyerLeadId)?input.profile.buyerLeadId:null;
+  const existing=profileId?await tx.queryOne<{buyerLeadId:string|null}>(`select buyer_lead_id as "buyerLeadId" from buyer_search_profiles where workspace_id=$1 and id=$2`,[session.workspaceId,profileId]):null;
+  if(profileId&&!existing)throw new CrmCommandError("NOT_FOUND","Buyer profile not found",404);
+  const leads=await tx.query<{id:string;sales_qualification:Record<string,unknown>|null}>("select id,sales_qualification from leads where workspace_id=$1 and id=any($2::uuid[]) order by id for update",[session.workspaceId,[buyerLeadId,existing?.buyerLeadId].filter(Boolean)]);
+  if(buyerLeadId&&!leads.some(row=>row.id===buyerLeadId))throw new CrmCommandError("RELATIONSHIP_INVALID","Buyer lead is outside the permitted scope",403);
+  if(leads.some(row=>row.sales_qualification&&Object.keys(row.sales_qualification).length))throw new CrmCommandError("CANONICAL_QUALIFICATION_REQUIRED","Change qualified buyer data through the buyer sales workflow",409);
+  return upsertBuyerSearchProfileInTransaction({...input,session});
+ },options);
 }

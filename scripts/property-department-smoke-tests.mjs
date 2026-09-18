@@ -115,14 +115,15 @@ test("property inventory writes are target-workspace scoped and database guarded
   assert.doesNotMatch(migration, /validate constraint/i);
 
   const unitWrite = repository.slice(repository.indexOf("export async function createPropertyUnitRecord"));
-  assert.match(repository, /insert into property_buildings[\s\S]*from projects p[\s\S]*p\.workspace_id = \$1::uuid/);
-  assert.match(unitWrite, /from projects p/);
-  assert.match(unitWrite, /left join property_buildings b[\s\S]*b\.workspace_id = p\.workspace_id[\s\S]*b\.project_id = p\.id/);
-  assert.match(unitWrite, /p\.id = \$2::uuid[\s\S]*p\.workspace_id = \$1::uuid/);
-  assert.match(unitWrite, /\$3::uuid is null or b\.id is not null/);
-  assert.match(unitWrite, /on conflict \(workspace_id, project_id, unit_number\)/);
-  assert.match(unitWrite, /where property_units\.workspace_id = excluded\.workspace_id[\s\S]*property_units\.project_id = excluded\.project_id/);
-  assert.doesNotMatch(unitWrite, /on conflict \(project_id, unit_number\)/);
+  // The command layer now enforces the project before the transaction; real
+  // PostgreSQL behavior is covered by crm-command-tests.ts.
+  assert.match(repository, /executeCrmCommand/);
+  assert.match(unitWrite, /property_buildings where workspace_id=\$1::uuid and project_id=\$2::uuid and id=\$3::uuid/);
+  assert.match(unitWrite, /and version=\$9/);
+  assert.match(unitWrite, /on conflict\(workspace_id,project_id,unit_number\) do nothing/);
+  assert.doesNotMatch(unitWrite, /do update set/);
+  const commands = read("src/lib/crm-command.ts");
+  assert.match(commands, /assertProjectGrant\(tx, freshSession, input\.projectId, true\)/);
 
   for (const route of [unitsPost, reservationsPost]) {
     assert.match(route, /resolveWorkspaceScopedSession\(request, \{[\s\S]*permission: "crm:write",[\s\S]*capability: "reservations:write"/);
