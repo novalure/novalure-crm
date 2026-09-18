@@ -2,14 +2,14 @@
 
 **CRM G08 FINAL LIVE VERIFICATION: PASS. G08 STATUS: CLOSED. Stand: 2026-09-17, isolierter synthetischer Preview-Umfang.** Die tatsächliche CRM-Vercel-Preview hat die gepinnte Evelyn-Preview mit ihrer eigenen verifizierten Dienstidentität erreicht. Der vollständige Live-Lauf bestand **21/21** Prüfungen; der gesonderte schreibgeschützte Datenbankabgleich bestand **50/50**. Lokal: **501/501** CRM-Tests; separat **27/27** signierte Evelyn-Policytests. Abschließender unabhängiger Sicherheitsreview **PASS**, **18/18 High-Gaps geschlossen**, **0 Critical / 0 High / 8 Medium offen** im dokumentierten Umfang.
 
-Alle folgenden Live-Ergebnisse beziehen sich auf Codecommit `137c796534d60cd0c5be69097632076c817295ee`, nicht auf einen späteren reinen Dokumentationscommit. Der tatsächliche PR-Statuswechsel wird erst nach seiner Bestätigung als abgeschlossen ausgewiesen. Kein Evelyn-Vertragsfehler wurde im geprüften Umfang gefunden. Keine Production-Änderung, kein Merge. Der [bereinigte portable Abschlussnachweis](../../qa/g08-final-live-evidence.json) enthält die konkreten Live-/HTTP-/DB-/Auditprüfungen, Infrastruktur- und CI-Ergebnisse sowie den unabhängigen Review mit gebundenen Quelldigests und Evidenzhashes.
+Alle folgenden Live-Ergebnisse beziehen sich auf Codecommit `137c796534d60cd0c5be69097632076c817295ee`, nicht auf einen späteren reinen Dokumentationscommit. PR #63 ist nach bestätigter vollständiger Abnahme auf **Ready for Review** gesetzt. Kein Evelyn-Vertragsfehler wurde im geprüften Umfang gefunden. Keine Production-Änderung, kein Merge. Der [bereinigte portable Abschlussnachweis](../../qa/g08-final-live-evidence.json) enthält die konkreten Live-/HTTP-/DB-/Auditprüfungen, Infrastruktur- und CI-Ergebnisse sowie den unabhängigen Review mit gebundenen Quelldigests und Evidenzhashes.
 
 ## Verbindliche Identität und Umfang
 
 | Feld | Nachgewiesener Stand |
 | --- | --- |
 | CRM Repository / Branch | `novalure/novalure-crm` / `codex/crm-sales-readiness-high-gaps` |
-| CRM PR | [#63](https://github.com/novalure/novalure-crm/pull/63), Statuswechsel auf Ready for Review nach finaler Abnahme vorgesehen; kein Merge |
+| CRM PR | [#63](https://github.com/novalure/novalure-crm/pull/63), **Ready for Review**; kein Merge |
 | CRM Ausgangscommit | `071ce1d2e93279487f56864a0125048676f7bd58` |
 | CRM Implementierungscommit | `137c796534d60cd0c5be69097632076c817295ee` — gepusht, lokal und live geprüft. Vorheriger Live-Harness-Stand `461f42bdea91fce2406fe9ade162a8fd06f9aab1`; erste Implementierung `cd1f2f1dbc84a192eeeb09733017f1a9de1dec24`. |
 | CRM Preview-Branchalias | [CRM QA-Preview](https://novalure-crm-git-codex-crm-sales-readiness-high-gaps-novalure.vercel.app), tatsächlicher authentifizierter Live-Lauf PASS |
@@ -182,6 +182,6 @@ Die acht Medium-Gaps bleiben offen: **G14** allgemeiner Company-Lifecycle; **G18
 
 ## Weiteres Vorgehen und Freigabeschwelle
 
-Die vollständigen Gates einschließlich des unabhängigen finalen Sicherheitsreviews erfüllen **18/18 REMEDIATED_AND_VERIFIED**, **OPEN CRITICAL=0**, **OPEN HIGH=0** und **Flow A/B Preview PASS**. Sie erlauben den vom Auftrag autorisierten Wechsel von PR #63 auf **Ready for Review**. Der Wechsel ist vorgesehen; dieser Text behauptet den externen Statuswechsel noch nicht.
+Die vollständigen Gates einschließlich des unabhängigen finalen Sicherheitsreviews erfüllen **18/18 REMEDIATED_AND_VERIFIED**, **OPEN CRITICAL=0**, **OPEN HIGH=0** und **Flow A/B Preview PASS**. PR #63 wurde deshalb gemäß Auftrag auf **Ready for Review** gesetzt.
 
 Danach folgt der gemeinsame abschließende Pre-Merge-Review von Evelyn PR #4 und CRM PR #63. Evelyn PR #4 bleibt unverändert. **Kein Merge, keine Production-Promotion, keine echten Kunden und keine Vertrags- oder Zahlungszustellung.**
