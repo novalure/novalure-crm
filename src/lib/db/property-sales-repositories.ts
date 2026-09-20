@@ -171,7 +171,7 @@ export async function runPropertySalesCommand(session:AppSession,command:Propert
    const sale=await tx.queryOne<Row>('insert into property_sales(workspace_id,project_id,unit_id,reservation_id,buyer_lead_id,contact_id,authority_id,confirmed_by,source_reference,unit_version) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *',[w,projectId,selected.id,reservation.id,reservation.buyer_lead_id,reservation.contact_id,auth.id,session.userId,evidence.sourceReference,evidence.unitVersion]);
    await tx.execute("update property_reservations set status='converted',version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,reservation.id]);
    await tx.execute("update property_units set status='sold',buyer_contact_id=$3,version=version+1,updated_at=now() where workspace_id=$1 and id=$2",[w,selected.id,reservation.contact_id]);
-   if(reservation.deal_id)await tx.execute("update deals set stage='Gewonnen',probability=100,closed_at=now(),updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3",[w,projectId,reservation.deal_id]);
+   if(reservation.deal_id)await tx.execute("update deals set stage='Gewonnen',probability=100,closed_at=now(),version=version+1,updated_at=now() where workspace_id=$1 and project_id=$2 and id=$3",[w,projectId,reservation.deal_id]);
    await auditUnit(tx,session,projectId,selected,'sold',evidence.sourceReference,{saleId:sale?.id});
    return {entity:'sale',record:sale,unitVersion:evidence.unitVersion};
   },options);

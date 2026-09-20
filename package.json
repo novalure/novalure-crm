@@ -65,7 +65,13 @@
     "test:sales:migrations": "node --import tsx --test scripts/sales-migration-upgrade-tests.ts",
     "test:sales:final": "node --conditions=react-server --import tsx --test scripts/crm-service-contract-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts",
     "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
-    "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts"
+    "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
+    "test:g27:unit": "node --conditions=react-server --import tsx --test scripts/evelyn-money-tax-v2-tests.ts scripts/g27-financial-snapshot-tests.ts scripts/g27-financial-cost-tests.ts",
+    "test:g27:contract": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-v2-client-tests.ts",
+    "test:g27:reporting": "node --conditions=react-server --import tsx --test scripts/g27-reporting-consistency-tests.ts",
+    "test:g27:migrations": "node --conditions=react-server --import tsx --test scripts/g27-migration-tests.ts",
+    "test:g27:workflow": "node --conditions=react-server --import tsx --test scripts/g27-evelyn-v2-db-tests.ts scripts/g27-legacy-snapshot-resolution-tests.ts scripts/g27-property-cost-idempotency-tests.ts",
+    "test:g27": "npm run test:g27:unit && npm run test:g27:contract && npm run test:g27:reporting && npm run test:g27:migrations && npm run test:g27:workflow"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -79,7 +85,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.3",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

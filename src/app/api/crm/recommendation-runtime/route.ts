@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
 import { hasProductCapability } from "@/lib/product-model";
+import { CrmCommandError, crmCommandErrorResponse } from "@/lib/crm-command";
+import { readBoundedCrmJson } from "@/lib/crm-request-body";
 import {
   createConversionAnalyticsSnapshot,
   createDataQualityCleanupAction,
@@ -18,14 +20,6 @@ import {
   upsertOfferMilestone,
   upsertViewingSlot,
 } from "@/lib/db/recommendation-runtime-repositories";
-
-async function readJson(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
-}
 
 function getOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -62,7 +56,14 @@ export async function POST(request: Request) {
   const auth = await requirePermission(request, "crm:write");
   if (!auth.ok) return auth.response;
 
-  const body = getRecord(await readJson(request));
+  let raw: unknown;
+  try {
+    raw = await readBoundedCrmJson(request);
+  } catch (error) {
+    if (error instanceof CrmCommandError) return crmCommandErrorResponse(error);
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const body = getRecord(raw);
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }

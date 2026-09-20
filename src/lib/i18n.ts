@@ -4071,6 +4071,8 @@ export const crmAnalysisBotCopy = {
         "Live runtime coverage for fallback audits, productive follow-ups, project sales workflows, bot quality, consent, reporting and cleanup actions.",
       fallbacks: "Open fallbacks",
       fallbackWarning: "Fallback or missing-table risk is visible in this scope. Keep the fallback audit open until the workspace is database-backed.",
+      financialCoverageWarning: (reviews: string, policies: string) =>
+        `${reviews} historical financial reviews and ${policies} policy selections remain open. Excluded values are not included in closed revenue.`,
       followUps: "Follow-ups",
       funnelReports: "Funnel reports",
       loadError: "Runtime coverage could not be loaded.",
@@ -4088,6 +4090,9 @@ export const crmAnalysisBotCopy = {
       saved: "Runtime checks saved.",
       sequenceReviews: "Sequence reviews",
       title: "Recommendation runtime coverage",
+      unverifiedRevenue: "unverified historical financial value",
+      unverifiedRevenueWarning:
+        "This conversion snapshot has no verified FinancialSnapshotV1 EUR/2 metadata. Its revenue is not shown as authoritative.",
     },
     metrics: {
       coverage: "Function coverage",
@@ -4903,6 +4908,8 @@ export const crmAnalysisBotCopy = {
         "Live-Abdeckung für Fallback-Audits, produktive Follow-ups, Projektvertriebs-Workflows, Bot-Qualität, Consent, Reporting und Cleanup-Aktionen.",
       fallbacks: "Offene Fallbacks",
       fallbackWarning: "Fallback- oder Tabellenrisiko ist in diesem Scope sichtbar. Fallback-Audit offen halten, bis der Workspace datenbankgestützt ist.",
+      financialCoverageWarning: (reviews: string, policies: string) =>
+        `${reviews} historische Finanzprüfungen und ${policies} Policy-Auswahlen sind offen. Ausgeschlossene Werte sind nicht in der Closed Revenue enthalten.`,
       followUps: "Follow-ups",
       funnelReports: "Funnel-Reports",
       loadError: "Runtime-Abdeckung konnte nicht geladen werden.",
@@ -4920,6 +4927,9 @@ export const crmAnalysisBotCopy = {
       saved: "Runtime-Prüfungen gespeichert.",
       sequenceReviews: "Sequenz-Reviews",
       title: "Empfehlungs-Runtime-Abdeckung",
+      unverifiedRevenue: "historischer Finanzwert nicht verifiziert",
+      unverifiedRevenueWarning:
+        "Dieser Conversion-Snapshot hat keine verifizierten FinancialSnapshotV1-EUR/2-Metadaten. Seine Revenue wird nicht als belastbar ausgewiesen.",
     },
     metrics: {
       coverage: "Funktionsabdeckung",
@@ -5704,8 +5714,8 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Active leads (this month)", description: "Current dashboard period" },
-      pipelineValue: { title: "Expected commission (3%)", description: "3% of weighted open-deal forecast" },
-      monthlyClosings: { title: "Monthly closings", description: "Commission vs. target" },
+      pipelineValue: { title: "Weighted open pipeline", description: "Deal values weighted by current probability" },
+      monthlyClosings: { title: "Monthly closings", description: "Closed deals; financial policy required for commission" },
       overdueFollowupsKpi: { title: "Overdue follow-ups", description: "SLA and next contact" },
       hotLeadsKpi: { title: "Hot leads", description: "Score above 80 or hot status" },
       conversionRate: { title: "Conversion rate", description: "Inquiry to viewing to closing" },
@@ -5765,10 +5775,11 @@ export const dashboardOverviewCopy = {
     },
     kpis: {
       activeLeads: "Active leads (this month)",
-      pipelineValue: "Expected commission (3%)",
+      pipelineValue: "Weighted open pipeline",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast} | commission 3%`,
+        `${count} open deals | pipeline volume ${pipelineValue} | weighted forecast ${weightedForecast}`,
       monthlyClosings: "Monthly closings",
+      financialPolicyRequired: "Commission unavailable until an explicit financial policy is selected.",
       target: "Target",
       overdueFollowups: "Overdue follow-ups",
       noCriticalFollowups: "No critical follow-ups",
@@ -5838,8 +5849,8 @@ export const dashboardOverviewCopy = {
     },
     widgets: {
       activeLeads: { title: "Aktive Leads (dieser Monat)", description: "Aktueller Dashboard-Zeitraum" },
-      pipelineValue: { title: "Erwartete Provision (3%)", description: "3% des gewichteten Forecasts offener Deals" },
-      monthlyClosings: { title: "Abschlüsse Monat", description: "Provision vs. Zielwert" },
+      pipelineValue: { title: "Gewichtete offene Pipeline", description: "Dealwerte gewichtet mit der aktuellen Wahrscheinlichkeit" },
+      monthlyClosings: { title: "Abschlüsse Monat", description: "Abgeschlossene Deals; Provision benötigt eine Finanz-Policy" },
       overdueFollowupsKpi: { title: "Überfällige Follow-ups", description: "SLA und nächster Kontakt" },
       hotLeadsKpi: { title: "Heiße Leads", description: "Score über 80 oder Status heiß" },
       conversionRate: { title: "Conversion-Rate", description: "Anfrage zu Besichtigung zu Abschluss" },
@@ -5899,10 +5910,11 @@ export const dashboardOverviewCopy = {
     },
     kpis: {
       activeLeads: "Aktive Leads (dieser Monat)",
-      pipelineValue: "Erwartete Provision (3%)",
+      pipelineValue: "Gewichtete offene Pipeline",
       expectedCommission: (count: number, pipelineValue: string, weightedForecast: string) =>
-        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast} | Provision 3%`,
+        `${count} offene Deals | Pipeline-Volumen ${pipelineValue} | gewichteter Forecast ${weightedForecast}`,
       monthlyClosings: "Abschlüsse Monat",
+      financialPolicyRequired: "Provision erst nach Auswahl einer expliziten Finanz-Policy verfügbar.",
       target: "Ziel",
       overdueFollowups: "Überfällige Follow-ups",
       noCriticalFollowups: "Keine kritischen Follow-ups",
@@ -6231,6 +6243,7 @@ export const dealPipelineCommandCopy = {
     workBoard: "Active pipeline",
     endStatus: "End status",
     endStatusDescription: "Won, lost and disqualified deals are separated from active work stages.",
+    financialReviewOpen: (count: number) => `${count} historical financial review${count === 1 ? "" : "s"} open`,
     dragHint: "Drag cards between stages or use the detail controls.",
     dropHere: "Drop deal here",
     stageMoved: (dealName: string, stage: string) => `${dealName} moved to ${stage}.`,
@@ -6402,6 +6415,7 @@ export const dealPipelineCommandCopy = {
     workBoard: "Aktive Pipeline",
     endStatus: "Endstatus",
     endStatusDescription: "Gewonnene, verlorene und disqualifizierte Deals sind von aktiven Arbeitsphasen getrennt.",
+    financialReviewOpen: (count: number) => `${count} historische Finanzprüfung${count === 1 ? "" : "en"} offen`,
     dragHint: "Ziehe Karten zwischen Phasen oder nutze die Steuerung im Detailbereich.",
     dropHere: "Deal hier ablegen",
     stageMoved: (dealName: string, stage: string) => `${dealName} nach ${stage} verschoben.`,

@@ -1,185 +1,272 @@
 # G27 Production Readiness – historische Geld-/Steuersemantik
 
-Stand: 2026-09-18
+Stand: 2026-09-20
 
-CRM-Basis: `1595dd03cbf7ac23518116d19f934dd7c99d0e0d`
-
-Evelyn-Basis: `6fe55077c560224edbe452d64fd9549951b5c96a`
+CRM-Repository: `novalure/novalure-crm`
 
 Branch: `codex/crm-production-readiness-g27`
 
-## Ergebnis
+PR: `#65` (Draft)
+
+CRM-Basis: `1595dd03cbf7ac23518116d19f934dd7c99d0e0d`
+
+Evelyn-Repository: `novalure/evelyn`
+
+Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
+
+## Abnahmestand
+
+**Lokale G27-Implementierung: PASS**
 
 **G27 Production Readiness: BLOCKED**
 
 **G27 Status: OPEN**
 
-Der Auftrag verlangt einen Stopp, sobald die vollständige G27-Lösung den bestehenden Evelyn-Contract beeinflusst. Diese Bedingung ist erfüllt. Deshalb enthält dieser Branch keine Laufzeit-, Datenbank- oder Evelyn-Änderung. Die zusätzlich fehlenden Steuer- und Rundungsregeln verbieten jede berechnende Steuerlogik; ausdrücklich autorisierte Net-/Tax-/Gross-Minor-Units könnten dagegen ohne erfundene Steuersätze gespeichert und arithmetisch geprüft werden.
+Der lokale Implementierungs-, Regressions- und Sicherheitsstand ist vollständig grün. G27 bleibt bis zum geforderten Live-Preview-Nachweis A–F offen. Es wurde weder eine Production-Datenbank verändert noch ein Production-Deployment oder Merge ausgeführt.
 
-## G27 Root Problem
+## Ergebnis der Implementierung
 
-Die autoritative Ursprungsdefinition steht in Evelyn unter `docs/integrations/crm/crm-gap-analysis.md`: Preis- und Budgetdaten liegen teils als Bigint-Cents, JavaScript-Number, formatierter Text oder untypisierte JSON-Zahlen vor. Währung und Steuerbasis sind nicht durchgängig gebunden. Präzision, Netto-/Gesamtverpflichtung und widerspruchsfreie Geldsemantik müssen vor finanziellen Entscheidungen vertraglich festgelegt sein.
+Das CRM konsumiert den gemergten Evelyn-Money/Tax-Contract V2 ohne eigene abweichende Finanzspezifikation:
 
-Das CRM besitzt aktuell keinen einheitlichen, transaktionszeitgebundenen Money-/Tax-Contract. Beträge verlieren je nach Pfad Währung, Netto-/Bruttobasis, Rundungsregel, fachliche Quelle oder Gültigkeitszeitpunkt. Mehrere historische Auswertungen lesen später veränderliche Stammdaten erneut ein.
+- Money V2 verwendet ausschließlich kanonische Minor-Unit-Integerstrings, explizite Währung und expliziten Exponenten.
+- FinancialSnapshotV1 bindet wirtschaftliche Komponenten, mehrere Steuerkomponenten, Net/Tax/Gross, Currency-, Tax- und Rounding-Policy-Referenzen, Source-Referenz, Provenance, Business-Version und Review-State.
+- Canonicalization und SHA-256-Domänentrennung entsprechen dem gepinnten Evelyn-Stand.
+- Sämtliche Berechnung verwendet `BigInt` beziehungsweise exakte Integer-/Rationalarithmetik. Browserwerte und JavaScript-Floats sind keine Finanzautorität.
+- Historische Snapshots, Policy-Versionen und Events sind append-only.
+- Unsichere Altbestände bleiben `NEEDS_REVIEW`; fehlende Currency-, Tax-, Jurisdiction- oder Rounding-Semantik wird nicht geraten.
+- Sensitive Evelyn-V2-Ausführung ist nur mit einem `COMPLETE`/`VERIFIED` Snapshot und vollständiger Hashbindung möglich.
 
-## Betroffene Daten
+## Contract- und Rechenmodell
 
-- `deals.value_cents` ohne gespeicherte Währung oder Steuerbasis; Loader liefern daraus wieder formatierten EUR-Text.
-- Unitpreise und Reservierungsanzahlungen als nackte Bigint-Cents; Loader konvertieren sie zu JavaScript-Number.
-- Leadbudgets als Freitext und BuyerProfile-/Suchprofilbudgets als nicht einheitlich typisierte Zahlen.
-- `property_cost_items` mit getrennten Netto-, VAT- und Bruttowerten sowie optionalem Prozentsatz, aber ohne Currency, Tax-Code, Jurisdiction, Rundungsbasis oder arithmetischen Konsistenz-Check.
-- Angebotsrevisionen mit sicherer EUR-Netto-Cent-Summe, aber ohne Steuerbetrag, Bruttobetrag oder Rundungsnachweis.
-- `property_sales` ohne Betrag, Währung oder Netto-/Steuer-/Brutto-Snapshot.
-- Reporting-Snapshots und Analytics-Beträge ohne vollständige historische Money-Semantik.
+Die CRM-Grenze in `src/lib/evelyn-money-tax-v2.ts` spiegelt die öffentlichen Evelyn-V2-Schemas für:
 
-Es wurde kein operatives kanonisches Rechnungs-, Zahlungs- oder Rabattmodell gefunden. OfferLines erlauben positive Mengen und nichtnegative Nettoeinzelpreise, besitzen aber kein Discount-Feld. Vertrags- und Zahlungsausführung sind im bestehenden Angebotsworkflow ausdrücklich deaktiviert.
+- `MoneyV2`
+- `FinancialSnapshotV1`
+- `ApprovalActionV2`
+- versionierte Financial References
+- Currency Definition
+- Tax Policy Reference und Tax Source Provenance
+- mehrere Tax Components
+- Canonical Snapshot Hash und Action Hash
+- `NEEDS_REVIEW`, `POLICY_REQUIRED` und Threshold-Kontext
 
-## Betroffene Prozesse
+Der echte Paritätstest lädt die Money/Tax-V2-Quelle direkt aus dem lokalen Evelyn-Checkout. Er verweigert einen abweichenden Commit, abweichende Source-/Lockfile-Blobs oder eine abweichende Zod-Version. Golden-Vektoren, Normalisierung, Decimal-Konvertierung, Tax-Reconciliation, Schwellenlogik und 128 Fuzz-Fälle werden auf beiden Implementierungen ausgeführt.
 
-- Deal-Erstellung, -Änderung und Abschluss
-- Angebotsversion, -freigabe und -annahme
-- autorisierte Unit-Preisbestätigung
-- Reservierungsumwandlung und `sale.confirm`
-- Objektkosten, Gebühren und provisionsrelevante Kennzeichnungen
-- Sold-Value-, Revenue-, Conversion-, Forecast- und Provisionsdarstellung
-- CRM→Evelyn-Vertragsfreigabe im synthetischen Preview-Contract
+Materialänderungen an Betrag, Currency, Exponent, Economic Component, Tax Component, Jurisdiction, Tax-Policy-Version, Rounding-Policy oder Action-Version ändern den gebundenen Hash. Eingabereihenfolge kann den normalisierten Hash nicht verändern.
 
-## Risiko
+## Policy Registry
 
-- Abgeschlossene Verkäufe und Won-Deals können in späteren Berichten einen anderen historischen Wert erhalten.
-- Unabhängig gelieferte Netto-, VAT- und Bruttowerte können widersprüchlich persistiert werden.
-- Währung, Basis und Einheit gehen beim Wechsel zwischen Bigint, JSON, formatiertem Text und JavaScript-Number verloren.
-- Provisions-, Forecast- und Revenue-Werte können dadurch fachlich falsch und nicht reproduzierbar sein.
-- Eine Evelyn-Freigabe kann heute nur die EUR-Netto-Projektion signieren; Steuer- und Bruttowerte wären nicht Bestandteil desselben Approval-Hashes.
-- Ein stiller Legacy-Backfill aus heutigen Preisen, Ländern oder Company Profiles würde unbelegte historische Tatsachen erzeugen.
+`crm_financial_policy_versions` speichert ausschließlich explizit registrierte, versionierte Policy-Inhalte:
 
-## Warum G27 ein Go-live-Blocker ist
+- `CURRENCY`: ISO-4217-Code, Exponent und Verifikationszeitpunkt
+- `TAX`: Jurisdiction, Treatment, Category, exakte Rate und belegte Source Provenance
+- `ROUNDING`: Modus, Currency-Exponent und Berechnungsscope
 
-Das CRM kann derzeit weder garantieren, dass ein alter Abschluss morgen denselben Geldwert ausweist, noch dass Netto, Steuer und Brutto eines relevanten Vorgangs widerspruchsfrei und durch dieselbe Freigabe gebunden sind. Dadurch fehlen Reproduzierbarkeit, Auditierbarkeit und eine verlässliche Grundlage für Verkaufswert, Umsatz, Provision und steuerbezogene Dokumentdarstellung. Das ist vor finanziellen Entscheidungen und einem Produktionsstart nicht vertretbar.
+Es werden keine länderspezifischen Steuersätze, Jurisdictions, Wechselkurse, Provisionssätze oder Rundungsregeln vorgegeben. Migration 087 legt keine reale Policy an.
 
-## Kompakte Evidenz
+Eine Snapshot-Erstellung löst exakt die angeforderten höchstens 22 `(policyId, version)`-Referenzen tenant- und projektgebunden in SQL auf. Unbekannte, doppelte, falsche, abgelaufene oder unpassende Policies werden fail-closed abgewiesen. Currency allein bestimmt keine Jurisdiction. Ein Nicht-EUR-Fall ohne freigegebene Vergleichs-/FX-Policy endet vor Persistenz oder Remotezugriff mit `POLICY_REQUIRED`.
 
-| Befund | Beleg |
-|---|---|
-| Autoritative G27-Definition und Evelyn-Anpassung `ja` | Evelyn `docs/integrations/crm/crm-gap-analysis.md:61` |
-| Dealwert ohne Currency/Tax-Basis | `migrations/001_initial_novalure_crm.sql:144-162` |
-| Deal-Cents werden zu formatiertem EUR-Text | `src/lib/db/crm-loaders.ts:2993-3047`, `3225-3231` |
-| Kosten ohne Currency und Konsistenz-Constraint | `migrations/035_property_department_content.sql:74-98` |
-| Kosten werden clientbasiert gelöscht und neu angelegt | `src/lib/db/property-department-repositories.ts:682-788` |
-| Ambiguer Euro-/Cent-Parser | `src/lib/db/property-department-repositories.ts:1649-1668` |
-| Sale ohne Money-Snapshot | `migrations/082_crm_property_sales_workflow.sql:43-53`, `src/lib/db/property-sales-repositories.ts:170-176` |
-| Preisänderung auch nach Verkauf möglich | `src/lib/db/property-sales-repositories.ts:115-124` |
-| Sold-Report liest aktuellen Unitpreis | `src/lib/db/crm-loaders.ts:2463-2475` |
-| Historische Conversion liest aktuelle Dealwerte | `src/lib/db/recommendation-runtime-repositories.ts:2007-2045` |
-| Customer-Revenue kann durch Lead×Deal-Join vervielfacht werden | `src/lib/db/customer-access-repositories.ts:1081-1101` |
-| Unbelegte 3-%-Provision | `src/components/dashboard-overview.tsx:33-35`, `566-570` |
-| Servicevertrag markiert Unit/Deposit/Budget als nicht verifiziert | `src/lib/crm-service-contract.ts:112-125` |
-| CRM→Evelyn-Action ist strikt EUR/netto | `src/lib/evelyn-approval-client.ts:15-20`, `79-96`; `src/lib/db/evelyn-contract-repositories.ts:75-103` |
-| Evelyn-Bridge akzeptiert exakt EUR, `net: true`, `netCents` | Evelyn `src/approval-bridge/model.ts:10-22` |
+## Migration 087
 
-## Belegte historische Fehler
+`migrations/087_crm_financial_snapshots.sql` ist ausschließlich vorwärtsgerichtet und ändert keine frühere Migration.
 
-### Property Sale
+Sie führt ein:
 
-`migrations/082_crm_property_sales_workflow.sql` speichert in `property_sales` Projekt, Unit, Reservierung, Käufer, Authority, Quelle, Zeitpunkt und Unit-Version, aber keinen Geldwert und keine Steuersemantik. `src/lib/db/property-sales-repositories.ts` setzt anschließend Unit und optionalen Deal auf den Abschlussstatus.
+- `crm_financial_policy_versions`
+- `crm_financial_snapshots`
+- `crm_financial_events`
+- V2-Bindung auf `crm_evelyn_contract_revisions`
+- deterministische Backfills für Offer, Deal, Property Sale und Property Cost Matrix
+- Fixierungs-Trigger für künftige terminale Deal- und Property-Sale-Vorgänge
+- exakte SQL-Validatoren und kanonische Hashfunktionen
+- eindeutige Ressourcen-/Business-Versionen und `supersedes_snapshot_id`
+- `numeric(78,0)` für exakte historische Conversion-Aggregate
 
-Der Command `unit.price.confirm` kann den Preis einer bereits verkauften Unit weiterhin ändern. `src/lib/db/crm-loaders.ts` berechnet `soldValueCents` aus dem jeweils aktuellen `property_units.price_cents`. Eine spätere Preisänderung verändert daher rückwirkend den ausgewiesenen Wert des alten Verkaufs.
+Alle drei neuen Tabellen verwenden FORCE RLS, vorhandene Projektberechtigungen und Actor-Bindung. Runtime-Zugriff ist auf Lesen und die tatsächlich benötigten Inserts beschränkt. Update, Delete und Truncate werden durch append-only Trigger abgewiesen. Snapshot- und Event-Fremdschlüssel binden Workspace, Projekt, Snapshot-Hash und V1/V2-Vertragsversion.
 
-### Deals und Reporting
+Die SQL-Validierung weist auch explizites JSON-`null` in Pflichtfeldern ab. Der unabhängige Review verglich 66 einzelne Snapshot-Nullmutationen und 25 Policy-Nullmutationen mit dem strikten CRM-Parser; es blieb keine Abweichung.
 
-Nicht durch den kanonischen Offer-Workflow geschützte Dealwerte können nach einem terminalen Status weiterhin überschrieben werden. Historische Conversion-Auswertungen summieren aktuelle Dealwerte für vergangene Perioden. Der Customer-Project-Report verbindet Leads und Deals vor der Summe, sodass mehrere Zeilen Geldwerte zusätzlich vervielfachen können.
+Fresh Install, Upgrade, realistischer Legacy-Backfill, Null-/Duplicate-/Constraint-Fälle, RLS, Retry, atomarer Fehlerrollback und nativer `pg_dump`/`pg_restore` wurden gegen kurzlebige lokale PostgreSQL-18-Cluster geprüft.
 
-### Property Costs
+## Historische Fixierung und Legacy
 
-Die UI übermittelt Netto, VAT und Brutto unabhängig. Das Repository löscht den vorhandenen Kostensatz und legt ihn aus den Clientwerten neu an. Es gibt weder serverseitig noch in der Datenbank die Invariante `net + tax = gross`.
+Die Implementierung verwendet ausschließlich vorhandene fachliche Grenzen:
 
-Die Konvertierung verwendet JavaScript-Number und `Math.round`. Eine Größenheuristik wechselt bei Beträgen oberhalb `999_999` zudem implizit zwischen Euro und Cent. Damit ist die Einheit vom Betrag abhängig und nicht vom Vertrag.
+- angenommene Offer-Revision
+- erstmaliger terminaler Dealabschluss
+- bestätigter Property Sale
+- versionierter Property-Cost-Command
 
-### Provision
+Spätere Änderungen aktueller Unitpreise, Dealwerte oder Policy-Registry-Zeilen verändern bestehende Snapshot-JSONs und Hashes nicht. Eine fachliche Korrektur erzeugt eine neue Business-Version mit neuem Snapshot und `supersedes_snapshot_id`.
 
-Das Dashboard verwendet eine hart codierte 3-%-Annahme. Es gibt dafür keine persistierte Provisionsbasis, Steuersemantik, Regelversion oder fachliche Quelle. Diese Konstante ist keine autoritative Finanzregel und darf nicht als historische Wahrheit übernommen werden.
+Der Backfill klassifiziert:
 
-## Bereits brauchbare Grenzen
+- **A:** vollständig belegbar; ein vollständiger Snapshot ist möglich.
+- **B:** teilweise belegbar; nur unveränderliche Evidenz wird übernommen.
+- **C:** historisch nicht eindeutig; veränderliche heutige Werte werden ausdrücklich ausgeschlossen.
 
-- Angebotspositionen verwenden Safe-Integer-Cents und der Server berechnet die EUR-Netto-Summe mit Überlaufprüfung.
-- Angebotsrevisionen und Freigaben sind unveränderlich und an Revision sowie Content-Digest gebunden.
-- Offer-Annahme und Property Sale besitzen vorhandene terminale fachliche Zustände.
-- Property-Preis, Reservierung und Verkauf verwenden projektbezogene Authority-, Versions- und Quellenbelege.
-- CRM-Command-Receipts, Domain-Events und Deal-Stage-History liefern append-only Auditmuster mit Tenant-, Actor- und Correlation-Bindung.
-- Der CRM-Servicevertrag gibt unsichere Unit-, Deposit- und Budgetsemantik bereits fail-closed als `currency: null`, `taxBasis: NOT_VERIFIED` beziehungsweise `budgetUnit: NOT_VERIFIED` aus.
+Die realistische Upgrade-Fixture erzeugt vier B- und zwei C-Snapshots. Alle bleiben `NEEDS_REVIEW`; Tax, Currency, Gross, Jurisdiction oder Rounding werden nicht ergänzt, wenn die alte Quelle sie nicht beweist.
 
-Diese Grenzen schließen G27 nicht, liefern aber das Sicherheitsmuster für eine spätere Umsetzung.
+Der minimale Review-Pfad `POST /api/crm/financial-snapshots` verlangt `crm:write` und `settings:manage`. Der Client benennt nur Projekt, Vorgänger, erwarteten Vorgängerhash, die Entscheidung `VERIFY_EVIDENCED_NET`, explizite Policy-Auswahl, Idempotency-Key und Correlation-ID. Unter einem Advisory Transaction Lock liest der Server den unveränderlichen Vorgänger und dessen `legacy_evidence`; daraus leitet er `effectiveAt`, Pricing-/Source-Referenz und sämtliche Nettokomponenten ab. Clientwerte für Zeitpunkt, Pricing-Referenz oder Beträge werden an der HTTP-Grenze abgewiesen. Klassifikation C oder unzureichende Evidenz bleibt fail-closed in `NEEDS_REVIEW`. Aus belegter Evidenz und den ausgewählten Policies berechnet der Server Net/Tax/Gross und erzeugt atomar einen `COMPLETE`-Nachfolger sowie:
 
-## Keine Steuerregel erfinden
+- `SNAPSHOT_RECORDED`
+- `SUPERSEDED`
+- `REVIEW_VERIFIED`
+- `POLICY_BOUND`
 
-Im Repository existiert keine autoritative Quelle für:
+Der unveränderte `NEEDS_REVIEW`-Vorgänger bleibt als Evidenz bestehen. Ohne verifizierten Nachfolger darf er kein Approval-Event autorisieren.
 
-- anwendbare Steuerart oder Tax-Code je Vorgang,
-- Steuersatz und zeitliche Gültigkeit,
-- Leistungs-/Objektklassifikation für die Steuerentscheidung,
-- Ländergrenzen für AT, DE, CH, ES und IE,
-- Rundung je Position oder Gesamtdokument,
-- Provisionsbasis und deren Steuerbehandlung.
+## Evelyn Approval V2
 
-Company Profiles enthalten Land, VAT-ID und Steuernummer sowie einzelne Pflichtfeldprüfungen. Diese Daten bilden keine Steuerregel-Engine. Bestehende `vat_percent`-Felder, `Math.round` und die Dashboard-3-%-Konstante sind ebenfalls keine fachliche Quelle.
+Neue G27-relevante `contract.send`-Aktionen verwenden explizit `approvalContractVersion=v2`. Bestehende V1-Revisionen bleiben unverändert; ein späterer V2→V1-Downgrade wird in der Datenbank abgewiesen.
 
-Unbelegte Legacy-Dimensionen dürfen weder aus Land, VAT-ID, Spaltenname, Betrag, heutigem Unitpreis noch aktuellem Firmenprofil abgeleitet werden. Bereits nachweisbare Felder bleiben erhalten: Eine akzeptierte Offer-Revision belegt zum Beispiel EUR, NET, `total_net_cents`, Revision und Digest. Ihr vollständiger Money-/Tax-Snapshot bleibt wegen fehlender Tax-/Gross-/Rundungsdimensionen dennoch `NEEDS_REVIEW`; ausschließlich die unbelegten Dimensionen bleiben unbestätigt.
+Der V2-Ablauf bindet:
 
-## Evelyn-Contract-Auswirkung und Stop
+- vollständigen `FinancialSnapshotV1`
+- `financialSnapshotHash`
+- `ApprovalActionV2`
+- `actionHash`
+- Action-/Resource-Version
+- ursprünglichen Workflow und Requesting Actor
+- Tenant, Projekt und Correlation-ID
 
-Der bestehende CRM→Evelyn-Contract ist ein strikt validierter EUR-Netto-Vertrag:
+Evelyn akzeptiert Version 1 zuerst und danach ausschließlich lückenlose Versionen. Deshalb darf das CRM eine Revision erst fortschreiben, wenn die aktuelle Version eine dauerhaft gespeicherte Remote-Registrierung besitzt. `request1 → revise2 → request2 → revise3 → request3` ist geprüft. Unregistrierte Versionen, Timeout, Servicefehler und lokaler Rollback nach erfolgreicher Remote-Registrierung bleiben wiederaufnehmbar und können keine Versionslücke erzeugen.
 
-- `src/lib/evelyn-approval-client.ts` erlaubt exakt `amount`, `currency: "EUR"`, `net: true` und `payload.price.netCents`.
-- Der Action-Hash umfasst genau diese Struktur; zusätzliche Felder werden abgelehnt.
-- `src/lib/db/evelyn-contract-repositories.ts` erstellt `contract.send` aus `crm_offer_revisions.total_net_cents`.
-- Evelyn `src/approval-bridge/model.ts` verlangt ebenfalls exakt EUR, `net: true` und `amount === price.netCents`.
+Die bestehende creator-bound RLS bleibt erhalten: Ein anderer Projekteditor kann die Action nicht als ursprünglichen Antragsteller fortschreiben und hinterlässt bei der Ablehnung keine Revision, keinen Snapshot und kein Receipt.
 
-Steuerbetrag, Bruttobetrag, Tax-Code/-Regelversion und Rundungsbasis sind nicht Bestandteil des signierten Action-Hashes. Ein CRM-interner Snapshot daneben würde diese Werte daher nicht von Evelyns Freigabe erfassen. `amount` darf nicht still von Netto auf Brutto umgedeutet werden, weil dies bestehende Hashes, Golden-Vektoren, Schwellenregeln und Auditbelege semantisch ändern würde.
+Der Pflichtfall **EUR 20.370 netto** erzeugt einen vollständigen Snapshot mit zwei Tax Components, zwei erforderlichen Approval-Schritten und erfolgreicher V2-Verifikation. Ein materiell geänderter Snapshot erhält einen anderen Hash; die alte Approval-Bindung kann ihn nicht autorisieren.
 
-Eine Freigabe der vollständigen Gesamtverpflichtung benötigt deshalb eine neue versionierte Evelyn-Contractform mit abgestimmtem Canonical Hash und Policy-Verhalten. Der Auftrag verbietet eine eigenmächtige Evelyn-Änderung und schreibt bei Contract-Auswirkung den Stopp vor. Dieser Blocker ist vor Implementierungsbeginn eingetreten.
+## Server Authority, Concurrency und Rollback
 
-## Kleinster sicherer Lösungsrahmen nach Auflösung des Blockers
+Die HTTP-Grenzen akzeptieren keine Clientfelder für Net, Tax oder Gross. Der Legacy-Review-Endpunkt akzeptiert zusätzlich weder `effectiveAt`, `pricingReference` noch Komponenten. Tatsächliche Cookie-/CSRF-Requests mit gefälschten Beträgen, Pricing-Quellen oder Zeitpunkten werden vor jedem dauerhaften Write abgewiesen. Offer-Quelle, Revision, Digest, Annahmebeleg, Legacy-Evidenz, Policies und Snapshot werden unter Tenant-/Projektprüfung serverseitig gelesen und berechnet.
 
-Die nachfolgende Skizze ist keine implementierte Migration.
+Geprüft sind:
 
-1. Ein append-only, tenant- und projektgebundener Money-Snapshot je terminalem Vorgang bindet explizit Currency, Net-, Tax- und Gross-Minor-Units, Semantikstatus, Rundungsbasis, Quelle, Quellversion/Digest, `effective_at`, Actor, Authority, Command, Audit und Correlation.
-2. Bei bestätigten Snapshots gilt ausschließlich Integer-Arithmetik mit sicheren Grenzen und `net + tax = gross`. Es wird kein Steuersatz aus Land oder Profil abgeleitet.
-3. Korrekturen erzeugen eine neue Revision mit `supersedes_snapshot_id`; historische Zeilen bleiben unveränderlich.
-4. Der Snapshot wird atomar an vorhandene Grenzen gebunden: angenommene Offer-Revision, erstmaliger Dealabschluss und `sale.confirm`.
-5. Altbestände mit unvollständiger Gesamtsnapshotsemantik werden `NEEDS_REVIEW`. Bereits belegte Felder werden unverändert als Evidenz übernommen; ausschließlich unbelegte Currency-, Basis-, Tax-, Gross- oder Rundungsdimensionen bleiben `NULL` und dürfen nicht aus aktuellen Stammdaten abgeleitet werden.
-6. Sold- und Revenue-Reports aggregieren nur bestätigte Snapshots, gruppieren nach Currency/Basis und zeigen `needsReviewCount` separat. Mutable Unit-/Dealwerte bleiben als aktuelle Schätzung gekennzeichnet.
-7. Die Datenbank übernimmt das FORCE-RLS-/Immutability-Muster aus Migration 080/081. Runtime-Rollen erhalten kein `UPDATE`, `DELETE` oder `TRUNCATE` auf Snapshot-Evidenz.
-8. Objektkosten benötigen explizite Einheiten, deterministisches Decimal→Minor-Unit-Parsing und einen versionierten Kostensatz statt `DELETE + INSERT`.
-9. Vor Evelyn-Nutzung muss entschieden und versioniert werden, ob deren Freigabebetrag die Netto-Projektion oder die tatsächlich zahlbare Gesamtverpflichtung bezeichnet.
+- parallele Snapshot-/Versionsanforderungen
+- identische Replay-Requests
+- gleiche Idempotency Identity mit anderer Payload
+- stale Versionen
+- Snapshot/Approval- und Snapshot/Status-Races
+- Cross-Tenant Read/Write
+- fehlende Projektberechtigung
+- injizierte Snapshot-, Event-, Approval-Binding-, Receipt- und Auditfehler
+- Remote-Erfolg mit lokalem Rollback und identischem Recovery-Request
 
-## Migration und Legacy
+Property-Kosten laufen als ein atomarer Command mit Receipt und Correlation-ID. Kosten, Snapshot, Events und Audit committen gemeinsam oder werden vollständig zurückgerollt.
 
-Es wurde keine Migration erstellt oder ausgeführt. Eine sichere Folgeumsetzung wäre ausschließlich vorwärtsgerichtet; bestehende Migrationen bleiben unverändert. Fresh-Install, Upgrade von 086, transaktionaler Fehler-Rollback, Ledger-Rerun, Checksum-Mismatch, RLS, Tenant-Isolation, parallele Writes und Dump/Restore wären Pflichtprüfungen.
+## Historische Reports und Dokumente
 
-Ein deterministischer Legacy-Backfill ist nur für bereits belegte Felder möglich. Diese Werte können unverändert als Review-Evidenz übernommen werden. Fehlende Dimensionen dürfen nicht bestätigt oder aus heutigen Stammdaten abgeleitet werden; unvollständige Snapshots gehen nicht als vollständig bestätigte Money-/Tax-Werte in Auswertungen oder Finanzentscheidungen ein.
+Folgende Pfade verwenden für terminale Vorgänge den neuesten unveränderlichen, verifizierten Snapshot:
 
-## Audit und Sicherheit
+- Property-Sale-Werte im Unit Board
+- Customer-Project-Revenue ohne Lead×Deal-Vervielfachung
+- Conversion-Revenue
+- Pipeline-Owner-/Stage-Auswertungen
+- terminale Deal-Wertdarstellung
+- Angebots-/Finanzdokumentdarstellung
 
-Der spätere Snapshot muss mindestens Tenant, Projekt, Resource, Quellversion, Actor, Zeitpunkt, Correlation, Operation und Source Reference binden. Finanzwerte dürfen nicht über unkontrollierte Client-Summen autorisiert werden. Server und Datenbank müssen die arithmetische Konsistenz erzwingen. Bestehende RBAC-/Projektgrants bleiben Voraussetzung; Snapshots benötigen FORCE RLS und harte Immutability.
+Mutable Unit-/Dealwerte bleiben nur für aktive operative Schätzungen zulässig. `NEEDS_REVIEW`, nicht-EUR und abweichende Exponenten werden nicht als EUR-Historienwert ausgegeben. Conversion-Snapshots ohne nachgewiesene FinancialSnapshotV1-EUR/2-Metadaten zeigen keinen autoritativen Geldbetrag. Offene Review- und Policy-Ausschlüsse erscheinen separat.
 
-## Verifikation
+Die Angebotsdruckansicht liest Net, Tax und Gross aus dem fixierten Snapshot. Ohne passenden `COMPLETE`/`VERIFIED` Snapshot bleibt Drucken blockiert.
 
-Wegen der expliziten STOP-Regel wurden keine Laufzeitänderungen vorgenommen und daher keine G27-Implementierungs-, Migrations-, E2E- oder Preview-Tests ausgeführt. Die bestehende CRM-Regression wurde nicht als Beleg für eine nicht vorhandene G27-Implementierung wiederholt.
+Die frühere unbelegte 3-%-Provisionsdarstellung wurde entfernt. Provision bleibt ohne explizite fachliche Policy unverfügbar.
 
-Production DB geändert: **NEIN**
+## Audit
 
-Production Deployment: **NEIN**
+Der append-only Ledger bindet mindestens:
 
-Evelyn main geändert: **NEIN**
+- Snapshot created/versioned/superseded
+- Legacy `NEEDS_REVIEW`
+- Review resolved
+- ausgewählte Policy-Versionen
+- Approval Contract Version
+- Action Hash
+- Financial Snapshot Hash
+- Actor
+- Tenant/Projekt
+- Correlation-ID
 
-## Offene Entscheidungen
+Es werden keine Credentials oder Secretwerte in Snapshot-, Event- oder Abschlussdokumentation aufgenommen.
 
-G27 kann erst fortgesetzt werden, wenn folgende verbindliche Entscheidungen beziehungsweise Quellen vorliegen:
+## Lokale Verifikation
 
-1. Bedeutet „Gesamtverpflichtung“ für Offer-/Contract-/Sale-Freigaben netto oder tatsächlich zahlbar brutto?
-2. Erfasst das CRM ausschließlich ausdrücklich autorisierte Net-/Tax-/Gross-Minor-Units, oder soll es Steuer aus versionierten Regeln berechnen?
-3. Falls berechnet wird: Welche autoritative Regelquelle, Länder-/Transaktionsabdeckung und Rundung gelten?
-4. Welche versionierte Evelyn-Contractform bindet dieselben Werte und Regeln in Action-Hash und Approval?
-5. Welche fachliche Basis gilt für Provisionen und rabatt-/gebührenbezogene Beträge?
+Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 
-Bis diese Punkte geklärt sind, bleiben **Open Critical: 0**, **Open High: 0** und **G27: OPEN/BLOCKED**. Die übrigen sieben Medium-Gaps wurden nicht bearbeitet.
+### Bestehende CRM-Regression
+
+| Suite | Ergebnis |
+| --- | ---: |
+| `test:unit` | 232/232 |
+| `test:integration` | 15/15 |
+| `test:protected-preview-access` | 17/17 |
+| `test:sales` | 90/90 |
+| `test:sales:final` | 50/50 |
+| `test:sales:migrations` | 15/15 |
+| `test:neon:061` | 11/11 |
+| `test:g08` | 51/51 |
+| `qa:sales:e2e` | 20/20 |
+| **Baseline total** | **501/501** |
+
+### G27 zusätzlich
+
+| Suite | Ergebnis | Evidenzart |
+| --- | ---: | --- |
+| Unit, Money/Tax, Snapshot, Cost, Property/Fuzz | 29/29 | ausgeführte CRM- und echte lokale Evelyn-Module |
+| V2 Client Contract | 29/29 | ausgeführte Transport-/Schema-/Bindingtests |
+| Reporting | 7/7 | Quell-/Query-Invarianten |
+| Migration/DB | 17/17 | echte lokale PostgreSQL-Transaktionen und Dump/Restore |
+| Workflow/RBAC/Security/Legacy/Property | 32/32 | echte lokale PostgreSQL- und HTTP-Grenzen |
+| **G27 total** | **114/114** | disjunkte Node-Testzählung |
+| **Lokaler Gesamtstand** | **615/615** | 501 Baseline + 114 G27 |
+
+Zusätzliche unabhängige Negativproben, nicht in den 602 gezählt:
+
+- 66/66 Snapshot-Nullmutationen
+- 25/25 Policy-Nullmutationen
+- 8/8 Conversion-Projektions-/Darstellungsfälle
+- erneute 16/16 V2-Lifecycle-DB-Prüfung
+
+### Qualitätsgates
+
+| Gate | Ergebnis |
+| --- | --- |
+| Typecheck | PASS |
+| ESLint `--max-warnings=0` | PASS |
+| Next.js 16.3.5 Production Build | PASS, 85 statische Seiten generiert |
+| Production Dependency Audit | PASS, 0 Vulnerabilities |
+| Secret Scan | PASS für 136 Commits der HEAD-Historie; finaler Änderungsdiff wird vor Commit erneut geprüft |
+| `git diff --check` | PASS |
+| unabhängiger Security-Review | PASS; 0 bestätigte Critical/High und keine G27-blockierenden P2 |
+
+## Preview und Live QA
+
+Die Live-Preview-Abnahme ist der letzte offene Closure-Gate. Sie wird erst nach dem grünen lokalen Stand gegen den gepushten Draft-PR ausgeführt.
+
+| Fall | Erwartung | Stand |
+| --- | --- | --- |
+| A | EUR-Vorgang → Snapshot → V2 Two-Step → VALID | PENDING |
+| B | Materialänderung macht alte Approval ungültig | PENDING |
+| C | aktueller Preis ändert historischen Snapshot nicht | PENDING |
+| D | neue Policy-Version ändert alten Snapshot nicht | PENDING |
+| E | Legacy `NEEDS_REVIEW` blockiert sensitive Aktion | PENDING |
+| F | Cross-Tenant-Zugriff wird verweigert | PENDING |
+
+G27 darf erst nach einem vollständigen A–F-PASS auf **CLOSED** gesetzt werden. Die Preview muss nachweisen, dass die konfigurierte Evelyn-V2-Runtime dem gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc` entspricht; ein älterer G08-Livestatus reicht dafür nicht.
+
+## Produktionsgrenzen
+
+- Production DB geändert: **NEIN**
+- Production deployed: **NEIN**
+- main gemergt: **NEIN**
+- Evelyn geändert oder redeployed: **NEIN**
+- reale Steuer-/FX-/Provisionsregeln angelegt: **NEIN**
+- reale Kunden-, Vertrags-, Zahlungs- oder Zustelldaten verwendet: **NEIN**
+
+## Offene Findings
+
+- Open Critical: **0**
+- Open High: **0**
+- G27-blockierende Medium-Findings nach lokalem Fix/Review: **0**
+- Übrige Production-Readiness-Medium-Gaps nach erfolgreichem G27-Abschluss: **7**
+
+Nach vollständiger Preview-Abnahme ist der nächste Schritt ausschließlich die Planung von G14/G18/G20/G21/G22/G23/G26. Diese Remediation wird in diesem Auftrag nicht ausgeführt.

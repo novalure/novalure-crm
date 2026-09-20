@@ -350,7 +350,7 @@ async function measure(pool) {
         select
           p.id,
           count(distinct l.id)::int as lead_count,
-          coalesce(sum(case when d.stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert') then d.value_cents else 0 end), 0)::bigint as legacy_multiplied_revenue_cents
+          coalesce(sum(case when d.stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert', 'Pausiert / Verloren') then d.value_cents else 0 end), 0)::bigint as legacy_multiplied_revenue_cents
         from projects p
         left join leads l on l.project_id = p.id and l.workspace_id = p.workspace_id
         left join deals d on d.project_id = p.id and d.workspace_id = p.workspace_id
@@ -364,7 +364,7 @@ async function measure(pool) {
         from deals
         where workspace_id = $1::uuid
           and project_id = $3::uuid
-          and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+          and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert', 'Pausiert / Verloren')
       )
       select
         row_to_json(unit_kpis) as unit_kpis,
