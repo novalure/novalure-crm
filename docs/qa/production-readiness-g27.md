@@ -240,16 +240,16 @@ Zusätzliche unabhängige Negativproben, nicht in den 602 gezählt:
 
 ## Preview und Live QA
 
-Die Live-Preview-Abnahme ist der letzte offene Closure-Gate. Sie wird erst nach dem grünen lokalen Stand gegen den gepushten Draft-PR ausgeführt.
+Die Live-Preview-Abnahme ist der letzte offene Closure-Gate. Der aktuelle Preview-Build ist grün und unter dem gepinnten Draft-Commit deployt. Die autorisierte A–F-Abnahme konnte in diesem Lauf nicht gestartet werden, weil die privaten, disposable QA-Preseed-/Deployment-Artefakte und der dafür erforderliche Vercel-API-Zugriff im Worktree nicht vorliegen.
 
 | Fall | Erwartung | Stand |
 | --- | --- | --- |
-| A | EUR-Vorgang → Snapshot → V2 Two-Step → VALID | PENDING |
-| B | Materialänderung macht alte Approval ungültig | PENDING |
-| C | aktueller Preis ändert historischen Snapshot nicht | PENDING |
-| D | neue Policy-Version ändert alten Snapshot nicht | PENDING |
-| E | Legacy `NEEDS_REVIEW` blockiert sensitive Aktion | PENDING |
-| F | Cross-Tenant-Zugriff wird verweigert | PENDING |
+| A | EUR-Vorgang → Snapshot → V2 Two-Step → VALID | BLOCKED – private QA-Preseed-/Deployment-Artefakte fehlen |
+| B | Materialänderung macht alte Approval ungültig | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
+| C | aktueller Preis ändert historischen Snapshot nicht | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
+| D | neue Policy-Version ändert alten Snapshot nicht | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
+| E | Legacy `NEEDS_REVIEW` blockiert sensitive Aktion | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
+| F | Cross-Tenant-Zugriff wird verweigert | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
 
 G27 darf erst nach einem vollständigen A–F-PASS auf **CLOSED** gesetzt werden. Die Preview muss nachweisen, dass die konfigurierte Evelyn-V2-Runtime dem gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc` entspricht; ein älterer G08-Livestatus reicht dafür nicht.
 
