@@ -44,7 +44,11 @@ test("probe sends only the two fixed incomplete cases with distinct fresh OIDC i
   const options: unknown[] = [], sent: { url: string; body: unknown; nonce: string }[] = [];
   const jwt = `test.${Buffer.from(JSON.stringify({ owner_id: NOVALURE_VERCEL_TEAM_ID,
     project_id: CRM_VERCEL_PROJECT_ID, environment: "preview" })).toString("base64url")}.test`;
-  const response = await runG27IsolationProbe(request(), env, {
+  const signed = request();
+  const closedBody = new ReadableStream({ start(controller) { controller.close(); } });
+  const bodylessStreamRequest = new Request(signed.url, { method: "POST", headers: signed.headers,
+    body: closedBody, duplex: "half" } as RequestInit & { duplex: "half" });
+  const response = await runG27IsolationProbe(bodylessStreamRequest, env, {
     token: async input => { options.push(input); return jwt; },
     fetch: async (url, input) => {
       const headers = new Headers(input?.headers);

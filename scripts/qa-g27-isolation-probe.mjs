@@ -3,6 +3,17 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { vercelDeploymentEvidence } from "./qa-g27-live-preview.mjs";
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+
+export function previewAccessHeaders(token, now = Date.now()) {
+  if (typeof token !== "string") throw new Error("PREVIEW_ACCESS_REQUIRED");
+  const claim = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  if (claim.project_id !== "prj_R32Okl6AHijTohvuKmryuTLjWMsk" || claim.owner_id !== "team_sjD78IkSicXJK6TAOR1JC7Wv"
+    || claim.environment !== "development" || !Number.isFinite(claim.exp) || claim.exp * 1000 <= now) {
+    throw new Error("PREVIEW_ACCESS_BINDING_FAILED");
+  }
+  return { "x-vercel-trusted-oidc-idp-token": token };
+}
 
 export function exactProbeResults(results) {
   const expected = [["control", 400, "INVALID_INPUT"], ["foreign", 401, "SERVICE_AUTH_DENIED"]];
@@ -19,7 +30,8 @@ async function main() {
     || !/^dpl_[A-Za-z0-9]+$/.test(deploymentId ?? "") || !/^[a-f0-9]{40}$/.test(commitSha ?? "")) throw new Error();
   const evidence = await vercelDeploymentEvidence("CRM", { teamId: "team_sjD78IkSicXJK6TAOR1JC7Wv" }, origin,
     { crmDeploymentId: deploymentId, crmCommitSha: commitSha, crmVercelProjectId: "prj_R32Okl6AHijTohvuKmryuTLjWMsk" });
-  const secrets = JSON.parse(await readFile(".npm-cache/g27/preview-secrets-private.json", "utf8"));
+  const accessHeaders = previewAccessHeaders(process.env.VERCEL_OIDC_TOKEN);
+  const secrets = JSON.parse(await readFile(path.join(projectRoot, ".npm-cache/g27/preview-secrets-private.json"), "utf8"));
   const secret = secrets.NOVALURE_SESSION_SECRET;
   if (typeof secret !== "string" || secret.length < 32) throw new Error();
   const timestamp = String(Date.now()), nonce = randomUUID();
@@ -28,7 +40,7 @@ async function main() {
   const signature = createHmac("sha256", key).update(`${context}\n${timestamp}\n${nonce}\n${commitSha}`).digest("hex");
   key.fill(0);
   const response = await fetch(`${origin}/api/qa/g27-isolation`, { method: "POST", redirect: "error",
-    headers: { "x-g27-time": timestamp, "x-g27-nonce": nonce, "x-g27-signature": signature },
+    headers: { ...accessHeaders, "x-g27-time": timestamp, "x-g27-nonce": nonce, "x-g27-signature": signature },
     signal: AbortSignal.timeout(60_000) });
   const json = response.headers.get("content-type")?.includes("application/json") === true;
   const noStore = response.headers.get("cache-control")?.includes("no-store") === true;
@@ -43,9 +55,11 @@ async function main() {
   const pass = response.status === 200 && json && noStore && noCookie && raw.status === "PASS"
     && exactProbeResults(results);
   const report = { status: pass ? "PASS_PENDING_DATABASE_AFTER_SNAPSHOT" : "BLOCKED", crm: evidence,
+    code: ["BODY_DENIED", "NOT_FOUND", "ISOLATION_PROBE_FAILED"].includes(raw.code) ? raw.code : null,
+    requestId: /^[A-Za-z0-9:_-]{1,160}$/.test(response.headers.get("x-vercel-id") ?? "") ? response.headers.get("x-vercel-id") : null,
     endpointStatus: response.status, json, noStore, noCookie, results, productionImpact: "NONE",
     remoteDatabaseAfterSnapshot: "REQUIRED", at: new Date().toISOString() };
-  await writeFile(".npm-cache/g27/isolation-probe-report.json", JSON.stringify(report, null, 2));
+  await writeFile(path.join(projectRoot, ".npm-cache/g27/isolation-probe-report.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report));
   if (!pass) process.exitCode = 1;
 }

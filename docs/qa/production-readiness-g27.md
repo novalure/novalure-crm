@@ -53,14 +53,14 @@ Auditereignisse über READ-ONLY-SQL. Er enthält außerdem einen parallelen
 Execute-/Replay-Fall mit Nachweis genau einer synthetischen Execution.
 Diese Live-Fälle sind vorbereitet, **noch nicht ausgeführt**.
 
-Frische lokale Prüfung dieser Fortsetzung: G27 115/115 plus Runner/Probe 30/30,
+Frische lokale Prüfung dieser Fortsetzung: G27 115/115 plus Runner/Probe 31/31,
 Baseline 481/481 plus isolierter Browser 26/26, Neon-Profil 11/11:
-**663/663 PASS**. Die zusätzlichen Correlation-/Fremdtenant-Assertions wurden
+**664/664 PASS**. Die zusätzlichen Correlation-/Fremdtenant-Assertions wurden
 anschließend im Workflow erneut geprüft (18/18, nicht doppelt gezählt).
 Typecheck, Lint, Build und Dependency-Audit (0 Vulnerabilities) PASS.
 Finale Live-Abnahme, Cleanup und abschließender Security-Review bleiben offen.
 Die nachfolgenden älteren Tabellen dokumentieren den bisherigen Stand vor
-dieser Fortsetzung und sind nicht zusätzlich zu diesen 663 Tests zu zählen.
+dieser Fortsetzung und sind nicht zusätzlich zu diesen 664 Tests zu zählen.
 
 Für die vorgeschaltete schreibfreie OIDC-/Tenant-Prüfung existierte kein
 verwendbarer CRM-Endpunkt: der fachliche V2-Client lehnt unvollständige Bodies
@@ -87,6 +87,22 @@ es werden ausschließlich die festen unvollständigen Payloads gesendet. Die Rou
 läuft am 25.09.2026 00:00 UTC ab und muss **vor Merge entfernt** werden.
 Die CI prüft Workflow und Runner/Probe jetzt explizit. Kein Live-PASS aus diesen
 lokalen Prüfungen abgeleitet.
+
+CRM-Preview `https://novalure-8m6kth0qt-novalure.vercel.app`, Deployment
+`dpl_3R1Zxys3EWy4xWdcFderD8jGUv2E`, Commit
+`06914fdd73e0a15e3dfa9451400bc2832ba7f79c`: READY, vollständige CI PASS.
+Der erste signierte Aufruf endete am 24.09.2026 13:08:37 UTC mit HTTP 400,
+application/json, no-store, ohne Set-Cookie und ohne Control-/Foreign-Ergebnis.
+Das ist **kein OIDC-PASS**. Der Body-Guard wurde korrigiert, damit ein tatsächlich
+leerer Stream wie ein fehlender Body behandelt wird; Datenbytes bleiben verboten.
+Neue Regression einschließlich geschlossenem Request-Stream PASS. Ein neuer
+CRM-Preview-Pin und Evelyns read-only After-Snapshot sind vor Wiederholung nötig.
+
+Deployment Protection bleibt eingeschaltet. Der lokale Caller verwendet ein
+frisches, ausschließlich im Prozess geladenes Development-OIDC des CRM-Projekts
+als Trusted-Source-Header für genau dessen gepinnte Preview. Das fachliche
+Service-OIDC wird separat erst im CRM-Preview erzeugt. Es wurde kein projektweiter
+Automation-Bypass angelegt und kein Token in Dateien geschrieben.
 
 Der lokale Implementierungs-, Regressions- und Sicherheitsstand ist vollständig grün. G27 bleibt bis zum geforderten Live-Preview-Nachweis A–F offen. Es wurde weder eine Production-Datenbank verändert noch ein Production-Deployment oder Merge ausgeführt.
 

@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { vercelDeploymentEvidence } from "./qa-g27-live-preview.mjs";
-import { exactProbeResults } from "./qa-g27-isolation-probe.mjs";
+import { exactProbeResults, previewAccessHeaders } from "./qa-g27-isolation-probe.mjs";
+
+test("Preview access token is origin-bound by project/team/environment and expires", () => {
+  const claims = { project_id: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", owner_id: "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    environment: "development", exp: 2000 };
+  const jwt = values => `synthetic.${Buffer.from(JSON.stringify(values)).toString("base64url")}.synthetic`;
+  const token = jwt(claims);
+  assert.deepEqual(previewAccessHeaders(token, 1000), { "x-vercel-trusted-oidc-idp-token": token });
+  for (const change of [{ project_id: "prj_other" }, { owner_id: "team_other" }, { environment: "production" }, { exp: 0 }]) {
+    assert.throws(() => previewAccessHeaders(jwt({ ...claims, ...change }), 1000), /BINDING_FAILED/);
+  }
+});
 
 test("probe caller independently rejects swapped, duplicate, missing and extra pass=true records", () => {
   const control = { name: "control", status: 400, code: "INVALID_INPUT", json: true, noStore: true, noCookie: true, pass: true };

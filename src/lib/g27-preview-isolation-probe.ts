@@ -50,7 +50,18 @@ function assertTokenBinding(token: string) {
 export async function runG27IsolationProbe(request: Request, env: ProbeEnvironment = process.env,
   transport: ProbeTransport = { fetch: globalThis.fetch, token: getVercelOidcToken }, now = Date.now()) {
   if (!authorized(request, env, now)) return Response.json({ code: "NOT_FOUND" }, { status: 404, headers });
-  if (request.body !== null) return Response.json({ code: "BODY_DENIED" }, { status: 400, headers });
+  // Vercel may represent a bodyless POST as a closed stream rather than null.
+  // Read at most its first chunk; any payload is still refused before OIDC.
+  if (request.body !== null) {
+    const reader = request.body.getReader();
+    try {
+      const first = await reader.read();
+      if (!first.done) {
+        await reader.cancel();
+        return Response.json({ code: "BODY_DENIED" }, { status: 400, headers });
+      }
+    } finally { reader.releaseLock(); }
+  }
   try {
     const results = [];
     for (const [name, tenantId, expectedStatus, expectedCode] of [
