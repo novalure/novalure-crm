@@ -67,6 +67,12 @@ jobs:
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
         run: npm run test:g08
 
+      - name: G27 legacy rejection audit and isolated local workflow
+        run: npm run test:g27:workflow
+
+      - name: G27 Preview pin and temporary isolation probe guards
+        run: npm run test:g27:runner
+
       - name: Protected preview access contract regression
         run: npm run test:protected-preview-access
 

@@ -76,7 +76,12 @@ type CustomerAccessRiskRow = {
 
 type ConversionSnapshotSummaryRow = {
   bookingsCount: number | string;
-  closedRevenueCents: number | string;
+  closedRevenueCurrency: string | null;
+  closedRevenueCents: string;
+  closedRevenueMinorUnitExponent: string | null;
+  financialPolicyRequiredCount: number | string;
+  financialReviewCount: number | string;
+  financialSnapshotSchemaVersion: string | null;
   id: string;
   leadsCount: number | string;
   lostDealsCount: number | string;
@@ -143,7 +148,10 @@ export type RecommendationRuntimeSummary = {
   followUpActions: number;
   latestConversionSnapshot: {
     bookingsCount: number;
-    closedRevenueCents: number;
+    closedRevenueAuthoritative: boolean;
+    closedRevenueCents: string;
+    financialPolicyRequiredCount: number;
+    financialReviewCount: number;
     id: string;
     leadsCount: number;
     lostDealsCount: number;
@@ -408,7 +416,20 @@ async function listRecommendationRuntimeSummaryInTransaction(input: {
           reservations_count as "reservationsCount",
           won_deals_count as "wonDealsCount",
           lost_deals_count as "lostDealsCount",
-          closed_revenue_cents as "closedRevenueCents",
+          metadata->>'closedRevenueCurrency' as "closedRevenueCurrency",
+          closed_revenue_cents::text as "closedRevenueCents",
+          metadata->>'closedRevenueMinorUnitExponent' as "closedRevenueMinorUnitExponent",
+          case
+            when metadata->>'financialPolicyRequiredCount' ~ '^[0-9]+$'
+              then (metadata->>'financialPolicyRequiredCount')::int
+            else 0
+          end as "financialPolicyRequiredCount",
+          case
+            when metadata->>'financialReviewCount' ~ '^[0-9]+$'
+              then (metadata->>'financialReviewCount')::int
+            else 0
+          end as "financialReviewCount",
+          metadata->>'financialSnapshotSchemaVersion' as "financialSnapshotSchemaVersion",
           unit_sales_velocity as "unitSalesVelocity"
         from crm_conversion_snapshots
         where ${projectWhere}
@@ -452,7 +473,13 @@ async function listRecommendationRuntimeSummaryInTransaction(input: {
     latestConversionSnapshot: latestConversionSnapshot
       ? {
           bookingsCount: Number(latestConversionSnapshot.bookingsCount ?? 0),
-          closedRevenueCents: Number(latestConversionSnapshot.closedRevenueCents ?? 0),
+          closedRevenueAuthoritative:
+            latestConversionSnapshot.financialSnapshotSchemaVersion === "financial-snapshot-v1" &&
+            latestConversionSnapshot.closedRevenueCurrency === "EUR" &&
+            latestConversionSnapshot.closedRevenueMinorUnitExponent === "2",
+          closedRevenueCents: latestConversionSnapshot.closedRevenueCents ?? "0",
+          financialPolicyRequiredCount: Number(latestConversionSnapshot.financialPolicyRequiredCount ?? 0),
+          financialReviewCount: Number(latestConversionSnapshot.financialReviewCount ?? 0),
           id: latestConversionSnapshot.id,
           leadsCount: Number(latestConversionSnapshot.leadsCount ?? 0),
           lostDealsCount: Number(latestConversionSnapshot.lostDealsCount ?? 0),
@@ -2004,6 +2031,61 @@ async function createConversionAnalyticsSnapshotInTransaction(input: {
   const from = normalizeDate(input.from) ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const row = await queryOne<IdRow>(
     `
+      with terminal_deal_financials as (
+        select
+          deal_record.id,
+          latest_snapshot.id as snapshot_id,
+          latest_snapshot.review_state,
+          latest_snapshot.canonical_snapshot
+        from deals deal_record
+        left join lateral (
+          select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+          from crm_financial_snapshots snapshot
+          where snapshot.workspace_id = deal_record.workspace_id
+            and snapshot.project_id is not distinct from deal_record.project_id
+            and snapshot.resource_type = 'DEAL'
+            and snapshot.resource_id = deal_record.id
+          order by snapshot.business_version desc, snapshot.id desc
+          limit 1
+        ) latest_snapshot on true
+        where deal_record.workspace_id = $1::uuid
+          and ($2::uuid is null or deal_record.project_id = $2::uuid)
+          and deal_record.stage = 'Gewonnen'
+          and coalesce(
+            (latest_snapshot.canonical_snapshot->>'effectiveAt')::timestamptz,
+            deal_record.closed_at,
+            deal_record.created_at
+          ) between $3::timestamptz and $4::timestamptz
+      ), revenue_summary as (
+        select
+          count(*)::int as won_count,
+          count(*) filter (
+            where snapshot_id is null
+              or review_state <> 'VERIFIED'
+              or canonical_snapshot->>'reviewState' <> 'COMPLETE'
+          )::int as review_count,
+          count(*) filter (
+            where review_state = 'VERIFIED'
+              and canonical_snapshot->>'reviewState' = 'COMPLETE'
+              and (
+                canonical_snapshot->>'currency' <> 'EUR'
+                or canonical_snapshot->>'minorUnitExponent' <> '2'
+              )
+          )::int as policy_required_count,
+          count(*) filter (
+            where review_state = 'VERIFIED'
+              and canonical_snapshot->>'reviewState' = 'COMPLETE'
+              and canonical_snapshot->>'currency' = 'EUR'
+              and canonical_snapshot->>'minorUnitExponent' = '2'
+          )::int as verified_eur_count,
+          coalesce(sum((canonical_snapshot#>>'{totals,net,minorUnits}')::numeric) filter (
+            where review_state = 'VERIFIED'
+              and canonical_snapshot->>'reviewState' = 'COMPLETE'
+              and canonical_snapshot->>'currency' = 'EUR'
+              and canonical_snapshot->>'minorUnitExponent' = '2'
+          ), 0) as closed_revenue_cents
+        from terminal_deal_financials
+      )
       insert into crm_conversion_snapshots (
         workspace_id,
         project_id,
@@ -2035,11 +2117,20 @@ async function createConversionAnalyticsSnapshotInTransaction(input: {
             and mb.created_at between $3::timestamptz and $4::timestamptz
         ),
         (select count(*) from property_reservations where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and created_at between $3::timestamptz and $4::timestamptz),
-        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz),
-        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage in ('Verloren', 'Disqualifiziert') and coalesce(lost_at, updated_at) between $3::timestamptz and $4::timestamptz),
-        (select coalesce(sum(value_cents), 0) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz),
+        revenue_summary.won_count,
+        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage in ('Verloren', 'Disqualifiziert', 'Pausiert / Verloren') and coalesce(lost_at, updated_at) between $3::timestamptz and $4::timestamptz),
+        revenue_summary.closed_revenue_cents,
         (select count(*)::numeric / greatest(1, extract(day from ($4::timestamptz - $3::timestamptz))) from property_units where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and status = 'sold'),
-        jsonb_build_object('createdByUserId', $5::text)
+        jsonb_build_object(
+          'createdByUserId', $5::text,
+          'financialReviewCount', revenue_summary.review_count,
+          'financialPolicyRequiredCount', revenue_summary.policy_required_count,
+          'verifiedDealSnapshotCount', revenue_summary.verified_eur_count,
+          'closedRevenueCurrency', 'EUR',
+          'closedRevenueMinorUnitExponent', 2,
+          'financialSnapshotSchemaVersion', 'financial-snapshot-v1'
+        )
+      from revenue_summary
       returning id
     `,
     [input.session.workspaceId, projectId, from, to, input.session.userId],
@@ -2970,6 +3061,50 @@ async function createPipelineManagementReport(input: { projectId?: string | null
   const periodStart = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const snapshot = await queryOne<IdRow>(
     `
+      with deal_financials as (
+        select
+          deal_record.*,
+          case
+            when deal_record.stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren')
+              then deal_record.value_cents::numeric
+            when deal_record.stage = 'Gewonnen'
+              and latest_snapshot.review_state = 'VERIFIED'
+              and latest_snapshot.canonical_snapshot->>'reviewState' = 'COMPLETE'
+              and latest_snapshot.canonical_snapshot->>'currency' = 'EUR'
+              and latest_snapshot.canonical_snapshot->>'minorUnitExponent' = '2'
+              then (latest_snapshot.canonical_snapshot#>>'{totals,net,minorUnits}')::numeric
+            else 0::numeric
+          end as report_value_cents,
+          case
+            when deal_record.stage = 'Gewonnen' and (
+              latest_snapshot.id is null
+              or latest_snapshot.review_state <> 'VERIFIED'
+              or latest_snapshot.canonical_snapshot->>'reviewState' <> 'COMPLETE'
+            ) then 1 else 0
+          end as financial_review_count,
+          case
+            when deal_record.stage = 'Gewonnen'
+              and latest_snapshot.review_state = 'VERIFIED'
+              and latest_snapshot.canonical_snapshot->>'reviewState' = 'COMPLETE'
+              and (
+                latest_snapshot.canonical_snapshot->>'currency' <> 'EUR'
+                or latest_snapshot.canonical_snapshot->>'minorUnitExponent' <> '2'
+              ) then 1 else 0
+          end as financial_policy_required_count
+        from deals deal_record
+        left join lateral (
+          select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+          from crm_financial_snapshots snapshot
+          where snapshot.workspace_id = deal_record.workspace_id
+            and snapshot.project_id is not distinct from deal_record.project_id
+            and snapshot.resource_type = 'DEAL'
+            and snapshot.resource_id = deal_record.id
+          order by snapshot.business_version desc, snapshot.id desc
+          limit 1
+        ) latest_snapshot on true
+        where deal_record.workspace_id = $1::uuid
+          and ($2::uuid is null or deal_record.project_id = $2::uuid)
+      )
       insert into pipeline_forecast_snapshots (
         workspace_id,
         project_id,
@@ -2990,33 +3125,46 @@ async function createPipelineManagementReport(input: { projectId?: string | null
         $2::uuid,
         $3::timestamptz,
         $4::timestamptz,
-        count(*) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert'))::int,
-        coalesce(sum(value_cents * probability / 100) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert')), 0)::bigint,
-        coalesce(sum(value_cents) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert')), 0)::bigint,
-        count(*) filter (where next_action = '' or updated_at < now() - interval '14 days')::int,
+        count(*) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren'))::int,
+        coalesce(sum(value_cents * probability / 100) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren')), 0)::bigint,
+        coalesce(sum(value_cents) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren')), 0)::bigint,
+        count(*) filter (where stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren')
+          and (next_action = '' or updated_at < now() - interval '14 days'))::int,
         coalesce((select jsonb_object_agg(coalesce(lost_reason_category, 'unknown'), reason_count) from (
           select lost_reason_category, count(*) as reason_count
-          from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and lost_reason_category is not null
+          from deal_financials
+          where stage in ('Verloren','Disqualifiziert','Pausiert / Verloren')
+            and lost_reason_category is not null
           group by lost_reason_category
         ) reasons), '{}'::jsonb),
         coalesce((select jsonb_agg(owner_row) from (
-          select owner_user_id, count(*) as deals, coalesce(sum(value_cents), 0) as value_cents
-          from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid)
+          select
+            owner_user_id,
+            count(*)::int as deals,
+            coalesce(sum(report_value_cents), 0)::text as value_cents,
+            coalesce(sum(financial_review_count), 0)::int as financial_review_count,
+            coalesce(sum(financial_policy_required_count), 0)::int as financial_policy_required_count
+          from deal_financials
           group by owner_user_id
         ) owner_row), '[]'::jsonb),
         coalesce((select jsonb_agg(stage_row) from (
-          select stage, count(*) as deals, coalesce(sum(value_cents), 0) as value_cents
-          from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid)
+          select
+            stage,
+            count(*)::int as deals,
+            coalesce(sum(report_value_cents), 0)::text as value_cents,
+            coalesce(sum(financial_review_count), 0)::int as financial_review_count,
+            coalesce(sum(financial_policy_required_count), 0)::int as financial_policy_required_count
+          from deal_financials
           group by stage
         ) stage_row), '[]'::jsonb),
-        jsonb_build_object('source', 'analysis_recommendation_completion'),
+        jsonb_build_object(
+          'source', 'analysis_recommendation_completion',
+          'financialReviewCount', coalesce(sum(financial_review_count), 0)::int,
+          'financialPolicyRequiredCount', coalesce(sum(financial_policy_required_count), 0)::int,
+          'terminalValuesSource', 'financial-snapshot-v1'
+        ),
         $5::uuid
-      from deals
-      where workspace_id = $1::uuid
-        and ($2::uuid is null or project_id = $2::uuid)
+      from deal_financials
       returning id
     `,
     [input.session.workspaceId, projectId, periodStart, periodEnd, normalizeUuid(input.session.userId)],
@@ -3028,7 +3176,7 @@ async function createPipelineManagementReport(input: { projectId?: string | null
       from deals
       where workspace_id = $1::uuid
         and ($2::uuid is null or project_id = $2::uuid)
-        and stage not in ('Gewonnen','Verloren','Disqualifiziert')
+        and stage not in ('Gewonnen','Verloren','Disqualifiziert','Pausiert / Verloren')
       order by updated_at asc
       limit 50
     `,

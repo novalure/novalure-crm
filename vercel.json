@@ -1,7 +1,8 @@
 {
   "git": {
     "deploymentEnabled": {
-      "main": false
+      "main": false,
+      "codex/crm-production-readiness-g27": false
     }
   },
   "crons": [

@@ -219,6 +219,10 @@ export type Project = {
   type: string;
   leads: number;
   revenue: string;
+  revenueCurrency?: string;
+  revenueMinorUnitExponent?: number;
+  revenueMinorUnits?: string;
+  revenueReviewCount?: number;
   status: ProjectStatus;
   defaultPipelineId: ID;
   customerType?: WorkspaceCustomerType;
@@ -644,6 +648,8 @@ export type PropertyDocumentItem = {
 
 export type PropertyUnitStatus = "available" | "reserved" | "sold" | "blocked";
 
+export type FinancialReviewState = "NEEDS_REVIEW" | "VERIFIED";
+
 export type PropertyBuilding = {
   version?: number;
   id: ID;
@@ -667,6 +673,11 @@ export type PropertyUnit = {
   areaSqm: number;
   priceCents: number;
   status: PropertyUnitStatus;
+  historicalSaleCurrency?: string;
+  historicalSaleFinancialSnapshotId?: ID;
+  historicalSaleMinorUnitExponent?: number;
+  historicalSaleNetMinorUnits?: string;
+  historicalSaleReviewState?: FinancialReviewState;
   buyerContactId?: ID;
   dealId?: ID;
   reservationId?: ID;
@@ -733,6 +744,11 @@ export type Deal = {
   name: string;
   stage: DealStage;
   value: string;
+  historicalFinancialSnapshotId?: ID;
+  historicalFinancialReviewState?: FinancialReviewState;
+  historicalFinancialCurrency?: string;
+  historicalFinancialMinorUnitExponent?: number;
+  historicalFinancialNetMinorUnits?: string;
   probability: number;
   expectedCloseDate: string;
   riskLevel: "niedrig" | "mittel" | "hoch";

@@ -1,0 +1,3296 @@
+{
+  "reportContractVersion": "g27-live-preview-report-v1",
+  "startedAt": "2026-09-24T13:41:31.746Z",
+  "finishedAt": "2026-09-24T13:42:45.176Z",
+  "status": "PASS",
+  "failedStep": null,
+  "environment": "preview",
+  "syntheticOnly": true,
+  "productionMutation": false,
+  "externalContractDelivery": false,
+  "runMarker": "536f189b1755",
+  "targets": {
+    "crm": {
+      "origin": "https://novalure-71fl8c6wh-novalure.vercel.app",
+      "browserOrigin": "https://novalure-crm-git-codex-crm-production-readiness-g27-novalure.vercel.app",
+      "deploymentId": "dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY",
+      "commitSha": "5058b06d71d3e48716249bd484a544b4244e6a4c",
+      "vercelProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "vercelApiEvidence": {
+        "deploymentId": "dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "commitSha": "5058b06d71d3e48716249bd484a544b4244e6a4c",
+        "gitRef": "codex/crm-production-readiness-g27",
+        "matchedHost": "novalure-71fl8c6wh-novalure.vercel.app",
+        "readyState": "READY",
+        "target": null
+      }
+    },
+    "evelyn": {
+      "origin": "https://evelyn-jyh6ijl3u-novalure.vercel.app",
+      "deploymentId": "dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA",
+      "commitSha": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+      "vercelApiEvidence": {
+        "deploymentId": "dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA",
+        "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+        "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+        "commitSha": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+        "gitRef": "codex/evelyn-g27-qa-20260924",
+        "matchedHost": "evelyn-jyh6ijl3u-novalure.vercel.app",
+        "readyState": "READY",
+        "target": null
+      }
+    },
+    "tenantId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+    "projectId": "f7599088-09cb-44a6-a366-a36f9146d495"
+  },
+  "checks": [
+    {
+      "flow": "PRECHECK",
+      "name": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "name": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "name": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "name": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "name": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "name": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "name": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "name": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "name": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "name": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "name": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "name": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "status": "PASS"
+    },
+    {
+      "flow": "F",
+      "name": "CROSS_TENANT_FINANCIAL_READ_AND_WRITE_ARE_DENIED",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "name": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "name": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "status": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "CRM_DEPLOYMENT_ID_LIVE_BINDING",
+      "expected": "dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY",
+      "actual": "dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "CRM_DEPLOYMENT_PROJECT_LIVE_BINDING",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "CRM_DEPLOYMENT_COMMIT_LIVE_BINDING",
+      "expected": "5058b06d71d3e48716249bd484a544b4244e6a4c",
+      "actual": "5058b06d71d3e48716249bd484a544b4244e6a4c",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "CRM_DEPLOYMENT_READY_STATE",
+      "expected": "READY",
+      "actual": "READY",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "EVELYN_DEPLOYMENT_ID_LIVE_BINDING",
+      "expected": "dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA",
+      "actual": "dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "EVELYN_DEPLOYMENT_PROJECT_LIVE_BINDING",
+      "expected": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+      "actual": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "EVELYN_DEPLOYMENT_COMMIT_LIVE_BINDING",
+      "expected": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+      "actual": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING",
+      "name": "EVELYN_DEPLOYMENT_READY_STATE",
+      "expected": "READY",
+      "actual": "READY",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "CRM_LOGIN_PAGE_OK",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "CRM_LOGIN_ORIGIN",
+      "expected": "https://novalure-crm-git-codex-crm-production-readiness-g27-novalure.vercel.app",
+      "actual": "https://novalure-crm-git-codex-crm-production-readiness-g27-novalure.vercel.app",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "PRESEEDED_MFA_ENROLLMENT",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "MFA_WORKSPACE_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "MFA_EMAIL_BINDING",
+      "expected": "synthetic-g27-175be1da78244ae1bf9c0dac09ba3552@example.invalid",
+      "actual": "synthetic-g27-175be1da78244ae1bf9c0dac09ba3552@example.invalid",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "CRM_LOGIN_LEFT_LOGIN_PAGE",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "CRM_SERVER_MFA_SESSION",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "AUTHENTICATED_WORKSPACE",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "PINNED_PREVIEW_AND_MFA_LOGIN",
+      "name": "AUTHENTICATED_DATA_SOURCE",
+      "expected": "database",
+      "actual": "database",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "name": "EVELYN_HEALTH_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "name": "EVELYN_HEALTH_SYNTHETIC",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "name": "OWNER_ROLE",
+      "expected": "OWNER",
+      "actual": "OWNER",
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "name": "OWNER_CSRF_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "PRECHECK",
+      "step": "SEPARATE_EVELYN_OWNER_LOGIN",
+      "name": "OWNER_SESSION_COOKIE_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_ID",
+      "expected": "SYNTHETIC:G27:536f189b1755:currency",
+      "actual": "SYNTHETIC:G27:536f189b1755:currency",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_VERSION",
+      "expected": "1",
+      "actual": "1",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_KIND",
+      "expected": "CURRENCY",
+      "actual": "CURRENCY",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_HASH",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_ID",
+      "expected": "SYNTHETIC:G27:536f189b1755:rounding",
+      "actual": "SYNTHETIC:G27:536f189b1755:rounding",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_VERSION",
+      "expected": "1",
+      "actual": "1",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_KIND",
+      "expected": "ROUNDING",
+      "actual": "ROUNDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_HASH",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_ID",
+      "expected": "SYNTHETIC:G27:536f189b1755:tax",
+      "actual": "SYNTHETIC:G27:536f189b1755:tax",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_VERSION",
+      "expected": "1",
+      "actual": "1",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_KIND",
+      "expected": "TAX",
+      "actual": "TAX",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "REGISTERED_POLICY_HASH",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "TAX_V1_RATE",
+      "expected": {
+        "basis": "NET",
+        "numerator": "20",
+        "denominator": "100"
+      },
+      "actual": {
+        "basis": "NET",
+        "numerator": "20",
+        "denominator": "100"
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REGISTER_EXPLICIT_EUR_ROUNDING_AND_TAX_V1",
+      "name": "TAX_V1_OUTER_SOURCE_BINDING",
+      "expected": "SYNTHETIC:G27:536f189b1755:tax:1:source",
+      "actual": "SYNTHETIC:G27:536f189b1755:tax:1:source",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "name": "OFFER_DRAFT_STATUS",
+      "expected": "DRAFT",
+      "actual": "DRAFT",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "name": "OFFER_NET_MINOR_UNITS",
+      "expected": "2037000",
+      "actual": "2037000",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "name": "OFFER_ACCEPTED_STATUS",
+      "expected": "ACCEPTED",
+      "actual": "ACCEPTED",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "name": "OFFER_FIXED_NET_MINOR_UNITS",
+      "expected": "2037000",
+      "actual": "2037000",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_AND_ACCEPT_EXACT_EUR_20370_OFFER",
+      "name": "ACCEPTED_DEAL_STAGE",
+      "expected": "Gewonnen",
+      "actual": "Gewonnen",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "APPROVAL_CONTRACT_VERSION",
+      "expected": "v2",
+      "actual": "v2",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "ACTION_VERSION_V1",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "ECONOMIC_BASIS",
+      "expected": "NET",
+      "actual": "NET",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "ECONOMIC_NET_MONEY",
+      "expected": {
+        "minorUnits": "2037000",
+        "currency": "EUR",
+        "minorUnitExponent": 2
+      },
+      "actual": {
+        "minorUnits": "2037000",
+        "currency": "EUR",
+        "minorUnitExponent": 2
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "ACTION_HASH_V1",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_HASH_V1",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_RESOURCE_TYPE",
+      "expected": "CONTRACT",
+      "actual": "CONTRACT",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_REVIEW_STATE",
+      "expected": [
+        "VERIFIED",
+        "COMPLETE"
+      ],
+      "actual": [
+        "VERIFIED",
+        "COMPLETE"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_VERSION",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_HASH_BINDING",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_CURRENCY",
+      "expected": [
+        "EUR",
+        2
+      ],
+      "actual": [
+        "EUR",
+        2
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_TOTALS",
+      "expected": {
+        "net": {
+          "minorUnits": "2037000",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "tax": {
+          "minorUnits": "407400",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "gross": {
+          "minorUnits": "2444400",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        }
+      },
+      "actual": {
+        "net": {
+          "minorUnits": "2037000",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "tax": {
+          "minorUnits": "407400",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "gross": {
+          "minorUnits": "2444400",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_TAX_POLICY_VERSIONS",
+      "expected": [
+        "1",
+        "1"
+      ],
+      "actual": [
+        "1",
+        "1"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_TAX_COMPONENT_AMOUNTS",
+      "expected": [
+        "198000",
+        "209400"
+      ],
+      "actual": [
+        "198000",
+        "209400"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "CREATE_V2_ACTION_AND_COMPLETE_20_PERCENT_SNAPSHOT",
+      "name": "SNAPSHOT_V1_ROUNDING_POLICY",
+      "expected": "1",
+      "actual": "1",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_CONTRACT",
+      "expected": "create-approval-request-v2",
+      "actual": "create-approval-request-v2",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_STATUS",
+      "expected": "PENDING",
+      "actual": "PENDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUIRED_STEPS",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_ACTION_HASH",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_FINANCIAL_HASH",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_REPLAY",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_REQUEST_REPLAY_REFERENCE",
+      "expected": "fe89d4da-1307-4449-b12c-40f871728768",
+      "actual": "fe89d4da-1307-4449-b12c-40f871728768",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_APPROVAL_RECORD_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_TENANT_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_PREVIEW_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_ACTION_HASH_BINDING",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CORRELATION_BINDING",
+      "expected": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "actual": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_SERVICE",
+      "expected": "crm-preview",
+      "actual": "crm-preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_PROJECT",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_FINANCIAL_HASH_BINDING",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_PRE_STEP_VERIFY_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_PRE_STEP_VERIFY_ERROR_CODE",
+      "expected": "EVELYN_PENDING",
+      "actual": "EVELYN_PENDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_APPROVAL_RECORD_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_TENANT_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_PREVIEW_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_ACTION_HASH_BINDING",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CORRELATION_BINDING",
+      "expected": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "actual": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_SERVICE",
+      "expected": "crm-preview",
+      "actual": "crm-preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_PROJECT",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_FINANCIAL_HASH_BINDING",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_REAUTHENTICATED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_STEP",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_HASH",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_VERSION",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEP_1_DECISION",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEP_1_ACTOR",
+      "expected": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "actual": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_STEP_ONE_STATUS",
+      "expected": "STEP_1_APPROVED",
+      "actual": "STEP_1_APPROVED",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_POST_STEP_ONE_VERIFY_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_POST_STEP_ONE_VERIFY_ERROR_CODE",
+      "expected": "EVELYN_PENDING",
+      "actual": "EVELYN_PENDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_APPROVAL_RECORD_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_TENANT_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_PREVIEW_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_ACTION_HASH_BINDING",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CORRELATION_BINDING",
+      "expected": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "actual": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_SERVICE",
+      "expected": "crm-preview",
+      "actual": "crm-preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_SOURCE_PROJECT",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_FINANCIAL_HASH_BINDING",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_REAUTHENTICATED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_STEP",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_HASH",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_VERSION",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEP_2_DECISION",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEP_2_ACTOR",
+      "expected": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "actual": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEPS_USE_DISTINCT_CHALLENGES",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "OWNER_STEPS_USE_DISTINCT_REQUESTS",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_STEP_TWO_STATUS",
+      "expected": "APPROVED",
+      "actual": "APPROVED",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_VERIFY_STATUS",
+      "expected": "VALID",
+      "actual": "VALID",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_VERIFY_CONTRACT",
+      "expected": "approval-bridge-v2",
+      "actual": "approval-bridge-v2",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_VERIFY_ACTION_VERSION",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_VERIFY_ACTION_HASH",
+      "expected": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "actual": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+      "status": "PASS"
+    },
+    {
+      "flow": "A",
+      "step": "REQUEST_TWO_STEP_APPROVAL_AND_VERIFY_VALID",
+      "name": "V2_VERIFY_FINANCIAL_HASH",
+      "expected": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "actual": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "REGISTERED_POLICY_ID",
+      "expected": "SYNTHETIC:G27:536f189b1755:tax",
+      "actual": "SYNTHETIC:G27:536f189b1755:tax",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "REGISTERED_POLICY_VERSION",
+      "expected": "2",
+      "actual": "2",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "REGISTERED_POLICY_KIND",
+      "expected": "TAX",
+      "actual": "TAX",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "REGISTERED_POLICY_HASH",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "TAX_V2_RATE",
+      "expected": {
+        "basis": "NET",
+        "numerator": "21",
+        "denominator": "100"
+      },
+      "actual": {
+        "basis": "NET",
+        "numerator": "21",
+        "denominator": "100"
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "V1_SNAPSHOT_UNCHANGED_AFTER_POLICY_REGISTRATION",
+      "expected": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "actual": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "status": "PASS"
+    },
+    {
+      "flow": "D",
+      "step": "REGISTER_TAX_POLICY_V2_AT_21_PERCENT_WITHOUT_REWRITING_V1",
+      "name": "V1_SNAPSHOT_EVIDENCE_DIGEST_AFTER_POLICY_REGISTRATION",
+      "expected": "38dc7c38ba5884980c7d0b640bd014081012095a054e6099059ca64c200671c9",
+      "actual": "38dc7c38ba5884980c7d0b640bd014081012095a054e6099059ca64c200671c9",
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "REVISED_ACTION_VERSION",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "REVISED_ACTION_HASH_CHANGED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "REVISED_FINANCIAL_HASH_CHANGED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "REVISED_APPROVAL_REFERENCE_RESET",
+      "expected": null,
+      "actual": null,
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "SNAPSHOT_V2_SUPERSEDES_V1",
+      "expected": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+      "actual": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "SNAPSHOT_V2_VERSION",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "SNAPSHOT_V2_TOTALS",
+      "expected": {
+        "net": {
+          "minorUnits": "2037000",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "tax": {
+          "minorUnits": "427770",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "gross": {
+          "minorUnits": "2464770",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        }
+      },
+      "actual": {
+        "net": {
+          "minorUnits": "2037000",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "tax": {
+          "minorUnits": "427770",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        },
+        "gross": {
+          "minorUnits": "2464770",
+          "currency": "EUR",
+          "minorUnitExponent": 2
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "SNAPSHOT_V2_TAX_POLICY_VERSIONS",
+      "expected": [
+        "2",
+        "2"
+      ],
+      "actual": [
+        "2",
+        "2"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "SNAPSHOT_V2_TAX_COMPONENT_AMOUNTS",
+      "expected": [
+        "207900",
+        "219870"
+      ],
+      "actual": [
+        "207900",
+        "219870"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "B_D",
+      "step": "REVISE_ACTION_TO_POLICY_V2_AND_PRESERVE_OLD_SNAPSHOT",
+      "name": "V1_SNAPSHOT_UNCHANGED_AFTER_REVISION",
+      "expected": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "actual": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISION_REQUEST_STATUS",
+      "expected": "PENDING",
+      "actual": "PENDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISION_REQUIRED_STEPS",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISION_HAS_NEW_APPROVAL",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OLD_APPROVAL_INVALIDATED",
+      "expected": "INVALIDATED",
+      "actual": "INVALIDATED",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "STALE_VERSION_OLD_APPROVAL_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "STALE_VERSION_OLD_APPROVAL_ERROR_CODE",
+      "expected": "VERSION_MISMATCH",
+      "actual": "VERSION_MISMATCH",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "CURRENT_VERSION_OLD_APPROVAL_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "CURRENT_VERSION_OLD_APPROVAL_ERROR_CODE",
+      "expected": "APPROVAL_REFERENCE_MISMATCH",
+      "actual": "APPROVAL_REFERENCE_MISMATCH",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "NEW_APPROVAL_PENDING_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "NEW_APPROVAL_PENDING_ERROR_CODE",
+      "expected": "EVELYN_PENDING",
+      "actual": "EVELYN_PENDING",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_APPROVAL_RECORD_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_TENANT_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_PREVIEW_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_ACTION_HASH_BINDING",
+      "expected": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "actual": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CORRELATION_BINDING",
+      "expected": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "actual": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_SOURCE_SERVICE",
+      "expected": "crm-preview",
+      "actual": "crm-preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_SOURCE_PROJECT",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_FINANCIAL_HASH_BINDING",
+      "expected": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "actual": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_REAUTHENTICATED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_STEP",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_HASH",
+      "expected": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "actual": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_VERSION",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEP_1_DECISION",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEP_1_ACTOR",
+      "expected": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "actual": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_APPROVAL_RECORD_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_TENANT_BINDING",
+      "expected": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "actual": "afeac3f9-7534-47f5-b749-b3fd91b8f91b",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_PREVIEW_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_ACTION_HASH_BINDING",
+      "expected": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "actual": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CORRELATION_BINDING",
+      "expected": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "actual": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_SOURCE_SERVICE",
+      "expected": "crm-preview",
+      "actual": "crm-preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_SOURCE_PROJECT",
+      "expected": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "actual": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_FINANCIAL_HASH_BINDING",
+      "expected": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "actual": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_REAUTHENTICATED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_STEP",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_HASH",
+      "expected": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "actual": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_CHALLENGE_ACTION_VERSION",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEP_2_DECISION",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEP_2_ACTOR",
+      "expected": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "actual": "b5b8d315-ab6d-4a38-9af3-0991209c5013",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEPS_USE_DISTINCT_CHALLENGES",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "OWNER_STEPS_USE_DISTINCT_REQUESTS",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISED_VERIFY_STATUS",
+      "expected": "VALID",
+      "actual": "VALID",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISED_VERIFY_ACTION_VERSION",
+      "expected": 2,
+      "actual": 2,
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISED_VERIFY_ACTION_HASH",
+      "expected": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "actual": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "REVISED_VERIFY_FINANCIAL_HASH",
+      "expected": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "actual": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "status": "PASS"
+    },
+    {
+      "flow": "B",
+      "step": "NEW_REQUEST_INVALIDATES_OLD_APPROVAL_AND_V2_BECOMES_VALID",
+      "name": "V1_SNAPSHOT_FINAL_IMMUTABILITY",
+      "expected": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "actual": "{\"businessVersion\":1,\"createdAt\":\"2026-09-24T13:41:52.059Z\",\"id\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"resourceType\":\"CONTRACT\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":1,\"components\":[{\"componentId\":\"line:001\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1188000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"990000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"198000\"},\"componentId\":\"line:001:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]},{\"componentId\":\"line:002\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1256400\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"1047000\"},\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"209400\"},\"componentId\":\"line:002:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:41:50.594Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"id\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:41:43.739Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7\",\"sourceRecordId\":\"36b12f1a-6314-40e6-9b0d-c5d15b95ea84\",\"sourceSystem\":\"novalure-crm\",\"sourceVersion\":\"1\"},\"resourceId\":\"f229adfe-c4f3-41f5-9280-d61e03f14529\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"25fe9893-b4ed-4ab9-862b-5bb4fa28364f\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2444400\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"2037000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"407400\"}}},\"snapshotHash\":\"df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116\",\"supersedesSnapshotId\":null}",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SOLD_STATUS",
+      "expected": "sold",
+      "actual": "sold",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_TIME_CURRENT_PRICE",
+      "expected": "35000000",
+      "actual": "35000000",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_REVIEW_SNAPSHOT_PRESENT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_PRIOR_STATE",
+      "expected": [
+        "NEEDS_REVIEW",
+        "NEEDS_REVIEW"
+      ],
+      "actual": [
+        "NEEDS_REVIEW",
+        "NEEDS_REVIEW"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_RESOLVED_STATE",
+      "expected": [
+        "VERIFIED",
+        "COMPLETE"
+      ],
+      "actual": [
+        "VERIFIED",
+        "COMPLETE"
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_RESOLVED_PREDECESSOR",
+      "expected": "b32177b4-9761-4716-8a42-4aa804b1e81e",
+      "actual": "b32177b4-9761-4716-8a42-4aa804b1e81e",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_SALE_HISTORICAL_NET",
+      "expected": {
+        "minorUnits": "35000000",
+        "currency": "EUR",
+        "minorUnitExponent": 2
+      },
+      "actual": {
+        "minorUnits": "35000000",
+        "currency": "EUR",
+        "minorUnitExponent": 2
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_CURRENT_PRICE_AFTER_CHANGE",
+      "expected": "36000000",
+      "actual": "36000000",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_HISTORICAL_SNAPSHOT_UNCHANGED",
+      "expected": "{\"businessVersion\":2,\"createdAt\":\"2026-09-24T13:42:27.750Z\",\"id\":\"7098dc61-1d31-40f8-8956-d50019426a94\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"c7f4e25d-b307-47e9-b608-48bd321a2614\",\"resourceType\":\"PROPERTY_SALE\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":2,\"components\":[{\"componentId\":\"evidence:sale-price\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"42000000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"35000000\"},\"pricingReference\":{\"contentHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"id\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"},\"componentId\":\"evidence:sale-price:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:42:26.227Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"id\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:42:27.750Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"sourceRecordId\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"sourceSystem\":\"novalure-crm-financial-review\",\"sourceVersion\":\"1\"},\"resourceId\":\"c7f4e25d-b307-47e9-b608-48bd321a2614\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"7098dc61-1d31-40f8-8956-d50019426a94\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"42000000\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"35000000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"}}},\"snapshotHash\":\"15c7f5c831dec3570b115428ebb3b8dc2e2142136d473b53a9c860e3e42bff9e\",\"supersedesSnapshotId\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\"}",
+      "actual": "{\"businessVersion\":2,\"createdAt\":\"2026-09-24T13:42:27.750Z\",\"id\":\"7098dc61-1d31-40f8-8956-d50019426a94\",\"legacyClassification\":null,\"projectId\":\"f7599088-09cb-44a6-a366-a36f9146d495\",\"resourceId\":\"c7f4e25d-b307-47e9-b608-48bd321a2614\",\"resourceType\":\"PROPERTY_SALE\",\"reviewState\":\"VERIFIED\",\"snapshot\":{\"businessVersion\":2,\"components\":[{\"componentId\":\"evidence:sale-price\",\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"42000000\"},\"kind\":\"LINE\",\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"35000000\"},\"pricingReference\":{\"contentHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"id\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"version\":\"1\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"},\"taxComponents\":[{\"amount\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"},\"componentId\":\"evidence:sale-price:tax:vat\",\"policy\":{\"jurisdiction\":\"AT:BUSINESS\",\"reference\":{\"contentHash\":\"936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d\",\"id\":\"SYNTHETIC:G27:536f189b1755:tax\",\"version\":\"1\"},\"sourceProvenance\":{\"authority\":\"SYNTHETIC G27 preview authority\",\"effectiveFrom\":\"2026-01-01T00:00:00.000Z\",\"effectiveTo\":null,\"jurisdiction\":\"AT:BUSINESS\",\"policyVersion\":\"1\",\"sourceReference\":\"SYNTHETIC:G27:536f189b1755:tax:1:source\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"}}}]}],\"currency\":\"EUR\",\"currencyDefinition\":{\"code\":\"EUR\",\"minorUnitExponent\":2,\"registryReference\":{\"contentHash\":\"a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54\",\"id\":\"SYNTHETIC:G27:536f189b1755:currency\",\"version\":\"1\"},\"standard\":\"ISO-4217\",\"verifiedAt\":\"2026-09-24T13:41:39.414Z\"},\"effectiveAt\":\"2026-09-24T13:42:26.227Z\",\"jurisdiction\":\"AT:BUSINESS\",\"minorUnitExponent\":2,\"pricingReference\":{\"contentHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"id\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"version\":\"1\"},\"provenance\":{\"recordedAt\":\"2026-09-24T13:42:27.750Z\",\"recordedBy\":\"175be1da-7824-4ae1-bf9c-0dac09ba3552\",\"sourceHash\":\"9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76\",\"sourceRecordId\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\",\"sourceSystem\":\"novalure-crm-financial-review\",\"sourceVersion\":\"1\"},\"resourceId\":\"c7f4e25d-b307-47e9-b608-48bd321a2614\",\"reviewState\":\"COMPLETE\",\"roundingPolicy\":{\"contentHash\":\"57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe\",\"id\":\"SYNTHETIC:G27:536f189b1755:rounding\",\"version\":\"1\"},\"snapshotId\":\"7098dc61-1d31-40f8-8956-d50019426a94\",\"snapshotSchemaVersion\":\"financial-snapshot-v1\",\"tenantId\":\"afeac3f9-7534-47f5-b749-b3fd91b8f91b\",\"totals\":{\"gross\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"42000000\"},\"net\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"35000000\"},\"tax\":{\"currency\":\"EUR\",\"minorUnitExponent\":2,\"minorUnits\":\"7000000\"}}},\"snapshotHash\":\"15c7f5c831dec3570b115428ebb3b8dc2e2142136d473b53a9c860e3e42bff9e\",\"supersedesSnapshotId\":\"b32177b4-9761-4716-8a42-4aa804b1e81e\"}",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_HISTORICAL_DIGEST_UNCHANGED",
+      "expected": "9a11561155824e9e09d29e470208d01a1a879dcbcc872be91f89752a8da8ae29",
+      "actual": "9a11561155824e9e09d29e470208d01a1a879dcbcc872be91f89752a8da8ae29",
+      "status": "PASS"
+    },
+    {
+      "flow": "C",
+      "step": "PROPERTY_SALE_350K_REMAINS_FIXED_AFTER_CURRENT_PRICE_360K",
+      "name": "PROPERTY_HISTORICAL_NET_AFTER_CURRENT_CHANGE",
+      "expected": "35000000",
+      "actual": "35000000",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_STORED_REVISION",
+      "expected": [
+        {
+          "version": 1,
+          "contract": "v1",
+          "snapshot": null
+        }
+      ],
+      "actual": [
+        {
+          "version": 1,
+          "contract": "v1",
+          "snapshot": null
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "SEEDED_ACTION_ABSENT_FROM_EVELYN_BEFORE",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_REQUEST_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_REQUEST_ERROR_CODE",
+      "expected": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "actual": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_VERIFY_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_VERIFY_ERROR_CODE",
+      "expected": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "actual": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_EXECUTE_HTTP_STATUS",
+      "expected": 409,
+      "actual": 409,
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_EXECUTE_ERROR_CODE",
+      "expected": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "actual": "EVELYN_CONTRACT_VERSION_MISMATCH",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "SEEDED_ACTION_ABSENT_FROM_EVELYN_AFTER",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_V1_STORED_REVISION",
+      "expected": [
+        {
+          "version": 1,
+          "contract": "v1",
+          "snapshot": null
+        }
+      ],
+      "actual": [
+        {
+          "version": 1,
+          "contract": "v1",
+          "snapshot": null
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_REVISION_UNCHANGED",
+      "expected": "c1b6da53891b34e7d055f7e13646ce7505788a1ba2ec0122c55d9a0790d0310b",
+      "actual": "c1b6da53891b34e7d055f7e13646ce7505788a1ba2ec0122c55d9a0790d0310b",
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_EFFECTS_BEFORE",
+      "expected": {
+        "crm_evelyn_contract_approvals": 0,
+        "crm_evelyn_contract_executions": 0
+      },
+      "actual": {
+        "crm_evelyn_contract_approvals": 0,
+        "crm_evelyn_contract_executions": 0
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_EFFECTS_AFTER",
+      "expected": {
+        "crm_evelyn_contract_approvals": 0,
+        "crm_evelyn_contract_executions": 0
+      },
+      "actual": {
+        "crm_evelyn_contract_approvals": 0,
+        "crm_evelyn_contract_executions": 0
+      },
+      "status": "PASS"
+    },
+    {
+      "flow": "E",
+      "step": "LEGACY_V1_REJECTED_BY_V2_WITH_AUDIT_AND_NO_EXECUTION",
+      "name": "LEGACY_DURABLE_REJECTION_AUDIT",
+      "expected": [
+        {
+          "stage": "EXECUTE",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        },
+        {
+          "stage": "REQUEST",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        },
+        {
+          "stage": "VERIFY",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        }
+      ],
+      "actual": [
+        {
+          "stage": "EXECUTE",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        },
+        {
+          "stage": "REQUEST",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        },
+        {
+          "stage": "VERIFY",
+          "result_code": "EVELYN_CONTRACT_VERSION_MISMATCH",
+          "correlation_id": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+          "recorded_by": "175be1da-7824-4ae1-bf9c-0dac09ba3552"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "F",
+      "step": "CROSS_TENANT_FINANCIAL_READ_AND_WRITE_ARE_DENIED",
+      "name": "FOREIGN_SNAPSHOT_READ_HTTP_STATUS",
+      "expected": 404,
+      "actual": 404,
+      "status": "PASS"
+    },
+    {
+      "flow": "F",
+      "step": "CROSS_TENANT_FINANCIAL_READ_AND_WRITE_ARE_DENIED",
+      "name": "FOREIGN_SNAPSHOT_READ_ERROR_CODE",
+      "expected": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE",
+      "actual": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE",
+      "status": "PASS"
+    },
+    {
+      "flow": "F",
+      "step": "CROSS_TENANT_FINANCIAL_READ_AND_WRITE_ARE_DENIED",
+      "name": "FOREIGN_SNAPSHOT_WRITE_HTTP_STATUS",
+      "expected": 404,
+      "actual": 404,
+      "status": "PASS"
+    },
+    {
+      "flow": "F",
+      "step": "CROSS_TENANT_FINANCIAL_READ_AND_WRITE_ARE_DENIED",
+      "name": "FOREIGN_SNAPSHOT_WRITE_ERROR_CODE",
+      "expected": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE",
+      "actual": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_IDENTICAL_EFFECT_IDS",
+      "expected": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+      "actual": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_EXACTLY_ONE_REPLAY",
+      "expected": 1,
+      "actual": 1,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_SYNTHETIC_EFFECT",
+      "expected": "SYNTHETIC_CONTRACT_SEND",
+      "actual": "SYNTHETIC_CONTRACT_SEND",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_NO_EXTERNAL_EFFECT",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_NO_CONTRACT_DELIVERY",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_SYNTHETIC_EFFECT",
+      "expected": "SYNTHETIC_CONTRACT_SEND",
+      "actual": "SYNTHETIC_CONTRACT_SEND",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_NO_EXTERNAL_EFFECT",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_NO_CONTRACT_DELIVERY",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "EXECUTION_REPLAY_RECEIPT",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "EXECUTION_REPLAY_SAME_EFFECT",
+      "expected": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+      "actual": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+      "status": "PASS"
+    },
+    {
+      "flow": "RACE",
+      "step": "PARALLEL_EXECUTION_AND_REPLAY_HAVE_ONE_SYNTHETIC_EFFECT",
+      "name": "RACE_ONE_PERSISTED_EXECUTION",
+      "expected": [
+        {
+          "id": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+          "version": 2,
+          "approval_reference": "0e838eea-6cba-4f4d-b52a-fefafd741d13"
+        }
+      ],
+      "actual": [
+        {
+          "id": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+          "version": 2,
+          "approval_reference": "0e838eea-6cba-4f4d-b52a-fefafd741d13"
+        }
+      ],
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "UNCAUGHT_BROWSER_ERROR_COUNT",
+      "expected": 0,
+      "actual": 0,
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "REPORT_ENVIRONMENT",
+      "expected": "preview",
+      "actual": "preview",
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "SYNTHETIC_ONLY",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "PRODUCTION_MUTATION",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "EXTERNAL_CONTRACT_DELIVERY",
+      "expected": false,
+      "actual": false,
+      "status": "PASS"
+    },
+    {
+      "flow": "FINAL",
+      "step": "NO_UNCAUGHT_BROWSER_ERRORS_AND_EXACT_TARGETS",
+      "name": "ALL_REQUIRED_FLOWS_RECORDED",
+      "expected": true,
+      "actual": true,
+      "status": "PASS"
+    }
+  ],
+  "http": [
+    {
+      "system": "crm",
+      "path": "/api/crm/core",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "f8cc5f68-e5b9-4598-ac5d-15a0da27d2b7"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/health",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/login",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-policies",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "9707bc58-d3eb-405c-aa05-5dca71f15c86",
+      "auditReference": "ddd2a5c2-0e89-41f0-9f74-250f0959b7a2"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-policies",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "296dad12-1852-4cef-9fec-ffc8935de063",
+      "auditReference": "81803a55-2d7d-4935-bca3-da90b0f35964"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-policies",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "5616552e-a579-4414-ae2d-3545f30feb78",
+      "auditReference": "0adc79da-eaf3-473a-8481-08e87597432e"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/contacts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "2a9abdd3-32ef-4a54-86c5-45b8c08585c3",
+      "auditReference": "feddb445-43f0-4fcf-a4f2-3ce9e79388b2"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/leads",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "2e107fab-41fc-483f-9be4-95c8a6332b11",
+      "auditReference": "27196130-b82b-47ed-9375-0f99694db596"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/deals",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "b7e8548a-e5ac-4a66-9824-0f0634eaf20d",
+      "auditReference": "da4b4bfd-86c6-4ebd-b027-72c8bdfbb3c9"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "dd7a710a-bcfc-4ae6-af9b-c21711add720"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "6b123228-cb2e-4268-8a42-a39a0e966dfd",
+      "auditReference": "9be86ca2-8c45-4935-821e-548a2a7cb8a4"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "a551bff1-5610-4318-b918-0fec188b22d5"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "5b45e858-4039-41da-97e9-9e9d32fe6f3a"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "f26db303-78bc-4d85-ab7b-e29e4670fa5a",
+      "auditReference": "fbb25620-6a95-46cb-b63e-2f443e8b5941"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "25ec1705-a5db-4c9c-bfb0-c374ee474595"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "e27e59ac-d7ce-4687-b2df-12fc7d144086",
+      "auditReference": "63b45db4-4384-4949-896b-9052389c9798"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "e275984f-97fb-4136-b7ab-1668348389d3"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "c9db4c66-11fa-4daa-8b4e-714c71a2075c"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "60a3ae03-6e45-47b8-a3bb-157db32a77f6",
+      "auditReference": "0dbb2f7f-6cbb-4aef-bd95-896703816ce1"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "4678df64-6ff9-4e47-8674-6c09b7811335"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "f7785fd3-100a-468e-ab8d-963bd9000899"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "2f73fdf1-da42-4a44-8404-54ec68cf2734",
+      "auditReference": "b2c12fa9-c1a2-43f8-be06-65a18d439183"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/offers",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "aca62908-39ba-40c7-92b7-2d966b2386bd"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/core",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "178306b9-1b3d-4913-a624-a97fa706c098"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "auditReference": "84f118ec-62e2-44b7-81fb-b8627981ff6b"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "0ed302c0-f156-46e9-af7c-081a5d828f90"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "result": "PENDING",
+      "auditReference": "77d1bf45-d805-44d1-81fe-e501b4a51ec9"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "result": "PENDING",
+      "auditReference": "77d1bf45-d805-44d1-81fe-e501b4a51ec9"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "code": "EVELYN_PENDING"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/reauth",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/challenge",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/decision",
+      "method": "POST",
+      "httpStatus": 200,
+      "result": "STEP_1_APPROVED"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "code": "EVELYN_PENDING"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/reauth",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/challenge",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/decision",
+      "method": "POST",
+      "httpStatus": 200,
+      "result": "APPROVED"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "result": "VALID",
+      "auditReference": "0534645a-ebaf-4e78-b1d9-aa819a133ea4"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-policies",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "a95780b3-15f8-4292-a097-bc8639678e17",
+      "auditReference": "cb22cd7e-0fc8-4a9b-97ee-a086c6555451"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "1ddd9044-afe0-4709-80ec-d5c35eb23945"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "auditReference": "e66eaadd-441c-42c0-af2c-4d4c1ef81c9a"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "2212da0a-54a9-4294-814c-1f7333cd8f17"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "9005900b-43af-4dcd-b6c2-1a89000322d5"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "result": "PENDING",
+      "auditReference": "0ea56932-253e-4b07-9d0f-f764e163acfd"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "code": "VERSION_MISMATCH"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "code": "APPROVAL_REFERENCE_MISMATCH"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "code": "EVELYN_PENDING"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/reauth",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/challenge",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/decision",
+      "method": "POST",
+      "httpStatus": 200,
+      "result": "STEP_1_APPROVED"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/reauth",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/challenge",
+      "method": "POST",
+      "httpStatus": 200
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/decision",
+      "method": "POST",
+      "httpStatus": 200,
+      "result": "APPROVED"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "result": "VALID",
+      "auditReference": "58f12c74-dc94-442c-b31b-3387c00781b7"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "4d20db23-7a12-4ddc-b0bb-55b0eb89076e"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/contacts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "15185edc-8148-4332-afa2-12979fb2ede0",
+      "auditReference": "fd1e5535-f6b7-4898-931e-b09995f097f1"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/leads",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "287931da-6408-4659-8fe8-ee4be30a69ed",
+      "auditReference": "cb5cadb6-a3e4-45f1-9776-c8c1140d74af"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/units",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "8cc51ff2-9d9c-46b8-bda2-0eec30022af7",
+      "result": "UNEXPECTED_RESPONSE",
+      "auditReference": "b1735f1e-d92b-4e86-87cf-5bb8c263d349"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "74cb2b30-c941-4bd5-9c74-4b2feb609a53"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "949802d0-9e27-46b7-80ad-d8022ffe5b07",
+      "auditReference": "e2be5a4e-c947-4819-b07b-f649af7c4401"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "a8a123e2-c52e-42de-8825-c2961476ab13",
+      "auditReference": "76e456da-b130-4f35-906f-2b6b506e696c"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "7c562d24-30da-4075-90bd-2e329e6e2922",
+      "auditReference": "c6b81fa2-150a-4b5f-8651-f9316bf9945c"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "709ae595-89ce-4760-b994-0ce9d2ef3362",
+      "auditReference": "ebc08dcb-4d0d-47fd-8a0e-15904d69bf96"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "049c222d-3432-4458-9491-b99478fd5c2a",
+      "auditReference": "878b2e04-96ce-4baf-ae49-6fb253c1e17e"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "dd700a54-cd4f-4111-8c09-89e5e29eb5df",
+      "auditReference": "286c6532-5585-4655-ad94-beb178d3c8f9"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "65638cc1-45d5-4fca-98f7-cfab00090c65",
+      "auditReference": "616b8fb3-397b-49a7-9951-9fdca3b732b1"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "b2df81cb-60b6-4d47-a81a-26f227119801"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "e92cdfa0-fba4-4570-9782-9ec6b7e634a0",
+      "auditReference": "1f1a3e46-e697-4c4a-8773-70f5d9352e78"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "285528e3-c1b0-4d0f-b1e6-6588dd6563f0",
+      "auditReference": "ff539fe7-94a6-4a2c-a044-ab25fd7fb966"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "9fedc44b-39be-40f8-ac25-88a43acee711"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "70d05f7a-9fdf-470a-8567-efe41625aa78",
+      "auditReference": "986ede8f-33ab-4e0f-a3b9-f80de1f7602d"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "0d172eb5-da2d-4034-a2d0-bab67230b2ae"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "92dc38cc-2896-4390-944b-1d8c825dfe36"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "cfa30fd3-63e7-47af-a269-1b7e9c7ff3f2",
+      "auditReference": "ad0ea110-ccd8-4110-af75-de78c79c4d61"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "71e067bb-6fe8-40cd-ba46-461bf5d43e5c",
+      "auditReference": "ec6c19f1-38a8-4007-8302-33e02cbb8e56"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/property-sales",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "65e42633-106c-4e44-a33d-7be5b27b80be"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 200,
+      "correlationId": "322c7270-141f-4d9e-9c69-5737d3981f86"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+      "code": "EVELYN_CONTRACT_VERSION_MISMATCH"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+      "code": "EVELYN_CONTRACT_VERSION_MISMATCH"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 409,
+      "correlationId": "03e4df67-b5df-4fa6-a49d-6551d4723cc1",
+      "code": "EVELYN_CONTRACT_VERSION_MISMATCH"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/overview",
+      "method": "GET",
+      "httpStatus": 200
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "GET",
+      "httpStatus": 404,
+      "correlationId": "7c01e86c-7514-4970-997a-6400b5bc99a1",
+      "code": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/financial-snapshots",
+      "method": "POST",
+      "httpStatus": 404,
+      "correlationId": "01f8f8d7-644e-4415-812e-23c071c5d9e3",
+      "code": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "auditReference": "7b3fd263-767b-43ff-9296-751f5e89cfe1"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "auditReference": "7b3fd263-767b-43ff-9296-751f5e89cfe1"
+    },
+    {
+      "system": "crm",
+      "path": "/api/crm/evelyn-contracts",
+      "method": "POST",
+      "httpStatus": 200,
+      "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60",
+      "auditReference": "7b3fd263-767b-43ff-9296-751f5e89cfe1"
+    },
+    {
+      "system": "evelyn-owner",
+      "path": "/api/logout",
+      "method": "POST",
+      "httpStatus": 200
+    }
+  ],
+  "flows": {
+    "A": {
+      "action": {
+        "actionId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+        "actionVersion": 1,
+        "actionHash": "b47127438d350105d4547bb6f0fe67f13a4e60006ab8397f079ee74a5673bc3d",
+        "financialSnapshotId": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+        "financialSnapshotHash": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+        "correlationId": "597a2a12-ca8f-4a38-97ff-b0af581adb60"
+      },
+      "snapshot": {
+        "id": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+        "resourceType": "CONTRACT",
+        "resourceId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+        "businessVersion": 1,
+        "reviewState": "VERIFIED",
+        "supersedesSnapshotId": null,
+        "snapshotHash": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+        "schemaVersion": "financial-snapshot-v1",
+        "canonicalReviewState": "COMPLETE",
+        "currency": "EUR",
+        "minorUnitExponent": 2,
+        "totals": {
+          "net": {
+            "minorUnits": "2037000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "tax": {
+            "minorUnits": "407400",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "gross": {
+            "minorUnits": "2444400",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          }
+        },
+        "roundingPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:rounding",
+          "version": "1",
+          "contentHash": "57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe"
+        },
+        "currencyPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:currency",
+          "version": "1",
+          "contentHash": "a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54"
+        },
+        "taxComponents": [
+          {
+            "componentId": "line:001:tax:vat",
+            "amount": {
+              "minorUnits": "198000",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "1",
+              "contentHash": "936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:1:source"
+          },
+          {
+            "componentId": "line:002:tax:vat",
+            "amount": {
+              "minorUnits": "209400",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "1",
+              "contentHash": "936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:1:source"
+          }
+        ],
+        "provenance": {
+          "sourceSystem": "novalure-crm",
+          "sourceRecordId": "36b12f1a-6314-40e6-9b0d-c5d15b95ea84",
+          "sourceVersion": "1",
+          "sourceHash": "b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7"
+        }
+      },
+      "approval": {
+        "approvalReference": "fe89d4da-1307-4449-b12c-40f871728768",
+        "requiredSteps": 2,
+        "finalStatus": "VALID"
+      }
+    },
+    "D": {
+      "policyV1": {
+        "id": "SYNTHETIC:G27:536f189b1755:tax",
+        "version": "1",
+        "numerator": "20",
+        "denominator": "100"
+      },
+      "policyV2": {
+        "id": "SYNTHETIC:G27:536f189b1755:tax",
+        "version": "2",
+        "numerator": "21",
+        "denominator": "100"
+      },
+      "oldSnapshot": {
+        "id": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+        "resourceType": "CONTRACT",
+        "resourceId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+        "businessVersion": 1,
+        "reviewState": "VERIFIED",
+        "supersedesSnapshotId": null,
+        "snapshotHash": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+        "schemaVersion": "financial-snapshot-v1",
+        "canonicalReviewState": "COMPLETE",
+        "currency": "EUR",
+        "minorUnitExponent": 2,
+        "totals": {
+          "net": {
+            "minorUnits": "2037000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "tax": {
+            "minorUnits": "407400",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "gross": {
+            "minorUnits": "2444400",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          }
+        },
+        "roundingPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:rounding",
+          "version": "1",
+          "contentHash": "57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe"
+        },
+        "currencyPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:currency",
+          "version": "1",
+          "contentHash": "a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54"
+        },
+        "taxComponents": [
+          {
+            "componentId": "line:001:tax:vat",
+            "amount": {
+              "minorUnits": "198000",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "1",
+              "contentHash": "936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:1:source"
+          },
+          {
+            "componentId": "line:002:tax:vat",
+            "amount": {
+              "minorUnits": "209400",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "1",
+              "contentHash": "936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:1:source"
+          }
+        ],
+        "provenance": {
+          "sourceSystem": "novalure-crm",
+          "sourceRecordId": "36b12f1a-6314-40e6-9b0d-c5d15b95ea84",
+          "sourceVersion": "1",
+          "sourceHash": "b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7"
+        }
+      },
+      "revisedSnapshot": {
+        "id": "41bc2ef9-ca4d-4c6e-b7c2-f94f8586bfe5",
+        "resourceType": "CONTRACT",
+        "resourceId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+        "businessVersion": 2,
+        "reviewState": "VERIFIED",
+        "supersedesSnapshotId": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+        "snapshotHash": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+        "schemaVersion": "financial-snapshot-v1",
+        "canonicalReviewState": "COMPLETE",
+        "currency": "EUR",
+        "minorUnitExponent": 2,
+        "totals": {
+          "net": {
+            "minorUnits": "2037000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "tax": {
+            "minorUnits": "427770",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "gross": {
+            "minorUnits": "2464770",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          }
+        },
+        "roundingPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:rounding",
+          "version": "1",
+          "contentHash": "57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe"
+        },
+        "currencyPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:currency",
+          "version": "1",
+          "contentHash": "a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54"
+        },
+        "taxComponents": [
+          {
+            "componentId": "line:001:tax:vat",
+            "amount": {
+              "minorUnits": "207900",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "2",
+              "contentHash": "dd5d031cc677c51d8a207aa589afa6d1e597bf8254adb137a9fd4eb61f69dd98"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:2:source"
+          },
+          {
+            "componentId": "line:002:tax:vat",
+            "amount": {
+              "minorUnits": "219870",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "2",
+              "contentHash": "dd5d031cc677c51d8a207aa589afa6d1e597bf8254adb137a9fd4eb61f69dd98"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:2:source"
+          }
+        ],
+        "provenance": {
+          "sourceSystem": "novalure-crm",
+          "sourceRecordId": "36b12f1a-6314-40e6-9b0d-c5d15b95ea84",
+          "sourceVersion": "1",
+          "sourceHash": "b6fa8875482c0e34f1f49ba9fff988a94220c73a544b9d5bb4725a79ef6185b7"
+        }
+      },
+      "oldSnapshotEvidenceDigest": "38dc7c38ba5884980c7d0b640bd014081012095a054e6099059ca64c200671c9"
+    },
+    "B": {
+      "oldApprovalReference": "fe89d4da-1307-4449-b12c-40f871728768",
+      "oldApprovalStatus": "INVALIDATED",
+      "staleVersionCode": "VERSION_MISMATCH",
+      "currentVersionOldReferenceCode": "APPROVAL_REFERENCE_MISMATCH",
+      "newApprovalReference": "0e838eea-6cba-4f4d-b52a-fefafd741d13",
+      "newApprovalStatus": "VALID",
+      "revisedAction": {
+        "actionId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+        "actionVersion": 2,
+        "actionHash": "5df3669769423e2eed78b6961d69054488896f9211d7ee5153ae12808d7d715e",
+        "financialSnapshotId": "41bc2ef9-ca4d-4c6e-b7c2-f94f8586bfe5",
+        "financialSnapshotHash": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260"
+      }
+    },
+    "C": {
+      "unitId": "59d51d60-4a01-4087-af06-d04b75a746c4",
+      "saleId": "c7f4e25d-b307-47e9-b608-48bd321a2614",
+      "priorSnapshotId": "b32177b4-9761-4716-8a42-4aa804b1e81e",
+      "historicalSnapshot": {
+        "id": "7098dc61-1d31-40f8-8956-d50019426a94",
+        "resourceType": "PROPERTY_SALE",
+        "resourceId": "c7f4e25d-b307-47e9-b608-48bd321a2614",
+        "businessVersion": 2,
+        "reviewState": "VERIFIED",
+        "supersedesSnapshotId": "b32177b4-9761-4716-8a42-4aa804b1e81e",
+        "snapshotHash": "15c7f5c831dec3570b115428ebb3b8dc2e2142136d473b53a9c860e3e42bff9e",
+        "schemaVersion": "financial-snapshot-v1",
+        "canonicalReviewState": "COMPLETE",
+        "currency": "EUR",
+        "minorUnitExponent": 2,
+        "totals": {
+          "net": {
+            "minorUnits": "35000000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "tax": {
+            "minorUnits": "7000000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          },
+          "gross": {
+            "minorUnits": "42000000",
+            "currency": "EUR",
+            "minorUnitExponent": 2
+          }
+        },
+        "roundingPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:rounding",
+          "version": "1",
+          "contentHash": "57e75be1802decc1bb4c3c4825b9b0fa3a6a5b06bcdbf1410cfd1d4edcb88ffe"
+        },
+        "currencyPolicy": {
+          "id": "SYNTHETIC:G27:536f189b1755:currency",
+          "version": "1",
+          "contentHash": "a9e24c1395da2f9d753b6ca2d07313c8a5e8b2c9a542bfbe7845c663ec945a54"
+        },
+        "taxComponents": [
+          {
+            "componentId": "evidence:sale-price:tax:vat",
+            "amount": {
+              "minorUnits": "7000000",
+              "currency": "EUR",
+              "minorUnitExponent": 2
+            },
+            "policyReference": {
+              "id": "SYNTHETIC:G27:536f189b1755:tax",
+              "version": "1",
+              "contentHash": "936e52fc82491040ce7026d018cb060b7608bc064d17e0aabf62f95c17a7220d"
+            },
+            "jurisdiction": "AT:BUSINESS",
+            "sourceReference": "SYNTHETIC:G27:536f189b1755:tax:1:source"
+          }
+        ],
+        "provenance": {
+          "sourceSystem": "novalure-crm-financial-review",
+          "sourceRecordId": "b32177b4-9761-4716-8a42-4aa804b1e81e",
+          "sourceVersion": "1",
+          "sourceHash": "9e341a0ac67e5d5be787053778f4de6fcc408d6b5d2d0148d64e5aa9dbde2f76"
+        }
+      },
+      "historicalEvidenceDigest": "9a11561155824e9e09d29e470208d01a1a879dcbcc872be91f89752a8da8ae29",
+      "saleTimeNetMinorUnits": "35000000",
+      "currentUnitPriceMinorUnits": "36000000"
+    },
+    "E": {
+      "actionId": "935e0f4e-02ab-4c6d-9381-76038e089458",
+      "actionVersion": 1,
+      "contractVersion": "v1",
+      "revisionDigest": "c1b6da53891b34e7d055f7e13646ce7505788a1ba2ec0122c55d9a0790d0310b",
+      "auditEventIds": [
+        "1ce5fc4b-f532-4e2f-a2be-2dfcd99b3c02",
+        "23cd7e29-5c57-4ce9-aef0-e2f4de58d362",
+        "707d889b-cc66-472e-a7fa-0237e0b3ff25"
+      ],
+      "sideEffects": {
+        "crm_evelyn_contract_approvals": 0,
+        "crm_evelyn_contract_executions": 0
+      },
+      "deniedCodes": {
+        "request": "EVELYN_CONTRACT_VERSION_MISMATCH",
+        "verify": "EVELYN_CONTRACT_VERSION_MISMATCH",
+        "execute": "EVELYN_CONTRACT_VERSION_MISMATCH"
+      },
+      "evelynApprovalCountBefore": 0,
+      "evelynApprovalCountAfter": 0
+    },
+    "F": {
+      "foreignSnapshotId": "42c6343a-90c8-4a56-8ee5-54dcf318511b",
+      "read": {
+        "status": 404,
+        "code": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE"
+      },
+      "write": {
+        "status": 404,
+        "code": "FINANCIAL_SNAPSHOT_NOT_ACCESSIBLE"
+      },
+      "tenantId": "afeac3f9-7534-47f5-b749-b3fd91b8f91b"
+    },
+    "RACE": {
+      "actionId": "f229adfe-c4f3-41f5-9280-d61e03f14529",
+      "actionVersion": 2,
+      "effectId": "0486d4dd-77f8-458d-8672-591d2c31fa2a",
+      "concurrentRequests": 2,
+      "replayed": true,
+      "persistedExecutions": 1,
+      "externalEffect": false,
+      "contractDelivered": false
+    }
+  },
+  "artifacts": {
+    "contacts": [
+      "39676ead-f1f1-46a8-9f01-0fd5e26be8f7",
+      "f1950f21-0cf0-4daa-af2a-e6f2b2711a3d"
+    ],
+    "leads": [
+      "5b1511e1-0afe-4a55-9468-bfd08cd69083",
+      "f06aff9a-6925-443d-affb-2c6855af9ccc"
+    ],
+    "deals": [
+      "15f14eaf-e111-4340-a3dd-352f90c13471"
+    ],
+    "offers": [
+      "36b12f1a-6314-40e6-9b0d-c5d15b95ea84"
+    ],
+    "units": [
+      "59d51d60-4a01-4087-af06-d04b75a746c4"
+    ],
+    "reservations": [
+      "e1fa6f07-6ee4-402c-bef4-9d812a83a6f3"
+    ],
+    "sales": [
+      "c7f4e25d-b307-47e9-b608-48bd321a2614"
+    ],
+    "policies": [
+      "00264739-3985-45fa-b66e-f4a7c68f42d0",
+      "d3241a12-91aa-4c6e-b329-0eaa235a9679",
+      "56229b75-8e0f-42f7-869b-94ae258872e2",
+      "cd603590-6b3d-4da8-bb60-357d7a0ed986"
+    ],
+    "actions": [
+      "f229adfe-c4f3-41f5-9280-d61e03f14529"
+    ],
+    "snapshots": [
+      "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+      "41bc2ef9-ca4d-4c6e-b7c2-f94f8586bfe5",
+      "b32177b4-9761-4716-8a42-4aa804b1e81e",
+      "7098dc61-1d31-40f8-8956-d50019426a94"
+    ],
+    "approvals": [
+      "fe89d4da-1307-4449-b12c-40f871728768",
+      "0e838eea-6cba-4f4d-b52a-fefafd741d13"
+    ]
+  },
+  "cleanup": {
+    "strategy": "DISPOSABLE_PREVIEW_BRANCH_DELETE",
+    "supportedByRunner": true,
+    "command": "node scripts/qa-g27-live-preview.mjs --cleanup --run-authorized-preview-cleanup",
+    "status": "PENDING",
+    "targets": [
+      {
+        "system": "crm",
+        "provider": "neon",
+        "projectId": "super-block-59791927",
+        "branchId": "br-summer-breeze-awuzinct",
+        "branchName": "g27-qa-crm-20260923",
+        "parentBranchId": "br-dry-thunder-awmimouk",
+        "parentBranchName": "main",
+        "schemaSourceBranchId": null,
+        "schemaSourceBranchName": null,
+        "createdAt": "2026-09-20T19:57:16Z"
+      },
+      {
+        "system": "evelyn",
+        "provider": "neon",
+        "projectId": "super-block-59791927",
+        "branchId": "br-young-water-awa2ri4k",
+        "branchName": "evelyn-g27-qa-20260924",
+        "parentBranchId": null,
+        "parentBranchName": null,
+        "schemaSourceBranchId": "br-dry-thunder-awmimouk",
+        "schemaSourceBranchName": "main",
+        "createdAt": "2026-09-24T12:09:41Z"
+      }
+    ]
+  },
+  "limits": [
+    "The browser runner proves public Preview behavior; independent database evidence must confirm row counts and audit events.",
+    "Append-only G27 facts are cleaned by deleting explicitly disposable Preview database branches, never by mutating historical rows.",
+    "The Legacy/V1 and foreign-tenant fixtures must be prepared by a separate tenant-aware admin seed before the run."
+  ],
+  "loginHttp": [
+    {
+      "method": "POST",
+      "status": 303,
+      "origin": "https://novalure-crm-git-codex-crm-production-readiness-g27-novalure.vercel.app",
+      "fetchSite": null
+    },
+    {
+      "method": "POST",
+      "status": 303,
+      "origin": "https://novalure-crm-git-codex-crm-production-readiness-g27-novalure.vercel.app",
+      "fetchSite": null
+    }
+  ],
+  "loginResultPath": "/"
+}

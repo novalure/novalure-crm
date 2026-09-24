@@ -45,6 +45,7 @@ import {
 import {
   formatCurrency,
   formatNumber,
+  getLocale,
   getCrmAnalysisBotCopy,
   type LanguageCode,
 } from "@/lib/i18n";
@@ -55,7 +56,19 @@ type AnalysisPriority = "all" | "p0" | "p1" | "p2";
 type FeatureStatus = "ready" | "partial" | "gap";
 type AnalysisTab = "overview" | "sprint" | "features" | "recommendations" | "playbook";
 
-const CLOSED_DEAL_STAGES = new Set<string>(["Gewonnen", "Verloren", "Disqualifiziert", "Abschluss"]);
+const CLOSED_DEAL_STAGES = new Set<string>(["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren", "Abschluss"]);
+
+function formatExactEuroMinorUnits(minorUnits: string, language: LanguageCode) {
+  if (!/^(?:0|-?[1-9][0-9]{0,77})$/.test(minorUnits)) return "EUR —";
+  const negative = minorUnits.startsWith("-");
+  const unsigned = negative ? minorUnits.slice(1) : minorUnits;
+  const padded = unsigned.padStart(3, "0");
+  const integer = new Intl.NumberFormat(getLocale(language), { maximumFractionDigits: 0 })
+    .format(BigInt(padded.slice(0, -2)));
+  const decimal = new Intl.NumberFormat(getLocale(language)).formatToParts(1.1)
+    .find((part) => part.type === "decimal")?.value ?? ".";
+  return `EUR ${negative ? "-" : ""}${integer}${decimal}${padded.slice(-2)}`;
+}
 
 type CrmAnalysisBotProps = {
   automations: Automation[];
@@ -118,7 +131,10 @@ type RecommendationRuntimeSummary = {
   fallbackAudits: number;
   followUpActions: number;
   latestConversionSnapshot: {
-    closedRevenueCents: number;
+    closedRevenueAuthoritative: boolean;
+    closedRevenueCents: string;
+    financialPolicyRequiredCount: number;
+    financialReviewCount: number;
     leadsCount: number;
     reservationsCount: number;
     unitSalesVelocity: number;
@@ -806,13 +822,31 @@ export function CrmAnalysisBot({
               ))}
             </div>
             {runtimeSummary.latestConversionSnapshot ? (
-              <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-semibold text-slate-800">
-                {copy.runtime.latestSnapshot(
-                  formatNumber(runtimeSummary.latestConversionSnapshot.leadsCount, language),
-                  formatCurrency(runtimeSummary.latestConversionSnapshot.closedRevenueCents / 100, language),
-                  formatNumber(runtimeSummary.latestConversionSnapshot.unitSalesVelocity, language),
-                )}
-              </p>
+              <div className="mt-3 space-y-2">
+                <p className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-semibold text-slate-800">
+                  {copy.runtime.latestSnapshot(
+                    formatNumber(runtimeSummary.latestConversionSnapshot.leadsCount, language),
+                    runtimeSummary.latestConversionSnapshot.closedRevenueAuthoritative
+                      ? formatExactEuroMinorUnits(runtimeSummary.latestConversionSnapshot.closedRevenueCents, language)
+                      : copy.runtime.unverifiedRevenue,
+                    formatNumber(runtimeSummary.latestConversionSnapshot.unitSalesVelocity, language),
+                  )}
+                </p>
+                {!runtimeSummary.latestConversionSnapshot.closedRevenueAuthoritative ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                    {copy.runtime.unverifiedRevenueWarning}
+                  </p>
+                ) : null}
+                {runtimeSummary.latestConversionSnapshot.financialReviewCount > 0 ||
+                runtimeSummary.latestConversionSnapshot.financialPolicyRequiredCount > 0 ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                    {copy.runtime.financialCoverageWarning(
+                      formatNumber(runtimeSummary.latestConversionSnapshot.financialReviewCount, language),
+                      formatNumber(runtimeSummary.latestConversionSnapshot.financialPolicyRequiredCount, language),
+                    )}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             {runtimeSummary.consentCoverage.length ? (
               <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3">

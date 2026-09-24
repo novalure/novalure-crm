@@ -154,7 +154,11 @@ type ProjectRow = {
   id: string;
   leads: number | string;
   name: string;
-  revenueCents: number | string | null;
+  revenueCurrency: string | null;
+  revenueDimensionCount: number | string;
+  revenueMinorUnitExponent: number | string | null;
+  revenueMinorUnits: string | null;
+  revenueReviewCount: number | string;
   setupDefaults: Project["setupDefaults"] | null;
   status: Project["status"];
   type: string;
@@ -1091,13 +1095,75 @@ async function loadCustomerProjects(workspaceId: string) {
         p.default_operating_model as "defaultOperatingModel",
         p.default_pipeline_id as "defaultPipelineId",
         p.setup_defaults as "setupDefaults",
-        count(distinct l.id) as leads,
-        coalesce(sum(d.value_cents), 0) as "revenueCents"
+        coalesce(lead_summary.leads, 0)::int as leads,
+        financial_summary."revenueCurrency",
+        financial_summary."revenueMinorUnitExponent",
+        financial_summary."revenueMinorUnits",
+        financial_summary."revenueReviewCount",
+        financial_summary."revenueDimensionCount"
       from projects p
-      left join leads l on l.project_id = p.id and l.workspace_id = p.workspace_id
-      left join deals d on d.project_id = p.id and d.workspace_id = p.workspace_id
+      left join lateral (
+        select count(*)::int as leads
+        from leads lead_record
+        where lead_record.workspace_id = p.workspace_id
+          and lead_record.project_id = p.id
+      ) lead_summary on true
+      left join lateral (
+        with won_deal_financials as (
+          select
+            deal_record.id,
+            latest_snapshot.id as snapshot_id,
+            latest_snapshot.review_state,
+            latest_snapshot.canonical_snapshot
+          from deals deal_record
+          left join lateral (
+            select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+            from crm_financial_snapshots snapshot
+            where snapshot.workspace_id = deal_record.workspace_id
+              and snapshot.project_id = deal_record.project_id
+              and snapshot.resource_type = 'DEAL'
+              and snapshot.resource_id = deal_record.id
+            order by snapshot.business_version desc, snapshot.id desc
+            limit 1
+          ) latest_snapshot on true
+          where deal_record.workspace_id = p.workspace_id
+            and deal_record.project_id = p.id
+            and deal_record.stage = 'Gewonnen'
+        ), review_summary as (
+          select
+            count(*) filter (
+              where snapshot_id is null or review_state = 'NEEDS_REVIEW'
+            )::int as review_count
+          from won_deal_financials
+        ), verified_dimensions as (
+          select
+            canonical_snapshot->>'currency' as currency,
+            (canonical_snapshot->>'minorUnitExponent')::int as exponent,
+            sum((canonical_snapshot#>>'{totals,net,minorUnits}')::numeric)::text as minor_units
+          from won_deal_financials
+          where review_state = 'VERIFIED'
+            and canonical_snapshot->>'reviewState' = 'COMPLETE'
+          group by
+            canonical_snapshot->>'currency',
+            (canonical_snapshot->>'minorUnitExponent')::int
+        ), verified_summary as (
+          select
+            count(*)::int as dimension_count,
+            min(currency) as currency,
+            min(exponent) as exponent,
+            case when count(*) = 1 then min(minor_units) else null end as minor_units
+          from verified_dimensions
+        )
+        select
+          verified_summary.currency as "revenueCurrency",
+          verified_summary.exponent as "revenueMinorUnitExponent",
+          verified_summary.minor_units as "revenueMinorUnits",
+          coalesce(review_summary.review_count, 0)::int as "revenueReviewCount",
+          coalesce(verified_summary.dimension_count, 0)::int as "revenueDimensionCount"
+        from review_summary
+        cross join verified_summary
+      ) financial_summary on true
       where p.workspace_id = $1
-      group by p.id
       order by p.updated_at desc
     `,
     [workspaceId],
@@ -1320,8 +1386,29 @@ function toCustomerWorkspaceAccess(row: CustomerAccessRow): CustomerWorkspaceAcc
   };
 }
 
+function formatExactMinorUnits(minorUnits: string, currency: string, exponent: number) {
+  if (!/^(?:0|-?[1-9][0-9]{0,77})$/.test(minorUnits) || !/^[A-Z]{3}$/.test(currency)) return null;
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 9) return null;
+
+  const negative = minorUnits.startsWith("-");
+  const unsigned = negative ? minorUnits.slice(1) : minorUnits;
+  const padded = unsigned.padStart(exponent + 1, "0");
+  const integerDigits = exponent === 0 ? padded : padded.slice(0, -exponent);
+  const fractionDigits = exponent === 0 ? "" : padded.slice(-exponent);
+  const integer = new Intl.NumberFormat("de-AT", { maximumFractionDigits: 0 }).format(BigInt(integerDigits));
+  return `${currency} ${negative ? "-" : ""}${integer}${fractionDigits ? `,${fractionDigits}` : ""}`;
+}
+
 function toProject(row: ProjectRow): Project {
-  const revenueCents = Number(row.revenueCents ?? 0);
+  const dimensionCount = Number(row.revenueDimensionCount ?? 0);
+  const reviewCount = Number(row.revenueReviewCount ?? 0);
+  const exponent = row.revenueMinorUnitExponent === null ? null : Number(row.revenueMinorUnitExponent);
+  const exactRevenue =
+    dimensionCount === 1 && row.revenueMinorUnits && row.revenueCurrency && exponent !== null
+      ? formatExactMinorUnits(row.revenueMinorUnits, row.revenueCurrency, exponent)
+      : null;
+  const revenueValue = dimensionCount > 1 ? "Mehrere Währungen" : (exactRevenue ?? "—");
+  const revenue = reviewCount > 0 ? `${revenueValue} · ${reviewCount} Finanzprüfung(en) offen` : revenueValue;
 
   return {
     customerType: row.customerType ?? undefined,
@@ -1330,11 +1417,11 @@ function toProject(row: ProjectRow): Project {
     id: row.id,
     leads: Number(row.leads ?? 0),
     name: row.name,
-    revenue: new Intl.NumberFormat("de-AT", {
-      currency: "EUR",
-      maximumFractionDigits: 0,
-      style: "currency",
-    }).format(revenueCents / 100),
+    revenue,
+    revenueCurrency: dimensionCount === 1 ? (row.revenueCurrency ?? undefined) : undefined,
+    revenueMinorUnitExponent: dimensionCount === 1 && exponent !== null ? exponent : undefined,
+    revenueMinorUnits: dimensionCount === 1 ? (row.revenueMinorUnits ?? undefined) : undefined,
+    revenueReviewCount: reviewCount,
     setupDefaults: row.setupDefaults ?? undefined,
     status: row.status,
     type: row.type,

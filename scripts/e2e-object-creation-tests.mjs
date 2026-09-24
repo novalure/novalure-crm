@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -1169,12 +1170,14 @@ async function main() {
       ],
     }));
     await expectPersisted("save property cost items", guard, () => savePropertyCostItems({
+      correlationId: randomUUID(),
       costItems: [
         { costKey: "operating_costs", groupKey: "monthly", label: "UATTEST_E2E Betriebskosten", monthlyGrossCents: 35000, vatPercent: 10 },
         { costKey: "heating_costs", groupKey: "monthly", label: "UATTEST_E2E Heizkosten", monthlyGrossCents: 12000, vatPercent: 20 },
         { costKey: "purchase_ancillary", groupKey: "one_time", label: "UATTEST_E2E Kaufnebenkosten", oneTimeGrossCents: 9000000, vatPercent: 0 },
         { commissionRelevant: true, costKey: "broker_commission", groupKey: "one_time", label: "UATTEST_E2E Provision", oneTimeGrossCents: 4860000, vatPercent: 20 },
       ],
+      idempotencyKey: randomUUID(),
       projectId: unitProject.id,
       propertyId: primaryListing.id,
       session,
