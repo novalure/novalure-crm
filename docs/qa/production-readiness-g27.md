@@ -22,8 +22,14 @@ Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
 
 **G27 Status: OPEN**
 
-Aktueller verbleibender Abschluss: vollständiges Cleanup und abschließender
-unabhängiger Security-Review. Die fehlenden QA-Artefakte und die Evelyn-Isolation
+**Einziger verbleibender Blocker: `LOCAL_QA_CLEANUP_POLICY_BLOCKED`**
+
+Aktueller verbleibender Abschluss: zwölf lokale CRM-QA-Dateien entfernen und
+deren Abwesenheit bestätigen. Beide Löschversuche wurden von der automatischen
+Ausführungsprüfung abgelehnt; Details und exakte Benutzeraktion stehen in der
+[Bereinigungsliste](g27-local-cleanup-blocker-20260924.md).
+Cloud-Cleanup und abschließender unabhängiger Security-Review sind PASS.
+Die fehlenden QA-Artefakte und die Evelyn-Isolation
 sind keine offenen Blocker mehr. 220 Live-Assertions und 93 HTTP-Aufrufe bestanden
 am 24.09.2026 zwischen 13:41:31 und 13:42:45 UTC. Siehe
 [Live-Evidenz](g27-live-preview-evidence-20260924.json) und
@@ -36,6 +42,23 @@ zusätzlich vor jedem Browser-Write über Vercel auf genau dieses Deployment
 aufgelöst. Der immutable Pin wurde dabei nicht durch eine Alias-Annahme ersetzt.
 Der temporäre Ein-Stunden-Metadaten-Token wurde nach dem Live-Lauf widerrufen;
 seine Abwesenheit in der Vercel-Tokenliste ist bestätigt.
+
+[CRM-Cleanup-Evidenz](g27-crm-cleanup-20260924.json): QA-Datenbankbranch entfernt,
+zwölf G27-Deployments entfernt und jeweils HTTP 404, zehn branchgebundene
+Preview-Variablen entfernt; übrige Vercel-Umgebungswerte und Production-Deployments
+unverändert. [Evelyn-Cleanup-Evidenz](g27-evelyn-cleanup-20260924.json): separater
+QA-Branch, drei Previews, vier Preview-Variablen, QA-Gitbranch/Worktree und private
+QA-Dateien entfernt. Bestehende allgemeine Projekt-Zugänge wurden nicht widerrufen.
+
+[Unabhängige Evelyn-Evidenz](g27-evelyn-independent-review-20260924.json) bestätigt
+0 Critical / 0 High, 30 gültige unveränderliche Auditereignisse, zehn eindeutige
+Nonces, null verbleibende Owner-Sessions und unveränderte fremde Tenants.
+Der Cleanup-Delta in `db4523a` wurde ebenfalls unabhängig geprüft.
+
+`db4523a` entfernt den temporären HTTP-Probe-Endpunkt. Ausschließlich automatische
+Deployments des G27-Branches sind deaktiviert, damit Abschluss-Commits nach dem
+Cleanup keine Preview mit geerbter Konfiguration erstellen. Die bestehende
+Production-Sperre `main:false` bleibt erhalten. PR #65 bleibt Draft und ungemergt.
 
 ### Fortsetzung: isolierte Evelyn-QA und Legacy-Fall E
 
@@ -68,15 +91,13 @@ Auditereignisse über READ-ONLY-SQL. Er enthält außerdem einen parallelen
 Execute-/Replay-Fall mit Nachweis genau einer synthetischen Execution.
 Diese Live-Fälle wurden vollständig ausgeführt und sind **PASS**.
 
-Frische lokale Prüfung dieser Fortsetzung: G27 115/115 plus Runner/Probe 31/31,
+Frische lokale Abschlussprüfung: G27 115/115 plus Runner/Probe 33/33,
 Baseline 481/481 plus isolierter Browser 26/26, Neon-Profil 11/11:
-**664/664 PASS**. Die zusätzlichen Correlation-/Fremdtenant-Assertions wurden
-anschließend im Workflow erneut geprüft (18/18, nicht doppelt gezählt).
-Typecheck, Lint, Build und Dependency-Audit (0 Vulnerabilities) PASS.
-Dieser lokale Zwischenstand wurde durch die oben verlinkte echte Live-Abnahme ergänzt.
-Cleanup und abschließender Security-Review bleiben offen.
-Die nachfolgenden älteren Tabellen dokumentieren den bisherigen Stand vor
-dieser Fortsetzung und sind nicht zusätzlich zu diesen 664 Tests zu zählen.
+**666/666 PASS**. Zusätzliche Wiederholungen werden nicht doppelt gezählt.
+Typecheck, Lint, Build, Dependency-Audit (0 Vulnerabilities) und Secret-Scan PASS.
+Build/Typecheck und Runner-Tests sind auch nach Entfernung des Probe-Endpunkts
+PASS. Die GitHub-Pflichtprüfungen für `db4523a` sind PASS.
+Die nachfolgenden Tabellen schlüsseln dieselben Tests auf; sie zählen nicht zusätzlich.
 
 Für die vorgeschaltete schreibfreie OIDC-/Tenant-Prüfung existierte kein
 verwendbarer CRM-Endpunkt: der fachliche V2-Client lehnt unvollständige Bodies
@@ -100,7 +121,8 @@ Unabhängiger Evelyn-Review: 0 Critical/High. Ein Medium im Caller (Vertrauen au
 pass=true ohne exakte Ergebnisreihenfolge) wurde korrigiert und negativ getestet.
 Bekanntes Low: die eingehende HMAC ist innerhalb von 30 Sekunden wiederholbar;
 es werden ausschließlich die festen unvollständigen Payloads gesendet. Die Route
-läuft am 25.09.2026 00:00 UTC ab und muss **vor Merge entfernt** werden.
+war auf den 25.09.2026 00:00 UTC begrenzt. Der HTTP-Endpunkt wurde nach seiner
+erfolgreichen Verwendung bereits in `db4523a` entfernt, vor jedem Merge.
 Die CI prüft Workflow und Runner/Probe jetzt explizit. Kein Live-PASS aus diesen
 lokalen Prüfungen abgeleitet.
 
@@ -288,7 +310,7 @@ Es werden keine Credentials oder Secretwerte in Snapshot-, Event- oder Abschluss
 
 ## Lokale Verifikation
 
-Frische Abnahme vom 24.09.2026: [Restore-/Browserbericht](g27-recovery-browser-20260924.md) und [strukturierte Evidenz](g27-blocker-evidence-20260924.json). Native Neon-Wiederherstellung mit vollständigem Hashvergleich und 64/64 nachgelagerten RLS-Prüfungen PASS. Preview A–F bleibt offen.
+Frische Abnahme vom 24.09.2026: [Restore-/Browserbericht](g27-recovery-browser-20260924.md) und [strukturierte Evidenz](g27-blocker-evidence-20260924.json). Native Neon-Wiederherstellung mit vollständigem Hashvergleich und 64/64 nachgelagerten RLS-Prüfungen PASS. Die nachfolgende echte Preview-A–F-Abnahme ist ebenfalls PASS.
 
 Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 
@@ -304,7 +326,7 @@ Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 | `test:sales:migrations` | 15/15 |
 | `test:neon:061` | 11/11 |
 | `test:g08` | 51/51 |
-| `qa:sales:e2e` | 20/20 |
+| `qa:sales:e2e` | 26/26 |
 | **Baseline total** | **507/507** |
 
 ### G27 zusätzlich
@@ -315,11 +337,12 @@ Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 | V2 Client Contract | 29/29 | ausgeführte Transport-/Schema-/Bindingtests |
 | Reporting | 7/7 | Quell-/Query-Invarianten |
 | Migration/DB | 17/17 | echte lokale PostgreSQL-Transaktionen und Dump/Restore |
-| Workflow/RBAC/Security/Legacy/Property | 32/32 | echte lokale PostgreSQL- und HTTP-Grenzen |
-| **G27 total** | **114/114** | disjunkte Node-Testzählung |
-| **Lokaler Gesamtstand** | **621/621** | 507 Baseline + 114 G27 |
+| Workflow/RBAC/Security/Legacy/Property | 33/33 | echte lokale PostgreSQL- und HTTP-Grenzen |
+| **G27 total** | **115/115** | disjunkte Node-Testzählung |
+| **Baseline + G27** | **622/622** | 507 Baseline + 115 G27 |
 
-Zusätzlich am 24.09.2026 frisch ausgeführt: G27-Neon-Profil 11/11 PASS, damit insgesamt **632/632** lokale Tests.
+Zusätzlich frisch ausgeführt: G27-Neon-Profil 11/11 und Runner/Probe 33/33 PASS,
+damit insgesamt **666/666** lokale Tests.
 
 Historische zusätzliche unabhängige Negativproben, nicht in dieser frischen Gesamtzahl gezählt:
 
@@ -336,7 +359,7 @@ Historische zusätzliche unabhängige Negativproben, nicht in dieser frischen Ge
 | ESLint `--max-warnings=0` | PASS |
 | Next.js 16.3.5 Production Build | PASS, 85 statische Seiten generiert |
 | Production Dependency Audit | PASS, 0 Vulnerabilities |
-| Secret Scan | PASS für 136 Commits der HEAD-Historie; finaler Änderungsdiff wird vor Commit erneut geprüft |
+| Secret Scan | PASS; GitHub Full-History/Current-Tree und lokaler finaler Quell-/Evidenzscan |
 | `git diff --check` | PASS |
 | unabhängiger Security-Review | PASS; 0 bestätigte Critical/High und keine G27-blockierenden P2 |
 
@@ -346,7 +369,8 @@ Die autorisierte Live-Preview-Abnahme ist vollständig PASS. Verwendet wurden
 ausschließlich die nachgewiesenen disposable CRM-/Evelyn-Datenbanken und
 synthetische Daten. Die öffentliche Evidenz enthält Pins, Testziele, Ergebnisse,
 IDs und HTTP-Status; Zugangsdaten verbleiben ausschließlich in geschützten
-privaten Artefakten beziehungsweise im Prozessspeicher. Cleanup steht noch aus.
+privaten Artefakten beziehungsweise im Prozessspeicher. Cloud-Cleanup ist PASS;
+die zwölf lokalen CRM-QA-Dateien bleiben bis zur manuellen Entfernung geschützt.
 
 | Fall | Erwartung | Stand |
 | --- | --- | --- |
@@ -358,7 +382,10 @@ privaten Artefakten beziehungsweise im Prozessspeicher. Cleanup steht noch aus.
 | F | Cross-Tenant-Zugriff wird verweigert | PASS – Lesen/Schreiben 404, fremder Snapshot unverändert |
 | Race/Idempotency | zwei parallele Executes und Replay | PASS – genau eine persistierte synthetische Execution |
 
-G27 darf erst nach einem vollständigen A–F-PASS auf **CLOSED** gesetzt werden. Die Preview muss nachweisen, dass die konfigurierte Evelyn-V2-Runtime dem gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc` entspricht; ein älterer G08-Livestatus reicht dafür nicht.
+G27 darf erst nach allen Pflichtgates einschließlich lokaler Bereinigung auf
+**CLOSED** gesetzt werden. Die vollständige A–F-/Race-Evidenz bestätigt die
+Evelyn-V2-Runtime am gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`.
+Die erfolgreich geprüften Preview-URLs wurden anschließend absichtlich gelöscht.
 
 ## Produktionsgrenzen
 
