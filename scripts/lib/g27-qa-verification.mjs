@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 
 // This helper is intentionally unusable on any existing branch or Production.
-const target = Object.freeze({ project: "super-block-59791927", branch: "br-summer-breeze-awuzinct", databases: ["qa_g27_20260923", "qa_g27_restore_20260923"], runtime: "g27_qa_20260923" });
+const target = Object.freeze({ project: "super-block-59791927", branch: "br-summer-breeze-awuzinct", databases: ["qa_g27_20260923", "qa_g27_restore_20260923", "qa_g27_recovery_20260924"], runtime: "g27_qa_20260923" });
 const identifier = value => '"' + value.replaceAll('"', '""') + '"';
 const hash = value => createHash("sha256").update(value).digest("hex");
 const canonical = value => value === null || typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? '[' + value.map(canonical).join(',') + ']' : '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';

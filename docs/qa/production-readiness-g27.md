@@ -1,6 +1,6 @@
 # G27 Production Readiness – historische Geld-/Steuersemantik
 
-Stand: 2026-09-20
+Stand: 2026-09-24
 
 CRM-Repository: `novalure/novalure-crm`
 
@@ -190,6 +190,8 @@ Es werden keine Credentials oder Secretwerte in Snapshot-, Event- oder Abschluss
 
 ## Lokale Verifikation
 
+Frische Abnahme vom 24.09.2026: [Restore-/Browserbericht](g27-recovery-browser-20260924.md) und [strukturierte Evidenz](g27-blocker-evidence-20260924.json). Native Neon-Wiederherstellung mit vollständigem Hashvergleich und 64/64 nachgelagerten RLS-Prüfungen PASS. Preview A–F bleibt offen.
+
 Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 
 ### Bestehende CRM-Regression
@@ -205,7 +207,7 @@ Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 | `test:neon:061` | 11/11 |
 | `test:g08` | 51/51 |
 | `qa:sales:e2e` | 20/20 |
-| **Baseline total** | **501/501** |
+| **Baseline total** | **507/507** |
 
 ### G27 zusätzlich
 
@@ -217,9 +219,11 @@ Ausgeführt mit Node `24.18.0` und npm `11.16.0`.
 | Migration/DB | 17/17 | echte lokale PostgreSQL-Transaktionen und Dump/Restore |
 | Workflow/RBAC/Security/Legacy/Property | 32/32 | echte lokale PostgreSQL- und HTTP-Grenzen |
 | **G27 total** | **114/114** | disjunkte Node-Testzählung |
-| **Lokaler Gesamtstand** | **615/615** | 501 Baseline + 114 G27 |
+| **Lokaler Gesamtstand** | **621/621** | 507 Baseline + 114 G27 |
 
-Zusätzliche unabhängige Negativproben, nicht in den 602 gezählt:
+Zusätzlich am 24.09.2026 frisch ausgeführt: G27-Neon-Profil 11/11 PASS, damit insgesamt **632/632** lokale Tests.
+
+Historische zusätzliche unabhängige Negativproben, nicht in dieser frischen Gesamtzahl gezählt:
 
 - 66/66 Snapshot-Nullmutationen
 - 25/25 Policy-Nullmutationen
