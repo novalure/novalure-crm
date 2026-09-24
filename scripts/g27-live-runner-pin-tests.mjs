@@ -1,7 +1,52 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { vercelDeploymentEvidence } from "./qa-g27-live-preview.mjs";
+import { vercelDeploymentEvidence, cleanupTarget } from "./qa-g27-live-preview.mjs";
 import { exactProbeResults, previewAccessHeaders } from "./qa-g27-isolation-probe.mjs";
+import { verifyCrmBrowserBinding, crmBrowserOrigin } from "./lib/g27-preview-access.mjs";
+
+test("cleanup permits only the exact schema-only Evelyn branch with absent lineage and pinned schema source", () => {
+  const oldKey = process.env.G27_EVELYN_NEON_API_KEY, oldProject = process.env.G27_EVELYN_NEON_PROJECT_ID;
+  process.env.G27_EVELYN_NEON_API_KEY = "synthetic-test-only";
+  process.env.G27_EVELYN_NEON_PROJECT_ID = "super-block-59791927";
+  const target = { system: "evelyn", provider: "neon", environment: "preview", disposable: true,
+    projectId: "super-block-59791927", branchId: "br-young-water-awa2ri4k", branchName: "evelyn-g27-qa-20260924",
+    parentBranchId: null, parentBranchName: null, schemaSourceBranchId: "br-dry-thunder-awmimouk",
+    schemaSourceBranchName: "main", createdAt: "2026-09-24T12:09:41Z", apiKeyEnv: "G27_EVELYN_NEON_API_KEY" }; // gitleaks:allow -- environment variable name, not a credential
+  const publicTarget = Object.fromEntries(Object.entries(target).filter(([key]) => !["environment", "disposable", "apiKeyEnv"].includes(key)));
+  const prior = { cleanup: { targets: [publicTarget] } };
+  const preseed = { database: { evelynProjectId: target.projectId, evelynBranchId: target.branchId, evelynParentBranchId: null } };
+  try {
+    assert.equal(cleanupTarget(target, prior, preseed).schemaOnly, true);
+    for (const change of [{ branchId: "br-other" }, { projectId: "production-project" },
+      { schemaSourceBranchId: "br-other" }, { schemaSourceBranchName: "other" },
+      { parentBranchId: "br-dry-thunder-awmimouk" }, { environment: "production" }, { disposable: false }]) {
+      assert.throws(() => cleanupTarget({ ...target, ...change }, prior, preseed));
+    }
+  } finally {
+    if (oldKey === undefined) delete process.env.G27_EVELYN_NEON_API_KEY; else process.env.G27_EVELYN_NEON_API_KEY = oldKey;
+    if (oldProject === undefined) delete process.env.G27_EVELYN_NEON_PROJECT_ID; else process.env.G27_EVELYN_NEON_PROJECT_ID = oldProject;
+  }
+});
+
+test("CRM browser alias is re-resolved and rejects deployment, commit, team, project and environment drift", async () => {
+  const previousFetch = globalThis.fetch;
+  const section = { deploymentId: "dpl_synthetic", url: "https://novalure-synthetic-novalure.vercel.app", commitSha: "a".repeat(40) };
+  const valid = { id: section.deploymentId, url: new URL(section.url).hostname,
+    projectId: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", teamId: "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    meta: { githubCommitSha: section.commitSha, githubCommitRef: "codex/crm-production-readiness-g27" },
+    readyState: "READY", target: null };
+  try {
+    globalThis.fetch = async () => Response.json(valid);
+    assert.equal(await verifyCrmBrowserBinding(section), crmBrowserOrigin);
+    for (const change of [{ id: "dpl_other" }, { url: "other.vercel.app" }, { projectId: "prj_other" },
+      { teamId: "team_other" }, { target: "production" }, { readyState: "BUILDING" },
+      { meta: { ...valid.meta, githubCommitSha: "b".repeat(40) } },
+      { meta: { ...valid.meta, githubCommitRef: "main" } }]) {
+      globalThis.fetch = async () => Response.json({ ...valid, ...change });
+      await assert.rejects(verifyCrmBrowserBinding(section), /BINDING_MISMATCH/);
+    }
+  } finally { globalThis.fetch = previousFetch; }
+});
 
 test("Preview access token is origin-bound by project/team/environment and expires", () => {
   const claims = { project_id: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", owner_id: "team_sjD78IkSicXJK6TAOR1JC7Wv",

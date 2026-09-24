@@ -3,17 +3,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { vercelDeploymentEvidence } from "./qa-g27-live-preview.mjs";
+import { previewAccessHeaders } from "./lib/g27-preview-access.mjs";
+export { previewAccessHeaders } from "./lib/g27-preview-access.mjs";
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-
-export function previewAccessHeaders(token, now = Date.now()) {
-  if (typeof token !== "string") throw new Error("PREVIEW_ACCESS_REQUIRED");
-  const claim = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
-  if (claim.project_id !== "prj_R32Okl6AHijTohvuKmryuTLjWMsk" || claim.owner_id !== "team_sjD78IkSicXJK6TAOR1JC7Wv"
-    || claim.environment !== "development" || !Number.isFinite(claim.exp) || claim.exp * 1000 <= now) {
-    throw new Error("PREVIEW_ACCESS_BINDING_FAILED");
-  }
-  return { "x-vercel-trusted-oidc-idp-token": token };
-}
 
 export function exactProbeResults(results) {
   const expected = [["control", 400, "INVALID_INPUT"], ["foreign", 401, "SERVICE_AUTH_DENIED"]];

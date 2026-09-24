@@ -18,9 +18,24 @@ Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
 
 **Lokale G27-Implementierung: PASS**
 
-**G27 Production Readiness: BLOCKED**
+**G27 Live A–F und Race/Idempotency: PASS**
 
 **G27 Status: OPEN**
+
+Aktueller verbleibender Abschluss: vollständiges Cleanup und abschließender
+unabhängiger Security-Review. Die fehlenden QA-Artefakte und die Evelyn-Isolation
+sind keine offenen Blocker mehr. 220 Live-Assertions und 93 HTTP-Aufrufe bestanden
+am 24.09.2026 zwischen 13:41:31 und 13:42:45 UTC. Siehe
+[Live-Evidenz](g27-live-preview-evidence-20260924.json) und
+[nachgelagerte READ-ONLY-Datenbankprüfung](g27-post-live-database-20260924.json).
+
+Getestetes CRM: `https://novalure-71fl8c6wh-novalure.vercel.app`, Deployment
+`dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY`, Commit
+`5058b06d71d3e48716249bd484a544b4244e6a4c`. Die konfigurierte CRM-Branch-URL wurde
+zusätzlich vor jedem Browser-Write über Vercel auf genau dieses Deployment
+aufgelöst. Der immutable Pin wurde dabei nicht durch eine Alias-Annahme ersetzt.
+Der temporäre Ein-Stunden-Metadaten-Token wurde nach dem Live-Lauf widerrufen;
+seine Abwesenheit in der Vercel-Tokenliste ist bestätigt.
 
 ### Fortsetzung: isolierte Evelyn-QA und Legacy-Fall E
 
@@ -33,8 +48,8 @@ Preview-Konfiguration korrigiert. Nachfolge-Preview:
 `https://evelyn-jyh6ijl3u-novalure.vercel.app`, Deployment
 `dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA`, unveränderter Evelyn-Commit, READY Preview.
 Das private Access-Artefakt bestätigt jetzt den CRM-Tenant. Keine Datenbank wurde
-neu provisioniert oder erneut befüllt. Gemeinsame Live-Writes bleiben bis zur
-abschließenden Runtime-Authentisierungs-/Tenant-Prüfung gesperrt. Der Server-Client
+neu provisioniert oder erneut befüllt. Die abschließende schreibfreie
+Runtime-Authentisierungs-/Tenant-Prüfung und der gemeinsame Live-Lauf sind PASS. Der Server-Client
 und Runner sind auf diese Nachfolge-Preview gepinnt.
 
 Fall E verwendet einen tatsächlich erzeugbaren V1-Altvertrag. Request, Verify
@@ -51,14 +66,15 @@ Der versionierte Runner `scripts/qa-g27-live-preview.mjs` prüft für E zusätzl
 die unveränderte V1-Revision, Null Approval-/Execution-Zeilen und drei neue
 Auditereignisse über READ-ONLY-SQL. Er enthält außerdem einen parallelen
 Execute-/Replay-Fall mit Nachweis genau einer synthetischen Execution.
-Diese Live-Fälle sind vorbereitet, **noch nicht ausgeführt**.
+Diese Live-Fälle wurden vollständig ausgeführt und sind **PASS**.
 
 Frische lokale Prüfung dieser Fortsetzung: G27 115/115 plus Runner/Probe 31/31,
 Baseline 481/481 plus isolierter Browser 26/26, Neon-Profil 11/11:
 **664/664 PASS**. Die zusätzlichen Correlation-/Fremdtenant-Assertions wurden
 anschließend im Workflow erneut geprüft (18/18, nicht doppelt gezählt).
 Typecheck, Lint, Build und Dependency-Audit (0 Vulnerabilities) PASS.
-Finale Live-Abnahme, Cleanup und abschließender Security-Review bleiben offen.
+Dieser lokale Zwischenstand wurde durch die oben verlinkte echte Live-Abnahme ergänzt.
+Cleanup und abschließender Security-Review bleiben offen.
 Die nachfolgenden älteren Tabellen dokumentieren den bisherigen Stand vor
 dieser Fortsetzung und sind nicht zusätzlich zu diesen 664 Tests zu zählen.
 
@@ -326,16 +342,21 @@ Historische zusätzliche unabhängige Negativproben, nicht in dieser frischen Ge
 
 ## Preview und Live QA
 
-Die Live-Preview-Abnahme ist der letzte offene Closure-Gate. Der aktuelle Preview-Build ist grün und unter dem gepinnten Draft-Commit deployt. Die autorisierte A–F-Abnahme konnte in diesem Lauf nicht gestartet werden, weil die privaten, disposable QA-Preseed-/Deployment-Artefakte und der dafür erforderliche Vercel-API-Zugriff im Worktree nicht vorliegen.
+Die autorisierte Live-Preview-Abnahme ist vollständig PASS. Verwendet wurden
+ausschließlich die nachgewiesenen disposable CRM-/Evelyn-Datenbanken und
+synthetische Daten. Die öffentliche Evidenz enthält Pins, Testziele, Ergebnisse,
+IDs und HTTP-Status; Zugangsdaten verbleiben ausschließlich in geschützten
+privaten Artefakten beziehungsweise im Prozessspeicher. Cleanup steht noch aus.
 
 | Fall | Erwartung | Stand |
 | --- | --- | --- |
-| A | EUR-Vorgang → Snapshot → V2 Two-Step → VALID | BLOCKED – private QA-Preseed-/Deployment-Artefakte fehlen |
-| B | Materialänderung macht alte Approval ungültig | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
-| C | aktueller Preis ändert historischen Snapshot nicht | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
-| D | neue Policy-Version ändert alten Snapshot nicht | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
-| E | Legacy/V1 → V2-Version-Mismatch → Ablehnung, keine Ausführung, Audit | BLOCKED – korrigierter Lauf vorbereitet, Runtime-Prüfung noch offen |
-| F | Cross-Tenant-Zugriff wird verweigert | BLOCKED – gleicher autorisierter QA-Lauf erforderlich |
+| A | EUR-Vorgang → Snapshot → V2 Two-Step → VALID | PASS – EUR 20.370 netto, EUR 24.444 brutto |
+| B | Materialänderung macht alte Approval ungültig | PASS – INVALIDATED; neue Version VALID |
+| C | aktueller Preis ändert historischen Snapshot nicht | PASS – EUR 350.000 historisch trotz EUR 360.000 aktuell |
+| D | neue Policy-Version ändert alten Snapshot nicht | PASS – synthetisch 20 % → 21 %, V1 unverändert |
+| E | Legacy/V1 → V2-Version-Mismatch → Ablehnung, keine Ausführung, Audit | PASS – drei Ablehnungen, drei Audit-IDs, null Approval/Execution |
+| F | Cross-Tenant-Zugriff wird verweigert | PASS – Lesen/Schreiben 404, fremder Snapshot unverändert |
+| Race/Idempotency | zwei parallele Executes und Replay | PASS – genau eine persistierte synthetische Execution |
 
 G27 darf erst nach einem vollständigen A–F-PASS auf **CLOSED** gesetzt werden. Die Preview muss nachweisen, dass die konfigurierte Evelyn-V2-Runtime dem gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc` entspricht; ein älterer G08-Livestatus reicht dafür nicht.
 
@@ -344,7 +365,7 @@ G27 darf erst nach einem vollständigen A–F-PASS auf **CLOSED** gesetzt werden
 - Production DB geändert: **NEIN**
 - Production deployed: **NEIN**
 - main gemergt: **NEIN**
-- Evelyn-Code unverändert; separate disposable QA-Preview am selben Commit ausdrücklich autorisiert. Tenant-Korrektur der QA-Preview läuft; Production unverändert.
+- Evelyn-Code unverändert; separate disposable QA-Preview am selben Commit verifiziert. Tenant-Korrektur und gemeinsame Live-Abnahme PASS; Production unverändert.
 - reale Steuer-/FX-/Provisionsregeln angelegt: **NEIN**
 - reale Kunden-, Vertrags-, Zahlungs- oder Zustelldaten verwendet: **NEIN**
 

@@ -1,0 +1,88 @@
+{
+  "verificationContractVersion": "g27-evelyn-post-joint-read-only-v1",
+  "capturedAt": "2026-09-24T13:48:38.989Z",
+  "status": "PASS",
+  "mode": "READ_ONLY",
+  "report": {
+    "status": "PASS",
+    "startedAt": "2026-09-24T13:41:31.746Z",
+    "finishedAt": "2026-09-24T13:42:45.176Z",
+    "checks": 15,
+    "assertions": 220,
+    "flows": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "RACE"
+    ],
+    "race": {
+      "concurrentRequests": 2,
+      "replayed": true,
+      "persistedExecutions": 1,
+      "externalEffect": false,
+      "contractDelivered": false
+    }
+  },
+  "database": {
+    "projectId": "super-block-59791927",
+    "branchId": "br-young-water-awa2ri4k",
+    "name": "evelyn_g27_qa",
+    "runtimeRole": "evelyn_g27_qa_runtime",
+    "safeRuntime": true
+  },
+  "isolation": {
+    "rlsForcedTables": 5,
+    "tenantPolicies": 5,
+    "foreignRowsVisibleFromTarget": {
+      "state": 0,
+      "audit": 0,
+      "nonces": 0
+    },
+    "priorControlUnchanged": true
+  },
+  "immutability": {
+    "auditTrigger": "ENABLED",
+    "nonceTrigger": "ENABLED",
+    "deploymentScopeTrigger": "ENABLED",
+    "runtimeMutationPrivileges": {
+      "audit_mutation": false,
+      "nonce_mutation": false,
+      "scope_mutation": false
+    }
+  },
+  "approvals": {
+    "total": 3,
+    "oldReferenceStatus": "INVALIDATED",
+    "newReferenceStatus": "APPROVED",
+    "currentReferenceBound": true,
+    "raceBoundToApprovedRevision": true
+  },
+  "audit": {
+    "events": 30,
+    "uniqueEventIds": 30,
+    "monotonicSequences": true,
+    "eventTypeCounts": {
+      "ApprovalInvalidated": 1,
+      "ApprovalRequested": 3,
+      "ChallengeIssued": 6,
+      "Step1Approved": 3,
+      "Step2Approved": 3,
+      "VerificationFailed": 3,
+      "VerificationRequested": 7,
+      "VerificationSucceeded": 4
+    },
+    "digest": "64b651d43ffb23bf99a1ed783afefb9bce315aec338ea672f53fbe5f25811b43"
+  },
+  "nonces": {
+    "total": 10,
+    "unique": 10,
+    "namespaceCounts": {
+      "create-v2:crm-preview": 3,
+      "verify-v2:crm-preview": 7
+    },
+    "digest": "f841dfe1e53ff69bf16d6b3618363f44826ef99cef5e85da77bded376586a41e"
+  }
+}

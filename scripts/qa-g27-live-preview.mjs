@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, expect, request as playwrightRequest } from "@playwright/test";
 import pg from "pg";
+import { previewAccessHeaders, crmBrowserOrigin, verifyCrmBrowserBinding } from "./lib/g27-preview-access.mjs";
 
 // G27 live verification is intentionally Preview-only and synthetic-only.
 // It never reads secrets from source files and never prints response bodies,
@@ -173,7 +174,7 @@ async function writePrivateJson(file, value) {
   await rename(temporary, file);
 }
 
-function authenticatorCode(secret) {
+export function authenticatorCode(secret) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const bytes = [];
   let accumulator = 0;
@@ -367,8 +368,13 @@ function validateInputs(inputs) {
     crmOrigin,
     evelynOrigin,
     pins,
-    crmHeaders: protectionHeaders(access.crm.protectionHeaders),
-    ownerHeaders: protectionHeaders(access.evelyn.protectionHeaders),
+    crmHeaders: { ...protectionHeaders(access.crm.protectionHeaders),
+      ...(process.env.G27_CRM_ACCESS_OIDC_TOKEN ? previewAccessHeaders(process.env.G27_CRM_ACCESS_OIDC_TOKEN) : {}) },
+    ownerHeaders: { ...protectionHeaders(access.evelyn.protectionHeaders),
+      ...(process.env.G27_EVELYN_PROTECTION_BYPASS
+        ? protectionHeaders({ "x-vercel-protection-bypass": process.env.G27_EVELYN_PROTECTION_BYPASS }) : {}),
+      ...(!process.env.G27_EVELYN_PROTECTION_BYPASS && process.env.G27_EVELYN_ACCESS_OIDC_TOKEN ? previewAccessHeaders(process.env.G27_EVELYN_ACCESS_OIDC_TOKEN,
+        Date.now(), "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I") : {}) },
     crmProtectionUrl: protectionUrl(access.crm.protectionUrl, crmOrigin),
     ownerProtectionUrl: protectionUrl(access.evelyn.protectionUrl, evelynOrigin),
   };
@@ -379,9 +385,10 @@ async function liveMain() {
   const inputs = await loadInputs();
   const { fixture, access, preseed } = inputs;
   const validated = validateInputs(inputs);
-  const { crmOrigin, evelynOrigin, pins, crmHeaders, ownerHeaders, crmProtectionUrl, ownerProtectionUrl } = validated;
-  ensure(crmProtectionUrl || crmHeaders["x-vercel-protection-bypass"], "CRM_PROTECTION_ACCESS_REQUIRED");
-  ensure(ownerProtectionUrl || ownerHeaders["x-vercel-protection-bypass"], "OWNER_PROTECTION_ACCESS_REQUIRED");
+  const { crmOrigin: crmDeploymentOrigin, evelynOrigin, pins, crmHeaders, ownerHeaders, crmProtectionUrl, ownerProtectionUrl } = validated;
+  const crmOrigin = crmBrowserOrigin;
+  ensure(crmProtectionUrl || crmHeaders["x-vercel-protection-bypass"] || crmHeaders["x-vercel-trusted-oidc-idp-token"], "CRM_PROTECTION_ACCESS_REQUIRED");
+  ensure(ownerProtectionUrl || ownerHeaders["x-vercel-protection-bypass"] || ownerHeaders["x-vercel-trusted-oidc-idp-token"], "OWNER_PROTECTION_ACCESS_REQUIRED");
 
   const marker = randomUUID().replaceAll("-", "").slice(0, 12);
   const report = {
@@ -396,7 +403,7 @@ async function liveMain() {
     externalContractDelivery: false,
     runMarker: marker,
     targets: {
-      crm: { origin: crmOrigin, deploymentId: pins.crmDeploymentId, commitSha: pins.crmCommitSha, vercelProjectId: pins.crmVercelProjectId },
+      crm: { origin: crmDeploymentOrigin, browserOrigin: crmOrigin, deploymentId: pins.crmDeploymentId, commitSha: pins.crmCommitSha, vercelProjectId: pins.crmVercelProjectId },
       evelyn: { origin: evelynOrigin, deploymentId: pins.evelynDeploymentId, commitSha: pins.evelynCommitSha },
       tenantId: fixture.workspaceId,
       projectId: fixture.projectId,
@@ -418,6 +425,8 @@ async function liveMain() {
         ? preseed.cleanup.targets.map(target => ({ system: target.system, provider: target.provider,
           projectId: target.projectId, branchId: target.branchId, branchName: target.branchName,
           parentBranchId: target.parentBranchId, parentBranchName: target.parentBranchName,
+          schemaSourceBranchId: target.schemaSourceBranchId ?? null,
+          schemaSourceBranchName: target.schemaSourceBranchName ?? null,
           createdAt: target.createdAt }))
         : [],
     },
@@ -432,6 +441,7 @@ async function liveMain() {
   let browser;
   let context;
   let ownerContext;
+  let lastCrmServerDate;
   let ownerCsrf;
   let ownerCookie = false;
   let pageErrors = 0;
@@ -507,7 +517,10 @@ async function liveMain() {
     });
     const cookies = (await ownerContext.storageState()).cookies;
     ownerCookie = cookies.some(cookie => cookie.name === "__Host-evelyn-test");
-    ensure(response.headers()["content-type"]?.includes("application/json"), "EVELYN_JSON_REQUIRED");
+    if (!response.headers()["content-type"]?.includes("application/json")) {
+      recordHttp("evelyn-owner", requestPath, method, { status: response.status(), body: { code: "NON_JSON_RESPONSE" } });
+      throw new Error("EVELYN_JSON_REQUIRED");
+    }
     const result = { status: response.status(), body: await response.json() };
     recordHttp("evelyn-owner", requestPath, method, result);
     return result;
@@ -515,7 +528,8 @@ async function liveMain() {
 
   try {
     await step("PRECHECK", "LIVE_VERCEL_DEPLOYMENT_ORIGIN_PROJECT_AND_COMMIT_BINDING", async () => {
-      const crmDeployment = await vercelDeploymentEvidence("CRM", access.crm, crmOrigin, pins);
+      const crmDeployment = await vercelDeploymentEvidence("CRM", access.crm, crmDeploymentOrigin, pins);
+      await verifyCrmBrowserBinding(access.crm);
       const evelynDeployment = await vercelDeploymentEvidence("EVELYN", access.evelyn, evelynOrigin, pins);
       exact("CRM_DEPLOYMENT_ID_LIVE_BINDING", crmDeployment.deploymentId, pins.crmDeploymentId);
       exact("CRM_DEPLOYMENT_PROJECT_LIVE_BINDING", crmDeployment.projectId, pins.crmVercelProjectId);
@@ -531,14 +545,26 @@ async function liveMain() {
     browser = await chromium.launch({ channel: process.env.CRM_QA_BROWSER_CHANNEL || "chrome", headless: true });
     context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: "de-AT", timezoneId: "Europe/Vienna" });
     context.setDefaultTimeout(30_000);
-    await context.route("**/*", route => {
+    await context.route("**/*", async route => {
       const url = new URL(route.request().url());
       if (["data:", "blob:"].includes(url.protocol)) return route.continue();
       if (url.origin !== crmOrigin) return route.abort();
+      if (!["GET", "HEAD"].includes(route.request().method())) {
+        try { await verifyCrmBrowserBinding(access.crm); } catch { return route.abort(); }
+      }
       return route.continue({ headers: { ...route.request().headers(), ...crmHeaders } });
     });
     await context.addInitScript(() => localStorage.setItem("novalure-crm-navigation-preset-v1", "realEstateBroker"));
     const page = await context.newPage();
+    report.loginHttp = [];
+    page.on("response", response => {
+      const request = response.request();
+      if (new URL(response.url()).pathname === "/api/auth/login") {
+        report.loginHttp.push({ method: request.method(), status: response.status(),
+          origin: request.headers().origin ?? null,
+          fetchSite: request.headers()["sec-fetch-site"] ?? null });
+      }
+    });
     page.on("pageerror", () => { pageErrors += 1; });
 
     async function crmCall(requestPath, body, method = "POST", metadata = {}) {
@@ -572,8 +598,9 @@ async function liveMain() {
         if (!result.headers.get("content-type")?.includes("application/json")) {
           return { status: result.status, body: { code: "NON_JSON_RESPONSE" } };
         }
-        return { status: result.status, body: await result.json() };
+        return { status: result.status, serverDate: result.headers.get("date"), body: await result.json() };
       }, { requestPath, body, method, idempotencyKey, correlationId });
+      lastCrmServerDate = response.serverDate;
       recordHttp("crm", requestPath, method, response, correlationId);
       return response;
     }
@@ -612,13 +639,18 @@ async function liveMain() {
       const totpSecret = prior.totpSecret;
       await page.locator("#login-mfa-code").fill(authenticatorCode(totpSecret));
       await Promise.all([
-        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        page.waitForURL(url => url.origin === crmOrigin && !url.pathname.startsWith("/login"), { waitUntil: "domcontentloaded", timeout: 30000 }),
         page.getByRole("button", { name: "Sicher bestätigen", exact: true }).click(),
       ]);
+      const loginError = new URL(page.url()).searchParams.get("error");
+      report.loginResultPath = new URL(page.url()).pathname;
+      if (["invalid_credentials", "invalid_mfa", "database_unavailable", "rate_limited"].includes(loginError)) {
+        report.loginError = loginError;
+      }
       truth("CRM_LOGIN_LEFT_LOGIN_PAGE", !/\/login(?:\?|$)/.test(page.url()));
       const session = (await context.cookies()).find(cookie => cookie.name === "novalure_session");
       truth("CRM_SERVER_MFA_SESSION", Boolean(session?.httpOnly && session.secure && session.value.startsWith("v2.")));
-      const core = resultData(await get("/api/crm/core"));
+      const core = await get("/api/crm/core");
       exact("AUTHENTICATED_WORKSPACE", core.activeWorkspaceId, fixture.workspaceId);
       exact("AUTHENTICATED_DATA_SOURCE", core.source, "database");
     });
@@ -760,13 +792,15 @@ async function liveMain() {
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
       });
       await offerCommand("queue_send");
+      await new Promise(resolve => setTimeout(resolve, 1500));
       offer = (await view()).offer;
+      const receiptAt = new Date(lastCrmServerDate).toISOString();
       await offerCommand("record_sent", {
         revision: offer.revision,
         contentDigest: offer.contentDigest,
         recipientEmail: offer.content.recipientEmail,
         reference: `SYNTHETIC G27 manual QA receipt ${marker}`,
-        sentAt: new Date().toISOString(),
+        sentAt: receiptAt,
       });
       offer = (await view()).offer;
       await offerCommand("accept", {
@@ -1284,7 +1318,7 @@ async function liveMain() {
         foreignSnapshotId: foreign.snapshotId,
         read: { status: read.status, code: read.body.code ?? read.body.error },
         write: { status: write.status, code: write.body.code ?? write.body.error },
-        authenticatedTenantId: fixture.workspaceId,
+        tenantId: fixture.workspaceId,
       };
     });
 
@@ -1335,9 +1369,11 @@ async function liveMain() {
       exact("EXTERNAL_CONTRACT_DELIVERY", report.externalContractDelivery, false);
       truth("ALL_REQUIRED_FLOWS_RECORDED", ["A", "B", "C", "D", "E", "F", "RACE"].every(key => report.flows[key]));
     });
+    await verifyCrmBrowserBinding(access.crm);
     report.status = "PASS";
-  } catch {
+  } catch (error) {
     report.status = "BLOCKED";
+    report.errorCode = /^[A-Z][A-Z0-9_]{1,160}$/.test(error?.message ?? "") ? error.message : "RUNNER_RUNTIME_ERROR";
     report.failedStep = { flow: activeFlow, name: active };
     console.error("BLOCKED G27 live Preview step; sanitized evidence saved. No raw error or credentials logged.");
     process.exitCode = 1;
@@ -1357,7 +1393,7 @@ async function liveMain() {
   }
 }
 
-function cleanupTarget(raw, prior, preseed) {
+export function cleanupTarget(raw, prior, preseed) {
   const target = object(raw, "CLEANUP_TARGET_REQUIRED");
   ensure(target.provider === "neon" && ["crm", "evelyn"].includes(target.system), "CLEANUP_PROVIDER_DENIED");
   ensure(target.environment === "preview" && target.disposable === true, "DISPOSABLE_PREVIEW_CLEANUP_REQUIRED");
@@ -1367,12 +1403,15 @@ function cleanupTarget(raw, prior, preseed) {
   ensure(target.branchName === allowedBranch.name && target.branchId === allowedBranch.id
     && target.projectId === "super-block-59791927",
     "G27_QA_BRANCH_NAME_REQUIRED");
+  const schemaOnly = target.system === "evelyn" && target.parentBranchId === null
+    && target.parentBranchName === null && target.schemaSourceBranchId === "br-dry-thunder-awmimouk"
+    && target.schemaSourceBranchName === "main";
   ensure(/^br-[A-Za-z0-9-]+$/.test(target.branchId ?? "")
-    && /^br-[A-Za-z0-9-]+$/.test(target.parentBranchId ?? "")
-    && target.parentBranchId !== target.branchId, "NEON_BRANCH_ID_REQUIRED");
+    && (schemaOnly || (/^br-[A-Za-z0-9-]+$/.test(target.parentBranchId ?? "")
+    && target.parentBranchId !== target.branchId)), "NEON_BRANCH_ID_REQUIRED");
   ensure(/^[A-Za-z0-9-]{3,100}$/.test(target.projectId ?? ""), "NEON_PROJECT_ID_REQUIRED");
-  ensure(typeof target.parentBranchName === "string" && target.parentBranchName.length > 0
-    && !/^g27-qa-/i.test(target.parentBranchName), "NEON_PARENT_BRANCH_REQUIRED");
+  ensure(schemaOnly || (typeof target.parentBranchName === "string" && target.parentBranchName.length > 0
+    && !/^g27-qa-/i.test(target.parentBranchName)), "NEON_PARENT_BRANCH_REQUIRED");
   ensure(typeof target.createdAt === "string" && !Number.isNaN(Date.parse(target.createdAt)),
     "NEON_BRANCH_CREATED_AT_REQUIRED");
   const prefix = target.system === "crm" ? "crm" : "evelyn";
@@ -1392,6 +1431,8 @@ function cleanupTarget(raw, prior, preseed) {
     branchName: target.branchName,
     parentBranchId: target.parentBranchId,
     parentBranchName: target.parentBranchName,
+    schemaSourceBranchId: target.schemaSourceBranchId ?? null,
+    schemaSourceBranchName: target.schemaSourceBranchName ?? null,
     createdAt: target.createdAt,
   };
   ensure(stable(priorTarget) === stable(publicTarget), "CLEANUP_REPORT_TARGET_MISMATCH");
@@ -1401,7 +1442,7 @@ function cleanupTarget(raw, prior, preseed) {
   ensure(process.env[expectedProject] === target.projectId, "FIXED_NEON_PROJECT_ALLOWLIST_REQUIRED");
   ensure(typeof process.env[expectedSecret] === "string" && process.env[expectedSecret].length > 0,
     "CLEANUP_API_KEY_REQUIRED");
-  return { ...target, apiKey: process.env[expectedSecret] };
+  return { ...target, schemaOnly, apiKey: process.env[expectedSecret] };
 }
 async function cleanupMain() {
   ensure(argv.has("--cleanup") && argv.has("--run-authorized-preview-cleanup")
@@ -1440,18 +1481,20 @@ async function cleanupMain() {
       const payload = await inspect.json();
       const branch = payload.branch ?? payload;
       ensure(branch.id === target.branchId && branch.name === target.branchName
-        && branch.parent_id === target.parentBranchId && branch.created_at === target.createdAt,
+        && (branch.parent_id ?? null) === target.parentBranchId && branch.created_at === target.createdAt,
       "CLEANUP_BRANCH_BINDING_FAILED");
       ensure(branch.protected === false && branch.primary !== true && branch.default !== true,
         "PROTECTED_DATABASE_BRANCH_DENIED");
-      const parentUrl = `${base}/projects/${encodeURIComponent(target.projectId)}/branches/${encodeURIComponent(target.parentBranchId)}`;
+      const sourceId = target.schemaOnly ? target.schemaSourceBranchId : target.parentBranchId;
+      const sourceName = target.schemaOnly ? target.schemaSourceBranchName : target.parentBranchName;
+      const parentUrl = `${base}/projects/${encodeURIComponent(target.projectId)}/branches/${encodeURIComponent(sourceId)}`;
       const parentResponse = await fetch(parentUrl, {
         method: "GET", headers, redirect: "error", signal: AbortSignal.timeout(30_000),
       });
       ensure(parentResponse.status === 200, "CLEANUP_PARENT_BRANCH_INSPECTION_FAILED");
       const parentPayload = await parentResponse.json();
       const parent = parentPayload.branch ?? parentPayload;
-      ensure(parent.id === target.parentBranchId && parent.name === target.parentBranchName,
+      ensure(parent.id === sourceId && parent.name === sourceName,
         "CLEANUP_PARENT_BRANCH_BINDING_FAILED");
       const response = await fetch(url, {
         method: "DELETE",
