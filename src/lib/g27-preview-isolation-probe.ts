@@ -51,16 +51,25 @@ export async function runG27IsolationProbe(request: Request, env: ProbeEnvironme
   transport: ProbeTransport = { fetch: globalThis.fetch, token: getVercelOidcToken }, now = Date.now()) {
   if (!authorized(request, env, now)) return Response.json({ code: "NOT_FOUND" }, { status: 404, headers });
   // Vercel may represent a bodyless POST as a closed stream rather than null.
-  // Read at most its first chunk; any payload is still refused before OIDC.
+  // Accept only clean EOF without data, with bounded reads and elapsed time.
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null && contentLength !== "0") {
+    return Response.json({ code: "BODY_DENIED" }, { status: 400, headers });
+  }
   if (request.body !== null) {
     const reader = request.body.getReader();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let empty = false;
     try {
-      const first = await reader.read();
-      if (!first.done) {
-        await reader.cancel();
-        return Response.json({ code: "BODY_DENIED" }, { status: 400, headers });
+      const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("BODY_TIMEOUT")), 2000); });
+      for (let chunks = 0; chunks < 32; chunks++) {
+        const chunk = await Promise.race([reader.read(), deadline]);
+        if (chunk.done) { empty = true; break; }
+        if (chunk.value.byteLength > 0) break;
       }
-    } finally { reader.releaseLock(); }
+    } catch { empty = false; }
+    finally { clearTimeout(timer); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    if (!empty) return Response.json({ code: "BODY_DENIED" }, { status: 400, headers });
   }
   try {
     const results = [];
