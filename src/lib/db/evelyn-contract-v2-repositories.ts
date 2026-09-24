@@ -589,7 +589,7 @@ function exposeVerificationReceipt(receipt: {
 async function recordContractEvent(
   tx: TenantTransaction,
   session: AppSession,
-  snapshot: V2Snapshot,
+  snapshot: Pick<V2Snapshot, "projectId" | "id" | "version" | "correlationId">,
   stage: "REQUEST" | "VERIFY" | "EXECUTE",
   code: string,
   reference: string | null,
@@ -837,10 +837,32 @@ export async function reviseEvelynContractActionV2(
 async function prepare(
   session: AppSession,
   input: EvelynContractV2ActionInput,
-  operation: string,
+  operation: "evelyn.contract.v2.request" | "evelyn.contract.v2.verify" | "evelyn.contract.v2.execute",
   options: EvelynContractV2Options,
 ) {
-  const snapshot = await withCrmRead(session, (tx, fresh) => read(tx, fresh, input, options), options);
+  const snapshot = await withCrmRead(session, async (tx, fresh) => {
+    try {
+      return await read(tx, fresh, input, options);
+    } catch (error) {
+      if (!(error instanceof CrmCommandError) || error.code !== "EVELYN_CONTRACT_VERSION_MISMATCH") throw error;
+      // read() has already checked tenant/project authority and holds the action
+      // lock. Persist the rejection in this transaction before throwing outside
+      // it, otherwise rollback would erase the audit. Bind it to stored lineage,
+      // never to a caller-supplied correlation ID or approval reference.
+      const legacy = await tx.queryOne<Pick<V2Snapshot, "projectId" | "id" | "version" | "correlationId">>(`
+        select a.id,a.project_id as "projectId",r.version,a.correlation_id as "correlationId"
+        from crm_evelyn_contract_actions a
+        join crm_evelyn_contract_revisions r on r.workspace_id=a.workspace_id and r.action_id=a.id
+        where a.workspace_id=$1::uuid and a.id=$2::uuid and r.version=$3
+      `, [fresh.workspaceId, input.actionId, input.expectedVersion]);
+      if (!legacy) throw error;
+      const stage = operation === "evelyn.contract.v2.request" ? "REQUEST"
+        : operation === "evelyn.contract.v2.verify" ? "VERIFY" : "EXECUTE";
+      await recordContractEvent(tx, fresh, legacy, stage, error.code, null);
+      return null;
+    }
+  }, options);
+  if (!snapshot) failure("EVELYN_CONTRACT_VERSION_MISMATCH");
   const threshold = v2ThresholdContext({ ...snapshot.action, environment: "preview", synthetic: true });
   if (threshold.status === "NEEDS_REVIEW") failure("FINANCIAL_SNAPSHOT_NEEDS_REVIEW");
   if (threshold.status === "POLICY_REQUIRED") failure("POLICY_REQUIRED");

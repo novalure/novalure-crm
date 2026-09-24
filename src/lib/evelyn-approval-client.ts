@@ -15,7 +15,7 @@ import {
 export const EVELYN_PREVIEW_URL = "https://evelyn-hrc1fof30-novalure.vercel.app";
 /** Money/Tax V2 runtime from novalure/evelyn main@1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc.
  * The Preview deployment is pinned to that exact commit. */
-export const EVELYN_V2_PREVIEW_URL = "https://evelyn-g0yxclae8-novalure.vercel.app";
+export const EVELYN_V2_PREVIEW_URL = "https://evelyn-jyh6ijl3u-novalure.vercel.app";
 export const EVELYN_PREVIEW_AUDIENCE = "urn:evelyn:preview:approval-bridge:v1:prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I";
 export const CRM_VERCEL_PROJECT_ID = "prj_R32Okl6AHijTohvuKmryuTLjWMsk";
 export const NOVALURE_VERCEL_TEAM_ID = "team_sjD78IkSicXJK6TAOR1JC7Wv";

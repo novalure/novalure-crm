@@ -712,6 +712,55 @@ test("G27 Evelyn V2 workflow against real isolated PostgreSQL", { timeout: 300_0
       )).rows[0].actor_user_id, f.userId);
     });
 
+    await t.test("legacy V1 is rejected by all V2 operations with durable audit and no execution", async () => {
+      const f = await fixture(db);
+      const legacy = await createEvelynContractAction(f.session, {
+        projectId: f.projectId,
+        offerId: f.offer.id,
+        expectedOfferVersion: f.offer.version,
+        idempotencyKey: randomUUID(),
+        correlationId: f.createInput.correlationId,
+      }, f.v1Options);
+      const input = actionInput(legacy, f.createInput.correlationId);
+      const revision = async () => (await db.admin.query(
+        "select version,action,action_hash,approval_contract_version,financial_snapshot_id from crm_evelyn_contract_revisions where workspace_id=$1 and action_id=$2 order by version",
+        [f.workspaceId, input.actionId],
+      )).rows;
+      const before = await revision();
+      assert.equal(before[0].approval_contract_version, "v1");
+      assert.equal(before[0].financial_snapshot_id, null);
+      for (const operation of [requestEvelynContractApprovalV2, verifyEvelynContractApprovalV2, executeEvelynContractActionV2]) {
+        await assert.rejects(operation(f.session, input, f.v2Options), denied("EVELYN_CONTRACT_VERSION_MISMATCH"));
+      }
+      assert.deepEqual(await revision(), before);
+      assert.deepEqual(f.remote.calls, { requests: 0, verifies: 0 });
+      for (const table of ["crm_evelyn_contract_approvals", "crm_evelyn_contract_executions"]) {
+        assert.equal((await db.admin.query(`select count(*)::int count from ${table} where workspace_id=$1 and action_id=$2`,
+          [f.workspaceId, input.actionId])).rows[0].count, 0);
+      }
+      assert.deepEqual((await db.admin.query(
+        "select stage,result_code,correlation_id,recorded_by from crm_evelyn_contract_events where workspace_id=$1 and action_id=$2 order by stage",
+        [f.workspaceId, input.actionId],
+      )).rows, ["EXECUTE", "REQUEST", "VERIFY"].map(stage => ({
+        stage, result_code: "EVELYN_CONTRACT_VERSION_MISMATCH",
+        correlation_id: f.createInput.correlationId, recorded_by: f.userId,
+      })));
+      await assert.rejects(requestEvelynContractApprovalV2(f.session,
+        { ...input, correlationId: randomUUID() }, f.v2Options), denied("EVELYN_CONTRACT_VERSION_MISMATCH"));
+      const foreign = await fixture(db);
+      await assert.rejects(requestEvelynContractApprovalV2(foreign.session, input, foreign.v2Options),
+        denied("EVELYN_ACTION_NOT_ACCESSIBLE"));
+      const audits = (await db.admin.query(
+        "select workspace_id,correlation_id,recorded_by from crm_evelyn_contract_events where action_id=$1",
+        [input.actionId],
+      )).rows;
+      assert.equal(audits.length, 4);
+      assert.ok(audits.every(row => row.workspace_id === f.workspaceId
+        && row.correlation_id === f.createInput.correlationId && row.recorded_by === f.userId));
+      assert.deepEqual(f.remote.calls, { requests: 0, verifies: 0 });
+      assert.deepEqual(foreign.remote.calls, { requests: 0, verifies: 0 });
+    });
+
     await t.test("V1 to V2 upgrade is additive while V2 to V1 downgrade is rejected", async () => {
       const upgrade = await fixture(db);
       const v1 = await createEvelynContractAction(upgrade.session, {
