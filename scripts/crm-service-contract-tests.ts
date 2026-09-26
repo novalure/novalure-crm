@@ -7,7 +7,7 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { after, before, test } from "node:test";
 import { createServer, type Server } from "node:http";
 import { startLocalSalesDb,applySalesSchema } from "./lib/local-sales-db.mjs";
-import { CRM_CONTRACT_SCOPES,parseCrmContractRequest } from "../src/lib/crm-service-contract";
+import { CRM_CONTRACT_SCOPES,CRM_READ_CONTRACT_VERSION,parseCrmContractRequest } from "../src/lib/crm-service-contract";
 import { crmPayloadDigest } from "../src/lib/crm-command";
 
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
@@ -15,13 +15,17 @@ type Handler=(request:Request,context:{params:Promise<Record<string,string>>})=>
 const routes=new Map<string,Record<string,Handler>>();
 let db:Awaited<ReturnType<typeof startLocalSalesDb>>,server:Server,baseUrl:string;
 const w=randomUUID(),actor=randomUUID(),project=randomUUID(),hidden=randomUUID(),foreignW=randomUUID(),foreignProject=randomUUID(),foreignActor=randomUUID();
-const contact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),principalId=randomUUID();
+const contact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),lead=randomUUID(),deal=randomUUID(),unboundDeal=randomUUID(),principalId=randomUUID(),readOnlyPrincipalId=randomUUID();
 const token="qa-crm-v1."+randomBytes(32).toString("base64url");
+const readOnlyToken="qa-crm-v1."+randomBytes(32).toString("base64url");
+const readOnlyScopes=["crm.contacts.read","crm.leads.read","crm.deals.read","crm.search.read"];
 const savedEnv={NODE_ENV:process.env.NODE_ENV,DATABASE_URL:process.env.DATABASE_URL,CRM_LOCAL_TEST_DATABASE:process.env.CRM_LOCAL_TEST_DATABASE};
 const sim=()=> "sim-"+randomUUID();
 const envelope=(extra:Record<string,unknown>={})=>({contractVersion:"crm-integration-v1",environment:"simulation",synthetic:true,operation:"Read",entity:"Contact",tenantId:"sim-qa-tenant",resourceId:"sim-contact",actorId:"sales",correlationId:sim(),idempotencyKey:sim(),expectedVersion:null,approvalReference:null,auditReference:sim(),validation:{status:"VALIDATED",schemaVersion:"crm-integration-v1"},patch:{},...extra});
-async function register(r:ReturnType<typeof envelope>) {
- await db.admin.query("insert into crm_service_audit_bindings(principal_id,workspace_id,audit_alias,resource_alias,request_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[principalId,w,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
+const readEnvelope=(extra:Record<string,unknown>={})=>envelope({contractVersion:CRM_READ_CONTRACT_VERSION,validation:{status:"VALIDATED",schemaVersion:CRM_READ_CONTRACT_VERSION},search:null,...extra});
+const searchEnvelope=(entity:"Contact"|"BuyerLead"|"Deal",filters:Record<string,unknown>={},extra:Record<string,unknown>={})=>readEnvelope({operation:"Search",entity,resourceId:"sim-project",search:{page:1,pageSize:25,filters},...extra});
+async function register(r:ReturnType<typeof envelope>,targetPrincipal=principalId) {
+ await db.admin.query("insert into crm_service_audit_bindings(principal_id,workspace_id,audit_alias,resource_alias,request_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[targetPrincipal,w,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
 }
 /** Contract tests do not test connection pooling. Avoid idle-socket reuse across cases. */
 async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
@@ -36,9 +40,9 @@ async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
   throw new Error("Local contract HTTP transport failed: "+(init.method??"GET")+" "+target.pathname,{cause:error});
  }
 }
-async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>={}) {
- const response=await fetchLocal(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token,...headers},body:JSON.stringify(r)});
- return {status:response.status,body:await response.json() as {projection?: {data:Record<string,unknown>;sourceId:string}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
+async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>={},bearer=token) {
+ const response=await fetchLocal(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+bearer,...headers},body:JSON.stringify(r)});
+ return {status:response.status,body:await response.json() as {projection?: {contractVersion:string;data:Record<string,unknown>;sourceId:string;sourceVersion:number|null;projectionHash:string}; search?:{kind:string;page:number;pageSize:number;hasMore:boolean;items:Array<{sourceId:string;data:Record<string,unknown>}>}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db);
@@ -50,19 +54,23 @@ before(async()=>{
  for(const [id,p,classification]of [[contact,project,"CUSTOMER_TENANT"],[hiddenContact,hidden,"CUSTOMER_TENANT"],[privateContact,project,"PRIVATE_FRANZ"],[unknownContact,project,"UNKNOWN"]])await db.admin.query("insert into contacts(id,workspace_id,project_id,name,email,role,data_classification) values($1,$2,$3,'SYNTHETIC: Contact','synthetic-sensitive@example.invalid','Bauträger',$4)",[id,w,p,classification]);
  await db.admin.query("insert into tasks(id,workspace_id,project_id,title) values($1,$2,$3,'SYNTHETIC: Task')",[task,w,project]);
  await db.admin.query("insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,$4,'sim-qa-tenant','sales',$5,'CUSTOMER_TENANT','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[principalId,w,actor,createHash("sha256").update(token).digest("hex"),CRM_CONTRACT_SCOPES]);
+ await db.admin.query("insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,$4,'sim-qa-tenant','sales',$5,'CUSTOMER_TENANT','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[readOnlyPrincipalId,w,actor,createHash("sha256").update(readOnlyToken).digest("hex"),readOnlyScopes]);
  for(const [alias,entity,id,p]of [["sim-contact","Contact",contact,project],["sim-hidden","Contact",hiddenContact,hidden],["sim-private","Contact",privateContact,project],["sim-unknown","Contact",unknownContact,project],["sim-project","Project",project,project],["sim-task","Task",task,project]])await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,$3,$4,$5,$6,'CUSTOMER_TENANT','CONFIDENTIAL','BUSINESS','OPERATIONS')",[principalId,w,alias,entity,id,p]);
 
- const company=randomUUID(),unit=randomUUID(),lead=randomUUID(),appointment=randomUUID(),viewing=randomUUID(),reservation=randomUUID(),communication=randomUUID(),unclassifiedCommunication=randomUUID();
+ const company=randomUUID(),unit=randomUUID(),appointment=randomUUID(),viewing=randomUUID(),reservation=randomUUID(),communication=randomUUID(),unclassifiedCommunication=randomUUID();
  await db.admin.query("insert into organizations(id,workspace_id,project_id,name,type) values($1,$2,$3,'SYNTHETIC: Developer','Bauträger')",[company,w,project]);
  await db.admin.query("insert into property_units(id,workspace_id,project_id,unit_number) values($1,$2,$3,'SYNTHETIC: Unit')",[unit,w,project]);
  await db.admin.query("insert into leads(id,workspace_id,project_id,contact_id,type,buyer_profile) values($1,$2,$3,$4,'Käufer',$5::jsonb)",[lead,w,project,contact,JSON.stringify({budgetFrom:100000,budgetTo:300000,financingStatus:"offen",desiredLocation:"SYNTHETIC: City"})]);
+ await db.admin.query("insert into crm_pipelines(id,workspace_id,project_id,key,name,is_default) values($1,$2,$3,'synthetic-sales','SYNTHETIC: Sales',true)",[randomUUID(),w,project]);
+ await db.admin.query("insert into deals(id,workspace_id,project_id,contact_id,owner_user_id,lead_id,name,stage,value_cents,next_action) values($1,$2,$3,$4,$5,$6,'SYNTHETIC: Deal','Qualifiziert',25000000,'SYNTHETIC: Follow up'),($7,$2,$3,$4,$5,$6,'SYNTHETIC: Unbound','Qualifiziert',10000000,'SYNTHETIC: Hidden')",[deal,w,project,contact,actor,lead,unboundDeal]);
  await db.admin.query("insert into calendar_events(id,workspace_id,project_id,title,starts_at,ends_at) values($1,$2,$3,'SYNTHETIC: Appointment',now()+interval '1 day',now()+interval '25 hours')",[appointment,w,project]);
  await db.admin.query("insert into property_viewing_slots(id,workspace_id,project_id,unit_id,contact_id,starts_at,ends_at,note) values($1,$2,$3,$4,$5,now()+interval '1 day',now()+interval '25 hours','SYNTHETIC: Viewing')",[viewing,w,project,unit,contact]);
  await db.admin.query("insert into property_reservations(id,workspace_id,project_id,unit_id,contact_id,expires_at,next_action) values($1,$2,$3,$4,$5,now()+interval '1 day','SYNTHETIC: Next step')",[reservation,w,project,unit,contact]);
  await db.admin.query("insert into conversations(id,workspace_id,project_id,channel,direction,summary,data_classification,data_purpose) values($1,$2,$3,'E-Mail','inbound','SYNTHETIC: Inquiry','CUSTOMER_TENANT','crm_sales'),($4,$2,$3,'E-Mail','inbound','SYNTHETIC: Legacy','UNCLASSIFIED','UNCLASSIFIED')",[communication,w,project,unclassifiedCommunication]);
- for(const [alias,entity,id]of [["sim-company","Company",company],["sim-developer","Developer",company],["sim-unit","Unit",unit],["sim-buyer","BuyerLead",lead],["sim-qualification","Qualification",lead],["sim-appointment","Appointment",appointment],["sim-viewing","Viewing",viewing],["sim-reservation","Reservation",reservation],["sim-communication","Communication",communication],["sim-unclassified-communication","Communication",unclassifiedCommunication],["sim-offer-gap","Offer",randomUUID()],["sim-sale-gap","Sale",randomUUID()],["sim-approval-gap","ApprovalReference",randomUUID()]]){
+ for(const [alias,entity,id]of [["sim-company","Company",company],["sim-developer","Developer",company],["sim-unit","Unit",unit],["sim-buyer","BuyerLead",lead],["sim-deal","Deal",deal],["sim-qualification","Qualification",lead],["sim-appointment","Appointment",appointment],["sim-viewing","Viewing",viewing],["sim-reservation","Reservation",reservation],["sim-communication","Communication",communication],["sim-unclassified-communication","Communication",unclassifiedCommunication],["sim-offer-gap","Offer",randomUUID()],["sim-sale-gap","Sale",randomUUID()],["sim-approval-gap","ApprovalReference",randomUUID()]]){
   await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,$3,$4,$5,$6,'CUSTOMER_TENANT','CONFIDENTIAL','BUSINESS','OPERATIONS')",[principalId,w,alias,entity,id,project]);
  }
+ for(const [alias,entity,id]of [["sim-contact","Contact",contact],["sim-buyer","BuyerLead",lead],["sim-deal","Deal",deal],["sim-project","Project",project]])await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,$3,$4,$5,$6,'CUSTOMER_TENANT','CONFIDENTIAL','BUSINESS','OPERATIONS')",[readOnlyPrincipalId,w,alias,entity,id,project]);
  for(const relative of await readdir("src/app/api/crm",{recursive:true})) {
   if(!String(relative).endsWith("route.ts"))continue;
   const routeModule=await import(pathToFileURL(path.resolve("src/app/api/crm",String(relative))).href) as Record<string,unknown>;
@@ -164,6 +172,54 @@ test("HTTP: every one of the twelve v1 read projections executes against Postgre
   const r=envelope({entity,resourceId});await register(r);const result=await call(r);
   assert.equal(result.status,200,entity+":"+JSON.stringify(result));assert.equal(result.body.projection?.data.referenceScope,"NOT_VERIFIED");
  }
+});
+test("HTTP: v1.1 Deal read is versioned, hashed, financial-classified and field-minimized",async()=>{
+ const r=readEnvelope({entity:"Deal",resourceId:"sim-deal"});await register(r);const result=await call(r);
+ assert.equal(result.status,200,JSON.stringify(result));const projection=result.body.projection!;
+ assert.equal(projection.contractVersion,CRM_READ_CONTRACT_VERSION);assert.equal(projection.sourceId,deal);assert.equal(projection.sourceVersion,1);
+ assert.match(projection.projectionHash,/^[a-f0-9]{64}$/);assert.deepEqual(projection.data.value,{minorUnits:25000000,currency:"EUR",classification:"FINANCIAL"});
+ assert.equal(projection.data.stage,"Qualifiziert");assert.equal(projection.data.ownerReference,actor);assert.deepEqual(projection.data.linkedContacts,[contact]);
+ assert.ok(projection.data.pipeline);assert.doesNotMatch(JSON.stringify(result.body),/probability|risk_level|metadata|expected_close_date|synthetic-sensitive/);
+});
+test("HTTP: structured v1.1 Contact, BuyerLead and Deal searches return only bound project resources",async()=>{
+ for(const [entity,expected]of [["Contact",contact],["BuyerLead",lead],["Deal",deal]] as const){
+  const filters=entity==="BuyerLead"?{status:"Neu"}:entity==="Deal"?{stage:"Qualifiziert"}:{};
+  const r=searchEnvelope(entity,filters);await register(r);const result=await call(r);
+  assert.equal(result.status,200,entity+":"+JSON.stringify(result));assert.equal(result.body.search?.kind,entity);assert.equal(result.body.search?.page,1);assert.equal(result.body.search?.hasMore,false);
+  assert.deepEqual(result.body.search?.items.map(item=>item.sourceId),[expected]);assert.doesNotMatch(JSON.stringify(result.body),new RegExp(unboundDeal));
+ }
+});
+test("contract: v1.1 Search rejects downgrade, arbitrary fields/query language and pagination overflow",()=>{
+ const valid=searchEnvelope("Deal",{stage:"Qualifiziert"});assert.doesNotThrow(()=>parseCrmContractRequest(valid));
+ for(const invalid of [
+  {...valid,contractVersion:"crm-integration-v1",validation:{status:"VALIDATED",schemaVersion:"crm-integration-v1"}},
+  {...valid,search:{page:6,pageSize:25,filters:{}}},
+  {...valid,search:{page:1,pageSize:26,filters:{}}},
+  {...valid,search:{page:1,pageSize:25,filters:{query:"select * from contacts"}}},
+  {...valid,search:{page:1,pageSize:25,filters:{stage:"Qualifiziert"},fields:["email"]}},
+ ])assert.throws(()=>parseCrmContractRequest(invalid),/INVALID_CRM_REQUEST/);
+ assert.throws(()=>parseCrmContractRequest(envelope({entity:"Deal",resourceId:"sim-deal"})),/INVALID_CRM_REQUEST/);
+});
+test("HTTP: disposable read-only principal allows four reads and denies writes, delete, finance and contract actions before effect",async()=>{
+ const readsToRun=[envelope(),envelope({entity:"BuyerLead",resourceId:"sim-buyer"}),readEnvelope({entity:"Deal",resourceId:"sim-deal"}),searchEnvelope("Deal",{stage:"Qualifiziert"})];
+ for(const r of readsToRun){await register(r,readOnlyPrincipalId);assert.equal((await call(r,{},readOnlyToken)).status,200,JSON.stringify(r));}
+ const receiptBefore=(await db.admin.query("select count(*)::int n from crm_command_receipts")).rows[0].n;
+ const dealBefore=(await db.admin.query("select name,stage,value_cents,version from deals where id=$1",[deal])).rows[0];
+ const denied=[
+  envelope({operation:"Update",expectedVersion:1,patch:{name:"SYNTHETIC: Forbidden"}}),
+  readEnvelope({operation:"Update",entity:"Deal",resourceId:"sim-deal",expectedVersion:1,patch:{name:"SYNTHETIC: Forbidden"}}),
+  readEnvelope({operation:"Delete",entity:"Deal",resourceId:"sim-deal",expectedVersion:1,patch:{}}),
+  envelope({operation:"PrepareOffer",entity:"Offer",resourceId:"sim-deal",expectedVersion:1}),
+  envelope({operation:"SendOffer",entity:"Offer",resourceId:"sim-deal",expectedVersion:1,approvalReference:"sim-no-approval"}),
+ ];
+ for(const r of denied){try{await register(r,readOnlyPrincipalId);}catch{}const result=await call(r,{},readOnlyToken);assert.ok([400,403,422].includes(result.status),JSON.stringify(result));}
+ assert.equal((await db.admin.query("select count(*)::int n from crm_command_receipts")).rows[0].n,receiptBefore);
+ assert.deepEqual((await db.admin.query("select name,stage,value_cents,version from deals where id=$1",[deal])).rows[0],dealBefore);
+});
+test("HTTP: Search requires both search and target read scopes",async()=>{
+ const r=searchEnvelope("Deal",{stage:"Qualifiziert"});await register(r,readOnlyPrincipalId);
+ await db.admin.query("update crm_service_principals set scopes=array_remove(scopes,'crm.deals.read') where id=$1",[readOnlyPrincipalId]);
+ try{assert.equal((await call(r,{},readOnlyToken)).status,403);}finally{await db.admin.query("update crm_service_principals set scopes=$2 where id=$1",[readOnlyPrincipalId,readOnlyScopes]);}
 });
 test("HTTP: semantic-gap entities and unclassified legacy communication remain closed",async()=>{
  for(const [entity,resourceId]of [["Offer","sim-offer-gap"],["Sale","sim-sale-gap"],["ApprovalReference","sim-approval-gap"]]){

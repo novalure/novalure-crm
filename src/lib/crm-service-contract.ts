@@ -6,16 +6,18 @@ import { assertCrmFields, assertProjectGrant, CrmCommandError, crmPayloadDigest,
 import { queryAuthenticationRows } from "./db/tenant-client";
 
 export const CRM_CONTRACT_VERSION = "crm-integration-v1";
-export const CRM_CONTRACT_SCOPES = ["crm.contacts.read","crm.contacts.write","crm.companies.read","crm.developers.read","crm.projects.read","crm.projects.write","crm.units.read","crm.leads.read","crm.leads.write","crm.qualifications.read","crm.offers.read","crm.offers.prepare","crm.tasks.read","crm.tasks.write","crm.appointments.read","crm.viewings.read","crm.reservations.read","crm.reservations.prepare","crm.sales.read","crm.communications.read","crm.communications.write","crm.approvals.read"] as const;
-const entities = ["Contact","Company","Developer","Project","Unit","BuyerLead","Qualification","Offer","Task","Appointment","Viewing","Reservation","Sale","Communication","ApprovalReference"] as const;
+export const CRM_READ_CONTRACT_VERSION = "crm-integration-v1.1";
+export const CRM_CONTRACT_SCOPES = ["crm.contacts.read","crm.contacts.write","crm.companies.read","crm.developers.read","crm.projects.read","crm.projects.write","crm.units.read","crm.leads.read","crm.leads.write","crm.deals.read","crm.search.read","crm.qualifications.read","crm.offers.read","crm.offers.prepare","crm.tasks.read","crm.tasks.write","crm.appointments.read","crm.viewings.read","crm.reservations.read","crm.reservations.prepare","crm.sales.read","crm.communications.read","crm.communications.write","crm.approvals.read"] as const;
+const entities = ["Contact","Company","Developer","Project","Unit","BuyerLead","Deal","Qualification","Offer","Task","Appointment","Viewing","Reservation","Sale","Communication","ApprovalReference"] as const;
 type Entity = typeof entities[number];
-type RequestEnvelope = { contractVersion: string; environment: string; synthetic: boolean; operation: string; entity: Entity; tenantId: string; resourceId: string; actorId: string; correlationId: string; idempotencyKey: string; expectedVersion: number|null; approvalReference:string|null; auditReference:string; validation:{status:string;schemaVersion:string}; patch:{name?:string;title?:string} };
+type SearchRequest = { page:number; pageSize:number; filters:{updatedAfter?:string;status?:string;stage?:string} };
+type RequestEnvelope = { contractVersion: string; environment: string; synthetic: boolean; operation: string; entity: Entity; tenantId: string; resourceId: string; actorId: string; correlationId: string; idempotencyKey: string; expectedVersion: number|null; approvalReference:string|null; auditReference:string; validation:{status:string;schemaVersion:string}; patch:{name?:string;title?:string}; search?:SearchRequest|null };
 type Principal = { id:string; workspace_id:string; actor_user_id:string; tenant_alias:string; agent_id:string; scopes:string[]; data_context:string; data_classification:string; purpose:string };
 type Binding = { source_id:string; project_id:string; entity:Entity; data_context:string;data_classification:string;domain:string;purpose:string };
 const simId = /^sim-[a-z0-9][a-z0-9:_-]{0,100}$/;
 const unsafeText = /(?:https?:\/\/|@|bearer\s|password|passwd|secret|token|api[_-]?key|credential|private.key|canary|sk-[a-z0-9]|gh[pousr]_|github_pat_|AKIA)/i;
 const departments = ["executive","sales","marketing","buyer","support","finance","engineering","security","legal","qc","procurement","hr","personal"];
-const reads: Record<Entity,string> = {Contact:"crm.contacts.read",Company:"crm.companies.read",Developer:"crm.developers.read",Project:"crm.projects.read",Unit:"crm.units.read",BuyerLead:"crm.leads.read",Qualification:"crm.qualifications.read",Offer:"crm.offers.read",Task:"crm.tasks.read",Appointment:"crm.appointments.read",Viewing:"crm.viewings.read",Reservation:"crm.reservations.read",Sale:"crm.sales.read",Communication:"crm.communications.read",ApprovalReference:"crm.approvals.read"};
+const reads: Record<Entity,string> = {Contact:"crm.contacts.read",Company:"crm.companies.read",Developer:"crm.developers.read",Project:"crm.projects.read",Unit:"crm.units.read",BuyerLead:"crm.leads.read",Deal:"crm.deals.read",Qualification:"crm.qualifications.read",Offer:"crm.offers.read",Task:"crm.tasks.read",Appointment:"crm.appointments.read",Viewing:"crm.viewings.read",Reservation:"crm.reservations.read",Sale:"crm.sales.read",Communication:"crm.communications.read",ApprovalReference:"crm.approvals.read"};
 function fail(code="CRM_NOT_ACCESSIBLE",status=403):never { throw new CrmCommandError(code,code,status); }
 function object(value:unknown):Record<string,unknown> {
  if (!value || typeof value!=="object" || Array.isArray(value)) return fail("INVALID_CRM_REQUEST",400);
@@ -23,18 +25,34 @@ function object(value:unknown):Record<string,unknown> {
 }
 export function parseCrmContractRequest(raw:unknown):RequestEnvelope {
  const p=object(raw);
- try { assertCrmFields(p,["contractVersion","environment","synthetic","operation","entity","tenantId","resourceId","actorId","correlationId","idempotencyKey","expectedVersion","approvalReference","auditReference","validation","patch"]); }
+ const version=String(p.contractVersion);
+ const fields=["contractVersion","environment","synthetic","operation","entity","tenantId","resourceId","actorId","correlationId","idempotencyKey","expectedVersion","approvalReference","auditReference","validation","patch",...(version===CRM_READ_CONTRACT_VERSION?["search"]:[])];
+ try { assertCrmFields(p,fields); }
  catch { return fail("INVALID_CRM_REQUEST",400); }
- if(p.contractVersion!==CRM_CONTRACT_VERSION || p.environment!=="simulation" || p.synthetic!==true || !entities.includes(p.entity as Entity) || !departments.includes(String(p.actorId))) return fail("INVALID_CRM_REQUEST",400);
- if(!["Read","Update","PrepareOffer","PrepareReservation","SendOffer","ConfirmReservation","ConfirmSale"].includes(String(p.operation))) return fail("INVALID_CRM_REQUEST",400);
+ if(![CRM_CONTRACT_VERSION,CRM_READ_CONTRACT_VERSION].includes(version) || p.environment!=="simulation" || p.synthetic!==true || !entities.includes(p.entity as Entity) || !departments.includes(String(p.actorId))) return fail("INVALID_CRM_REQUEST",400);
+ if(!["Read","Search","Update","PrepareOffer","PrepareReservation","SendOffer","ConfirmReservation","ConfirmSale"].includes(String(p.operation))) return fail("INVALID_CRM_REQUEST",400);
+ if((p.entity==="Deal" || p.operation==="Search") && version!==CRM_READ_CONTRACT_VERSION)return fail("INVALID_CRM_REQUEST",400);
+ if(version===CRM_READ_CONTRACT_VERSION&&!["Read","Search"].includes(String(p.operation)))return fail("INVALID_CRM_REQUEST",400);
  for(const key of ["tenantId","resourceId","correlationId","idempotencyKey","auditReference"]) if(typeof p[key]!=="string" || !simId.test(p[key] as string)) return fail("INVALID_CRM_REQUEST",400);
  if(p.approvalReference!==null && (typeof p.approvalReference!=="string" || !simId.test(p.approvalReference))) return fail("INVALID_CRM_REQUEST",400);
  if(p.expectedVersion!==null && (!Number.isSafeInteger(p.expectedVersion) || Number(p.expectedVersion)<1)) return fail("INVALID_CRM_REQUEST",400);
- if(p.operation!=="Read" && p.expectedVersion===null) return fail("INVALID_CRM_REQUEST",400);
+ if(!["Read","Search"].includes(String(p.operation)) && p.expectedVersion===null) return fail("INVALID_CRM_REQUEST",400);
  const validation=object(p.validation),patch=object(p.patch);
- if(Object.keys(validation).length!==2 || validation.status!=="VALIDATED" || validation.schemaVersion!==CRM_CONTRACT_VERSION) return fail("INVALID_CRM_REQUEST",400);
+ if(Object.keys(validation).length!==2 || validation.status!=="VALIDATED" || validation.schemaVersion!==version) return fail("INVALID_CRM_REQUEST",400);
  for(const [key,value] of Object.entries(patch)) if(!["name","title"].includes(key) || typeof value!=="string" || (!/^SYNTHETIC: [a-zA-Z0-9 ._-]{1,100}$/.test(value) || unsafeText.test(value))) return fail("INVALID_CRM_REQUEST",400);
- if(p.operation==="Read" && Object.keys(patch).length) return fail("INVALID_CRM_REQUEST",400);
+ if(["Read","Search"].includes(String(p.operation)) && Object.keys(patch).length) return fail("INVALID_CRM_REQUEST",400);
+ if(version===CRM_READ_CONTRACT_VERSION) {
+  if(p.operation==="Search") {
+   if(!["Contact","BuyerLead","Deal"].includes(String(p.entity)))return fail("INVALID_CRM_REQUEST",400);
+   const search=object(p.search),filters=object(search.filters);
+   try {assertCrmFields(search,["page","pageSize","filters"]);assertCrmFields(filters,["updatedAfter","status","stage"]);}catch{return fail("INVALID_CRM_REQUEST",400);}
+   if(!Number.isSafeInteger(search.page)||Number(search.page)<1||Number(search.page)>5||!Number.isSafeInteger(search.pageSize)||Number(search.pageSize)<1||Number(search.pageSize)>25)return fail("INVALID_CRM_REQUEST",400);
+   if(p.expectedVersion!==null)return fail("INVALID_CRM_REQUEST",400);
+   if(filters.updatedAfter!==undefined && (typeof filters.updatedAfter!=="string"||filters.updatedAfter.length>40||!Number.isFinite(Date.parse(filters.updatedAfter))))return fail("INVALID_CRM_REQUEST",400);
+   for(const key of ["status","stage"])if(filters[key]!==undefined&&(typeof filters[key]!=="string"||!/^[\p{L}\p{N} ._-]{1,80}$/u.test(filters[key] as string)||unsafeText.test(filters[key] as string)))return fail("INVALID_CRM_REQUEST",400);
+   if((p.entity==="Contact"&&(filters.status!==undefined||filters.stage!==undefined))||(p.entity==="BuyerLead"&&filters.stage!==undefined)||(p.entity==="Deal"&&filters.status!==undefined))return fail("INVALID_CRM_REQUEST",400);
+  } else if(p.search!==null)return fail("INVALID_CRM_REQUEST",400);
+ }
  if(["SendOffer","ConfirmReservation","ConfirmSale"].includes(String(p.operation)) && p.approvalReference===null) return fail("INVALID_CRM_REQUEST",400);
  if((["PrepareOffer","SendOffer"].includes(String(p.operation)) && p.entity!=="Offer") || (["PrepareReservation","ConfirmReservation"].includes(String(p.operation)) && p.entity!=="Reservation") || (p.operation==="ConfirmSale" && p.entity!=="Sale")) return fail("INVALID_CRM_REQUEST",400);
  return p as RequestEnvelope;
@@ -50,6 +68,7 @@ const tables:Partial<Record<Entity,{table:string;columns:string;representation?:
  Project:{table:"projects",columns:"name,type,status"},
  Unit:{table:"property_units",columns:"unit_number,building_id,buyer_contact_id,deal_id,status,price_cents"},
  BuyerLead:{table:"leads",columns:"contact_id,type,status,score,buyer_profile",representation:"leads[type=Käufer]"},Qualification:{table:"leads",columns:"contact_id,type,status,score,buyer_profile",representation:"leads.buyer_profile"},
+ Deal:{table:"deals",columns:"contact_id,owner_user_id,stage,value_cents,next_action"},
  Task:{table:"tasks",columns:"title,contact_id,lead_id,due_at,priority,status"},
  Appointment:{table:"calendar_events",columns:"title,contact_id,lead_id,starts_at,ends_at,status"},
  Viewing:{table:"property_viewing_slots",columns:"unit_id,contact_id,lead_id,starts_at,ends_at,status,note"},
@@ -97,6 +116,11 @@ function validateProjection(kind:Entity,r:Record<string,unknown>) {
    if(Object.keys(profile).some(key=>!allowed.includes(key)))return fail("INVALID_CRM_RESPONSE",502);assertProfile(profile);
   }
  }
+ if(kind==="Deal") {
+  if(typeof r.stage!=="string"||!/^[\p{L}\p{N} ._-]{1,80}$/u.test(r.stage)||unsafeText.test(r.stage))return fail("INVALID_CRM_RESPONSE",502);
+  integer(r.value_cents);integer(r.version);
+  if(r.next_action!=="")syntheticText(r.next_action);
+ }
  if(kind==="Task") {requireEnum(r.priority,["Hoch","Mittel","Normal"]);requireEnum(r.status,["open","done"]);}
  if(kind==="Appointment")requireEnum(r.status,["geplant","vorbereiten","bestätigt","nachfassen"]);
  if(kind==="Viewing")requireEnum(r.status,["planned","confirmed","completed","cancelled","no_show"]);
@@ -119,6 +143,7 @@ function dataProjection(kind:Entity,r:Record<string,unknown>):Record<string,unkn
   assertProfile(profile);
   return {buyerLeadSourceId:r.id,profile,completion:"NOT_VERIFIED",currency:null,budgetUnit:"NOT_VERIFIED",desiredUnitSourceId:null};
  }
+ case "Deal":return {dealReference:r.id,tenantReference:r.workspace_id,pipeline:r.pipeline,stage:r.stage,value:{minorUnits:integer(r.value_cents),currency:"EUR",classification:"FINANCIAL"},ownerReference:r.owner_user_id,linkedContacts:r.contact_id?[r.contact_id]:[],nextAction:r.next_action||null,updatedAt:timestamp(r.updated_at)};
  case "Task":return {title:r.title,contactSourceId:r.contact_id,leadSourceId:r.lead_id,dueAt:r.due_at?timestamp(r.due_at):null,crmPriority:r.priority,state:r.status==="done"?"COMPLETED":"OPEN"};
  case "Appointment":return {title:r.title,contactSourceId:r.contact_id,leadSourceId:r.lead_id,startsAt:timestamp(r.starts_at),endsAt:timestamp(r.ends_at),crmStatus:r.status,timeZone:null,calendarReference:null};
  case "Viewing":return {unitSourceId:r.unit_id,contactSourceId:r.contact_id,leadSourceId:r.lead_id,startsAt:timestamp(r.starts_at),endsAt:timestamp(r.ends_at),crmStatus:r.status,note:r.note,appointmentSourceId:null};
@@ -127,18 +152,38 @@ function dataProjection(kind:Entity,r:Record<string,unknown>):Record<string,unkn
  default:return fail("CRM_SEMANTIC_GAP",422);
  }
 }
-async function project(tx:TenantTransaction,p:Principal,b:Binding,kind:Entity,credentialHash:string) {
+async function project(tx:TenantTransaction,p:Principal,b:Binding,kind:Entity,credentialHash:string,contractVersion=CRM_CONTRACT_VERSION) {
  const config=tables[kind];if(!config)return fail("CRM_SEMANTIC_GAP",422);
  const projectColumn=kind==="Project"?"id":"project_id";
- const row=kind==="Communication" ? await tx.queryOne<Record<string,unknown>>("select * from crm_read_contract_conversation($1,$2,$3,$4)",[credentialHash,p.workspace_id,b.project_id,b.source_id]) : await tx.queryOne<Record<string,unknown>>("select id,workspace_id,"+projectColumn+" as project_id,updated_at,data_classification,data_purpose,"+config.columns+" from "+config.table+" where id=$1::uuid and workspace_id=$2::uuid and "+projectColumn+"=$3::uuid and data_classification=$4 and data_purpose='crm_sales'",[b.source_id,p.workspace_id,b.project_id,p.data_context]);
+ const versionColumn=kind==="Deal"?"version,":"";
+ const row=kind==="Communication" ? await tx.queryOne<Record<string,unknown>>("select * from crm_read_contract_conversation($1,$2,$3,$4)",[credentialHash,p.workspace_id,b.project_id,b.source_id]) : await tx.queryOne<Record<string,unknown>>("select id,workspace_id,"+projectColumn+" as project_id,updated_at,"+versionColumn+"data_classification,data_purpose,"+config.columns+" from "+config.table+" where id=$1::uuid and workspace_id=$2::uuid and "+projectColumn+"=$3::uuid and data_classification=$4 and data_purpose='crm_sales'",[b.source_id,p.workspace_id,b.project_id,p.data_context]);
  if(!row || row.data_classification!==p.data_context || row.data_purpose!=="crm_sales")return fail();
+ if(kind==="Deal") {
+  const pipeline=await tx.queryOne<{id:string;key:string}>("select id,key from crm_pipelines where workspace_id=$1::uuid and project_id=$2::uuid and data_classification=$3 and data_purpose='crm_sales' order by is_default desc,created_at,id limit 1",[p.workspace_id,b.project_id,p.data_context]);
+  row.pipeline=pipeline?{sourceId:pipeline.id,key:pipeline.key}:null;
+ }
  const textField=({Contact:"name",Company:"name",Developer:"name",Project:"name",Unit:"unit_number",Task:"title",Appointment:"title",Viewing:"note",Reservation:"next_action",Communication:"summary"} as Partial<Record<Entity,string>>)[kind];
  if(textField)syntheticText(row[textField]);
  validateProjection(kind,row);
  const data=dataProjection(kind,row);safeProjectionValue(data);
- return {contractVersion:CRM_CONTRACT_VERSION,kind,workspaceId:p.workspace_id,sourceId:b.source_id,projectId:b.project_id,representation:config.representation??config.table,compatibility:kind==="Contact"||kind==="Company"?"DIRECT":"PARTIAL",data:{...data,sourceUpdatedAt:timestamp(row.updated_at),referenceScope:"NOT_VERIFIED"}};
+ const version=kind==="Deal"?integer(row.version):null;
+ const projected={...data,sourceUpdatedAt:timestamp(row.updated_at),referenceScope:"NOT_VERIFIED"};
+ return {contractVersion,kind,workspaceId:p.workspace_id,sourceId:b.source_id,projectId:b.project_id,representation:config.representation??config.table,compatibility:kind==="Contact"||kind==="Company"||kind==="Deal"?"DIRECT":"PARTIAL",sourceVersion:version,projectionHash:crmPayloadDigest({kind,workspaceId:p.workspace_id,sourceId:b.source_id,projectId:b.project_id,version,data:projected}),data:projected};
 }
-function errorResponse(error:unknown,correlationId?:string) {
+
+async function search(tx:TenantTransaction,p:Principal,b:Binding,r:RequestEnvelope,credentialHash:string) {
+ const query=r.search!;const offset=(query.page-1)*query.pageSize;const filters=query.filters;
+ const baseParams=[p.id,p.workspace_id,b.project_id,filters.updatedAfter??null,(r.entity==="BuyerLead"?filters.status:r.entity==="Deal"?filters.stage:null)??null,query.pageSize+1,offset] as const;
+ const source=r.entity==="Contact"
+  ?"contacts"
+  :r.entity==="BuyerLead"?"leads":"deals";
+ const extra=r.entity==="Contact"?"and $5::text is null":r.entity==="BuyerLead"?"and t.type='Käufer' and ($5::text is null or t.status=$5)":"and ($5::text is null or t.stage=$5)";
+ const rows=await tx.query<Binding>("select b.source_id,b.project_id,b.entity,b.data_context,b.data_classification,b.domain,b.purpose from crm_service_resource_bindings b join "+source+" t on t.id=b.source_id and t.workspace_id=b.workspace_id and t.project_id=b.project_id where b.principal_id=$1::uuid and b.workspace_id=$2::uuid and b.project_id=$3::uuid and b.entity='"+r.entity+"' and b.data_context=$8 and b.data_classification=$9 and b.domain='BUSINESS' and b.purpose=$10 and t.data_classification=$8 and t.data_purpose='crm_sales' and ($4::timestamptz is null or t.updated_at>=$4) "+extra+" order by t.updated_at,t.id limit $6 offset $7",[...baseParams,p.data_context,p.data_classification,p.purpose]);
+ const pageRows=rows.slice(0,query.pageSize);const items=[];
+ for(const item of pageRows)items.push(await project(tx,p,item,r.entity,credentialHash,r.contractVersion));
+ return {contractVersion:r.contractVersion,kind:r.entity,workspaceId:p.workspace_id,projectId:b.project_id,page:query.page,pageSize:query.pageSize,hasMore:rows.length>query.pageSize,items};
+}
+function errorResponse(error:unknown,correlationId?:string,contractVersion=CRM_CONTRACT_VERSION) {
  let code="CRM_RESULT_UNKNOWN",status=503;
  if(error instanceof CrmCommandError) {
   status=error.status;
@@ -148,7 +193,7 @@ function errorResponse(error:unknown,correlationId?:string) {
   else if(error.status===401||error.status===403)code="CRM_NOT_ACCESSIBLE";
   else code="INVALID_CRM_REQUEST";
  }
- return Response.json({contractVersion:CRM_CONTRACT_VERSION,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null},{status,headers:{"Cache-Control":"no-store"}});
+ return Response.json({contractVersion,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null},{status,headers:{"Cache-Control":"no-store"}});
 }
 /** Dedicated bearer endpoint. Cookie/header identities cannot enter or acquire these grants. */
 export async function handleCrmContractRequest(request:Request,options:TenantTransactionOptions={}):Promise<Response> {
@@ -166,9 +211,9 @@ export async function handleCrmContractRequest(request:Request,options:TenantTra
   const r=envelope;
   if(r.tenantId!==principal.tenant_alias || r.actorId!==principal.agent_id)return fail();
   for(const [header,value]of [["x-crm-purpose",principal.purpose],["x-crm-data-context",principal.data_context],["x-crm-classification",principal.data_classification]])if(request.headers.has(header)&&request.headers.get(header)!==value)return fail();
-  const required=r.operation==="Read"?reads[r.entity]:r.operation==="Update"?({Contact:"crm.contacts.write",Project:"crm.projects.write",Task:"crm.tasks.write",BuyerLead:"crm.leads.write",Communication:"crm.communications.write"} as Partial<Record<Entity,string>>)[r.entity]:r.operation==="PrepareOffer"?"crm.offers.prepare":r.operation==="PrepareReservation"?"crm.reservations.prepare":undefined;
-  if(!required || !principal.scopes.includes(required))return fail();
-  if(!["Read","Update"].includes(r.operation) || (r.operation==="Update"&&!["Contact","Project","Task"].includes(r.entity)))return fail("CRM_UNSUPPORTED_OPERATION",422);
+  const required=r.operation==="Read"?[reads[r.entity]]:r.operation==="Search"?["crm.search.read",reads[r.entity]]:r.operation==="Update"?[({Contact:"crm.contacts.write",Project:"crm.projects.write",Task:"crm.tasks.write",BuyerLead:"crm.leads.write",Communication:"crm.communications.write"} as Partial<Record<Entity,string>>)[r.entity]]:r.operation==="PrepareOffer"?["crm.offers.prepare"]:r.operation==="PrepareReservation"?["crm.reservations.prepare"]:[];
+  if(!required.length || required.some(scope=>!scope||!principal.scopes.includes(scope)))return fail();
+  if(!["Read","Search","Update"].includes(r.operation) || (r.operation==="Update"&&!["Contact","Project","Task"].includes(r.entity)))return fail("CRM_UNSUPPORTED_OPERATION",422);
   if(r.operation==="Update") {
    const field=r.entity==="Task"?"title":"name";
    if(Object.keys(r.patch).length!==1 || !Object.hasOwn(r.patch,field) || r.approvalReference!==null)return fail("INVALID_CRM_REQUEST",400);
@@ -178,11 +223,13 @@ export async function handleCrmContractRequest(request:Request,options:TenantTra
    const locked=await tx.queryOne<Principal>("select * from crm_authenticate_service($1)",[hash]);
    if(!locked || crmPayloadDigest(locked)!==crmPayloadDigest(principal))return fail();
    const binding=await tx.queryOne<Binding>("select source_id,project_id,entity,data_context,data_classification,domain,purpose from crm_service_resource_bindings where principal_id=$1 and workspace_id=$2 and resource_alias=$3",[principal.id,principal.workspace_id,r.resourceId]);
-   if(!binding || binding.entity!==r.entity || binding.data_context!==principal.data_context || binding.data_classification!==principal.data_classification || binding.domain!=="BUSINESS" || binding.purpose!==principal.purpose)return fail();
-   await assertProjectGrant(tx,fresh,binding.project_id,r.operation!=="Read");
+    const expectedBindingEntity=r.operation==="Search"?"Project":r.entity;
+    if(!binding || binding.entity!==expectedBindingEntity || binding.data_context!==principal.data_context || binding.data_classification!==principal.data_classification || binding.domain!=="BUSINESS" || binding.purpose!==principal.purpose)return fail();
+    await assertProjectGrant(tx,fresh,binding.project_id,!["Read","Search"].includes(r.operation));
    const audit=await tx.queryOne("select audit_alias from crm_service_audit_bindings where principal_id=$1 and workspace_id=$2 and audit_alias=$3 and resource_alias=$4 and request_hash=$5 and expires_at>clock_timestamp()",[principal.id,principal.workspace_id,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
    if(!audit)return fail();
-   if(r.operation==="Read")return {projection:await project(tx,principal,binding,r.entity,hash),auditReference:r.auditReference};
+    if(r.operation==="Read")return {projection:await project(tx,principal,binding,r.entity,hash,r.contractVersion),auditReference:r.auditReference};
+    if(r.operation==="Search")return {search:await search(tx,principal,binding,r,hash),auditReference:r.auditReference};
    const input={operation:"contract.v1."+r.entity.toLowerCase()+".update",resourceId:binding.source_id,projectId:binding.project_id,expectedVersion:r.expectedVersion!,idempotencyKey:nativeRequestId(principal.id,"idempotency",r.idempotencyKey),correlationId:nativeRequestId(principal.id,"correlation",r.correlationId),payload:{principalId:principal.id,request:r},capability:"pipeline:write" as const};
    if(request.headers.get("x-crm-reconcile")==="1")return reconcileCrmCommand(fresh,input,options);
    return executeCrmCommand(fresh,input,async(commandTx)=>{
@@ -192,6 +239,6 @@ export async function handleCrmContractRequest(request:Request,options:TenantTra
     return {projection:await project(commandTx,principal,binding,r.entity,hash),resourceVersion:r.expectedVersion!+1,requestAuditReference:r.auditReference};
    },options);
   },options);
-  return Response.json({contractVersion:CRM_CONTRACT_VERSION,correlationId:r.correlationId,idempotencyKey:r.idempotencyKey,...result},{headers:{"Cache-Control":"no-store"}});
- } catch(error) {return errorResponse(error,envelope?.correlationId);}
+  return Response.json({contractVersion:r.contractVersion,correlationId:r.correlationId,idempotencyKey:r.idempotencyKey,...result},{headers:{"Cache-Control":"no-store"}});
+ } catch(error) {return errorResponse(error,envelope?.correlationId,envelope?.contractVersion);}
 }
