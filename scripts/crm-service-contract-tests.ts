@@ -198,6 +198,23 @@ test("HTTP: v1.1 Deal read is versioned, hashed, financial-classified and field-
  assert.equal(projection.data.stage,"Qualifiziert");assert.equal(projection.data.ownerReference,actor);assert.deepEqual(projection.data.linkedContacts,[contact]);
  assert.ok(projection.data.pipeline);assert.doesNotMatch(JSON.stringify(result.body),/probability|risk_level|metadata|expected_close_date|synthetic-sensitive/);
 });
+test("HTTP: unrequested legacy lead profile and deal next action are minimized",async()=>{
+ const priorLead=(await db.admin.query("select buyer_profile from leads where id=$1",[lead])).rows[0].buyer_profile;
+ const priorDeal=(await db.admin.query("select next_action from deals where id=$1",[deal])).rows[0].next_action;
+ await db.admin.query("update leads set buyer_profile=$2::jsonb where id=$1",[lead,JSON.stringify({purchaseTimeline:"Within six months"})]);
+ await db.admin.query("update deals set next_action='Plan follow-up' where id=$1",[deal]);
+ try {
+  const leadRequest=envelope({entity:"BuyerLead",resourceId:"sim-buyer"});await register(leadRequest);
+  assert.equal((await call(leadRequest)).status,200);
+  const dealRequest=readEnvelope({entity:"Deal",resourceId:"sim-deal"});await register(dealRequest);
+  const result=await call(dealRequest);assert.equal(result.status,200,JSON.stringify(result));
+  assert.equal(result.body.projection?.data.nextAction,null);
+  assert.doesNotMatch(JSON.stringify(result.body),/Within six months|Plan follow-up/);
+ } finally {
+  await db.admin.query("update leads set buyer_profile=$2::jsonb where id=$1",[lead,JSON.stringify(priorLead)]);
+  await db.admin.query("update deals set next_action=$2 where id=$1",[deal,priorDeal]);
+ }
+});
 test("HTTP: structured v1.1 Contact, BuyerLead and Deal searches return only bound project resources",async()=>{
  for(const [entity,expected]of [["Contact",contact],["BuyerLead",lead],["Deal",deal]] as const){
   const filters=entity==="BuyerLead"?{status:"Neu"}:entity==="Deal"?{stage:"Qualifiziert"}:{};

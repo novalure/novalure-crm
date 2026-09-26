@@ -78,8 +78,11 @@ const tables:Partial<Record<Entity,{table:string;columns:string;representation?:
 function integer(value:unknown) {const n=Number(value);if(!Number.isSafeInteger(n)||n<0)fail("INVALID_CRM_RESPONSE",502);return n;}
 function timestamp(value:unknown) {const d=new Date(String(value));if(!Number.isFinite(d.valueOf()))return fail("INVALID_CRM_RESPONSE",502);return d.toISOString();}
 
+function isSyntheticText(value:unknown):value is string {
+ return typeof value==="string" && /^SYNTHETIC:? [\p{L}\p{N} .,_-]{1,200}$/u.test(value) && !unsafeText.test(value);
+}
 function syntheticText(value:unknown) {
- if(typeof value!=="string" || !/^SYNTHETIC:? [\p{L}\p{N} .,_-]{1,200}$/u.test(value) || unsafeText.test(value))return fail("INVALID_CRM_RESPONSE",502);
+ if(!isSyntheticText(value))return fail("INVALID_CRM_RESPONSE",502);
  return value;
 }
 function assertProfile(profile:Record<string,unknown>) {
@@ -110,7 +113,7 @@ function validateProjection(kind:Entity,r:Record<string,unknown>) {
  if(kind==="BuyerLead"||kind==="Qualification") {
   requireEnum(r.status,["Neu","Qualifiziert","Qualifizieren","Termin offen","Übergabe","Archiviert"]);
   if(typeof r.score!=="number"||integer(r.score)>100)return fail("INVALID_CRM_RESPONSE",502);
-  if(r.buyer_profile!==null) {
+  if(kind==="Qualification"&&r.buyer_profile!==null) {
    if(!r.buyer_profile||typeof r.buyer_profile!=="object"||Array.isArray(r.buyer_profile))return fail("INVALID_CRM_RESPONSE",502);
    const profile=r.buyer_profile as Record<string,unknown>,allowed=["budgetFrom","budgetTo","financingStatus","desiredLocation","mustHaveCriteria","niceToHaveCriteria","purchaseTimeline","propertyType","useCase"];
    if(Object.keys(profile).some(key=>!allowed.includes(key)))return fail("INVALID_CRM_RESPONSE",502);assertProfile(profile);
@@ -119,7 +122,7 @@ function validateProjection(kind:Entity,r:Record<string,unknown>) {
  if(kind==="Deal") {
   if(typeof r.stage!=="string"||!/^[\p{L}\p{N} ._-]{1,80}$/u.test(r.stage)||unsafeText.test(r.stage))return fail("INVALID_CRM_RESPONSE",502);
   integer(r.value_cents);integer(r.version);
-  if(r.next_action!=="")syntheticText(r.next_action);
+  if(r.next_action!==""&&isSyntheticText(r.next_action))syntheticText(r.next_action);
  }
  if(kind==="Task") {requireEnum(r.priority,["Hoch","Mittel","Normal"]);requireEnum(r.status,["open","done"]);}
  if(kind==="Appointment")requireEnum(r.status,["geplant","vorbereiten","bestätigt","nachfassen"]);
@@ -143,7 +146,7 @@ function dataProjection(kind:Entity,r:Record<string,unknown>):Record<string,unkn
   assertProfile(profile);
   return {buyerLeadSourceId:r.id,profile,completion:"NOT_VERIFIED",currency:null,budgetUnit:"NOT_VERIFIED",desiredUnitSourceId:null};
  }
- case "Deal":return {dealReference:r.id,tenantReference:r.workspace_id,pipeline:r.pipeline,stage:r.stage,value:{minorUnits:integer(r.value_cents),currency:"EUR",classification:"FINANCIAL"},ownerReference:r.owner_user_id,linkedContacts:r.contact_id?[r.contact_id]:[],nextAction:r.next_action||null,updatedAt:timestamp(r.updated_at)};
+ case "Deal":return {dealReference:r.id,tenantReference:r.workspace_id,pipeline:r.pipeline,stage:r.stage,value:{minorUnits:integer(r.value_cents),currency:"EUR",classification:"FINANCIAL"},ownerReference:r.owner_user_id,linkedContacts:r.contact_id?[r.contact_id]:[],nextAction:isSyntheticText(r.next_action)?r.next_action:null,updatedAt:timestamp(r.updated_at)};
  case "Task":return {title:r.title,contactSourceId:r.contact_id,leadSourceId:r.lead_id,dueAt:r.due_at?timestamp(r.due_at):null,crmPriority:r.priority,state:r.status==="done"?"COMPLETED":"OPEN"};
  case "Appointment":return {title:r.title,contactSourceId:r.contact_id,leadSourceId:r.lead_id,startsAt:timestamp(r.starts_at),endsAt:timestamp(r.ends_at),crmStatus:r.status,timeZone:null,calendarReference:null};
  case "Viewing":return {unitSourceId:r.unit_id,contactSourceId:r.contact_id,leadSourceId:r.lead_id,startsAt:timestamp(r.starts_at),endsAt:timestamp(r.ends_at),crmStatus:r.status,note:r.note,appointmentSourceId:null};
