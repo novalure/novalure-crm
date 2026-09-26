@@ -2,6 +2,10 @@
 
 Stand: 2026-09-17. Diese Belegkarte beschreibt den Integrationsumfang der Originalgaps G01, G02, G16 und G17. Sie ist keine Aussage über eine vollständige Sicherheitsmigration aller historischen manuellen CRM-Module und kein Produktions- oder Preview-Nachweis.
 
+## EVM-08C disposable Activity-Vertrag
+
+Der ungemergte QA-Branch stellt zusätzlich die separat versionierte Route `crm-qa-write-v1` für genau einen synthetischen EVM-08C-Activity-Nachweis bereit. Sie verlangt den exakten Scope `crm.qa.activity.write`, ein unveränderliches Contact-Resource-Binding, einen exakten Audit-Request-Hash, Preview-Runtime, einen aktuellen Resource-Version-Hash und einen Idempotency-Key. Kontakte, Leads, Deals, Stages, Finanzdaten, Verträge und Zahlungen können darüber nicht geändert werden. Cleanup neutralisiert ausschließlich die dedizierte QA-Activity-Zeile; die Service-Rolle besitzt keine Delete-Berechtigung.
+
 ## Additive Read-Version v1.1 (EVM-08B.1)
 
 `crm-integration-v1.1` erweitert dieselbe Dienstgrenze ausschließlich um `Deal`-Reads und strukturierte Suchen über `Contact`, `BuyerLead` und `Deal`. Der bestehende Vertrag `crm-integration-v1` und seine Request-Paritätsvektoren bleiben unverändert. Deal und Search lehnen einen Versions-Downgrade auf v1 ab.
