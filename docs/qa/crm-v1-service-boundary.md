@@ -12,6 +12,8 @@ Search akzeptiert nur `page` 1–5, `pageSize` 1–25 sowie die festen Filter `u
 
 Die Deal-Projektion enthält ausschließlich Referenzen auf Deal, Tenant, Pipeline, Owner und verknüpften Kontakt sowie Version, SHA-256-Projektionshash, Stage, Next Action, Änderungszeit und den als `FINANCIAL` klassifizierten EUR-Minor-Unit-Wert. Rohmetadaten, Wahrscheinlichkeit, Risiko, E-Mail und Telefonnummer werden nicht exportiert. Migration `087_evm08b1_read_contracts.sql` erweitert nur die geschlossenen Scope-/Entity-Constraints; sie erzeugt weder Principal noch Credential noch Geschäftsdaten.
 
+Auf dem ausschließlich dafür vorgesehenen Git-Branch `codex/evm-08b1-read-contracts` akzeptiert die Vercel-Preview-Runtime als Datenziel nur `G27_QA_DATABASE_URL`. Ein gleichzeitig vorhandenes abweichendes generisches Datenbankziel führt vor dem Verbindungsaufbau zum Abbruch. Production, `main` und alle anderen Branches können diesen Fallback nicht verwenden.
+
 ## Verbindlicher Bezug
 
 Evelyn-Tag `phase-2a-crm-contract-v1`, Commit `8119798a97347eb1c96126c6a14308e158e20862`: `src/connectors/crm/contract.ts`, `mapping.ts`, `src/domain/types.ts` und `src/security/redaction.ts`. Der frühere auditierte CRM-Quellstand bleibt `c3705927e2b47fc8fb0d52bfd28e5b8feff2f600`; neue CRM-Projektionen behaupten nicht, laufende Daten dieses alten Commits zu sein.

@@ -9,6 +9,7 @@ import { createServer, type Server } from "node:http";
 import { startLocalSalesDb,applySalesSchema } from "./lib/local-sales-db.mjs";
 import { CRM_CONTRACT_SCOPES,CRM_READ_CONTRACT_VERSION,parseCrmContractRequest } from "../src/lib/crm-service-contract";
 import { crmPayloadDigest } from "../src/lib/crm-command";
+import { resolveTenantDatabaseUrl } from "../src/lib/db/tenant-client";
 
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 type Handler=(request:Request,context:{params:Promise<Record<string,string>>})=>Promise<Response>;
@@ -44,6 +45,14 @@ async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>=
  const response=await fetchLocal(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+bearer,...headers},body:JSON.stringify(r)});
  return {status:response.status,body:await response.json() as {projection?: {contractVersion:string;data:Record<string,unknown>;sourceId:string;sourceVersion:number|null;projectionHash:string}; search?:{kind:string;page:number;pageSize:number;hasMore:boolean;items:Array<{sourceId:string;data:Record<string,unknown>}>}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
+test("target: EVM-08B.1 branch uses only the isolated QA database variable",()=>{
+ const qa="postgresql://runtime@qa-pooler.example.neon.tech/qa_evm08b?sslmode=require";
+ const preview={NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",G27_QA_DATABASE_URL:qa} as NodeJS.ProcessEnv;
+ assert.equal(resolveTenantDatabaseUrl(preview),qa);
+ assert.throws(()=>resolveTenantDatabaseUrl({...preview,DATABASE_URL:"postgresql://runtime@production.example.neon.tech/production?sslmode=require"}),/target conflict/);
+ assert.throws(()=>resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts"}),/not configured/);
+ assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"production",VERCEL_GIT_COMMIT_REF:"main",G27_QA_DATABASE_URL:qa}),"");
+});
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db);
  Object.assign(process.env,{NODE_ENV:"test"});process.env.CRM_LOCAL_TEST_DATABASE="1";process.env.DATABASE_URL=`postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;

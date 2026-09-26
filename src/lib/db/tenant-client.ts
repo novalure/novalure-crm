@@ -50,13 +50,20 @@ function cleanDatabaseUrl(value: string | undefined) {
   return prefixedUrl?.[1] ?? trimmed;
 }
 
-function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
-  return (
+export function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
+  const generic = (
     cleanDatabaseUrl(env.DATABASE_URL) ||
     cleanDatabaseUrl(env.POSTGRES_URL) ||
     cleanDatabaseUrl(env.POSTGRES_DATABASE_URL) ||
     cleanDatabaseUrl(env.POSTGRES_PRISMA_URL)
   );
+  const evm08bPreview = env.VERCEL === "1" && env.VERCEL_ENV === "preview"
+    && env.VERCEL_GIT_COMMIT_REF === "codex/evm-08b1-read-contracts";
+  if (!evm08bPreview) return generic;
+  const isolatedQa = cleanDatabaseUrl(env.G27_QA_DATABASE_URL);
+  if (!isolatedQa) throw new Error("EVM-08B.1 Preview QA database is not configured");
+  if (generic && generic !== isolatedQa) throw new Error("EVM-08B.1 Preview database target conflict");
+  return isolatedQa;
 }
 
 async function getTenantPool(): Promise<TenantPool> {
