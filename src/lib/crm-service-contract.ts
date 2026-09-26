@@ -193,15 +193,7 @@ function errorResponse(error:unknown,correlationId?:string,contractVersion=CRM_C
   else if(error.status===401||error.status===403)code="CRM_NOT_ACCESSIBLE";
   else code="INVALID_CRM_REQUEST";
  }
- const previewDiagnostic=process.env.VERCEL_ENV==="preview"&&error instanceof Error
-  ? (error.message==="Tenant database role is unsafe: a non-owner, non-privileged tenant runtime role is required"
-    ? "QA_DATABASE_ROLE_UNSAFE"
-    : error.message==="EVM-08B.1 Preview QA database host is denied"&&/^[a-z0-9.-]{1,253}$/.test((error as Error&{qaHost?:string}).qaHost??"")
-    ? "QA_DATABASE_HOST_DENIED_"+(error as Error&{qaHost:string}).qaHost
-    : ({"EVM-08B.1 Preview QA database is not configured":"QA_DATABASE_NOT_CONFIGURED","EVM-08B.1 Preview QA database binding is invalid":"QA_DATABASE_BINDING_INVALID","EVM-08B.1 Preview QA database protocol is denied":"QA_DATABASE_PROTOCOL_DENIED","EVM-08B.1 Preview QA database host is denied":"QA_DATABASE_HOST_DENIED","EVM-08B.1 Preview QA database name is denied":"QA_DATABASE_NAME_DENIED","EVM-08B.1 Preview QA database role is denied":"QA_DATABASE_ROLE_DENIED"} as Record<string,string>)[error.message])
-    ?? (typeof (error as Error&{code?:unknown}).code==="string"&&/^[A-Z0-9]{5}$/.test((error as Error&{code:string}).code)?"SQLSTATE_"+(error as Error&{code:string}).code:"QA_UNCLASSIFIED_ERROR")
-  : undefined;
- return Response.json({contractVersion,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null,...(previewDiagnostic?{previewDiagnostic}:{})},{status,headers:{"Cache-Control":"no-store"}});
+ return Response.json({contractVersion,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null},{status,headers:{"Cache-Control":"no-store"}});
 }
 /** Dedicated bearer endpoint. Cookie/header identities cannot enter or acquire these grants. */
 export async function handleCrmContractRequest(request:Request,options:TenantTransactionOptions={}):Promise<Response> {

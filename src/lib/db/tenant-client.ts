@@ -71,11 +71,7 @@ export function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
   const expectedHost = /^ep-flat-surf-al1a9k1y(?:-pooler)?\.c-3\.eu-central-1\.aws\.neon\.tech$/;
   const expectedRole = /^g24_qa_20260917(?:_r[23])?$/;
   if (binding.protocol !== "postgresql:") throw new Error("EVM-08B.1 Preview QA database protocol is denied");
-  if (!expectedHost.test(binding.hostname)) {
-    const error = new Error("EVM-08B.1 Preview QA database host is denied") as Error & { qaHost?: string };
-    error.qaHost = binding.hostname;
-    throw error;
-  }
+  if (!expectedHost.test(binding.hostname)) throw new Error("EVM-08B.1 Preview QA database host is denied");
   if (binding.pathname !== "/qa_g08_pr63_20260917") throw new Error("EVM-08B.1 Preview QA database name is denied");
   if (!expectedRole.test(binding.username)) throw new Error("EVM-08B.1 Preview QA database role is denied");
   return isolatedQa;
