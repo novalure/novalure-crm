@@ -196,7 +196,7 @@ function errorResponse(error:unknown,correlationId?:string,contractVersion=CRM_C
  const previewDiagnostic=process.env.VERCEL_ENV==="preview"&&error instanceof Error
   ? (error.message==="Tenant database role is unsafe: a non-owner, non-privileged tenant runtime role is required"
     ? "QA_DATABASE_ROLE_UNSAFE"
-    : ({"EVM-08B.1 Preview QA database is not configured":"QA_DATABASE_NOT_CONFIGURED","EVM-08B.1 Preview QA database binding is invalid":"QA_DATABASE_BINDING_INVALID","EVM-08B.1 Preview QA database binding is denied":"QA_DATABASE_BINDING_DENIED"} as Record<string,string>)[error.message])
+    : ({"EVM-08B.1 Preview QA database is not configured":"QA_DATABASE_NOT_CONFIGURED","EVM-08B.1 Preview QA database binding is invalid":"QA_DATABASE_BINDING_INVALID","EVM-08B.1 Preview QA database protocol is denied":"QA_DATABASE_PROTOCOL_DENIED","EVM-08B.1 Preview QA database host is denied":"QA_DATABASE_HOST_DENIED","EVM-08B.1 Preview QA database name is denied":"QA_DATABASE_NAME_DENIED","EVM-08B.1 Preview QA database role is denied":"QA_DATABASE_ROLE_DENIED"} as Record<string,string>)[error.message])
     ?? (typeof (error as Error&{code?:unknown}).code==="string"&&/^[A-Z0-9]{5}$/.test((error as Error&{code:string}).code)?"SQLSTATE_"+(error as Error&{code:string}).code:"QA_UNCLASSIFIED_ERROR")
   : undefined;
  return Response.json({contractVersion,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null,...(previewDiagnostic?{previewDiagnostic}:{})},{status,headers:{"Cache-Control":"no-store"}});
