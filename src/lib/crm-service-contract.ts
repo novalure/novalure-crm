@@ -79,7 +79,7 @@ function integer(value:unknown) {const n=Number(value);if(!Number.isSafeInteger(
 function timestamp(value:unknown) {const d=new Date(String(value));if(!Number.isFinite(d.valueOf()))return fail("INVALID_CRM_RESPONSE",502);return d.toISOString();}
 
 function syntheticText(value:unknown) {
- if(typeof value!=="string" || !/^SYNTHETIC: [\p{L}\p{N} .,_-]{1,200}$/u.test(value) || unsafeText.test(value))return fail("INVALID_CRM_RESPONSE",502);
+ if(typeof value!=="string" || !/^SYNTHETIC:? [\p{L}\p{N} .,_-]{1,200}$/u.test(value) || unsafeText.test(value))return fail("INVALID_CRM_RESPONSE",502);
  return value;
 }
 function assertProfile(profile:Record<string,unknown>) {
