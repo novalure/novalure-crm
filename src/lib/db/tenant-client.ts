@@ -60,7 +60,7 @@ export function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
   const evm08bPreview = env.VERCEL === "1" && env.VERCEL_ENV === "preview"
     && env.CRM_EVM08B_PREVIEW_TARGET === "weathered-term-98273025/br-spring-snow-alupo8u4/qa_g08_pr63_20260917";
   if (!evm08bPreview) return generic;
-  const isolatedQa = cleanDatabaseUrl(env.G27_QA_DATABASE_URL);
+  const isolatedQa = cleanDatabaseUrl(env.EVM08B_QA_DATABASE_URL);
   if (!isolatedQa) throw new Error("EVM-08B.1 Preview QA database is not configured");
   let binding: URL;
   try {

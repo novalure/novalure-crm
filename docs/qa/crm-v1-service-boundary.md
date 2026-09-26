@@ -18,7 +18,7 @@ Novalure-QA-Workspace notwendigen Datenkontext `NOVALURE_INTERNAL`. Dieser Pfad 
 weiterhin exakte Principal-, Projekt-, Resource- und Auditbindungen. `PRIVATE_FRANZ`, `UNCLASSIFIED` und fremde
 Kontexte bleiben unzulässig. Die Migration erzeugt ebenfalls weder Principal noch Credential noch Geschäftsdaten.
 
-Auf dem ausschließlich dafür vorgesehenen Git-Branch `codex/evm-08b1-read-contracts` akzeptiert die Vercel-Preview-Runtime als Datenziel nur `G27_QA_DATABASE_URL`. Ein gleichzeitig vorhandenes abweichendes generisches Datenbankziel führt vor dem Verbindungsaufbau zum Abbruch. Production, `main` und alle anderen Branches können diesen Fallback nicht verwenden.
+Auf dem ausschließlich dafür vorgesehenen Git-Branch `codex/evm-08b1-read-contracts` akzeptiert die Vercel-Preview-Runtime als Datenziel nur `EVM08B_QA_DATABASE_URL`. Ein gleichzeitig vorhandenes abweichendes generisches Datenbankziel führt vor dem Verbindungsaufbau zum Abbruch. Production, `main` und alle anderen Branches können diesen Fallback nicht verwenden.
 
 ## Verbindlicher Bezug
 

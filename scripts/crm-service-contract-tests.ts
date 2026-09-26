@@ -48,14 +48,14 @@ async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>=
 }
 test("target: EVM-08B.1 branch uses only the isolated QA database variable",()=>{
  const qa="postgresql://g24_qa_20260917_r3:synthetic@ep-flat-surf-al1a9k1y-pooler.c-3.eu-central-1.aws.neon.tech/qa_g08_pr63_20260917?sslmode=require";
- const preview={NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",CRM_EVM08B_PREVIEW_TARGET:"weathered-term-98273025/br-spring-snow-alupo8u4/qa_g08_pr63_20260917",G27_QA_DATABASE_URL:qa} as NodeJS.ProcessEnv;
+ const preview={NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",CRM_EVM08B_PREVIEW_TARGET:"weathered-term-98273025/br-spring-snow-alupo8u4/qa_g08_pr63_20260917",EVM08B_QA_DATABASE_URL:qa} as NodeJS.ProcessEnv;
  assert.equal(resolveTenantDatabaseUrl(preview),qa);
  assert.equal(resolveTenantDatabaseUrl({...preview,DATABASE_URL:"postgresql://runtime@production.example.neon.tech/production?sslmode=require"}),qa);
- assert.throws(()=>resolveTenantDatabaseUrl({...preview,G27_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@production.example.neon.tech/qa_g08_pr63_20260917?sslmode=require"}),/binding is denied/);
- assert.throws(()=>resolveTenantDatabaseUrl({...preview,G27_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@ep-flat-surf-al1a9k1y.c-3.eu-central-1.aws.neon.tech/production?sslmode=require"}),/binding is denied/);
+ assert.throws(()=>resolveTenantDatabaseUrl({...preview,EVM08B_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@production.example.neon.tech/qa_g08_pr63_20260917?sslmode=require"}),/host is denied/);
+ assert.throws(()=>resolveTenantDatabaseUrl({...preview,EVM08B_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@ep-flat-surf-al1a9k1y.c-3.eu-central-1.aws.neon.tech/production?sslmode=require"}),/name is denied/);
  assert.throws(()=>resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",CRM_EVM08B_PREVIEW_TARGET:preview.CRM_EVM08B_PREVIEW_TARGET}),/not configured/);
- assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",G27_QA_DATABASE_URL:qa}),"");
- assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"production",CRM_EVM08B_PREVIEW_TARGET:preview.CRM_EVM08B_PREVIEW_TARGET,G27_QA_DATABASE_URL:qa}),"");
+ assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",EVM08B_QA_DATABASE_URL:qa}),"");
+ assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"production",CRM_EVM08B_PREVIEW_TARGET:preview.CRM_EVM08B_PREVIEW_TARGET,EVM08B_QA_DATABASE_URL:qa}),"");
 });
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db);
