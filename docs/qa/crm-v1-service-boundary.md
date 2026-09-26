@@ -12,6 +12,12 @@ Search akzeptiert nur `page` 1–5, `pageSize` 1–25 sowie die festen Filter `u
 
 Die Deal-Projektion enthält ausschließlich Referenzen auf Deal, Tenant, Pipeline, Owner und verknüpften Kontakt sowie Version, SHA-256-Projektionshash, Stage, Next Action, Änderungszeit und den als `FINANCIAL` klassifizierten EUR-Minor-Unit-Wert. Rohmetadaten, Wahrscheinlichkeit, Risiko, E-Mail und Telefonnummer werden nicht exportiert. Migration `087_evm08b1_read_contracts.sql` erweitert nur die geschlossenen Scope-/Entity-Constraints; sie erzeugt weder Principal noch Credential noch Geschäftsdaten.
 
+Migration `088_evm08b1_internal_preview_principal.sql` ergänzt ausschließlich den für den vorhandenen synthetischen
+Novalure-QA-Workspace notwendigen Datenkontext `NOVALURE_INTERNAL`. Dieser Pfad verlangt gleichzeitig
+`operating_model=novalure_internal`, eine aktive `agent`-Mitgliedschaft mit interner Novalure-Produktrolle sowie
+weiterhin exakte Principal-, Projekt-, Resource- und Auditbindungen. `PRIVATE_FRANZ`, `UNCLASSIFIED` und fremde
+Kontexte bleiben unzulässig. Die Migration erzeugt ebenfalls weder Principal noch Credential noch Geschäftsdaten.
+
 Auf dem ausschließlich dafür vorgesehenen Git-Branch `codex/evm-08b1-read-contracts` akzeptiert die Vercel-Preview-Runtime als Datenziel nur `G27_QA_DATABASE_URL`. Ein gleichzeitig vorhandenes abweichendes generisches Datenbankziel führt vor dem Verbindungsaufbau zum Abbruch. Production, `main` und alle anderen Branches können diesen Fallback nicht verwenden.
 
 ## Verbindlicher Bezug
@@ -24,7 +30,12 @@ Evelyn-Tag `phase-2a-crm-contract-v1`, Commit `8119798a97347eb1c96126c6a14308e15
 
 Einziger Einstieg: `POST /api/crm/contract/v1` mit eigenem `qa-crm-v1.`-Bearer. Die Migration erzeugt weder Principal noch Credential. Nur der isolierte synthetische Testaufbau erzeugt einen zufälligen, kurzlebigen Testwert im Arbeitsspeicher und speichert dessen SHA256-Hash in der Testdatenbank.
 
-Die Datenbank prüft Principal, aktives Mitglied, exakten Actor, Department, Tenant-Alias, Scope, Ablauf, Widerruf, synthetischen QA-Workspace und die Produktrolle `agent/project_sales_member`. Owner-/Admin-Identitäten sind für diesen Vertrag unzulässig. Cookies, Browser-Origin und abweichende Kontext-/Zweck-/Klassifikationsheader werden abgewiesen. Production ist gesperrt. Ein Preview-Betrieb ist nicht durch diese lokalen Tests nachgewiesen.
+Die Datenbank prüft Principal, aktives Mitglied, exakten Actor, Department, Tenant-Alias, Scope, Ablauf, Widerruf
+und synthetischen QA-Workspace. `CUSTOMER_TENANT` verlangt `agent/project_sales_member` in einem Kunden-
+Betriebsmodell; `NOVALURE_INTERNAL` verlangt `agent` plus eine interne Novalure-Produktrolle in einem
+`novalure_internal`-Workspace. Owner-/Admin-Rollen sind für diesen Vertrag unzulässig. Cookies, Browser-Origin
+und abweichende Kontext-/Zweck-/Klassifikationsheader werden abgewiesen. Production ist gesperrt. Ein
+Preview-Betrieb ist nicht durch diese lokalen Tests nachgewiesen.
 
 `getRequestSession` lehnt diesen Service-Bearer vor der menschlichen Cookie-/Headerauflösung ab. Das gilt auch beim Versuch, zugleich Owner-Header einzuschleusen. Der tatsächliche Service-Principal kann damit die unten inventarisierten älteren CRM-Routen nicht erreichen. Deren menschliche Produktberechtigungen werden dadurch nicht neu definiert.
 
@@ -32,9 +43,9 @@ Die Datenbank prüft Principal, aktives Mitglied, exakten Actor, Department, Ten
 
 - `queryAuthenticationRows` führt die schmale Credentialprüfung über dieselbe verifizierte, nicht privilegierte Laufzeitrolle aus, in einer Transaktion mit leerem Tenant-/Actor-Kontext. Hashes sind der Laufzeitrolle nicht direkt lesbar.
 - Danach verwendet der Dienst `withCrmRead` und die bestehende Tenant-Transaktion. Der Principal wird innerhalb dieser Transaktion erneut geprüft und gesperrt; auch Actor-/Workspace- und Projektfreigaben werden frisch geprüft.
-- Immutable Bindings verknüpfen genau Principal, Workspace, synthetischen Alias, Entity, native Ressource und Projekt. Erforderlich sind unabhängig voneinander `CUSTOMER_TENANT`, die Sensitivitätsklasse des Principals, `BUSINESS` und `OPERATIONS`. Fehlende Binding-Klassifikation ist `UNCLASSIFIED` und bleibt gesperrt.
-- Der native Datensatz muss zusätzlich das richtige Workspace-/Projektpaar und die bestehende CRM-Klassifikation `CUSTOMER_TENANT` mit Zweck `crm_sales` besitzen. Die historische CRM-Spalte `data_classification` bezeichnet den Datenkontext; die zusätzliche Binding-Klasse bezeichnet ausdrücklich die Sensitivität. Sie werden nicht gleichgesetzt.
-- PRIVATE_FRANZ, NOVALURE_INTERNAL, SECRET, unklassifizierte oder fremde Kontexte erhalten keinen impliziten Zugriff. Es gibt keine Owner-Ausnahme im Dienstvertrag.
+- Immutable Bindings verknüpfen genau Principal, Workspace, synthetischen Alias, Entity, native Ressource und Projekt. Erforderlich sind der exakt gleiche Principal-Datenkontext (`CUSTOMER_TENANT` oder `NOVALURE_INTERNAL`), die Sensitivitätsklasse des Principals, `BUSINESS` und `OPERATIONS`. Fehlende Binding-Klassifikation ist `UNCLASSIFIED` und bleibt gesperrt.
+- Der native Datensatz muss zusätzlich das richtige Workspace-/Projektpaar, exakt den Principal-Datenkontext und den Zweck `crm_sales` besitzen. Die historische CRM-Spalte `data_classification` bezeichnet den Datenkontext; die zusätzliche Binding-Klasse bezeichnet ausdrücklich die Sensitivität. Sie werden nicht gleichgesetzt.
+- PRIVATE_FRANZ, SECRET, unklassifizierte oder fremde Kontexte erhalten keinen impliziten Zugriff. `NOVALURE_INTERNAL` ist nur über den oben beschriebenen synthetischen internen QA-Pfad erreichbar. Es gibt keine Owner-Ausnahme im Dienstvertrag.
 - Die technische Auditbindung ist an den Digest des vollständigen validierten Requests, die Ressource, den Principal und einen Ablauf gebunden. Sie ist keine geschäftliche ApprovalReference.
 - Alle drei erlaubten Writes verwenden `executeCrmCommand`, SQL-CAS, unveränderliche Receipts, Audit und Event in derselben Transaktion. Reconcile authentifiziert und autorisiert erneut. `NOT_FOUND` beweist ausschließlich, dass kein passendes Receipt beobachtet wurde; unbekannte Ergebnisse dürfen nur reconciliert werden.
 - Der interne Command-Digest hat Version 2 und bindet nun ausdrücklich auch die Correlation-ID. Bereits erzeugte unveröffentlichte QA-Receipts werden nicht umgeschrieben; veraltete Receipts können daher konfliktbehaftet sein und benötigen einen sauberen isolierten QA-Aufbau. Eine Produktions-Receipt-Migration wird nicht behauptet.

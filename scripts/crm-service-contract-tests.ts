@@ -15,18 +15,19 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 type Handler=(request:Request,context:{params:Promise<Record<string,string>>})=>Promise<Response>;
 const routes=new Map<string,Record<string,Handler>>();
 let db:Awaited<ReturnType<typeof startLocalSalesDb>>,server:Server,baseUrl:string;
-const w=randomUUID(),actor=randomUUID(),project=randomUUID(),hidden=randomUUID(),foreignW=randomUUID(),foreignProject=randomUUID(),foreignActor=randomUUID();
-const contact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),lead=randomUUID(),deal=randomUUID(),unboundDeal=randomUUID(),principalId=randomUUID(),readOnlyPrincipalId=randomUUID();
+const w=randomUUID(),actor=randomUUID(),project=randomUUID(),hidden=randomUUID(),foreignW=randomUUID(),foreignProject=randomUUID(),foreignActor=randomUUID(),internalW=randomUUID(),internalActor=randomUUID(),internalProject=randomUUID();
+const contact=randomUUID(),internalContact=randomUUID(),hiddenContact=randomUUID(),privateContact=randomUUID(),unknownContact=randomUUID(),task=randomUUID(),lead=randomUUID(),deal=randomUUID(),unboundDeal=randomUUID(),principalId=randomUUID(),readOnlyPrincipalId=randomUUID(),internalPrincipalId=randomUUID();
 const token="qa-crm-v1."+randomBytes(32).toString("base64url");
 const readOnlyToken="qa-crm-v1."+randomBytes(32).toString("base64url");
+const internalToken="qa-crm-v1."+randomBytes(32).toString("base64url");
 const readOnlyScopes=["crm.contacts.read","crm.leads.read","crm.deals.read","crm.search.read"];
 const savedEnv={NODE_ENV:process.env.NODE_ENV,DATABASE_URL:process.env.DATABASE_URL,CRM_LOCAL_TEST_DATABASE:process.env.CRM_LOCAL_TEST_DATABASE};
 const sim=()=> "sim-"+randomUUID();
 const envelope=(extra:Record<string,unknown>={})=>({contractVersion:"crm-integration-v1",environment:"simulation",synthetic:true,operation:"Read",entity:"Contact",tenantId:"sim-qa-tenant",resourceId:"sim-contact",actorId:"sales",correlationId:sim(),idempotencyKey:sim(),expectedVersion:null,approvalReference:null,auditReference:sim(),validation:{status:"VALIDATED",schemaVersion:"crm-integration-v1"},patch:{},...extra});
 const readEnvelope=(extra:Record<string,unknown>={})=>envelope({contractVersion:CRM_READ_CONTRACT_VERSION,validation:{status:"VALIDATED",schemaVersion:CRM_READ_CONTRACT_VERSION},search:null,...extra});
 const searchEnvelope=(entity:"Contact"|"BuyerLead"|"Deal",filters:Record<string,unknown>={},extra:Record<string,unknown>={})=>readEnvelope({operation:"Search",entity,resourceId:"sim-project",search:{page:1,pageSize:25,filters},...extra});
-async function register(r:ReturnType<typeof envelope>,targetPrincipal=principalId) {
- await db.admin.query("insert into crm_service_audit_bindings(principal_id,workspace_id,audit_alias,resource_alias,request_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[targetPrincipal,w,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
+async function register(r:ReturnType<typeof envelope>,targetPrincipal=principalId,targetWorkspace=w) {
+ await db.admin.query("insert into crm_service_audit_bindings(principal_id,workspace_id,audit_alias,resource_alias,request_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[targetPrincipal,targetWorkspace,r.auditReference,r.resourceId,crmPayloadDigest(r)]);
 }
 /** Contract tests do not test connection pooling. Avoid idle-socket reuse across cases. */
 async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
@@ -56,14 +57,18 @@ test("target: EVM-08B.1 branch uses only the isolated QA database variable",()=>
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db);
  Object.assign(process.env,{NODE_ENV:"test"});process.env.CRM_LOCAL_TEST_DATABASE="1";process.env.DATABASE_URL=`postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
- await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC QA','managed_by_novalure','{\"syntheticQa\":true}'),($2,'SYNTHETIC FOREIGN','managed_by_novalure','{\"syntheticQa\":true}')",[w,foreignW]);
- await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC Service','service@example.invalid','agent','project_sales_member','active'),($3,$4,'SYNTHETIC Other','foreign@example.invalid','agent','project_sales_member','active')",[actor,w,foreignActor,foreignW]);
- await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$4,'SYNTHETIC: Granted','SYNTHETIC: Service'),($2,$4,'SYNTHETIC: Hidden','SYNTHETIC: Service'),($3,$5,'SYNTHETIC: Foreign','SYNTHETIC: Service')",[project,hidden,foreignProject,w,foreignW]);
+ await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC QA','managed_by_novalure','{\"syntheticQa\":true}'),($2,'SYNTHETIC FOREIGN','managed_by_novalure','{\"syntheticQa\":true}'),($3,'SYNTHETIC INTERNAL','novalure_internal','{\"syntheticQa\":true}')",[w,foreignW,internalW]);
+ await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC Service','service@example.invalid','agent','project_sales_member','active'),($3,$4,'SYNTHETIC Other','foreign@example.invalid','agent','project_sales_member','active'),($5,$6,'SYNTHETIC Internal Service','internal-service@example.invalid','agent','novalure_sales','active')",[actor,w,foreignActor,foreignW,internalActor,internalW]);
+ await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$4,'SYNTHETIC: Granted','SYNTHETIC: Service'),($2,$4,'SYNTHETIC: Hidden','SYNTHETIC: Service'),($3,$5,'SYNTHETIC: Foreign','SYNTHETIC: Service'),($6,$7,'SYNTHETIC: Internal','SYNTHETIC: Service')",[project,hidden,foreignProject,w,foreignW,internalProject,internalW]);
  await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)",[w,project,actor]);
+ await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)",[internalW,internalProject,internalActor]);
  for(const [id,p,classification]of [[contact,project,"CUSTOMER_TENANT"],[hiddenContact,hidden,"CUSTOMER_TENANT"],[privateContact,project,"PRIVATE_FRANZ"],[unknownContact,project,"UNKNOWN"]])await db.admin.query("insert into contacts(id,workspace_id,project_id,name,email,role,data_classification) values($1,$2,$3,'SYNTHETIC: Contact','synthetic-sensitive@example.invalid','Bauträger',$4)",[id,w,p,classification]);
  await db.admin.query("insert into tasks(id,workspace_id,project_id,title) values($1,$2,$3,'SYNTHETIC: Task')",[task,w,project]);
  await db.admin.query("insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,$4,'sim-qa-tenant','sales',$5,'CUSTOMER_TENANT','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[principalId,w,actor,createHash("sha256").update(token).digest("hex"),CRM_CONTRACT_SCOPES]);
  await db.admin.query("insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,$4,'sim-qa-tenant','sales',$5,'CUSTOMER_TENANT','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[readOnlyPrincipalId,w,actor,createHash("sha256").update(readOnlyToken).digest("hex"),readOnlyScopes]);
+ await db.admin.query("insert into contacts(id,workspace_id,project_id,name,email,role,data_classification) values($1,$2,$3,'SYNTHETIC: Internal Contact','synthetic-internal@example.invalid','Bauträger','NOVALURE_INTERNAL')",[internalContact,internalW,internalProject]);
+ await db.admin.query("insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,$4,'sim-qa-tenant','sales',array['crm.contacts.read'],'NOVALURE_INTERNAL','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[internalPrincipalId,internalW,internalActor,createHash("sha256").update(internalToken).digest("hex")]);
+ await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,'sim-internal-contact','Contact',$3,$4,'NOVALURE_INTERNAL','CONFIDENTIAL','BUSINESS','OPERATIONS')",[internalPrincipalId,internalW,internalContact,internalProject]);
  for(const [alias,entity,id,p]of [["sim-contact","Contact",contact,project],["sim-hidden","Contact",hiddenContact,hidden],["sim-private","Contact",privateContact,project],["sim-unknown","Contact",unknownContact,project],["sim-project","Project",project,project],["sim-task","Task",task,project]])await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,$3,$4,$5,$6,'CUSTOMER_TENANT','CONFIDENTIAL','BUSINESS','OPERATIONS')",[principalId,w,alias,entity,id,p]);
 
  const company=randomUUID(),unit=randomUUID(),appointment=randomUUID(),viewing=randomUUID(),reservation=randomUUID(),communication=randomUUID(),unclassifiedCommunication=randomUUID();
@@ -224,6 +229,14 @@ test("HTTP: disposable read-only principal allows four reads and denies writes, 
  for(const r of denied){try{await register(r,readOnlyPrincipalId);}catch{}const result=await call(r,{},readOnlyToken);assert.ok([400,403,422].includes(result.status),JSON.stringify(result));}
  assert.equal((await db.admin.query("select count(*)::int n from crm_command_receipts")).rows[0].n,receiptBefore);
  assert.deepEqual((await db.admin.query("select name,stage,value_cents,version from deals where id=$1",[deal])).rows[0],dealBefore);
+});
+test("HTTP: disposable Preview principal may read an exact NOVALURE_INTERNAL synthetic binding only",async()=>{
+ const r=envelope({resourceId:"sim-internal-contact"});await register(r,internalPrincipalId,internalW);
+ const result=await call(r,{},internalToken);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.projection?.sourceId,internalContact);
+ assert.equal(result.body.projection?.data.displayName,"SYNTHETIC: Internal Contact");
+ const other=envelope({resourceId:"sim-contact"});assert.equal((await call(other,{},internalToken)).status,403);
+ await assert.rejects(db.admin.query("insert into crm_service_principals(workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,expires_at) values($1,$2,$3,'sim-private','sales',array['crm.contacts.read'],'PRIVATE_FRANZ','CONFIDENTIAL','OPERATIONS',now()+interval '1 hour')",[internalW,internalActor,"0".repeat(64)]),/crm_service_principals_data_context_check/);
 });
 test("HTTP: Search requires both search and target read scopes",async()=>{
  const r=searchEnvelope("Deal",{stage:"Qualifiziert"});await register(r,readOnlyPrincipalId);
