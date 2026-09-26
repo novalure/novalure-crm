@@ -62,7 +62,18 @@ export function resolveTenantDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
   if (!evm08bPreview) return generic;
   const isolatedQa = cleanDatabaseUrl(env.G27_QA_DATABASE_URL);
   if (!isolatedQa) throw new Error("EVM-08B.1 Preview QA database is not configured");
-  if (generic && generic !== isolatedQa) throw new Error("EVM-08B.1 Preview database target conflict");
+  let binding: URL;
+  try {
+    binding = new URL(isolatedQa);
+  } catch {
+    throw new Error("EVM-08B.1 Preview QA database binding is invalid");
+  }
+  const expectedHost = /^ep-flat-surf-al1a9k1y(?:-pooler)?\.c-3\.eu-central-1\.aws\.neon\.tech$/;
+  const expectedRole = /^g24_qa_20260917(?:_r[23])?$/;
+  if (binding.protocol !== "postgresql:" || !expectedHost.test(binding.hostname)
+    || binding.pathname !== "/qa_g08_pr63_20260917" || !expectedRole.test(binding.username)) {
+    throw new Error("EVM-08B.1 Preview QA database binding is denied");
+  }
   return isolatedQa;
 }
 

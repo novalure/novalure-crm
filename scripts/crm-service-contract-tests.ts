@@ -47,10 +47,12 @@ async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>=
  return {status:response.status,body:await response.json() as {projection?: {contractVersion:string;data:Record<string,unknown>;sourceId:string;sourceVersion:number|null;projectionHash:string}; search?:{kind:string;page:number;pageSize:number;hasMore:boolean;items:Array<{sourceId:string;data:Record<string,unknown>}>}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
 test("target: EVM-08B.1 branch uses only the isolated QA database variable",()=>{
- const qa="postgresql://runtime@qa-pooler.example.neon.tech/qa_evm08b?sslmode=require";
+ const qa="postgresql://g24_qa_20260917_r3:synthetic@ep-flat-surf-al1a9k1y-pooler.c-3.eu-central-1.aws.neon.tech/qa_g08_pr63_20260917?sslmode=require";
  const preview={NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts",G27_QA_DATABASE_URL:qa} as NodeJS.ProcessEnv;
  assert.equal(resolveTenantDatabaseUrl(preview),qa);
- assert.throws(()=>resolveTenantDatabaseUrl({...preview,DATABASE_URL:"postgresql://runtime@production.example.neon.tech/production?sslmode=require"}),/target conflict/);
+ assert.equal(resolveTenantDatabaseUrl({...preview,DATABASE_URL:"postgresql://runtime@production.example.neon.tech/production?sslmode=require"}),qa);
+ assert.throws(()=>resolveTenantDatabaseUrl({...preview,G27_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@production.example.neon.tech/qa_g08_pr63_20260917?sslmode=require"}),/binding is denied/);
+ assert.throws(()=>resolveTenantDatabaseUrl({...preview,G27_QA_DATABASE_URL:"postgresql://g24_qa_20260917_r3:synthetic@ep-flat-surf-al1a9k1y.c-3.eu-central-1.aws.neon.tech/production?sslmode=require"}),/binding is denied/);
  assert.throws(()=>resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"preview",VERCEL_GIT_COMMIT_REF:"codex/evm-08b1-read-contracts"}),/not configured/);
  assert.equal(resolveTenantDatabaseUrl({NODE_ENV:"production",VERCEL:"1",VERCEL_ENV:"production",VERCEL_GIT_COMMIT_REF:"main",G27_QA_DATABASE_URL:qa}),"");
 });
