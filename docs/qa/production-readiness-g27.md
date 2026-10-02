@@ -8,6 +8,8 @@ Branch: `codex/crm-production-readiness-g27`
 
 PR: `#65` (Draft)
 
+Governance: The authoritative cross-repository source is the Evelyn [Novalure AI Workforce Masterplan v1](../masterplan/novalure-ai-workforce-masterplan-v1.md), mirrored byte-identically here and governed by Autonomy and Access Framework `2.0.0`. The durable authorization resolves the former pure authorization objection to narrowly scoped local QA cleanup, but changes no G27 evidence or gate status until that cleanup and its absence check actually run.
+
 CRM-Basis: `1595dd03cbf7ac23518116d19f934dd7c99d0e0d`
 
 Evelyn-Repository: `novalure/evelyn`
@@ -22,11 +24,14 @@ Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
 
 **G27 Status: OPEN**
 
-**Einziger verbleibender Blocker: `LOCAL_QA_CLEANUP_POLICY_BLOCKED`**
+**Einziger verbleibender Blocker: `LOCAL_QA_CLEANUP_NOT_EXECUTED`**
+
+Dieser Dokumentationsabgleich schließt den Blocker nicht. G27 bleibt `OPEN`; es wurde keine der zwölf benannten lokalen QA-Dateien entfernt oder ihre Abwesenheit neu nachgewiesen. Framework 2.0.0 löst den früheren reinen Freigabevorbehalt für diese eindeutig zugeordneten QA-Artefakte, ersetzt aber die Ausführung und Prüfung nicht. Der Neon-Runtime-Credential-Bootstrap gehört zu Evelyn Production und ist ebenfalls nicht abgeschlossen; er belegt keine CRM-Production-Migration, Anwendungsverbindung, Promotion oder Canary-Aktivierung.
 
 Aktueller verbleibender Abschluss: zwölf lokale CRM-QA-Dateien entfernen und
-deren Abwesenheit bestätigen. Beide Löschversuche wurden von der automatischen
-Ausführungsprüfung abgelehnt; Details und exakte Benutzeraktion stehen in der
+deren Abwesenheit bestätigen. Zwei frühere Löschversuche wurden von der automatischen
+Ausführungsprüfung abgelehnt; Framework 2.0.0 löst den Freigabevorbehalt, aber
+in diesem Governance-Auftrag findet keine Bereinigung statt. Details stehen in der
 [Bereinigungsliste](g27-local-cleanup-blocker-20260924.md).
 Cloud-Cleanup und abschließender unabhängiger Security-Review sind PASS.
 Die fehlenden QA-Artefakte und die Evelyn-Isolation

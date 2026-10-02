@@ -2,9 +2,11 @@
 
 Stand: 24.09.2026. A–F, Race/Idempotency, unabhängiger Security-Review und Cloud-Cleanup sind PASS. Die lokale Entfernung der folgenden privaten QA-Dateien ist noch offen.
 
+Statusabgleich 02.10.2026: Autonomie- und Zugriffsrahmen `2.0.0` löst den früheren reinen Freigabevorbehalt für die eng begrenzte Entfernung dieser eindeutig zugeordneten lokalen QA-Artefakte. Er erzeugt jedoch weder Löschung noch Evidenz: In dieser Governance-Aktualisierung wurde keine der zwölf Dateien entfernt oder auf Abwesenheit geprüft. G27 bleibt deshalb `OPEN`. Eine Fortsetzung muss zuerst die exakten Pfade und den disposable QA-Bezug lesend bestätigen, darf keine unbekannte Datei oder Geschäftsdaten erfassen und muss anschließend die Abwesenheit nachweisen. Sicherheits- oder Ausführungsblockaden dürfen nicht umgangen werden.
+
 Die automatische Ausführungsprüfung hat sowohl einen auf das QA-Verzeichnis begrenzten rekursiven Löschbefehl als auch einen engeren, nicht-rekursiven Befehl mit zwölf expliziten Dateinamen abgelehnt. Rückgabe jeweils: `rejected: blocked by policy`. Eine nähere Begründung wurde nicht geliefert. Die Befehle wurden nicht ausgeführt. Ein Wechsel auf ein anderes Löschwerkzeug zur Umgehung dieser Ablehnung erfolgt nicht.
 
-## Erforderliche manuelle Aktion
+## Noch auszuführende eng begrenzte Aktion
 
 Im Windows-Explorer dieses Verzeichnis öffnen:
 
@@ -29,7 +31,7 @@ Nur diese zwölf Dateien entfernen; Pfade sind relativ zum obigen Verzeichnis:
 
 Keine Dateien öffnen oder Inhalte in eine Nachricht kopieren. Die allgemeine `.env.local`, Repository-Dateien, CLI-Anmeldedaten und andere Projektverzeichnisse gehören nicht zu dieser Liste.
 
-Anschließend „lokale QA-Dateien gelöscht“ melden. Codex prüft ihre Abwesenheit lesend und aktualisiert erst danach den G27-Abschlussstatus. Bereits bestandene Live-Tests dürfen nach dem absichtlichen Entfernen der QA-Umgebung nicht gegen eine andere Umgebung wiederholt werden.
+Nach erfolgreicher Entfernung muss Codex ihre Abwesenheit lesend prüfen und darf erst danach den G27-Abschlussstatus aktualisieren. Wenn die technische Ausführung erneut durch eine Sicherheits- oder Plattformkontrolle abgelehnt wird, ist ausschließlich die konkrete manuelle Entfernung durch Franz anzufordern. Bereits bestandene Live-Tests dürfen nach dem absichtlichen Entfernen der QA-Umgebung nicht gegen eine andere Umgebung wiederholt werden.
 
 ## Gesicherter Wiederaufnahmepunkt
 
@@ -44,4 +46,4 @@ Anschließend „lokale QA-Dateien gelöscht“ melden. Codex prüft ihre Abwese
 
 `BLOCKER | BENÖTIGTE RESSOURCE | WO SIE ERWARTET WIRD | WARUM NICHT VERFÜGBAR | EXAKTE AKTION`
 
-`LOCAL_QA_CLEANUP_POLICY_BLOCKED | Entfernung der zwölf lokalen QA-Dateien | oben genanntes .npm-cache/g27 | automatische Ausführungsprüfung lehnt beide Löschvarianten ab | zwölf benannte Dateien manuell löschen und Abwesenheit lesend bestätigen lassen`
+`LOCAL_QA_CLEANUP_NOT_EXECUTED | Entfernung der zwölf lokalen QA-Dateien | oben genanntes .npm-cache/g27 | Framework 2.0.0 löst den Freigabevorbehalt, aber keine aktuelle Ausführung oder Abwesenheitsprüfung liegt vor | Pfade und QA-Zuordnung lesend bestätigen, eng begrenzt entfernen, Abwesenheit prüfen; bei erneuter Plattformablehnung nur die konkrete manuelle Aktion anfordern`
