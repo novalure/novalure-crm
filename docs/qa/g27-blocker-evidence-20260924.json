@@ -1,0 +1,225 @@
+{
+  "format": "g27-blocker-evidence-v1",
+  "recordedAt": "2026-09-24T09:19:53.265Z",
+  "productionImpact": "NONE",
+  "restore": {
+    "status": "PASS",
+    "project": "super-block-59791927",
+    "branch": "br-summer-breeze-awuzinct",
+    "source": "qa_g27_20260923",
+    "destination": "qa_g27_recovery_20260924",
+    "dump": {
+      "bytes": 1160754,
+      "sha256": "1a27f62302567b8eb9b77fc8446726054a182819bc338cbc6b6534f7e08cf723"
+    },
+    "timeoutPolicy": {
+      "oldMs": 180000,
+      "newMs": 447000,
+      "estimateMs": 357054.8888888889,
+      "safetyMargin": "25%",
+      "measuredCompletedObjects": 972,
+      "totalObjects": 1928,
+      "method": "Observed serial TOC throughput, no blocked sessions or stalled objects"
+    },
+    "timings": {
+      "sourceChecksumComparison": 25638,
+      "syntheticFinancialFixture": 11270,
+      "dumpCreation": 44923,
+      "targetPreparation": 3184,
+      "nativeRestore": 335922,
+      "migrationLedgerVerification": 1040,
+      "checksumComparison": 25347,
+      "rlsVerification": 68068,
+      "sourceUnchanged": 25842
+    },
+    "pgRestore": {
+      "exitCode": 0,
+      "elapsedMs": 335915,
+      "objects": 1928,
+      "phaseIntervalsMs": {
+        "schema": 63107,
+        "other": 21657,
+        "data": 43111,
+        "constraints": 117096,
+        "indexes": 44959,
+        "post-data": 41630
+      }
+    },
+    "checksum": {
+      "status": "PASS",
+      "before": "83465b62f3b40c0f993c0bfa910bf9970cc6cd46654239374b3e0fe7fb04292b",
+      "after": "83465b62f3b40c0f993c0bfa910bf9970cc6cd46654239374b3e0fe7fb04292b"
+    },
+    "catalogCounts": {
+      "tables": 153,
+      "columns": 2359,
+      "constraints": 2780,
+      "foreignKeys": 586,
+      "indexes": 527,
+      "policies": 114,
+      "functions": 215,
+      "triggers": 102,
+      "ledgerRows": 44,
+      "dataTables": 150,
+      "dataRows": 149
+    },
+    "financialTables": [
+      {
+        "table": "audit_logs",
+        "rows": 7,
+        "sha256": "44b0aba36ca7d2b8778d23fc2bad149717f4a5bb959cf242303f3c70ae41a44f"
+      },
+      {
+        "table": "crm_financial_events",
+        "rows": 7,
+        "sha256": "8bc51795affebe46533b05c51c0229426e619f820982154478d5725c4448aece"
+      },
+      {
+        "table": "crm_financial_policy_versions",
+        "rows": 3,
+        "sha256": "8091505cdc10aa00b0fe9bdc03e21203448093e469108c4ba266231ff00190e7"
+      },
+      {
+        "table": "crm_financial_snapshots",
+        "rows": 2,
+        "sha256": "6cb61fe62ac891f0c9d99e763a955a3c800d7d63a15f84fceb94aa361783fb9d"
+      }
+    ],
+    "security": {
+      "passed": 64,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "browser": {
+    "status": "PASS",
+    "passed": 26,
+    "total": 26,
+    "checks": [
+      {
+        "name": "anonymous login renders and protected CRM denies anonymous access",
+        "status": "PASS"
+      },
+      {
+        "name": "actual login rejects an incorrect password without granting a session",
+        "status": "PASS"
+      },
+      {
+        "name": "correct password requires real TOTP enrollment before CRM access",
+        "status": "PASS"
+      },
+      {
+        "name": "MFA enrollment rejects an invalid code without creating a session",
+        "status": "PASS"
+      },
+      {
+        "name": "real UI TOTP enrollment creates a server-issued authenticated MFA session",
+        "status": "PASS"
+      },
+      {
+        "name": "persisted real password and MFA session loads CRM after reload without framework errors",
+        "status": "PASS"
+      },
+      {
+        "name": "actual logout revokes the session and rejects replay of its previous cookie",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile login requires existing MFA and rejects an invalid TOTP",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile password and TOTP login creates a fresh session through the actual UI",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow A creates canonical contact, lead and linked deal through authenticated CSRF APIs",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow A offer draft is operable from the actual deal UI",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow A approval, manual delivery evidence, follow-up and customer acceptance through UI",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser B: explicit NEEDS_REVIEW evidence keeps authoritative printing blocked",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser D: mismatching expected snapshot hash is rejected by the real HTTP boundary",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser F: another existing tenant cannot read the snapshot through the authenticated HTTP boundary",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser C/E: missing tax policy and stale offer version fail during real V2 preparation",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser A: complete policy-backed V2 snapshot reloads from persistence and enables the approved document",
+        "status": "PASS"
+      },
+      {
+        "name": "G27 browser G: later current-value and tax-policy changes preserve historical evidence",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B creates canonical buyer inquiry and available inventory via APIs",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B project-specific authority assignment through UI",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B confirmed price, complete qualification and priority through UI",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B handover and viewing lifecycle through UI",
+        "status": "PASS"
+      },
+      {
+        "name": "Flow B reservation request, binding confirmation and sale through UI",
+        "status": "PASS"
+      },
+      {
+        "name": "mobile layout and workflow navigation remain operable",
+        "status": "PASS"
+      },
+      {
+        "name": "authenticated API rejects forged cross-tenant project and missing CSRF",
+        "status": "PASS"
+      },
+      {
+        "name": "no browser runtime exceptions during either workflow",
+        "status": "PASS"
+      }
+    ],
+    "scope": "Local synthetic loopback. C/E exercise the guarded actual V2 repository; remote Evelyn approval remains unverified."
+  },
+  "regression": {
+    "g27": 114,
+    "baselineWithoutBrowser": 481,
+    "browser": 26,
+    "g27NeonProfile": 11,
+    "total": 632,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "dependencyAudit": "PASS",
+    "secretScanChangedCode": "PASS"
+  },
+  "preview": {
+    "status": "NOT_RUN",
+    "crmBranchRuntimeConfiguration": "MISSING",
+    "evelynPinnedCommit": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+    "evelynDeployment": "dpl_Adbe72F6BsmuCYpiHf322GZ1zAn3"
+  },
+  "g27Status": "OPEN"
+}

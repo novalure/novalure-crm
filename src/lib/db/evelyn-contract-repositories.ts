@@ -15,7 +15,7 @@ type Target = { workspaceId: string; projectId: string; tenantId: string };
 /** Test injection is rejected outside a real loopback test transaction. Routes pass no overrides. */
 export type EvelynContractOptions = TenantTransactionOptions & { testOnly?: { target: Target; client: EvelynApprovalClient } };
 type Source = { id: string; projectId: string; version: number; revision: number; contactId: string; approvalId: string; contentDigest: string; content: OfferContent; total: string; acceptanceId: string };
-type Snapshot = { id: string; projectId: string; offerId: string; offerVersion: number; offerRevision: number; sourceApprovalId: string; sourceContentDigest: string; correlationId: string; version: number; currentVersion: number; action: EvelynApprovalAction; actionHash: string; approvalReference: string | null };
+type Snapshot = { id: string; projectId: string; offerId: string; offerVersion: number; offerRevision: number; sourceApprovalId: string; sourceContentDigest: string; correlationId: string; version: number; currentVersion: number; action: EvelynApprovalAction; actionHash: string; approvalReference: string | null; approvalContractVersion: string };
 function failure(code: string, status = 409): never { throw new CrmCommandError(code, code, status); }
 const safeCode = (error: unknown) => error instanceof EvelynApprovalError || error instanceof CrmCommandError ? error.code : "EVELYN_UNAVAILABLE";
 function derivedId(key: string, suffix: string) {
@@ -55,11 +55,12 @@ async function source(tx: TenantTransaction, session: AppSession, offerId: strin
   return row;
 }
 async function read(tx: TenantTransaction, session: AppSession, input: EvelynContractActionInput, options: EvelynContractOptions, receiptOnly = false): Promise<Snapshot> {
-  const row = await tx.queryOne<Snapshot>(`select a.id,a.project_id as "projectId",a.offer_id as "offerId",a.offer_version as "offerVersion",a.offer_revision as "offerRevision",a.source_approval_id as "sourceApprovalId",a.source_content_digest as "sourceContentDigest",a.correlation_id as "correlationId",a.version as "currentVersion",r.version,r.action,r.action_hash as "actionHash",p.approval_reference as "approvalReference"
+  const row = await tx.queryOne<Snapshot>(`select a.id,a.project_id as "projectId",a.offer_id as "offerId",a.offer_version as "offerVersion",a.offer_revision as "offerRevision",a.source_approval_id as "sourceApprovalId",a.source_content_digest as "sourceContentDigest",a.correlation_id as "correlationId",a.version as "currentVersion",r.version,r.action,r.action_hash as "actionHash",r.approval_contract_version as "approvalContractVersion",p.approval_reference as "approvalReference"
     from crm_evelyn_contract_actions a join crm_evelyn_contract_revisions r on r.workspace_id=a.workspace_id and r.action_id=a.id and r.version=$3
     left join crm_evelyn_contract_approvals p on p.workspace_id=a.workspace_id and p.action_id=a.id and p.version=r.version
     where a.workspace_id=$1::uuid and a.id=$2::uuid for update of a`, [session.workspaceId, assertCrmUuid(input.actionId), assertExpectedVersion(input.expectedVersion)]);
   if (!row) failure("EVELYN_ACTION_NOT_ACCESSIBLE", 404);
+  if (row.approvalContractVersion !== "v1") failure("EVELYN_CONTRACT_VERSION_MISMATCH");
   await guard(tx, session, row.projectId, options);
   if (!receiptOnly && row.currentVersion !== input.expectedVersion) failure("VERSION_MISMATCH");
   if (row.correlationId !== input.correlationId) failure("CORRELATION_MISMATCH");

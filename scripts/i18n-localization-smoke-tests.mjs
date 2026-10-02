@@ -397,10 +397,11 @@ test("phase 2 dashboard KPI labels stay explicit and localized", () => {
   assert.match(i18nSource, /hotLeads:\s*"Heiße Leads gesamt"/);
   assert.match(i18nSource, /activeLeads:\s*"Active leads \(this month\)"/);
   assert.match(i18nSource, /activeLeads:\s*"Aktive Leads \(dieser Monat\)"/);
-  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Expected commission \(3%\)"/);
-  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Erwartete Provision \(3%\)"/);
-  assert.match(i18nSource, /commission 3%/);
-  assert.match(i18nSource, /Provision 3%/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Weighted open pipeline"/);
+  assert.match(i18nSource, /pipelineValue:\s*\{\s*title:\s*"Gewichtete offene Pipeline"/);
+  assert.match(i18nSource, /Commission unavailable until an explicit financial policy is selected/);
+  assert.match(i18nSource, /Provision erst nach Auswahl einer expliziten Finanz-Policy verfügbar/);
+  assert.doesNotMatch(i18nSource, /Expected commission \(3%\)|Erwartete Provision \(3%\)|commission 3%|Provision 3%/);
   assert.doesNotMatch(i18nSource, /Hot leads \(no time filter\)|Heiße Leads \(ohne Zeitfilter\)|Active leads \(dashboard filter\)|Aktive Leads \(Dashboard-Filter\)|Weighted forecast \(open deals\)|Gewichteter Forecast \(offene Deals\)|commission rate 3%|Provisionssatz 3%/);
   assert.match(workspaceSource, /hotLeads:\s*"Hot leads \(all\)"/);
   assert.match(workspaceSource, /pipeline:\s*"Weighted forecast - open deals"/);
@@ -509,7 +510,6 @@ test("phase 4 KPI labels avoid forced mid-word breaks", () => {
   assert.match(propertyCommandCenterSource, /flex min-w-\[220px\] flex-wrap gap-1\.5/);
   assert.match(propertyCommandCenterSource, /lg:grid-cols-3 2xl:grid-cols-6/);
   assert.match(unitBoardSource, /lg:grid-cols-3 2xl:grid-cols-7/);
-  assert.match(unitBoardSource, /lg:grid-cols-3 2xl:grid-cols-6/);
   assert.match(unitBoardSource, /crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500/);
   assert.match(calendarCommandCenterSource, /grid min-w-0 grid-cols-2 gap-2 text-sm sm:min-w-\[520px\] md:grid-cols-4 xl:min-w-\[620px\]/);
   assert.match(calendarCommandCenterSource, /crm-kpi-label text-xs leading-4 text-stone-500/);

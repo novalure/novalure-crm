@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "frameworkVersion": "2.0.0",
+  "authoritativeRepository": "novalure/evelyn",
+  "authoritativePath": "docs/masterplan/novalure-ai-workforce-masterplan-v1.md",
+  "localPath": "docs/masterplan/novalure-ai-workforce-masterplan-v1.md",
+  "sha256": "38e7946b4073c4b6eb49f4c1ca62429b4fb41b1935c22dc9a8dd16ee9d6a9c0b",
+  "requiredConsumers": [
+    "AGENTS.md",
+    "README.md",
+    "docs/governance/agent-start-prompt.md",
+    "docs/go-live/cloud-development-guide.md",
+    "docs/go-live/technical-production-runbook.md",
+    "docs/security/secrets-policy.md"
+  ]
+}

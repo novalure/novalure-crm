@@ -246,6 +246,7 @@ export function getDefaultPipelineTemplates(
           { key: "won", name: "Gewonnen", probability: 100, category: "won" },
           { key: "lost", name: "Verloren", probability: 0, category: "lost" },
           { key: "disqualified", name: "Disqualifiziert", probability: 0, category: "disqualified" },
+          { key: "paused_lost", name: "Pausiert / Verloren", probability: 0, category: "lost" },
         ],
       },
     ];
@@ -267,6 +268,7 @@ export function getDefaultPipelineTemplates(
           { key: "won", name: "Gewonnen", probability: 100, category: "won" },
           { key: "lost", name: "Verloren", probability: 0, category: "lost" },
           { key: "disqualified", name: "Disqualifiziert", probability: 0, category: "disqualified" },
+          { key: "paused_lost", name: "Pausiert / Verloren", probability: 0, category: "lost" },
         ],
       },
     ];
@@ -307,6 +309,7 @@ export function getDefaultPipelineTemplates(
         { key: "won", name: "Gewonnen", probability: 100, category: "won" },
         { key: "lost", name: "Verloren", probability: 0, category: "lost" },
         { key: "disqualified", name: "Disqualifiziert", probability: 0, category: "disqualified" },
+        { key: "paused_lost", name: "Pausiert / Verloren", probability: 0, category: "lost" },
       ],
     },
   ];

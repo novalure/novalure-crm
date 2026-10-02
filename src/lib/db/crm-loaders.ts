@@ -198,6 +198,11 @@ type DealRow = {
   name: string;
   stage: Deal["stage"];
   valueCents: number | string;
+  historicalFinancialSnapshotId: string | null;
+  historicalFinancialReviewState: Deal["historicalFinancialReviewState"] | null;
+  historicalFinancialCurrency: string | null;
+  historicalFinancialMinorUnitExponent: number | string | null;
+  historicalFinancialNetMinorUnits: string | null;
   probability: number;
   expectedCloseDate: string | Date | null;
   lostReasonCategory: Deal["lostReasonCategory"] | null;
@@ -385,6 +390,11 @@ type PropertyUnitRow = {
   buyerContactId: string | null;
   dealId: string | null;
   floor: number | string;
+  historicalSaleCurrency: string | null;
+  historicalSaleFinancialSnapshotId: string | null;
+  historicalSaleMinorUnitExponent: number | string | null;
+  historicalSaleNetMinorUnits: string | null;
+  historicalSaleReviewState: PropertyUnit["historicalSaleReviewState"] | null;
   id: string;
   priceCents: number | string;
   projectId: string;
@@ -666,11 +676,13 @@ export type PropertyUnitPaginationResult = {
   summary: {
     availableUnits: number;
     blockedUnits: number;
-    inventoryValueCents: number;
+    inventoryValueCents: string;
     reservedUnits: number;
     soldUnits: number;
-    soldValueCents: number;
-    totalSalesValueCents: number;
+    soldValueCurrencyMismatchCount: number;
+    soldValueCents: string;
+    soldValueReviewCount: number;
+    totalSalesValueCents: string;
     totalUnits: number;
   };
 };
@@ -1182,7 +1194,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
         sum(value_cents)::bigint as revenue_cents
       from deals
       where workspace_id = $1
-        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert', 'Pausiert / Verloren')
       group by workspace_id, project_id
     ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
     where p.workspace_id = $1
@@ -1848,7 +1860,7 @@ async function loadProjectsForPropertyAssets(workspaceId: string, projectIds: st
       from deals
       where workspace_id = $1::uuid
         and project_id = any($2::uuid[])
-        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
+        and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert', 'Pausiert / Verloren')
       group by workspace_id, project_id
     ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
     where p.workspace_id = $1::uuid and p.id = any($2::uuid[])
@@ -1882,10 +1894,31 @@ async function loadPropertyUnitsForAssetSummaries(
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
+      sale_financial.id as "historicalSaleFinancialSnapshotId",
+      case
+        when pu.status = 'sold' then coalesce(sale_financial.review_state, 'NEEDS_REVIEW')
+        else null
+      end as "historicalSaleReviewState",
+      sale_financial.canonical_snapshot->>'currency' as "historicalSaleCurrency",
+      sale_financial.canonical_snapshot->>'minorUnitExponent' as "historicalSaleMinorUnitExponent",
+      sale_financial.canonical_snapshot#>>'{totals,net,minorUnits}' as "historicalSaleNetMinorUnits",
       null::uuid as "reservationId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
+    left join property_sales sale
+      on sale.workspace_id = pu.workspace_id
+      and sale.unit_id = pu.id
+    left join lateral (
+      select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+      from crm_financial_snapshots snapshot
+      where snapshot.workspace_id = pu.workspace_id
+        and snapshot.project_id = pu.project_id
+        and snapshot.resource_type = 'PROPERTY_SALE'
+        and snapshot.resource_id = sale.id
+      order by snapshot.business_version desc, snapshot.id desc
+      limit 1
+    ) sale_financial on true
     where pu.workspace_id = $1::uuid
       and (pu.project_id = any($2::uuid[]) or pu.id = any($3::uuid[]))
     order by pu.project_id asc, pu.unit_number asc, pu.id asc
@@ -2376,10 +2409,31 @@ export async function loadPropertyUnits(workspaceId: string): Promise<PropertyUn
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
+      sale_financial.id as "historicalSaleFinancialSnapshotId",
+      case
+        when pu.status = 'sold' then coalesce(sale_financial.review_state, 'NEEDS_REVIEW')
+        else null
+      end as "historicalSaleReviewState",
+      sale_financial.canonical_snapshot->>'currency' as "historicalSaleCurrency",
+      sale_financial.canonical_snapshot->>'minorUnitExponent' as "historicalSaleMinorUnitExponent",
+      sale_financial.canonical_snapshot#>>'{totals,net,minorUnits}' as "historicalSaleNetMinorUnits",
       null::uuid as "reservationId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
+    left join property_sales sale
+      on sale.workspace_id = pu.workspace_id
+      and sale.unit_id = pu.id
+    left join lateral (
+      select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+      from crm_financial_snapshots snapshot
+      where snapshot.workspace_id = pu.workspace_id
+        and snapshot.project_id = pu.project_id
+        and snapshot.resource_type = 'PROPERTY_SALE'
+        and snapshot.resource_id = sale.id
+      order by snapshot.business_version desc, snapshot.id desc
+      limit 1
+    ) sale_financial on true
     where pu.workspace_id = $1
     order by pu.project_id, pu.unit_number asc
     limit 2000
@@ -2404,6 +2458,12 @@ function mapPropertyUnitRow(row: PropertyUnitRow): PropertyUnit {
     reservationId: row.reservationId ?? undefined,
     rooms: Number(row.rooms ?? 0),
     status: normalizePropertyUnitStatus(row.status),
+    historicalSaleCurrency: row.historicalSaleCurrency ?? undefined,
+    historicalSaleFinancialSnapshotId: row.historicalSaleFinancialSnapshotId ?? undefined,
+    historicalSaleMinorUnitExponent:
+      row.historicalSaleMinorUnitExponent === null ? undefined : Number(row.historicalSaleMinorUnitExponent),
+    historicalSaleNetMinorUnits: row.historicalSaleNetMinorUnits ?? undefined,
+    historicalSaleReviewState: row.historicalSaleReviewState ?? undefined,
     unitNumber: row.unitNumber,
     updatedAt: toIso(row.updatedAt),
     workspaceId: row.workspaceId,
@@ -2456,22 +2516,74 @@ export async function loadPaginatedPropertyUnits(
     inventoryValueCents: number | string;
     reservedUnits: number | string;
     soldUnits: number | string;
+    soldValueCurrencyMismatchCount: number | string;
     soldValueCents: number | string;
+    soldValueReviewCount: number | string;
     totalSalesValueCents: number | string;
     totalUnits: number | string;
   }>(
     `
+    with unit_financials as (
+      select
+        pu.status,
+        pu.price_cents,
+        sale_financial.id as snapshot_id,
+        sale_financial.review_state,
+        sale_financial.canonical_snapshot
+      from property_units pu
+      left join property_sales sale
+        on sale.workspace_id = pu.workspace_id
+        and sale.unit_id = pu.id
+      left join lateral (
+        select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+        from crm_financial_snapshots snapshot
+        where snapshot.workspace_id = pu.workspace_id
+          and snapshot.project_id = pu.project_id
+          and snapshot.resource_type = 'PROPERTY_SALE'
+          and snapshot.resource_id = sale.id
+        order by snapshot.business_version desc, snapshot.id desc
+        limit 1
+      ) sale_financial on true
+      where ${filter.whereClause}
+    )
     select
       count(*)::int as "totalUnits",
-      count(*) filter (where pu.status = 'available')::int as "availableUnits",
-      count(*) filter (where pu.status = 'reserved')::int as "reservedUnits",
-      count(*) filter (where pu.status = 'sold')::int as "soldUnits",
-      count(*) filter (where pu.status = 'blocked')::int as "blockedUnits",
-      coalesce(sum(pu.price_cents), 0)::bigint as "totalSalesValueCents",
-      coalesce(sum(pu.price_cents) filter (where pu.status <> 'sold'), 0)::bigint as "inventoryValueCents",
-      coalesce(sum(pu.price_cents) filter (where pu.status = 'sold'), 0)::bigint as "soldValueCents"
-    from property_units pu
-    where ${filter.whereClause}
+      count(*) filter (where status = 'available')::int as "availableUnits",
+      count(*) filter (where status = 'reserved')::int as "reservedUnits",
+      count(*) filter (where status = 'sold')::int as "soldUnits",
+      count(*) filter (where status = 'blocked')::int as "blockedUnits",
+      (
+        coalesce(sum(price_cents) filter (where status <> 'sold'), 0)::numeric
+        + coalesce(sum((canonical_snapshot#>>'{totals,net,minorUnits}')::numeric) filter (
+          where status = 'sold'
+            and review_state = 'VERIFIED'
+            and canonical_snapshot->>'reviewState' = 'COMPLETE'
+            and canonical_snapshot->>'currency' = 'EUR'
+            and canonical_snapshot->>'minorUnitExponent' = '2'
+        ), 0)
+      )::text as "totalSalesValueCents",
+      coalesce(sum(price_cents) filter (where status <> 'sold'), 0)::text as "inventoryValueCents",
+      coalesce(sum((canonical_snapshot#>>'{totals,net,minorUnits}')::numeric) filter (
+        where status = 'sold'
+          and review_state = 'VERIFIED'
+          and canonical_snapshot->>'reviewState' = 'COMPLETE'
+          and canonical_snapshot->>'currency' = 'EUR'
+          and canonical_snapshot->>'minorUnitExponent' = '2'
+      ), 0)::text as "soldValueCents",
+      count(*) filter (
+        where status = 'sold'
+          and (snapshot_id is null or review_state = 'NEEDS_REVIEW')
+      )::int as "soldValueReviewCount",
+      count(*) filter (
+        where status = 'sold'
+          and review_state = 'VERIFIED'
+          and canonical_snapshot->>'reviewState' = 'COMPLETE'
+          and (
+            canonical_snapshot->>'currency' <> 'EUR'
+            or canonical_snapshot->>'minorUnitExponent' <> '2'
+          )
+      )::int as "soldValueCurrencyMismatchCount"
+    from unit_financials
   `,
     filter.params,
   );
@@ -2491,10 +2603,31 @@ export async function loadPaginatedPropertyUnits(
       pu.status,
       pu.buyer_contact_id as "buyerContactId",
       pu.deal_id as "dealId",
+      sale_financial.id as "historicalSaleFinancialSnapshotId",
+      case
+        when pu.status = 'sold' then coalesce(sale_financial.review_state, 'NEEDS_REVIEW')
+        else null
+      end as "historicalSaleReviewState",
+      sale_financial.canonical_snapshot->>'currency' as "historicalSaleCurrency",
+      sale_financial.canonical_snapshot->>'minorUnitExponent' as "historicalSaleMinorUnitExponent",
+      sale_financial.canonical_snapshot#>>'{totals,net,minorUnits}' as "historicalSaleNetMinorUnits",
       null::uuid as "reservationId",
       pu.updated_at as "updatedAt",
       pu.version
     from property_units pu
+    left join property_sales sale
+      on sale.workspace_id = pu.workspace_id
+      and sale.unit_id = pu.id
+    left join lateral (
+      select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+      from crm_financial_snapshots snapshot
+      where snapshot.workspace_id = pu.workspace_id
+        and snapshot.project_id = pu.project_id
+        and snapshot.resource_type = 'PROPERTY_SALE'
+        and snapshot.resource_id = sale.id
+      order by snapshot.business_version desc, snapshot.id desc
+      limit 1
+    ) sale_financial on true
     where ${filter.whereClause}
     order by pu.project_id asc, pu.unit_number asc, pu.id asc
     limit $${filter.params.length + 1}::int
@@ -2520,11 +2653,13 @@ export async function loadPaginatedPropertyUnits(
     summary: {
       availableUnits: Number(summary?.availableUnits ?? 0),
       blockedUnits: Number(summary?.blockedUnits ?? 0),
-      inventoryValueCents: Number(summary?.inventoryValueCents ?? 0),
+      inventoryValueCents: String(summary?.inventoryValueCents ?? "0"),
       reservedUnits: Number(summary?.reservedUnits ?? 0),
       soldUnits: Number(summary?.soldUnits ?? 0),
-      soldValueCents: Number(summary?.soldValueCents ?? 0),
-      totalSalesValueCents: Number(summary?.totalSalesValueCents ?? 0),
+      soldValueCurrencyMismatchCount: Number(summary?.soldValueCurrencyMismatchCount ?? 0),
+      soldValueCents: String(summary?.soldValueCents ?? "0"),
+      soldValueReviewCount: Number(summary?.soldValueReviewCount ?? 0),
+      totalSalesValueCents: String(summary?.totalSalesValueCents ?? "0"),
       totalUnits: total,
     },
   };
@@ -2995,29 +3130,50 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
   const rows = await queryRows<DealRow>(
     `
     select
-      id,
-      version,
-      workspace_id as "workspaceId",
-      project_id as "projectId",
-      contact_id as "contactId",
-      organization_id as "organizationId",
-      owner_user_id as "ownerUserId",
-      lead_id as "leadId",
-      name,
-      stage,
-      value_cents as "valueCents",
-      probability,
-      expected_close_date::text as "expectedCloseDate",
-      lost_reason_category as "lostReasonCategory",
-      lost_reason_detail as "lostReasonDetail",
-      lost_at as "lostAt",
-      closed_at as "closedAt",
-      risk_level as "riskLevel",
-      source,
-      next_action as "nextAction"
-    from deals
-    where workspace_id = $1
-    order by updated_at desc
+      deal_record.id,
+      deal_record.version,
+      deal_record.workspace_id as "workspaceId",
+      deal_record.project_id as "projectId",
+      deal_record.contact_id as "contactId",
+      deal_record.organization_id as "organizationId",
+      deal_record.owner_user_id as "ownerUserId",
+      deal_record.lead_id as "leadId",
+      deal_record.name,
+      deal_record.stage,
+      deal_record.value_cents as "valueCents",
+      deal_financial.id as "historicalFinancialSnapshotId",
+      case
+        when deal_financial.id is null then null
+        when deal_financial.review_state = 'VERIFIED'
+          and deal_financial.canonical_snapshot->>'reviewState' = 'COMPLETE'
+          then 'VERIFIED'
+        else 'NEEDS_REVIEW'
+      end as "historicalFinancialReviewState",
+      deal_financial.canonical_snapshot->>'currency' as "historicalFinancialCurrency",
+      deal_financial.canonical_snapshot->>'minorUnitExponent' as "historicalFinancialMinorUnitExponent",
+      deal_financial.canonical_snapshot#>>'{totals,net,minorUnits}' as "historicalFinancialNetMinorUnits",
+      deal_record.probability,
+      deal_record.expected_close_date::text as "expectedCloseDate",
+      deal_record.lost_reason_category as "lostReasonCategory",
+      deal_record.lost_reason_detail as "lostReasonDetail",
+      deal_record.lost_at as "lostAt",
+      deal_record.closed_at as "closedAt",
+      deal_record.risk_level as "riskLevel",
+      deal_record.source,
+      deal_record.next_action as "nextAction"
+    from deals deal_record
+    left join lateral (
+      select snapshot.id, snapshot.review_state, snapshot.canonical_snapshot
+      from crm_financial_snapshots snapshot
+      where snapshot.workspace_id = deal_record.workspace_id
+        and snapshot.project_id is not distinct from deal_record.project_id
+        and snapshot.resource_type = 'DEAL'
+        and snapshot.resource_id = deal_record.id
+      order by snapshot.business_version desc, snapshot.id desc
+      limit 1
+    ) deal_financial on true
+    where deal_record.workspace_id = $1
+    order by deal_record.updated_at desc
     limit 500
   `,
     [scopedWorkspaceId],
@@ -3035,6 +3191,13 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
     name: row.name,
     stage: row.stage,
     value: formatEuroFromCents(row.valueCents),
+    historicalFinancialSnapshotId: row.historicalFinancialSnapshotId ?? undefined,
+    historicalFinancialReviewState: row.historicalFinancialReviewState ?? undefined,
+    historicalFinancialCurrency: row.historicalFinancialCurrency ?? undefined,
+    historicalFinancialMinorUnitExponent: row.historicalFinancialMinorUnitExponent === null
+      ? undefined
+      : Number(row.historicalFinancialMinorUnitExponent),
+    historicalFinancialNetMinorUnits: row.historicalFinancialNetMinorUnits ?? undefined,
     probability: Number(row.probability),
     expectedCloseDate: toDateOnly(row.expectedCloseDate),
     lostReasonCategory: row.lostReasonCategory ?? undefined,
