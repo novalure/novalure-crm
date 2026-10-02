@@ -2,6 +2,8 @@
 
 This opt-in infrastructure profile builds a fresh synthetic QA database for PR #65. It does not enable Production migrations, change application code, or change the G27 live A–F runner.
 
+Autonomy and Access Framework `1.0.0` in the [mirrored authoritative masterplan](../masterplan/novalure-ai-workforce-masterplan-v1.md) applies. This historical disposable-QA bootstrap is distinct from the incomplete Evelyn Production Neon Runtime credential bootstrap. Neither bootstrap grants authority for a Production migration, application connection, deployment promotion or Canary activation.
+
 ## Exact target
 
 - Project: `super-block-59791927` / `novalure-g27-disposable-qa-20260920`.

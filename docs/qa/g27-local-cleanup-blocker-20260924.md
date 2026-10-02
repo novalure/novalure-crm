@@ -2,6 +2,8 @@
 
 Stand: 24.09.2026. A–F, Race/Idempotency, unabhängiger Security-Review und Cloud-Cleanup sind PASS. Die lokale Entfernung der folgenden privaten QA-Dateien ist noch offen.
 
+Statusabgleich 02.10.2026: Autonomie- und Zugriffsrahmen `1.0.0` ändert diesen Blocker nicht. Es wurde in der Governance-Aktualisierung keine Datei entfernt und kein Bereinigungsnachweis erzeugt. Die unten verlangte manuelle, eng begrenzte Aktion bleibt der kleinste nächste Schritt; Sicherheits- oder Browserblockaden dürfen nicht umgangen werden.
+
 Die automatische Ausführungsprüfung hat sowohl einen auf das QA-Verzeichnis begrenzten rekursiven Löschbefehl als auch einen engeren, nicht-rekursiven Befehl mit zwölf expliziten Dateinamen abgelehnt. Rückgabe jeweils: `rejected: blocked by policy`. Eine nähere Begründung wurde nicht geliefert. Die Befehle wurden nicht ausgeführt. Ein Wechsel auf ein anderes Löschwerkzeug zur Umgehung dieser Ablehnung erfolgt nicht.
 
 ## Erforderliche manuelle Aktion

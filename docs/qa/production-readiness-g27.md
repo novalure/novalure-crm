@@ -8,6 +8,8 @@ Branch: `codex/crm-production-readiness-g27`
 
 PR: `#65` (Draft)
 
+Governance: The authoritative cross-repository source is the Evelyn [Novalure AI Workforce Masterplan v1](../masterplan/novalure-ai-workforce-masterplan-v1.md), mirrored byte-identically here and governed by Autonomy and Access Framework `1.0.0`. This durable framework is separate from task-specific approvals and changes no G27 evidence or gate status.
+
 CRM-Basis: `1595dd03cbf7ac23518116d19f934dd7c99d0e0d`
 
 Evelyn-Repository: `novalure/evelyn`
@@ -23,6 +25,8 @@ Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
 **G27 Status: OPEN**
 
 **Einziger verbleibender Blocker: `LOCAL_QA_CLEANUP_POLICY_BLOCKED`**
+
+Dieser Dokumentationsabgleich schließt den Blocker nicht. G27 bleibt `OPEN`; es wurde keine der zwölf benannten lokalen QA-Dateien entfernt oder ihre Abwesenheit neu nachgewiesen. Der neu dokumentierte Neon-Runtime-Credential-Bootstrap gehört zu Evelyn Production und ist ebenfalls nicht abgeschlossen; er autorisiert oder belegt keine CRM-Production-Migration, Anwendungsverbindung, Promotion oder Canary-Aktivierung.
 
 Aktueller verbleibender Abschluss: zwölf lokale CRM-QA-Dateien entfernen und
 deren Abwesenheit bestätigen. Beide Löschversuche wurden von der automatischen

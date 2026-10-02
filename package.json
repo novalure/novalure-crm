@@ -8,10 +8,11 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "check:masterplan": "node scripts/check-masterplan-consistency.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint --max-warnings=0",
+    "lint": "eslint --max-warnings=0 && npm run check:masterplan",
     "typecheck": "tsc --noEmit",
     "ci:toolchain": "node scripts/check-toolchain.mjs",
     "ci:qa-target": "node scripts/qa-target-guard.mjs",
