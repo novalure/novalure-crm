@@ -2,7 +2,9 @@
 
 Novalure CLG is a Next.js based real estate CRM workspace for buyer, seller and investor lead operations. The current implementation focuses on a central configurable CRM dashboard, lead inbox, deal pipeline, tasks, funnels, newsletter preparation and calendar context.
 
-Repository work is governed by the [mirrored Novalure AI Workforce Masterplan](docs/masterplan/novalure-ai-workforce-masterplan-v1.md), whose authoritative source is the Evelyn repository. Run `npm run check:masterplan` to verify framework version `1.0.0` and the pinned content digest.
+Repository work is governed by the [mirrored Novalure AI Workforce Masterplan](docs/masterplan/novalure-ai-workforce-masterplan-v1.md), whose authoritative source is the Evelyn repository. Run `npm run check:masterplan` to verify framework version `2.0.0`, the pinned content digest and all required repository entry points.
+
+Agents working outside this repository's `AGENTS.md` scope must begin with the reusable [agent start prompt](docs/governance/agent-start-prompt.md). Operational details are in the [cloud development guide](docs/go-live/cloud-development-guide.md), [secrets policy](docs/security/secrets-policy.md) and [technical Production runbook](docs/go-live/technical-production-runbook.md).
 
 ## Dashboard Features
 
