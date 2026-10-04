@@ -4,8 +4,9 @@ import { getRolePermissions } from "./auth/permissions";
 import { getProductRoleCapabilities } from "./product-model";
 import { assertCrmFields, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "./crm-command";
 import { queryAuthenticationRows } from "./db/tenant-client";
+import { assertCrmContractCompatibility, CRM_CONTRACT_REGISTRY, CRM_CONTRACT_SCHEMA_VERSION, CRM_LEGACY_WIRE_VERSION } from "./crm-contract-registry";
 
-export const CRM_CONTRACT_VERSION = "crm-integration-v1";
+export const CRM_CONTRACT_VERSION = CRM_LEGACY_WIRE_VERSION;
 export const CRM_CONTRACT_SCOPES = ["crm.contacts.read","crm.contacts.write","crm.companies.read","crm.developers.read","crm.projects.read","crm.projects.write","crm.units.read","crm.leads.read","crm.leads.write","crm.qualifications.read","crm.offers.read","crm.offers.prepare","crm.tasks.read","crm.tasks.write","crm.appointments.read","crm.viewings.read","crm.reservations.read","crm.reservations.prepare","crm.sales.read","crm.communications.read","crm.communications.write","crm.approvals.read"] as const;
 const entities = ["Contact","Company","Developer","Project","Unit","BuyerLead","Qualification","Offer","Task","Appointment","Viewing","Reservation","Sale","Communication","ApprovalReference"] as const;
 type Entity = typeof entities[number];
@@ -33,6 +34,8 @@ export function parseCrmContractRequest(raw:unknown):RequestEnvelope {
  if(p.operation!=="Read" && p.expectedVersion===null) return fail("INVALID_CRM_REQUEST",400);
  const validation=object(p.validation),patch=object(p.patch);
  if(Object.keys(validation).length!==2 || validation.status!=="VALIDATED" || validation.schemaVersion!==CRM_CONTRACT_VERSION) return fail("INVALID_CRM_REQUEST",400);
+ try { assertCrmContractCompatibility({contractId:p.operation==="Read"?"crm.records.read":"crm.records.write",schemaVersion:CRM_CONTRACT_SCHEMA_VERSION,access:p.operation==="Read"?"read":"write"}); }
+ catch { return fail("INVALID_CRM_REQUEST",400); }
  for(const [key,value] of Object.entries(patch)) if(!["name","title"].includes(key) || typeof value!=="string" || (!/^SYNTHETIC: [a-zA-Z0-9 ._-]{1,100}$/.test(value) || unsafeText.test(value))) return fail("INVALID_CRM_REQUEST",400);
  if(p.operation==="Read" && Object.keys(patch).length) return fail("INVALID_CRM_REQUEST",400);
  if(["SendOffer","ConfirmReservation","ConfirmSale"].includes(String(p.operation)) && p.approvalReference===null) return fail("INVALID_CRM_REQUEST",400);
@@ -136,7 +139,7 @@ async function project(tx:TenantTransaction,p:Principal,b:Binding,kind:Entity,cr
  if(textField)syntheticText(row[textField]);
  validateProjection(kind,row);
  const data=dataProjection(kind,row);safeProjectionValue(data);
- return {contractVersion:CRM_CONTRACT_VERSION,kind,workspaceId:p.workspace_id,sourceId:b.source_id,projectId:b.project_id,representation:config.representation??config.table,compatibility:kind==="Contact"||kind==="Company"?"DIRECT":"PARTIAL",data:{...data,sourceUpdatedAt:timestamp(row.updated_at),referenceScope:"NOT_VERIFIED"}};
+ return {contractVersion:CRM_CONTRACT_VERSION,contractId:"crm.records.read",schemaVersion:CRM_CONTRACT_SCHEMA_VERSION,registryVersion:CRM_CONTRACT_REGISTRY.registryVersion,kind,workspaceId:p.workspace_id,sourceId:b.source_id,projectId:b.project_id,representation:config.representation??config.table,compatibility:kind==="Contact"||kind==="Company"?"DIRECT":"PARTIAL",data:{...data,sourceUpdatedAt:timestamp(row.updated_at),referenceScope:"NOT_VERIFIED"}};
 }
 function errorResponse(error:unknown,correlationId?:string) {
  let code="CRM_RESULT_UNKNOWN",status=503;
@@ -148,7 +151,7 @@ function errorResponse(error:unknown,correlationId?:string) {
   else if(error.status===401||error.status===403)code="CRM_NOT_ACCESSIBLE";
   else code="INVALID_CRM_REQUEST";
  }
- return Response.json({contractVersion:CRM_CONTRACT_VERSION,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null},{status,headers:{"Cache-Control":"no-store"}});
+ return Response.json({contractVersion:CRM_CONTRACT_VERSION,schemaVersion:CRM_CONTRACT_SCHEMA_VERSION,registryVersion:CRM_CONTRACT_REGISTRY.registryVersion,code,retry:code==="CRM_RESULT_UNKNOWN"?"RECONCILE_ONLY":code==="CRM_UNAVAILABLE"?"AFTER_BACKOFF":"NEVER",correlationId:correlationId??null},{status,headers:{"Cache-Control":"no-store"}});
 }
 /** Dedicated bearer endpoint. Cookie/header identities cannot enter or acquire these grants. */
 export async function handleCrmContractRequest(request:Request,options:TenantTransactionOptions={}):Promise<Response> {
@@ -192,6 +195,6 @@ export async function handleCrmContractRequest(request:Request,options:TenantTra
     return {projection:await project(commandTx,principal,binding,r.entity,hash),resourceVersion:r.expectedVersion!+1,requestAuditReference:r.auditReference};
    },options);
   },options);
-  return Response.json({contractVersion:CRM_CONTRACT_VERSION,correlationId:r.correlationId,idempotencyKey:r.idempotencyKey,...result},{headers:{"Cache-Control":"no-store"}});
+  return Response.json({contractVersion:CRM_CONTRACT_VERSION,contractId:r.operation==="Read"?"crm.records.read":"crm.records.write",schemaVersion:CRM_CONTRACT_SCHEMA_VERSION,registryVersion:CRM_CONTRACT_REGISTRY.registryVersion,correlationId:r.correlationId,idempotencyKey:r.idempotencyKey,...result},{headers:{"Cache-Control":"no-store"}});
  } catch(error) {return errorResponse(error,envelope?.correlationId);}
 }
