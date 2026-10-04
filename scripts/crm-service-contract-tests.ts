@@ -38,7 +38,7 @@ async function fetchLocal(url:string|URL,init:RequestInit):Promise<Response> {
 }
 async function call(r:ReturnType<typeof envelope>,headers:Record<string,string>={}) {
  const response=await fetchLocal(baseUrl,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token,...headers},body:JSON.stringify(r)});
- return {status:response.status,body:await response.json() as {projection?: {data:Record<string,unknown>;sourceId:string}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
+ return {status:response.status,body:await response.json() as {contractId?:string;schemaVersion?:string;registryVersion?:string;projection?: {contractId?:string;schemaVersion?:string;registryVersion?:string;data:Record<string,unknown>;sourceId:string}; data?: {resourceVersion:number}; code?:string; retry?:string; replayed?:boolean; commandId?:string; status?:string}};
 }
 before(async()=>{
  db=await startLocalSalesDb();await applySalesSchema(db);
@@ -92,6 +92,8 @@ after(async()=>{
 test("HTTP: authenticated narrow read returns selected fields and produces no business write",async()=>{
  const r=envelope();await register(r);const before=await db.admin.query("select count(*) from crm_command_receipts");
  const result=await call(r);assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.projection!.data.displayName,"SYNTHETIC: Contact");
+ assert.equal(result.body.contractId,"crm.records.read");assert.equal(result.body.schemaVersion,"1.0.0");assert.equal(result.body.registryVersion,"1.0.0");
+ assert.equal(result.body.projection!.contractId,"crm.records.read");assert.equal(result.body.projection!.schemaVersion,"1.0.0");
  assert.equal(result.body.projection!.sourceId,contact);assert.doesNotMatch(JSON.stringify(result.body),/synthetic-sensitive|email|phone|token_hash/);
  assert.deepEqual((await db.admin.query("select count(*) from crm_command_receipts")).rows,before.rows);
 });
