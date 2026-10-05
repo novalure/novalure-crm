@@ -61,3 +61,28 @@ test("environment manifest separates expected names from unverified remote parit
     "every directly referenced runtime/build variable must be classified",
   );
 });
+
+test("Evelyn CRM service identity registry is value-free and least privilege", async () => {
+  const identity = await json("config/evelyn-crm-service-identity.json");
+  assert.equal(identity.identityId, "EVELYN_CRM_SERVICE_IDENTITY");
+  assert.equal(identity.workspaceId, "11111111-1111-4111-8111-111111111111");
+  assert.equal(identity.role, "Evelyn.Service");
+  assert.equal(identity.authType, "OIDC_JWKS");
+  assert.equal(identity.bypassRls, false);
+  assert.equal(identity.credentialMaterialInRepository, false);
+  assert.equal(identity.state, "AWAITING_BOOTSTRAP");
+  assert.deepEqual(identity.capabilities, ["crm.contacts.read", "crm.contacts.write"]);
+  assert.ok(identity.forbiddenCapabilities.includes("proposal.owner.approve"));
+  assert.ok(identity.forbiddenCapabilities.includes("contract.owner.approve"));
+  assert.doesNotMatch(JSON.stringify(identity), /-----BEGIN|eyJ[A-Za-z0-9_-]{20,}\.|gh[pousr]_|github_pat_|AKIA|sk-[A-Za-z0-9]{12,}/);
+
+  const environment = await json("config/vercel-environment-manifest.json");
+  const required = new Set(environment.runtimeRequired.map(({ name }) => name));
+  for (const name of [
+    "CRM_SERVICE_IDENTITY_AUDIENCE",
+    "CRM_SERVICE_IDENTITY_ISSUER",
+    "CRM_SERVICE_IDENTITY_JWKS_URL",
+    "CRM_SERVICE_IDENTITY_PRODUCTION_ENABLED",
+    "EVELYN_CRM_SERVICE_CREDENTIAL_REFERENCE",
+  ]) assert.ok(required.has(name), `${name} must be classified`);
+});

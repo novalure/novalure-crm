@@ -3,7 +3,12 @@
   "scope": ["preview", "production"],
   "valueInspection": "FORBIDDEN",
   "runtimeRequired": [
+    { "name": "CRM_SERVICE_IDENTITY_AUDIENCE", "targets": ["production"], "kind": "configuration", "notes": "Exact Production audience for the Evelyn CRM workload token." },
+    { "name": "CRM_SERVICE_IDENTITY_ISSUER", "targets": ["production"], "kind": "configuration", "notes": "Exact trusted issuer for the Evelyn CRM workload token." },
+    { "name": "CRM_SERVICE_IDENTITY_JWKS_URL", "targets": ["production"], "kind": "configuration", "notes": "HTTPS JWKS endpoint; repository contains no private key." },
+    { "name": "CRM_SERVICE_IDENTITY_PRODUCTION_ENABLED", "targets": ["production"], "kind": "configuration", "notes": "Fail-closed explicit Production machine-auth enablement." },
     { "name": "DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Tenant-scoped pooled application connection." },
+    { "name": "EVELYN_CRM_SERVICE_CREDENTIAL_REFERENCE", "targets": ["production"], "kind": "secret-reference", "notes": "Value-free provider reference recorded in the service identity registry; never credential material." },
     { "name": "NOVALURE_ABUSE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Minimum 32-byte public-submission abuse secret." },
     { "name": "NOVALURE_AUTH_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth secret encryption; minimum length enforced by the app." },
     { "name": "NOVALURE_AUTH_RATE_LIMIT_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth rate-limit key material." },
