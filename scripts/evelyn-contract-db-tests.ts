@@ -5,7 +5,7 @@ import type {AppSession} from "../src/lib/auth/session";
 import type {TenantPool} from "../src/lib/db/tenant-client";
 import {executeOfferCommand,getOfferWorkflow,type OfferCommand} from "../src/lib/db/offer-repositories";
 import {createEvelynContractAction,executeEvelynContractCommand,requestEvelynContractApproval,verifyEvelynContractApproval,executeEvelynContractAction,reviseEvelynContractAction,type EvelynContractOptions} from "../src/lib/db/evelyn-contract-repositories";
-import {EvelynApprovalError,type EvelynApprovalClient,type EvelynCreateApprovalRequest} from "../src/lib/evelyn-approval-client";
+import {evelynOwnerApprovalBindingDigest,EvelynApprovalError,type EvelynApprovalClient,type EvelynCreateApprovalRequest} from "../src/lib/evelyn-approval-client";
 import {startLocalSalesDb,applySalesSchema} from "./lib/local-sales-db.mjs";
 
 test("G08 durable Preview contract boundary against real isolated PostgreSQL",{timeout:180000},async t=>{
@@ -26,7 +26,7 @@ test("G08 durable Preview contract boundary against real isolated PostgreSQL",{t
    const session={authenticated:true,userId,workspaceId,workspaceName:"SYNTHETIC G08 QA",email:userId+"@example.invalid",name:"SYNTHETIC owner",role:"owner",permissions:["crm:read","crm:write"],productRole:"novalureAdmin",productPermissions:["pipeline:write","novalure:internal"],source:"database",authIdentityId,authSessionId,sessionCreatedAt:new Date()} as AppSession;
    const pool={pool:db.pool as unknown as TenantPool};
    const offerCommand=async(operation:OfferCommand["operation"],payload:Record<string,unknown>={})=>{const view=await getOfferWorkflow(session,dealId,pool);return executeOfferCommand(session,{operation,projectId,dealId,offerId:view.offer?.id,expectedVersion:view.offer?.version??view.dealVersion,payload,idempotencyKey:randomUUID(),correlationId:randomUUID()},pool)};
-   await offerCommand("create",{leadId,content:{subject:"SYNTHETIC standard-value proposal",recipientName:"SYNTHETIC Buyer",recipientEmail:"buyer@example.invalid",terms:"SYNTHETIC scope; no real contract delivery",validUntil:new Date(Date.now()+86400000).toISOString(),currency:"EUR",taxBasis:"NET",items:[{description:"Setup",quantity:1,unitNetCents:990000},{description:"Monthly",quantity:3,unitNetCents:349000}]}});
+   await offerCommand("create",{leadId,content:{subject:"SYNTHETIC standard-value proposal",recipientName:"SYNTHETIC Buyer",recipientEmail:"buyer@example.invalid",scope:"SYNTHETIC CRM scope",paymentPlan:"SYNTHETIC setup then monthly",discounts:"No discounts",specialTerms:"No special terms",riskComplianceNotes:"SYNTHETIC only; no real customer",terms:"SYNTHETIC scope; no real contract delivery",validUntil:new Date(Date.now()+86400000).toISOString(),currency:"EUR",taxBasis:"NET",items:[{description:"Setup",quantity:1,unitNetCents:990000},{description:"Monthly",quantity:3,unitNetCents:349000}]}});
    let offer=(await getOfferWorkflow(session,dealId,pool)).offer!;
    await offerCommand("approve",{revision:offer.revision,contentDigest:offer.contentDigest,expiresAt:new Date(Date.now()+3600000).toISOString()});await offerCommand("queue_send");
    // PostgreSQL records microseconds; wait for an actual later JS millisecond.
@@ -36,7 +36,7 @@ test("G08 durable Preview contract boundary against real isolated PostgreSQL",{t
    const approvals=new Map<string,{reference:string;body:EvelynCreateApprovalRequest}>(),calls={requests:0,verifies:0};let valid=false,onVerify:(()=>Promise<void>)|undefined;
    const client:EvelynApprovalClient={
     async requestApproval(body){calls.requests++;let row=approvals.get(body.requestId);if(!row){row={reference:randomUUID(),body};approvals.set(body.requestId,row)}assert.deepEqual(row.body,body);return {contractVersion:"create-approval-request-v1",environment:"preview",approvalReference:row.reference,actionId:body.action.actionId,actionVersion:body.action.actionVersion,actionHash:body.actionHash,requiredSteps:2,status:"PENDING",auditReference:randomUUID(),correlationId:body.correlationId}},
-    async verifyApproval(body){calls.verifies++;await onVerify?.();const row=[...approvals.values()].find(a=>a.reference===body.approvalReference);if(!row)throw new EvelynApprovalError("INVALID");if(row.body.actionHash!==body.actionHash)throw new EvelynApprovalError("ACTION_MISMATCH");if(row.body.action.tenantId!==body.tenantId)throw new EvelynApprovalError("TENANT_MISMATCH");if(!valid)throw new EvelynApprovalError("PENDING");return {contractVersion:"approval-bridge-v1",environment:"preview",status:"VALID",approvalReference:body.approvalReference,correlationId:body.correlationId}}};
+    async verifyApproval(body){calls.verifies++;await onVerify?.();const row=[...approvals.values()].find(a=>a.reference===body.approvalReference);if(!row)throw new EvelynApprovalError("INVALID");if(row.body.actionHash!==body.actionHash)throw new EvelynApprovalError("ACTION_MISMATCH");if(row.body.action.tenantId!==body.tenantId)throw new EvelynApprovalError("TENANT_MISMATCH");if(!valid)throw new EvelynApprovalError("PENDING");const authority={approvalClass:"A3" as const,approverRole:"OWNER" as const,delegated:false as const,ownerBound:true as const,tenantId:body.tenantId,actionId:body.actionId,resourceId:body.resourceId,actionVersion:body.actionVersion,actionHash:body.actionHash};return {contractVersion:"approval-bridge-v1",environment:"preview",status:"VALID",approvalReference:body.approvalReference,correlationId:body.correlationId,ownerAuthority:{...authority,approvalBindingDigest:evelynOwnerApprovalBindingDigest({approvalReference:body.approvalReference,...authority})}}}};
    const options:EvelynContractOptions={...pool,testOnly:{target:{workspaceId,projectId,tenantId:workspaceId},client}};
    const metadata=()=>({idempotencyKey:randomUUID(),correlationId});
    const createInput={...metadata(),offerId:offer.id,projectId,expectedOfferVersion:offer.version};
@@ -66,14 +66,22 @@ test("G08 durable Preview contract boundary against real isolated PostgreSQL",{t
    const f=await fixture();await executeEvelynContractCommand(f.session,{operation:"create",...f.createInput},f.options);
    const receipt=await db.admin.query("select operation from crm_command_receipts where workspace_id=$1 and idempotency_key=$2",[f.workspaceId,f.createInput.idempotencyKey]);assert.equal(receipt.rows[0].operation,"evelyn.contract.create");
    const otherId=randomUUID();await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC ungranted',$3,'agent','novalureServiceOps','active')",[otherId,f.workspaceId,otherId+"@example.invalid"]);
-   const other={...f.session,userId:otherId,authIdentityId:undefined,authSessionId:undefined}, action=await f.create();await assert.rejects(requestEvelynContractApproval(other,{...f.metadata(),actionId:action.data.actionId,expectedVersion:1},f.options),{code:"EVELYN_ACTION_NOT_ACCESSIBLE"});
+   const other={...f.session,userId:otherId,role:"agent" as const,authIdentityId:undefined,authSessionId:undefined}, action=await f.create();await assert.rejects(requestEvelynContractApproval(other,{...f.metadata(),actionId:action.data.actionId,expectedVersion:1},f.options),{code:"OWNER_A3_REQUIRED"});
+  });
+  await t.test("Sales, Finance and Admin without Owner grant cannot request, verify or execute contract send",async()=>{
+   const f=await fixture(),input=await f.make();
+   for(const candidate of [{label:"Sales",role:"agent",productRole:"novalure_sales"},{label:"Finance",role:"agent",productRole:"novalureServiceOps"},{label:"Admin",role:"admin",productRole:"novalureAdmin"}] as const){
+    const userId=randomUUID();await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,$3,$4,$5,$6,'active')",[userId,f.workspaceId,"SYNTHETIC "+candidate.label,userId+"@example.invalid",candidate.role,candidate.productRole]);
+    const actor={...f.session,userId,role:candidate.role,productRole:candidate.productRole,authIdentityId:undefined,authSessionId:undefined} as AppSession;
+    for(const operation of [requestEvelynContractApproval,verifyEvelynContractApproval,executeEvelynContractAction]) await assert.rejects(operation(actor,{...input,...f.metadata()},f.options),{code:"OWNER_A3_REQUIRED"});
+   }
   });
   await t.test("pending cannot execute; fresh repeated verification and concurrent retry commit exactly once",async()=>{
    const f=await fixture(),input=await f.make();await requestEvelynContractApproval(f.session,input,f.options);const exec={...input,...f.metadata()};
    await assert.rejects(executeEvelynContractAction(f.session,exec,f.options),{code:"PENDING"});assert.equal((await db.admin.query("select count(*)::int as count from crm_evelyn_contract_executions where action_id=$1",[input.actionId])).rows[0].count,0);
    f.setValid();const verify={...input,...f.metadata()};await verifyEvelynContractApproval(f.session,verify,f.options);await verifyEvelynContractApproval(f.session,verify,f.options);
    const results=await Promise.all([executeEvelynContractAction(f.session,exec,f.options),executeEvelynContractAction(f.session,exec,f.options)]);assert.equal(results.filter(r=>r.replayed).length,1);
-   assert.equal((await db.admin.query("select count(*)::int as count from crm_evelyn_contract_executions where action_id=$1",[input.actionId])).rows[0].count,1);
+   const execution=(await db.admin.query("select count(*)::int as count,min(owner_authority_digest) as digest from crm_evelyn_contract_executions where action_id=$1",[input.actionId])).rows[0];assert.equal(execution.count,1);assert.match(execution.digest,/^[0-9a-f]{64}$/);
    const calls=f.calls.verifies;await executeEvelynContractAction(f.session,exec,f.options);assert.equal(f.calls.verifies,calls,"committed retry returns authorized receipt without a second effect");
    await assert.rejects(executeEvelynContractAction(f.session,{...exec,...f.metadata()},f.options),{code:"EVELYN_ALREADY_EXECUTED"});
   });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseOfferContent, offerTotal, nextOfferStatus, assertOfferApproval, assertFreshOfferSession, requiredSalesApprovalSteps, assertOfferOnlyAction, type OfferStatus } from "../src/lib/offer-workflow";
+import { parseOfferContent, offerApprovalPayload, offerTotal, nextOfferStatus, assertOfferApproval, assertFreshOfferSession, requiredSalesApprovalSteps, assertOfferOnlyAction, type OfferStatus } from "../src/lib/offer-workflow";
 import { executeOfferCommand, getOfferWorkflow, type OfferCommand } from "../src/lib/db/offer-repositories";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import type { AppSession } from "../src/lib/auth/session";
@@ -10,8 +10,15 @@ import type { TenantPool } from "../src/lib/db/tenant-client";
 import { chromium } from "@playwright/test";
 import { createOfferPrintFrame } from "../src/components/offer-workflow";
 
-const content = () => ({ subject: "SYNTHETIC Novalure proposal", recipientName: "Synthetic Buyer", recipientEmail: "buyer@example.invalid", terms: "Synthetic scope, setup plus three mandatory monthly periods. No contract is sent.", validUntil: new Date(Date.now() + 2 * 86400000).toISOString(), currency: "EUR" as const, taxBasis: "NET" as const, items: [{ description: "Setup", quantity: 1, unitNetCents: 990000 }, { description: "Monthly service", quantity: 3, unitNetCents: 349000 }] });
+const content = () => ({ subject: "SYNTHETIC Novalure proposal", recipientName: "Synthetic Buyer", recipientEmail: "buyer@example.invalid", scope: "Synthetic CRM setup and three mandatory service periods.", paymentPlan: "Setup on acceptance; each service period monthly in advance.", discounts: "No discounts.", specialTerms: "No special terms.", riskComplianceNotes: "Synthetic-only test; no external delivery.", terms: "Synthetic scope, setup plus three mandatory monthly periods. No contract is sent.", validUntil: new Date(Date.now() + 2 * 86400000).toISOString(), currency: "EUR" as const, taxBasis: "NET" as const, items: [{ description: "Setup", quantity: 1, unitNetCents: 990000 }, { description: "Monthly service", quantity: 3, unitNetCents: 349000 }] });
 test("money: mandatory periods are included in exact EUR net total", () => { assert.equal(offerTotal(parseOfferContent(content())), 2037000); });
+test("proposal A3 payload explicitly binds every material field", () => {
+  const payload = offerApprovalPayload(parseOfferContent(content()), 3);
+  assert.deepEqual(Object.keys(payload).sort(), ["discounts", "paymentPlan", "price", "proposalVersion", "recipient", "riskComplianceNotes", "scope", "specialTerms"].sort());
+  assert.equal(payload.proposalVersion, 3); assert.equal(payload.price.totalNetCents, 2037000);
+  assert.equal(payload.recipient.email, "buyer@example.invalid");
+  for (const key of ["scope", "paymentPlan", "discounts", "specialTerms", "riskComplianceNotes"] as const) assert.equal(payload[key], content()[key]);
+});
 test("money and content reject negative, fractional, overflowing and ambiguous inputs", () => {
   for (const change of [{ currency: "USD" }, { taxBasis: "GROSS" }, { approved: true }, { items: [] }, { items: [{ description: "X", quantity: 1.5, unitNetCents: 10 }] }, { items: [{ description: "X", quantity: 1, unitNetCents: -1 }] }, { items: [{ description: "X", quantity: 100, unitNetCents: Number.MAX_SAFE_INTEGER }] }, { validUntil: "2027-02-30T10:00:00.000Z" }]) assert.throws(() => parseOfferContent({ ...content(), ...change }));
 });
@@ -33,6 +40,7 @@ test("approval requires recent authenticated session; offers never authorize con
   for (const change of [{ authenticated: false }, { source: "demo" }, { authSessionId: undefined }, { sessionCreatedAt: new Date(now - 16 * 60000) }, { sessionCreatedAt: new Date(now + 1000) }]) assert.throws(() => assertFreshOfferSession({ ...valid, ...change }, now));
   assert.equal(requiredSalesApprovalSteps("offer.send", 2037000), 1);
   assert.equal(requiredSalesApprovalSteps("contract.send", 499999), 1);
+  assert.equal(requiredSalesApprovalSteps("contract.send", 1), 1);
   assert.equal(requiredSalesApprovalSteps("contract.send", 500000), 2);
   assert.throws(() => assertOfferOnlyAction("contract.send"), /DISABLED/);
 });
@@ -42,6 +50,7 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
   try {
     const migrations = await applySalesSchema(db);
     assert.ok(migrations.includes("081_crm_offer_workflow.sql"));
+    assert.ok(migrations.includes("087_d11_crm_source_of_truth_closure.sql"));
     const options = { pool: db.pool as unknown as TenantPool };
     const makeFixture = async () => {
       const workspaceId = randomUUID(), userId = randomUUID(), projectId = randomUUID(), organizationId = randomUUID(), contactId = randomUUID(), leadId = randomUUID(), dealId = randomUUID(), authSessionId = randomUUID();
@@ -66,10 +75,25 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
       const respond = async (accepted: boolean) => { const offer = (await view()).offer!; return command(accepted ? "accept" : "reject", { revision: offer.revision, contentDigest: offer.contentDigest, reference: "SYNTHETIC customer answer", ...(accepted ? {} : { reason: "SYNTHETIC declined" }) }); };
       return { workspaceId, userId, projectId, contactId, leadId, dealId, organizationId, session, command, view, create, approve, sent, respond };
     };
+    await t.test("canonical divisions propagate to commercial/reporting records and reject unknown or mismatched values", async () => {
+      const workspaceId=randomUUID(), webProject=randomUUID(), reProject=randomUUID();
+      await db.admin.query("insert into workspaces(id,name) values($1,'SYNTHETIC DIVISION QA')",[workspaceId]);
+      await db.admin.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'SYNTHETIC web','Service','WEB_DESIGN'),($3,$2,'SYNTHETIC real estate','Bauträger','REAL_ESTATE_GROWTH')",[webProject,workspaceId,reProject]);
+      await assert.rejects(db.admin.query("insert into projects(workspace_id,name,type,division) values($1,'SYNTHETIC invalid','Service',$2)",[workspaceId,"UNKNOWN"]),/crm_division|invalid input value/i);
+      const organization=randomUUID();await db.admin.query("insert into organizations(id,workspace_id,project_id,name,type) values($1,$2,$3,'SYNTHETIC company','Unternehmen')",[organization,workspaceId,webProject]);
+      const deal=randomUUID();await db.admin.query("insert into deals(id,workspace_id,project_id,organization_id,name) values($1,$2,$3,$4,'SYNTHETIC web deal')",[deal,workspaceId,webProject,organization]);
+      await db.admin.query("insert into crm_pipelines(workspace_id,project_id,key,name) values($1,$2,'synthetic-web','SYNTHETIC web pipeline')",[workspaceId,webProject]);
+      await db.admin.query("insert into crm_conversion_snapshots(workspace_id,project_id,period_start,period_end) values($1,$2,now(),now()+interval '1 day')",[workspaceId,webProject]);
+      for(const table of ["organizations","deals","crm_pipelines","crm_conversion_snapshots"]){const row=await db.admin.query(`select division::text from ${table} where workspace_id=$1 and project_id=$2 limit 1`,[workspaceId,webProject]);assert.equal(row.rows[0].division,"WEB_DESIGN")}
+      await assert.rejects(db.admin.query("update deals set division='REAL_ESTATE_GROWTH' where id=$1",[deal]),/CRM_DIVISION_PROJECT_MISMATCH/);
+      await assert.rejects(db.admin.query("update projects set division='REAL_ESTATE_GROWTH' where id=$1",[webProject]),/CRM_PROJECT_DIVISION_IMMUTABLE/);
+    });
     await t.test("real offer API view and queue consume the scope-bound approval reference", async () => {
       const f = await makeFixture(); await f.create(); await f.approve();
       const view = await f.view(), reference = view.approvalReference;
       assert.ok(reference); assert.equal(reference.status, "APPROVED"); assert.equal(reference.scope.action, "offer.send");
+      assert.equal(reference.authority, "CRM_OWNER_A3_EXACT_PAYLOAD");
+      assert.deepEqual(reference.exactPayload, offerApprovalPayload(parseOfferContent(content()), 1));
       assert.equal(reference.scope.resourceId, view.offer!.id); assert.equal(reference.scope.resourceVersion, view.offer!.revision);
       assert.equal(reference.scope.contentDigest, view.offer!.contentDigest); assert.equal(reference.scope.recipient, view.offer!.content.recipientEmail);
       assert.equal(reference.scope.totalNetCents, 2037000); assert.equal(reference.requiredSteps, 1); assert.equal(reference.contractOrPaymentAuthorized, false);
@@ -101,6 +125,23 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
       const actor = { ...f.session, userId, authSessionId, authIdentityId };
       const offer = (await f.view()).offer!;
       await assert.rejects(f.command("approve", { revision: offer.revision, contentDigest: offer.contentDigest, expiresAt: new Date(Date.now()+3600000).toISOString() }, {}, actor), /APPROVER_REQUIRED/);
+    });
+    await t.test("Sales, Finance and Admin without Owner grant cannot satisfy A3 even when configured", async () => {
+      const f = await makeFixture(); await f.create();
+      for (const candidate of [
+        { label: "Sales", role: "agent", productRole: "novalure_sales" },
+        { label: "Finance", role: "agent", productRole: "novalureServiceOps" },
+        { label: "Admin", role: "admin", productRole: "novalureAdmin" },
+      ] as const) {
+        const userId = randomUUID(), authSessionId = randomUUID();
+        const added = await db.admin.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,$3,$4,$5,$6,'active') returning auth_identity_id`, [userId, f.workspaceId, `Synthetic ${candidate.label}`, `${userId}@example.invalid`, candidate.role, candidate.productRole]);
+        const authIdentityId = added.rows[0].auth_identity_id as string;
+        await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,expires_at) values($1,$2,$3,$4,$5,now()+interval '2 hours')`, [authSessionId, createHash("sha256").update(randomUUID()).digest("hex"), authIdentityId, userId, f.workspaceId]);
+        await db.admin.query(`update workspaces set setup_state=$2::jsonb where id=$1`, [f.workspaceId, JSON.stringify({ salesApprovalUserId: userId })]);
+        const actor = { ...f.session, userId, authSessionId, authIdentityId, role: candidate.role, productRole: candidate.productRole } as AppSession;
+        const offer = (await f.view()).offer!;
+        await assert.rejects(f.command("approve", { revision: offer.revision, contentDigest: offer.contentDigest, expiresAt: new Date(Date.now()+3600000).toISOString() }, {}, actor), /APPROVER_NOT_CONFIGURED|OWNER_A3_REQUIRED|Command capability is not granted/);
+      }
     });
     await t.test("invalid contact-lead link is refused before any offer is persisted", async () => {
       const a = await makeFixture(), b = await makeFixture();
