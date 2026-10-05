@@ -57,6 +57,9 @@ async function source(tx: TenantTransaction, session: AppSession, offerId: strin
   return row;
 }
 async function read(tx: TenantTransaction, session: AppSession, input: EvelynContractActionInput, options: EvelynContractOptions, receiptOnly = false): Promise<Snapshot> {
+  // `session` is freshly reloaded from workspace_users by withCrmRead. Reject
+  // non-Owners before RLS can collapse the denial into a not-found response.
+  if (session.role !== "owner") failure("OWNER_A3_REQUIRED", 403);
   const row = await tx.queryOne<Snapshot>(`select a.id,a.project_id as "projectId",a.offer_id as "offerId",a.offer_version as "offerVersion",a.offer_revision as "offerRevision",a.source_approval_id as "sourceApprovalId",a.source_content_digest as "sourceContentDigest",a.correlation_id as "correlationId",a.version as "currentVersion",r.version,r.action,r.action_hash as "actionHash",p.approval_reference as "approvalReference"
     from crm_evelyn_contract_actions a join crm_evelyn_contract_revisions r on r.workspace_id=a.workspace_id and r.action_id=a.id and r.version=$3
     left join crm_evelyn_contract_approvals p on p.workspace_id=a.workspace_id and p.action_id=a.id and p.version=r.version
