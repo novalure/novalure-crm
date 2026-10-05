@@ -35,6 +35,7 @@ import { queueDealStageChangeGoogleNotification } from "@/lib/db/google-notifica
 import { ensureProjectDefaultPipelines } from "@/lib/db/pipeline-default-repositories";
 import { queueDealStageChangeTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
+import { isCrmDivision } from "@/lib/crm-division";
 import {
   isNovalureGrowthLeadSource,
   isNovalureGrowthWorkspace,
@@ -237,6 +238,7 @@ type ProjectWriteRow = {
   customerType: Project["customerType"] | null;
   defaultOperatingModel: Project["defaultOperatingModel"] | null;
   defaultPipelineId: string | null;
+  division: Project["division"];
   id: string;
   name: string;
   setupDefaults: Project["setupDefaults"] | null;
@@ -3146,6 +3148,7 @@ async function createProjectRecordInTransaction(input: {
 
   const name = cleanString(input.project.name);
   if (!name) return { persisted: false, reason: "Project name is required" };
+  if (!isCrmDivision(input.project.division)) return { persisted: false, reason: "INVALID_CRM_DIVISION" };
 
   const customerType = isWorkspaceCustomerType(input.project.customerType)
     ? input.project.customerType
@@ -3170,18 +3173,20 @@ async function createProjectRecordInTransaction(input: {
       insert into projects (
         workspace_id,
         name,
+        division,
         type,
         status,
         customer_type,
         default_operating_model,
         setup_defaults
       )
-      values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      values ($1, $2, $3::crm_division, $4, $5, $6, $7, $8::jsonb)
       returning
         version,
         id,
         workspace_id as "workspaceId",
         name,
+        division,
         type,
         status,
         customer_type as "customerType",
@@ -3192,6 +3197,7 @@ async function createProjectRecordInTransaction(input: {
     [
       input.session.workspaceId,
       name,
+      input.project.division,
       cleanString(input.project.type) || "real_estate_project",
       cleanString(input.project.status) || "Aktiv",
       customerType,
@@ -3252,6 +3258,7 @@ async function updateProjectRecordInTransaction(input: {
         id,
         workspace_id as "workspaceId",
         name,
+        division,
         type,
         status,
         customer_type as "customerType",
@@ -3271,6 +3278,8 @@ async function updateProjectRecordInTransaction(input: {
   if (!validExpectedVersion(expectedVersion)) return { persisted: false, reason: "Invalid expectedVersion: a positive integer is required" };
   const name = cleanString(input.project.name) || existing.name;
   if (!name) return { persisted: false, reason: "Project name is required" };
+  const division = input.project.division === undefined ? existing.division : input.project.division;
+  if (!isCrmDivision(division)) return { persisted: false, reason: "INVALID_CRM_DIVISION" };
 
   const customerType = isWorkspaceCustomerType(input.project.customerType)
     ? input.project.customerType
@@ -3300,19 +3309,21 @@ async function updateProjectRecordInTransaction(input: {
       update projects
       set
         name = $3,
-        type = $4,
-        status = $5,
-        customer_type = $6,
-        default_operating_model = $7,
-        setup_defaults = $8::jsonb,
-        default_pipeline_id = $9::uuid,
+        division = $4::crm_division,
+        type = $5,
+        status = $6,
+        customer_type = $7,
+        default_operating_model = $8,
+        setup_defaults = $9::jsonb,
+        default_pipeline_id = $10::uuid,
         updated_at = now()
-      where id = $1 and workspace_id = $2 and version = $10
+      where id = $1 and workspace_id = $2 and version = $11
       returning
         version,
         id,
         workspace_id as "workspaceId",
         name,
+        division,
         type,
         status,
         customer_type as "customerType",
@@ -3324,6 +3335,7 @@ async function updateProjectRecordInTransaction(input: {
       existing.id,
       input.session.workspaceId,
       name,
+      division,
       cleanString(input.project.type) || existing.type,
       cleanString(input.project.status) || existing.status,
       customerType,
@@ -3357,6 +3369,7 @@ function toProjectWriteResult(row: ProjectWriteRow, defaultPipelineId = row.defa
     defaultPipelineId: defaultPipelineId ?? "",
     customerType: row.customerType ?? undefined,
     defaultOperatingModel: row.defaultOperatingModel ?? undefined,
+    division: row.division,
     id: row.id,
     leads: 0,
     name: row.name,
