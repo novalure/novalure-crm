@@ -132,19 +132,25 @@ create function crm_require_owner_a3_actor() returns trigger
 language plpgsql security invoker set search_path=pg_catalog,public as $$
 declare actor uuid;
 begin
-  actor := case tg_table_name
-    when 'crm_offer_approvals' then new.actor_id
-    when 'crm_evelyn_contract_approvals' then new.recorded_by
-    when 'crm_evelyn_contract_executions' then new.executed_by
-    else null end;
+  if tg_table_name='crm_offer_approvals' then
+    actor := new.actor_id;
+  elsif tg_table_name='crm_evelyn_contract_approvals' then
+    actor := new.recorded_by;
+  elsif tg_table_name='crm_evelyn_contract_executions' then
+    actor := new.executed_by;
+  else
+    actor := null;
+  end if;
   if actor is null or not exists(
     select 1 from public.workspace_users
      where workspace_id=new.workspace_id and id=actor and status='active' and role='owner'
   ) then
     raise exception using errcode='42501',message='OWNER_A3_REQUIRED';
   end if;
-  if tg_table_name='crm_evelyn_contract_executions' and new.owner_authority_digest is null then
-    raise exception using errcode='23514',message='OWNER_A3_ATTESTATION_REQUIRED';
+  if tg_table_name='crm_evelyn_contract_executions' then
+    if new.owner_authority_digest is null then
+      raise exception using errcode='23514',message='OWNER_A3_ATTESTATION_REQUIRED';
+    end if;
   end if;
   return new;
 end $$;
