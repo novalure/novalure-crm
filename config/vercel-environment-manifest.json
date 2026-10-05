@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0.0",
+  "scope": ["preview", "production"],
+  "valueInspection": "FORBIDDEN",
+  "runtimeRequired": [
+    { "name": "DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Tenant-scoped pooled application connection." },
+    { "name": "NOVALURE_ABUSE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Minimum 32-byte public-submission abuse secret." },
+    { "name": "NOVALURE_AUTH_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth secret encryption; minimum length enforced by the app." },
+    { "name": "NOVALURE_AUTH_RATE_LIMIT_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth rate-limit key material." },
+    { "name": "NOVALURE_SESSION_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Session and CSRF signing secret." },
+    { "name": "OAUTH_STATE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth state signing secret." },
+    { "name": "OAUTH_TOKEN_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth token encryption key." }
+  ],
+  "runtimeConditional": [
+    { "feature": "cron", "names": ["CRON_SECRET"] },
+    { "feature": "email", "names": ["NOVALURE_EMAIL_FROM", "RESEND_API_KEY", "RESEND_FROM"] },
+    { "feature": "blob-media", "names": ["BLOB_PRIVATE_READ_WRITE_TOKEN", "BLOB_READ_WRITE_TOKEN", "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN", "NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN"] },
+    { "feature": "ai", "names": ["AI_GATEWAY_API_KEY", "NOVALURE_EMBEDDING_API_KEY", "NOVALURE_EMBEDDING_BASE_URL", "NOVALURE_EMBEDDING_MODEL", "NOVALURE_LLM_API_KEY", "NOVALURE_LLM_BASE_URL", "NOVALURE_LLM_MODEL", "OPENAI_API_KEY", "OPENAI_BASE_URL", "VERCEL_AI_GATEWAY_API_KEY"] },
+    { "feature": "bot-webhook", "names": ["META_APP_SECRET", "NOVALURE_BOT_DEFAULT_MEETING_SLUG", "NOVALURE_BOT_DISABLED", "NOVALURE_BOT_KILL_SWITCH", "NOVALURE_BOT_NOT_AUS", "NOVALURE_BOT_WEBHOOK_DISABLED", "NOVALURE_BOT_WEBHOOK_SECRET", "NOVALURE_BOT_WEBHOOK_VERIFY_TOKEN"] },
+    { "feature": "routing-and-runtime", "names": ["NEXT_PUBLIC_APP_URL", "NOVALURE_APP_ORIGIN", "NOVALURE_AUTH_STRICT", "NOVALURE_FORM_REDIRECT_ALLOWLIST", "NOVALURE_MEDIA_ROOT", "NOVALURE_MEDIA_SHARE_TTL_SECONDS", "NOVALURE_MEETING_PAGE_SLUG", "NOVALURE_WORKSPACE_ID"] }
+  ],
+  "databaseAliases": {
+    "pooledAccepted": ["DATABASE_URL", "POSTGRES_URL", "POSTGRES_DATABASE_URL"],
+    "unpooledAccepted": ["POSTGRES_URL_NON_POOLING", "POSTGRES_DATABASE_URL_UNPOOLED"]
+  },
+  "platformProvided": [
+    "NEXT_RUNTIME",
+    "NODE_ENV",
+    "VERCEL",
+    "VERCEL_DEPLOYMENT_ID",
+    "VERCEL_ENV",
+    "VERCEL_GIT_COMMIT_REF",
+    "VERCEL_GIT_COMMIT_SHA",
+    "VERCEL_PROJECT_ID",
+    "VERCEL_PROJECT_PRODUCTION_URL",
+    "VERCEL_TARGET_ENV",
+    "VERCEL_URL"
+  ],
+  "ciBuildFallbacks": ["GITHUB_REF_NAME", "GITHUB_SHA"],
+  "buildGenerated": [
+    "NOVALURE_APPLICATION_VERSION",
+    "NOVALURE_BUILD_DEPLOYMENT_ID",
+    "NOVALURE_BUILD_GIT_BRANCH",
+    "NOVALURE_BUILD_GIT_SHA",
+    "NOVALURE_BUILD_TIMESTAMP"
+  ],
+  "previewOnlyOrTestOnly": [
+    "CRM_EVELYN_QA_PROJECT_ID",
+    "CRM_EVELYN_QA_TENANT_ID",
+    "CRM_EVELYN_QA_WORKSPACE_ID",
+    "CRM_SYNTHETIC_APPROVAL_TESTS",
+    "NOVALURE_DEMO_AUTH_ENABLED",
+    "NOVALURE_DEMO_USER_EMAIL",
+    "NOVALURE_DEMO_USER_NAME",
+    "NOVALURE_DEMO_USER_ROLE",
+    "NOVALURE_NOTIFICATION_TEST_SINK_URL",
+    "NOVALURE_TRUST_AUTH_HEADERS"
+  ],
+  "forbiddenInProduction": [
+    "CRM_SYNTHETIC_APPROVAL_TESTS",
+    "NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS",
+    "NOVALURE_DEMO_AUTH_ENABLED",
+    "NOVALURE_NOTIFICATION_TEST_SINK_URL",
+    "NOVALURE_TRUST_AUTH_HEADERS"
+  ],
+  "remoteComparison": {
+    "status": "PARTIAL",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "checkedAt": "2026-10-05T20:08:32Z",
+    "valuesRead": false,
+    "reason": "The authorized names/scopes response reports 100 entries but omits 76 array items under connector output limits. The visible subset cannot establish complete Production parity.",
+    "missingProductionBindings": "NOT_VERIFIED",
+    "ambiguousProductionBindings": "ALL runtimeRequired entries remain decision-blocking until an untruncated names/scopes export is checked."
+  }
+}

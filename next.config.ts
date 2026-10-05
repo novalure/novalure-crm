@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+const buildGitSha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "unknown";
+const buildGitBranch = process.env.VERCEL_GIT_COMMIT_REF ?? process.env.GITHUB_REF_NAME ?? "unknown";
+const buildTimestamp = process.env.NOVALURE_BUILD_TIMESTAMP ?? new Date().toISOString();
+const applicationVersion = process.env.npm_package_version ?? "0.1.0";
+const deploymentIdentity = process.env.VERCEL_DEPLOYMENT_ID ?? (buildGitSha !== "unknown" ? buildGitSha : undefined);
+
 const baselineCsp = [
   "object-src 'none'",
   "base-uri 'self'",
@@ -53,6 +59,14 @@ const visualQaContentHeaders = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  deploymentId: deploymentIdentity,
+  env: {
+    NOVALURE_APPLICATION_VERSION: applicationVersion,
+    NOVALURE_BUILD_DEPLOYMENT_ID: deploymentIdentity ?? "unknown",
+    NOVALURE_BUILD_GIT_BRANCH: buildGitBranch,
+    NOVALURE_BUILD_GIT_SHA: buildGitSha,
+    NOVALURE_BUILD_TIMESTAMP: buildTimestamp,
+  },
   serverExternalPackages: ["pg"],
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {

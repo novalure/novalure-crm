@@ -83,13 +83,18 @@ export async function startLocalSalesDb() {
  * append-only audit trigger. Audit protection stays enabled. Rollbacks are not applied.
  * This is explicitly not a full historical, pgvector/RAG or production validation.
  */
-export async function applySalesSchema(db, { includeSales = true } = {}) {
+export async function applySalesSchema(db, {
+  includeD11Contract = true,
+  includeSales = true,
+  maxMigrationNumber = Number.POSITIVE_INFINITY,
+} = {}) {
   const names = (await readdir("migrations")).filter(name => /^\d+.*\.sql$/.test(name)).sort();
   const applied = [];
   for (const name of names) {
     if (name.includes("_rollback") || name === "062_private_media_contract_cutover.sql") continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
+    if (number > maxMigrationNumber) continue;
     let sql = await readFile(path.join("migrations", name), "utf8");
     const originalHash = createHash("sha256").update(sql).digest("hex");
     if (number === 1) {
@@ -113,6 +118,34 @@ export async function applySalesSchema(db, { includeSales = true } = {}) {
     } catch (error) {
       await client.query("rollback");
       throw new Error(`Local schema migration ${name} failed: ${error.message}`, { cause: error });
+    } finally {
+      client.release();
+    }
+  }
+  // The product regression suites exercise the final D11 schema. Production
+  // still applies this separately: keeping Contract outside migrations/*.sql
+  // prevents the normal migration runner from selecting it with Expand.
+  if (includeD11Contract && includeSales && maxMigrationNumber >= 87) {
+    let remaining;
+    for (let batch = 0; batch < 100; batch += 1) {
+      const result = await db.admin.query("select public.crm_d11_backfill_batch(500) as result");
+      remaining = result.rows[0].result.remaining;
+      if (Object.values(remaining).every(value => Number(value) === 0)) break;
+    }
+    if (!remaining || Object.values(remaining).some(value => Number(value) !== 0)) {
+      throw new Error(`Local D11 backfill did not converge: ${JSON.stringify(remaining)}`);
+    }
+    const name = "staged/087_d11_crm_source_of_truth_contract.sql";
+    const sql = await readFile(path.join("migrations", name), "utf8");
+    const client = await db.admin.connect();
+    try {
+      await client.query("begin");
+      await client.query(sql);
+      await client.query("commit");
+      applied.push(name);
+    } catch (error) {
+      await client.query("rollback");
+      throw new Error(`Local staged schema migration ${name} failed: ${error.message}`, { cause: error });
     } finally {
       client.release();
     }
