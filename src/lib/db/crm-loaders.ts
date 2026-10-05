@@ -161,6 +161,7 @@ type ContactRow = {
 type LeadRow = {
   version?: number | string;
   id: string;
+  division: Lead["division"];
   workspaceId: string;
   projectId: string | null;
   contactId: string | null;
@@ -2972,6 +2973,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
+    division: row.division,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
     contactId: row.contactId ?? "",

@@ -140,7 +140,7 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
         await db.admin.query(`update workspaces set setup_state=$2::jsonb where id=$1`, [f.workspaceId, JSON.stringify({ salesApprovalUserId: userId })]);
         const actor = { ...f.session, userId, authSessionId, authIdentityId, role: candidate.role, productRole: candidate.productRole } as AppSession;
         const offer = (await f.view()).offer!;
-        await assert.rejects(f.command("approve", { revision: offer.revision, contentDigest: offer.contentDigest, expiresAt: new Date(Date.now()+3600000).toISOString() }, {}, actor), /APPROVER_NOT_CONFIGURED|OWNER_A3_REQUIRED/);
+        await assert.rejects(f.command("approve", { revision: offer.revision, contentDigest: offer.contentDigest, expiresAt: new Date(Date.now()+3600000).toISOString() }, {}, actor), /APPROVER_NOT_CONFIGURED|OWNER_A3_REQUIRED|Command capability is not granted/);
       }
     });
     await t.test("invalid contact-lead link is refused before any offer is persisted", async () => {

@@ -292,6 +292,7 @@ export type ContactTimelineItem = {
 };
 
 export type Lead = {
+  division?: CrmDivision;
   version?: number;
   id: ID;
   workspaceId: ID;

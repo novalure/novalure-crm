@@ -3148,7 +3148,8 @@ async function createProjectRecordInTransaction(input: {
 
   const name = cleanString(input.project.name);
   if (!name) return { persisted: false, reason: "Project name is required" };
-  if (!isCrmDivision(input.project.division)) return { persisted: false, reason: "INVALID_CRM_DIVISION" };
+  const division = input.project.division ?? "REAL_ESTATE_GROWTH";
+  if (!isCrmDivision(division)) return { persisted: false, reason: "INVALID_CRM_DIVISION" };
 
   const customerType = isWorkspaceCustomerType(input.project.customerType)
     ? input.project.customerType
@@ -3197,7 +3198,7 @@ async function createProjectRecordInTransaction(input: {
     [
       input.session.workspaceId,
       name,
-      input.project.division,
+      division,
       cleanString(input.project.type) || "real_estate_project",
       cleanString(input.project.status) || "Aktiv",
       customerType,

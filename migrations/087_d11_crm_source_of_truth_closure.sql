@@ -13,6 +13,7 @@ alter table projects alter column division set default 'REAL_ESTATE_GROWTH';
 alter table projects alter column division set not null;
 
 alter table organizations add column division crm_division;
+alter table leads add column division crm_division;
 alter table deals add column division crm_division;
 alter table crm_pipelines add column division crm_division;
 alter table crm_offers add column division crm_division;
@@ -23,6 +24,9 @@ alter table funnel_conversion_reports add column division crm_division;
 
 update organizations child set division=project.division from projects project
  where child.workspace_id=project.workspace_id and child.project_id=project.id and child.division is null;
+update leads child set division=coalesce(project.division,'REAL_ESTATE_GROWTH') from projects project
+ where child.workspace_id=project.workspace_id and child.project_id=project.id and child.division is null;
+update leads set division='REAL_ESTATE_GROWTH' where division is null;
 update deals child set division=coalesce(project.division,'REAL_ESTATE_GROWTH') from projects project
  where child.workspace_id=project.workspace_id and child.project_id=project.id and child.division is null;
 update deals set division='REAL_ESTATE_GROWTH' where division is null;
@@ -43,6 +47,7 @@ update funnel_conversion_reports child set division=project.division from projec
  where child.workspace_id=project.workspace_id and child.project_id=project.id and child.division is null;
 update funnel_conversion_reports set division='REAL_ESTATE_GROWTH' where division is null;
 
+alter table leads alter column division set not null;
 alter table deals alter column division set not null;
 alter table crm_pipelines alter column division set not null;
 alter table crm_offers alter column division set not null;
@@ -74,7 +79,7 @@ begin
 end $$;
 
 do $$ declare relation text; begin
-  foreach relation in array array['organizations','deals','crm_pipelines','crm_offers','property_sales','crm_conversion_snapshots','pipeline_forecast_snapshots','funnel_conversion_reports'] loop
+  foreach relation in array array['organizations','leads','deals','crm_pipelines','crm_offers','property_sales','crm_conversion_snapshots','pipeline_forecast_snapshots','funnel_conversion_reports'] loop
     execute format('create trigger crm_project_division_binding before insert or update of workspace_id,project_id,division on %I for each row execute function crm_bind_project_division()',relation);
   end loop;
 end $$;
