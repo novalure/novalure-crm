@@ -596,6 +596,8 @@ export type PropertyCostItem = {
 };
 
 export type PropertyMediaItem = {
+  /** Joined asset exists in this workspace; false means a detached legacy row. */
+  assetAvailable?: boolean;
   id: ID;
   workspaceId: ID;
   projectId?: ID;
@@ -620,6 +622,8 @@ export type PropertyMediaItem = {
 };
 
 export type PropertyDocumentItem = {
+  /** Joined asset exists in this workspace; not a provider HEAD guarantee. */
+  assetAvailable?: boolean;
   id: ID;
   workspaceId: ID;
   projectId?: ID;

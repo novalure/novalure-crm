@@ -61,8 +61,12 @@
     { "path": "src/lib/use-property-workflow-capabilities.ts", "fileId": "e831522b3f5058b2d8150f163c3baa8c03dd52cc", "subsystem": "other Property modules" }
   ],
   "sourceRecovery": {
-    "status": "BLOCKED_EXTERNAL",
-    "reason": "The CLI deployment has no Git metadata, no reachable Git ref contains these paths, and the authorized read-only deployment-file connector truncates large file bodies.",
-    "requiredInput": "An untruncated export of deployment dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah or the original source tree, verified against the listed Vercel file IDs."
+    "status": "COMPLETE",
+    "completedAt": "2026-10-05T23:10:26Z",
+    "package": "U1-C04-PRODUCTION-SOURCE-INGEST-dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah.tar",
+    "packageSha256": "973587963a98cee1e9e6133f3c23814304553fd67ac60352d4aad3c87fe210f4",
+    "packageManifest": "config/u1-c04-production-source-package-manifest.json",
+    "filesVerified": 43,
+    "verification": "Every extracted source matched the package size, SHA-1/fileId and SHA-256 before ingest. The committed sources preserve the recovered content; property-text-editor.tsx is Git-normalized from mixed CRLF to LF without a code change."
   }
 }

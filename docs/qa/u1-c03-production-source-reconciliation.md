@@ -1,14 +1,14 @@
 # U1-C03 Production source reconciliation
 
-Status: **BLOCKED_EXTERNAL**. This branch is a recovery and safe-migration package, not a deployable reconciliation candidate. No Production deployment, migration, environment, secret, domain, customer-data or outbound change was made.
+Status: **PARTIAL — SOURCE RECOVERED**. The exact U1-C04 source package has been ingested and locally validated, but this branch is not yet a deployable reconciliation candidate. No Production deployment, migration, environment, secret, domain, customer-data or outbound change was made.
 
 ## Provenance and exact inventory
 
-The U1 input is commit `29ae7d1d452297a6370c0292a62b8e5b2643e27c` (557 tracked files). The current Production deployment is `dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah`, created by CLI at `2026-09-13T11:31:59Z`. It contains no Git commit or branch metadata. The read-only deployment tree exposed 152 source paths and is depth-limited.
+The U1 input is commit `29ae7d1d452297a6370c0292a62b8e5b2643e27c` (557 tracked files). The Production deployment is `dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah`, created by CLI at `2026-09-13T11:31:59Z`. It contains no Git commit or branch metadata. The read-only deployment tree exposed 152 source paths and is depth-limited.
 
 The comparison found exactly 43 visible Production-only files. Their exact paths, Vercel file IDs and subsystem classifications are in [`config/u1-c03-production-source-manifest.json`](../../config/u1-c03-production-source-manifest.json). The inventory covers Property Core Editor (8), Exposé Workspace/PDF (9), Media Gallery (7), Document Review (2), Purchase Costs (4), Relationship Editor (3), other Property modules (8), auth/runtime (1), and CRM core (1).
 
-No reachable Git ref contains the identified source paths. The authorized deployment-file reader truncates large file bodies, so it cannot reconstruct byte-identical sources. A partial or inferred rewrite would risk deleting Production behavior and is deliberately excluded. Recovery requires an untruncated export of that deployment or its original working tree, followed by verification against every recorded Vercel file ID.
+The supplied `U1-C04-PRODUCTION-SOURCE-INGEST-dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah.tar` has SHA-256 `973587963a98cee1e9e6133f3c23814304553fd67ac60352d4aad3c87fe210f4`. Its 43 sources were verified independently against exact size, SHA-1/provider file ID and SHA-256 before ingest. The archive contained only regular relative files under its package directory and no traversal, absolute, link or device entries. The committed sources also match the latest corresponding historical Git content; `property-text-editor.tsx` differs only because Git normalizes the package's mixed line endings to LF. Full ingest evidence is in [`docs/qa/u1-c04-production-source-ingest.md`](./u1-c04-production-source-ingest.md).
 
 ## Migration 087 deployment model
 
@@ -32,7 +32,7 @@ No staged SQL file is discovered by the normal top-level migration runner. Contr
 - **After Contract:** first apply `migrations/staged/087_d11_crm_source_of_truth_contract_rollback.sql`, which removes strict gates and restores the compatible approver lookup without deleting columns or data; then roll the app back. It does not undo business rows or erase audit history.
 - **Restore drill:** restore a sanitized/synthetic dump into PostgreSQL 18, apply through 086, run Expand and batches to zero, validate Contract, exercise tenant/RLS negatives, apply Contract rollback, boot the previous writer, then repeat forward migration. Archive row counts, checksums and exact candidate SHA.
 
-This is a tested migration rollback mechanism, but overall `ROLLBACK_READY` remains conditional until the missing Production source is recovered and the full restore/browser drill runs on the combined candidate.
+This is a tested migration rollback mechanism, but overall `ROLLBACK_READY` remains conditional until the full restore/browser drill runs on the exact combined candidate.
 
 ## Environment parity
 
@@ -58,8 +58,8 @@ Run only against a SHA-bound Preview backed by synthetic tenants and an isolated
 - [ ] Expand → bounded Backfill → Contract → Contract rollback → previous writer → forward migration.
 - [ ] Production build, browser console/network errors, accessibility smoke and all restored Property module regressions.
 
-Manual QA has **not** been executed for U1-C03. It must not start until the combined source tree exists.
+Manual QA has **not** been executed for U1-C03. The source tree now exists, but QA must run only on an exact-SHA Preview with its isolated test data and evidence bundle.
 
 ## Release gate
 
-Owner approval is prohibited while any of these are unresolved: untruncated Production source recovery, all 43 files reconciled and regression-tested, exact Production env names/scopes exported, exact-SHA CI green, SHA-bound Preview QA complete, and PostgreSQL 18 restore/rollback evidence archived.
+Owner approval is prohibited while any of these are unresolved: exact Production env names/scopes exported, exact-SHA CI green, SHA-bound Preview QA complete, Production media-schema preflight passed read-only against the exact candidate, and PostgreSQL 18 restore/rollback evidence archived.

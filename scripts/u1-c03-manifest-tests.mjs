@@ -16,7 +16,9 @@ test("Production source reconciliation manifest is exact and provenance-safe", a
   assert.equal(manifest.productionOnly.length, 43);
   assert.equal(new Set(manifest.productionOnly.map(({ path }) => path)).size, 43);
   assert.equal(new Set(manifest.productionOnly.map(({ fileId }) => fileId)).size, 43);
-  assert.equal(manifest.sourceRecovery.status, "BLOCKED_EXTERNAL");
+  assert.equal(manifest.sourceRecovery.status, "COMPLETE");
+  assert.equal(manifest.sourceRecovery.packageSha256, "973587963a98cee1e9e6133f3c23814304553fd67ac60352d4aad3c87fe210f4");
+  assert.equal(manifest.sourceRecovery.filesVerified, 43);
 });
 
 test("environment manifest separates expected names from unverified remote parity", async () => {
