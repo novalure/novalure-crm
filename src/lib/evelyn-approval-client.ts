@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { getVercelOidcToken } from "@vercel/oidc";
 
-/** Contract source: novalure/evelyn@56e26c2b063319813076a3bc181473f484b1d490.
+/** Contract source: novalure/evelyn@b21dbb4d737df7a7014ec9bc0834a64a6d45d0cb.
  * No owner decisions or business execution are available through this client. */
 export const EVELYN_PREVIEW_URL = "https://evelyn-hrc1fof30-novalure.vercel.app";
 export const EVELYN_PREVIEW_AUDIENCE = "urn:evelyn:preview:approval-bridge:v1:prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I";
