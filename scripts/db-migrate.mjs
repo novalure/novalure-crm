@@ -23,6 +23,7 @@ import {
 } from "./lib/infra-targets.mjs";
 import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
 import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
+import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
@@ -56,6 +57,7 @@ const migrationDependencies = new Map([
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
 const validMedia062Profiles = new Set(["production", "rehearsal"]);
+const validCrm080Profiles = new Set(["production", "rehearsal"]);
 
 function fail(message) {
   console.error(`[ERROR] ${message}`);
@@ -92,6 +94,7 @@ function parseArgs(argv) {
   const planTokenFileArg = args.find((arg) => arg.startsWith("--plan-token-file="));
   const neon061ProfileArg = args.find((arg) => arg.startsWith("--neon-061-profile="));
   const media062ProfileArg = args.find((arg) => arg.startsWith("--media-062-profile="));
+  const crm080ProfileArg = args.find((arg) => arg.startsWith("--crm-080-profile="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
 
   if (!command || !validCommands.has(command)) {
@@ -132,10 +135,21 @@ function parseArgs(argv) {
     fail("--media-062-profile requires the explicit 062 --only target and --allow-manual-cutover");
   }
   if (media062Profile && neon061Profile) fail("Select only one compatibility execution profile.");
+  const crm080Profile = crm080ProfileArg
+    ? crm080ProfileArg.slice("--crm-080-profile=".length).trim()
+    : "";
+  if (crm080Profile && !validCrm080Profiles.has(crm080Profile)) {
+    fail(`--crm-080-profile must be one of: ${[...validCrm080Profiles].join("|")}`);
+  }
+  if (crm080Profile && (!onlyArg || onlyArg.slice("--only=".length).trim() !== "080_crm_command_safety")) {
+    fail("--crm-080-profile requires the explicit 080 --only target");
+  }
+  if ([crm080Profile, media062Profile, neon061Profile].filter(Boolean).length > 1) fail("Select only one compatibility execution profile.");
 
   return {
     allowManualCutover,
     command,
+    crm080Profile,
     media062Profile,
     neon061Profile,
     only: onlyArg ? onlyArg.slice("--only=".length).trim() : "",
@@ -667,7 +681,20 @@ async function applyMigration(client, migration, context = {}) {
   await client.query("begin");
   try {
     await client.query("set local search_path = public");
-    if (migration.version === "062_private_media_contract_cutover" && context.media062Profile) {
+    if (migration.version === "080_crm_command_safety" && context.crm080Profile) {
+      await applyCrm080Compatibility({
+        client,
+        executionContext: { headCommit: context.headCommit, planDigest: context.planToken },
+        executionProfile: context.crm080Profile,
+        sql: migration.content,
+        target: {
+          branchId: context.connectedTarget.branchId,
+          databaseName: context.connectedTarget.databaseName,
+          projectId: context.connectedTarget.projectId,
+          runtimeRole: context.runtimeRole,
+        },
+      });
+    } else if (migration.version === "062_private_media_contract_cutover" && context.media062Profile) {
       await applyMedia062Compatibility({
         client,
         executionContext: { headCommit: context.headCommit, planDigest: context.planToken },
@@ -718,7 +745,7 @@ async function applyMigration(client, migration, context = {}) {
 }
 
 async function main() {
-  const { allowManualCutover, command, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
+  const { allowManualCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
   const target = resolveTarget();
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
@@ -746,8 +773,8 @@ async function main() {
     });
     console.log("Connected database fingerprint verified");
     if (
-      ((neon061Profile === "production" || media062Profile === "production") && target.name !== "prod") ||
-      ((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production")) && target.name !== "test"
+      ((neon061Profile === "production" || media062Profile === "production" || crm080Profile === "production") && target.name !== "prod") ||
+      (((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production") || (crm080Profile && crm080Profile !== "production")) && target.name !== "test")
     ) {
       throw new Error("The selected Neon 061 execution profile does not match MIGRATION_TARGET.");
     }
@@ -756,7 +783,7 @@ async function main() {
         ? "NOVALURE_PRODUCTION_DATABASE_ROLE"
         : "NOVALURE_QA_DATABASE_ROLE"
     ];
-    if ((neon061Profile || media062Profile) && !runtimeRole) {
+    if ((neon061Profile || media062Profile || crm080Profile) && !runtimeRole) {
       throw new Error("The selected compatibility execution profile requires the declared runtime role.");
     }
     await client.query({
@@ -797,7 +824,7 @@ async function main() {
     assertChecksumSafety({ ledgerRows: ledger.rows, migrations, plan });
     const planToken = createMigrationPlanToken({
       connectedTarget,
-      executionProfile: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null),
+      executionProfile: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null),
       headCommit,
       ledgerRows: ledger.rows,
       plan,
@@ -820,6 +847,7 @@ async function main() {
           await applyCommittedMigrationPlan({
             apply: (migration) => applyMigration(client, migration, {
               connectedTarget,
+              crm080Profile,
               headCommit,
               media062Profile,
               neon061Profile,
