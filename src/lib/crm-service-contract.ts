@@ -203,7 +203,8 @@ export async function handleCrmContractRequest(request:Request,options:CrmContra
    const field=r.entity==="Task"?"title":"name";
    if(Object.keys(r.patch).length!==1 || !Object.hasOwn(r.patch,field) || r.approvalReference!==null)return fail("INVALID_CRM_REQUEST",400);
   }
-  const session:AppSession={authenticated:true,userId:principal.actor_user_id,workspaceId:principal.workspace_id,workspaceName:"Synthetic contract",name:"Evelyn service actor",email:"service-identity@example.invalid",role:"agent",productRole:"project_sales_member",permissions:getRolePermissions("agent"),productPermissions:getProductRoleCapabilities("project_sales_member"),source:"database",serviceIdentity:claims?{identityId:claims.identityId,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}:undefined};
+  const productRole=claims?"novalure_operator":"project_sales_member";
+  const session:AppSession={authenticated:true,userId:principal.actor_user_id,workspaceId:principal.workspace_id,workspaceName:"Synthetic contract",name:"Evelyn service actor",email:"service-identity@example.invalid",role:"agent",productRole,permissions:getRolePermissions("agent"),productPermissions:getProductRoleCapabilities(productRole),source:"database",serviceIdentity:claims?{identityId:claims.identityId,role:claims.role,consumer:claims.consumer,environment:claims.environment,jtiHash:claims.jtiHash}:undefined};
   const result=await withCrmRead(session,async(tx,fresh)=>{
    const locked=claims
     ? await tx.queryOne<Principal>("select * from crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)",[claims.identityId,claims.subject,claims.issuer,claims.audience,claims.projectId,claims.ownerId,claims.workspaceId,claims.environment,claims.role])

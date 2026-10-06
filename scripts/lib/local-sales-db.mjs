@@ -95,7 +95,8 @@ export async function applySalesSchema(db, {
       name.includes("_rollback") ||
       name === "062_private_media_contract_cutover.sql" ||
       name === "091_production_runtime_forced_rls_cutover.sql" ||
-      name === "092_crm_production_machine_identity.sql"
+      name === "092_crm_production_machine_identity.sql" ||
+      name === "093_crm_machine_internal_context.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

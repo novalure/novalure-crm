@@ -20,7 +20,7 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { TenantPool } from "../src/lib/db/tenant-client";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
-const now = new Date("2026-10-06T14:00:00.000Z");
+const now = new Date();
 const nowSeconds = Math.floor(now.valueOf() / 1000);
 const taskId = "2fdefb1e-8690-4a84-bf44-485d9858bab4";
 const principalId = "8b3238e9-efea-459f-ac84-a08e2a6ec59b";
@@ -102,10 +102,11 @@ async function call(body: Record<string, unknown>, machineAuth = authOptions()) 
 before(async () => {
   db = await startLocalSalesDb();
   await applySalesSchema(db);
-  await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC: Evelyn machine workspace','managed_by_novalure','{}') on conflict(id) do update set operating_model='managed_by_novalure'", [CRM_MACHINE_WORKSPACE_ID]);
+  await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC: Evelyn machine workspace','novalure_internal','novalure_internal','{}') on conflict(id) do update set operating_model='novalure_internal',customer_type='novalure_internal'", [CRM_MACHINE_WORKSPACE_ID]);
   await db.admin.query("alter table company_profiles enable row level security; alter table company_profiles force row level security; alter table company_profile_versions enable row level security; alter table company_profile_versions force row level security");
   await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
   await db.admin.query(await readFile("migrations/092_crm_production_machine_identity.sql", "utf8"));
+  await db.admin.query(await readFile("migrations/093_crm_machine_internal_context.sql", "utf8"));
   const bootstrap = await db.admin.query("select id from crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)", ["EVELYN_CRM_SERVICE_IDENTITY", CRM_MACHINE_SUBJECT, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_WORKSPACE_ID, CRM_MACHINE_ENVIRONMENT, "Evelyn.Service"]);
   assert.equal(bootstrap.rowCount, 1, "machine principal bootstrap must authenticate exactly once");
 });
@@ -156,12 +157,14 @@ test("machine HTTP denies missing auth, cookies, wrong tenant/resource/action an
 test("machine read/write/read-after-write preserves audit, receipts and idempotency", async () => {
   const read = await call(envelope());
   assert.equal(read.status, 200, JSON.stringify(read.body));
-  const projection = read.body.projection as { sourceId?: unknown };
+  const projection = read.body.projection as { sourceId?: unknown; data?: { resourceVersion?: unknown } };
   assert.equal(projection.sourceId, taskId);
+  assert.equal(Number.isSafeInteger(projection.data?.resourceVersion), true);
+  const versionBefore = Number(projection.data?.resourceVersion);
 
   const idempotencyKey = randomUUID();
   const correlationId = randomUUID();
-  const request = envelope({ operation: "Update", expectedVersion: 1, idempotencyKey, correlationId, patch: { title: "SYNTHETIC: Evelyn workload write" } });
+  const request = envelope({ operation: "Update", expectedVersion: versionBefore, idempotencyKey, correlationId, patch: { title: "SYNTHETIC: Evelyn workload write" } });
   const first = await call(request, authOptions({ jti: randomUUID() }));
   assert.equal(first.status, 200, JSON.stringify(first.body));
   const replay = await call(request, authOptions({ jti: randomUUID() }));
