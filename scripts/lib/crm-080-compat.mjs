@@ -53,6 +53,9 @@ export async function applyCrm080Compatibility({ client, executionContext, execu
     order by lead.id`);
   if (invalid.rows.some((row) => row.repairable !== true)) fail("every legacy qualifying lead must have one active contact owner");
   await client.query(reconcileSql);
+  // Flush deferred FK events before 080 performs ALTER TABLE on the same
+  // relations; the entire sequence still commits or rolls back atomically.
+  await client.query("set constraints all immediate");
   const remaining = await client.query("select count(*)::integer as count from public.leads where status='Qualifizieren' and assigned_to_user_id is null");
   if (remaining.rows[0]?.count !== 0) fail("lead reconciliation did not converge");
   await client.query({ query_timeout: 960_000, text: source });
