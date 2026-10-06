@@ -137,7 +137,7 @@ values(
 
 insert into public.projects(id,workspace_id,name,type,status,data_classification,data_purpose)
 values(
-  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'fbae49e1-2cce-48b7-95cd-4146da343d3a',
   '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
   'SYNTHETIC: Evelyn CRM machine proof',
   'SYNTHETIC: Internal',
@@ -149,7 +149,7 @@ values(
 insert into public.project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)
 values(
   '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
-  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'fbae49e1-2cce-48b7-95cd-4146da343d3a',
   '6122a6da-e7f4-47fa-bc55-e296bb01af62',
   true,
   true
@@ -159,7 +159,7 @@ insert into public.tasks(id,workspace_id,project_id,title,priority,status,versio
 values(
   '2fdefb1e-8690-4a84-bf44-485d9858bab4',
   '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
-  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'fbae49e1-2cce-48b7-95cd-4146da343d3a',
   'SYNTHETIC: Evelyn workload proof',
   'Normal',
   'open',
@@ -211,7 +211,7 @@ values(
   'EVELYN_INTERNAL_CANARY_SYNTHETIC',
   'Task',
   '2fdefb1e-8690-4a84-bf44-485d9858bab4',
-  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'fbae49e1-2cce-48b7-95cd-4146da343d3a',
   'CUSTOMER_TENANT',
   'CONFIDENTIAL',
   'BUSINESS',
