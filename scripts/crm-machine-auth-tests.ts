@@ -22,10 +22,8 @@ import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 
 const now = new Date("2026-10-06T14:00:00.000Z");
 const nowSeconds = Math.floor(now.valueOf() / 1000);
-const projectId = "f1f039d0-b2a5-4c60-8d2c-97be0dcddedd";
-const actorId = randomUUID();
-const taskId = randomUUID();
-const principalId = randomUUID();
+const taskId = "2fdefb1e-8690-4a84-bf44-485d9858bab4";
+const principalId = "8b3238e9-efea-459f-ac84-a08e2a6ec59b";
 const keyId = "vercel-test-key";
 const runtimeEnv = {
   CRM_MACHINE_AUTH_ENABLED: "1",
@@ -104,17 +102,10 @@ async function call(body: Record<string, unknown>, machineAuth = authOptions()) 
 before(async () => {
   db = await startLocalSalesDb();
   await applySalesSchema(db);
+  await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC: Evelyn machine workspace','managed_by_novalure','{}') on conflict(id) do update set operating_model='managed_by_novalure'", [CRM_MACHINE_WORKSPACE_ID]);
   await db.admin.query("alter table company_profiles enable row level security; alter table company_profiles force row level security; alter table company_profile_versions enable row level security; alter table company_profile_versions force row level security");
   await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
   await db.admin.query(await readFile("migrations/092_crm_production_machine_identity.sql", "utf8"));
-  await db.admin.query("insert into workspaces(id,name,operating_model,setup_state) values($1,'SYNTHETIC: Evelyn machine workspace','managed_by_novalure','{}') on conflict(id) do update set operating_model='managed_by_novalure'", [CRM_MACHINE_WORKSPACE_ID]);
-  await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC: Evelyn service actor','service-actor@example.invalid','agent','project_sales_member','active')", [actorId, CRM_MACHINE_WORKSPACE_ID]);
-  await db.admin.query("insert into projects(id,workspace_id,name,type,status,data_classification,data_purpose) values($1,$2,'SYNTHETIC: Evelyn integration project','SYNTHETIC: Internal','Aktiv','CUSTOMER_TENANT','crm_sales') on conflict(id) do update set data_classification='CUSTOMER_TENANT',data_purpose='crm_sales'", [projectId, CRM_MACHINE_WORKSPACE_ID]);
-  await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)", [CRM_MACHINE_WORKSPACE_ID, projectId, actorId]);
-  await db.admin.query("insert into tasks(id,workspace_id,project_id,title,priority,status,version,data_classification,data_purpose) values($1,$2,$3,'SYNTHETIC: Evelyn machine proof','Normal','open',1,'CUSTOMER_TENANT','crm_sales')", [taskId, CRM_MACHINE_WORKSPACE_ID, projectId]);
-  await db.admin.query(`insert into crm_service_principals(id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,data_context,data_classification,purpose,environment,synthetic,expires_at,identity_id,service_subject,consumer,service_role,auth_type,issuer,audience,oidc_project_id,oidc_owner_id,state,not_before)
-    values($1,$2,$3,null,$12,'evelyn',$4,'CUSTOMER_TENANT','CONFIDENTIAL','OPERATIONS','production',true,$5,'EVELYN_CRM_SERVICE_IDENTITY',$6,'EVELYN','Evelyn.Service','VERCEL_OIDC',$7,$8,$9,$10,'ACTIVE',$11)`, [principalId, CRM_MACHINE_WORKSPACE_ID, actorId, ["crm.tasks.read", "crm.tasks.write"], new Date(Date.now() + 86_400_000), CRM_MACHINE_SUBJECT, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, new Date(Date.now() - 60_000), CRM_MACHINE_WORKSPACE_ID]);
-  await db.admin.query("insert into crm_service_resource_bindings(principal_id,workspace_id,resource_alias,entity,source_id,project_id,data_context,data_classification,domain,purpose) values($1,$2,$3,'Task',$4,$5,'CUSTOMER_TENANT','CONFIDENTIAL','BUSINESS','OPERATIONS')", [principalId, CRM_MACHINE_WORKSPACE_ID, CRM_MACHINE_RESOURCE, taskId, projectId]);
   const bootstrap = await db.admin.query("select id from crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)", ["EVELYN_CRM_SERVICE_IDENTITY", CRM_MACHINE_SUBJECT, CRM_MACHINE_ISSUER, CRM_MACHINE_AUDIENCE, CRM_MACHINE_PROJECT_ID, CRM_MACHINE_OWNER_ID, CRM_MACHINE_WORKSPACE_ID, CRM_MACHINE_ENVIRONMENT, "Evelyn.Service"]);
   assert.equal(bootstrap.rowCount, 1, "machine principal bootstrap must authenticate exactly once");
 });

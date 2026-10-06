@@ -122,8 +122,113 @@ end $function$;
 revoke all on function public.crm_claim_machine_request(uuid,text,uuid,text,text,uuid,text,text,uuid,timestamptz) from public,novalure_app;
 grant execute on function public.crm_claim_machine_request(uuid,text,uuid,text,text,uuid,text,text,uuid,timestamptz) to novalure_tenant_app;
 
-do $verify$ declare relation_count integer; forced_count integer; begin
+-- One exact synthetic workload binding. No customer record and no reusable
+-- credential is created; Vercel signs every short-lived request token.
+insert into public.workspace_users(id,workspace_id,name,email,role,product_role,status)
+values(
+  '6122a6da-e7f4-47fa-bc55-e296bb01af62',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'SYNTHETIC: Evelyn CRM service actor',
+  'evelyn-crm-service@service.invalid',
+  'agent',
+  'project_sales_member',
+  'active'
+);
+
+insert into public.projects(id,workspace_id,name,type,status,data_classification,data_purpose)
+values(
+  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'SYNTHETIC: Evelyn CRM machine proof',
+  'SYNTHETIC: Internal',
+  'Aktiv',
+  'CUSTOMER_TENANT',
+  'crm_sales'
+);
+
+insert into public.project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)
+values(
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  '6122a6da-e7f4-47fa-bc55-e296bb01af62',
+  true,
+  true
+);
+
+insert into public.tasks(id,workspace_id,project_id,title,priority,status,version,data_classification,data_purpose)
+values(
+  '2fdefb1e-8690-4a84-bf44-485d9858bab4',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'SYNTHETIC: Evelyn workload proof',
+  'Normal',
+  'open',
+  1,
+  'CUSTOMER_TENANT',
+  'crm_sales'
+);
+
+insert into public.crm_service_principals(
+  id,workspace_id,actor_user_id,token_hash,tenant_alias,agent_id,scopes,
+  data_context,data_classification,purpose,environment,synthetic,expires_at,
+  identity_id,service_subject,consumer,service_role,auth_type,issuer,audience,
+  oidc_project_id,oidc_owner_id,state,not_before
+)
+values(
+  '8b3238e9-efea-459f-ac84-a08e2a6ec59b',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  '6122a6da-e7f4-47fa-bc55-e296bb01af62',
+  null,
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'evelyn',
+  array['crm.tasks.read','crm.tasks.write']::text[],
+  'CUSTOMER_TENANT',
+  'CONFIDENTIAL',
+  'OPERATIONS',
+  'production',
+  true,
+  '2027-10-06T00:00:00Z',
+  'EVELYN_CRM_SERVICE_IDENTITY',
+  'owner:novalure:project:evelyn:environment:production',
+  'EVELYN',
+  'Evelyn.Service',
+  'VERCEL_OIDC',
+  'https://oidc.vercel.com/novalure',
+  'urn:novalure:crm:production',
+  'prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I',
+  'team_sjD78IkSicXJK6TAOR1JC7Wv',
+  'ACTIVE',
+  clock_timestamp()-interval '1 minute'
+);
+
+insert into public.crm_service_resource_bindings(
+  principal_id,workspace_id,resource_alias,entity,source_id,project_id,
+  data_context,data_classification,domain,purpose
+)
+values(
+  '8b3238e9-efea-459f-ac84-a08e2a6ec59b',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'EVELYN_INTERNAL_CANARY_SYNTHETIC',
+  'Task',
+  '2fdefb1e-8690-4a84-bf44-485d9858bab4',
+  'f1f039d0-b2a5-4c60-8d2c-97be0dcddedd',
+  'CUSTOMER_TENANT',
+  'CONFIDENTIAL',
+  'BUSINESS',
+  'OPERATIONS'
+);
+
+do $verify$ declare relation_count integer; forced_count integer; binding_count integer; begin
   select count(*),count(*) filter(where c.relforcerowsecurity) into relation_count,forced_count
   from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity;
   if relation_count<>68 or forced_count<>68 then raise exception using errcode='55000',message=format('092 requires and preserves exact forced RLS inventory 68/68, observed %s/%s',forced_count,relation_count); end if;
+  select count(*) into binding_count
+  from public.crm_service_principals principal
+  join public.crm_service_resource_bindings binding on binding.principal_id=principal.id and binding.workspace_id=principal.workspace_id
+  where principal.id='8b3238e9-efea-459f-ac84-a08e2a6ec59b'
+    and principal.identity_id='EVELYN_CRM_SERVICE_IDENTITY'
+    and principal.workspace_id='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'
+    and binding.resource_alias='EVELYN_INTERNAL_CANARY_SYNTHETIC'
+    and binding.source_id='2fdefb1e-8690-4a84-bf44-485d9858bab4';
+  if binding_count<>1 then raise exception using errcode='55000',message='092 exact Evelyn machine binding verification failed'; end if;
 end $verify$;
