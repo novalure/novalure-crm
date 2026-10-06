@@ -1,10 +1,10 @@
 {
   "contract": "CRM-U1-C06",
-  "status": "READY_FOR_PRODUCTION_CUTOVER",
-  "recordedAt": "2026-10-06T12:41:00Z",
+  "status": "CLOSED_LIVE_VERIFIED",
+  "recordedAt": "2026-10-06T13:25:27Z",
   "repository": "novalure/novalure-crm",
   "branch": "codex/u1-c06-production-rls-cutover",
-  "testedCommit": "50eb3025dbb2217141f56c3e6885661d64ecc4c6",
+  "testedCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
   "productionBaseline": {
     "projectId": "misty-cloud-70835427",
     "branchId": "br-snowy-fog-aldx77v8",
@@ -91,7 +91,7 @@
       "versionHttp": 200
     },
     "tests": {
-      "unit": "233/233 PASS",
+      "unit": "234/234 PASS",
       "sales": "93/93 PASS",
       "salesFinal": "50/50 PASS",
       "d11": "87/87 PASS",
@@ -115,6 +115,76 @@
     "preservedLedgerRows": 48,
     "preservedForcedRlsRelations": 68,
     "expiresAt": "2026-10-13T18:49:59Z"
+  },
+  "productionCutover": {
+    "result": "PASS",
+    "migrationCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
+    "cutoverDeploymentId": "dpl_5j2akNfLibmEVkboK57E9VaqZtoh",
+    "deploymentState": "READY",
+    "deploymentTarget": "production",
+    "platformProvenanceCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
+    "preCutoverBackup": {
+      "branchId": "br-billowing-tree-almi4j0c",
+      "branchName": "crm-u1-c06-production-backup-20261006T124926Z",
+      "state": "ready",
+      "expiresAt": "2026-10-20T12:49:26Z"
+    },
+    "database": {
+      "ledgerRows": 48,
+      "pendingMigrations": 0,
+      "d11BackfillBatches": 1,
+      "d11Remaining": 0,
+      "d11Contract": "PASS",
+      "rlsRelations": 68,
+      "forcedRlsRelations": 68,
+      "runtimeDirectTableAclEntriesOnForcedTables": 0,
+      "runtimeDirectColumnAclEntriesOnForcedTables": 0
+    },
+    "runtimeIdentity": {
+      "currentUser": "novalure_app",
+      "sessionUser": "novalure_app",
+      "database": "neondb",
+      "login": true,
+      "inherit": false,
+      "superuser": false,
+      "bypassRls": false,
+      "createDb": false,
+      "createRole": false,
+      "replication": false,
+      "tenantRoleMembership": true
+    },
+    "companyProfiles": {
+      "directPrivilege": false,
+      "directQueryDenied": true,
+      "workspaceOwnerWriteAllowed": true,
+      "crmAccountWriteAllowed": true,
+      "platformProjectionRows": 1,
+      "platformWriteAllowed": true
+    },
+    "tenantProof": {
+      "unsetProjects": 0,
+      "unsetContacts": 0,
+      "unsetDeals": 0,
+      "unsetCompanyProfiles": 0,
+      "ownProjects": 5,
+      "ownContacts": 6,
+      "ownLeads": 5,
+      "ownDeals": 5,
+      "ownPipelines": 5,
+      "ownMediaAssets": 2,
+      "ownNotes": 6,
+      "foreignProjects": 0,
+      "foreignCompanyProfiles": 0
+    },
+    "application": {
+      "rootHttp": 200,
+      "loginHttp": 200,
+      "healthHttp": 200,
+      "versionHttp": 200,
+      "protectedRoutesFailClosed": true,
+      "recentRuntimeErrorLogs": 0
+    },
+    "rollbackRequired": false
   },
   "critical": 0,
   "high": 0,
