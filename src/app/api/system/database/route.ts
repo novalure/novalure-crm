@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/auth/session";
 import { getBuildMetadata } from "@/lib/build-metadata";
@@ -57,21 +57,9 @@ function canViewSystemDiagnostics(session: Awaited<ReturnType<typeof getRequestS
   return session.productRole === "platform_admin" || hasProductCapability(session.productRole, "novalure:internal");
 }
 
-function hasOneTimeProductionProofAuthorization(request: Request) {
-  const expected = process.env.NOVALURE_DATABASE_PROOF_TOKEN?.trim();
-  const authorization = request.headers.get("authorization");
-  if (!expected || expected.length < 32 || !authorization?.startsWith("Bearer ")) return false;
-
-  const supplied = authorization.slice("Bearer ".length);
-  const expectedBytes = Buffer.from(expected);
-  const suppliedBytes = Buffer.from(supplied);
-  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
-}
-
 export async function GET(request: Request) {
-  const oneTimeProofAuthorized = hasOneTimeProductionProofAuthorization(request);
-  const session = oneTimeProofAuthorized ? null : await getRequestSession(request);
-  if (!oneTimeProofAuthorized && !canViewSystemDiagnostics(session)) {
+  const session = await getRequestSession(request);
+  if (!canViewSystemDiagnostics(session)) {
     return NextResponse.json(
       { error: "not_found" },
       {

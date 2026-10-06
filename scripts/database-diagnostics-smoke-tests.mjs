@@ -14,11 +14,7 @@ test("database diagnostics read the migration ledger dynamically and redact fail
   ]);
 
   assert.ok(source.indexOf("getRequestSession(request)") < source.indexOf("getDatabaseStatus()"));
-  assert.match(source, /if \(!oneTimeProofAuthorized && !canViewSystemDiagnostics\(session\)\)/);
-  assert.match(source, /NOVALURE_DATABASE_PROOF_TOKEN/);
-  assert.match(source, /expected\.length < 32/);
-  assert.match(source, /timingSafeEqual\(expectedBytes, suppliedBytes\)/);
-  assert.match(source, /oneTimeProofAuthorized \? null : await getRequestSession\(request\)/);
+  assert.match(source, /if \(!canViewSystemDiagnostics\(session\)\)/);
   assert.match(source, /\{ error: "not_found" \}/);
   assert.match(source, /status: 404/);
   assert.doesNotMatch(source, /isProductionDiagnosticsRestricted|NOVALURE_RESTRICT_SYSTEM_DIAGNOSTICS/);
