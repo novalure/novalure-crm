@@ -460,6 +460,7 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"061_validate_and_activate_tenant_rls_pilot"/);
   assert.match(runner, /"062_private_media_contract_cutover"/);
   assert.match(runner, /"065_notification_guard_search_path_hardening"/);
+  assert.match(runner, /"091_production_runtime_forced_rls_cutover"/);
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 

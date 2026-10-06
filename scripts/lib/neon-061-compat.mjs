@@ -5,6 +5,7 @@ import path from 'node:path';
 export const neon061SourceChecksum = '0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23';
 export const neon061ProfileId = 'neon-provider-creator-admin-only-061-v1';
 export const neon061QaTarget = Object.freeze({ projectId: 'weathered-term-98273025', branchId: 'br-spring-snow-alupo8u4', databaseName: 'qa_g24_pr63_20260917_r3', runtimeRole: 'g24_qa_20260917_r3' });
+export const neon061ProductionTarget = Object.freeze({ projectId: 'misty-cloud-70835427', branchId: 'br-snowy-fog-aldx77v8', databaseName: 'neondb', runtimeRole: 'novalure_app' });
 const predecessorChecksum = 'b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf';
 const version = '061_validate_and_activate_tenant_rls_pilot';
 const pilot = ['audit_logs', 'contacts', 'deals', 'leads', 'projects'];
@@ -39,13 +40,22 @@ async function catalog(client, runtimeRole) {
   return { identity, roles, edges, owners, ownership, access };
 }
 
-async function attestTarget(client, target, localTest, evidence) {
+async function attestTarget(client, target, localTest, evidence, executionProfile) {
   if (!target || Object.keys(target).sort().join(',') !== 'branchId,databaseName,projectId,runtimeRole') fail('exact explicit target required');
   name(target.runtimeRole); const identity = evidence.identity;
   if (identity.serverVersionNum < 170000) fail('PostgreSQL 17 or later required');
   if (identity.databaseName !== target.databaseName || identity.currentUser !== identity.sessionUser) fail('database or session identity mismatch');
   if (!localTest) {
-    if (Object.keys(neon061QaTarget).some(key => target[key] !== neon061QaTarget[key]) || identity.projectId !== target.projectId || identity.branchId !== target.branchId || identity.currentUser !== 'neondb_owner') fail('pinned Neon QA fingerprint mismatch');
+    if (identity.projectId !== target.projectId || identity.branchId !== target.branchId || identity.currentUser !== 'neondb_owner') fail('connected Neon fingerprint mismatch');
+    if (executionProfile === 'production') {
+      if (Object.keys(neon061ProductionTarget).some(key => target[key] !== neon061ProductionTarget[key])) fail('pinned Neon Production fingerprint mismatch');
+      return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'production:' + neon061ProfileId };
+    }
+    if (executionProfile === 'rehearsal') {
+      if (target.projectId !== neon061ProductionTarget.projectId || target.branchId === neon061ProductionTarget.branchId || target.databaseName !== neon061ProductionTarget.databaseName || target.runtimeRole !== neon061ProductionTarget.runtimeRole) fail('pinned Neon Production-rehearsal fingerprint mismatch');
+      return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'production-rehearsal:' + neon061ProfileId };
+    }
+    if (executionProfile !== 'qa' || Object.keys(neon061QaTarget).some(key => target[key] !== neon061QaTarget[key])) fail('pinned Neon QA fingerprint mismatch');
     return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: neon061ProfileId };
   }
   // A caller flag alone cannot opt a remote server into the local profile.
@@ -65,7 +75,7 @@ function attestRoles(evidence, target, profile) {
   const group = roles.find(role => role.rolname === 'novalure_tenant_app'), creator = roles.find(role => role.rolname === profile.ownerRole), grantor = roles.find(role => role.rolname === profile.grantorRole), runtime = roles.find(role => role.rolname === target.runtimeRole);
   if (!group || group.rolcanlogin || elevated(group)) fail('safe tenant group missing');
   if (!creator || !grantor || creator.oid !== identity.databaseOwner || owners.length !== 5 || owners.some(row => row.owner !== creator.oid)) fail('creator must own database and exactly the five pilot tables');
-  if (!runtime || !runtime.rolcanlogin || !runtime.rolinherit || elevated(runtime) || ownership.includes(runtime.oid)) fail('runtime must be a safe non-owner LOGIN INHERIT role');
+  if (!runtime || !runtime.rolcanlogin || elevated(runtime) || ownership.includes(runtime.oid)) fail('runtime must be a safe non-owner LOGIN role');
   const creatorEdges = edges.filter(edge => edge.roleid === group.oid && edge.member === creator.oid);
   if (creatorEdges.length !== 1) fail('exactly one provider creator edge required');
   const ignored = creatorEdges[0];
@@ -89,7 +99,7 @@ function attestRoles(evidence, target, profile) {
 }
 
 /** Caller MUST own BEGIN, original-source ledger insert, and COMMIT/ROLLBACK. No provider-role SQL is executed. */
-export async function applyNeon061Compatibility({ client, sql, target, localTest, executionContext }) {
+export async function applyNeon061Compatibility({ client, sql, target, localTest, executionContext, executionProfile = 'qa' }) {
   if (!executionContext || Object.keys(executionContext).sort().join(',') !== 'headCommit,planDigest' || !/^[a-f0-9]{40}$/.test(executionContext.headCommit) || !/^[a-f0-9]{64}$/.test(executionContext.planDigest)) fail('exact runner commit and plan digest required');
   const source = normalize(sql); if (hash(source) !== neon061SourceChecksum) fail('historical source checksum mismatch');
   await client.query('savepoint g24_neon_061_compat'); // PostgreSQL rejects calls outside a transaction.
@@ -100,7 +110,7 @@ export async function applyNeon061Compatibility({ client, sql, target, localTest
     const predecessors = ledger.filter(row => /^0*60(?:_|$)/.test(row.version));
     if (predecessors.length !== 1 || predecessors[0].checksum !== predecessorChecksum) fail('exact checksummed 060 predecessor required');
     const before = await catalog(client, target?.runtimeRole);
-    const profile = await attestTarget(client, target, localTest, before);
+    const profile = await attestTarget(client, target, localTest, before, executionProfile);
     const roleEvidence = attestRoles(before, target, profile);
     const prepared = renderNeon061Compatibility(source, profile);
     await client.query(prepared.executedSql);
