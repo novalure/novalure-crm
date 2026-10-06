@@ -573,7 +573,7 @@ export function PropertyCommandCenter({
           position: selectedMedia.length,
           status: "draft",
           title: file.name,
-          visibility: "public",
+          visibility: "private",
         },
         operation: "attach_media",
         projectId: selectedAsset.projectId,

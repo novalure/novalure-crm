@@ -94,3 +94,12 @@ test("restored property audit and Exposé company data stay least-privilege", as
   assert.match(exposeRepository, /crm_property_expose_company_profile\(p\.workspace_id\)/);
   assert.doesNotMatch(exposeRepository, /from company_profiles cp/);
 });
+
+test("command-center uploads stay private until an explicit publication workflow", async () => {
+  const commandCenter = await source("src/components/property-command-center.tsx");
+  const interactions = await source("src/lib/property-interactions.ts");
+  assert.match(commandCenter, /operation: "attach_media"/);
+  assert.match(commandCenter, /visibility: "private"/);
+  assert.doesNotMatch(commandCenter, /visibility: "public"/);
+  assert.match(interactions, /visibility: "private"/);
+});
