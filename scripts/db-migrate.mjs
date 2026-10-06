@@ -16,7 +16,7 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { Pool } from "@neondatabase/serverless";
+import pg from "pg";
 import {
   assertConnectedDatabaseTarget,
   assertDatabaseTarget,
@@ -24,6 +24,8 @@ import {
 import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
 import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
 import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
+
+const { Pool } = pg;
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
