@@ -48,6 +48,13 @@ export type AppSession = {
   productRole: ProductRole;
   productPermissions: ProductCapability[];
   source: "cookie" | "headers" | "database" | "demo";
+  serviceIdentity?: Readonly<{
+    identityId: string;
+    role: "Evelyn.Service";
+    consumer: "EVELYN";
+    environment: "PRODUCTION";
+    jtiHash: string;
+  }>;
   authIdentityId?: string;
   authSessionId?: string;
   mfaEnabledAt?: string | Date | null;
@@ -139,7 +146,7 @@ export function resolveWorkspaceMembershipAccess(input: {
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   // A CRM service credential is valid only at its dedicated contract endpoint.
   // It must never combine with cookies or optional development identity headers.
-  if (/^Bearer\s+qa-crm-v1\./i.test(request.headers.get("authorization") ?? "")) return null;
+  if (/^Bearer\s+(?:qa-crm-v1\.|eyJ[A-Za-z0-9_-]{20,}\.)/i.test(request.headers.get("authorization") ?? "")) return null;
   return getSessionFromHeaders(request.headers);
 }
 
