@@ -122,3 +122,9 @@ test("property media deletion uses the lifecycle protocol and globally complete 
   assert.match(migration, /grant execute on function crm_media_reference_counts\(uuid\) to novalure_tenant_app/);
   assert.doesNotMatch(migration, /grant select on table (property_media|property_documents|bot_document_sends|media_asset_shares)/i);
 });
+
+test("property media mutations reuse the active forced-RLS tenant transaction", async () => {
+  const mutation = await source("src/lib/db/property-media-mutation.ts");
+  assert.match(mutation, /currentTenantTransaction\(\)/);
+  assert.match(mutation, /active\.transaction\.queryOne[\s\S]*for update[\s\S]*active\.transaction\.queryOne<Row>\(input\.query/);
+});
