@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
+import { withCrmRead } from "@/lib/crm-command";
 import {
   listWorkspaceMedia,
   maxMediaUploadBytes,
@@ -16,7 +17,8 @@ export async function GET(request: Request) {
   const auth = await requirePermission(request, "crm:read");
   if (!auth.ok) return auth.response;
 
-  const media = await listWorkspaceMedia(auth.session.workspaceId);
+  const media = await withCrmRead(auth.session, (_tx, session) =>
+    listWorkspaceMedia(session.workspaceId));
   return NextResponse.json(
     { assets: media.assets.map(serializeMediaAsset), quota: media.quota },
     { headers: privateJsonHeaders },
@@ -35,9 +37,9 @@ export async function POST(request: Request) {
     }
 
     try {
-      const changedAsset = body.action === "publish"
-        ? await publishWorkspaceMedia(assetId, auth.session.workspaceId)
-        : await revokeWorkspaceMediaPublication(assetId, auth.session.workspaceId);
+      const changedAsset = await withCrmRead(auth.session, (_tx, session) => body.action === "publish"
+        ? publishWorkspaceMedia(assetId, session.workspaceId)
+        : revokeWorkspaceMediaPublication(assetId, session.workspaceId));
       if (!changedAsset) {
         return NextResponse.json({ error: "Media asset not found." }, { headers: privateJsonHeaders, status: 404 });
       }
@@ -70,17 +72,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const asset = await saveWorkspaceFile({
-      alt: stringField(formData.get("alt")),
-      file,
-      folder: stringField(formData.get("folder")),
-      name: stringField(formData.get("name")),
-      workspaceId: auth.session.workspaceId,
+    const { asset, media, publishedAsset } = await withCrmRead(auth.session, async (_tx, session) => {
+      const asset = await saveWorkspaceFile({
+        alt: stringField(formData.get("alt")),
+        file,
+        folder: stringField(formData.get("folder")),
+        name: stringField(formData.get("name")),
+        workspaceId: session.workspaceId,
+      });
+      const publishedAsset = isTruthy(formData.get("public"))
+        ? await publishWorkspaceMedia(asset.id, session.workspaceId)
+        : null;
+      const media = await listWorkspaceMedia(session.workspaceId);
+      return { asset, media, publishedAsset };
     });
-    const publishedAsset = isTruthy(formData.get("public"))
-      ? await publishWorkspaceMedia(asset.id, auth.session.workspaceId)
-      : null;
-    const media = await listWorkspaceMedia(auth.session.workspaceId);
     return NextResponse.json(
       { asset: serializeMediaAsset(publishedAsset ?? asset), quota: media.quota },
       { headers: privateJsonHeaders, status: 201 },

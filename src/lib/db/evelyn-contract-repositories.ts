@@ -35,6 +35,8 @@ function target(options: EvelynContractOptions): Target {
 async function guard(tx: TenantTransaction, session: AppSession, projectId: string, options: EvelynContractOptions) {
   const configured = target(options);
   if (session.workspaceId !== configured.workspaceId || projectId !== configured.projectId) failure("EVELYN_QA_SCOPE_DENIED", 403);
+  const owner = await tx.queryOne<{ allowed: boolean }>("select exists(select 1 from workspace_users where workspace_id=$1::uuid and id=$2::uuid and status='active' and role='owner') as allowed", [session.workspaceId, session.userId]);
+  if (!owner?.allowed) failure("OWNER_A3_REQUIRED", 403);
   await assertProjectGrant(tx, session, projectId, true);
   if (options.testOnly && !(await tx.queryOne<{local: boolean}>("select inet_server_addr() in ('127.0.0.1'::inet,'::1'::inet) as local"))?.local) failure("LOCAL_TEST_DATABASE_REQUIRED", 403);
   const allowed = await tx.queryOne<{allowed:boolean}>("select crm_lock_evelyn_preview_target($1::uuid,$2::uuid,$3::uuid) as allowed", [session.workspaceId, projectId, configured.tenantId]);
@@ -55,6 +57,9 @@ async function source(tx: TenantTransaction, session: AppSession, offerId: strin
   return row;
 }
 async function read(tx: TenantTransaction, session: AppSession, input: EvelynContractActionInput, options: EvelynContractOptions, receiptOnly = false): Promise<Snapshot> {
+  // `session` is freshly reloaded from workspace_users by withCrmRead. Reject
+  // non-Owners before RLS can collapse the denial into a not-found response.
+  if (session.role !== "owner") failure("OWNER_A3_REQUIRED", 403);
   const row = await tx.queryOne<Snapshot>(`select a.id,a.project_id as "projectId",a.offer_id as "offerId",a.offer_version as "offerVersion",a.offer_revision as "offerRevision",a.source_approval_id as "sourceApprovalId",a.source_content_digest as "sourceContentDigest",a.correlation_id as "correlationId",a.version as "currentVersion",r.version,r.action,r.action_hash as "actionHash",p.approval_reference as "approvalReference"
     from crm_evelyn_contract_actions a join crm_evelyn_contract_revisions r on r.workspace_id=a.workspace_id and r.action_id=a.id and r.version=$3
     left join crm_evelyn_contract_approvals p on p.workspace_id=a.workspace_id and p.action_id=a.id and p.version=r.version
@@ -147,14 +152,14 @@ export async function executeEvelynContractAction(session:AppSession,input:Evely
   const preflight=await withCrmRead(session,(tx,fresh)=>read(tx,fresh,input,options),options), execution=command("evelyn.contract.execute",input,preflight);
   const prior=await reconcileCrmCommand(session,execution,options);
   if(prior.status==="COMMITTED")return {data:prior.data,replayed:true,auditReference:prior.auditReference,commandId:prior.commandId};
-  const {snapshot,approvalReference}=await verified(session,input,"EXECUTE",options);
+  const {snapshot,result,approvalReference}=await verified(session,input,"EXECUTE",options);
   return executeCrmCommand(session,execution,async(tx,ctx)=>{
     const current=await read(tx,ctx.session,input,options);
     if(current.actionHash!==snapshot.actionHash||current.approvalReference!==approvalReference)failure("ACTION_MISMATCH");
     if(await tx.queryOne("select id from crm_evelyn_contract_executions where workspace_id=$1::uuid and action_id=$2::uuid",[session.workspaceId,current.id]))failure("EVELYN_ALREADY_EXECUTED");
-    const effect=await tx.queryOne<{id:string}>("insert into crm_evelyn_contract_executions(workspace_id,project_id,action_id,version,executed_by,approval_reference,correlation_id) values($1::uuid,$2::uuid,$3::uuid,$4,$5::uuid,$6::uuid,$7::uuid) returning id",[session.workspaceId,current.projectId,current.id,current.version,session.userId,approvalReference,current.correlationId]);
+    const effect=await tx.queryOne<{id:string}>("insert into crm_evelyn_contract_executions(workspace_id,project_id,action_id,version,executed_by,approval_reference,correlation_id,owner_authority_digest) values($1::uuid,$2::uuid,$3::uuid,$4,$5::uuid,$6::uuid,$7::uuid,$8) returning id",[session.workspaceId,current.projectId,current.id,current.version,session.userId,approvalReference,current.correlationId,result.ownerAuthority.approvalBindingDigest]);
     await record(tx,ctx.session,current,"EXECUTE","VALID",approvalReference);
-    return {id:effect!.id,actionId:current.id,actionVersion:current.version,approvalReference,correlationId:current.correlationId,effect:"SYNTHETIC_CONTRACT_SEND",externalEffect:false,contractDelivered:false};
+    return {id:effect!.id,actionId:current.id,actionVersion:current.version,approvalReference,ownerAuthorityDigest:result.ownerAuthority.approvalBindingDigest,correlationId:current.correlationId,effect:"SYNTHETIC_CONTRACT_SEND",externalEffect:false,contractDelivered:false};
   },options);
 }
 export async function getEvelynContractAction(session: AppSession, actionId: string, options: EvelynContractOptions = {}) {

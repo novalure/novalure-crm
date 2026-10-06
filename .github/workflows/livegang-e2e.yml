@@ -67,6 +67,15 @@ jobs:
       - name: G08 Evelyn contract, fail-closed consumer and Preview boundaries
         run: npm run test:g08
 
+      - name: D11 staged Expand, Backfill, Contract and rollback
+        run: npm run test:d11:migrations
+
+      - name: Reproducible build metadata endpoint
+        run: npm run test:build-metadata
+
+      - name: U1-C03 reconciliation and environment manifests
+        run: npm run test:u1-c03:manifests
+
       - name: Protected preview access contract regression
         run: npm run test:protected-preview-access
 

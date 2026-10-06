@@ -171,7 +171,12 @@ try{
   await section.getByLabel('Betreff',{exact:true}).fill('SYNTHETIC browser offer');
   await section.getByLabel('Leistung',{exact:true}).fill('Synthetic project setup');
   await section.getByLabel('Einzelpreis (€)',{exact:true}).fill('9900');
-  await section.getByLabel('Leistungsumfang und Konditionen').fill('SYNTHETIC approved scope for local browser QA. No contract or real delivery.');
+  await section.getByLabel('Leistungsumfang',{exact:true}).fill('SYNTHETIC approved scope for local browser QA. No contract or real delivery.');
+  await section.getByLabel('Zahlungsplan',{exact:true}).fill('SYNTHETIC staged payment plan for local browser QA. No payment authorization.');
+  await section.getByLabel('Rabatte',{exact:true}).fill('Keine Rabatte.');
+  await section.getByLabel('Sonderbedingungen',{exact:true}).fill('Keine Sonderbedingungen.');
+  await section.getByLabel('Risiko- und Compliance-Hinweise',{exact:true}).fill('SYNTHETIC local QA record. No real customer data or external commitment.');
+  await section.getByLabel('Weitere Konditionen',{exact:true}).fill('SYNTHETIC browser QA conditions only. No contract or real delivery.');
   await section.getByRole('button',{name:'Angebotsentwurf anlegen',exact:true}).click();await expect(section.getByText('Entwurf',{exact:true})).toBeVisible();
  });
  await step('Flow A approval, manual delivery evidence, follow-up and customer acceptance through UI',async()=>{
