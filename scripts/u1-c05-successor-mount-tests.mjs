@@ -80,3 +80,17 @@ test("private media workflows use tenant transactions and an RLS-scoped runtime 
   assert.match(migration, /grant select, insert, update, delete on table media_assets to novalure_tenant_app/);
   assert.doesNotMatch(migration, /disable row level security|no force/);
 });
+
+test("restored property audit and Exposé company data stay least-privilege", async () => {
+  const migration = await source("migrations/089_property_surface_runtime_access.sql");
+  const exposeRepository = await source("src/lib/db/property-expose-repositories.ts");
+  assert.match(migration, /alter table property_activity_events force row level security/);
+  assert.match(migration, /actor_user_id = nullif\(current_setting\('app\.actor_id'/);
+  assert.match(migration, /grant select, insert on table property_activity_events to novalure_tenant_app/);
+  assert.match(migration, /security definer[\s\S]*set search_path = pg_catalog, public/);
+  assert.match(migration, /p_workspace = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /revoke all on function crm_property_expose_company_profile\(uuid\) from public/);
+  assert.doesNotMatch(migration, /grant select on (table )?company_profiles/i);
+  assert.match(exposeRepository, /crm_property_expose_company_profile\(p\.workspace_id\)/);
+  assert.doesNotMatch(exposeRepository, /from company_profiles cp/);
+});

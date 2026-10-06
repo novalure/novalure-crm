@@ -94,9 +94,7 @@ export const exposeSourceSql = `jsonb_build_object(
     'oneTimeGrossCents',c.one_time_gross_cents,'optional',c.optional,'updatedAt',c.updated_at) order by c.position,c.id)
     from property_cost_items c where c.workspace_id=p.workspace_id and c.property_id=p.id and c.project_id is not distinct from p.project_id
       and c.unit_id is null and c.expose_visible=true),'[]'::jsonb),
-  'company',(select jsonb_build_object('name',coalesce(nullif(cp.display_name,''),cp.legal_name),'email',cp.public_email,'phone',cp.public_phone,
-    'updatedAt',cp.updated_at) from company_profiles cp where cp.workspace_id=p.workspace_id and cp.profile_scope='workspace_owner'
-    and cp.status in ('approved','locked') and cp.usage_settings->'exposes'='true'::jsonb order by cp.updated_at desc limit 1)
+  'company',crm_property_expose_company_profile(p.workspace_id)
 )`;
 const scopedPropertySql = `p.id=$1::uuid and p.workspace_id=$2::uuid and
   (p.project_id is null or exists(select 1 from projects project where project.id=p.project_id and project.workspace_id=p.workspace_id))`;
