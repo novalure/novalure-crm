@@ -113,6 +113,10 @@ test("property media deletion uses the lifecycle protocol and globally complete 
   assert.match(route, /deletionComplete: true/);
   assert.match(store, /deleteDatabaseMedia/);
   assert.match(lifecycle, /crm_media_reference_counts\(\$1::uuid\)/);
+  const remainingReferenceCheck = lifecycle.indexOf("Asset references remain");
+  const assetDelete = lifecycle.indexOf("delete from public.media_assets");
+  assert.ok(remainingReferenceCheck > 0 && assetDelete > remainingReferenceCheck,
+    "zero-reference verification must run while the locked asset still exists");
   assert.match(migration, /security definer[\s\S]*set search_path = pg_catalog, public/);
   assert.match(migration, /asset\.workspace_id = nullif\(current_setting\('app\.tenant_id'/);
   assert.match(migration, /grant execute on function crm_media_reference_counts\(uuid\) to novalure_tenant_app/);

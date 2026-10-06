@@ -143,13 +143,16 @@ export async function deleteDatabaseMedia(input: {
           [target.attachmentId, input.workspaceId]);
         if (remains) throw new Error("Attachment remains after deletion");
       }
+      // The scoped SECURITY DEFINER counter deliberately returns no row when the
+      // asset is absent. Verify that all references are gone while the locked,
+      // tenant-owned asset still exists, then let the FKs guard the final delete.
+      const remainingReferences = await transaction.queryOne(referenceCountsSql, [input.assetId]);
+      if (!remainingReferences || Object.values(remainingReferences).some(count => count !== 0)) throw new Error("Asset references remain");
       const removed = await transaction.queryOne(`delete from public.media_assets where id=$1::uuid and workspace_id=$2 returning id`,
         [input.assetId, input.workspaceId]);
       if (removed?.id !== input.assetId) throw new Error("Asset delete not confirmed");
       if (await transaction.queryOne(`select id from public.media_assets where id=$1::uuid and workspace_id=$2`,
         [input.assetId, input.workspaceId])) throw new Error("Asset remains after deletion");
-      const remainingReferences = await transaction.queryOne(referenceCountsSql, [input.assetId]);
-      if (!remainingReferences || Object.values(remainingReferences).some(count => count !== 0)) throw new Error("Asset references remain");
       return asset;
     }, { pool: input.pool ?? getDeletionPool() });
   } catch (error) {
