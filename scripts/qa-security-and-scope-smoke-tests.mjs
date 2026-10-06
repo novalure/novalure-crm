@@ -507,8 +507,9 @@ test("private media routes stream through the app and never redirect to Blob", a
   assert.match(privateRoute, /"cache-control": "private, no-store"/);
   assert.match(privateRoute, /withCrmRead\(auth\.session/);
   assert.match(privateRoute, /findWorkspaceMediaAsset\(assetId, session\.workspaceId\)/);
-  assert.match(deleteRoute, /withCrmRead\(auth\.session/);
-  assert.match(deleteRoute, /deleteWorkspaceMedia\(assetId, session\.workspaceId\)/);
+  assert.match(deleteRoute, /resolveWorkspaceScopedSession\(request/);
+  assert.match(deleteRoute, /parsePropertyMediaDeletionTarget/);
+  assert.match(deleteRoute, /deleteWorkspaceMedia\(assetId, auth\.session\.workspaceId/);
   assert.match(publicRoute, /findPublicMediaAsset\(token\)/);
   assert.match(apiRoute, /media\.assets\.map\(serializeMediaAsset\)/);
   assert.match(apiRoute, /body\?\.action !== "publish" && body\?\.action !== "revoke"/);

@@ -73,7 +73,7 @@ test("private media workflows use tenant transactions and an RLS-scoped runtime 
   const migration = await source("migrations/088_property_media_runtime_access.sql");
   assert.match(mediaRoute, /withCrmRead\(auth\.session/);
   assert.match(fileRoute, /withCrmRead\(auth\.session/);
-  assert.match(deleteRoute, /withCrmRead\(auth\.session/);
+  assert.match(deleteRoute, /resolveWorkspaceScopedSession\(request/);
   assert.match(migration, /force row level security/);
   assert.match(migration, /workspace_id = nullif\(current_setting\('app\.tenant_id'/);
   assert.match(migration, /actor\.id = nullif\(current_setting\('app\.actor_id'/);
@@ -102,4 +102,19 @@ test("command-center uploads stay private until an explicit publication workflow
   assert.match(commandCenter, /visibility: "private"/);
   assert.doesNotMatch(commandCenter, /visibility: "public"/);
   assert.match(interactions, /visibility: "private"/);
+});
+
+test("property media deletion uses the lifecycle protocol and globally complete scoped counts", async () => {
+  const route = await source("src/app/api/media/[assetId]/route.ts");
+  const store = await source("src/lib/media-store.ts");
+  const lifecycle = await source("src/lib/media-lifecycle.ts");
+  const migration = await source("migrations/090_property_media_delete_runtime.sql");
+  assert.match(route, /parsePropertyMediaDeletionTarget/);
+  assert.match(route, /deletionComplete: true/);
+  assert.match(store, /deleteDatabaseMedia/);
+  assert.match(lifecycle, /crm_media_reference_counts\(\$1::uuid\)/);
+  assert.match(migration, /security definer[\s\S]*set search_path = pg_catalog, public/);
+  assert.match(migration, /asset\.workspace_id = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /grant execute on function crm_media_reference_counts\(uuid\) to novalure_tenant_app/);
+  assert.doesNotMatch(migration, /grant select on table (property_media|property_documents|bot_document_sends|media_asset_shares)/i);
 });
