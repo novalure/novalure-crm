@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0.0",
+  "evidenceType": "VALUE_FREE_LOCAL_ARTIFACT_ABSENCE",
+  "control": "G27",
+  "observedAt": "2026-10-06T14:51:27.141Z",
+  "inspectionMode": "READ_ONLY_EXACT_LITERAL_PATH_EXISTENCE",
+  "source": "docs/qa/g27-local-cleanup-blocker-20260924.md",
+  "basePath": "C:\\Users\\Franz\\Documents\\Codex\\2026-05-11\\ich-verwende-hubspot-starter-kannst-du\\novalure-crm\\.codex-worktrees\\g27-production-readiness\\.npm-cache\\g27",
+  "contentRead": false,
+  "artifactMutationPerformed": false,
+  "artifacts": [
+    { "relativePath": "preview-private.json", "exists": false },
+    { "relativePath": "preview-secrets-private.json", "exists": false },
+    { "relativePath": "neon-bootstrap-private.json", "exists": false },
+    { "relativePath": "preview.env", "exists": false },
+    { "relativePath": "old-preview.env", "exists": false },
+    { "relativePath": "neon-bootstrap-20260923/runtime-private.json", "exists": false },
+    { "relativePath": "neon-bootstrap-20260923/g27-full.dump", "exists": false },
+    { "relativePath": "recovery-probe-20260924/full.dump", "exists": false },
+    { "relativePath": "recovery-verify-20260924-v2/full.dump", "exists": false },
+    { "relativePath": "private-live/live-access.json", "exists": false },
+    { "relativePath": "private-live/live-browser-private.json", "exists": false },
+    { "relativePath": "private-live/live-preseed-private.json", "exists": false }
+  ],
+  "expectedArtifactCount": 12,
+  "observedAbsentCount": 12,
+  "observedPresentCount": 0,
+  "result": "PASS_ALL_TWELVE_ABSENT",
+  "g27Status": "CLOSED"
+}

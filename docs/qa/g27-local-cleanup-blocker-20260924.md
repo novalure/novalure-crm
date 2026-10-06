@@ -1,12 +1,14 @@
-# G27 – verbleibende lokale Bereinigung
+# G27 – lokale Bereinigung abgeschlossen
 
-Stand: 24.09.2026. A–F, Race/Idempotency, unabhängiger Security-Review und Cloud-Cleanup sind PASS. Die lokale Entfernung der folgenden privaten QA-Dateien ist noch offen.
+Stand: 06.10.2026. A–F, Race/Idempotency, unabhängiger Security-Review, Cloud-Cleanup und die lokale Abwesenheitsprüfung sind PASS. **G27 ist CLOSED.**
+
+Abschlussprüfung 06.10.2026: Alle zwölf exakt benannten privaten QA-Artefakte wurden ausschließlich über ihre Literalpfade auf Existenz geprüft. Keiner der zwölf Pfade war vorhanden. Es wurden keine Artefaktinhalte gelesen und während der Prüfung keine Dateien gelöscht, verschoben oder verändert. Die value-free Evidence ist in [g27-local-cleanup-absence-evidence-20261006.json](g27-local-cleanup-absence-evidence-20261006.json) festgehalten.
 
 Statusabgleich 02.10.2026: Autonomie- und Zugriffsrahmen `2.0.0` löst den früheren reinen Freigabevorbehalt für die eng begrenzte Entfernung dieser eindeutig zugeordneten lokalen QA-Artefakte. Er erzeugt jedoch weder Löschung noch Evidenz: In dieser Governance-Aktualisierung wurde keine der zwölf Dateien entfernt oder auf Abwesenheit geprüft. G27 bleibt deshalb `OPEN`. Eine Fortsetzung muss zuerst die exakten Pfade und den disposable QA-Bezug lesend bestätigen, darf keine unbekannte Datei oder Geschäftsdaten erfassen und muss anschließend die Abwesenheit nachweisen. Sicherheits- oder Ausführungsblockaden dürfen nicht umgangen werden.
 
 Die automatische Ausführungsprüfung hat sowohl einen auf das QA-Verzeichnis begrenzten rekursiven Löschbefehl als auch einen engeren, nicht-rekursiven Befehl mit zwölf expliziten Dateinamen abgelehnt. Rückgabe jeweils: `rejected: blocked by policy`. Eine nähere Begründung wurde nicht geliefert. Die Befehle wurden nicht ausgeführt. Ein Wechsel auf ein anderes Löschwerkzeug zur Umgehung dieser Ablehnung erfolgt nicht.
 
-## Noch auszuführende eng begrenzte Aktion
+## Abgeschlossene eng begrenzte Aktion
 
 Im Windows-Explorer dieses Verzeichnis öffnen:
 
@@ -14,7 +16,7 @@ Im Windows-Explorer dieses Verzeichnis öffnen:
 C:\Users\Franz\Documents\Codex\2026-05-11\ich-verwende-hubspot-starter-kannst-du\novalure-crm\.codex-worktrees\g27-production-readiness\.npm-cache\g27
 ```
 
-Nur diese zwölf Dateien entfernen; Pfade sind relativ zum obigen Verzeichnis:
+Die folgenden zwölf relativen Pfade wurden am 06.10.2026 als nicht vorhanden bestätigt:
 
 1. `preview-private.json`
 2. `preview-secrets-private.json`
@@ -31,7 +33,7 @@ Nur diese zwölf Dateien entfernen; Pfade sind relativ zum obigen Verzeichnis:
 
 Keine Dateien öffnen oder Inhalte in eine Nachricht kopieren. Die allgemeine `.env.local`, Repository-Dateien, CLI-Anmeldedaten und andere Projektverzeichnisse gehören nicht zu dieser Liste.
 
-Nach erfolgreicher Entfernung muss Codex ihre Abwesenheit lesend prüfen und darf erst danach den G27-Abschlussstatus aktualisieren. Wenn die technische Ausführung erneut durch eine Sicherheits- oder Plattformkontrolle abgelehnt wird, ist ausschließlich die konkrete manuelle Entfernung durch Franz anzufordern. Bereits bestandene Live-Tests dürfen nach dem absichtlichen Entfernen der QA-Umgebung nicht gegen eine andere Umgebung wiederholt werden.
+Die Abwesenheitsprüfung ist PASS. Die bereits bestandenen Live-Tests wurden nach dem absichtlichen Entfernen der QA-Umgebung nicht gegen eine andere Umgebung wiederholt.
 
 ## Gesicherter Wiederaufnahmepunkt
 
@@ -44,6 +46,6 @@ Nach erfolgreicher Entfernung muss Codex ihre Abwesenheit lesend prüfen und dar
 - Temporärer Vercel-Metadaten-Token widerrufen; Evelyns private QA-Dateien entfernt.
 - PR #65 bleibt Draft. Kein Merge. Kein Production-Deploy. `PRODUCTION IMPACT = NONE`.
 
-`BLOCKER | BENÖTIGTE RESSOURCE | WO SIE ERWARTET WIRD | WARUM NICHT VERFÜGBAR | EXAKTE AKTION`
+`CONTROL | RESULT | EVIDENCE`
 
-`LOCAL_QA_CLEANUP_NOT_EXECUTED | Entfernung der zwölf lokalen QA-Dateien | oben genanntes .npm-cache/g27 | Framework 2.0.0 löst den Freigabevorbehalt, aber keine aktuelle Ausführung oder Abwesenheitsprüfung liegt vor | Pfade und QA-Zuordnung lesend bestätigen, eng begrenzt entfernen, Abwesenheit prüfen; bei erneuter Plattformablehnung nur die konkrete manuelle Aktion anfordern`
+`G27 | CLOSED | PASS_ALL_TWELVE_ABSENT; docs/qa/g27-local-cleanup-absence-evidence-20261006.json`

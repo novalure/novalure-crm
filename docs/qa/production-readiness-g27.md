@@ -22,17 +22,19 @@ Evelyn-Money/Tax-V2-Basis: `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`
 
 **G27 Live A–F und Race/Idempotency: PASS**
 
-**G27 Status: OPEN**
+**G27 Status: CLOSED**
 
-**Einziger verbleibender Blocker: `LOCAL_QA_CLEANUP_NOT_EXECUTED`**
+**Verbleibender Blocker: NONE**
 
-Dieser Dokumentationsabgleich schließt den Blocker nicht. G27 bleibt `OPEN`; es wurde keine der zwölf benannten lokalen QA-Dateien entfernt oder ihre Abwesenheit neu nachgewiesen. Framework 2.0.0 löst den früheren reinen Freigabevorbehalt für diese eindeutig zugeordneten QA-Artefakte, ersetzt aber die Ausführung und Prüfung nicht. Der Neon-Runtime-Credential-Bootstrap gehört zu Evelyn Production und ist ebenfalls nicht abgeschlossen; er belegt keine CRM-Production-Migration, Anwendungsverbindung, Promotion oder Canary-Aktivierung.
-
-Aktueller verbleibender Abschluss: zwölf lokale CRM-QA-Dateien entfernen und
-deren Abwesenheit bestätigen. Zwei frühere Löschversuche wurden von der automatischen
-Ausführungsprüfung abgelehnt; Framework 2.0.0 löst den Freigabevorbehalt, aber
-in diesem Governance-Auftrag findet keine Bereinigung statt. Details stehen in der
+Die am 06.10.2026 ausschließlich lesend ausgeführte Literalpfadprüfung bestätigt
+die Abwesenheit aller zwölf benannten lokalen QA-Artefakte. Sie las keine
+Artefaktinhalte und nahm keine Dateiänderung vor. Die
+[value-free Evidence](g27-local-cleanup-absence-evidence-20261006.json) weist zwölf
+abwesende und null vorhandene Artefakte aus. Damit ist der letzte G27-Blocker
+geschlossen. Details und der historische Blockerverlauf stehen in der
 [Bereinigungsliste](g27-local-cleanup-blocker-20260924.md).
+Diese G27-Schließung belegt für sich keine andere CRM-Production-Migration,
+Anwendungsverbindung, Promotion oder Canary-Aktivierung.
 Cloud-Cleanup und abschließender unabhängiger Security-Review sind PASS.
 Die fehlenden QA-Artefakte und die Evelyn-Isolation
 sind keine offenen Blocker mehr. 220 Live-Assertions und 93 HTTP-Aufrufe bestanden
@@ -374,8 +376,8 @@ Die autorisierte Live-Preview-Abnahme ist vollständig PASS. Verwendet wurden
 ausschließlich die nachgewiesenen disposable CRM-/Evelyn-Datenbanken und
 synthetische Daten. Die öffentliche Evidenz enthält Pins, Testziele, Ergebnisse,
 IDs und HTTP-Status; Zugangsdaten verbleiben ausschließlich in geschützten
-privaten Artefakten beziehungsweise im Prozessspeicher. Cloud-Cleanup ist PASS;
-die zwölf lokalen CRM-QA-Dateien bleiben bis zur manuellen Entfernung geschützt.
+privaten Artefakten beziehungsweise im Prozessspeicher. Cloud-Cleanup und die
+value-free lokale Abwesenheitsprüfung sind PASS; alle zwölf lokalen CRM-QA-Artefakte fehlen.
 
 | Fall | Erwartung | Stand |
 | --- | --- | --- |
@@ -387,8 +389,8 @@ die zwölf lokalen CRM-QA-Dateien bleiben bis zur manuellen Entfernung geschütz
 | F | Cross-Tenant-Zugriff wird verweigert | PASS – Lesen/Schreiben 404, fremder Snapshot unverändert |
 | Race/Idempotency | zwei parallele Executes und Replay | PASS – genau eine persistierte synthetische Execution |
 
-G27 darf erst nach allen Pflichtgates einschließlich lokaler Bereinigung auf
-**CLOSED** gesetzt werden. Die vollständige A–F-/Race-Evidenz bestätigt die
+G27 ist nach allen Pflichtgates einschließlich lokaler Bereinigung und lesender
+Abwesenheitsprüfung **CLOSED**. Die vollständige A–F-/Race-Evidenz bestätigt die
 Evelyn-V2-Runtime am gepinnten Quellstand `1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc`.
 Die erfolgreich geprüften Preview-URLs wurden anschließend absichtlich gelöscht.
 
