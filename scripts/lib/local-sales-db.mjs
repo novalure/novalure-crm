@@ -91,7 +91,11 @@ export async function applySalesSchema(db, {
   const names = (await readdir("migrations")).filter(name => /^\d+.*\.sql$/.test(name)).sort();
   const applied = [];
   for (const name of names) {
-    if (name.includes("_rollback") || name === "062_private_media_contract_cutover.sql") continue;
+    if (
+      name.includes("_rollback") ||
+      name === "062_private_media_contract_cutover.sql" ||
+      name === "091_production_runtime_forced_rls_cutover.sql"
+    ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
     if (number > maxMigrationNumber) continue;
@@ -152,6 +156,6 @@ export async function applySalesSchema(db, {
   }
   await db.admin.query(`grant usage on schema public to ${db.role}`);
   await db.admin.query(`grant select on workspaces, workspace_users, project_pipeline_permissions to ${db.role}`);
-  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover conflicts with append-only audit trigger; unchanged and excluded from sales fixture" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
+  await writeFile(path.join(db.directory, "migration-evidence.json"), JSON.stringify({ mode: "local-sales-only", optionalRagExcluded: true, excluded: [{ migration: "062_private_media_contract_cutover.sql", reason: "Manual media cutover uses its separately tested append-only redaction compatibility path" }, { migration: "091_production_runtime_forced_rls_cutover.sql", reason: "Production-pinned manual cutover is covered by the dedicated PostgreSQL and Neon rehearsal proofs" }, { pattern: "*_rollback.sql", reason: "Rollback scripts are not forward migrations" }], applied }, null, 2));
   return applied;
 }
