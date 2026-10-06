@@ -67,7 +67,19 @@ const nextConfig: NextConfig = {
     NOVALURE_BUILD_GIT_SHA: buildGitSha,
     NOVALURE_BUILD_TIMESTAMP: buildTimestamp,
   },
-  serverExternalPackages: ["pg"],
+  serverExternalPackages: ["pg", "pdfkit", "pdf-lib"],
+  outputFileTracingIncludes: {
+    "/api/crm/properties/expose": [
+      "./src/lib/property-expose-pdf-worker.cjs",
+      "./src/lib/property-expose-assets/**/*",
+      "./node_modules/pdf-lib/**/*",
+    ],
+    "/api/crm/properties/expose/*": [
+      "./src/lib/property-expose-pdf-worker.cjs",
+      "./src/lib/property-expose-assets/**/*",
+      "./node_modules/pdf-lib/**/*",
+    ],
+  },
   allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [

@@ -4747,7 +4747,7 @@ export function CrmWorkspace({
                 onOpenUnits={handleOpenUnitsFromProperty}
                 onClearPropertyFocus={() => setPropertyFocusAssetId(undefined)}
                 onPropertyChanged={async () => {
-                  await refreshCoreData();
+                  if (!(await refreshCoreData())) throw new Error("refresh_unavailable");
                 }}
                 projectLabel={projectScopeLabel}
                 projects={draftScopeProjects}
@@ -4762,6 +4762,8 @@ export function CrmWorkspace({
                 sessionProductRole={sessionProductRole}
                 sessionRole={sessionRole}
                 units={propertyUnitRecords.filter((unit) => isProjectInActiveScope(unit.projectId))}
+                users={users}
+                draftUserId={sessionUserId}
               />
             ) : null}
 

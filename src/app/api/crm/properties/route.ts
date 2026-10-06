@@ -1,6 +1,6 @@
 import { withCrmRead } from "@/lib/crm-command";
 import { NextResponse } from "next/server";
-import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
 import { loadPaginatedPropertyAssets } from "@/lib/db/crm-loaders";
 import {
@@ -16,7 +16,7 @@ import {
   updateSellerListingRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
-import { enforceCsrfForSession } from "@/lib/security/csrf";
+import { canReviewPropertyDocuments, reviewPropertyDocument } from "@/lib/db/property-document-review";
 import {
   routePropertyInquiry,
   runPropertyChannelPreflight,
@@ -53,6 +53,7 @@ function canPersistRouting(session: AppSession) {
 
 function getWriteStatus(reason: string) {
   const lower = reason.toLowerCase();
+  if (lower.startsWith("conflict:")) return 409;
   if (lower.includes("permission") || lower.includes("forbidden") || lower.includes("required")) return 403;
   if (lower.includes("not found")) return 404;
   if (lower.includes("invalid") || lower.includes("title") || lower.includes("address")) return 400;
@@ -91,10 +92,43 @@ function parseIdempotencyKey(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const workspaceIds = new URL(request.url).searchParams.getAll("workspaceId");
+  if (workspaceIds.length > 1 || (workspaceIds.length === 1 && !uuidPattern.test(workspaceIds[0]))) {
+    return NextResponse.json({ error: "Invalid workspaceId" }, { status: 400 });
+  }
   const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
+  const readOperation = url.searchParams.get("operation");
+  const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
+  if (readOperation === "capabilities") {
+    return NextResponse.json({ workspaceId: auth.session.workspaceId, capabilities: {
+      canEditProperty: canWriteProperty(auth.session),
+      canReviewDocuments: canReviewPropertyDocuments(auth.session),
+      canAssignInquiry: false,
+    } }, { headers: privateHeaders });
+  }
+  if (readOperation === "relationship_options") {
+    const allowed = ["workspaceId", "operation", "propertyId"];
+    const propertyId = url.searchParams.get("propertyId") ?? "";
+    if (!uuidPattern.test(propertyId) || !url.searchParams.has("workspaceId") || url.hash ||
+      [...url.searchParams.keys()].some((key) => !allowed.includes(key)) ||
+      allowed.some((key) => url.searchParams.getAll(key).length !== 1)) {
+      return NextResponse.json({ persisted: false, error: "Invalid relationship options scope" }, { status: 400, headers: privateHeaders });
+    }
+    if (!canWriteProperty(auth.session)) {
+      return NextResponse.json({ persisted: false, error: "Property operating rights required" }, { status: 403, headers: privateHeaders });
+    }
+    const { loadPropertyRelationshipOptions } = await import("@/lib/db/property-relationship-options");
+    const result = await withCrmRead(auth.session, (_tx, scopedSession) =>
+      loadPropertyRelationshipOptions({ session: scopedSession, propertyId }));
+    return NextResponse.json(result.persisted ? result : { persisted: false, error: result.reason }, {
+      status: result.persisted ? 200 : result.status,
+      headers: privateHeaders,
+    });
+  }
+  if (readOperation) return NextResponse.json({ error: "Unsupported read operation" }, { status: 400, headers: privateHeaders });
   const projectId = parseProjectId(url.searchParams.get("projectId"));
   if (projectId === undefined) {
     return NextResponse.json({ error: "Invalid projectId" }, { status: 400 });
@@ -128,12 +162,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const workspaceIds = new URL(request.url).searchParams.getAll("workspaceId");
+  if (workspaceIds.length > 1 || (workspaceIds.length === 1 && !uuidPattern.test(workspaceIds[0]))) {
+    return NextResponse.json({ error: "Invalid workspaceId" }, { status: 400 });
   }
-  const csrf = await enforceCsrfForSession(request, session);
-  if (!csrf.ok) return csrf.response;
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
+  if (!auth.ok) return auth.response;
+  const session = auth.session;
 
   const body = await readJson(request);
   if (!body || typeof body !== "object") {
@@ -142,6 +177,22 @@ export async function POST(request: Request) {
 
   const input = body as Record<string, unknown>;
   const operation = typeof input.operation === "string" ? input.operation : "create_property";
+
+  if (operation === "review_document") {
+    const result = await withCrmRead(session, (_tx, scopedSession) => reviewPropertyDocument({
+      session: scopedSession,
+      propertyId: input.propertyId,
+      projectId: input.projectId,
+      documentId: input.documentId,
+      mediaAssetId: input.mediaAssetId,
+      expectedStatus: input.expectedStatus,
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      action: input.action,
+    }));
+    return NextResponse.json(result.persisted ? result : { persisted: false, error: result.reason }, {
+      status: result.persisted ? 200 : result.status,
+    });
+  }
 
   if (operation === "route_inquiry") {
     const inquiry = {
@@ -213,6 +264,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "CRM write and property operating rights are required" }, { status: 403 });
     }
 
+    if (operation === "update_relationships") {
+      const property = asObject(input.property);
+      const relationshipKeys = ["sellerLeadId", "mandateId", "ownerContactId", "ownerUserId", "contactUserId"];
+      if (Object.keys(input).some((key) => !["operation", "propertyId", "property"].includes(key)) ||
+          Object.keys(property).some((key) => ![...relationshipKeys, "expectedRelationships"].includes(key)) ||
+          !Object.hasOwn(property, "expectedRelationships") || !relationshipKeys.some((key) => Object.hasOwn(property, key))) {
+        return NextResponse.json({ error: "Invalid relationship update: changed fields and comparison snapshot are required" }, { status: 400 });
+      }
+      const result = await updateSellerListingRecord({ property, propertyId: input.propertyId, session });
+      return NextResponse.json(result.persisted ? { data: result.data, persisted: true } : { error: result.reason }, {
+        status: result.persisted ? 200 : getWriteStatus(result.reason),
+      });
+    }
+
     if (operation === "update_property_core") {
       const propertyPayload = asObject(input.property);
       const result = await updateSellerListingRecord({
@@ -280,7 +345,9 @@ export async function POST(request: Request) {
 
     if (operation === "update_media_order") {
       const result = await updatePropertyMediaOrder({
+        expectedMedia: input.expectedMedia,
         mediaItems: input.mediaItems,
+        projectId: input.projectId,
         propertyId: input.propertyId,
         session,
       });
