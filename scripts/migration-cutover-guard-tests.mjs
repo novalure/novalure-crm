@@ -398,6 +398,13 @@ test("explicit automatic migrations require their checksummed predecessors", () 
       manualCutover: true,
     }),
     migration("066_oauth_state_workspace_user_guard", "sha-066"),
+    migration("090_property_media_delete_runtime", "sha-090"),
+    migration("091_production_runtime_forced_rls_cutover", "sha-091", {
+      manualCutover: true,
+    }),
+    migration("092_crm_production_machine_identity", "sha-092", {
+      manualCutover: true,
+    }),
   ];
 
   assert.throws(
@@ -445,6 +452,27 @@ test("explicit automatic migrations require their checksummed predecessors", () 
     /required predecessor 053_oauth_state_integrity/,
   );
   assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [ledgerRow("090_property_media_delete_runtime", "sha-090")],
+      migrations,
+      only: "092_crm_production_machine_identity",
+    }),
+    /required predecessor 091_production_runtime_forced_rls_cutover/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [
+        ledgerRow("090_property_media_delete_runtime", "sha-090"),
+        ledgerRow("091_production_runtime_forced_rls_cutover", "sha-091"),
+      ],
+      migrations,
+      only: "092_crm_production_machine_identity",
+    }),
+    [migrations.at(-1)],
+  );
+  assert.throws(
     () => resolveMigrationLedgerState({
       ledgerRows: [ledgerRow("052_validate_property_inventory_tenant_guards", "sha-052")],
       migrations,
@@ -460,6 +488,8 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"061_validate_and_activate_tenant_rls_pilot"/);
   assert.match(runner, /"062_private_media_contract_cutover"/);
   assert.match(runner, /"065_notification_guard_search_path_hardening"/);
+  assert.match(runner, /"091_production_runtime_forced_rls_cutover"/);
+  assert.match(runner, /"092_crm_production_machine_identity"/);
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 

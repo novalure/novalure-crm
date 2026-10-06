@@ -12,6 +12,7 @@ import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { hasProductCapability } from "@/lib/product-model";
+import { withCrmRead } from "@/lib/crm-command";
 
 export type CompanyProfilePayload = {
   canApprove: boolean;
@@ -443,7 +444,7 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
           approved_at as "approvedAt",
           created_at as "createdAt",
           updated_at as "updatedAt"
-        from company_profiles
+        from crm_company_profiles_scoped
         where profile_scope = 'platform_operator'
         limit 1
       `,
@@ -485,7 +486,7 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
           approved_at as "approvedAt",
           created_at as "createdAt",
           updated_at as "updatedAt"
-        from company_profiles
+        from crm_company_profiles_scoped
         where profile_scope = 'crm_account'
           and workspace_id = $1
           and organization_id = $2
@@ -529,7 +530,7 @@ async function findProfile(scope: CompanyProfileScope, session: AppSession, orga
         approved_at as "approvedAt",
         created_at as "createdAt",
         updated_at as "updatedAt"
-      from company_profiles
+      from crm_company_profiles_scoped
       where profile_scope = 'workspace_owner'
         and workspace_id = $1
       limit 1
@@ -551,7 +552,7 @@ async function listVersions(profileId: string) {
         action,
         changed_fields as "changedFields",
         created_at as "createdAt"
-      from company_profile_versions
+      from crm_company_profile_versions_scoped
       where company_profile_id = $1
       order by created_at desc
       limit 25
@@ -590,23 +591,27 @@ export async function getCompanyProfilePayload(input: {
     };
   }
 
-  const row = await findProfile(scope, input.session, organizationId);
-  const profile = row ? toProfile(row) : buildFallbackProfile(scope, input.session, organizationId);
-  const issues = runCompanyProfilePreflight(profile, input.session);
+  return withCrmRead(input.session, async (_tx, session) => {
+    const freshCanEdit = canEditScope(session, scope);
+    const freshCanApprove = canApproveScope(session, scope);
+    const row = await findProfile(scope, session, organizationId);
+    const profile = row ? toProfile(row) : buildFallbackProfile(scope, session, organizationId);
+    const issues = runCompanyProfilePreflight(profile, session);
 
-  return {
-    canApprove,
-    canEdit,
-    fieldRequirements: getCountryFieldRequirements(profile.countryCode),
-    preflight: {
-      blockers: issues.filter((issue) => issue.severity === "blocker"),
-      issues,
-      warnings: issues.filter((issue) => issue.severity === "warning"),
-    },
-    profile,
-    source: row ? "database" : "fallback",
-    versions: row ? await listVersions(row.id) : [],
-  };
+    return {
+      canApprove: freshCanApprove,
+      canEdit: freshCanEdit,
+      fieldRequirements: getCountryFieldRequirements(profile.countryCode),
+      preflight: {
+        blockers: issues.filter((issue) => issue.severity === "blocker"),
+        issues,
+        warnings: issues.filter((issue) => issue.severity === "warning"),
+      },
+      profile,
+      source: row ? "database" as const : "fallback" as const,
+      versions: row ? await listVersions(row.id) : [],
+    };
+  });
 }
 
 function sanitizeProfileInput(input: CompanyProfileInput, existing: CompanyProfile, canApprove: boolean): MutableCompanyProfileFields {
@@ -650,7 +655,7 @@ function getChangedFields(before: CompanyProfile | null, after: MutableCompanyPr
   return legalFieldKeys.filter((field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]));
 }
 
-export async function saveCompanyProfile(input: {
+async function saveCompanyProfileInTransaction(input: {
   body: CompanyProfileInput;
   organizationId?: string;
   profileScope?: unknown;
@@ -688,7 +693,7 @@ export async function saveCompanyProfile(input: {
   const row = existingRow
     ? await queryOne<CompanyProfileRow>(
         `
-          update company_profiles
+          update crm_company_profiles_write_scoped
           set
             legal_name = $2,
             display_name = $3,
@@ -781,7 +786,7 @@ export async function saveCompanyProfile(input: {
       )
     : await queryOne<CompanyProfileRow>(
         `
-          insert into company_profiles (
+          insert into crm_company_profiles_write_scoped (
             profile_scope,
             workspace_id,
             organization_id,
@@ -911,21 +916,16 @@ export async function saveCompanyProfile(input: {
 
   await executeQuery(
     `
-      insert into company_profile_versions (
-        company_profile_id,
-        workspace_id,
-        actor_user_id,
-        action,
-        before,
-        after,
-        changed_fields
+      select crm_company_profile_record_version(
+        $1::uuid,
+        $2,
+        $3::jsonb,
+        $4::jsonb,
+        $5::text[]
       )
-      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::text[])
     `,
     [
       profile.id,
-      profile.workspaceId ?? null,
-      isUuid(input.session.userId) ? input.session.userId : null,
       existingRow ? "company_profile.updated" : "company_profile.created",
       JSON.stringify(existingRow ? existing : null),
       JSON.stringify(profile),
@@ -946,4 +946,18 @@ export async function saveCompanyProfile(input: {
     ok: true as const,
     payload: await getCompanyProfilePayload({ organizationId, profileScope: scope, session: input.session }),
   };
+}
+
+export async function saveCompanyProfile(input: {
+  body: CompanyProfileInput;
+  organizationId?: string;
+  profileScope?: unknown;
+  session: AppSession;
+}) {
+  if (!canPersist() || !hasDatabaseUrl()) {
+    return { ok: false as const, reason: "Database persistence is not configured", status: 503 };
+  }
+  return withCrmRead(input.session, (_tx, session) =>
+    saveCompanyProfileInTransaction({ ...input, session }),
+  );
 }

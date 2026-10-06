@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { getVercelOidcToken } from "@vercel/oidc";
 
-/** Contract source: novalure/evelyn@56e26c2b063319813076a3bc181473f484b1d490.
+/** Contract source: novalure/evelyn@b21dbb4d737df7a7014ec9bc0834a64a6d45d0cb.
  * No owner decisions or business execution are available through this client. */
 export const EVELYN_PREVIEW_URL = "https://evelyn-hrc1fof30-novalure.vercel.app";
 export const EVELYN_PREVIEW_AUDIENCE = "urn:evelyn:preview:approval-bridge:v1:prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I";
@@ -46,9 +46,21 @@ export type EvelynVerifyRequest = {
 };
 export type EvelynVerificationStatus = "VALID" | "INVALID" | "PENDING" | "EXPIRED" | "REJECTED"
   | "VERSION_MISMATCH" | "ACTION_MISMATCH" | "TENANT_MISMATCH";
+export type EvelynOwnerAuthority = {
+  approvalClass: "A3";
+  approverRole: "OWNER";
+  delegated: false;
+  ownerBound: true;
+  tenantId: string;
+  actionId: string;
+  resourceId: string;
+  actionVersion: number;
+  actionHash: string;
+  approvalBindingDigest: string;
+};
 export type EvelynVerifiedApproval = {
   contractVersion: "approval-bridge-v1"; environment: "preview"; status: "VALID";
-  approvalReference: string; correlationId: string;
+  approvalReference: string; correlationId: string; ownerAuthority: EvelynOwnerAuthority;
 };
 export class EvelynApprovalError extends Error {
   constructor(readonly code: string) { super(code); this.name = "EvelynApprovalError"; }
@@ -76,6 +88,12 @@ export function canonicalEvelynJson(value: unknown): string {
   return "{" + Object.keys(object).sort().map(key => JSON.stringify(key) + ":" + canonicalEvelynJson(object[key])).join(",") + "}";
 }
 function digest(value: unknown) { return createHash("sha256").update(canonicalEvelynJson(value)).digest("hex"); }
+export function evelynOwnerApprovalBindingDigest(input: Omit<EvelynOwnerAuthority, "approvalBindingDigest"> & { approvalReference: string }): string {
+  uuid(input.approvalReference); uuid(input.tenantId); uuid(input.actionId); uuid(input.resourceId);
+  version(input.actionVersion); hash(input.actionHash);
+  check(input.approvalClass === "A3" && input.approverRole === "OWNER" && input.delegated === false && input.ownerBound === true, "OWNER_A3_ATTESTATION_REQUIRED");
+  return digest({ contractVersion: "owner-a3-attestation-v1", ...input });
+}
 function validateAction(action: EvelynApprovalAction) {
   exact(action, ["actionId", "workflowId", "tenantId", "requestingActorId", "actionType", "resourceType", "resourceId",
     "actionVersion", "resourceVersion", "amount", "currency", "net", "payload"]);
@@ -125,8 +143,9 @@ function validateVerify(input: EvelynVerifyRequest, tenantId: string) {
 }
 function requiredSteps(input: EvelynCreateApprovalRequest): 0 | 1 | 2 {
   if (input.action.amount >= 500_000) return 2;
-  const evidence = input.policyEvidence;
-  return evidence.standardContract && evidence.approvedOffer && evidence.customerAccepted && evidence.approvedTemplate ? 0 : 1;
+  // C-03: every new contract is A3. Standard/template/accepted-offer evidence
+  // can never create an autonomous low-value send exception.
+  return 1;
 }
 const approvalStatuses: readonly EvelynApprovalStatus[] = ["PENDING", "STEP_1_APPROVED", "APPROVED", "REJECTED", "CHANGES_REQUESTED", "EXPIRED", "CANCELLED", "INVALIDATED"];
 const verificationStatuses: readonly EvelynVerificationStatus[] = ["VALID", "INVALID", "PENDING", "EXPIRED", "REJECTED", "VERSION_MISMATCH", "ACTION_MISMATCH", "TENANT_MISMATCH"];
@@ -142,11 +161,21 @@ function parseCreate(value: unknown, input: EvelynCreateApprovalRequest): Evelyn
 }
 function parseVerify(value: unknown, input: EvelynVerifyRequest): EvelynVerifiedApproval {
   const code = "MALFORMED_RESPONSE";
-  exact(value, ["contractVersion", "environment", "status", "approvalReference", "correlationId"], code);
+  check(value !== null && typeof value === "object" && !Array.isArray(value), code);
+  const responseStatus=(value as Record<string,unknown>).status;
+  exact(value, responseStatus === "VALID"
+    ? ["contractVersion", "environment", "status", "approvalReference", "correlationId", "ownerAuthority"]
+    : ["contractVersion", "environment", "status", "approvalReference", "correlationId"], code);
   check(value.contractVersion === "approval-bridge-v1" && value.environment === "preview"
     && verificationStatuses.includes(value.status as EvelynVerificationStatus), code);
   check(value.approvalReference === input.approvalReference && value.correlationId === input.correlationId, "RESPONSE_BINDING_MISMATCH");
   if (value.status !== "VALID") deny(value.status as EvelynVerificationStatus);
+  exact(value.ownerAuthority, ["approvalClass", "approverRole", "delegated", "ownerBound", "tenantId", "actionId", "resourceId", "actionVersion", "actionHash", "approvalBindingDigest"], "OWNER_A3_ATTESTATION_REQUIRED");
+  const authority=value.ownerAuthority as unknown as EvelynOwnerAuthority;
+  check(authority.approvalClass === "A3" && authority.approverRole === "OWNER" && authority.delegated === false && authority.ownerBound === true, "OWNER_A3_ATTESTATION_REQUIRED");
+  check(authority.tenantId === input.tenantId && authority.actionId === input.actionId && authority.resourceId === input.resourceId && authority.actionVersion === input.actionVersion && authority.actionHash === input.actionHash, "OWNER_A3_ATTESTATION_MISMATCH");
+  hash(authority.approvalBindingDigest, "OWNER_A3_ATTESTATION_REQUIRED");
+  check(authority.approvalBindingDigest === evelynOwnerApprovalBindingDigest({ approvalReference: input.approvalReference, approvalClass: authority.approvalClass, approverRole: authority.approverRole, delegated: authority.delegated, ownerBound: authority.ownerBound, tenantId: authority.tenantId, actionId: authority.actionId, resourceId: authority.resourceId, actionVersion: authority.actionVersion, actionHash: authority.actionHash }), "OWNER_A3_ATTESTATION_MISMATCH");
   return value as EvelynVerifiedApproval;
 }
 type TokenOptions = { audience: string; jti: string; skipCache: true };

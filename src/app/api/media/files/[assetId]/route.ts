@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
+import { withCrmRead } from "@/lib/crm-command";
 import { findWorkspaceMediaAsset, MediaStoreError, readMediaAssetContent } from "@/lib/media-store";
 import { safeMediaContentDisposition } from "@/lib/media-security";
 
@@ -20,7 +21,8 @@ export async function GET(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;
-  const asset = await findWorkspaceMediaAsset(assetId, auth.session.workspaceId);
+  const asset = await withCrmRead(auth.session, (_tx, session) =>
+    findWorkspaceMediaAsset(assetId, session.workspaceId));
   if (!asset) {
     return NextResponse.json({ error: "Media asset not found." }, { headers: privateHeaders, status: 404 });
   }
