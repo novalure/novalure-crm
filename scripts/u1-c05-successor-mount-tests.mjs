@@ -65,3 +65,18 @@ test("Exposé routes are private, tenant-scoped, and traced with their immutable
   assert.match(documentRoute, /content-security-policy/);
   assert.match(config, /property-expose-assets\/\*\*\/\*/);
 });
+
+test("private media workflows use tenant transactions and an RLS-scoped runtime grant", async () => {
+  const mediaRoute = await source("src/app/api/media/route.ts");
+  const fileRoute = await source("src/app/api/media/files/[assetId]/route.ts");
+  const deleteRoute = await source("src/app/api/media/[assetId]/route.ts");
+  const migration = await source("migrations/088_property_media_runtime_access.sql");
+  assert.match(mediaRoute, /withCrmRead\(auth\.session/);
+  assert.match(fileRoute, /withCrmRead\(auth\.session/);
+  assert.match(deleteRoute, /withCrmRead\(auth\.session/);
+  assert.match(migration, /force row level security/);
+  assert.match(migration, /workspace_id = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /actor\.id = nullif\(current_setting\('app\.actor_id'/);
+  assert.match(migration, /grant select, insert, update, delete on table media_assets to novalure_tenant_app/);
+  assert.doesNotMatch(migration, /disable row level security|no force/);
+});

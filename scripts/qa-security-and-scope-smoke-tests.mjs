@@ -471,6 +471,10 @@ test("private media routes stream through the app and never redirect to Blob", a
     new URL("../src/app/api/media/public/[token]/route.ts", import.meta.url),
     "utf8",
   );
+  const deleteRoute = await readFile(
+    new URL("../src/app/api/media/[assetId]/route.ts", import.meta.url),
+    "utf8",
+  );
   const apiRoute = await readFile(new URL("../src/app/api/media/route.ts", import.meta.url), "utf8");
   const expandMigration = await readFile(
     new URL("../migrations/051_private_media_access.sql", import.meta.url),
@@ -501,7 +505,10 @@ test("private media routes stream through the app and never redirect to Blob", a
     assert.doesNotMatch(route, /asset\.url/);
   }
   assert.match(privateRoute, /"cache-control": "private, no-store"/);
-  assert.match(privateRoute, /findWorkspaceMediaAsset\(assetId, auth\.session\.workspaceId\)/);
+  assert.match(privateRoute, /withCrmRead\(auth\.session/);
+  assert.match(privateRoute, /findWorkspaceMediaAsset\(assetId, session\.workspaceId\)/);
+  assert.match(deleteRoute, /withCrmRead\(auth\.session/);
+  assert.match(deleteRoute, /deleteWorkspaceMedia\(assetId, session\.workspaceId\)/);
   assert.match(publicRoute, /findPublicMediaAsset\(token\)/);
   assert.match(apiRoute, /media\.assets\.map\(serializeMediaAsset\)/);
   assert.match(apiRoute, /body\?\.action !== "publish" && body\?\.action !== "revoke"/);

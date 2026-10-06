@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/session";
+import { withCrmRead } from "@/lib/crm-command";
 import { deleteWorkspaceMedia } from "@/lib/media-store";
 
 const privateJsonHeaders = { "cache-control": "private, no-store" };
@@ -13,7 +14,8 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;
-  const deleted = await deleteWorkspaceMedia(assetId, auth.session.workspaceId);
+  const deleted = await withCrmRead(auth.session, (_tx, session) =>
+    deleteWorkspaceMedia(assetId, session.workspaceId));
 
   if (!deleted) {
     return NextResponse.json({ error: "Media asset not found." }, { headers: privateJsonHeaders, status: 404 });
