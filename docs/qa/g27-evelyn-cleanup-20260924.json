@@ -1,0 +1,56 @@
+{
+  "contractVersion": "evelyn-g27-cleanup-final-v1",
+  "completedAt": "2026-09-24T13:59:49.577Z",
+  "status": "PASS",
+  "independentReview": {
+    "critical": 0,
+    "high": 0
+  },
+  "vercel": {
+    "deletedDeployments404": [
+      {
+        "id": "dpl_Adbe72F6BsmuCYpiHf322GZ1zAn3",
+        "status": 404
+      },
+      {
+        "id": "dpl_AVvk5TKMAoPQoVbATZRKKkHKZnTE",
+        "status": 404
+      },
+      {
+        "id": "dpl_78AgPzc13Y2LNKFmZKMLpbDhdDiA",
+        "status": 404
+      }
+    ],
+    "remainingG27PreviewDeployments": 0,
+    "remainingG27BranchVariables": 0,
+    "productionEnvironmentVariables": 0,
+    "productionDeploymentsUnchanged": true,
+    "automationBypassPreserved": true,
+    "bypassScopes": [
+      "automation-bypass"
+    ]
+  },
+  "neon": {
+    "branchId": "br-young-water-awa2ri4k",
+    "branchName": "evelyn-g27-qa-20260924",
+    "branchListAbsent": true,
+    "databaseConnectionRejected": true
+  },
+  "git": {
+    "mainHead": "1de5e72d4f599f9fe9c05ddb9f8ab6db51f753fc",
+    "mainClean": true,
+    "localBranchAbsent": true,
+    "remoteBranchAbsent": true,
+    "worktreeAbsent": true
+  },
+  "local": {
+    "privateQaArtifactsAbsent": true,
+    "privateFileNameResidue": 0,
+    "sanitizedEvidenceDirectory": "C:\\Projects\\evelyn\\artifacts\\g27-final-evidence-20260924"
+  },
+  "crmResourcesModified": false,
+  "productionImpact": "NONE",
+  "openCritical": 0,
+  "openHigh": 0,
+  "openBlockers": 0
+}

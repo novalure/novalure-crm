@@ -2202,7 +2202,7 @@ function RolePriorityPanel({
   const openTasks = tasks.filter((task) => task.status === "open");
   const now = new Date();
   const pipelineValue = deals
-    .filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert"].includes(deal.stage))
+    .filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren"].includes(deal.stage))
     .reduce((sum, deal) => sum + parseRolePanelDealValue(deal.value) * (deal.probability / 100), 0);
   const locale = getLocale(language);
   const metricValues = {

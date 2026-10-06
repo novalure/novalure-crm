@@ -13,10 +13,10 @@ function readJson(path) {
 test("Next.js app baseline scripts and versions are present", () => {
   const pkg = readJson("package.json");
 
-  assert.equal(pkg.dependencies.next, "16.3.5");
+  assert.equal(pkg.dependencies.next, "16.3.6");
   assert.equal(pkg.dependencies.react, "19.2.8");
   assert.equal(pkg.dependencies["react-dom"], "19.2.8");
-  assert.equal(pkg.scripts.lint, "eslint --max-warnings=0");
+  assert.equal(pkg.scripts.lint, "eslint --max-warnings=0 && npm run check:masterplan");
   assert.equal(pkg.engines.node, ">=24 <25");
   assert.equal(pkg.packageManager, "npm@11.9.0");
   assert.equal(pkg.scripts.build, "next build");

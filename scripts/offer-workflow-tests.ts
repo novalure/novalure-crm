@@ -48,7 +48,7 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
       await db.admin.query(`insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC OFFER QA','novalure_internal','novalure_internal',$2::jsonb)`, [workspaceId, JSON.stringify({ salesApprovalUserId: userId })]);
       const user = await db.admin.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic approver',$3,'owner','novalureAdmin','active') returning auth_identity_id`, [userId, workspaceId, `${userId}@example.invalid`]);
       const authIdentityId = user.rows[0].auth_identity_id as string;
-      await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,expires_at) values($1,$2,$3,$4,$5,now()+interval '2 hours')`, [authSessionId, createHash("sha256").update(randomUUID()).digest("hex"), authIdentityId, userId, workspaceId]);
+      await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at) values($1,$2,$3,$4,$5,now(),now()+interval '2 hours')`, [authSessionId, createHash("sha256").update(randomUUID()).digest("hex"), authIdentityId, userId, workspaceId]);
       await db.admin.query(`insert into projects(id,workspace_id,name,type) values($1,$2,'Synthetic project','Service')`, [projectId, workspaceId]);
       await db.admin.query(`insert into organizations(id,workspace_id,project_id,name,type) values($1,$2,$3,'Synthetic company','Unternehmen')`, [organizationId, workspaceId, projectId]);
       await db.admin.query(`insert into contacts(id,workspace_id,project_id,organization_id,owner_user_id,name,role,email,consent_label) values($1,$2,$3,$4,$5,'Synthetic Buyer','Kunde','buyer@example.invalid','Opt-in')`, [contactId, workspaceId, projectId, organizationId, userId]);
@@ -97,7 +97,7 @@ test("PostgreSQL offer workflow, constraints, isolation, idempotency and atomic 
       const userId = randomUUID(), authSessionId = randomUUID();
       const added = await db.admin.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'Synthetic sales',$3,'agent','novalure_sales','active') returning auth_identity_id`, [userId, f.workspaceId, `${userId}@example.invalid`]);
       const authIdentityId = added.rows[0].auth_identity_id as string;
-      await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,expires_at) values($1,$2,$3,$4,$5,now()+interval '2 hours')`, [authSessionId, createHash("sha256").update(randomUUID()).digest("hex"), authIdentityId, userId, f.workspaceId]);
+      await db.admin.query(`insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at) values($1,$2,$3,$4,$5,now(),now()+interval '2 hours')`, [authSessionId, createHash("sha256").update(randomUUID()).digest("hex"), authIdentityId, userId, f.workspaceId]);
       const actor = { ...f.session, userId, authSessionId, authIdentityId };
       const offer = (await f.view()).offer!;
       await assert.rejects(f.command("approve", { revision: offer.revision, contentDigest: offer.contentDigest, expiresAt: new Date(Date.now()+3600000).toISOString() }, {}, actor), /APPROVER_REQUIRED/);

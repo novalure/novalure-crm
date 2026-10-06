@@ -1313,7 +1313,8 @@ function isImportantStage(toStage: string) {
     toStage.startsWith("Abschluss") ||
     toStage === "Gewonnen" ||
     toStage === "Verloren" ||
-    toStage === "Disqualifiziert"
+    toStage === "Disqualifiziert" ||
+    toStage === "Pausiert / Verloren"
   );
 }
 
@@ -1357,7 +1358,9 @@ export async function queueDealStageChangeTeamsNotification(input: {
     return { queued: false, reason: "Deal not found" };
   }
 
-  const severity = input.toStage === "Verloren" || input.toStage === "Disqualifiziert" ? "critical" : "warning";
+  const severity = input.toStage === "Verloren" || input.toStage === "Disqualifiziert" || input.toStage === "Pausiert / Verloren"
+    ? "critical"
+    : "warning";
   const summary = `${deal.dealName} wechselte von ${input.fromStage ?? "unbekannt"} zu ${input.toStage}.`;
 
   return queueTeamsNotification({

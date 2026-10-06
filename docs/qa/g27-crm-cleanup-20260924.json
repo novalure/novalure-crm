@@ -1,0 +1,171 @@
+{
+  "status": "PARTIAL",
+  "completedAt": "2026-09-24T13:59:08.55Z",
+  "productionImpact": "NONE",
+  "database": {
+    "projectId": "super-block-59791927",
+    "branchId": "br-summer-breeze-awuzinct",
+    "branchName": "g27-qa-crm-20260923",
+    "parentBranchId": "br-dry-thunder-awmimouk",
+    "createdAt": "2026-09-20T19:57:16Z",
+    "method": "Authenticated Neon Console exact branch Delete",
+    "branchListAbsent": true,
+    "directBranchPage": "Request failed: branch not found",
+    "runtimeConnectionRefused": true
+  },
+  "vercel": {
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "branch": "codex/crm-production-readiness-g27",
+    "deletedVariables": [
+      {
+        "id": "8LFI2xUovSOFvgQz",
+        "key": "NEXT_PUBLIC_APP_URL",
+        "status": "DELETED"
+      },
+      {
+        "id": "smQwCq78ripePLif",
+        "key": "NOVALURE_APP_ORIGIN",
+        "status": "DELETED"
+      },
+      {
+        "id": "ng0RVdOQI3edXK6b",
+        "key": "CRM_EVELYN_QA_WORKSPACE_ID",
+        "status": "DELETED"
+      },
+      {
+        "id": "y3SVwRvw6nTlIYN4",
+        "key": "CRM_EVELYN_QA_PROJECT_ID",
+        "status": "DELETED"
+      },
+      {
+        "id": "gocTWhcOcME2baBM",
+        "key": "CRM_EVELYN_QA_TENANT_ID",
+        "status": "DELETED"
+      },
+      {
+        "id": "DHsKhx05MHEYhWuK",
+        "key": "DATABASE_URL",
+        "status": "DELETED"
+      },
+      {
+        "id": "aMfVAZm8K7Lmh1dA",
+        "key": "NOVALURE_SESSION_SECRET",
+        "status": "DELETED"
+      },
+      {
+        "id": "XmKqUyaVAqVdoR1D",
+        "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+        "status": "DELETED"
+      },
+      {
+        "id": "oLPA7vWUH9HFTgDs",
+        "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+        "status": "DELETED"
+      },
+      {
+        "id": "PiNaD1Tc7Q4KROiQ",
+        "key": "NOVALURE_AUTH_STRICT",
+        "status": "DELETED"
+      }
+    ],
+    "allOtherEnvironmentValuesUnchanged": true,
+    "deployments": [
+      {
+        "id": "dpl_9dYhwKCWSfuj3uXhoUgZoDnroYjY",
+        "url": "novalure-71fl8c6wh-novalure.vercel.app",
+        "target": null,
+        "sha": "5058b06d71d3e48716249bd484a544b4244e6a4c",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_7Cdk4noti394K5sp63ic8oYM9CEf",
+        "url": "novalure-bnuhjxaio-novalure.vercel.app",
+        "target": null,
+        "sha": "c6fa598054fdf0becd3d462dadb9f668dcba0c69",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_3R1Zxys3EWy4xWdcFderD8jGUv2E",
+        "url": "novalure-8m6kth0qt-novalure.vercel.app",
+        "target": null,
+        "sha": "06914fdd73e0a15e3dfa9451400bc2832ba7f79c",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_54SK7NS7csBYGVWDHHyAF36n7MDX",
+        "url": "novalure-j4qpxzss8-novalure.vercel.app",
+        "target": null,
+        "sha": "c43275b4f520fee4bbad5461126ff0650eac9d12",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_9YpzjHrZAaHP8EHqyD9FxUYreSbV",
+        "url": "novalure-h2d75ndgg-novalure.vercel.app",
+        "target": null,
+        "sha": "c43275b4f520fee4bbad5461126ff0650eac9d12",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_2mhHtYvTwznM7NbaXdSVXxt2EvDs",
+        "url": "novalure-8whxwbdpa-novalure.vercel.app",
+        "target": null,
+        "sha": "9685c6e2b8f829c04e6b442e8b8be6441996b02a",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_3cZ5cfpPWHwCfs6qYrHfCcUwWy3R",
+        "url": "novalure-h5gqx6s8x-novalure.vercel.app",
+        "target": null,
+        "sha": "9685c6e2b8f829c04e6b442e8b8be6441996b02a",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_GGWyhEFhsZ3yq9KGtfb8u6yHr8Sp",
+        "url": "novalure-7jhle9nr5-novalure.vercel.app",
+        "target": null,
+        "sha": "9a1aa32034e0ce9bcb9b78115b6ce1483515df39",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_2DuLDohKrBCBFvrGAcoQG1M8nmmE",
+        "url": "novalure-n7ow0x5ga-novalure.vercel.app",
+        "target": null,
+        "sha": "c8c3e21b2215e3c0319daedcd367f9f51fc7e847",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_6FDg6A4mX7uLZ9nPaY7YohXCM3sc",
+        "url": "novalure-8b2yc3kmx-novalure.vercel.app",
+        "target": null,
+        "sha": "4d56a1e689f765c6943dd284ad21557e86e5b2ca",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_3mMBTCgeCKE35G69jL2mPty6MiHC",
+        "url": "novalure-jxh7c2tdw-novalure.vercel.app",
+        "target": null,
+        "sha": "fb81f05d4e79b07cb03d6f564ac15671c0a004b3",
+        "confirmationStatus": 404
+      },
+      {
+        "id": "dpl_3r9pGrmdyp6KPLxGk5KioEvPnrn7",
+        "url": "novalure-ng21p7c8l-novalure.vercel.app",
+        "target": null,
+        "sha": "1c777bc8316583bc08ad49d61364a046d27cbe31",
+        "confirmationStatus": 404
+      }
+    ],
+    "remainingBranchDeployments": 0,
+    "originalProductionDeploymentCount": 11,
+    "originalProductionDeploymentsUnchanged": true
+  },
+  "temporaryMetadataToken": {
+    "name": "G27 final metadata 1h 20260924",
+    "revoked": true,
+    "absenceVerified": true
+  },
+  "localPrivateArtifacts": "BLOCKED_BY_EXECUTION_POLICY",
+  "qaAutoDeployDisabled": true,
+  "temporaryProbeRouteRemoved": true,
+  "localCleanupBlocker": "LOCAL_QA_CLEANUP_POLICY_BLOCKED"
+}

@@ -674,7 +674,7 @@ function warnMissingReservationDealStage(warning: ReservationDealStageWarning) {
 }
 
 function isTerminalDealStage(stage: string | null | undefined) {
-  return stage === "Gewonnen" || stage === "Verloren" || stage === "Disqualifiziert";
+  return stage === "Gewonnen" || stage === "Verloren" || stage === "Disqualifiziert" || stage === "Pausiert / Verloren";
 }
 
 async function validateDealStagePermission(

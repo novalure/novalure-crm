@@ -1,4 +1,10 @@
-import { withCrmRead } from "@/lib/crm-command";
+import {
+  assertCrmFields,
+  crmCommandErrorResponse,
+  crmRequestMetadata,
+  CrmCommandError,
+  withCrmRead,
+} from "@/lib/crm-command";
 import { NextResponse } from "next/server";
 import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import type { PropertyReservation, PropertyUnit } from "@/lib/crm-types";
@@ -16,6 +22,7 @@ import {
   updateSellerListingRecord,
 } from "@/lib/db/property-department-repositories";
 import { hasProductCapability } from "@/lib/product-model";
+import { readBoundedCrmJson } from "@/lib/crm-request-body";
 import { enforceCsrfForSession } from "@/lib/security/csrf";
 import {
   routePropertyInquiry,
@@ -25,12 +32,73 @@ import {
 } from "@/lib/property-department";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_PROPERTY_POST_BYTES = 16_384;
+const MAX_PROPERTY_COST_ITEMS = 100;
+const propertyCostItemFields = [
+  "costKey", "key", "groupKey", "label", "monthlyGross", "monthlyGrossCents", "monthlyNet",
+  "monthlyNetCents", "monthlyVat", "monthlyVatCents", "oneTimeGross", "oneTimeGrossCents",
+  "oneTimeNet", "oneTimeNetCents", "oneTimeVat", "oneTimeVatCents", "vatPercent", "optional",
+  "commissionRelevant", "exposeVisible", "internalNote", "position", "metadata",
+] as const;
 
 async function readJson(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    return null;
+  return readBoundedCrmJson(request, MAX_PROPERTY_POST_BYTES);
+}
+
+function boundedString(value: unknown, label: string, maxLength: number, required = false) {
+  if (value === undefined || value === null) {
+    if (required) throw new CrmCommandError("INVALID_COST_ITEM", `${label} is required`);
+    return;
+  }
+  if (typeof value !== "string") {
+    throw new CrmCommandError("INVALID_COST_ITEM", `${label} must be a string`);
+  }
+  const length = value.trim().length;
+  if ((required && length === 0) || length > maxLength) {
+    throw new CrmCommandError("INVALID_COST_ITEM", `${label} must contain 1-${maxLength} characters`);
+  }
+}
+
+function assertPropertyCostItemsBoundary(input: Record<string, unknown>) {
+  assertCrmFields(input, ["operation", "projectId", "propertyId", "costItems", "idempotencyKey", "correlationId"]);
+  if (!Array.isArray(input.costItems)) {
+    throw new CrmCommandError("INVALID_COST_ITEMS", "costItems must be an array");
+  }
+  if (input.costItems.length > MAX_PROPERTY_COST_ITEMS) {
+    throw new CrmCommandError("COST_ITEMS_LIMIT", `costItems must contain at most ${MAX_PROPERTY_COST_ITEMS} items`);
+  }
+  for (const [index, rawItem] of input.costItems.entries()) {
+    if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
+      throw new CrmCommandError("INVALID_COST_ITEM", `costItems[${index}] must be an object`);
+    }
+    const item = rawItem as Record<string, unknown>;
+    assertCrmFields(item, propertyCostItemFields);
+    const hasCostKey = typeof item.costKey === "string" && item.costKey.trim().length > 0;
+    boundedString(hasCostKey ? item.costKey : item.key, `costItems[${index}].costKey`, 100, true);
+    boundedString(item.costKey, `costItems[${index}].costKey`, 100);
+    boundedString(item.key, `costItems[${index}].key`, 100);
+    boundedString(item.groupKey, `costItems[${index}].groupKey`, 100);
+    boundedString(item.label, `costItems[${index}].label`, 200, true);
+    boundedString(item.internalNote, `costItems[${index}].internalNote`, 2_000);
+    for (const field of [
+      "monthlyGross", "monthlyGrossCents", "monthlyNet", "monthlyNetCents", "monthlyVat",
+      "monthlyVatCents", "oneTimeGross", "oneTimeGrossCents", "oneTimeNet", "oneTimeNetCents",
+      "oneTimeVat", "oneTimeVatCents", "vatPercent",
+    ] as const) {
+      if (typeof item[field] === "string") boundedString(item[field], `costItems[${index}].${field}`, 80);
+    }
+    for (const field of ["optional", "commissionRelevant", "exposeVisible"] as const) {
+      if (item[field] !== undefined && typeof item[field] !== "boolean") {
+        throw new CrmCommandError("INVALID_COST_ITEM", `costItems[${index}].${field} must be a boolean`);
+      }
+    }
+    if (item.position !== undefined && (!Number.isSafeInteger(item.position) || Number(item.position) < 0)) {
+      throw new CrmCommandError("INVALID_COST_ITEM", `costItems[${index}].position must be a non-negative integer`);
+    }
+    if (item.metadata !== undefined
+      && (!item.metadata || typeof item.metadata !== "object" || Array.isArray(item.metadata))) {
+      throw new CrmCommandError("INVALID_COST_ITEM", `costItems[${index}].metadata must be an object`);
+    }
   }
 }
 
@@ -135,9 +203,14 @@ export async function POST(request: Request) {
   const csrf = await enforceCsrfForSession(request, session);
   if (!csrf.ok) return csrf.response;
 
-  const body = await readJson(request);
-  if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  let body: unknown;
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    return crmCommandErrorResponse(error);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return crmCommandErrorResponse(new CrmCommandError("INVALID_REQUEST", "JSON object required"));
   }
 
   const input = body as Record<string, unknown>;
@@ -240,16 +313,32 @@ export async function POST(request: Request) {
     }
 
     if (operation === "save_cost_items") {
-      const result = await savePropertyCostItems({
-        costItems: input.costItems,
-        projectId: input.projectId,
-        propertyId: input.propertyId,
-        session,
-      });
-      if (!result.persisted) {
-        return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+      let correlationId: string | undefined;
+      try {
+        assertPropertyCostItemsBoundary(input);
+        const metadata = crmRequestMetadata(request, input);
+        correlationId = metadata.correlationId;
+        const result = await savePropertyCostItems({
+          costItems: input.costItems,
+          projectId: input.projectId,
+          propertyId: input.propertyId,
+          session,
+          ...metadata,
+        });
+        if (!result.persisted) {
+          return NextResponse.json({ error: result.reason }, { status: getWriteStatus(result.reason) });
+        }
+        return NextResponse.json({
+          auditReference: result.auditReference,
+          commandId: result.commandId,
+          correlationId,
+          data: result.data,
+          persisted: true,
+          replayed: result.replayed,
+        });
+      } catch (error) {
+        return crmCommandErrorResponse(error, correlationId);
       }
-      return NextResponse.json({ data: result.data, persisted: true });
     }
 
     if (operation === "attach_media") {

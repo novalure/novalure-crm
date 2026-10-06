@@ -131,6 +131,69 @@ function parsePrice(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
 }
 
+function formatExactMinorUnits(
+  minorUnits: string,
+  currency: string,
+  exponent: number,
+  language: LanguageCode,
+) {
+  if (!/^(?:0|-?[1-9][0-9]{0,77})$/.test(minorUnits) || !/^[A-Z]{3}$/.test(currency)) return null;
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 9) return null;
+
+  const negative = minorUnits.startsWith("-");
+  const unsigned = negative ? minorUnits.slice(1) : minorUnits;
+  const padded = unsigned.padStart(exponent + 1, "0");
+  const integerDigits = exponent === 0 ? padded : padded.slice(0, -exponent);
+  const fractionDigits = exponent === 0 ? "" : padded.slice(-exponent);
+  const formatter = new Intl.NumberFormat(getLocale(language), { maximumFractionDigits: 0 });
+  const integer = formatter.format(BigInt(integerDigits));
+  const decimalSeparator =
+    new Intl.NumberFormat(getLocale(language)).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
+
+  return `${currency} ${negative ? "-" : ""}${integer}${fractionDigits ? `${decimalSeparator}${fractionDigits}` : ""}`;
+}
+
+function summarizeHistoricalSaleValue(units: PropertyUnit[]) {
+  const soldUnits = units.filter((unit) => unit.status === "sold");
+  const reviewCount = soldUnits.filter((unit) => unit.historicalSaleReviewState !== "VERIFIED").length;
+  const verifiedValues = soldUnits.flatMap((unit) => {
+    const currency = unit.historicalSaleCurrency;
+    const exponent = unit.historicalSaleMinorUnitExponent;
+    const minorUnits = unit.historicalSaleNetMinorUnits;
+    if (
+      unit.historicalSaleReviewState !== "VERIFIED" ||
+      !unit.historicalSaleFinancialSnapshotId ||
+      !currency ||
+      exponent === undefined ||
+      !minorUnits ||
+      !/^(?:0|-?[1-9][0-9]{0,77})$/.test(minorUnits)
+    ) {
+      return [];
+    }
+    return [{ currency, exponent, minorUnits }];
+  });
+  const projectionIssueCount = soldUnits.length - reviewCount - verifiedValues.length;
+  const dimensions = new Set(verifiedValues.map((value) => `${value.currency}:${value.exponent}`));
+
+  if (verifiedValues.length === 0 || dimensions.size !== 1) {
+    return {
+      currency: null,
+      dimensionCount: dimensions.size,
+      exponent: null,
+      minorUnits: null,
+      reviewCount: reviewCount + Math.max(0, projectionIssueCount),
+    };
+  }
+
+  return {
+    currency: verifiedValues[0].currency,
+    dimensionCount: 1,
+    exponent: verifiedValues[0].exponent,
+    minorUnits: verifiedValues.reduce((sum, value) => sum + BigInt(value.minorUnits), BigInt(0)).toString(),
+    reviewCount: reviewCount + Math.max(0, projectionIssueCount),
+  };
+}
+
 function parseBudgetText(value: string | undefined) {
   if (!value) return null;
 
@@ -376,11 +439,25 @@ export function UnitBoard({
 
   const activeUnitIds = new Set(unitViews.map(({ unit }) => unit.id));
   const visibleUnits = unitViews.map(({ unit }) => unit);
-  const inventoryValue = visibleUnits.reduce((sum, unit) => sum + unit.priceCents, 0);
-  const soldValue = visibleUnits
-    .filter((unit) => unit.status === "sold")
-    .reduce((sum, unit) => sum + unit.priceCents, 0);
-  const totalAreaSqm = visibleUnits.reduce((sum, unit) => sum + unit.areaSqm, 0);
+  const inventoryUnits = visibleUnits.filter((unit) => unit.status !== "sold");
+  const inventoryValue = inventoryUnits.reduce((sum, unit) => sum + unit.priceCents, 0);
+  const historicalSaleValue = summarizeHistoricalSaleValue(visibleUnits);
+  const soldValue =
+    historicalSaleValue.minorUnits !== null &&
+    historicalSaleValue.currency !== null &&
+    historicalSaleValue.exponent !== null
+      ? formatExactMinorUnits(
+          historicalSaleValue.minorUnits,
+          historicalSaleValue.currency,
+          historicalSaleValue.exponent,
+          language,
+        )
+      : historicalSaleValue.dimensionCount > 1
+        ? language === "de"
+          ? "Mehrere Währungen"
+          : "Multiple currencies"
+        : "—";
+  const totalAreaSqm = inventoryUnits.reduce((sum, unit) => sum + unit.areaSqm, 0);
   const averagePricePerSqm = totalAreaSqm > 0 ? inventoryValue / 100 / totalAreaSqm : 0;
   const availableCount = visibleUnits.filter((unit) => unit.status === "available").length;
   const reservedCount = visibleUnits.filter((unit) => unit.status === "reserved").length;
@@ -425,7 +502,11 @@ export function UnitBoard({
       label: text.soldShare,
       value: visibleUnits.length ? `${formatNumber(Math.round((soldCount / visibleUnits.length) * 100), language)}%` : "0%",
     },
-    { label: text.soldValue, value: formatCurrency(soldValue / 100, language) },
+    { label: text.soldValue, value: soldValue },
+    {
+      label: language === "de" ? "Finanzprüfung offen" : "Financial reviews pending",
+      value: formatNumber(historicalSaleValue.reviewCount, language),
+    },
     { label: text.averagePricePerSqm, value: formatCurrency(averagePricePerSqm, language) },
     { label: text.warningCount, value: formatNumber(expiringReservations.length, language) },
   ];
@@ -940,7 +1021,7 @@ export function UnitBoard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
           {managementMetrics.map((metric) => (
             <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={metric.label}>
               <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{metric.label}</p>
@@ -1339,7 +1420,29 @@ export function UnitBoard({
                       <Pill className={statusStyles[unit.status]}>{text.unitStatusLabels[unit.status]}</Pill>
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-950">
-                      {formatCurrency(unit.priceCents / 100, language)}
+                      <p>{formatCurrency(unit.priceCents / 100, language)}</p>
+                      {unit.status === "sold" ? (
+                        unit.historicalSaleReviewState === "VERIFIED" &&
+                        unit.historicalSaleNetMinorUnits &&
+                        unit.historicalSaleCurrency &&
+                        unit.historicalSaleMinorUnitExponent !== undefined ? (
+                          <p className="mt-1 text-xs font-medium text-emerald-800">
+                            {language === "de" ? "Historischer Nettoabschluss" : "Historical net closing"}: {" "}
+                            {formatExactMinorUnits(
+                              unit.historicalSaleNetMinorUnits,
+                              unit.historicalSaleCurrency,
+                              unit.historicalSaleMinorUnitExponent,
+                              language,
+                            ) ?? "—"}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs font-medium text-amber-800">
+                            {language === "de"
+                              ? "Historischer Geld-/Steuerstand: Prüfung offen"
+                              : "Historical money/tax state: review pending"}
+                          </p>
+                        )
+                      ) : null}
                     </td>
                     <td className="px-4 py-4 text-slate-700">{text.areaValue(formatNumber(unit.areaSqm, language))}</td>
                     <td className="px-4 py-4 text-slate-700">{formatNumber(unit.rooms, language)}</td>

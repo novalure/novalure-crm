@@ -4,6 +4,7 @@ import { getRolePermissions } from "./auth/permissions";
 import { getProductRoleCapabilities } from "./product-model";
 import { assertCrmFields, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "./crm-command";
 import { queryAuthenticationRows } from "./db/tenant-client";
+import { readBoundedCrmJson } from "./crm-request-body";
 
 export const CRM_CONTRACT_VERSION = "crm-integration-v1";
 export const CRM_CONTRACT_SCOPES = ["crm.contacts.read","crm.contacts.write","crm.companies.read","crm.developers.read","crm.projects.read","crm.projects.write","crm.units.read","crm.leads.read","crm.leads.write","crm.qualifications.read","crm.offers.read","crm.offers.prepare","crm.tasks.read","crm.tasks.write","crm.appointments.read","crm.viewings.read","crm.reservations.read","crm.reservations.prepare","crm.sales.read","crm.communications.read","crm.communications.write","crm.approvals.read"] as const;
@@ -161,8 +162,8 @@ export async function handleCrmContractRequest(request:Request,options:TenantTra
   const hash=createHash("sha256").update(match[1]).digest("hex");
   const principal=(await queryAuthenticationRows<Principal>("select * from crm_authenticate_service($1)",[hash],options))[0];
   if(!principal)return fail("CRM_NOT_ACCESSIBLE",401);
-  const body=await request.text();if(body.length>16_384)return fail("INVALID_CRM_REQUEST",400);
-  try {envelope=parseCrmContractRequest(JSON.parse(body));}catch(error){if(error instanceof CrmCommandError)throw error;return fail("INVALID_CRM_REQUEST",400);}
+  const body=await readBoundedCrmJson(request,16_384);
+  try {envelope=parseCrmContractRequest(body);}catch(error){if(error instanceof CrmCommandError)throw error;return fail("INVALID_CRM_REQUEST",400);}
   const r=envelope;
   if(r.tenantId!==principal.tenant_alias || r.actorId!==principal.agent_id)return fail();
   for(const [header,value]of [["x-crm-purpose",principal.purpose],["x-crm-data-context",principal.data_context],["x-crm-classification",principal.data_classification]])if(request.headers.has(header)&&request.headers.get(header)!==value)return fail();

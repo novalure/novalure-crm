@@ -125,7 +125,7 @@ const WORK_STAGE_TITLES: DealStage[] = [
   "Abschlussprüfung",
 ];
 
-const END_STAGE_TITLES: DealStage[] = ["Gewonnen", "Verloren", "Disqualifiziert"];
+const END_STAGE_TITLES: DealStage[] = ["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren"];
 const ORDERED_STAGE_TITLES: DealStage[] = [...WORK_STAGE_TITLES, ...END_STAGE_TITLES];
 const CLOSE_REASON_OPTIONS: DealCloseReasonCategory[] = [
   "budget",
@@ -295,6 +295,42 @@ function formatEuro(value: number, locale: string) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value);
+}
+
+function exactWonDealMinorUnits(deal: Deal): bigint | null {
+  const minorUnits = deal.historicalFinancialNetMinorUnits;
+  if (
+    deal.stage !== "Gewonnen"
+    || !deal.historicalFinancialSnapshotId
+    || deal.historicalFinancialReviewState !== "VERIFIED"
+    || deal.historicalFinancialCurrency !== "EUR"
+    || deal.historicalFinancialMinorUnitExponent !== 2
+    || !minorUnits
+    || !/^(?:0|[1-9][0-9]{0,77})$/.test(minorUnits)
+  ) return null;
+  return BigInt(minorUnits);
+}
+
+function summarizeTerminalDealValues(deals: Deal[]) {
+  let valueMinorUnits = BigInt(0);
+  let reviewCount = 0;
+  for (const deal of deals) {
+    if (deal.stage !== "Gewonnen") continue;
+    const value = exactWonDealMinorUnits(deal);
+    if (value === null) reviewCount += 1;
+    else valueMinorUnits += value;
+  }
+  return { reviewCount, valueMinorUnits };
+}
+
+function formatExactEuroMinorUnits(value: bigint, locale: string) {
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  const integer = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(absolute / BigInt(100));
+  const fraction = (absolute % BigInt(100)).toString().padStart(2, "0");
+  const decimal = new Intl.NumberFormat(locale).formatToParts(1.1)
+    .find((part) => part.type === "decimal")?.value ?? ".";
+  return `EUR ${negative ? "-" : ""}${integer}${decimal}${fraction}`;
 }
 
 function formatBudgetText(value: string, locale: string, language: LanguageCode) {
@@ -1658,7 +1694,7 @@ export function DealPipelineWorkspace({
               >
                 {endStageTitles.map((stage) => {
                   const stageDeals = filteredDealViews.filter((item) => item.deal.stage === stage);
-                  const stageValue = stageDeals.reduce((sum, item) => sum + parseEuroValue(item.deal.value), 0);
+                  const stageFinancials = summarizeTerminalDealValues(stageDeals.map((item) => item.deal));
                   const stageMeta = stageConfigByName.get(stage);
 
                   return (
@@ -1674,8 +1710,13 @@ export function DealPipelineWorkspace({
                         <div>
                           <h5 className="text-sm font-semibold text-slate-950">{stageLabel(stage)}</h5>
                           <p className="mt-1 text-xs text-stone-500">
-                            {stageDeals.length} · {formatEuro(stageValue, locale)}
+                            {stageDeals.length} · {formatExactEuroMinorUnits(stageFinancials.valueMinorUnits, locale)}
                           </p>
+                          {stageFinancials.reviewCount > 0 ? (
+                            <p className="mt-1 text-xs font-semibold text-amber-700">
+                              {text.financialReviewOpen(stageFinancials.reviewCount)}
+                            </p>
+                          ) : null}
                           {stageMeta ? (
                             <p className="mt-1 text-xs font-semibold text-stone-500">
                               {stageMeta.probability}%{stageMeta.slaHours ? ` · SLA ${stageMeta.slaHours}h` : ""}
@@ -2088,6 +2129,9 @@ export function DealPipelineWorkspace({
             {orderedStageTitles.map((stage) => {
               const stageDeals = workingDeals.filter((deal) => deal.stage === stage);
               const value = stageDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
+              const terminalFinancials = isEndStage(stage, endStageTitles)
+                ? summarizeTerminalDealValues(stageDeals)
+                : null;
               const configured = Boolean(stageConfigByName.get(stage)) || pipeline.some((item) => normalizeDealStage(item.title, orderedStageTitles) === stage);
 
               return (
@@ -2099,8 +2143,15 @@ export function DealPipelineWorkspace({
                     </span>
                   </div>
                   <p className="mt-1 break-words text-xs text-slate-300">
-                    {value > 0 ? formatEuro(value, locale) : text.emptyStage}
+                    {terminalFinancials
+                      ? formatExactEuroMinorUnits(terminalFinancials.valueMinorUnits, locale)
+                      : value > 0 ? formatEuro(value, locale) : text.emptyStage}
                   </p>
+                  {terminalFinancials && terminalFinancials.reviewCount > 0 ? (
+                    <p className="mt-1 break-words text-xs font-semibold text-amber-200">
+                      {text.financialReviewOpen(terminalFinancials.reviewCount)}
+                    </p>
+                  ) : null}
                   {!configured ? (
                     <p className="mt-1 text-xs font-semibold text-amber-200">{text.stageHistoryPlaceholder}</p>
                   ) : null}

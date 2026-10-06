@@ -755,9 +755,9 @@ async function upsertDealRecordInTransaction(input: {
     return { persisted: false, reason: closeState.reason };
   }
 
-  if (stageChanged && existing) {
+  if ((stageChanged && existing) || (!existing && isTerminalDealStage(stage))) {
     const permission = await assertPipelineStagePermission({
-      deal: existing,
+      deal: existing ?? { ownerUserId, projectId, stage: "Neu" },
       session: input.session,
       targetStage: stage,
     });
@@ -4336,7 +4336,7 @@ function resolveDealCloseState(input: {
 }
 
 async function assertPipelineStagePermission(input: {
-  deal: DealRow;
+  deal: Pick<DealRow, "ownerUserId" | "projectId" | "stage">;
   session: AppSession;
   targetStage: DealStage;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {

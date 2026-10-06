@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "verifiedAt": "2026-09-24T13:45:27.634Z",
+  "readOnly": true,
+  "productionImpact": "NONE",
+  "checks": [
+    {
+      "gate": "PERSISTED_SNAPSHOT_AND_TOTALS",
+      "id": "25fe9893-b4ed-4ab9-862b-5bb4fa28364f",
+      "hash": "df803ae552711e3634acb8dcdb0ceedf88ecea4dea28ad67cc2268c64b580116",
+      "status": "PASS"
+    },
+    {
+      "gate": "PERSISTED_SNAPSHOT_AND_TOTALS",
+      "id": "41bc2ef9-ca4d-4c6e-b7c2-f94f8586bfe5",
+      "hash": "bd00865e447139631e07526c4050488f8d4d44e45dd638e459349989d20ca260",
+      "status": "PASS"
+    },
+    {
+      "gate": "PERSISTED_SNAPSHOT_AND_TOTALS",
+      "id": "7098dc61-1d31-40f8-8956-d50019426a94",
+      "hash": "15c7f5c831dec3570b115428ebb3b8dc2e2142136d473b53a9c860e3e42bff9e",
+      "status": "PASS"
+    },
+    {
+      "gate": "EXACTLY_ONE_V2_EXECUTION",
+      "status": "PASS",
+      "count": 1
+    },
+    {
+      "gate": "LEGACY_V1_AND_THREE_DURABLE_REJECTIONS",
+      "status": "PASS",
+      "eventIds": [
+        "23cd7e29-5c57-4ce9-aef0-e2f4de58d362",
+        "1ce5fc4b-f532-4e2f-a2be-2dfcd99b3c02",
+        "707d889b-cc66-472e-a7fa-0237e0b3ff25"
+      ]
+    },
+    {
+      "gate": "FOREIGN_SNAPSHOT_HIDDEN_BY_RLS",
+      "status": "PASS"
+    },
+    {
+      "gate": "FOREIGN_SNAPSHOT_UNCHANGED",
+      "status": "PASS"
+    }
+  ],
+  "database": {
+    "database": "qa_g27_20260923",
+    "project": "super-block-59791927",
+    "branch": "br-summer-breeze-awuzinct"
+  }
+}

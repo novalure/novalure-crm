@@ -1,4 +1,11 @@
-import { withCrmRead, CrmCommandError } from "@/lib/crm-command";
+import { randomUUID } from "node:crypto";
+import {
+  withCrmRead,
+  CrmCommandError,
+  crmPayloadDigest,
+  executeCrmCommand,
+  type TenantTransactionOptions,
+} from "@/lib/crm-command";
 import type { AppSession } from "@/lib/auth/session";
 import type { PropertyPriceVisibility, SellerListing } from "@/lib/crm-types";
 import type {
@@ -9,6 +16,8 @@ import type {
 import { executeQuery, queryOne } from "@/lib/db/client";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
+import { financialSnapshotHash, normalizeFinancialSnapshotV1 } from "@/lib/evelyn-money-tax-v2";
+import { exactCostMinorUnits, reconcileCostTriplet } from "@/lib/financial-costs";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -680,11 +689,17 @@ async function savePropertyTextBlocksInTransaction(input: {
 }
 
 async function savePropertyCostItemsInTransaction(input: {
+  correlationId: string;
   costItems: unknown;
   projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
-}): Promise<RepositoryWriteResult<{ count: number }>> {
+}): Promise<RepositoryWriteResult<{
+  businessVersion: number;
+  count: number;
+  snapshotHash: string;
+  snapshotId: string;
+}>> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) {
     return { persisted: false, reason: "Database persistence is not configured" };
   }
@@ -693,18 +708,47 @@ async function savePropertyCostItemsInTransaction(input: {
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
   const projectId = nullableUuid(input.projectId) ?? (await findPropertyProjectId(propertyId, input.session));
+  if (!projectId) return { persisted: false, reason: "Financial project context is required" };
+  const property = await queryOne<{ id: string }>(
+    "select id from seller_listings where workspace_id=$1 and project_id=$2::uuid and id=$3::uuid for update",
+    [input.session.workspaceId, projectId, propertyId],
+  );
+  if (!property) return { persisted: false, reason: "Property not found in project" };
   const costItems = asObjectArray(input.costItems);
+  const prepared = costItems.flatMap((item, index) => {
+    const costKey = cleanString(item.costKey) || cleanString(item.key);
+    const label = cleanString(item.label);
+    if (!costKey || !label) return [];
+    const monthly = reconcileCostTriplet({
+      net: exactCostMinorUnits(item.monthlyNet, item.monthlyNetCents, `${costKey}.monthlyNet`),
+      tax: exactCostMinorUnits(item.monthlyVat, item.monthlyVatCents, `${costKey}.monthlyTax`),
+      gross: exactCostMinorUnits(item.monthlyGross, item.monthlyGrossCents, `${costKey}.monthlyGross`),
+    }, `${costKey}.monthly`);
+    const oneTime = reconcileCostTriplet({
+      net: exactCostMinorUnits(item.oneTimeNet, item.oneTimeNetCents, `${costKey}.oneTimeNet`),
+      tax: exactCostMinorUnits(item.oneTimeVat, item.oneTimeVatCents, `${costKey}.oneTimeTax`),
+      gross: exactCostMinorUnits(item.oneTimeGross, item.oneTimeGrossCents, `${costKey}.oneTimeGross`),
+    }, `${costKey}.oneTime`);
+    return [{ item, index, costKey, label, monthly, oneTime }];
+  });
   await executeQuery("delete from property_cost_items where workspace_id = $1 and property_id = $2::uuid", [
     input.session.workspaceId,
     propertyId,
   ]);
 
   let count = 0;
-  for (const [index, item] of costItems.entries()) {
-    const costKey = cleanString(item.costKey) || cleanString(item.key);
-    const label = cleanString(item.label);
-    if (!costKey || !label) continue;
-
+  for (const cost of prepared) {
+    const { item, index, costKey, label, monthly, oneTime } = cost;
+    const storedMetadata = {
+      ...asPlainObject(item.metadata),
+      financialSemantics: {
+        reviewState: "NEEDS_REVIEW",
+        currency: null,
+        minorUnitExponent: null,
+        monthly: monthly.evidence,
+        oneTime: oneTime.evidence,
+      },
+    };
     await queryOne<IdRow>(
       `
         insert into property_cost_items (
@@ -758,34 +802,108 @@ async function savePropertyCostItemsInTransaction(input: {
         costKey,
         cleanString(item.groupKey) || "monthly",
         label,
-        toCostCents(item.monthlyNet, item.monthlyNetCents),
-        toCostCents(item.monthlyVat, item.monthlyVatCents),
-        toCostCents(item.monthlyGross, item.monthlyGrossCents),
-        toCostCents(item.oneTimeNet, item.oneTimeNetCents),
-        toCostCents(item.oneTimeVat, item.oneTimeVatCents),
-        toCostCents(item.oneTimeGross, item.oneTimeGrossCents),
+        monthly.net,
+        monthly.tax,
+        monthly.gross,
+        oneTime.net,
+        oneTime.tax,
+        oneTime.gross,
         optionalNumber(item.vatPercent),
         Boolean(item.optional),
         Boolean(item.commissionRelevant),
         item.exposeVisible !== false,
         cleanString(item.internalNote),
         index,
-        JSON.stringify(asPlainObject(item.metadata)),
+        JSON.stringify(storedMetadata),
       ],
     );
     count += 1;
   }
 
-  await writePropertyActivityEvent({
-    detail: `${count} Kostenpositionen gespeichert`,
-    eventType: "property.cost_items.saved",
-    projectId,
-    propertyId,
-    session: input.session,
-    title: "Kostenmatrix gespeichert",
+  const prior = await queryOne<{ id: string; businessVersion: number | string }>(`
+    select id,business_version as "businessVersion" from crm_financial_snapshots
+    where workspace_id=$1::uuid and resource_type='PROPERTY_COST_MATRIX' and resource_id=$2::uuid
+    order by business_version desc limit 1
+  `, [input.session.workspaceId, propertyId]);
+  const businessVersion = Number(prior?.businessVersion ?? 0) + 1;
+  if (!Number.isSafeInteger(businessVersion) || businessVersion < 1) {
+    throw new CrmCommandError("VERSION_REQUIRED", "Cost matrix version is invalid", 409);
+  }
+  const snapshotId = randomUUID();
+  const recordedAt = new Date().toISOString();
+  const evidence = {
+    source: "property-cost-items-v1",
+    exactMinorUnitStrings: true,
+    currencyUnknown: true,
+    taxPolicyUnknown: true,
+    roundingPolicyUnknown: true,
+    items: prepared.map(({ costKey, label, monthly, oneTime, item, index }) => ({
+      costKey,
+      label,
+      groupKey: cleanString(item.groupKey) || "monthly",
+      position: index,
+      monthly: monthly.evidence,
+      oneTime: oneTime.evidence,
+    })),
+  };
+  const evidenceHash = crmPayloadDigest({ contractVersion: "property-cost-evidence-v1", evidence });
+  const snapshot = normalizeFinancialSnapshotV1({
+    snapshotSchemaVersion: "financial-snapshot-v1",
+    snapshotId,
+    businessVersion,
+    tenantId: input.session.workspaceId,
+    resourceId: propertyId,
+    reviewState: "NEEDS_REVIEW",
+    effectiveAt: recordedAt,
+    currency: null,
+    minorUnitExponent: null,
+    currencyDefinition: null,
+    jurisdiction: null,
+    components: null,
+    totals: { net: null, tax: null, gross: null },
+    roundingPolicy: null,
+    pricingReference: { id: propertyId, version: String(businessVersion), contentHash: evidenceHash },
+    provenance: {
+      sourceSystem: "novalure-crm",
+      sourceRecordId: propertyId,
+      sourceVersion: String(businessVersion),
+      sourceHash: evidenceHash,
+      recordedAt,
+      recordedBy: input.session.userId,
+    },
+    missingFields: ["currency", "minorUnitExponent", "currencyDefinition", "jurisdiction", "components",
+      "totals.net", "totals.tax", "totals.gross", "taxPolicy", "roundingPolicy"],
   });
+  const snapshotHash = financialSnapshotHash(snapshot);
+  await queryOne<IdRow>(`
+    insert into crm_financial_snapshots(
+      id,workspace_id,project_id,resource_type,resource_id,business_version,review_state,
+      canonical_snapshot,snapshot_hash,supersedes_snapshot_id,legacy_classification,legacy_evidence,
+      created_by,correlation_id
+    ) values($1::uuid,$2::uuid,$3::uuid,'PROPERTY_COST_MATRIX',$4::uuid,$5,'NEEDS_REVIEW',
+      $6::jsonb,$7,$8::uuid,'B',$9::jsonb,$10::uuid,$11::uuid) returning id
+  `, [snapshotId, input.session.workspaceId, projectId, propertyId, businessVersion, JSON.stringify(snapshot),
+    snapshotHash, prior?.id ?? null, JSON.stringify(evidence), input.session.userId, input.correlationId]);
+  await queryOne<IdRow>(`
+    insert into crm_financial_events(
+      workspace_id,project_id,snapshot_id,event_type,related_snapshot_id,financial_snapshot_hash,
+      actor_id,correlation_id,details
+    ) values($1::uuid,$2::uuid,$3::uuid,'LEGACY_NEEDS_REVIEW',$4::uuid,$5,$6::uuid,$7::uuid,$8::jsonb)
+    returning id
+  `, [input.session.workspaceId, projectId, snapshotId, prior?.id ?? null, snapshotHash,
+    input.session.userId, input.correlationId, JSON.stringify({ resourceType: "PROPERTY_COST_MATRIX", businessVersion })]);
+  if (prior) {
+    await queryOne<IdRow>(`
+      insert into crm_financial_events(
+        workspace_id,project_id,snapshot_id,event_type,related_snapshot_id,financial_snapshot_hash,
+        actor_id,correlation_id,details
+      ) values($1::uuid,$2::uuid,$3::uuid,'SUPERSEDED',$4::uuid,$5,$6::uuid,$7::uuid,$8::jsonb)
+      returning id
+    `, [input.session.workspaceId, projectId, snapshotId, prior.id, snapshotHash,
+      input.session.userId, input.correlationId, JSON.stringify({ priorSnapshotId: prior.id })]);
+  }
 
-  return { data: { count }, persisted: true };
+  return { data: { businessVersion, count, snapshotHash, snapshotId }, persisted: true };
 }
 
 async function attachPropertyMediaInTransaction(input: {
@@ -1253,7 +1371,8 @@ async function savePropertyFragments(input: {
 
   const costItems = asObjectArray(input.property.costItems);
   if (costItems.length) {
-    await savePropertyCostItems({
+    await savePropertyCostItemsInTransaction({
+      correlationId: randomUUID(),
       costItems,
       projectId: input.projectId,
       propertyId: input.propertyId,
@@ -1657,16 +1776,6 @@ function toNullablePriceCents(value: unknown) {
   return Number.isFinite(parsed) ? Math.round(parsed > 999_999 ? parsed : parsed * 100) : null;
 }
 
-function toCostCents(euroValue: unknown, centsValue: unknown) {
-  if (euroValue !== null && euroValue !== undefined && euroValue !== "") {
-    return toPriceCents(euroValue);
-  }
-  if (centsValue !== null && centsValue !== undefined && centsValue !== "") {
-    const parsed = toNumber(centsValue, 0);
-    return Math.round(parsed);
-  }
-  return 0;
-}
 
 function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {
   if (value === "price_on_request") return "price_on_request";
@@ -1773,9 +1882,46 @@ export async function savePropertyTextBlocks(input:Parameters<typeof savePropert
  return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return savePropertyTextBlocksInTransaction({...input,session})});
 }
 
-export async function savePropertyCostItems(input:Parameters<typeof savePropertyCostItemsInTransaction>[0]):ReturnType<typeof savePropertyCostItemsInTransaction>{
- if(!canPersist())return savePropertyCostItemsInTransaction(input);
- return withCrmRead(input.session,async(_tx,session)=>{if(!session.permissions.includes("crm:write"))throw new CrmCommandError("FORBIDDEN","CRM write permission is required",403);return savePropertyCostItemsInTransaction({...input,session})});
+export async function savePropertyCostItems(
+ input: Parameters<typeof savePropertyCostItemsInTransaction>[0] & { idempotencyKey: string },
+ options: TenantTransactionOptions = {},
+){
+ if(!canPersist()||!isUuid(input.session.workspaceId))return {persisted:false as const,reason:"Database persistence is not configured"};
+ const propertyId=normalizeEntityId(input.propertyId);
+ if(!propertyId)throw new CrmCommandError("VALIDATION_ERROR","Invalid property id",400);
+ return withCrmRead(input.session,async(_tx,session)=>{
+  const projectId=nullableUuid(input.projectId)??await findPropertyProjectId(propertyId,session);
+  if(!projectId)throw new CrmCommandError("PROJECT_REQUIRED","Financial project context is required",400);
+  const command=await executeCrmCommand(session,{
+   operation:"property.cost_items.save",
+   resourceId:propertyId,
+   projectId,
+   idempotencyKey:input.idempotencyKey,
+   correlationId:input.correlationId,
+   capability:"workspace:operate",
+   payload:{contractVersion:"property-cost-matrix-v1",costItems:input.costItems},
+  },async(_commandTx,context)=>{
+   const saved=await savePropertyCostItemsInTransaction({
+    ...input,
+    correlationId:context.correlationId,
+    projectId,
+    propertyId,
+    session:context.session,
+   });
+   if(!saved.persisted){
+    const notFound=saved.reason.toLowerCase().includes("not found");
+    throw new CrmCommandError(notFound?"NOT_FOUND":"COMMAND_REJECTED",saved.reason,notFound?404:409);
+   }
+   return saved.data;
+  },options);
+  return {
+   auditReference:command.auditReference,
+   commandId:command.commandId,
+   data:command.data,
+   persisted:true as const,
+   replayed:command.replayed,
+  };
+ },options);
 }
 
 export async function attachPropertyMedia(input:Parameters<typeof attachPropertyMediaInTransaction>[0]):ReturnType<typeof attachPropertyMediaInTransaction>{

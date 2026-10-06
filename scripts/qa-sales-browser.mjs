@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
+import { spawn } from 'node:child_process';
 let fixture=JSON.parse(await readFile('.npm-cache/qa/sales-browser-context.json','utf8'));
 if(!fixture.syntheticOnly||new URL(fixture.baseUrl).hostname!=='127.0.0.1')throw Error('Browser QA requires the isolated loopback fixture');
 if(fixture.database?.host!=='127.0.0.1')throw Error('Invalid local database fixture');
@@ -22,12 +23,32 @@ const context=await browser.newContext({viewport:{width:1440,height:1000},locale
 await context.route('**/*',route=>{const u=new URL(route.request().url());return ['127.0.0.1','localhost'].includes(u.hostname)||['data:','blob:'].includes(u.protocol)?route.continue():route.abort()});
 await context.addInitScript(()=>localStorage.setItem('novalure-crm-navigation-preset-v1','realEstateBroker'));
 const page=await context.newPage(),results=[],errors=[];
+// Persist only allowlisted diagnostic metadata, never auth headers or request bodies.
+const requestTrace=[], requestStarted=new WeakMap(), traceTasks=[];
+page.on('request',request=>{
+ const url=new URL(request.url());
+ if(url.origin!==fixture.baseUrl||!['/api/crm/offers','/api/crm/financial-snapshots'].includes(url.pathname))return;
+ let operation;
+ try{operation=request.postDataJSON()?.operation}catch{/* GET has no body. */}
+ const entry={path:url.pathname,method:request.method(),operation,startedAt:new Date().toISOString(),startedMs:Date.now()};
+ requestStarted.set(request,entry);requestTrace.push(entry);
+});
+page.on('response',response=>{
+ const entry=requestStarted.get(response.request());if(!entry)return;
+ traceTasks.push((async()=>{entry.status=response.status();entry.durationMs=Date.now()-entry.startedMs;try{const data=await response.json();entry.code=data.code;entry.persisted=data.persisted;entry.offerStatus=(data.data??data).offer?.status;entry.snapshotReviewState=data.snapshot?.reviewState;}catch{/* No response body available. */}})());
+});
 page.on('pageerror',error=>errors.push(error.message));
 page.on('response',response=>{const url=new URL(response.url());if(url.origin===fixture.baseUrl&&response.status()>=500)errors.push('HTTP '+response.status()+' '+url.pathname);});
 async function step(name,fn){try{await fn();results.push({name,status:'PASS'});console.log('PASS '+name)}catch(error){results.push({name,status:'FAIL',error:error.message});await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});throw error}}
-async function api(path,body,method='POST'){
- const response=await page.evaluate(async({path,body,method,key,correlationId})=>{const csrf=await fetch('/api/auth/csrf?'+new URLSearchParams({method,path}));const token=await csrf.json();const r=await fetch(path,{method,headers:{'content-type':'application/json','x-novalure-csrf-token':token.csrfToken,'Idempotency-Key':key,'X-Correlation-Id':correlationId},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};},{path,body,method,key:randomUUID(),correlationId:randomUUID()});
- assert.ok(response.status>=200&&response.status<300,JSON.stringify(response));return response.body;
+async function requestApi(path,body,method='POST'){
+ const response=await page.evaluate(async({path,body,method,key,correlationId})=>{const csrf=await fetch('/api/auth/csrf?'+new URLSearchParams({method,path:new URL(path,location.origin).pathname}));if(!csrf.ok)throw Error('CSRF issuance failed: '+csrf.status);const token=await csrf.json();const r=await fetch(path,{method,headers:{'content-type':'application/json','x-novalure-csrf-token':token.csrfToken,'Idempotency-Key':key,'X-Correlation-Id':correlationId},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};},{path,body,method,key:randomUUID(),correlationId:randomUUID()});
+ return response;
+}
+async function api(path,body,method='POST'){const response=await requestApi(path,body,method);assert.ok(response.status>=200&&response.status<300,JSON.stringify(response));return response.body;}
+async function financialFixture(mode,offerId){
+ const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>/^(path|systemroot|windir|temp|tmp|userprofile|localappdata|appdata|comspec|pathext)$/i.test(key)));env.NODE_ENV='test';
+ await new Promise((resolve,reject)=>{const child=spawn(process.execPath,['--conditions=react-server','--import','tsx','scripts/qa-g27-browser-financial-fixture.ts',mode,offerId],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>output+=x);child.once('error',reject);child.once('close',code=>code===0?resolve():reject(new Error('Financial fixture failed: '+output)));});
+ return JSON.parse(await readFile('.npm-cache/qa/g27-browser-financial.json','utf8'));
 }
 
 // Independent RFC 6238 authenticator: the key comes solely from the rendered enrollment UI.
@@ -176,13 +197,43 @@ try{
  });
  await step('Flow A approval, manual delivery evidence, follow-up and customer acceptance through UI',async()=>{
   const section=page.getByRole('region',{name:'Angebotsablauf',exact:true});
-  await section.getByRole('button',{name:'Diese Revision freigeben',exact:true}).click();await expect(section.getByText('Freigegeben',{exact:true})).toBeVisible();
+  const approvalResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/crm/offers'&&response.request().method()==='POST'&&response.request().postDataJSON()?.operation==='approve');
+  await section.getByRole('button',{name:'Diese Revision freigeben',exact:true}).click();
+  const approved=await approvalResponse;assert.equal(approved.status(),200);assert.equal((await approved.json()).persisted,true);
+  await expect(section.getByText('Freigegeben',{exact:true})).toBeVisible();
+  const persisted=await page.request.get(fixture.baseUrl+'/api/crm/offers?workspaceId='+fixture.workspaceId+'&dealId='+deal.id);assert.equal(persisted.status(),200);assert.equal((await persisted.json()).offer.status,'APPROVED');
   await section.getByRole('button',{name:'Manuellen Versand vorbereiten',exact:true}).click();
   await section.getByLabel('Manueller Versandbeleg',{exact:false}).fill('SYNTHETIC MANUAL LOCAL RECEIPT');await section.getByRole('button',{name:'Manuellen Versand bestätigen',exact:true}).click();
   await expect(section.getByText('Versand manuell belegt',{exact:true})).toBeVisible();
   await section.getByRole('button',{name:'Nachfassaufgabe planen',exact:true}).click();await expect(section).toContainText('SCHEDULED');
   await section.getByLabel('Kundenantwort / Annahme- oder Ablehnungsbeleg').fill('SYNTHETIC CUSTOMER ACCEPTANCE');
   await section.getByRole('button',{name:'Kundenannahme belegen',exact:true}).click();await expect(section.getByText('Angenommen · Deal gewonnen · Kunde',{exact:true})).toBeVisible();await expect(section).toContainText('STOPPED');
+ });
+ let financialState,financialOffer;
+ const reloadFinancialOffer=async()=>{await page.reload();await page.getByRole('button',{name:'Pipeline',exact:true}).first().click();return page.getByRole('region',{name:'Angebotsablauf',exact:true});};
+ await step('G27 browser B: explicit NEEDS_REVIEW evidence keeps authoritative printing blocked',async()=>{
+  const view=await (await page.request.get(fixture.baseUrl+'/api/crm/offers?workspaceId='+fixture.workspaceId+'&dealId='+deal.id)).json();financialOffer=view.offer;
+  financialState=await financialFixture('prepare',financialOffer.id);
+  const section=await reloadFinancialOffer();await expect(section.getByRole('alert')).toContainText('Finanzprüfung offen',{timeout:30000});await expect(section.getByRole('button',{name:'Druck gesperrt – Finanzprüfung offen',exact:true})).toBeDisabled();
+  const snapshot=await (await page.request.get(fixture.baseUrl+'/api/crm/financial-snapshots?workspaceId='+fixture.workspaceId+'&offerId='+financialOffer.id)).json();assert.equal(snapshot.snapshot.reviewState,'NEEDS_REVIEW');assert.equal(snapshot.snapshot.snapshotHash,financialState.pendingHash);
+ });
+ await step('G27 browser D: mismatching expected snapshot hash is rejected by the real HTTP boundary',async()=>{
+  const response=await requestApi('/api/crm/financial-snapshots?workspaceId='+fixture.workspaceId,{projectId:fixture.projectId,priorSnapshotId:financialState.pendingId,expectedPriorSnapshotHash:'0'.repeat(64),policySelection:financialState.selection,reviewDecision:'VERIFY_EVIDENCED_NET'});assert.equal(response.status,409);assert.equal(response.body.code,'FINANCIAL_SNAPSHOT_HASH_MISMATCH');
+ });
+ await step('G27 browser F: another existing tenant cannot read the snapshot through the authenticated HTTP boundary',async()=>{
+  const response=await page.request.get(fixture.baseUrl+'/api/crm/financial-snapshots?workspaceId='+financialState.foreignWorkspaceId+'&snapshotId='+financialState.pendingId);assert.ok([403,404].includes(response.status()));
+ });
+ await step('G27 browser C/E: missing tax policy and stale offer version fail during real V2 preparation',async()=>{
+  // Never spoof the Preview-only HTTP gate locally: use the repository's guarded loopback test interface.
+  financialState=await financialFixture('verify',financialOffer.id);assert.equal(financialState.missingTaxDenied,true);assert.equal(financialState.staleVersionDenied,true);
+ });
+ await step('G27 browser A: complete policy-backed V2 snapshot reloads from persistence and enables the approved document',async()=>{
+  const section=await reloadFinancialOffer();await expect(section).toContainText('Verifizierter unveränderlicher Finanzsnapshot',{timeout:30000});await expect(section).toContainText(financialState.verifiedHash);await expect(section).toContainText('EUR 11\u00a0880,00');await expect(section.getByRole('button',{name:'Fassung drucken',exact:true})).toBeEnabled();
+  const result=await (await page.request.get(fixture.baseUrl+'/api/crm/financial-snapshots?workspaceId='+fixture.workspaceId+'&offerId='+financialOffer.id)).json();assert.equal(result.snapshot.reviewState,'VERIFIED');assert.equal(result.snapshot.snapshot.reviewState,'COMPLETE');assert.equal(result.snapshot.snapshotHash,financialState.verifiedHash);
+ });
+ await step('G27 browser G: later current-value and tax-policy changes preserve historical evidence',async()=>{
+  financialState=await financialFixture('change-current-values',financialOffer.id);assert.equal(financialState.historicalUnchanged,true);
+  const section=await reloadFinancialOffer();await expect(section).toContainText(financialState.verifiedHash,{timeout:30000});await expect(section).toContainText('EUR 11\u00a0880,00');
  });
  await step('Flow B creates canonical buyer inquiry and available inventory via APIs',async()=>{
   buyer=(await api('/api/crm/contacts',{contact:{name:'SYNTHETIC Buyer',email:'buyer-browser-'+randomUUID().replaceAll('-','')+'@example.invalid',role:'Käufer',source:'Manual',consent:'Opt-in',projectId:fixture.projectId}})).contact;
@@ -221,4 +272,4 @@ try{
   const r=await page.request.get(fixture.baseUrl+'/api/crm/property-sales?projectId='+randomUUID());assert.ok([403,404].includes(r.status()));const w=await page.request.post(fixture.baseUrl+'/api/crm/offers',{data:{}});assert.equal(w.status(),403);
  });
  await step('no browser runtime exceptions during either workflow',async()=>assert.deepEqual(errors,[]));
-}catch(error){console.error(error.message);await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});await writeFile('.npm-cache/qa/sales-browser-failure.txt',await page.locator('body').innerText());process.exitCode=1;}finally{await writeFile('.npm-cache/qa/sales-browser-results.json',JSON.stringify({syntheticOnly:true,providerDeliveryVerified:false,loginCredentialExchangeVerified,mfaEnrollmentVerified:enrollmentVerified,authenticationTransport:"actual-login-ui",results,errors},null,2));console.log(JSON.stringify({passed:results.filter(r=>r.status==='PASS').length,total:results.length}));await browser.close();}
+}catch(error){console.error(error.message);await page.screenshot({path:'.npm-cache/qa/sales-browser-failure.png',fullPage:true});await writeFile('.npm-cache/qa/sales-browser-failure.txt',await page.locator('body').innerText());process.exitCode=1;}finally{await Promise.allSettled(traceTasks);await writeFile('.npm-cache/qa/sales-browser-results.json',JSON.stringify({syntheticOnly:true,providerDeliveryVerified:false,loginCredentialExchangeVerified,mfaEnrollmentVerified:enrollmentVerified,authenticationTransport:"actual-login-ui",results,errors,requestTrace},null,2));console.log(JSON.stringify({passed:results.filter(r=>r.status==='PASS').length,total:results.length}));await browser.close();}

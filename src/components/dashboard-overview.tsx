@@ -31,11 +31,9 @@ import {
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 const NOW = new Date();
-const COMMISSION_RATE = 0.03;
-const MONTH_TARGET_COMMISSION = 120000;
 const VIEW_STORAGE_KEY = "novalure-dashboard-views-v4";
 const LAST_VIEW_STORAGE_KEY = "novalure-dashboard-last-view-v4";
-const CLOSED_DEAL_STAGES = new Set<string>(["Gewonnen", "Verloren", "Disqualifiziert", "Abschluss"]);
+const CLOSED_DEAL_STAGES = new Set<string>(["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren", "Abschluss"]);
 const WON_DEAL_STAGES = new Set<string>(["Gewonnen", "Abschluss"]);
 const VIEWING_DEAL_STAGES = new Set<string>([
   "Besichtigung/Beratung",
@@ -565,9 +563,7 @@ export function DashboardOverview({
   const activeLeadsByType = leadTypeOptions.map((type) => ({ type, count: filteredLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === type).length }));
   const forecastOpenPipelineValue = forecastOpenDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value), 0);
   const forecastWeightedPipelineValue = forecastOpenDeals.reduce((sum, deal) => sum + parseEuroValue(deal.value) * (deal.probability / 100), 0);
-  const forecastCommission = forecastWeightedPipelineValue * COMMISSION_RATE;
   const monthClosings = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage) && isInPeriod(deal.expectedCloseDate, "Monat"));
-  const monthClosingCommission = monthClosings.reduce((sum, deal) => sum + parseEuroValue(deal.value) * COMMISSION_RATE, 0);
   const stageVisits = Math.max(1, filteredLeads.length);
   const viewingDeals = filteredDeals.filter((deal) => VIEWING_DEAL_STAGES.has(deal.stage)).length;
   const closingDeals = filteredDeals.filter((deal) => WON_DEAL_STAGES.has(deal.stage)).length;
@@ -745,9 +741,9 @@ export function DashboardOverview({
       case "activeLeads":
         return renderKpi(copy.kpis.activeLeads, String(filteredLeads.length), activeLeadsByType.map((item) => getCrmLeadTypeLabel(item.type, language) + ": " + item.count).join(" | "), "bg-emerald-50");
       case "pipelineValue":
-        return renderKpi(copy.kpis.pipelineValue, formatEuro(forecastCommission, locale), copy.kpis.expectedCommission(forecastOpenDeals.length, formatEuro(forecastOpenPipelineValue, locale), formatEuro(forecastWeightedPipelineValue, locale)), "bg-blue-50");
+        return renderKpi(copy.kpis.pipelineValue, formatEuro(forecastWeightedPipelineValue, locale), copy.kpis.expectedCommission(forecastOpenDeals.length, formatEuro(forecastOpenPipelineValue, locale), formatEuro(forecastWeightedPipelineValue, locale)), "bg-blue-50");
       case "monthlyClosings":
-        return renderKpi(copy.kpis.monthlyClosings, formatEuro(monthClosingCommission, locale), copy.kpis.target + ": " + formatEuro(MONTH_TARGET_COMMISSION, locale) + " | " + Math.round((monthClosingCommission / MONTH_TARGET_COMMISSION) * 100) + "%", "bg-violet-50");
+        return renderKpi(copy.kpis.monthlyClosings, new Intl.NumberFormat(locale).format(monthClosings.length), copy.kpis.financialPolicyRequired, "bg-violet-50");
       case "overdueFollowupsKpi":
         return renderKpi(copy.kpis.overdueFollowups, String(overdueLeads.length), overdueLeads.slice(0, 2).map((lead) => getLeadName(lead, contacts, language)).join(" | ") || copy.kpis.noCriticalFollowups, overdueLeads.length ? "bg-red-50" : "bg-emerald-50");
       case "hotLeadsKpi":
