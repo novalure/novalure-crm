@@ -1418,6 +1418,8 @@ export function PropertyCommandCenter({
               <ActionButton action={actions.approveDocument} />
             </div>
           </div>
+          {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
+            role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
           {selectedListing ? (
             <div className="mt-4">
               <PropertyExposeWorkspace

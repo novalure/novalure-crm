@@ -102,6 +102,7 @@ test("command-center uploads stay private until an explicit publication workflow
   assert.match(commandCenter, /visibility: "private"/);
   assert.doesNotMatch(commandCenter, /visibility: "public"/);
   assert.match(interactions, /visibility: "private"/);
+  assert.match(commandCenter, /activeTab === "documents"[\s\S]*role=\{notice\.kind === "success" \? "status" : "alert"\}[\s\S]*\{notice\.message\}/);
 });
 
 test("property media deletion uses the lifecycle protocol and globally complete scoped counts", async () => {
