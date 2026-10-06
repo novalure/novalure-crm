@@ -67,8 +67,11 @@ function attestTarget(target, identity, profile) {
 export async function applyMedia062Compatibility({ client, executionContext, executionProfile, sql, target }) {
   if (!executionContext || Object.keys(executionContext).sort().join(",") !== "headCommit,planDigest" || !/^[a-f0-9]{40}$/.test(executionContext.headCommit) || !/^[a-f0-9]{64}$/.test(executionContext.planDigest)) fail("exact runner commit and plan digest required");
   const prepared = renderMedia062Compatibility(sql);
-  const transaction = await client.query("select txid_current_if_assigned() is not null as active");
-  if (!transaction.rows[0]?.active) fail("caller transaction required");
+  try {
+    await client.query("savepoint media_062_compat");
+  } catch {
+    fail("caller transaction required");
+  }
   const identityResult = await client.query(`select current_user as "currentUser",session_user as "sessionUser",current_database() as "databaseName",current_setting('neon.project_id',true) as "projectId",current_setting('neon.branch_id',true) as "branchId"`);
   const profileId = attestTarget(target, identityResult.rows[0], executionProfile);
   const ledger = await client.query("select version,checksum from public.novalure_schema_migrations where version in ('061_validate_and_activate_tenant_rls_pilot','062_private_media_contract_cutover') order by version");
