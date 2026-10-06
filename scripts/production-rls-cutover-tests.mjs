@@ -4,11 +4,26 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import pg from "pg";
 import { startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { media062SourceChecksum, renderMedia062Compatibility } from "./lib/media-062-compat.mjs";
 
 const migration = await readFile(
   new URL("../migrations/091_production_runtime_forced_rls_cutover.sql", import.meta.url),
   "utf8",
 );
+const media062 = await readFile(
+  new URL("../migrations/062_private_media_contract_cutover.sql", import.meta.url),
+  "utf8",
+);
+
+test("062 compatibility pins historical bytes and brackets only the audit redaction", () => {
+  const rendered = renderMedia062Compatibility(media062);
+  assert.equal(rendered.sourceChecksum, media062SourceChecksum);
+  assert.notEqual(rendered.executedSqlChecksum, rendered.sourceChecksum);
+  assert.equal((rendered.executedSql.match(/disable trigger audit_logs_append_only_guard/g) ?? []).length, 1);
+  assert.equal((rendered.executedSql.match(/enable trigger audit_logs_append_only_guard/g) ?? []).length, 1);
+  assert.match(rendered.executedSql, /lock table public\.audit_logs in access exclusive mode/);
+  assert.throws(() => renderMedia062Compatibility(`${media062}\n`), /checksum mismatch/);
+});
 
 test("091 proves direct denial and scoped own/foreign/unset company-profile access", { timeout: 240_000 }, async () => {
   const db = await startLocalSalesDb();
