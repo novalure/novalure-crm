@@ -56,29 +56,21 @@ export function PublicSiteShell({
   const copy = shellCopy[language];
   const pageCopy = getPublicPageCopy(language);
   const legalCopy = getLoginLegalFooterCopy(language);
-  const homeHref = withPublicLanguage("/", language);
   const isLoginRoute = currentPath.startsWith("/login");
   const resolvedLanguageHrefs = languageHrefs ?? {
     de: withPublicLanguage(currentPath, "de"),
     en: withPublicLanguage(currentPath, "en"),
   };
-  const actionHref = isLoginRoute ? homeHref : withPublicLanguage("/login", language);
-  const actionLabel = isLoginRoute ? copy.home : copy.login;
+  const actionHref = withPublicLanguage("/login", language);
+  const actionLabel = copy.login;
 
   return (
     <div className={`${styles.page} ${figtree.variable} novalure-public-legacy`} lang={language}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <Link aria-label="Novalure CRM" className={styles.brand} href={homeHref}>
+          <Link aria-label="Novalure" className={styles.brand} href={actionHref}>
             <span className={styles.wordmark}>Novalure<span>.</span></span>
-            <span className={styles.crmBadge}>CRM</span>
           </Link>
-
-          <nav aria-label={copy.navigation} className={styles.desktopNav}>
-            <Link href={`${homeHref}#preview`}>{copy.preview}</Link>
-            <Link href={`${homeHref}#audit`}>{copy.audit}</Link>
-            <Link href={`${homeHref}#faq`}>{copy.faq}</Link>
-          </nav>
 
           <div className={styles.headerActions}>
             <nav aria-label={pageCopy.languageAriaLabel} className={styles.languageSwitch}>
@@ -94,7 +86,7 @@ export function PublicSiteShell({
                 <Link aria-label={pageCopy.switchToEnglish} href={resolvedLanguageHrefs.en}>EN</Link>
               )}
             </nav>
-            <Link className={styles.headerButton} href={actionHref}>{actionLabel}</Link>
+            {!isLoginRoute ? <Link className={styles.headerButton} href={actionHref}>{actionLabel}</Link> : null}
           </div>
         </div>
       </header>

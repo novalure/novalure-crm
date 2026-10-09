@@ -22,7 +22,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { companyLegalDetails, publicSiteOrigin } from "@/lib/legal";
-import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
+import { getRequestCountry } from "@/lib/public-audit";
 import { resolvePublicLanguage } from "@/lib/public-language";
 import { resolveSafeLocalRedirect } from "@/lib/security/redirects";
 import { buildPublicPageMetadata, resolvePublicPageLanguage } from "@/lib/page-metadata";
@@ -177,8 +177,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorText = getErrorText(getQueryValue(query.error), loginCopy);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
-  const auditHref = resolveAuditHref(country, language);
-  const publicHomeHref = getCanonicalPublicHref("/", language);
   const cookieHref = getCanonicalPublicHref("/cookies", language);
   const privacyHref = getCanonicalPublicHref("/privacy", language);
   const languageHrefs = {
@@ -187,16 +185,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   };
   const introCopy = language === "de"
     ? {
-        eyebrow: "Privater CRM-Zugang",
-        title: "Ihr geschützter Immobilien-Workspace.",
-        body: "Melden Sie sich an, um Leads, Zuständigkeiten und nächste Aktionen in Ihrem Novalure Workspace zu bearbeiten.",
-        points: ["Nur für freigegebene Teams", "Mandantengetrennte Arbeitsbereiche", "Sicherer Zugang zu operativen CRM-Daten"],
+        eyebrow: "Novalure",
+        title: "Mitarbeiter-Login",
+        body: "Interner Zugang für autorisierte Nutzer.",
+        points: ["Zugriff nur für freigegebene Nutzer", "Geschützte Arbeitsbereiche", "Sichere Anmeldung"],
       }
     : {
-        eyebrow: "Private CRM access",
-        title: "Your protected real estate workspace.",
-        body: "Sign in to manage leads, ownership and next actions in your Novalure workspace.",
-        points: ["For approved teams only", "Tenant-isolated workspaces", "Secure access to operational CRM data"],
+        eyebrow: "Novalure",
+        title: "Staff Login",
+        body: "Internal access for authorised users.",
+        points: ["Access for approved users only", "Protected workspaces", "Secure sign-in"],
       };
 
   return (
@@ -408,26 +406,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 </SubmitOnceForm>
               ) : null}
 
-            <div className={subpageStyles.authLinks}>
-              <Link
-                className={subpageStyles.textLink}
-                href={publicHomeHref}
-              >
-                {loginCopy.overviewLink}
-              </Link>
-              <a
-                className={subpageStyles.textLink}
-                href={auditHref}
-              >
-                {loginCopy.auditLink}
-              </a>
-            </div>
             <p className={subpageStyles.authHelp}>
-              {loginCopy.accessHelp.prefix}{" "}
-              <a className={subpageStyles.textLink} href={auditHref}>
-                {loginCopy.accessHelp.auditLabel}
-              </a>{" "}
-              {loginCopy.accessHelp.connector}{" "}
+              {language === "de" ? "Bei Fragen zum Zugang wenden Sie sich an " : "For access questions, contact "}
               <a className={subpageStyles.textLink} href={`mailto:${companyLegalDetails.email}`}>
                 {companyLegalDetails.email}
               </a>
