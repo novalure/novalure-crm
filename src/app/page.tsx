@@ -1,17 +1,12 @@
 import { headers } from "next/headers";
 import type { Metadata } from "next";
-import { PublicCrmLanding } from "@/components/public-crm-landing";
+import { redirect } from "next/navigation";
 import { CrmWorkspace } from "@/components/crm-workspace";
 import { getSessionFromHeaders } from "@/lib/auth/session";
 import { getCoreCrmData } from "@/lib/db/crm-loaders";
-import {
-  getCrmLandingPageCopy,
-  getLoginLegalFooterCopy,
-  getPublicPageCopy,
-  languageRequestHeaderName,
-} from "@/lib/i18n";
+import { languageRequestHeaderName } from "@/lib/i18n";
 import { publicSiteOrigin } from "@/lib/legal";
-import { getRequestCountry, resolveAuditHref } from "@/lib/public-audit";
+import { getRequestCountry } from "@/lib/public-audit";
 import {
   publicLanguageRequestHeaderName,
   resolvePublicSiteLanguage,
@@ -26,28 +21,25 @@ export const dynamic = "force-dynamic";
 
 const homeMetadata = {
   en: {
-    title: "Novalure CRM | Private Lead Workspace for Real Estate Teams",
+    title: "Novalure | Staff Login",
     description:
-      "Novalure CRM brings real estate enquiries, ownership and next actions into a protected workspace for property developers, brokerage teams and project sales teams.",
-    openGraphTitle: "Every real estate enquiry gets a next action.",
-    openGraphDescription:
-      "Private lead workspace for property developers, brokerage teams and project sales teams.",
+      "Internal access for authorised Novalure users.",
+    openGraphTitle: "Novalure Staff Login",
+    openGraphDescription: "Internal access for authorised Novalure users.",
   },
   de: {
-    title: "Novalure CRM | Privater Lead-Workspace für Immobilien-Teams",
+    title: "Novalure | Mitarbeiter-Login",
     description:
-      "Novalure CRM bündelt Immobilienanfragen, Zuständigkeiten und nächste Aktionen in einem geschützten Workspace für Maklerteams, Bauträger und Projektvertriebe.",
-    openGraphTitle: "Jede Immobilienanfrage bekommt den nächsten Schritt.",
-    openGraphDescription:
-      "Privater Lead-Workspace für Maklerteams, Bauträger und Projektvertriebe.",
+      "Interner Zugang für autorisierte Novalure-Nutzer.",
+    openGraphTitle: "Novalure Mitarbeiter-Login",
+    openGraphDescription: "Interner Zugang für autorisierte Novalure-Nutzer.",
   },
   es: {
-    title: "Novalure CRM | Espacio privado de leads para equipos inmobiliarios",
+    title: "Novalure | Acceso del personal",
     description:
-      "Novalure CRM reune consultas inmobiliarias, responsables y proximas acciones en un workspace protegido para promotoras, agencias y equipos de venta de proyectos.",
-    openGraphTitle: "Cada consulta inmobiliaria recibe el siguiente paso.",
-    openGraphDescription:
-      "Workspace privado de leads para promotoras, agencias y equipos de venta de proyectos.",
+      "Acceso interno para usuarios autorizados de Novalure.",
+    openGraphTitle: "Novalure Acceso del personal",
+    openGraphDescription: "Acceso interno para usuarios autorizados de Novalure.",
   },
 } as const;
 
@@ -100,20 +92,11 @@ export default async function Home({ searchParams }: HomeProps) {
   const requestHeaders = await headers();
   const session = await getSessionFromHeaders(requestHeaders);
   const query = searchParams ? await searchParams : {};
-  const { country, language } = resolveHomeLanguage(requestHeaders, query);
+  const { language } = resolveHomeLanguage(requestHeaders, query);
   const appLanguage = toAppLanguage(language);
 
   if (!session) {
-    return (
-      <PublicCrmLanding
-        auditHref={resolveAuditHref(country, appLanguage)}
-        basePath="/"
-        copy={getCrmLandingPageCopy(appLanguage)}
-        language={language}
-        legalCopy={getLoginLegalFooterCopy(appLanguage)}
-        pageCopy={getPublicPageCopy(appLanguage)}
-      />
-    );
+    redirect(`/login?lang=${language}`);
   }
 
   const coreData = await getCoreCrmData(session.workspaceId, { session });
