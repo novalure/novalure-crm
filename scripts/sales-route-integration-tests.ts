@@ -60,7 +60,7 @@ test("G06 actual cookie/CSRF routes: six areas, exact replay, current authority 
     [tasks.PATCH,"tasks",{task:{id:task.id,title:"SYNTHETIC revised task"},expectedVersion:task.version},"task"],
     [projects.PATCH,"projects",{project:{id:project.id,name:"SYNTHETIC revised project"},expectedVersion:project.version},"project"],
     [leads.PATCH,"leads",{lead:{id:lead.id,intent:"SYNTHETIC revised lead",version:lead.version}},"lead"],
-    [deals.PATCH,"deals",{deal:{id:deal.id,name:"SYNTHETIC revised deal",version:deal.version}},"deal"]
+    [deals.PATCH,"deals",{expectedVersion:deal.version,deal:{id:deal.id,name:"SYNTHETIC revised deal"}},"deal"]
    ];
    for(const [handler,name,body,field] of operations){const response=await replay(handler,"/api/crm/"+name,"PATCH",body);assert.ok(response.data[field].version>1);const stale=await handler(request("/api/crm/"+name,"PATCH",body));assert.equal(stale.status,409,await stale.clone().text());}
   });
