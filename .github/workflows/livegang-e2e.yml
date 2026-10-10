@@ -269,6 +269,16 @@ jobs:
           POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
         run: node scripts/db-migrate.mjs up --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
+      - name: Bind existing QA runtime role to tenant group
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/qa-bind-runtime-role.mjs
+
       - name: Reset synthetic QA run
         env:
           NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}

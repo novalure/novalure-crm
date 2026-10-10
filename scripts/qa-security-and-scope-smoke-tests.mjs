@@ -245,18 +245,17 @@ test("migration connections verify the actual Neon branch, database and role", a
   );
 });
 
-test("QA runtime-role binding is explicit, confirmation-gated, and uses only the direct migration connection", async () => {
+test("protected QA runtime-role binding is explicit and uses only the direct migration connection", async () => {
   const [workflow, binding] = await Promise.all([
-    readFile(".github/workflows/qa-runtime-role-binding.yml", "utf8"),
+    readFile(".github/workflows/livegang-e2e.yml", "utf8"),
     readFile("scripts/qa-bind-runtime-role.mjs", "utf8"),
   ]);
 
-  assert.match(workflow, /workflow_dispatch/);
-  assert.match(workflow, /BIND_QA_NOVALURE_APP/);
   assert.match(workflow, /environment: novalure-qa/);
+  assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Bind existing QA runtime role to tenant group[\s\S]*Reset synthetic QA run/);
   assert.match(workflow, /MIGRATION_DATABASE_URL/);
-  assert.doesNotMatch(workflow, /NOVALURE_PRODUCTION/);
   assert.match(binding, /NOVALURE_QA_DATABASE_ROLE.*novalure_app/);
+  assert.doesNotMatch(binding, /NOVALURE_PRODUCTION/);
   assert.match(binding, /grant novalure_tenant_app to novalure_app with admin false, inherit true, set false/);
   assert.match(binding, /assertConnectedDatabaseTarget/);
   assert.match(binding, /connectionMode: "direct"/);
