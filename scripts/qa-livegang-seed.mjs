@@ -2,7 +2,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import fs from "node:fs";
 import { promisify } from "node:util";
-import { neon } from "@neondatabase/serverless";
+import { neon, Pool } from "@neondatabase/serverless";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const scrypt = promisify(scryptCallback);
@@ -59,10 +59,124 @@ const qaPassword = configuredQaPassword || defaultQaPassword;
 const databaseUrl = qaTarget.databaseUrl;
 
 const sql = neon(databaseUrl);
+const tenantPool = new Pool({
+  allowExitOnIdle: true,
+  connectionString: databaseUrl,
+  idleTimeoutMillis: 10_000,
+  max: 1,
+});
+let activeTenantClient = null;
 
 async function queryOne(query, params = []) {
+  if (activeTenantClient) {
+    const result = await activeTenantClient.query(query, params);
+    return result.rows[0] ?? null;
+  }
   const rows = await sql.query(query, params);
   return rows[0] ?? null;
+}
+
+async function assertSafeTenantRuntimeRole() {
+  const row = await queryOne(`
+    select
+      current_user as "roleName",
+      current_user = 'novalure_app' as "expectedRole",
+      role.rolinherit as inherit,
+      not role.rolsuper
+        and not role.rolbypassrls
+        and not role.rolcreatedb
+        and not role.rolcreaterole
+        and not role.rolreplication
+        and role.rolinherit
+        and current_user = 'novalure_app'
+        and pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as "safeRoleAttributes",
+      not role.rolsuper as "noSuperuser",
+      not role.rolbypassrls as "noBypassRls",
+      not role.rolcreatedb as "noCreateDb",
+      not role.rolcreaterole as "noCreateRole",
+      not role.rolreplication as "noReplication",
+      pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as "tenantRoleInherited",
+      not has_database_privilege(current_user, current_database(), 'CREATE') as "noDatabaseDdl",
+      not has_schema_privilege(current_user, 'public', 'CREATE') as "noSchemaDdl",
+      not exists (
+        select 1 from pg_database database where database.datname = current_database() and database.datdba = role.oid
+      ) as "notDatabaseOwner",
+      not exists (
+        select 1 from pg_namespace schema where schema.nspname = 'public' and schema.nspowner = role.oid
+      ) as "notSchemaOwner",
+      not exists (
+        select 1
+        from pg_class relation
+        join pg_namespace schema on schema.oid = relation.relnamespace
+        where schema.nspname = 'public'
+          and relation.relkind in ('r', 'p', 'S', 'v', 'm', 'f')
+          and relation.relowner = role.oid
+      ) as "notTableOwner",
+      not (
+        has_table_privilege(current_user, 'public.novalure_schema_migrations', 'SELECT')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'INSERT')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'UPDATE')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'DELETE')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'TRUNCATE')
+      ) as "noMigrationPrivilege"
+    from pg_roles role
+    where role.rolname = current_user
+  `);
+  const safe = row?.safeRoleAttributes === true
+    && row.noDatabaseDdl === true
+    && row.noSchemaDdl === true
+    && row.notDatabaseOwner === true
+    && row.notSchemaOwner === true
+    && row.notTableOwner === true
+    && row.noMigrationPrivilege === true;
+  if (!safe) {
+    const details = {
+      expectedRole: row?.expectedRole === true,
+      inherit: row?.inherit === true,
+      noBypassRls: row?.noBypassRls === true,
+      noCreateDb: row?.noCreateDb === true,
+      noCreateRole: row?.noCreateRole === true,
+      noDatabaseDdl: row?.noDatabaseDdl === true,
+      noMigrationPrivilege: row?.noMigrationPrivilege === true,
+      noReplication: row?.noReplication === true,
+      noSchemaDdl: row?.noSchemaDdl === true,
+      noSuperuser: row?.noSuperuser === true,
+      notDatabaseOwner: row?.notDatabaseOwner === true,
+      notSchemaOwner: row?.notSchemaOwner === true,
+      notTableOwner: row?.notTableOwner === true,
+      tenantRoleInherited: row?.tenantRoleInherited === true,
+    };
+    throw new Error(`QA_RUNTIME_IDENTITY_UNSAFE ${JSON.stringify(details)}`);
+  }
+}
+
+async function withWorkspaceTenantContext(workspaceId, actorId, callback) {
+  if (activeTenantClient) throw new Error("Nested QA tenant transactions are not permitted.");
+  const client = await tenantPool.connect();
+  let begun = false;
+  try {
+    await client.query("begin");
+    begun = true;
+    const context = await client.query(
+      "select set_config('app.tenant_id', $1, true) as workspace_id, set_config('app.actor_id', $2, true) as actor_id",
+      [workspaceId, actorId],
+    );
+    if (context.rows[0]?.workspace_id !== workspaceId || context.rows[0]?.actor_id !== actorId) {
+      throw new Error("QA tenant context could not be verified.");
+    }
+    activeTenantClient = client;
+    const result = await callback();
+    activeTenantClient = null;
+    await client.query("commit");
+    begun = false;
+    return result;
+  } catch (error) {
+    activeTenantClient = null;
+    if (begun) await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 const workspaces = {
@@ -236,7 +350,7 @@ function templateForWorkspace(workspace) {
 }
 
 async function upsertWorkspace(workspace) {
-  await queryOne(
+  const row = await queryOne(
     `
       insert into workspaces (
         id,
@@ -246,9 +360,10 @@ async function upsertWorkspace(workspace) {
         customer_type,
         team_structure,
         active_calendar_provider,
+        is_qa,
         setup_state
       )
-      values ($1::uuid, $2, $3, $4, $5, $6, 'none', $7::jsonb)
+      values ($1::uuid, $2, $3, $4, $5, $6, 'none', true, $7::jsonb)
       on conflict (id) do update set
         name = excluded.name,
         plan = excluded.plan,
@@ -256,8 +371,11 @@ async function upsertWorkspace(workspace) {
         customer_type = excluded.customer_type,
         team_structure = excluded.team_structure,
         active_calendar_provider = excluded.active_calendar_provider,
+        is_qa = true,
         setup_state = workspaces.setup_state || excluded.setup_state,
         updated_at = now()
+      where workspaces.is_qa = true
+        and workspaces.setup_state ->> 'qaSeedRun' = $8
       returning id
     `,
     [
@@ -267,9 +385,13 @@ async function upsertWorkspace(workspace) {
       workspace.operatingModel,
       workspace.customerType,
       workspace.teamStructure,
-      json({ qaSeed: "livegang-8-10", seededAt: new Date().toISOString() }),
+      json({ qaSeed: "livegang-8-10", qaSeedRun: qaTarget.runPrefix, seededAt: new Date().toISOString() }),
+      qaTarget.runPrefix,
     ],
   );
+  if (!row?.id) {
+    throw new Error(`Refusing to reuse a non-QA or foreign QA workspace fixture: ${workspace.id}`);
+  }
 }
 
 async function upsertUser(user, passwordHash) {
@@ -1070,6 +1192,7 @@ async function upsertBotAndKnowledge(record, projectId) {
 
 async function main() {
   const passwordHash = await hashPassword(qaPassword);
+  await assertSafeTenantRuntimeRole();
 
   for (const workspace of Object.values(workspaces)) {
     await upsertWorkspace(workspace);
@@ -1080,14 +1203,18 @@ async function main() {
   }
 
   for (const record of qaRecords) {
-    const projectId = await upsertProject(record);
-    await upsertPipeline(record.workspace, projectId);
-    const ids = await upsertCoreRecords(record, projectId);
-    await upsertObjectData(record, projectId, ids);
-    await upsertBotAndKnowledge(record, projectId);
-    for (const user of users.filter((item) => item.workspace.id === record.workspace.id && item.role !== "assistant")) {
-      await upsertPipelinePermission(record.workspace, projectId, user);
-    }
+    const owner = users.find((user) => user.workspace.id === record.workspace.id && user.role === "owner");
+    if (!owner) throw new Error(`QA workspace owner is missing: ${record.workspace.id}`);
+    await withWorkspaceTenantContext(record.workspace.id, owner.id, async () => {
+      const projectId = await upsertProject(record);
+      await upsertPipeline(record.workspace, projectId);
+      const ids = await upsertCoreRecords(record, projectId);
+      await upsertObjectData(record, projectId, ids);
+      await upsertBotAndKnowledge(record, projectId);
+      for (const user of users.filter((item) => item.workspace.id === record.workspace.id && item.role !== "assistant")) {
+        await upsertPipelinePermission(record.workspace, projectId, user);
+      }
+    });
   }
 
   console.log("QA Livegang seed complete.");

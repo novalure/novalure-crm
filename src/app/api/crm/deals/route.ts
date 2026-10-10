@@ -54,6 +54,10 @@ function withDealIdFromRequest(request: Request, deal: Record<string, unknown>) 
   return id ? { ...deal, id } : deal;
 }
 
+function withExpectedDealVersion(deal: Record<string, unknown>, expectedVersion: unknown) {
+  return expectedVersion === undefined ? deal : { ...deal, version: expectedVersion };
+}
+
 async function postHandler(request: Request, session: AppSession) {
   const auth = { session };
 
@@ -82,7 +86,7 @@ async function postHandler(request: Request, session: AppSession) {
   });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: getDealWriteStatus(result.reason) });
+    return NextResponse.json({ code: result.code, error: result.reason }, { status: result.status ?? getDealWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ deal: result.data, persisted: true });
@@ -102,7 +106,7 @@ async function patchHandler(request: Request, session: AppSession) {
     allowHistoricalCloseDate:
       input.historicalImport === true &&
       auth.session.productPermissions.includes("novalure:internal"),
-    deal: withDealIdFromRequest(request, deal),
+    deal: withExpectedDealVersion(withDealIdFromRequest(request, deal), input.expectedVersion),
     reason: typeof input.reason === "string" ? input.reason : undefined,
     reasonCategory: input.reasonCategory,
     reasonDetail: typeof input.reasonDetail === "string" ? input.reasonDetail : undefined,
@@ -111,7 +115,7 @@ async function patchHandler(request: Request, session: AppSession) {
   });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: getDealWriteStatus(result.reason) });
+    return NextResponse.json({ code: result.code, error: result.reason }, { status: result.status ?? getDealWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ deal: result.data, persisted: true });

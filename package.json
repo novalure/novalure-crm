@@ -49,7 +49,7 @@
     "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs",
     "qa:productrole-invite": "node scripts/qa-productrole-invite-hardening.mjs",
     "qa:public-slug-routing": "node scripts/qa-public-slug-routing.mjs",
-    "qa:tenant-isolation": "node scripts/qa-tenant-isolation.mjs",
+    "qa:tenant-isolation": "node --import tsx scripts/qa-tenant-isolation.mjs",
     "qa:e2e-object-flow": "node scripts/e2e-object-creation-tests.mjs --phase4",
     "qa:property-unit-pagination": "node scripts/qa-property-unit-pagination.mjs",
     "qa:property-pagination": "node scripts/qa-property-pagination.mjs",
@@ -65,7 +65,8 @@
     "test:sales:migrations": "node --import tsx --test scripts/sales-migration-upgrade-tests.ts",
     "test:sales:final": "node --conditions=react-server --import tsx --test scripts/crm-service-contract-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts",
     "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
-    "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts"
+    "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
+    "test:website-sales-ingestion": "node --import tsx --test scripts/website-sales-ingestion-tests.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -75,7 +76,7 @@
     "@vercel/oidc": "3.8.8",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
-    "next": "16.3.5",
+    "next": "16.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.3",
@@ -90,7 +91,7 @@
     "@types/react-dom": "^19",
     "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.4.0",
     "pg": "8.23.0",
     "tailwindcss": "^4",
     "tsx": "4.23.13",

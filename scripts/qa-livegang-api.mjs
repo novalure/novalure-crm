@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
@@ -23,6 +23,15 @@ loadEnv(".env.production.local");
 
 const qaTarget = await assertQaTarget();
 const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+
+function futureDate(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const qaInitialExpectedCloseDate = futureDate(30);
+const qaEditedExpectedCloseDate = futureDate(45);
 
 function qaEmail(localPart) {
   return `${localPart}+${qaRunSlug}@novalure.local`;
@@ -138,6 +147,8 @@ function createClient(email) {
       headers.set("origin", trustedOrigin);
       headers.set("sec-fetch-site", "same-origin");
       headers.set("x-novalure-csrf-token", await getCsrfToken(method, path));
+      if (!headers.has("idempotency-key")) headers.set("idempotency-key", randomUUID());
+      if (!headers.has("x-correlation-id")) headers.set("x-correlation-id", randomUUID());
     }
     const init = {
       headers,
@@ -309,7 +320,7 @@ async function createDeal(client, workspaceId, projectId, contactId, stage, name
     json: {
       deal: {
         contactId,
-        expectedCloseDate: "2026-08-15",
+        expectedCloseDate: qaInitialExpectedCloseDate,
         name,
         nextAction: "QA Livegang Pipeline pruefen",
         probability: 41,
@@ -403,14 +414,17 @@ async function main() {
     },
     method: "POST",
   });
-  assert(foreignPayloadContact.response.ok, "client contact payload with foreign workspaceId is accepted only in session scope");
+  assert(
+    foreignPayloadContact.response.ok,
+    `client contact payload with foreign workspaceId is accepted only in session scope (received HTTP ${foreignPayloadContact.response.status}; code=${String(foreignPayloadContact.json?.code ?? foreignPayloadContact.json?.error ?? "unknown").slice(0, 120)})`,
+  );
   assert(foreignPayloadContact.json?.contact?.workspaceId === brokerWorkspace.id, "foreign contact workspaceId payload is ignored");
 
   const foreignPayloadDeal = await broker.request("/api/crm/deals", {
     json: {
       deal: {
         contactId: foreignPayloadContact.json.contact.id,
-        expectedCloseDate: "2026-08-20",
+        expectedCloseDate: qaEditedExpectedCloseDate,
         name: "QA Foreign Workspace Payload Deal",
         nextAction: "QA payload isolation pruefen",
         probability: 52,
@@ -423,7 +437,10 @@ async function main() {
     },
     method: "POST",
   });
-  assert(foreignPayloadDeal.response.ok, "client deal payload with foreign workspaceId is accepted only in session scope");
+  assert(
+    foreignPayloadDeal.response.ok,
+    `client deal payload with foreign workspaceId is accepted only in session scope (received HTTP ${foreignPayloadDeal.response.status}; code=${String(foreignPayloadDeal.json?.code ?? foreignPayloadDeal.json?.error ?? "unknown").slice(0, 120)})`,
+  );
   assert(foreignPayloadDeal.json?.deal?.workspaceId === brokerWorkspace.id, "foreign deal workspaceId payload is ignored");
 
   await admin.login();
@@ -466,11 +483,13 @@ async function main() {
   const moveResponse = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: secondStage },
+      json: { expectedVersion: deal.version, toStage: secondStage },
       method: "POST",
     },
   );
   assert(moveResponse.response.ok, "admin can move QA deal to next DB stage");
+  const movedDeal = moveResponse.json?.deal;
+  assert(movedDeal?.version > deal.version, "current-version stage move advances the deal version");
   assert(moveResponse.json?.history?.fromStage === firstStage, "stage history stores fromStage");
   assert(moveResponse.json?.history?.toStage === secondStage, "stage history stores toStage");
   assert(
@@ -487,11 +506,23 @@ async function main() {
     "stage history endpoint contains stage move",
   );
 
+  const missingVersionMove = await admin.request(
+    `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
+    { json: { toStage: firstStage }, method: "POST" },
+  );
+  assert(missingVersionMove.response.status === 409, "stage move without expectedVersion is denied");
+  const staleVersionMove = await admin.request(
+    `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
+    { json: { expectedVersion: deal.version, toStage: firstStage }, method: "POST" },
+  );
+  assert(staleVersionMove.response.status === 409, "stale stage move is denied");
+
   const editedDealResponse = await admin.request(`/api/crm/deals?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`, {
     json: {
+      expectedVersion: movedDeal.version,
       deal: {
         contactId: contact.id,
-        expectedCloseDate: "2026-08-20",
+        expectedCloseDate: qaEditedExpectedCloseDate,
         id: deal.id,
         name: deal.name,
         nextAction: "QA Vertrag pruefen und Rueckruf planen",
@@ -506,6 +537,8 @@ async function main() {
     method: "PATCH",
   });
   assert(editedDealResponse.response.ok, "deal detail fields can be edited");
+  const editedDeal = editedDealResponse.json?.deal;
+  assert(editedDeal?.version > movedDeal.version, "deal edit advances the version");
 
   const reloadedBrokerCore = await getCore(admin, brokerWorkspace.id);
   const reloadedDeal = (reloadedBrokerCore.deals ?? []).find((item) => item.id === deal.id);
@@ -514,12 +547,12 @@ async function main() {
   assert(reloadedDeal?.probability === 64, "deal probability persists after reload");
   assert(reloadedDeal?.riskLevel === "hoch", "deal risk persists after reload");
   assert(reloadedDeal?.nextAction === "QA Vertrag pruefen und Rueckruf planen", "deal next action persists after reload");
-  assert(reloadedDeal?.expectedCloseDate === "2026-08-20", "deal expected close date persists after reload");
+  assert(reloadedDeal?.expectedCloseDate === qaEditedExpectedCloseDate, "deal expected close date persists after reload");
 
   const lostWithoutReason = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: lostStage },
+      json: { expectedVersion: editedDeal.version, toStage: lostStage },
       method: "POST",
     },
   );
@@ -529,6 +562,7 @@ async function main() {
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
       json: {
+        expectedVersion: editedDeal.version,
         reason: "QA Timing passt nicht",
         reasonCategory: "timing",
         reasonDetail: "QA Kunde moechte erst spaeter verkaufen",
@@ -538,10 +572,12 @@ async function main() {
     },
   );
   assert(lostWithReason.response.ok, "lost stage with structured reason succeeds");
+  const lostDeal = lostWithReason.json?.deal;
+  assert(lostDeal?.version > editedDeal.version, "lost stage advances the version");
 
   await broker.login();
   const unauthorizedReopen = await broker.request(`/api/crm/deals/${encodeURIComponent(deal.id)}/stage`, {
-    json: { toStage: secondStage },
+    json: { expectedVersion: lostDeal.version, toStage: secondStage },
     method: "POST",
   });
   assert(unauthorizedReopen.response.status === 403, "broker agent without reopen permission cannot reopen terminal deal");
@@ -550,7 +586,7 @@ async function main() {
   const adminReopen = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: secondStage },
+      json: { expectedVersion: lostDeal.version, toStage: secondStage },
       method: "POST",
     },
   );
@@ -560,7 +596,7 @@ async function main() {
   const developerDeal = (developerCoreFromAdmin.deals ?? []).find((item) => String(item.name ?? "").startsWith("QA "));
   assert(developerDeal, "developer QA deal exists for foreign workspace mutation test");
   const foreignDealMutation = await broker.request(`/api/crm/deals/${encodeURIComponent(developerDeal.id)}/stage`, {
-    json: { toStage: firstStage },
+    json: { expectedVersion: developerDeal.version, toStage: firstStage },
     method: "POST",
   });
   assert([403, 404].includes(foreignDealMutation.response.status), "broker cannot mutate a developer workspace deal");

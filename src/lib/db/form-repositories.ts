@@ -103,6 +103,7 @@ const defaultActions: WebsiteForm["actions"] = {
 };
 
 const defaultSteps: FormStep[] = [{ description: "", id: "step_contact", title: "Kontakt" }];
+const websiteSalesFormSlug = "novalure-studio-website-sales-v1";
 
 const defaultFields: FormField[] = [
   createFallbackField("text", "Name", "name", true, defaultSteps[0].id),
@@ -556,8 +557,9 @@ export async function persistWebsiteFormSubmission(input: {
   const score = scoreFormSubmission(form, answers, consent);
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
-  const source = form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
-  const leadType = normalizeLeadType(lookup.funnelAudience);
+  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, form, tracking });
+  const source = websiteSalesMetadata ? "Novalure Studio Form" : form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
+  const leadType = websiteSalesMetadata ? "Website Sales" : normalizeLeadType(lookup.funnelAudience);
   const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
 
   const contactId = await upsertContact({
@@ -573,6 +575,7 @@ export async function persistWebsiteFormSubmission(input: {
     projectId: lookup.projectId,
     source,
     tracking,
+    websiteSalesMetadata,
     workspaceId: lookup.workspaceId,
   });
 
@@ -615,7 +618,15 @@ export async function persistWebsiteFormSubmission(input: {
           now,
           slaDueAt,
           score >= 70,
-          JSON.stringify({ answers, consent, formId: lookup.id, pipelineStage: form.pipelineStage, tracking }),
+          JSON.stringify({
+            answers,
+            businessLine: websiteSalesMetadata?.businessLine,
+            consent,
+            formId: lookup.id,
+            pipelineStage: form.pipelineStage,
+            tracking,
+            websiteSales: websiteSalesMetadata,
+          }),
         ],
       );
 
@@ -639,7 +650,12 @@ export async function persistWebsiteFormSubmission(input: {
           Math.min(95, Math.max(15, score)),
           source,
           getNextAction(form),
-          JSON.stringify({ formId: lookup.id, tracking }),
+          JSON.stringify({
+            businessLine: websiteSalesMetadata?.businessLine,
+            formId: lookup.id,
+            tracking,
+            websiteSales: websiteSalesMetadata,
+          }),
         ],
       )
     : null;
@@ -660,7 +676,13 @@ export async function persistWebsiteFormSubmission(input: {
           form.crmTarget === "ticket" ? `Ticket prüfen: ${form.name}` : getNextAction(form),
           new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString(),
           score >= 70 ? "Hoch" : "Mittel",
-          JSON.stringify({ formId: lookup.id, dealId: deal?.id ?? null, tracking }),
+          JSON.stringify({
+            businessLine: websiteSalesMetadata?.businessLine,
+            dealId: deal?.id ?? null,
+            formId: lookup.id,
+            tracking,
+            websiteSales: websiteSalesMetadata,
+          }),
         ],
       )
     : null;
@@ -679,7 +701,7 @@ export async function persistWebsiteFormSubmission(input: {
         "Website Formular",
         form.doubleOptIn ? "Double-Opt-in offen" : "Opt-in",
         form.name,
-        JSON.stringify({ formId: lookup.id, consent, tracking }),
+        JSON.stringify({ formId: lookup.id, consent, tracking, websiteSales: websiteSalesMetadata }),
       ],
     );
   }
@@ -698,7 +720,7 @@ export async function persistWebsiteFormSubmission(input: {
         "Newsletter",
         form.doubleOptIn ? "Double-Opt-in offen" : "Opt-in",
         form.name,
-        JSON.stringify({ formId: lookup.id, consent, tracking }),
+        JSON.stringify({ formId: lookup.id, consent, tracking, websiteSales: websiteSalesMetadata }),
       ],
     );
   }
@@ -759,7 +781,7 @@ export async function persistWebsiteFormSubmission(input: {
         "Formular eingesendet",
         `${form.name} - Score ${score}`,
         "offen",
-        JSON.stringify({ formId: lookup.id, submissionId: submission?.id ?? null, leadId: lead?.id ?? null }),
+        JSON.stringify({ formId: lookup.id, submissionId: submission?.id ?? null, leadId: lead?.id ?? null, websiteSales: websiteSalesMetadata }),
       ],
     );
   }
@@ -819,6 +841,7 @@ export async function persistWebsiteFormSubmission(input: {
             score,
             taskId: task?.id ?? null,
             tracking,
+            websiteSales: websiteSalesMetadata,
           },
           module: "funnel",
           projectId: lookup.projectId,
@@ -843,6 +866,7 @@ export async function persistWebsiteFormSubmission(input: {
             formTemplate: form.template,
             score,
             trigger: lookup.funnelId ? "funnel_submit" : "form_submit",
+            websiteSales: websiteSalesMetadata,
           },
           module: "lead_inbox",
           projectId: lookup.projectId,
@@ -863,6 +887,7 @@ export async function persistWebsiteFormSubmission(input: {
             score,
             sourcePayload: "website_form",
             trigger: lookup.funnelId ? "funnel_submit" : "form_submit",
+            websiteSales: websiteSalesMetadata,
           },
           ownerUserId: assignedOwnerId,
           projectId: lookup.projectId,
@@ -924,6 +949,7 @@ async function upsertContact(input: {
   projectId: string | null;
   source: string;
   tracking: Record<string, unknown>;
+  websiteSalesMetadata: Record<string, unknown> | null;
   workspaceId: string;
 }) {
   const existing = input.email || input.phone
@@ -974,7 +1000,7 @@ async function upsertContact(input: {
         input.consentLabel,
         input.email,
         input.phone,
-        JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking }),
+        JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
       ],
     );
 
@@ -1000,11 +1026,31 @@ async function upsertContact(input: {
       input.consentLabel,
       input.email,
       input.phone,
-      JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking }),
+      JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
     ],
   );
 
   return contact?.id ?? null;
+}
+
+function getWebsiteSalesMetadata(input: {
+  answers: Record<string, unknown>;
+  form: WebsiteForm;
+  tracking: Record<string, unknown>;
+}) {
+  if (input.form.slug !== websiteSalesFormSlug) return null;
+  const string = (key: string, limit: number) => {
+    const value = input.answers[key];
+    return typeof value === "string" ? value.trim().slice(0, limit) : "";
+  };
+  return {
+    attribution: input.tracking,
+    businessLine: "WEBSITE_SALES",
+    currentWebsiteUrl: string("current_website_url", 2_048),
+    leadSource: "NOVALURE_STUDIO_FORM",
+    packageInterest: string("package_interest", 40) || "UNDECIDED",
+    syntheticTest: string("synthetic_test", 8) === "true",
+  };
 }
 
 async function resolveExistingFormId(workspaceId: string, form: WebsiteForm) {

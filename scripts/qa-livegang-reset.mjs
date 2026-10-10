@@ -23,11 +23,6 @@ loadEnv(".env.local");
 loadEnv(".env.production.local");
 
 const qaTarget = await assertQaTarget();
-const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-
-function qaEmail(localPart) {
-  return `${localPart}+${qaRunSlug}@novalure.local`;
-}
 
 function stableUuid(input) {
   const chars = createHash("sha1")
@@ -62,53 +57,27 @@ const qaWorkspaceIds = [
   stableUuid("workspace:broker"),
 ];
 
-const qaWorkspaceNames = [
-  `QA Novalure Internal Workspace ${qaTarget.runPrefix}`,
-  `QA Bautr\u00e4ger Workspace ${qaTarget.runPrefix}`,
-  `QA Makler Workspace ${qaTarget.runPrefix}`,
-];
-
-const qaEmails = [
-  qaEmail("qa-platform-admin"),
-  qaEmail("qa-developer-sales"),
-  qaEmail("qa-broker-sales"),
-  qaEmail("qa-assistant"),
-];
-
-async function countDeleted(query, params = []) {
-  const rows = await sql.query(query, params);
-  return Number(rows[0]?.count ?? 0);
-}
-
 async function cleanup() {
-  const deletedWorkspaces = await countDeleted(
+  const rows = await sql.query(
     `
-      with deleted as (
-        delete from workspaces
-        where id = any($1::uuid[])
-           or name = any($2::text[])
-        returning 1
-      )
-      select count(*)::int as count from deleted
+      select id, is_qa as "isQa", setup_state ->> 'qaSeedRun' as "qaSeedRun"
+      from workspaces
+      where id = any($1::uuid[])
     `,
-    [qaWorkspaceIds, qaWorkspaceNames],
+    [qaWorkspaceIds],
   );
+  for (const row of rows) {
+    if (row.isQa !== true || row.qaSeedRun !== qaTarget.runPrefix) {
+      throw new Error(`Refusing to reset a non-QA or foreign QA workspace fixture: ${row.id}`);
+    }
+  }
 
-  const deletedUsers = await countDeleted(
-    `
-      with deleted as (
-        delete from workspace_users
-        where lower(email) = any($1::text[])
-        returning 1
-      )
-      select count(*)::int as count from deleted
-    `,
-    [qaEmails],
-  );
-
-  console.log("QA Livegang cleanup complete.");
-  console.log(`Deleted QA workspace users: ${deletedUsers}`);
-  console.log(`Deleted QA workspaces: ${deletedWorkspaces}`);
+  // Delete deterministic QA Livegang workspaces/users is intentionally no
+  // longer a valid operation: completed QA flows can create append-only audit,
+  // receipt, event, and stage-history evidence. The seed is idempotent for a
+  // unique run prefix, and QA infrastructure owns retention of that evidence.
+  console.log("QA Livegang integrity reset complete; no append-only evidence was deleted.");
+  console.log(`Verified reusable QA workspaces: ${rows.length}`);
 }
 
 await cleanup();

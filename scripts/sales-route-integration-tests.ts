@@ -11,6 +11,7 @@ import * as projects from "../src/app/api/crm/projects/route";
 import * as leads from "../src/app/api/crm/leads/route";
 import * as deals from "../src/app/api/crm/deals/route";
 import * as stages from "../src/app/api/crm/deals/[dealId]/stage/route";
+import * as analytics from "../src/app/api/crm/analytics-events/route";
 import {POST as reconcile} from "../src/app/api/crm/commands/reconcile/route";
 type Handler=(request:Request)=>Promise<Response>;
 test("G06 actual cookie/CSRF routes: six areas, exact replay, current authority and tenant isolation",{timeout:240000},async t=>{
@@ -44,6 +45,16 @@ test("G06 actual cookie/CSRF routes: six areas, exact replay, current authority 
    const path="/api/crm/deals/"+deal.id+"/stage",context={params:Promise.resolve({dealId:deal.id})};
    deal=(await replay(req=>stages.POST(req,context),path,"POST",{toStage:"Qualifizieren",expectedVersion:deal.version})).data.deal;
    assert.equal(Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1 and to_stage='Qualifizieren'",[deal.id])).rows[0].count),1);
+   const historyBefore=Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1",[deal.id])).rows[0].count);
+   const missing=await stages.POST(request(path,"POST",{toStage:"Neu"}),context);assert.equal(missing.status,409,await missing.clone().text());assert.equal((await missing.json()).code,"VERSION_CONFLICT");
+   const stale=await stages.POST(request(path,"POST",{toStage:"Neu",expectedVersion:deal.version-1}),context);assert.equal(stale.status,409,await stale.clone().text());assert.equal((await stale.json()).code,"VERSION_CONFLICT");
+   const analyticsResponse=await analytics.GET(new Request(origin+"/api/crm/analytics-events?eventTypes=deal_created,deal_stage_changed&limit=100",{headers:{cookie:"novalure_session="+cookie}}));assert.equal(analyticsResponse.status,200,await analyticsResponse.clone().text());const events=(await analyticsResponse.json()).events;assert.ok(events.some((event:{dealId:string;eventType:string})=>event.dealId===deal.id&&event.eventType==="deal_created"));assert.ok(events.some((event:{dealId:string;eventType:string})=>event.dealId===deal.id&&event.eventType==="deal_stage_changed"));
+   const invalid=await stages.POST(request(path,"POST",{toStage:"Invalid",expectedVersion:deal.version}),context);assert.equal(invalid.status,400,await invalid.clone().text());
+   const unknownId=randomUUID(),unknownPath="/api/crm/deals/"+unknownId+"/stage",unknown=await stages.POST(request(unknownPath,"POST",{toStage:"Neu",expectedVersion:1}),{params:Promise.resolve({dealId:unknownId})});assert.equal(unknown.status,404,await unknown.clone().text());
+   await db.admin.query("update workspace_users set role='assistant',product_role='viewer' where id=$1",[fixture.userId]);
+   const denied=await stages.POST(request(path,"POST",{toStage:"Neu",expectedVersion:deal.version}),context);assert.equal(denied.status,403,await denied.clone().text());
+   await db.admin.query("update workspace_users set role='owner',product_role='novalureAdmin' where id=$1",[fixture.userId]);
+   const unchanged=await db.admin.query("select stage,version from deals where id=$1",[deal.id]);assert.equal(unchanged.rows[0].stage,"Qualifizieren");assert.equal(Number(unchanged.rows[0].version),deal.version);assert.equal(Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1",[deal.id])).rows[0].count),historyBefore);
   });
   await t.test("CAS updates replay without version increment; stale intent cannot overwrite",async()=>{
    const operations:Array<[Handler,string,Record<string,unknown>,string]>=[
@@ -51,7 +62,7 @@ test("G06 actual cookie/CSRF routes: six areas, exact replay, current authority 
     [tasks.PATCH,"tasks",{task:{id:task.id,title:"SYNTHETIC revised task"},expectedVersion:task.version},"task"],
     [projects.PATCH,"projects",{project:{id:project.id,name:"SYNTHETIC revised project"},expectedVersion:project.version},"project"],
     [leads.PATCH,"leads",{lead:{id:lead.id,intent:"SYNTHETIC revised lead",version:lead.version}},"lead"],
-    [deals.PATCH,"deals",{deal:{id:deal.id,name:"SYNTHETIC revised deal",version:deal.version}},"deal"]
+    [deals.PATCH,"deals",{expectedVersion:deal.version,deal:{id:deal.id,name:"SYNTHETIC revised deal"}},"deal"]
    ];
    for(const [handler,name,body,field] of operations){const response=await replay(handler,"/api/crm/"+name,"PATCH",body);assert.ok(response.data[field].version>1);const stale=await handler(request("/api/crm/"+name,"PATCH",body));assert.equal(stale.status,409,await stale.clone().text());}
   });

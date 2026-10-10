@@ -258,7 +258,7 @@ export type DashboardViewRecord = {
 
 export type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
-  | { persisted: false; reason: string };
+  | { persisted: false; reason: string; code?: string; status?: number };
 
 export type CrmNoteRecord = {
   contactId: string;
@@ -4572,7 +4572,14 @@ async function legacySalesCommand<T>(input: { session: AppSession; idempotencyKe
     }, options);
     return result.data;
   } catch (cause) {
-    if (cause instanceof CrmCommandError) return { persisted: false, reason: cause.code + ": " + cause.message };
+    if (cause instanceof CrmCommandError) {
+      return {
+        code: cause.code,
+        persisted: false,
+        reason: cause.code + ": " + cause.message,
+        ...(cause.code === "WRITE_REJECTED" ? {} : { status: cause.status }),
+      };
+    }
     throw cause;
   }
 }

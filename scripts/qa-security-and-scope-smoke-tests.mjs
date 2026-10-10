@@ -74,6 +74,28 @@ test("CI pins the exact Node runtime and fails closed for QA targets", async () 
   assert.match(guard, /-pooler\./);
 });
 
+test("Growth RLS proof quarantines stale probes and cannot let application writes block teardown", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/livegang-e2e.yml", import.meta.url), "utf8");
+  const probe = await readFile(new URL("./qa-growth-rls-probe.mjs", import.meta.url), "utf8");
+  const quarantine = workflow.indexOf("name: Quarantine stale active Growth RLS probes");
+  const regression = workflow.indexOf("name: Run CRM API regression and role-negative tests");
+  const stopServer = workflow.indexOf("name: Stop production server before RLS diagnostic");
+  const provision = workflow.indexOf("name: Provision run-scoped Growth RLS probe");
+  const diagnostic = workflow.indexOf("name: Run tenant-isolation diagnostics");
+  const teardown = workflow.indexOf("name: Remove run-scoped Growth RLS probe");
+  const syntheticCleanup = workflow.indexOf("name: Cleanup synthetic QA run");
+  const finalStop = workflow.indexOf("name: Ensure production server is stopped");
+
+  assert.ok(quarantine >= 0 && regression < stopServer && stopServer < provision && provision < diagnostic && diagnostic < teardown && teardown < syntheticCleanup && syntheticCleanup < finalStop);
+  assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs quarantine-stale/);
+  assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs seed\s+echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1"/);
+  assert.match(workflow, /name: Stop production server before RLS diagnostic\s+if: always\(\)/);
+  assert.match(workflow, /name: Ensure production server is stopped\s+if: always\(\)/);
+  assert.match(probe, /if \(provisioned && suspended\.length !== 1\)/);
+  assert.match(probe, /QA Growth probe was suspended without a provisioning marker/);
+  assert.match(probe, /status='suspended'/);
+});
+
 test("database infrastructure targets are lazy, explicit and fail closed", () => {
   withoutInfraEnvironment(() => {
     assert.throws(
@@ -243,6 +265,26 @@ test("migration connections verify the actual Neon branch, database and role", a
     }),
     /PostgreSQL version does not meet the migration-runner requirement/,
   );
+});
+
+test("protected QA runtime-role binding is explicit and uses only the direct migration connection", async () => {
+  const [workflow, binding] = await Promise.all([
+    readFile(".github/workflows/livegang-e2e.yml", "utf8"),
+    readFile("scripts/qa-bind-runtime-role.mjs", "utf8"),
+  ]);
+
+  assert.match(workflow, /environment: novalure-qa/);
+  assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Bind existing QA runtime role to tenant group[\s\S]*Reset synthetic QA run/);
+  assert.match(workflow, /MIGRATION_DATABASE_URL/);
+  assert.match(binding, /NOVALURE_QA_DATABASE_ROLE.*novalure_app/);
+  assert.doesNotMatch(binding, /NOVALURE_PRODUCTION/);
+  assert.match(binding, /grant novalure_tenant_app to novalure_app with admin false, inherit true, set false/);
+  assert.match(binding, /assertConnectedDatabaseTarget/);
+  assert.match(binding, /connectionMode: "direct"/);
+  assert.match(binding, /target: "test"/);
+  assert.match(binding, /runtimeNoBypassRls/);
+  assert.match(binding, /runtimeNoMigrationPrivilege/);
+  assert.match(binding, /noPrivilegedRoleReachability/);
 });
 
 test("database scripts use the central target guard without embedded provider fingerprints", async () => {
