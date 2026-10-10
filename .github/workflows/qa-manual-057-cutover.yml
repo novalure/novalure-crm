@@ -23,7 +23,6 @@ jobs:
     environment: novalure-qa
     env:
       MIGRATION_TARGET: test
-      MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-manual-057-plan-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout exact requested revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +46,7 @@ jobs:
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-manual-057-plan-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/db-migrate.mjs dry-run --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
       - name: Apply exact checksummed QA cutover
         env:
@@ -59,4 +59,5 @@ jobs:
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-manual-057-plan-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/db-migrate.mjs up --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
