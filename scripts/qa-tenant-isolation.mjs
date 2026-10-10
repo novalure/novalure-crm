@@ -48,6 +48,7 @@ function sameArray(actual, expected) { return actual.length === expected.length 
 function productRoleBlock(source, role) { return source.match(new RegExp(`${role}: \\[([\\s\\S]*?)\\],`))?.[1] ?? ""; }
 function parseNavigationPresetOrder(source) { const match = source.match(/const navigationPresetOrder: NavigationPresetId\[\] = \[([\s\S]*?)\];/); return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]) : []; }
 function fingerprint(snapshot) { return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex").slice(0, 24); }
+function growthProbeEmail() { return `qa-growth-rls-probe+${required("NOVALURE_QA_RUN_PREFIX").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}@novalure.invalid`; }
 
 function assertDirectMigrationUrl(value) {
   const url = new URL(value);
@@ -107,7 +108,7 @@ async function operatorSnapshot() {
     const duplicateStageKeyCount = Number((await client.query("select count(*)::int as count from (select key from crm_pipeline_stages where pipeline_id=$1 and workspace_id=$2 group by key having count(*)>1) duplicates", [growthPipelineId, growthWorkspaceId])).rows[0]?.count ?? 0);
     const duplicateBotSeedKeyCount = Number((await client.query("select count(*)::int as count from (select config->>'seedKey' from bots where workspace_id=$1 and project_id=$2 and config->>'seedKey'=any($3::text[]) group by config->>'seedKey' having count(*)>1) duplicates", [growthWorkspaceId, growthProjectId, growthBotSeedKeys])).rows[0]?.count ?? 0);
     const customerLeakCount = Number((await client.query("select count(*)::int as count from customer_workspace_access ca left join organizations o on o.id=ca.organization_id left join projects p on p.id=ca.project_id where ca.workspace_id=$1 or o.name='Novalure Growth' or p.name='Novalure Eigenakquise'", [growthWorkspaceId])).rows[0]?.count ?? 0);
-    const growthActor = (await client.query("select id, role, product_role from workspace_users where workspace_id=$1 and status='active' and role in ('owner','admin','agent') and product_role=any($2::text[]) order by case role when 'owner' then 0 when 'admin' then 1 else 2 end, id asc limit 1", [growthWorkspaceId, internalGrowthRoles])).rows[0] ?? null;
+    const growthActor = (await client.query("select id, role, product_role from workspace_users where workspace_id=$1 and lower(email)=lower($2) and status='active' and role='agent' and product_role=any($3::text[]) limit 1", [growthWorkspaceId, growthProbeEmail(), internalGrowthRoles])).rows[0] ?? null;
     const foreignContext = (await client.query("select w.id as workspace_id, u.id as actor_id from workspaces w join workspace_users u on u.workspace_id=w.id and u.status='active' and u.role in ('owner','admin','agent') where w.is_qa=true and w.setup_state->>'qaSeedRun'=$1 order by case u.role when 'owner' then 0 when 'admin' then 1 else 2 end, w.id, u.id limit 1", [required("NOVALURE_QA_RUN_PREFIX")])).rows[0] ?? null;
     return { workspace, project, pipeline, stages, sources, bots, modules, duplicateWorkspaceCount, canonicalProjectCount, canonicalPipelineCount, duplicateStageKeyCount, duplicateBotSeedKeyCount, customerLeakCount, growthActor, foreignContext };
   });
@@ -158,7 +159,7 @@ async function scopedProtectedRead(scope) {
 async function runRuntimeChecks(sql, snapshot) {
   const noContext = await noContextProtectedRead(sql);
   addMatrix({ check: "NO_CONTEXT_PROTECTED_READ", expected: "DENIED_OR_ZERO", actual: noContext.denied ? "DENIED" : `ZERO (${noContext.counts.join("/")})`, ok: noContext.ok, cause: "Runtime identity read protected Growth data without a tenant context" });
-  addMatrix({ check: "Growth runtime actor", expected: "an active internal Growth member is available for the same-tenant proof", actual: snapshot.growthActor ? `${snapshot.growthActor.role}/${snapshot.growthActor.product_role}` : "missing", ok: Boolean(snapshot.growthActor), cause: "No active internal Growth member is available for a valid tenant-scoped runtime proof" });
+  addMatrix({ check: "Growth runtime actor", expected: "the run-scoped, least-privilege Growth probe member is available for the same-tenant proof", actual: snapshot.growthActor ? `${snapshot.growthActor.role}/${snapshot.growthActor.product_role}` : "missing", ok: Boolean(snapshot.growthActor), cause: "The run-scoped Growth probe member is unavailable for a valid tenant-scoped runtime proof" });
   addMatrix({ check: "Foreign runtime actor", expected: "an active synthetic QA member is available for the cross-tenant proof", actual: snapshot.foreignContext ? "available" : "missing", ok: Boolean(snapshot.foreignContext), cause: "No active synthetic QA member is available for the cross-tenant proof" });
   if (!snapshot.growthActor || !snapshot.foreignContext) return false;
   const growth = await scopedProtectedRead({ workspaceId: growthWorkspaceId, actorId: snapshot.growthActor.id });
