@@ -483,11 +483,13 @@ async function main() {
   const moveResponse = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: secondStage },
+      json: { expectedVersion: deal.version, toStage: secondStage },
       method: "POST",
     },
   );
   assert(moveResponse.response.ok, "admin can move QA deal to next DB stage");
+  const movedDeal = moveResponse.json?.deal;
+  assert(movedDeal?.version > deal.version, "current-version stage move advances the deal version");
   assert(moveResponse.json?.history?.fromStage === firstStage, "stage history stores fromStage");
   assert(moveResponse.json?.history?.toStage === secondStage, "stage history stores toStage");
   assert(
@@ -504,8 +506,20 @@ async function main() {
     "stage history endpoint contains stage move",
   );
 
+  const missingVersionMove = await admin.request(
+    `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
+    { json: { toStage: firstStage }, method: "POST" },
+  );
+  assert(missingVersionMove.response.status === 409, "stage move without expectedVersion is denied");
+  const staleVersionMove = await admin.request(
+    `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
+    { json: { expectedVersion: deal.version, toStage: firstStage }, method: "POST" },
+  );
+  assert(staleVersionMove.response.status === 409, "stale stage move is denied");
+
   const editedDealResponse = await admin.request(`/api/crm/deals?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`, {
     json: {
+      expectedVersion: movedDeal.version,
       deal: {
         contactId: contact.id,
         expectedCloseDate: qaEditedExpectedCloseDate,
@@ -523,6 +537,8 @@ async function main() {
     method: "PATCH",
   });
   assert(editedDealResponse.response.ok, "deal detail fields can be edited");
+  const editedDeal = editedDealResponse.json?.deal;
+  assert(editedDeal?.version > movedDeal.version, "deal edit advances the version");
 
   const reloadedBrokerCore = await getCore(admin, brokerWorkspace.id);
   const reloadedDeal = (reloadedBrokerCore.deals ?? []).find((item) => item.id === deal.id);
@@ -536,7 +552,7 @@ async function main() {
   const lostWithoutReason = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: lostStage },
+      json: { expectedVersion: editedDeal.version, toStage: lostStage },
       method: "POST",
     },
   );
@@ -546,6 +562,7 @@ async function main() {
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
       json: {
+        expectedVersion: editedDeal.version,
         reason: "QA Timing passt nicht",
         reasonCategory: "timing",
         reasonDetail: "QA Kunde moechte erst spaeter verkaufen",
@@ -555,10 +572,12 @@ async function main() {
     },
   );
   assert(lostWithReason.response.ok, "lost stage with structured reason succeeds");
+  const lostDeal = lostWithReason.json?.deal;
+  assert(lostDeal?.version > editedDeal.version, "lost stage advances the version");
 
   await broker.login();
   const unauthorizedReopen = await broker.request(`/api/crm/deals/${encodeURIComponent(deal.id)}/stage`, {
-    json: { toStage: secondStage },
+    json: { expectedVersion: lostDeal.version, toStage: secondStage },
     method: "POST",
   });
   assert(unauthorizedReopen.response.status === 403, "broker agent without reopen permission cannot reopen terminal deal");
@@ -567,7 +586,7 @@ async function main() {
   const adminReopen = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
     {
-      json: { toStage: secondStage },
+      json: { expectedVersion: lostDeal.version, toStage: secondStage },
       method: "POST",
     },
   );
@@ -577,7 +596,7 @@ async function main() {
   const developerDeal = (developerCoreFromAdmin.deals ?? []).find((item) => String(item.name ?? "").startsWith("QA "));
   assert(developerDeal, "developer QA deal exists for foreign workspace mutation test");
   const foreignDealMutation = await broker.request(`/api/crm/deals/${encodeURIComponent(developerDeal.id)}/stage`, {
-    json: { toStage: firstStage },
+    json: { expectedVersion: developerDeal.version, toStage: firstStage },
     method: "POST",
   });
   assert([403, 404].includes(foreignDealMutation.response.status), "broker cannot mutate a developer workspace deal");
