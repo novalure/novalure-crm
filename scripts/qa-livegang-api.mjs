@@ -428,7 +428,10 @@ async function main() {
     },
     method: "POST",
   });
-  assert(foreignPayloadDeal.response.ok, "client deal payload with foreign workspaceId is accepted only in session scope");
+  assert(
+    foreignPayloadDeal.response.ok,
+    `client deal payload with foreign workspaceId is accepted only in session scope (received HTTP ${foreignPayloadDeal.response.status}; code=${String(foreignPayloadDeal.json?.code ?? foreignPayloadDeal.json?.error ?? "unknown").slice(0, 120)})`,
+  );
   assert(foreignPayloadDeal.json?.deal?.workspaceId === brokerWorkspace.id, "foreign deal workspaceId payload is ignored");
 
   await admin.login();
