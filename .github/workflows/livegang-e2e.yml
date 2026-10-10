@@ -405,6 +405,7 @@ jobs:
         run: npm run test:e2e
 
       - name: Stop production server before RLS diagnostic
+        if: always()
         shell: bash
         run: |
           if [ -f /tmp/novalure-livegang.pid ]; then
