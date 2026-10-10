@@ -49,7 +49,7 @@
     "qa:persistence": "node scripts/qa-persistence-diagnostics.mjs",
     "qa:productrole-invite": "node scripts/qa-productrole-invite-hardening.mjs",
     "qa:public-slug-routing": "node scripts/qa-public-slug-routing.mjs",
-    "qa:tenant-isolation": "node scripts/qa-tenant-isolation.mjs",
+    "qa:tenant-isolation": "node --import tsx scripts/qa-tenant-isolation.mjs",
     "qa:e2e-object-flow": "node scripts/e2e-object-creation-tests.mjs --phase4",
     "qa:property-unit-pagination": "node scripts/qa-property-unit-pagination.mjs",
     "qa:property-pagination": "node scripts/qa-property-pagination.mjs",

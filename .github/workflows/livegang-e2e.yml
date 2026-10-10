@@ -279,6 +279,26 @@ jobs:
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
         run: node scripts/qa-bind-runtime-role.mjs
 
+      - name: Capture canonical Growth seed baseline
+        shell: bash
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          fingerprint="$(npm run --silent qa:tenant-isolation -- --operator-only | sed -n 's/^GROWTH_CANONICAL_SEED_FINGERPRINT=//p')"
+          test -n "$fingerprint"
+          echo "GROWTH_CANONICAL_SEED_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+
       - name: Reset synthetic QA run
         env:
           NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
@@ -289,6 +309,21 @@ jobs:
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run qa:livegang:reset -- --cleanup-only
+
+      - name: Verify cleanup preserves canonical Growth seeds
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+        run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Seed two or more isolated QA workspaces
         env:
@@ -301,6 +336,21 @@ jobs:
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_QA_SEED_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
         run: npm run qa:livegang:seed
+
+      - name: Verify synthetic QA seeding preserves canonical Growth seeds
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+        run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Build the production artifact
         run: npm run build
@@ -351,7 +401,11 @@ jobs:
           NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
         run: npm run qa:tenant-isolation
 
       - name: Cleanup synthetic QA run
@@ -365,6 +419,22 @@ jobs:
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run qa:livegang:reset -- --cleanup-only
+
+      - name: Verify final cleanup preserves canonical Growth seeds
+        if: always()
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+        run: npm run qa:tenant-isolation -- --operator-only
 
       - name: Stop production server
         if: always()
