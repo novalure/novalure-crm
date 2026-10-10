@@ -334,7 +334,9 @@ jobs:
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
-        run: node scripts/qa-growth-rls-probe.mjs seed
+        run: |
+          node scripts/qa-growth-rls-probe.mjs seed
+          echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1" >> "$GITHUB_ENV"
 
       - name: Seed two or more isolated QA workspaces
         env:

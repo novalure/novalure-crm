@@ -32,6 +32,13 @@ function probeIdentity() {
   });
 }
 
+function expectedProvisioning() {
+  const marker = process.env.NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED;
+  if (marker === undefined || marker === "") return false;
+  if (marker !== "1") throw new Error("NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED must be exactly 1 when present.");
+  return true;
+}
+
 function assertDirectMigrationUrl(value) {
   const url = new URL(value);
   if (!/^postgres(?:ql)?:$/.test(url.protocol) || url.hostname.includes("-pooler.")) throw new Error("QA Growth probe requires the direct migration connection.");
@@ -68,12 +75,17 @@ async function seed() {
 
 async function cleanup() {
   const probe = probeIdentity();
+  const provisioned = expectedProvisioning();
+  let untrackedProvisioning = false;
   await withOperatorTransaction(async (client) => {
     const dependencies = Number((await client.query("select (select count(*) from audit_logs where actor_user_id=$1) + (select count(*) from deal_stage_history where changed_by_user_id=$1) as count", [probe.id])).rows[0]?.count ?? 0);
     if (dependencies !== 0) throw new Error("QA Growth probe has unexpected business evidence; refusing deletion.");
     const removed = (await client.query("delete from workspace_users where id=$1 and workspace_id=$2 and lower(email)=lower($3) and name=$4 and role='agent' and status='active' and product_role='novalureGrowth' returning id", [probe.id, growthWorkspaceId, probe.email, probe.name])).rows;
-    if (removed.length > 1) throw new Error("QA Growth probe cleanup matched more than one member.");
+    if (removed.length > 1) throw new Error(`QA Growth probe cleanup matched ${removed.length} members.`);
+    if (provisioned && removed.length !== 1) throw new Error(`QA Growth probe cleanup expected one exact member deletion after provisioning, found ${removed.length}.`);
+    untrackedProvisioning = !provisioned && removed.length === 1;
   });
+  if (untrackedProvisioning) throw new Error("QA Growth probe was removed without a provisioning marker; cleanup is complete but the workflow proof is invalid.");
   console.log("QA_GROWTH_RLS_PROBE=CLEANED");
 }
 
