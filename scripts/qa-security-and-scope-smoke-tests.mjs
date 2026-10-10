@@ -91,8 +91,8 @@ test("Growth RLS proof quarantines stale probes and cannot let application write
   assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs seed\s+echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1"/);
   assert.match(workflow, /name: Stop production server before RLS diagnostic\s+if: always\(\)/);
   assert.match(workflow, /name: Ensure production server is stopped\s+if: always\(\)/);
-  assert.match(probe, /if \(provisioned && removed\.length !== 1\)/);
-  assert.match(probe, /QA Growth probe was removed without a provisioning marker/);
+  assert.match(probe, /if \(provisioned && suspended\.length !== 1\)/);
+  assert.match(probe, /QA Growth probe was suspended without a provisioning marker/);
   assert.match(probe, /status='suspended'/);
 });
 
