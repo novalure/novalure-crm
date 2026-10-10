@@ -79,17 +79,74 @@ async function queryOne(query, params = []) {
 async function assertSafeTenantRuntimeRole() {
   const row = await queryOne(`
     select
+      current_user as "roleName",
+      current_user = 'novalure_app' as "expectedRole",
+      role.rolinherit as inherit,
       not role.rolsuper
         and not role.rolbypassrls
         and not role.rolcreatedb
         and not role.rolcreaterole
         and not role.rolreplication
-        and pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as safe
+        and role.rolinherit
+        and current_user = 'novalure_app'
+        and pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as "safeRoleAttributes",
+      not role.rolsuper as "noSuperuser",
+      not role.rolbypassrls as "noBypassRls",
+      not role.rolcreatedb as "noCreateDb",
+      not role.rolcreaterole as "noCreateRole",
+      not role.rolreplication as "noReplication",
+      pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as "tenantRoleInherited",
+      not has_database_privilege(current_user, current_database(), 'CREATE') as "noDatabaseDdl",
+      not has_schema_privilege(current_user, 'public', 'CREATE') as "noSchemaDdl",
+      not exists (
+        select 1 from pg_database database where database.datname = current_database() and database.datdba = role.oid
+      ) as "notDatabaseOwner",
+      not exists (
+        select 1 from pg_namespace schema where schema.nspname = 'public' and schema.nspowner = role.oid
+      ) as "notSchemaOwner",
+      not exists (
+        select 1
+        from pg_class relation
+        join pg_namespace schema on schema.oid = relation.relnamespace
+        where schema.nspname = 'public'
+          and relation.relkind in ('r', 'p', 'S', 'v', 'm', 'f')
+          and relation.relowner = role.oid
+      ) as "notTableOwner",
+      not (
+        has_table_privilege(current_user, 'public.novalure_schema_migrations', 'SELECT')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'INSERT')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'UPDATE')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'DELETE')
+        or has_table_privilege(current_user, 'public.novalure_schema_migrations', 'TRUNCATE')
+      ) as "noMigrationPrivilege"
     from pg_roles role
     where role.rolname = current_user
   `);
-  if (row?.safe !== true) {
-    throw new Error("QA Livegang seed requires the non-privileged tenant runtime role.");
+  const safe = row?.safeRoleAttributes === true
+    && row.noDatabaseDdl === true
+    && row.noSchemaDdl === true
+    && row.notDatabaseOwner === true
+    && row.notSchemaOwner === true
+    && row.notTableOwner === true
+    && row.noMigrationPrivilege === true;
+  if (!safe) {
+    const details = {
+      expectedRole: row?.expectedRole === true,
+      inherit: row?.inherit === true,
+      noBypassRls: row?.noBypassRls === true,
+      noCreateDb: row?.noCreateDb === true,
+      noCreateRole: row?.noCreateRole === true,
+      noDatabaseDdl: row?.noDatabaseDdl === true,
+      noMigrationPrivilege: row?.noMigrationPrivilege === true,
+      noReplication: row?.noReplication === true,
+      noSchemaDdl: row?.noSchemaDdl === true,
+      noSuperuser: row?.noSuperuser === true,
+      notDatabaseOwner: row?.notDatabaseOwner === true,
+      notSchemaOwner: row?.notSchemaOwner === true,
+      notTableOwner: row?.notTableOwner === true,
+      tenantRoleInherited: row?.tenantRoleInherited === true,
+    };
+    throw new Error(`QA_RUNTIME_IDENTITY_UNSAFE ${JSON.stringify(details)}`);
   }
 }
 

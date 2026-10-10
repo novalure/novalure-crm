@@ -35,6 +35,8 @@ test("QA seed creates livegang data with relative persistence timing and clear d
   assert.match(reset, /Delete deterministic QA Livegang workspaces\/users/);
   assert.match(seed, /withWorkspaceTenantContext/);
   assert.match(seed, /set_config\('app\.tenant_id'/);
+  assert.match(seed, /QA_RUNTIME_IDENTITY_UNSAFE/);
+  assert.match(seed, /current_user = 'novalure_app'/);
   assert.match(reset, /no append-only evidence was deleted/);
   assert.doesNotMatch(reset, /delete from workspaces/i);
   assert.doesNotMatch(reset, /delete from workspace_users/i);
