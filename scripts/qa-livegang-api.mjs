@@ -403,7 +403,10 @@ async function main() {
     },
     method: "POST",
   });
-  assert(foreignPayloadContact.response.ok, "client contact payload with foreign workspaceId is accepted only in session scope");
+  assert(
+    foreignPayloadContact.response.ok,
+    `client contact payload with foreign workspaceId is accepted only in session scope (received HTTP ${foreignPayloadContact.response.status}; code=${String(foreignPayloadContact.json?.code ?? foreignPayloadContact.json?.error ?? "unknown").slice(0, 120)})`,
+  );
   assert(foreignPayloadContact.json?.contact?.workspaceId === brokerWorkspace.id, "foreign contact workspaceId payload is ignored");
 
   const foreignPayloadDeal = await broker.request("/api/crm/deals", {
