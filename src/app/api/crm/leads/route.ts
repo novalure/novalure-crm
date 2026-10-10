@@ -67,7 +67,7 @@ async function postHandler(request: Request, session: AppSession) {
   const result = await upsertLeadRecord({ idempotencyKey: idempotencyKey.value, lead, session: auth.session });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: getLeadWriteStatus(result.reason) });
+    return NextResponse.json({ code: result.code, error: result.reason }, { status: result.status ?? getLeadWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ lead: result.data, persisted: true });
@@ -90,7 +90,7 @@ async function patchHandler(request: Request, session: AppSession) {
   });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason }, { status: getLeadWriteStatus(result.reason) });
+    return NextResponse.json({ code: result.code, error: result.reason }, { status: result.status ?? getLeadWriteStatus(result.reason) });
   }
 
   return NextResponse.json({ lead: result.data, persisted: true });

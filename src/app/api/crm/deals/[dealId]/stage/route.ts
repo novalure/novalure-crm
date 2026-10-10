@@ -37,12 +37,12 @@ async function postHandler(request: Request, session: AppSession, context: Route
 
   if (!result.persisted) {
     const normalizedReason = result.reason.toLowerCase();
-    const status = normalizedReason.includes("permission")
+    const status = result.status ?? (normalizedReason.includes("permission")
       ? 403
       : normalizedReason.includes("not found")
         ? 404
-        : 400;
-    return NextResponse.json({ error: result.reason }, { status });
+        : 400);
+    return NextResponse.json({ code: result.code, error: result.reason }, { status });
   }
 
   return NextResponse.json({

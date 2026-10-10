@@ -44,6 +44,15 @@ test("G06 actual cookie/CSRF routes: six areas, exact replay, current authority 
    const path="/api/crm/deals/"+deal.id+"/stage",context={params:Promise.resolve({dealId:deal.id})};
    deal=(await replay(req=>stages.POST(req,context),path,"POST",{toStage:"Qualifizieren",expectedVersion:deal.version})).data.deal;
    assert.equal(Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1 and to_stage='Qualifizieren'",[deal.id])).rows[0].count),1);
+   const historyBefore=Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1",[deal.id])).rows[0].count);
+   const missing=await stages.POST(request(path,"POST",{toStage:"Neu"}),context);assert.equal(missing.status,409,await missing.clone().text());assert.equal((await missing.json()).code,"VERSION_CONFLICT");
+   const stale=await stages.POST(request(path,"POST",{toStage:"Neu",expectedVersion:deal.version-1}),context);assert.equal(stale.status,409,await stale.clone().text());assert.equal((await stale.json()).code,"VERSION_CONFLICT");
+   const invalid=await stages.POST(request(path,"POST",{toStage:"Invalid",expectedVersion:deal.version}),context);assert.equal(invalid.status,400,await invalid.clone().text());
+   const unknownId=randomUUID(),unknownPath="/api/crm/deals/"+unknownId+"/stage",unknown=await stages.POST(request(unknownPath,"POST",{toStage:"Neu",expectedVersion:1}),{params:Promise.resolve({dealId:unknownId})});assert.equal(unknown.status,404,await unknown.clone().text());
+   await db.admin.query("update workspace_users set role='assistant',product_role='viewer' where id=$1",[fixture.userId]);
+   const denied=await stages.POST(request(path,"POST",{toStage:"Neu",expectedVersion:deal.version}),context);assert.equal(denied.status,403,await denied.clone().text());
+   await db.admin.query("update workspace_users set role='owner',product_role='novalureAdmin' where id=$1",[fixture.userId]);
+   const unchanged=await db.admin.query("select stage,version from deals where id=$1",[deal.id]);assert.equal(unchanged.rows[0].stage,"Qualifizieren");assert.equal(Number(unchanged.rows[0].version),deal.version);assert.equal(Number((await db.admin.query("select count(*) from deal_stage_history where deal_id=$1",[deal.id])).rows[0].count),historyBefore);
   });
   await t.test("CAS updates replay without version increment; stale intent cannot overwrite",async()=>{
    const operations:Array<[Handler,string,Record<string,unknown>,string]>=[
