@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
@@ -138,6 +138,8 @@ function createClient(email) {
       headers.set("origin", trustedOrigin);
       headers.set("sec-fetch-site", "same-origin");
       headers.set("x-novalure-csrf-token", await getCsrfToken(method, path));
+      if (!headers.has("idempotency-key")) headers.set("idempotency-key", randomUUID());
+      if (!headers.has("x-correlation-id")) headers.set("x-correlation-id", randomUUID());
     }
     const init = {
       headers,
