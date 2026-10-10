@@ -60,6 +60,7 @@ const databaseUrl = qaTarget.databaseUrl;
 
 const sql = neon(databaseUrl);
 const tenantPool = new Pool({
+  allowExitOnIdle: true,
   connectionString: databaseUrl,
   idleTimeoutMillis: 10_000,
   max: 1,
