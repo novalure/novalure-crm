@@ -22,6 +22,10 @@ const workflow = await readFile(
   new URL("../.github/workflows/livegang-e2e.yml", import.meta.url),
   "utf8",
 );
+const qaManual057Workflow = await readFile(
+  new URL("../.github/workflows/qa-manual-057-cutover.yml", import.meta.url),
+  "utf8",
+);
 const [
   webhookExpand,
   webhookCutover,
@@ -492,6 +496,16 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   assert.doesNotMatch(runner, /unlinkSync/);
   assert.match(runner, /up requires --plan-token-file/);
   assert.doesNotMatch(workflow, /--allow-manual-cutover/);
+});
+
+test("the dedicated QA 057 cutover is explicit, isolated, and checksummed", () => {
+  assert.match(qaManual057Workflow, /confirm_057_cutover/);
+  assert.match(qaManual057Workflow, /APPLY_057_QA/);
+  assert.match(qaManual057Workflow, /environment: novalure-qa/);
+  assert.match(qaManual057Workflow, /MIGRATION_TARGET: test/);
+  assert.match(qaManual057Workflow, /dry-run --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover/);
+  assert.match(qaManual057Workflow, /up --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover/);
+  assert.doesNotMatch(qaManual057Workflow, /MIGRATION_TARGET: prod/);
 });
 
 test("QA secrets are step-scoped behind install and all third-party actions are SHA pinned", () => {

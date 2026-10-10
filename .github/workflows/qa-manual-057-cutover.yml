@@ -1,0 +1,62 @@
+name: QA manual 057 webhook cutover
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_057_cutover:
+        description: "Type APPLY_057_QA to apply only the checksummed QA cutover"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: novalure-shared-qa
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    name: Explicit QA webhook legacy-index cutover
+    if: inputs.confirm_057_cutover == 'APPLY_057_QA'
+    runs-on: ubuntu-latest
+    environment: novalure-qa
+    env:
+      MIGRATION_TARGET: test
+      MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-manual-057-plan-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout exact requested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install dependencies from lockfile
+        run: npm ci
+      - name: Preview exact QA cutover without writes
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/db-migrate.mjs dry-run --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
+      - name: Apply exact checksummed QA cutover
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/db-migrate.mjs up --only=057_bot_webhook_legacy_index_cutover --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
