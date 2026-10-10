@@ -141,7 +141,7 @@ try {
     connectionMode: "direct",
     minimumServerVersionNum: 170000,
     purpose: "QA runtime-role binding",
-    target: "qa",
+    target: "test",
   });
   const before = await rolePosture(client);
   assertSafePosture(before, { requireMembership: false });

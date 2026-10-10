@@ -259,6 +259,7 @@ test("protected QA runtime-role binding is explicit and uses only the direct mig
   assert.match(binding, /grant novalure_tenant_app to novalure_app with admin false, inherit true, set false/);
   assert.match(binding, /assertConnectedDatabaseTarget/);
   assert.match(binding, /connectionMode: "direct"/);
+  assert.match(binding, /target: "test"/);
   assert.match(binding, /runtimeNoBypassRls/);
   assert.match(binding, /runtimeNoMigrationPrivilege/);
   assert.match(binding, /noPrivilegedRoleReachability/);
