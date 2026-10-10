@@ -92,7 +92,7 @@ async function cleanup() {
 async function quarantineStale() {
   const quarantined = await withOperatorTransaction(async (client) => {
     const rows = (await client.query(
-      "update workspace_users set status='inactive',updated_at=now() where workspace_id=$1 and status='active' and role='agent' and product_role='novalureGrowth' and lower(email) ~ '^qa-growth-rls-probe\\+golivetest_[a-z0-9_-]+@novalure\\.invalid$' and name ~ '^QA Growth RLS Probe GOLIVETEST_[A-Za-z0-9_-]+$' returning id",
+      "update workspace_users set status='suspended',updated_at=now() where workspace_id=$1 and status='active' and role='agent' and product_role='novalureGrowth' and lower(email) ~ '^qa-growth-rls-probe\\+golivetest_[a-z0-9_-]+@novalure\\.invalid$' and name ~ '^QA Growth RLS Probe GOLIVETEST_[A-Za-z0-9_-]+$' returning id",
       [growthWorkspaceId],
     )).rows;
     const active = Number((await client.query(

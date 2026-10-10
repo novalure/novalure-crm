@@ -89,7 +89,7 @@ test("Growth RLS proof quarantines stale probes and cannot let application write
   assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs seed\s+echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1"/);
   assert.match(probe, /if \(provisioned && removed\.length !== 1\)/);
   assert.match(probe, /QA Growth probe was removed without a provisioning marker/);
-  assert.match(probe, /status='inactive'/);
+  assert.match(probe, /status='suspended'/);
 });
 
 test("database infrastructure targets are lazy, explicit and fail closed", () => {
