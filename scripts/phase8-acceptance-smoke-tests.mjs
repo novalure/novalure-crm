@@ -33,6 +33,11 @@ test("QA seed creates livegang data with relative persistence timing and clear d
   assert.match(seed, /QA Bautr/);
   assert.match(seed, /QA Makler Workspace/);
   assert.match(reset, /Delete deterministic QA Livegang workspaces\/users/);
+  assert.match(seed, /withWorkspaceTenantContext/);
+  assert.match(seed, /set_config\('app\.tenant_id'/);
+  assert.match(reset, /no append-only evidence was deleted/);
+  assert.doesNotMatch(reset, /delete from workspaces/i);
+  assert.doesNotMatch(reset, /delete from workspace_users/i);
 });
 
 test("all phase-level smoke tests are registered for repeatable acceptance", () => {
