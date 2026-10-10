@@ -84,10 +84,12 @@ test("Growth RLS proof quarantines stale probes and cannot let application write
   const diagnostic = workflow.indexOf("name: Run tenant-isolation diagnostics");
   const teardown = workflow.indexOf("name: Remove run-scoped Growth RLS probe");
   const syntheticCleanup = workflow.indexOf("name: Cleanup synthetic QA run");
+  const finalStop = workflow.indexOf("name: Ensure production server is stopped");
 
-  assert.ok(quarantine >= 0 && regression < stopServer && stopServer < provision && provision < diagnostic && diagnostic < teardown && teardown < syntheticCleanup);
+  assert.ok(quarantine >= 0 && regression < stopServer && stopServer < provision && provision < diagnostic && diagnostic < teardown && teardown < syntheticCleanup && syntheticCleanup < finalStop);
   assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs quarantine-stale/);
   assert.match(workflow, /node scripts\/qa-growth-rls-probe\.mjs seed\s+echo "NOVALURE_QA_GROWTH_RLS_PROBE_PROVISIONED=1"/);
+  assert.match(workflow, /name: Ensure production server is stopped\s+if: always\(\)/);
   assert.match(probe, /if \(provisioned && removed\.length !== 1\)/);
   assert.match(probe, /QA Growth probe was removed without a provisioning marker/);
   assert.match(probe, /status='suspended'/);

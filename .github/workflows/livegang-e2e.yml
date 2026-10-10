@@ -479,6 +479,14 @@ jobs:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
         run: npm run qa:tenant-isolation -- --operator-only
 
+      - name: Ensure production server is stopped
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/novalure-livegang.pid ]; then
+            kill "$(cat /tmp/novalure-livegang.pid)" || true
+          fi
+
       - name: Print app log on failure
         if: failure()
         run: node scripts/summarize-app-log.mjs /tmp/novalure-livegang.log || true
