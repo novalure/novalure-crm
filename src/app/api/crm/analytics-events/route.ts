@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
+import { withCrmRead } from "@/lib/crm-command";
 import {
   crmAnalyticsEventTypes,
   listCrmAnalyticsEvents,
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
-  const events = await listCrmAnalyticsEvents({
+  const events = await withCrmRead(auth.session, () => listCrmAnalyticsEvents({
     eventTypes: getEventTypes(url),
     from: url.searchParams.get("from"),
     limit: getLimit(url),
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
     source: url.searchParams.get("source"),
     to: url.searchParams.get("to"),
     workspaceId: auth.session.workspaceId,
-  });
+  }));
 
   return NextResponse.json({
     eventTypes: crmAnalyticsEventTypes,
