@@ -24,6 +24,15 @@ loadEnv(".env.production.local");
 const qaTarget = await assertQaTarget();
 const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
 
+function futureDate(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const qaInitialExpectedCloseDate = futureDate(30);
+const qaEditedExpectedCloseDate = futureDate(45);
+
 function qaEmail(localPart) {
   return `${localPart}+${qaRunSlug}@novalure.local`;
 }
@@ -311,7 +320,7 @@ async function createDeal(client, workspaceId, projectId, contactId, stage, name
     json: {
       deal: {
         contactId,
-        expectedCloseDate: "2026-08-15",
+        expectedCloseDate: qaInitialExpectedCloseDate,
         name,
         nextAction: "QA Livegang Pipeline pruefen",
         probability: 41,
@@ -415,7 +424,7 @@ async function main() {
     json: {
       deal: {
         contactId: foreignPayloadContact.json.contact.id,
-        expectedCloseDate: "2026-08-20",
+        expectedCloseDate: qaEditedExpectedCloseDate,
         name: "QA Foreign Workspace Payload Deal",
         nextAction: "QA payload isolation pruefen",
         probability: 52,
@@ -499,7 +508,7 @@ async function main() {
     json: {
       deal: {
         contactId: contact.id,
-        expectedCloseDate: "2026-08-20",
+        expectedCloseDate: qaEditedExpectedCloseDate,
         id: deal.id,
         name: deal.name,
         nextAction: "QA Vertrag pruefen und Rueckruf planen",
@@ -522,7 +531,7 @@ async function main() {
   assert(reloadedDeal?.probability === 64, "deal probability persists after reload");
   assert(reloadedDeal?.riskLevel === "hoch", "deal risk persists after reload");
   assert(reloadedDeal?.nextAction === "QA Vertrag pruefen und Rueckruf planen", "deal next action persists after reload");
-  assert(reloadedDeal?.expectedCloseDate === "2026-08-20", "deal expected close date persists after reload");
+  assert(reloadedDeal?.expectedCloseDate === qaEditedExpectedCloseDate, "deal expected close date persists after reload");
 
   const lostWithoutReason = await admin.request(
     `/api/crm/deals/${encodeURIComponent(deal.id)}/stage?workspaceId=${encodeURIComponent(brokerWorkspace.id)}`,
