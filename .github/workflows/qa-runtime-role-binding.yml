@@ -1,0 +1,46 @@
+name: Bind QA runtime role
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type BIND_QA_NOVALURE_APP to grant the existing QA runtime role its least-privilege tenant membership.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: novalure-qa-runtime-role-binding
+  cancel-in-progress: false
+
+jobs:
+  bind-runtime-role:
+    if: inputs.confirmation == 'BIND_QA_NOVALURE_APP'
+    runs-on: ubuntu-latest
+    environment: novalure-qa
+    steps:
+      - name: Checkout exact requested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Bind existing QA runtime role to tenant group
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/qa-bind-runtime-role.mjs
