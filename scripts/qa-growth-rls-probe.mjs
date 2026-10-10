@@ -89,6 +89,23 @@ async function cleanup() {
   console.log("QA_GROWTH_RLS_PROBE=CLEANED");
 }
 
+async function quarantineStale() {
+  const quarantined = await withOperatorTransaction(async (client) => {
+    const rows = (await client.query(
+      "update workspace_users set status='inactive',updated_at=now() where workspace_id=$1 and status='active' and role='agent' and product_role='novalureGrowth' and lower(email) ~ '^qa-growth-rls-probe\\+golivetest_[a-z0-9_-]+@novalure\\.invalid$' and name ~ '^QA Growth RLS Probe GOLIVETEST_[A-Za-z0-9_-]+$' returning id",
+      [growthWorkspaceId],
+    )).rows;
+    const active = Number((await client.query(
+      "select count(*)::int as count from workspace_users where workspace_id=$1 and status='active' and role='agent' and product_role='novalureGrowth' and lower(email) ~ '^qa-growth-rls-probe\\+golivetest_[a-z0-9_-]+@novalure\\.invalid$' and name ~ '^QA Growth RLS Probe GOLIVETEST_[A-Za-z0-9_-]+$'",
+      [growthWorkspaceId],
+    )).rows[0]?.count ?? 0);
+    if (active !== 0) throw new Error("Active stale QA Growth probe membership remains after quarantine.");
+    return rows.length;
+  });
+  console.log(`QA_GROWTH_RLS_PROBE_STALE_QUARANTINE=${quarantined}`);
+}
+
 if (action === "seed") await seed();
 else if (action === "cleanup") await cleanup();
-else throw new Error("Usage: node scripts/qa-growth-rls-probe.mjs <seed|cleanup>");
+else if (action === "quarantine-stale") await quarantineStale();
+else throw new Error("Usage: node scripts/qa-growth-rls-probe.mjs <seed|cleanup|quarantine-stale>");
