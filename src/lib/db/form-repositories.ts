@@ -249,9 +249,21 @@ export async function upsertWebsiteForm(input: {
 
 async function upsertWebsiteFormInTenant(input: { session: AppSession; form: WebsiteForm }) {
   const form = normalizeWebsiteForm(input.form);
-  const existingId = await resolveExistingFormId(input.session.workspaceId, form);
+  const existing = await resolveExistingForm(input.session.workspaceId, form);
+  if (isUuid(form.id) && !existing) {
+    return { form: null, persisted: false, reason: "Form not found" };
+  }
+  const existingId = existing?.id ?? null;
   const funnel = await resolveFunnel(input.session.workspaceId, form.funnelId);
-  const projectId = funnel?.projectId ?? (await resolveFallbackProjectId(input.session.workspaceId));
+  if (isUuid(form.funnelId) && !funnel) {
+    return { form: null, persisted: false, reason: "Form funnel is not accessible" };
+  }
+  if (existing && funnel?.projectId && funnel.projectId !== existing.projectId) {
+    return { form: null, persisted: false, reason: "Form project cannot be changed" };
+  }
+  const projectId = existing
+    ? existing.projectId
+    : funnel?.projectId ?? (await resolveFallbackProjectId(input.session.workspaceId));
   const ownerUserId = form.ownerMode === "user" && isUuid(form.ownerUserId)
     ? form.ownerUserId
     : funnel?.ownerUserId ?? (isUuid(input.session.userId) ? input.session.userId : null);
@@ -1076,21 +1088,19 @@ function getWebsiteSalesMetadata(input: {
   };
 }
 
-async function resolveExistingFormId(workspaceId: string, form: WebsiteForm) {
+async function resolveExistingForm(workspaceId: string, form: WebsiteForm) {
   if (isUuid(form.id)) {
-    const row = await queryOne<IdRow>(
-      "select id from forms where workspace_id = $1 and id = $2 limit 1",
+    const row = await queryOne<{ id: string; projectId: string | null }>(
+      'select id, project_id as "projectId" from forms where workspace_id = $1 and id = $2 limit 1',
       [workspaceId, form.id],
     );
-    if (row) return row.id;
+    if (row) return row;
   }
 
-  const legacy = await queryOne<IdRow>(
-    "select id from forms where workspace_id = $1 and settings->>'legacyId' = $2 limit 1",
+  return queryOne<{ id: string; projectId: string | null }>(
+    'select id, project_id as "projectId" from forms where workspace_id = $1 and settings->>\'legacyId\' = $2 limit 1',
     [workspaceId, form.id],
   );
-
-  return legacy?.id ?? null;
 }
 
 async function resolveFunnel(workspaceId: string, funnelId: string) {
@@ -1113,6 +1123,8 @@ async function resolveFallbackProjectId(workspaceId: string) {
       select id
       from projects
       where workspace_id = $1
+        and (public.crm_workspace_manager(workspace_id)
+          or public.crm_project_access(workspace_id, id, true))
       order by created_at asc
       limit 1
     `,

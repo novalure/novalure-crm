@@ -7,7 +7,7 @@ import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-t
 import { closePublicFormLookupPool } from "../src/lib/db/public-form-lookup-client";
 import type { PoolClient } from "@neondatabase/serverless";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
-import { getPublicWebsiteFormByKey, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
+import { getPublicWebsiteFormByKey, listWebsiteForms, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
 import type { AppSession } from "../src/lib/auth/session";
@@ -413,4 +413,122 @@ test("anonymous lookup fails closed without its separate database identity", asy
     await closePublicFormLookupPool();
     process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = lookupUrl;
   }
+});
+
+test("an editor can save a form in a writable project without a funnel", async () => {
+  const editorId = randomUUID();
+  const writableProjectId = randomUUID();
+  const formId = randomUUID();
+  await db.admin.query(
+    `insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
+     values($1,$2,'SYNTHETIC form editor','form-editor@example.invalid','agent','novalure_operator','active')`,
+    [editorId, websiteSalesWorkspaceId],
+  );
+  await db.admin.query(
+    `insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC writable project','Bauträger')`,
+    [writableProjectId, websiteSalesWorkspaceId],
+  );
+  await db.admin.query(
+    `insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)
+     values($1,$2,$4,true,false),($1,$3,$4,true,true)`,
+    [websiteSalesWorkspaceId, projectId, writableProjectId, editorId],
+  );
+  await db.admin.query(
+    `insert into forms(id,workspace_id,project_id,name,slug,status)
+     values($1,$2,$3,'SYNTHETIC editable form','editable-form','entwurf')`,
+    [formId, websiteSalesWorkspaceId, writableProjectId],
+  );
+  const session = {
+    authenticated: true,
+    userId: editorId,
+    workspaceId: websiteSalesWorkspaceId,
+    workspaceName: "SYNTHETIC Website Sales",
+    name: "SYNTHETIC form editor",
+    email: "form-editor@example.invalid",
+    role: "agent",
+    productRole: "novalure_operator",
+    permissions: getRolePermissions("agent"),
+    productPermissions: getProductRoleCapabilities("novalure_operator"),
+    source: "database",
+  } as AppSession;
+  const loaded = await listWebsiteForms({ session });
+  const form = loaded.forms.find((item) => item.id === formId);
+  assert.ok(form, "editor can read the form before saving");
+  const saved = await upsertWebsiteForm({ session, form: { ...form, name: "SYNTHETIC edited form" } });
+  assert.equal(saved.persisted, true);
+  assert.deepEqual(
+    (await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
+    [{ project_id: writableProjectId, name: "SYNTHETIC edited form" }],
+  );
+});
+
+test("form saves keep project scope and reject a cross-project funnel", async () => {
+  const workspaceId = randomUUID();
+  const editorId = randomUUID();
+  const readProjectId = randomUUID();
+  const writeProjectId = randomUUID();
+  const formId = randomUUID();
+  const readFunnelId = randomUUID();
+  await db.admin.query(
+    `insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC customer workspace','self_service_customer')`,
+    [workspaceId],
+  );
+  await db.admin.query(
+    `insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
+     values($1,$2,'SYNTHETIC customer editor','customer-form-editor@example.invalid','agent','broker_agent','active')`,
+    [editorId, workspaceId],
+  );
+  await db.admin.query(
+    `insert into projects(id,workspace_id,name,type) values
+     ($1,$3,'SYNTHETIC read-only project','Bauträger'),
+     ($2,$3,'SYNTHETIC writable project','Bauträger')`,
+    [readProjectId, writeProjectId, workspaceId],
+  );
+  await db.admin.query(
+    `insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)
+     values($1,$2,$4,true,false),($1,$3,$4,true,true)`,
+    [workspaceId, readProjectId, writeProjectId, editorId],
+  );
+  await db.admin.query(
+    `insert into forms(id,workspace_id,project_id,name,slug,status,settings)
+     values($1,$2,$3,'SYNTHETIC scoped form','scoped-form','entwurf','{"doubleOptIn":true}')`,
+    [formId, workspaceId, writeProjectId],
+  );
+  await db.admin.query(
+    `insert into funnels(id,workspace_id,project_id,name,goal,audience,entry_channel)
+     values($1,$2,$3,'SYNTHETIC read funnel','lead','buyer','web')`,
+    [readFunnelId, workspaceId, readProjectId],
+  );
+  const session = {
+    authenticated: true, userId: editorId, workspaceId,
+    workspaceName: "SYNTHETIC customer workspace", name: "SYNTHETIC customer editor",
+    email: "customer-form-editor@example.invalid", role: "agent", productRole: "broker_agent",
+    permissions: getRolePermissions("agent"), productPermissions: getProductRoleCapabilities("broker_agent"),
+    source: "database",
+  } as AppSession;
+  const loaded = await listWebsiteForms({ session });
+  const form = loaded.forms.find((item) => item.id === formId);
+  assert.ok(form);
+  const saved = await upsertWebsiteForm({ session, form: { ...form, name: "SYNTHETIC saved scoped form" } });
+  assert.equal(saved.persisted, true);
+  assert.equal(saved.form?.doubleOptIn, true);
+  assert.deepEqual((await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
+    [{ project_id: writeProjectId, name: "SYNTHETIC saved scoped form" }]);
+
+  const forgedNewForm = {
+    ...form, id: "form_new_synthetic", name: "SYNTHETIC new scoped form", slug: "new-scoped-form",
+    workspaceId: websiteSalesWorkspaceId, projectId: readProjectId,
+  };
+  const newForm = await upsertWebsiteForm({ session, form: forgedNewForm });
+  assert.equal(newForm.persisted, true);
+  assert.deepEqual((await db.admin.query("select workspace_id,project_id from forms where id=$1", [newForm.form?.id])).rows,
+    [{ workspace_id: workspaceId, project_id: writeProjectId }]);
+
+  const deniedMove = await upsertWebsiteForm({ session, form: { ...form, funnelId: readFunnelId, name: "SYNTHETIC forbidden move" } });
+  assert.equal(deniedMove.persisted, false);
+  assert.deepEqual((await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
+    [{ project_id: writeProjectId, name: "SYNTHETIC saved scoped form" }]);
+  const deniedForeignId = await upsertWebsiteForm({ session, form: { ...form, id: genericFormId, name: "SYNTHETIC foreign override" } });
+  assert.equal(deniedForeignId.persisted, false);
+  assert.equal((await db.admin.query("select count(*)::integer as count from forms where workspace_id=$1", [workspaceId])).rows[0].count, 2);
 });
