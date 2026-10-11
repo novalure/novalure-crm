@@ -40,11 +40,32 @@ before(async () => {
     [websiteSalesWorkspaceId],
   );
   await db.admin.query("update workspaces set public_key='synthetic-website-sales' where id=$1", [websiteSalesWorkspaceId]);
+  // Recreate only the pre-existing, approved internal operator for this isolated fixture.
+  // Production already has this membership from migrations 092 and 093.
+  await db.admin.query(
+    "insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC: Evelyn CRM service actor','evelyn-crm-service@service.invalid','agent','novalure_operator','active')",
+    [actorId, websiteSalesWorkspaceId],
+  );
   await db.admin.query(
     "insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC Website Sales','Bauträger') on conflict(id) do nothing",
     [projectId, websiteSalesWorkspaceId],
   );
-  await db.admin.query(await readFile(new URL("../migrations/094_website_sales_ingestion.sql", import.meta.url), "utf8"));
+  const migration = await readFile(new URL("../migrations/094_website_sales_ingestion.sql", import.meta.url), "utf8");
+  const guardClient = await db.admin.connect();
+  try {
+    await guardClient.query("begin");
+    await guardClient.query("update workspace_users set status='suspended' where id=$1", [actorId]);
+    await assert.rejects(guardClient.query(migration), /existing active internal operator actor/);
+    await guardClient.query("rollback");
+  } finally {
+    guardClient.release();
+  }
+  await db.admin.query(migration);
+  const membershipCount = await db.admin.query<{ count: string }>(
+    "select count(*)::text as count from workspace_users where workspace_id=$1",
+    [websiteSalesWorkspaceId],
+  );
+  assert.equal(membershipCount.rows[0].count, "1", "migration 094 must not add a workspace membership");
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
   process.env.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
@@ -149,6 +170,14 @@ test("an ambiguous commit keeps the key guarded and replays its durable success 
   for (const relation of ["contacts", "leads", "deals", "tasks", "form_submissions"]) {
     assert.equal(after[relation], before[relation] + 1, `${relation} was inserted once`);
   }
+  const audit = await db.admin.query<{ actorUserId: string; ingestionSource: string }>(
+    `select actor_user_id as "actorUserId", after->>'ingestionSource' as "ingestionSource"
+     from audit_logs where workspace_id=$1 and action='form.submission.persisted'
+     order by created_at desc limit 1`,
+    [websiteSalesWorkspaceId],
+  );
+  assert.equal(audit.rows[0]?.actorUserId, actorId);
+  assert.equal(audit.rows[0]?.ingestionSource, "NOVALURE_STUDIO_SIGNED_WEBSITE_SALES");
   assert.deepEqual(await claimPublicSubmissionIdempotency(hashes), { state: "replay", response: snapshot });
   assert.deepEqual(await counts(), after);
 });

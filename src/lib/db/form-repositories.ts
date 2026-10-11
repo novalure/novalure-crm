@@ -813,14 +813,16 @@ export async function persistWebsiteFormSubmission(input: {
     [lookup.id, websiteSalesMetadata?.syntheticTest === true ? 0 : 1],
   );
 
+  const signedWebsiteSales = websiteSalesMetadata !== null && input.actorUserId === websiteSalesActorId;
+  const auditProductRole = signedWebsiteSales ? "novalure_operator" : "assistant_backoffice";
   const formSession: AppSession = {
     authenticated: true,
-    email: "website@novalure.local",
-    name: "Website Formular",
+    email: signedWebsiteSales ? "evelyn-crm-service@service.invalid" : "website@novalure.local",
+    name: signedWebsiteSales ? "SYNTHETIC: Evelyn CRM service actor" : "Website Formular",
     permissions: [],
-    productPermissions: getProductRoleCapabilities("assistant_backoffice"),
-    productRole: "assistant_backoffice",
-    role: "owner",
+    productPermissions: getProductRoleCapabilities(auditProductRole),
+    productRole: auditProductRole,
+    role: signedWebsiteSales ? "agent" : "owner",
     source: "database",
     userId: input.actorUserId ?? lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
     workspaceId: lookup.workspaceId,
@@ -833,7 +835,15 @@ export async function persistWebsiteFormSubmission(input: {
       action: "form.submission.persisted",
       entityType: "form_submission",
       entityId: submission?.id,
-      after: { contactId, dealId: deal?.id ?? null, formId: lookup.id, leadId: lead?.id ?? null, taskId: task?.id ?? null },
+      after: {
+        contactId,
+        dealId: deal?.id ?? null,
+        formId: lookup.id,
+        ingestionSource: signedWebsiteSales ? "NOVALURE_STUDIO_SIGNED_WEBSITE_SALES" : "PUBLIC_FORM",
+        leadId: lead?.id ?? null,
+        taskId: task?.id ?? null,
+        websiteSales: websiteSalesMetadata,
+      },
     }),
     lookup.funnelId
       ? writeCrmAnalyticsEvent({

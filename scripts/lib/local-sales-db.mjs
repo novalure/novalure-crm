@@ -96,7 +96,10 @@ export async function applySalesSchema(db, {
       name === "062_private_media_contract_cutover.sql" ||
       name === "091_production_runtime_forced_rls_cutover.sql" ||
       name === "092_crm_production_machine_identity.sql" ||
-      name === "093_crm_machine_internal_context.sql"
+      name === "093_crm_machine_internal_context.sql" ||
+      // 094 depends on the operator installed by 092/093. Its unchanged SQL
+      // runs in the dedicated Website Sales fixture, which seeds that actor.
+      name === "094_website_sales_ingestion.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
