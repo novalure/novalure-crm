@@ -120,7 +120,7 @@ async function attestRls() {
     "QA_FOREIGN_SUBMISSION_FIXTURE_MISSING");
   requireProof(await scalar(app, "select count(*)::int as value from forms where id=$1", [own.form]) === 0, "QA_NO_CONTEXT_FORM_LEAK");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_NO_CONTEXT_SUBMISSION_LEAK");
-  await requireDenied(() => app.query("select id from novalure_schema_migrations limit 1"), "QA_LEDGER_READ_ALLOWED");
+  await requireDenied(() => app.query("select version from novalure_schema_migrations limit 1"), "QA_LEDGER_READ_ALLOWED");
   await requireDenied(() => lookup.query("select id from forms limit 1"), "QA_LOOKUP_BASE_READ_ALLOWED");
   await requireDenied(() => lookup.query("select id from form_submissions limit 1"), "QA_LOOKUP_SUBMISSION_READ_ALLOWED");
   const published = await lookup.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, slug]);
