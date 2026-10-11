@@ -39,11 +39,14 @@ try {
     throw new Error("QA_LOOKUP_BIND_ROLE_UNSAFE");
   }
   const password = randomBytes(36).toString("hex");
+  // Register masks before either credential can enter a later workflow step.
+  process.stdout.write(`::add-mask::${password}\n`);
   await owner.query(`alter role novalure_public_form_lookup password '${password}'`);
   const target = new URL(qa.databaseUrl);
   target.username = "novalure_public_form_lookup";
   target.password = password;
   target.searchParams.set("sslmode", "verify-full");
+  process.stdout.write(`::add-mask::${target.toString()}\n`);
   lookup = new pg.Client({ connectionString: target.toString(), ssl: { rejectUnauthorized: true } });
   await lookup.connect();
   const verified = (await lookup.query(`select current_setting('neon.project_id',true) project,
