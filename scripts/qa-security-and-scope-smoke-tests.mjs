@@ -380,7 +380,11 @@ test("CI pins the exact runtime, canonicalizes SBOM and never prints raw app log
   );
   const setupBlocks = [...workflow.matchAll(/uses:\s+actions\/setup-node@[\s\S]*?package-manager-cache:\s*false/g)];
 
-  assert.equal(setupBlocks.length, 4);
+  assert.equal(setupBlocks.length, 3);
+  assert.match(workflow, /quality:\s*\n\s+name: Lockfile, lint, typecheck, tests and build\s*\n\s+runs-on:/);
+  assert.match(workflow, /production-sca:\s*\n\s+name: Production dependency audit and SBOM\s*\n\s+runs-on:/);
+  assert.doesNotMatch(workflow, /qa_action:/);
+  assert.match(workflow, /Read-only candidate runtime and migration authentication preflight[\s\S]*?Preview checksummed QA migration plan without writes/);
   for (const block of setupBlocks) assert.match(block[0], /node-version-file:\s*\.node-version/);
   assert.match(workflow, /canonicalize-sbom\.mjs/);
   assert.match(workflow, /novalure-production-sbom\.components\.sha256/);
