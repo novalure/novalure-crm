@@ -87,6 +87,7 @@ create policy form_submissions_tenant_insert on public.form_submissions
       select 1 from public.forms f
       where f.id = form_id and f.workspace_id = form_submissions.workspace_id
         and f.status in ('aktiv', 'eingebaut')
+        and f.project_id is not distinct from form_submissions.project_id
     )
     and (public.crm_workspace_manager(workspace_id)
       or (project_id is not null and public.crm_project_access(workspace_id, project_id, true)))

@@ -31,8 +31,12 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     const ownWorkspace = randomUUID();
     const foreignWorkspace = randomUUID();
     const ownActor = randomUUID();
+    const splitActor = randomUUID();
     const foreignActor = randomUUID();
+    const readProject = randomUUID();
+    const writeProject = randomUUID();
     const ownForm = randomUUID();
+    const projectForm = randomUUID();
     const foreignForm = randomUUID();
     const unpublishedForm = randomUUID();
     const key = randomUUID().replaceAll("-", "");
@@ -45,8 +49,20 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     await db.admin.query(
       `insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
        values($1,$2,'SYNTHETIC owner','owner@example.invalid','owner','customer_owner','active'),
-             ($3,$4,'SYNTHETIC foreign owner','foreign@example.invalid','owner','customer_owner','active')`,
-      [ownActor, ownWorkspace, foreignActor, foreignWorkspace],
+             ($3,$4,'SYNTHETIC foreign owner','foreign@example.invalid','owner','customer_owner','active'),
+             ($5,$2,'SYNTHETIC split agent','split@example.invalid','agent','broker_agent','active')`,
+      [ownActor, ownWorkspace, foreignActor, foreignWorkspace, splitActor],
+    );
+    await db.admin.query(
+      `insert into projects(id,workspace_id,name,type) values
+       ($1,$3,'SYNTHETIC read project','Bauträger'),
+       ($2,$3,'SYNTHETIC write project','Bauträger')`,
+      [readProject, writeProject, ownWorkspace],
+    );
+    await db.admin.query(
+      `insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals)
+       values($1,$2,$4,true,false),($1,$3,$4,true,true)`,
+      [ownWorkspace, readProject, writeProject, splitActor],
     );
     await db.admin.query(
       `insert into forms(id,workspace_id,name,slug,status)
@@ -54,6 +70,11 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
              ($3,$4,'SYNTHETIC foreign','foreign','aktiv'),
              ($5,$2,'SYNTHETIC draft','draft','entwurf')`,
       [ownForm, ownWorkspace, foreignForm, foreignWorkspace, unpublishedForm],
+    );
+    await db.admin.query(
+      `insert into forms(id,workspace_id,project_id,name,slug,status)
+       values($1,$2,$3,'SYNTHETIC project form','project-form','aktiv')`,
+      [projectForm, ownWorkspace, readProject],
     );
     // The release order is 094, then 095; the Website Sales seed itself is
     // exercised in its dedicated fixture, so this local matrix records 094's
@@ -141,6 +162,20 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await client.query("select id from forms where id=$1", [ownForm])).rowCount, 1);
       assert.equal((await client.query("select id from form_submissions where form_id=$1", [ownForm])).rowCount, 1);
       await client.query("commit");
+      await client.query("begin");
+      await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, splitActor]);
+      assert.equal((await client.query("select id from forms where id=$1", [projectForm])).rowCount, 1);
+      await client.query("savepoint before_split_project_insert");
+      await assert.rejects(client.query(
+        "insert into form_submissions(workspace_id,project_id,form_id) values($1,$2,$3)",
+        [ownWorkspace, writeProject, projectForm],
+      ), /row-level security|permission denied/);
+      await client.query("rollback to savepoint before_split_project_insert");
+      await assert.rejects(client.query(
+        "insert into form_submissions(workspace_id,project_id,form_id) values($1,$2,$3)",
+        [ownWorkspace, readProject, projectForm],
+      ), /row-level security|permission denied/);
+      await client.query("rollback");
       await client.query("begin");
       await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, ownActor]);
       await assert.rejects(client.query("insert into form_submissions(workspace_id,form_id) values($1,$2)", [foreignWorkspace, foreignForm]), /row-level security|permission denied/);
