@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, queryOne } from "@/lib/db/client";
+import { withTenantTransaction } from "@/lib/db/tenant-client";
 import { shouldUseSecureAuthCookies } from "@/lib/auth/cookie-security";
 import { workspace as mockWorkspace, users as mockUsers } from "@/lib/crm-data";
 import { getRolePermissions, isAppRole, type AppPermission, type AppRole } from "@/lib/auth/permissions";
@@ -511,8 +512,10 @@ async function auditCrossWorkspaceView(input: {
     throw new Error("Cross-workspace audit requires a persisted target membership");
   }
 
-  const audit = await queryOne<{ id: string }>(
-    `
+  const audit = await withTenantTransaction(
+    { actorId: input.session.userId, workspaceId: input.targetWorkspace.id },
+    (tx) => tx.queryOne<{ id: string }>(
+      `
       insert into audit_logs (
         workspace_id,
         actor_user_id,
@@ -524,8 +527,8 @@ async function auditCrossWorkspaceView(input: {
       )
       values ($1, $2::uuid, 'workspace.cross_workspace_view', 'workspace', $1, null, $3::jsonb)
       returning id
-    `,
-    [
+      `,
+      [
       input.targetWorkspace.id,
       input.session.userId,
       JSON.stringify({
@@ -536,7 +539,8 @@ async function auditCrossWorkspaceView(input: {
         originUserId: input.originSession.userId,
         targetWorkspaceName: input.targetWorkspace.name,
       }),
-    ],
+      ],
+    ),
   );
 
   if (!audit) {

@@ -123,6 +123,21 @@ async function attestRls() {
     requireProof((await client.query("select id from forms where id=$1", [own.form])).rowCount === 1, "QA_SAME_TENANT_DENIED");
     requireProof((await client.query("select id from forms where id=$1", [foreign.form])).rowCount === 0, "QA_CROSS_TENANT_FORM_LEAK");
     requireProof((await client.query("select id from form_submissions where workspace_id=$1", [foreign.workspace])).rowCount === 0, "QA_CROSS_TENANT_SUBMISSION_LEAK");
+    requireProof((await client.query(`insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+      values($1,$2,$3,$4,$5,$6,'entwurf',$7::jsonb,'{}'::jsonb) returning id`,
+    [randomUUID(), own.workspace, own.project, own.actor, `SYNTHETIC Own ${marker}`, `own-${marker}`, formFields])).rowCount === 1,
+    "QA_SAME_TENANT_WRITE_DENIED");
+    await client.query("savepoint foreign_form_write");
+    await requireDenied(() => client.query(`insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+      values($1,$2,$3,$4,$5,$6,'entwurf',$7::jsonb,'{}'::jsonb)`,
+    [randomUUID(), foreign.workspace, foreign.project, foreign.actor, `SYNTHETIC Foreign ${marker}`, `denied-${marker}`, formFields]),
+    "QA_CROSS_TENANT_WRITE_ALLOWED");
+    await client.query("rollback to savepoint foreign_form_write");
+    await client.query("release savepoint foreign_form_write");
+    await client.query("savepoint form_delete");
+    await requireDenied(() => client.query("delete from forms where id=$1", [own.form]), "QA_FORM_DELETE_ALLOWED");
+    await client.query("rollback to savepoint form_delete");
+    await client.query("release savepoint form_delete");
     await client.query("rollback");
   } finally { client.release(); }
 }

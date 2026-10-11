@@ -22,6 +22,3 @@ console.log("app_log_present=true");
 console.log(`app_log_bytes=${content.length}`);
 console.log(`app_log_lines=${lines}`);
 console.log(`app_log_sha256=${createHash("sha256").update(content).digest("hex")}`);
-for (const match of content.toString("utf8").matchAll(/^QA_CORE_FAILURE code=([A-Za-z0-9_]{1,40}) name=([A-Za-z0-9_]{1,40})$/gmu)) {
-  console.log(`qa_core_failure_code=${match[1]} name=${match[2]}`);
-}

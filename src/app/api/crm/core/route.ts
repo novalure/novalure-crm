@@ -29,13 +29,5 @@ export async function GET(request: Request) {
     },
     data,
   });
-  } catch (error) {
-    if (process.env.CI === "true" && /^GOLIVETEST_[A-Za-z0-9_-]{6,80}$/u.test(process.env.NOVALURE_QA_RUN_PREFIX ?? "")) {
-      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "unknown";
-      const name = error instanceof Error ? error.name : "unknown";
-      const safe = (value: string) => /^[A-Za-z0-9_]{1,40}$/u.test(value) ? value : "redacted";
-      console.error(`QA_CORE_FAILURE code=${safe(code)} name=${safe(name)}`);
-    }
-    return crmCommandErrorResponse(error);
-  }
+  } catch (error) { return crmCommandErrorResponse(error); }
 }
