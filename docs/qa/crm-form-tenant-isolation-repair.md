@@ -14,7 +14,7 @@ All checks below ran on a clean branch from `origin/main` at `20e2f978540aa34288
 | --- | --- |
 | Lint, typecheck, Next.js build | PASS |
 | Unit and integration | 235/235 and 17/17 PASS |
-| Website Sales signed and anonymous ingestion | 11/11 PASS |
+| Website Sales signed and anonymous ingestion, including stale session denial | 12/12 PASS |
 | Migration 095 isolation and native `pg_dump`/`pg_restore` rehearsal | 1/1 PASS |
 | Sales, sales final, and existing 080–083 migration suites | 93/93, 55/55, 15/15 PASS |
 | Neon 061 compatibility, G08, D11 migrations | 11/11, 54/54, 1/1 PASS |

@@ -6,7 +6,10 @@ import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { PoolClient } from "@neondatabase/serverless";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
-import { getPublicWebsiteFormByKey, persistWebsiteFormSubmission } from "../src/lib/db/form-repositories";
+import { getPublicWebsiteFormByKey, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
+import { getRolePermissions } from "../src/lib/auth/permissions";
+import { getProductRoleCapabilities } from "../src/lib/product-model";
+import type { AppSession } from "../src/lib/auth/session";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -365,4 +368,31 @@ test("anonymous public form submits through the server transaction without table
   }));
   assert.equal(forged.status, 400);
   assert.equal((await db.admin.query("select id from form_submissions where form_id=$1", [genericFormId])).rowCount, 1);
+});
+
+test("a stale owner session cannot save a form after database membership loses write permission", async () => {
+  const lookup = await getPublicWebsiteFormByKey("synthetic-website-sales/generic-public");
+  assert.ok(lookup);
+  const staleOwner = {
+    authenticated: true,
+    userId: genericActorId,
+    workspaceId: websiteSalesWorkspaceId,
+    workspaceName: "SYNTHETIC Website Sales",
+    name: "SYNTHETIC public form operator",
+    email: "public-form-operator@example.invalid",
+    role: "owner",
+    productRole: "novalure_operator",
+    permissions: getRolePermissions("owner"),
+    productPermissions: getProductRoleCapabilities("novalure_operator"),
+    source: "database",
+  } as AppSession;
+  const before = await db.admin.query<{ name: string }>("select name from forms where id=$1", [genericFormId]);
+  await db.admin.query("update workspace_users set role='assistant' where id=$1", [genericActorId]);
+  try {
+    const result = await upsertWebsiteForm({ form: { ...lookup.form, name: "SYNTHETIC forged stale write" }, session: staleOwner });
+    assert.deepEqual(result, { form: null, persisted: false, reason: "CRM write permission is required" });
+    assert.deepEqual((await db.admin.query<{ name: string }>("select name from forms where id=$1", [genericFormId])).rows, before.rows);
+  } finally {
+    await db.admin.query("update workspace_users set role='owner' where id=$1", [genericActorId]);
+  }
 });
