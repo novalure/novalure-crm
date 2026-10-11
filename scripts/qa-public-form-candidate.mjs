@@ -4,8 +4,14 @@ import { createHmac, randomBytes, randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { assertQaTarget } from "./qa-target-guard.mjs";
+import { listWebsiteForms, upsertWebsiteForm } from "../src/lib/db/form-repositories.ts";
+import { getRolePermissions } from "../src/lib/auth/permissions.ts";
+import { getProductRoleCapabilities } from "../src/lib/product-model.ts";
 
 const qa = await assertQaTarget();
+if (process.env.DATABASE_URL?.trim() !== qa.databaseUrl) {
+  throw new Error("QA_FORM_RUNTIME_TARGET_INVALID");
+}
 const ownerUrl = process.env.NOVALURE_QA_MIGRATION_DATABASE_URL?.trim();
 const lookupUrl = process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL?.trim();
 const salesSecret = process.env.NOVALURE_STUDIO_INGESTION_SECRET?.trim();
@@ -152,6 +158,61 @@ async function attestRls() {
   } finally { client.release(); }
 }
 
+async function attestFormSaving() {
+  const session = {
+    authenticated: true,
+    userId: own.actor,
+    workspaceId: own.workspace,
+    workspaceName: `SYNTHETIC Candidate ${marker}`,
+    name: "SYNTHETIC owner",
+    email: `candidate-${own.actor}@example.invalid`,
+    role: "owner",
+    productRole: "customer_owner",
+    permissions: getRolePermissions("owner"),
+    productPermissions: getProductRoleCapabilities("customer_owner"),
+    source: "database",
+  };
+  const loaded = await listWebsiteForms({ session });
+  requireProof(loaded.source === "database", "QA_FORM_LOAD_FAILED");
+  const form = loaded.forms.find(item => item.id === own.form);
+  requireProof(Boolean(form), "QA_FORM_FIXTURE_MISSING");
+  const saved = await upsertWebsiteForm({
+    session,
+    form: { ...form, name: `SYNTHETIC Saved ${marker}`, projectId: foreign.project, workspaceId: foreign.workspace },
+  });
+  requireProof(saved.persisted && saved.form?.projectId === own.project
+    && saved.form.name === `SYNTHETIC Saved ${marker}`
+    && JSON.stringify(saved.form.fields) === JSON.stringify(form.fields), "QA_FORM_SAVE_PROJECT_OR_FIELDS_CHANGED");
+  const row = await owner.query("select workspace_id,project_id,name from forms where id=$1", [own.form]);
+  requireProof(row.rows[0]?.workspace_id === own.workspace && row.rows[0]?.project_id === own.project
+    && row.rows[0]?.name === `SYNTHETIC Saved ${marker}`, "QA_FORM_SAVE_DATABASE_SCOPE_INVALID");
+
+  const created = await upsertWebsiteForm({
+    session,
+    form: { ...form, id: `candidate-new-${marker}`, name: `SYNTHETIC Created ${marker}`,
+      slug: `created-${marker}`, workspaceId: foreign.workspace, projectId: foreign.project },
+  });
+  requireProof(created.persisted && created.form?.workspaceId === own.workspace
+    && created.form.projectId === own.project, "QA_FORM_CREATE_WRITABLE_PROJECT_FAILED");
+  const createdRow = await owner.query("select workspace_id,project_id from forms where id=$1", [created.form.id]);
+  requireProof(createdRow.rows[0]?.workspace_id === own.workspace && createdRow.rows[0]?.project_id === own.project,
+    "QA_FORM_CREATE_DATABASE_SCOPE_INVALID");
+
+  const otherProject = randomUUID();
+  const otherFunnel = randomUUID();
+  await owner.query("insert into projects(id,workspace_id,name,type) values($1,$2,$3,'Bauträger')",
+    [otherProject, own.workspace, `SYNTHETIC Candidate Other ${marker}`]);
+  await owner.query("insert into funnels(id,workspace_id,project_id,name,goal,audience,entry_channel) values($1,$2,$3,$4,'lead','buyer','web')",
+    [otherFunnel, own.workspace, otherProject, `SYNTHETIC Candidate Other ${marker}`]);
+  const deniedMove = await upsertWebsiteForm({ session, form: { ...saved.form, funnelId: otherFunnel } });
+  requireProof(!deniedMove.persisted, "QA_FORM_CROSS_PROJECT_MOVE_ALLOWED");
+  const deniedForeign = await upsertWebsiteForm({ session, form: { ...form, id: foreign.form } });
+  requireProof(!deniedForeign.persisted, "QA_FORM_CROSS_TENANT_SAVE_ALLOWED");
+  const unchanged = await owner.query("select project_id,name from forms where id=$1", [own.form]);
+  requireProof(unchanged.rows[0]?.project_id === own.project
+    && unchanged.rows[0]?.name === `SYNTHETIC Saved ${marker}`, "QA_FORM_DENIED_MOVE_CHANGED_ROW");
+}
+
 function hiddenInputs(html) {
   const values = new Map();
   for (const tag of html.match(/<input\b[^>]*>/giu) ?? []) {
@@ -229,9 +290,10 @@ try {
   await attestDatabase();
   await seedForms();
   await attestRls();
+  await attestFormSaving();
   await attestHttp();
   await attestWebsiteSales();
-  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095 forms=RLS_FORCE lookup=SCOPED anonymous=PASS sales=PASS replay=PASS`);
+  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095 forms=RLS_FORCE formSave=PASS lookup=SCOPED anonymous=PASS sales=PASS replay=PASS`);
 } catch (error) {
   const code = error instanceof Error && /^QA_[A-Z0-9_]+$/u.test(error.message) ? error.message : "QA_UNEXPECTED_FAILURE";
   console.error(`CRM_CANDIDATE_QA_FAIL code=${code}`);

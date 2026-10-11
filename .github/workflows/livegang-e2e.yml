@@ -493,6 +493,7 @@ jobs:
       - name: Run isolated public Form and Website Sales candidate matrix
         if: inputs.qa_profile == 'isolated-candidate'
         env:
+          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
           NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
           NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
           NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
@@ -502,7 +503,7 @@ jobs:
           NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
-        run: node scripts/qa-public-form-candidate.mjs
+        run: node --conditions=react-server --import tsx scripts/qa-public-form-candidate.mjs
 
       - name: Stop production server before RLS diagnostic
         if: always()
