@@ -589,6 +589,19 @@ jobs:
             kill "$(cat /tmp/novalure-livegang.pid)" || true
           fi
 
+      - name: Revoke isolated QA public Form lookup password
+        if: always() && inputs.qa_profile == 'isolated-candidate'
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+        run: node --use-system-ca scripts/qa-revoke-public-form-lookup.mjs
+
       - name: Print app log on failure
         if: failure()
         run: node scripts/summarize-app-log.mjs /tmp/novalure-livegang.log || true
