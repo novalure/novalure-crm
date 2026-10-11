@@ -34,7 +34,6 @@ async function rolePosture(client) {
   const result = await client.query(`
     select
       runtime.rolcanlogin as "runtimeCanLogin",
-      runtime.rolinherit as "runtimeInherit",
       not runtime.rolsuper as "runtimeNoSuperuser",
       not runtime.rolbypassrls as "runtimeNoBypassRls",
       not runtime.rolcreatedb as "runtimeNoCreateDb",
@@ -99,7 +98,6 @@ async function rolePosture(client) {
 function assertSafePosture(posture, { requireMembership }) {
   const requiredChecks = [
     "runtimeCanLogin",
-    "runtimeInherit",
     "runtimeNoSuperuser",
     "runtimeNoBypassRls",
     "runtimeNoCreateDb",

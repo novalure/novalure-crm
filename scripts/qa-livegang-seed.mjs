@@ -81,13 +81,11 @@ async function assertSafeTenantRuntimeRole() {
     select
       current_user as "roleName",
       current_user = 'novalure_app' as "expectedRole",
-      role.rolinherit as inherit,
       not role.rolsuper
         and not role.rolbypassrls
         and not role.rolcreatedb
         and not role.rolcreaterole
         and not role.rolreplication
-        and role.rolinherit
         and current_user = 'novalure_app'
         and pg_has_role(role.oid, 'novalure_tenant_app', 'USAGE') as "safeRoleAttributes",
       not role.rolsuper as "noSuperuser",

@@ -525,7 +525,9 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   assert.match(runner, /pathStat\.isFile\(\)/);
   assert.doesNotMatch(runner, /unlinkSync/);
   assert.match(runner, /up requires --plan-token-file/);
-  assert.doesNotMatch(workflow, /--allow-manual-cutover/);
+  const automaticSteps = workflow.slice(workflow.indexOf("Preview checksummed QA migration plan"), workflow.indexOf("Preview explicit form isolation QA cutover"));
+  assert.doesNotMatch(automaticSteps, /--allow-manual-cutover/);
+  assert.match(workflow, /Preview explicit form isolation QA cutover[\s\S]*dry-run --only=095_form_tenant_isolation --allow-manual-cutover[\s\S]*Apply explicit form isolation QA cutover[\s\S]*up --only=095_form_tenant_isolation --allow-manual-cutover/);
 });
 
 test("the dedicated QA 057 cutover is explicit, isolated, and checksummed", () => {
