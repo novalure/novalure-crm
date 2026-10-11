@@ -510,6 +510,30 @@ jobs:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
         run: npm run qa:tenant-isolation
 
+      - name: Restart production server for isolated candidate matrix
+        if: inputs.qa_profile == 'isolated-candidate'
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
+          NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
+          NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
+          NOVALURE_AUTH_RATE_LIMIT_SECRET: ${{ secrets.NOVALURE_QA_AUTH_RATE_LIMIT_SECRET }}
+          NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_QA_SESSION_SECRET }}
+          OAUTH_STATE_SECRET: ${{ secrets.NOVALURE_QA_OAUTH_STATE_SECRET }}
+        run: |
+          npm run start -- --hostname 127.0.0.1 >> /tmp/novalure-livegang.log 2>&1 &
+          echo $! > /tmp/novalure-livegang.pid
+          for attempt in {1..60}; do
+            if curl -fsS "$NOVALURE_QA_BASE_URL/api/health" > /tmp/novalure-health.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          node scripts/summarize-app-log.mjs /tmp/novalure-livegang.log
+          exit 1
+
       - name: Run isolated public Form and Website Sales candidate matrix
         if: inputs.qa_profile == 'isolated-candidate'
         env:

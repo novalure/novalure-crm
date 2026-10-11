@@ -16,11 +16,14 @@ const productionHost = process.env.NOVALURE_PRODUCTION_DATABASE_HOST?.trim().toL
 if (ownerTarget.protocol !== "postgresql:" || decodeURIComponent(ownerTarget.username) !== "neondb_owner"
   || ownerTarget.pathname !== `/${qa.expectedDatabase}` || ownerTarget.hostname.includes("-pooler.")
   || ownerTarget.hostname === productionHost || !ownerTarget.hostname.endsWith(".neon.tech")
-  || appTarget.hostname === productionHost || appTarget.hostname !== qa.expectedHost) {
+  || appTarget.hostname === productionHost || appTarget.hostname !== qa.expectedHost
+  || !["require", "verify-full"].includes(ownerTarget.searchParams.get("sslmode"))
+  || !["require", "verify-full"].includes(appTarget.searchParams.get("sslmode"))) {
   throw new Error("QA_LOOKUP_BIND_SCOPE_INVALID");
 }
 
-const owner = new pg.Client({ connectionString: ownerUrl, ssl: { rejectUnauthorized: true } });
+ownerTarget.searchParams.set("sslmode", "verify-full");
+const owner = new pg.Client({ connectionString: ownerTarget.toString(), ssl: { rejectUnauthorized: true } });
 let lookup;
 try {
   await owner.connect();

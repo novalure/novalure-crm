@@ -22,20 +22,23 @@ function safeUrl(value, role, pooled) {
   requireProof(parsed.protocol === "postgresql:" && decodeURIComponent(parsed.username) === role
     && parsed.pathname === "/neondb" && parsed.hostname.endsWith(".neon.tech")
     && parsed.hostname.includes("-pooler.") === pooled
-    && parsed.hostname.toLowerCase() !== productionHost, "QA_CONNECTION_SCOPE_INVALID");
+    && parsed.hostname.toLowerCase() !== productionHost
+    && ["require", "verify-full"].includes(parsed.searchParams.get("sslmode")), "QA_CONNECTION_SCOPE_INVALID");
+  parsed.searchParams.set("sslmode", "verify-full");
   return parsed;
 }
 
 requireProof(Boolean(ownerUrl && lookupUrl && base && productionHost && salesSecret?.length >= 32), "QA_INPUT_MISSING");
-safeUrl(ownerUrl, "neondb_owner", false);
+const ownerTarget = safeUrl(ownerUrl, "neondb_owner", false);
+requireProof(new URL(lookupUrl).searchParams.get("sslmode") === "verify-full", "QA_LOOKUP_TLS_MODE_INVALID");
 const lookupTarget = safeUrl(lookupUrl, "novalure_public_form_lookup", true);
 const appTarget = safeUrl(qa.databaseUrl, "novalure_app", true);
 requireProof(lookupTarget.hostname === appTarget.hostname && lookupTarget.searchParams.get("sslmode") === "verify-full", "QA_LOOKUP_BINDING_INVALID");
 requireProof(base === "http://127.0.0.1:3000", "QA_HTTP_TARGET_INVALID");
 
-const owner = new pg.Pool({ connectionString: ownerUrl, ssl: { rejectUnauthorized: true }, max: 2 });
-const app = new pg.Pool({ connectionString: qa.databaseUrl, ssl: { rejectUnauthorized: true }, max: 2 });
-const lookup = new pg.Pool({ connectionString: lookupUrl, ssl: { rejectUnauthorized: true }, max: 2 });
+const owner = new pg.Pool({ connectionString: ownerTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
+const app = new pg.Pool({ connectionString: appTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
+const lookup = new pg.Pool({ connectionString: lookupTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const marker = randomBytes(12).toString("hex");
 const own = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
 const foreign = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
@@ -55,7 +58,10 @@ async function scalar(pool, sql, params = []) {
 }
 
 async function requireDenied(task, code) {
-  try { await task(); } catch { return; }
+  try { await task(); } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "42501") return;
+    throw new Error(`${code}_UNEXPECTED_ERROR`);
+  }
   throw new Error(code);
 }
 
@@ -102,12 +108,16 @@ async function seedForms() {
     [own.form, own.workspace, own.project, own.actor, `SYNTHETIC Published ${marker}`, slug, formFields,
       own.draft, `SYNTHETIC Draft ${marker}`, draftSlug,
       foreign.form, foreign.workspace, foreign.project, foreign.actor, `SYNTHETIC Foreign ${marker}`, `foreign-${marker}`]);
+    await client.query("insert into form_submissions(id,workspace_id,project_id,form_id) values($1,$2,$3,$4)",
+      [randomUUID(), foreign.workspace, foreign.project, foreign.form]);
     await client.query("commit");
   } catch (error) { await client.query("rollback"); throw error; }
   finally { client.release(); }
 }
 
 async function attestRls() {
+  requireProof(await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [foreign.form]) === 1,
+    "QA_FOREIGN_SUBMISSION_FIXTURE_MISSING");
   requireProof(await scalar(app, "select count(*)::int as value from forms where id=$1", [own.form]) === 0, "QA_NO_CONTEXT_FORM_LEAK");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_NO_CONTEXT_SUBMISSION_LEAK");
   await requireDenied(() => app.query("select id from novalure_schema_migrations limit 1"), "QA_LEDGER_READ_ALLOWED");
@@ -174,6 +184,16 @@ async function attestHttp() {
   requireProof([302,303].includes(first.status) && second.status === first.status && after === before + 1, "QA_ANONYMOUS_SUBMISSION_OR_REPLAY_FAILED");
   requireProof(first.headers.get("location") === second.headers.get("location"), "QA_SUBMISSION_REPLAY_MISMATCH");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_ANONYMOUS_SUBMISSION_READ_LEAK");
+  const tenant = await app.connect();
+  try {
+    await tenant.query("begin");
+    await tenant.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [own.workspace, own.actor]);
+    requireProof((await tenant.query("select id from form_submissions where form_id=$1", [own.form])).rowCount === 1,
+      "QA_SAME_TENANT_SUBMISSION_READ_DENIED");
+    requireProof((await tenant.query("select id from form_submissions where form_id=$1", [foreign.form])).rowCount === 0,
+      "QA_CROSS_TENANT_SUBMISSION_LEAK");
+    await tenant.query("rollback");
+  } finally { tenant.release(); }
   const anonymousRead = await fetch(`${base}/api/forms/submissions`, { redirect: "manual" });
   requireProof(anonymousRead.status >= 400, "QA_ANONYMOUS_SUBMISSION_API_READ_ALLOWED");
 }
