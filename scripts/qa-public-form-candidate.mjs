@@ -227,7 +227,7 @@ async function attestHttp() {
   const publicPath = `/forms/${own.key}/${slug}`;
   const published = await fetch(`${base}${publicPath}`, { redirect: "manual" });
   const html = await published.text();
-  requireProof(published.status === 200 && html.includes(`SYNTHETIC Published ${marker}`), "QA_ANONYMOUS_PUBLISHED_FORM_FAILED");
+  requireProof(published.status === 200 && html.includes(`SYNTHETIC Saved ${marker}`), "QA_ANONYMOUS_PUBLISHED_FORM_FAILED");
   const draft = await fetch(`${base}/forms/${own.key}/${draftSlug}`, { redirect: "manual" });
   const draftHtml = await draft.text();
   requireProof(!draftHtml.includes(`SYNTHETIC Draft ${marker}`), "QA_ANONYMOUS_DRAFT_LEAK");
