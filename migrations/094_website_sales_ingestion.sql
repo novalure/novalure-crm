@@ -2,20 +2,19 @@
 -- The public website reaches this data only through the signed ingestion route;
 -- no browser receives CRM credentials or a direct database path.
 
--- Distinct audit principal for the signed website receiver. The bounded
--- runtime role still passes all existing tenant, classification and project
--- access policies; no service or database credential is created here.
-insert into workspace_users (id, workspace_id, name, email, role, product_role, status)
-values (
-  '958e424d-681d-4d96-8e73-5d131678a49e',
-  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
-  'Studio Website Sales ingestion actor',
-  'studio-website-sales@service.invalid',
-  'agent',
-  'novalure_operator',
-  'active'
-)
-on conflict (id) do nothing;
+-- Reuse the already applied, active internal operator actor from migrations
+-- 092 and 093. This migration must not create an account or team membership.
+do $$
+begin
+  if not exists (
+    select 1 from workspace_users
+    where id = '6122a6da-e7f4-47fa-bc55-e296bb01af62'
+      and workspace_id = '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'
+      and status = 'active' and role = 'agent' and product_role = 'novalure_operator'
+  ) then
+    raise exception 'Website Sales requires the existing active internal operator actor';
+  end if;
+end $$;
 
 insert into forms (
   id, workspace_id, project_id, name, slug, status, variant, template,

@@ -74,4 +74,5 @@ test("CRM endpoint uses the dedicated form identity and persistent public-submis
   assert.match(migration, new RegExp(websiteSalesFormId));
   assert.match(migration, /WEBSITE_SALES/);
   assert.match(migration, /NOVALURE_STUDIO_FORM/);
+  assert.doesNotMatch(migration, /insert\s+into\s+workspace_users/i);
 });

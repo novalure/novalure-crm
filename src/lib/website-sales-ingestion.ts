@@ -4,7 +4,9 @@ import { isIP } from "node:net";
 export const websiteSalesContractVersion = "website-sales-lead-v1";
 export const websiteSalesFormId = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
 export const websiteSalesWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
-export const websiteSalesActorId = "958e424d-681d-4d96-8e73-5d131678a49e";
+// Existing active internal operator from the applied CRM machine-identity lineage.
+// The signed receiver does not create a workspace user or grant a new membership.
+export const websiteSalesActorId = "6122a6da-e7f4-47fa-bc55-e296bb01af62";
 
 const acceptedPackages = new Set([
   "STARTER",
