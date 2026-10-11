@@ -3,7 +3,9 @@ import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import {
   getPublicWebsiteFormByKey,
   persistWebsiteFormSubmission,
+  publicWebsiteFormView,
 } from "@/lib/db/form-repositories";
+import { withPublicSubmissionTransaction } from "@/lib/db/client";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -256,11 +258,15 @@ export async function POST(request: Request) {
 
   stripPublicSubmissionControlFields(formData);
   try {
-    const persistence = await persistWebsiteFormSubmission({
-      formData,
-      formKey: formSlug,
-      requestUrl: request.url,
-    });
+    const persistence = await withPublicSubmissionTransaction(
+      { actorId: lookup.publicActorId, workspaceId: lookup.workspaceId },
+      () => persistWebsiteFormSubmission({
+        actorUserId: lookup.publicActorId,
+        formData,
+        formKey: formSlug,
+        requestUrl: request.url,
+      }),
+    );
     return complete(
       createPublicFormPersistenceSnapshot({
         formSlug,
@@ -294,7 +300,7 @@ function createPublicFormPersistenceSnapshot(input: {
   if (input.request.headers.get("accept")?.includes("application/json")) {
     return {
       body: input.persistence.persisted
-        ? { persisted: true, form: input.persistence.form }
+        ? { persisted: true, form: input.persistence.form ? publicWebsiteFormView(input.persistence.form) : undefined }
         : { error: normalizePublicFormReason(input.persistence.reason), persisted: false },
       kind: "json",
       status: input.persistence.persisted ? 200 : getFailureStatus(input.persistence.reason),

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { FormRuntimeClient } from "@/components/form-runtime-client";
-import { getPublicWebsiteForm } from "@/lib/db/form-repositories";
+import { getPublicWebsiteForm, publicWebsiteFormView } from "@/lib/db/form-repositories";
 import { getFormCommandCenterCopy } from "@/lib/i18n";
 import { resolvePublicLanguage } from "@/lib/public-language";
 import {
@@ -67,7 +67,7 @@ export async function renderPublicFormPage({
   });
   const copy = getFormCommandCenterCopy(language);
   const persisted = await getPublicWebsiteForm({ slug, workspacePublicKey }).catch(() => null);
-  const form = persisted?.form ?? null;
+  const form = persisted?.form ? publicWebsiteFormView(persisted.form) : null;
   const title = form?.name || titleFromFormSlug(slug) || copy.publicPage.unavailableTitle;
   const returnTo = persisted?.publicPath ?? `/forms/${workspacePublicKey}/${slug}`;
   const submissionProof = persisted
@@ -98,12 +98,6 @@ export async function renderPublicFormPage({
             <div className="rounded-lg border border-white/10 bg-white/5 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{copy.publicPage.source}</p>
               <p className="mt-1 font-semibold">{source}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{copy.publicPage.crmTarget}</p>
-              <p className="mt-1 font-semibold">
-                {form ? `${form.crmTarget} / ${form.pipelineStage}` : copy.publicPage.unavailableTitle}
-              </p>
             </div>
           </div>
         </div>

@@ -96,6 +96,12 @@ jobs:
       - name: Sales schema upgrade, rollback and native restore
         run: npm run test:sales:migrations
 
+      - name: Form tenant isolation and published lookup
+        run: npm run test:form-isolation
+
+      - name: Signed and anonymous website form ingestion
+        run: npm run test:website-sales-ingestion
+
       - name: Isolated sales browser flows
         run: npm run qa:sales:e2e
 

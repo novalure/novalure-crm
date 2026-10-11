@@ -242,7 +242,7 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
   );
   assert.ok(
     formRoute.indexOf("await claimPublicSubmissionIdempotency") <
-      formRoute.indexOf("await persistWebsiteFormSubmission"),
+      formRoute.indexOf("await withPublicSubmissionTransaction"),
   );
   assert.match(repository, /on conflict \(idempotency_hash\) do nothing/);
   assert.match(repository, /existing\.request_hash <> \$4/);

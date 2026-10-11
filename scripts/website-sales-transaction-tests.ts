@@ -11,7 +11,7 @@ import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
 } from "../src/lib/db/public-submission-abuse-repository";
-import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope } from "../src/lib/security/public-submission-abuse";
+import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope, createPublicSubmissionProof, publicSubmissionControlFields, publicSubmissionActions } from "../src/lib/security/public-submission-abuse";
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
 import { buildWebsiteSalesSignature, websiteSalesContractVersion } from "../src/lib/website-sales-ingestion";
 import { POST as ingestWebsiteSales } from "../src/app/api/public/website-sales/route";
@@ -21,18 +21,21 @@ import { isBusinessKpiRecord, businessKpiSqlPredicate } from "../src/lib/website
 
 const projectId = "f7d83c6b-d08d-4d73-b822-1f1c0b4733d2";
 const actorId = websiteSalesActorId;
+const genericFormId = "829f4222-af69-4b9b-8fe7-4e0141665c5c";
+const genericActorId = "b20270d1-3b4e-4964-8e6b-27413a9b5265";
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>;
 const savedEnv = {
   CRM_LOCAL_TEST_DATABASE: process.env.CRM_LOCAL_TEST_DATABASE,
   DATABASE_URL: process.env.DATABASE_URL,
   NOVALURE_ABUSE_SECRET: process.env.NOVALURE_ABUSE_SECRET,
   NOVALURE_STUDIO_INGESTION_SECRET: process.env.NOVALURE_STUDIO_INGESTION_SECRET,
+  NOVALURE_TRUSTED_CLIENT_IP_HEADER: process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER,
   NODE_ENV: process.env.NODE_ENV,
 };
 
 before(async () => {
   db = await startLocalSalesDb();
-  await applySalesSchema(db, { maxMigrationNumber: 61 });
+  await applySalesSchema(db, { includeD11Contract: false, maxMigrationNumber: 90 });
   // The isolated sales fixture omits legacy public-form grants present in Production.
   await db.admin.query("grant select, insert, update on forms, form_submissions, tasks, consent_records, contact_timeline_items, analytics_events, speed_to_lead_events to novalure_app; grant select on funnels to novalure_app");
   await db.admin.query(
@@ -61,16 +64,34 @@ before(async () => {
     guardClient.release();
   }
   await db.admin.query(migration);
+  await db.admin.query(
+    `insert into novalure_schema_migrations(version,name,checksum)
+     values('094_website_sales_ingestion','094_website_sales_ingestion.sql','synthetic-prerequisite')`,
+  );
+  await db.admin.query(await readFile(new URL("../migrations/095_form_tenant_isolation.sql", import.meta.url), "utf8"));
   const membershipCount = await db.admin.query<{ count: string }>(
     "select count(*)::text as count from workspace_users where workspace_id=$1",
     [websiteSalesWorkspaceId],
   );
   assert.equal(membershipCount.rows[0].count, "1", "migration 094 must not add a workspace membership");
+  await db.admin.query(
+    `insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
+     values($1,$2,'SYNTHETIC public form operator','public-form-operator@example.invalid','owner','novalure_operator','active')`,
+    [genericActorId, websiteSalesWorkspaceId],
+  );
+  await db.admin.query(
+    `insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+     values($1,$2,$3,$4,'SYNTHETIC public form','generic-public','aktiv',
+       '[{"id":"name","crmField":"name","label":"Name","type":"text","required":true},{"id":"email","crmField":"email","label":"Email","type":"email","required":true},{"id":"privacy","crmField":"privacy","label":"Privacy","type":"consent","required":true}]'::jsonb,
+       '{"createTask":true}'::jsonb)`,
+    [genericFormId, websiteSalesWorkspaceId, projectId, genericActorId],
+  );
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
   process.env.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
   process.env.NOVALURE_ABUSE_SECRET = "synthetic-website-sales-abuse-secret-for-local-tests";
   process.env.NOVALURE_STUDIO_INGESTION_SECRET = "synthetic-website-sales-signing-secret-for-local-tests";
+  process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-test-client-ip";
 });
 
 after(async () => {
@@ -237,10 +258,16 @@ test("public submission transactions reject an invalid scope or privileged role 
 test("dedicated Website Sales form cannot be submitted or exposed through generic public forms", async () => {
   const before = await counts();
   assert.equal(await getPublicWebsiteFormByKey(websiteSalesFormId), null);
-  assert.ok(await getPublicWebsiteFormByKey(websiteSalesFormId, { includeSignedWebsiteSales: true }));
+  assert.ok(await withPublicSubmissionTransaction(
+    { actorId, workspaceId: websiteSalesWorkspaceId },
+    () => getPublicWebsiteFormByKey(websiteSalesFormId, { includeSignedWebsiteSales: true }),
+  ));
   const canonicalKey = "synthetic-website-sales/novalure-studio-website-sales-v1";
   assert.equal(await getPublicWebsiteFormByKey(canonicalKey), null);
-  assert.ok(await getPublicWebsiteFormByKey(canonicalKey, { includeSignedWebsiteSales: true }));
+  assert.ok(await withPublicSubmissionTransaction(
+    { actorId, workspaceId: websiteSalesWorkspaceId },
+    () => getPublicWebsiteFormByKey(canonicalKey, { includeSignedWebsiteSales: true }),
+  ));
 
   const genericData = formData("website-sales-generic-bypass@example.invalid");
   genericData.set("form_id", websiteSalesFormId);
@@ -286,4 +313,49 @@ test("synthetic records are visible in operational storage but excluded by KPI p
   assert.equal(isBusinessKpiRecord({ syntheticTest: true }), false);
   assert.equal(isBusinessKpiRecord({ syntheticTest: false }), true);
   assert.equal(isBusinessKpiRecord({}), true);
+});
+
+test("anonymous public form submits through the server transaction without table access", async () => {
+  const publicKey = "synthetic-website-sales/generic-public";
+  const lookup = await getPublicWebsiteFormByKey(publicKey);
+  assert.equal(lookup?.id, genericFormId);
+  assert.equal(lookup?.publicActorId, genericActorId);
+  const data = new FormData();
+  data.set("form_slug", publicKey);
+  data.set("name", "SYNTHETIC public contact");
+  data.set("email", "generic-public@example.invalid");
+  data.set("privacy", "true");
+  const proof = createPublicSubmissionProof({
+    action: publicSubmissionActions.form,
+    scope: buildPublicSubmissionScope({ resourceId: genericFormId, resourceType: "form", workspaceId: websiteSalesWorkspaceId }),
+  });
+  data.set(publicSubmissionControlFields.idempotencyKey, proof.idempotencyKey);
+  data.set(publicSubmissionControlFields.issuedAt, String(proof.issuedAt));
+  data.set(publicSubmissionControlFields.expiresAt, String(proof.expiresAt));
+  data.set(publicSubmissionControlFields.proof, proof.signature);
+  data.set(publicSubmissionControlFields.honeypot, "");
+  const response = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+    body: data,
+    headers: { accept: "application/json", "x-test-client-ip": "192.0.2.10" },
+    method: "POST",
+  }));
+  if (response.status !== 200) assert.fail(await response.text());
+  const body = await response.json() as { form: { ownerUserId: string; pipelineStage: string; actions: { createTask: boolean } } };
+  assert.equal(body.form.ownerUserId, "");
+  assert.equal(body.form.pipelineStage, "");
+  assert.equal(body.form.actions.createTask, false);
+  const row = await db.admin.query<{ workspace_id: string; mode: string }>(
+    "select workspace_id,mode from form_submissions where form_id=$1",
+    [genericFormId],
+  );
+  assert.equal(row.rowCount, 1);
+  assert.equal(row.rows[0].workspace_id, websiteSalesWorkspaceId);
+  data.set("workspaceId", "00000000-0000-4000-8000-000000000001");
+  const forged = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+    body: data,
+    headers: { accept: "application/json", "x-test-client-ip": "192.0.2.10" },
+    method: "POST",
+  }));
+  assert.equal(forged.status, 400);
+  assert.equal((await db.admin.query("select id from form_submissions where form_id=$1", [genericFormId])).rowCount, 1);
 });

@@ -47,6 +47,7 @@ const manualCutoverVersions = new Set([
   "091_production_runtime_forced_rls_cutover",
   "092_crm_production_machine_identity",
   "093_crm_machine_internal_context",
+  "095_form_tenant_isolation",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -59,6 +60,7 @@ const migrationDependencies = new Map([
   ["091_production_runtime_forced_rls_cutover", "090_property_media_delete_runtime"],
   ["092_crm_production_machine_identity", "091_production_runtime_forced_rls_cutover"],
   ["093_crm_machine_internal_context", "092_crm_production_machine_identity"],
+  ["095_form_tenant_isolation", "094_website_sales_ingestion"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

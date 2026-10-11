@@ -3,7 +3,7 @@ import {
   fallbackFormRuntimeCopy,
 } from "@/components/form-renderer";
 import { renderStaticFormHtml } from "@/components/form-renderer-static";
-import { getPublicWebsiteFormByKey } from "@/lib/db/form-repositories";
+import { getPublicWebsiteFormByKey, publicWebsiteFormView } from "@/lib/db/form-repositories";
 import {
   resolveRuntimeLayoutVariant,
   type FormVariant,
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const form = persisted.form;
+  const form = publicWebsiteFormView(persisted.form);
   const variant = normalizeRequestedVariant(url.searchParams.get("variant"), form.variant);
   const origin = url.origin;
   const publicKey = form.id || formKey;
