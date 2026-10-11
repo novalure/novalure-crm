@@ -92,7 +92,9 @@ create policy form_submissions_tenant_insert on public.form_submissions
       or (project_id is not null and public.crm_project_access(workspace_id, project_id, true)))
   );
 
-grant select, insert, update, delete on public.forms to novalure_tenant_app;
+-- A form delete would cascade to submissions through the legacy FK. Keep
+-- submissions immutable to the runtime even when it owns the parent form.
+grant select, insert, update on public.forms to novalure_tenant_app;
 grant select, insert on public.form_submissions to novalure_tenant_app;
 
 -- The public lookup identity is separate from the tenant runtime. It has no

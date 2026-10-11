@@ -84,6 +84,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     assert.ok(flags.rows.every(row => row.relrowsecurity && row.relforcerowsecurity));
     const role = await db.admin.query(`select rolsuper,rolbypassrls,rolcreatedb,rolcreaterole from pg_roles where rolname=$1`, [db.role]);
     assert.deepEqual(role.rows[0], { rolsuper: false, rolbypassrls: false, rolcreatedb: false, rolcreaterole: false });
+    assert.equal((await db.admin.query("select has_table_privilege($1,'public.forms','DELETE') as allowed", [db.role])).rows[0].allowed, false);
     assert.equal((await db.pool.query("select id from forms")).rowCount, 0);
     assert.equal((await db.pool.query("select id from form_submissions")).rowCount, 0);
     await assert.rejects(db.pool.query(
@@ -129,9 +130,16 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await client.query("update forms set name='SYNTHETIC changed' where id=$1 returning id", [ownForm])).rowCount, 1);
       assert.equal((await client.query("select id from forms where id=$1", [foreignForm])).rowCount, 0);
       assert.equal((await client.query("update forms set name='forged' where id=$1 returning id", [foreignForm])).rowCount, 0);
-      assert.equal((await client.query("delete from forms where id=$1 returning id", [foreignForm])).rowCount, 0);
+      await client.query("savepoint before_foreign_form_delete");
+      await assert.rejects(client.query("delete from forms where id=$1 returning id", [foreignForm]), /permission denied/);
+      await client.query("rollback to savepoint before_foreign_form_delete");
       assert.equal((await client.query("insert into form_submissions(workspace_id,form_id) values($1,$2) returning id", [ownWorkspace, ownForm])).rowCount, 1);
       assert.equal((await client.query("select id from form_submissions where workspace_id=$1", [ownWorkspace])).rowCount, 1);
+      await client.query("savepoint before_form_delete");
+      await assert.rejects(client.query("delete from forms where id=$1", [ownForm]), /permission denied/);
+      await client.query("rollback to savepoint before_form_delete");
+      assert.equal((await client.query("select id from forms where id=$1", [ownForm])).rowCount, 1);
+      assert.equal((await client.query("select id from form_submissions where form_id=$1", [ownForm])).rowCount, 1);
       await client.query("commit");
       await client.query("begin");
       await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, ownActor]);
