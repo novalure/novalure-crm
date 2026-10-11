@@ -37,8 +37,8 @@ const owner = new pg.Pool({ connectionString: ownerUrl, ssl: { rejectUnauthorize
 const app = new pg.Pool({ connectionString: qa.databaseUrl, ssl: { rejectUnauthorized: true }, max: 2 });
 const lookup = new pg.Pool({ connectionString: lookupUrl, ssl: { rejectUnauthorized: true }, max: 2 });
 const marker = randomBytes(12).toString("hex");
-const own = { workspace: randomUUID(), actor: randomUUID(), form: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
-const foreign = { workspace: randomUUID(), actor: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
+const own = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
+const foreign = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
 const salesForm = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
 const salesWorkspace = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const slug = `candidate-${marker}`;
@@ -92,14 +92,16 @@ async function seedForms() {
       await client.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
         values($1,$2,'SYNTHETIC owner',$3,'owner','customer_owner','active')`,
       [fixture.actor, fixture.workspace, `candidate-${fixture.actor}@example.invalid`]);
+      await client.query("insert into projects(id,workspace_id,name,type) values($1,$2,$3,'Bauträger')",
+        [fixture.project, fixture.workspace, `SYNTHETIC Candidate ${marker}`]);
     }
-    await client.query(`insert into forms(id,workspace_id,owner_user_id,name,slug,status,fields,actions)
-      values($1,$2,$3,$4,$5,'aktiv',$6::jsonb,'{}'::jsonb),
-            ($7,$2,$3,$8,$9,'entwurf',$6::jsonb,'{}'::jsonb),
-            ($10,$11,$12,$13,$14,'aktiv',$6::jsonb,'{}'::jsonb)`,
-    [own.form, own.workspace, own.actor, `SYNTHETIC Published ${marker}`, slug, formFields,
+    await client.query(`insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+      values($1,$2,$3,$4,$5,$6,'aktiv',$7::jsonb,'{}'::jsonb),
+            ($8,$2,$3,$4,$9,$10,'entwurf',$7::jsonb,'{}'::jsonb),
+            ($11,$12,$13,$14,$15,$16,'aktiv',$7::jsonb,'{}'::jsonb)`,
+    [own.form, own.workspace, own.project, own.actor, `SYNTHETIC Published ${marker}`, slug, formFields,
       own.draft, `SYNTHETIC Draft ${marker}`, draftSlug,
-      foreign.form, foreign.workspace, foreign.actor, `SYNTHETIC Foreign ${marker}`, `foreign-${marker}`]);
+      foreign.form, foreign.workspace, foreign.project, foreign.actor, `SYNTHETIC Foreign ${marker}`, `foreign-${marker}`]);
     await client.query("commit");
   } catch (error) { await client.query("rollback"); throw error; }
   finally { client.release(); }

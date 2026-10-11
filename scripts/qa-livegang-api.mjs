@@ -256,7 +256,9 @@ async function getWorkspaces(client) {
 async function getCore(client, workspaceId) {
   const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
   const { json, response } = await client.request(`/api/crm/core${query}`);
-  assert(response.ok, `${client.email} can load /api/crm/core${workspaceId ? " for switched workspace" : ""}`);
+  const errorCode = String(json?.code ?? json?.error ?? "unknown");
+  const safeCode = /^[A-Z0-9_]{1,80}$/u.test(errorCode) ? errorCode : "redacted";
+  assert(response.ok, `${client.email} can load /api/crm/core${workspaceId ? " for switched workspace" : ""} (HTTP ${response.status}; code=${safeCode})`);
   return json?.data ?? json;
 }
 
