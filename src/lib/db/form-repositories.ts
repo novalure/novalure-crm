@@ -5,6 +5,7 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import { websiteSalesActorId, websiteSalesFormId } from "@/lib/website-sales-ingestion";
 import {
   buildPublicFormPath,
   parsePublicSlugLookup,
@@ -385,7 +386,10 @@ export async function upsertWebsiteForm(input: {
   return { form: toWebsiteForm(row), persisted: true };
 }
 
-export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: string }): Promise<FormLookup | null> {
+export async function getPublicWebsiteForm(
+  input: PublicSlugLookup | { formId: string },
+  options: { includeSignedWebsiteSales?: boolean } = {},
+): Promise<FormLookup | null> {
   if (!hasDatabaseUrl()) return null;
 
   const formId = "formId" in input && isUuid(input.formId) ? input.formId : null;
@@ -445,7 +449,7 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
     [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""],
   );
 
-  if (!row) return null;
+  if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
   const publicPath = row.workspacePublicKey
     ? buildPublicFormPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug })
@@ -464,10 +468,13 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
   };
 }
 
-export async function getPublicWebsiteFormByKey(formKey: string): Promise<FormLookup | null> {
+export async function getPublicWebsiteFormByKey(
+  formKey: string,
+  options: { includeSignedWebsiteSales?: boolean } = {},
+): Promise<FormLookup | null> {
   const route = parsePublicSlugLookup(formKey);
-  if (route) return getPublicWebsiteForm(route);
-  if (isUuid(formKey)) return getPublicWebsiteForm({ formId: formKey });
+  if (route) return getPublicWebsiteForm(route, options);
+  if (isUuid(formKey)) return getPublicWebsiteForm({ formId: formKey }, options);
 
   const legacy = await getLegacyPublicWebsiteFormRoute(formKey);
   if (legacy.status !== "unique") return null;
@@ -475,7 +482,7 @@ export async function getPublicWebsiteFormByKey(formKey: string): Promise<FormLo
   return getPublicWebsiteForm({
     slug: legacy.slug,
     workspacePublicKey: legacy.workspacePublicKey,
-  });
+  }, options);
 }
 
 export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promise<LegacyPublicFormRoute> {
@@ -531,7 +538,9 @@ export async function persistWebsiteFormSubmission(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const lookup = await getPublicWebsiteFormByKey(input.formKey);
+  const lookup = await getPublicWebsiteFormByKey(input.formKey, {
+    includeSignedWebsiteSales: input.formKey === websiteSalesFormId && input.actorUserId === websiteSalesActorId,
+  });
   if (!lookup) {
     return { persisted: false, reason: "Form not found" };
   }

@@ -6,7 +6,7 @@ import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { PoolClient } from "@neondatabase/serverless";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
-import { persistWebsiteFormSubmission } from "../src/lib/db/form-repositories";
+import { getPublicWebsiteFormByKey, persistWebsiteFormSubmission } from "../src/lib/db/form-repositories";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -15,6 +15,8 @@ import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope } f
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
 import { buildWebsiteSalesSignature, websiteSalesContractVersion } from "../src/lib/website-sales-ingestion";
 import { POST as ingestWebsiteSales } from "../src/app/api/public/website-sales/route";
+import { POST as submitGenericForm } from "../src/app/api/forms/submissions/route";
+import { GET as renderGenericEmbed } from "../src/app/forms/embed/route";
 import { isBusinessKpiRecord, businessKpiSqlPredicate } from "../src/lib/website-sales-kpi";
 
 const projectId = "f7d83c6b-d08d-4d73-b822-1f1c0b4733d2";
@@ -37,6 +39,7 @@ before(async () => {
     "insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC Website Sales','novalure_internal') on conflict(id) do nothing",
     [websiteSalesWorkspaceId],
   );
+  await db.admin.query("update workspaces set public_key='synthetic-website-sales' where id=$1", [websiteSalesWorkspaceId]);
   await db.admin.query(
     "insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC Website Sales','Bauträger') on conflict(id) do nothing",
     [projectId, websiteSalesWorkspaceId],
@@ -200,6 +203,43 @@ test("public submission transactions reject an invalid scope or privileged role 
     (error: unknown) => error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed,
   );
   assert.equal(called, false);
+});
+
+test("dedicated Website Sales form cannot be submitted or exposed through generic public forms", async () => {
+  const before = await counts();
+  assert.equal(await getPublicWebsiteFormByKey(websiteSalesFormId), null);
+  assert.ok(await getPublicWebsiteFormByKey(websiteSalesFormId, { includeSignedWebsiteSales: true }));
+  const canonicalKey = "synthetic-website-sales/novalure-studio-website-sales-v1";
+  assert.equal(await getPublicWebsiteFormByKey(canonicalKey), null);
+  assert.ok(await getPublicWebsiteFormByKey(canonicalKey, { includeSignedWebsiteSales: true }));
+
+  const genericData = formData("website-sales-generic-bypass@example.invalid");
+  genericData.set("form_id", websiteSalesFormId);
+  const genericResponse = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+    body: genericData,
+    headers: { accept: "application/json" },
+    method: "POST",
+  }));
+  assert.equal(genericResponse.status, 404);
+  genericData.set("form_slug", canonicalKey);
+  const canonicalResponse = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+    body: genericData,
+    headers: { accept: "application/json" },
+    method: "POST",
+  }));
+  assert.equal(canonicalResponse.status, 404);
+  const directPersistence = await persistWebsiteFormSubmission({
+    formData: genericData,
+    formKey: websiteSalesFormId,
+    requestUrl: "https://crm.example.invalid/forms/embed",
+  });
+  assert.deepEqual(directPersistence, { persisted: false, reason: "Form not found" });
+
+  const embedResponse = await renderGenericEmbed(new Request(`https://crm.example.invalid/forms/embed?form=${websiteSalesFormId}`));
+  const embed = await embedResponse.text();
+  assert.equal(embedResponse.status, 200);
+  assert.doesNotMatch(embed, /submissionProof|public_submission_proof|api\/forms\/submissions/);
+  assert.deepEqual(await counts(), before);
 });
 
 test("synthetic records are visible in operational storage but excluded by KPI predicates", async () => {

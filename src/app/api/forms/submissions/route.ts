@@ -30,6 +30,7 @@ import {
   type PublicSubmissionResponseSnapshot,
 } from "@/lib/security/public-submission-abuse";
 import { resolveSafeFormRedirect } from "@/lib/security/redirects";
+import { websiteSalesFormId } from "@/lib/website-sales-ingestion";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -62,6 +63,19 @@ export async function POST(request: Request) {
   const source = getString(formData, "utm_source") || "website";
   const lookup = await getPublicWebsiteFormByKey(formSlug).catch(() => null);
   if (!lookup) {
+    return responseFromSnapshot(
+      createPublicFormFailureSnapshot({
+        formSlug,
+        reason: "Form not found",
+        request,
+        returnTo,
+        source,
+        status: 404,
+      }),
+    );
+  }
+  // The dedicated Studio form is only accepted by the signed Website Sales route.
+  if (lookup.id === websiteSalesFormId) {
     return responseFromSnapshot(
       createPublicFormFailureSnapshot({
         formSlug,
