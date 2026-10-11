@@ -7,8 +7,13 @@ import type {
   PropertyPreflightResult,
 } from "@/lib/property-department";
 import { executeQuery, queryOne } from "@/lib/db/client";
+import { queryPropertyMediaMutation } from "@/lib/db/property-media-mutation";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { findWorkspaceMediaAsset } from "@/lib/media-store";
+import { parsePropertyLinkInput, parsePropertyRelationshipInput } from "@/lib/property-link-input";
+import { resolvePropertyAreaSqm } from "@/lib/property-area-input";
+import { isEmptyMoneyInput, parsePropertyEuroCents, parsePropertyIntegerCents } from "@/lib/property-money";
+import { normalizePurchaseAncillaryCalculation } from "@/lib/property-purchase-costs";
 
 type RepositoryWriteResult<T> =
   | { data: T; persisted: true }
@@ -455,6 +460,51 @@ async function updateSellerListingRecordInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
+  const monetaryError = validatePropertyMoney(input.property);
+  if (monetaryError) return { persisted: false, reason: monetaryError };
+  const area = resolvePropertyAreaSqm(input.property);
+  if (!area.ok) return { persisted: false, reason: area.reason };
+  const links = parsePropertyLinkInput(input.property);
+  if (!links.ok) return { persisted: false, reason: links.reason };
+  const relationships = parsePropertyRelationshipInput(input.property);
+  if (!relationships.ok) return { persisted: false, reason: relationships.reason };
+  const hasExpectedCore = Object.hasOwn(input.property, "expectedCore");
+  const expectedCore = asPlainObject(input.property.expectedCore);
+  if (hasExpectedCore && (expectedCore.id !== propertyId || expectedCore.workspaceId !== input.session.workspaceId ||
+      Object.keys(expectedCore).length !== 12 || !Object.hasOwn(expectedCore, "priceCents") ||
+      !Object.hasOwn(expectedCore, "publicPriceCents"))) {
+    return { persisted: false, reason: "Invalid property core comparison snapshot" };
+  }
+  const hasExpectedRelationships = Object.hasOwn(input.property, "expectedRelationships");
+  const expectedRelationships = asPlainObject(input.property.expectedRelationships);
+  const relationshipSnapshotKeys = ["id", "workspaceId", "projectId", "sellerLeadId", "mandateId", "ownerContactId", "ownerUserId", "contactUserId"];
+  if (hasExpectedRelationships && (Object.keys(expectedRelationships).length !== relationshipSnapshotKeys.length ||
+      relationshipSnapshotKeys.some((key) => !Object.hasOwn(expectedRelationships, key)) ||
+      expectedRelationships.id !== propertyId || expectedRelationships.workspaceId !== input.session.workspaceId ||
+      relationshipSnapshotKeys.slice(2).some((key) => expectedRelationships[key] !== null &&
+        (typeof expectedRelationships[key] !== "string" || !isUuid(expectedRelationships[key]))))) {
+    return { persisted: false, reason: "Invalid property relationship comparison snapshot" };
+  }
+  const hasAncillaryCalculation = Object.hasOwn(input.property, "purchaseAncillaryCalculation");
+  const ancillaryCalculation = hasAncillaryCalculation ? normalizePurchaseAncillaryCalculation(input.property.purchaseAncillaryCalculation) : null;
+  if (hasAncillaryCalculation && input.property.purchaseAncillaryCalculation !== null && !ancillaryCalculation) {
+    return { persisted: false, reason: "Invalid purchase ancillary calculation" };
+  }
+  const hasExpectedAncillaryCosts = Object.hasOwn(input.property, "expectedAncillaryCosts");
+  const expectedAncillaryCosts = asPlainObject(input.property.expectedAncillaryCosts);
+  const expectedAncillaryCalculation = hasExpectedAncillaryCosts ? normalizePurchaseAncillaryCalculation(expectedAncillaryCosts.calculation) : null;
+  if (hasExpectedAncillaryCosts && (Object.keys(expectedAncillaryCosts).length !== 2 ||
+      !Object.hasOwn(expectedAncillaryCosts, "amountCents") || !Object.hasOwn(expectedAncillaryCosts, "calculation") ||
+      (expectedAncillaryCosts.amountCents !== null && (!Number.isSafeInteger(expectedAncillaryCosts.amountCents) || Number(expectedAncillaryCosts.amountCents) < 0)) ||
+      (expectedAncillaryCosts.calculation !== null && !expectedAncillaryCalculation))) {
+    return { persisted: false, reason: "Invalid purchase ancillary comparison snapshot" };
+  }
+  const ancillaryInput = {
+    ...(hasAncillaryCalculation ? { calculation: ancillaryCalculation } : {}),
+    amountProvided: Object.hasOwn(input.property, "purchaseAncillaryCosts") &&
+      (!isEmptyMoneyInput(input.property.purchaseAncillaryCosts) || (hasAncillaryCalculation && ancillaryCalculation === null)),
+  };
+  const existingAncillarySql = normalizedStoredPurchaseCalculationSql();
   const fields = asPlainObject(input.property.fieldValues);
   const title = cleanString(input.property.title);
   const city = cleanString(input.property.city) || cleanString(fields["location.ort"]);
@@ -463,7 +513,7 @@ async function updateSellerListingRecordInTransaction(input: {
   const houseNumber = cleanString(fields["location.hausnummer"]);
   const address = cleanString(input.property.address) || [street, houseNumber, postalCode, city].filter(Boolean).join(" ");
   const federalState = cleanString(input.property.region) || cleanString(fields["location.bundesland"]);
-  const areaSqm = optionalNumber(input.property.areaSqm ?? fields["areas.wohnflaeche"]);
+  const areaSqm = area.value;
   const priceCents = toNullablePriceCents(input.property.price ?? fields["costs.kaufpreis"]);
   const channelPriceVisibility = normalizePriceVisibilityMap(asPlainObject(input.property.channelPriceVisibility));
   const row = await queryOne<SellerListingRow>(
@@ -471,12 +521,12 @@ async function updateSellerListingRecordInTransaction(input: {
       update seller_listings
       set
         project_id = coalesce($3::uuid, project_id),
-        seller_lead_id = coalesce($4::uuid, seller_lead_id),
+        seller_lead_id = case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_lead_id end,
         unit_id = coalesce($5::uuid, unit_id),
-        mandate_id = coalesce($6::uuid, mandate_id),
-        owner_contact_id = coalesce($7::uuid, owner_contact_id),
-        owner_user_id = coalesce($8::uuid, owner_user_id),
-        contact_user_id = coalesce($9::uuid, contact_user_id),
+        mandate_id = case when $51::jsonb ? 'mandateId' then $6::uuid else mandate_id end,
+        owner_contact_id = case when $51::jsonb ? 'ownerContactId' then $7::uuid else owner_contact_id end,
+        owner_user_id = case when $51::jsonb ? 'ownerUserId' then $8::uuid else owner_user_id end,
+        contact_user_id = case when $51::jsonb ? 'contactUserId' then $9::uuid else contact_user_id end,
         title = coalesce(nullif($10, ''), title),
         address = coalesce(nullif($11, ''), address),
         region = coalesce(nullif($12, ''), region),
@@ -505,33 +555,169 @@ async function updateSellerListingRecordInTransaction(input: {
         available_from = coalesce($35::date, available_from),
         available_from_text = coalesce(nullif($36, ''), available_from_text),
         availability_note = coalesce(nullif($37, ''), availability_note),
-        price_visibility = $38,
-        channel_price_visibility = $39::jsonb,
+        price_visibility = coalesce($38, price_visibility),
+        channel_price_visibility = coalesce($39::jsonb, channel_price_visibility),
         public_price_cents = coalesce($40::bigint, public_price_cents),
         rent_price_cents = coalesce($41::bigint, rent_price_cents),
         rent_net_cents = coalesce($42::bigint, rent_net_cents),
         monthly_costs_gross_cents = coalesce($43::bigint, monthly_costs_gross_cents),
-        purchase_ancillary_costs_cents = coalesce($44::bigint, purchase_ancillary_costs_cents),
-        costs_summary = costs_summary || $45::jsonb,
         gdpr_status = coalesce(nullif($46, ''), gdpr_status),
         portal_mapping_status = coalesce(nullif($47, ''), portal_mapping_status),
         internal_notes = coalesce(nullif($48, ''), internal_notes),
-        canonical_payload = canonical_payload || $49::jsonb,
+        (purchase_ancillary_costs_cents, costs_summary, canonical_payload) = (
+          select ancillary_amount.amount_cents,
+            coalesce(costs_summary, '{}'::jsonb) || ($45::jsonb - 'purchaseAncillaryCostsCents')
+              || jsonb_build_object('purchaseAncillaryCostsCents', ancillary_amount.amount_cents),
+            ((coalesce(canonical_payload, '{}'::jsonb) || ($49::jsonb - 'fieldValues')
+              || case when $49::jsonb ? 'fieldValues' then jsonb_build_object(
+                'fieldValues', coalesce(canonical_payload -> 'fieldValues', '{}'::jsonb) || ($49::jsonb -> 'fieldValues')
+              ) else '{}'::jsonb end) - 'purchaseAncillaryCalculation')
+              || case when ancillary_selected.calculation is not null then
+                jsonb_build_object('purchaseAncillaryCalculation', ancillary_selected.calculation)
+                when not ($52::jsonb ? 'calculation') and ancillary_previous.calculation is null
+                  and canonical_payload ? 'purchaseAncillaryCalculation' then
+                  jsonb_build_object('purchaseAncillaryCalculation', canonical_payload -> 'purchaseAncillaryCalculation')
+                else '{}'::jsonb end
+          from lateral (select ${existingAncillarySql} as calculation) ancillary_previous
+          cross join lateral (select case
+            when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent') then null::jsonb
+            when $52::jsonb ? 'calculation' then nullif($52::jsonb -> 'calculation', 'null'::jsonb)
+            else ancillary_previous.calculation end as calculation) ancillary_selected
+          cross join lateral (select case
+            when coalesce(nullif($31, ''), marketing_type, 'sale') not in ('sale', 'sale_or_rent')
+              and (ancillary_previous.calculation is not null or jsonb_typeof($52::jsonb -> 'calculation') = 'object')
+              then null::bigint
+            when ancillary_selected.calculation is not null then
+              round(coalesce($18::bigint, target_price_cents)::numeric
+                * (ancillary_selected.calculation ->> 'rateBps')::numeric / 10000)::bigint
+            when $52::jsonb ->> 'amountProvided' = 'true' then $44::bigint
+            else purchase_ancillary_costs_cents end as amount_cents) ancillary_amount
+        ),
         updated_at = now()
       where id = $1::uuid
         and workspace_id = $2
+        and ($53::jsonb is null or jsonb_build_object(
+          'amountCents', purchase_ancillary_costs_cents, 'calculation', ${existingAncillarySql}
+        ) = $53::jsonb)
+        and (
+          $52::jsonb ? 'calculation'
+          or canonical_payload -> 'purchaseAncillaryCalculation' is null
+          or canonical_payload -> 'purchaseAncillaryCalculation' = 'null'::jsonb
+          or ${existingAncillarySql} is not null
+          or ($18::bigint is null and nullif($31, '') is null and $52::jsonb ->> 'amountProvided' <> 'true')
+        )
+        and (case when coalesce(nullif($31, ''), marketing_type, 'sale') in ('sale', 'sale_or_rent')
+          and (case when $52::jsonb ? 'calculation' then nullif($52::jsonb -> 'calculation', 'null'::jsonb)
+            else ${existingAncillarySql} end) is not null
+          then coalesce($18::bigint, target_price_cents) between 0 and 9007199254740991
+          else true end)
+        and (
+          coalesce($3::uuid, seller_listings.project_id) is null or exists (
+            select 1 from projects p
+            where p.id = coalesce($3::uuid, seller_listings.project_id)
+              and p.workspace_id = $2::uuid
+          )
+        )
+        and (
+          coalesce($5::uuid, seller_listings.unit_id) is null or exists (
+            select 1 from property_units u
+            where u.id = coalesce($5::uuid, seller_listings.unit_id)
+              and u.workspace_id = $2::uuid
+              and u.project_id = coalesce($3::uuid, seller_listings.project_id)
+              and (
+                not (coalesce(u.metadata, '{}'::jsonb) @> '{"defaultUnit": true}'::jsonb)
+                or u.metadata ->> 'sellerListingId' = $1::text
+              )
+          )
+        )
+        and (
+          $50::jsonb is null or jsonb_build_object(
+            'id', id::text, 'workspaceId', workspace_id::text, 'projectId', project_id::text,
+            'title', title, 'address', address, 'region', region, 'objectType', object_type,
+            'areaSqm', area_sqm, 'rooms', rooms, 'yearBuilt', coalesce(year_built, 0),
+            'priceCents', target_price_cents, 'publicPriceCents', public_price_cents
+          ) = $50::jsonb
+        )
+        and (not ($51::jsonb ? '_expectedRelationships') or jsonb_build_object(
+          'id', id::text, 'workspaceId', workspace_id::text, 'projectId', project_id::text,
+          'sellerLeadId', seller_lead_id::text, 'mandateId', mandate_id::text,
+          'ownerContactId', owner_contact_id::text, 'ownerUserId', owner_user_id::text,
+          'contactUserId', contact_user_id::text
+        ) = $51::jsonb -> '_expectedRelationships')
+        and ($4::uuid is null or exists (
+          select 1 from leads relationship_lead
+          where relationship_lead.id = $4::uuid and relationship_lead.workspace_id = $2::uuid
+            and (relationship_lead.project_id is null or relationship_lead.project_id = coalesce($3::uuid, seller_listings.project_id))
+            and (lower(relationship_lead.type) like '%verk%' or lower(relationship_lead.type) like '%seller%'
+              or (jsonb_typeof(relationship_lead.seller_profile) = 'object' and relationship_lead.seller_profile <> '{}'::jsonb))
+          for share of relationship_lead
+        ))
+        and ($6::uuid is null or exists (
+          select 1 from broker_mandates relationship_mandate
+          where relationship_mandate.id = $6::uuid and relationship_mandate.workspace_id = $2::uuid
+            and (relationship_mandate.project_id is null or relationship_mandate.project_id = coalesce($3::uuid, seller_listings.project_id))
+            and (case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end is null
+              or relationship_mandate.seller_lead_id is null
+              or relationship_mandate.seller_lead_id = case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end)
+          for share of relationship_mandate
+        ))
+        and ($4::uuid is null or $51::jsonb ? 'mandateId' or seller_listings.mandate_id is null or exists (
+          select 1 from broker_mandates retained_mandate
+          where retained_mandate.id = seller_listings.mandate_id and retained_mandate.workspace_id = $2::uuid
+            and (retained_mandate.project_id is null or retained_mandate.project_id = coalesce($3::uuid, seller_listings.project_id))
+            and (retained_mandate.seller_lead_id is null or retained_mandate.seller_lead_id = $4::uuid)
+          for share of retained_mandate
+        ))
+        and ($3::uuid is null or $3::uuid is not distinct from seller_listings.project_id
+          or case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end is null
+          or exists (
+            select 1 from leads moved_lead
+            where moved_lead.id = case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end
+              and moved_lead.workspace_id = $2::uuid
+              and (moved_lead.project_id is null or moved_lead.project_id = $3::uuid)
+              and (lower(moved_lead.type) like '%verk%' or lower(moved_lead.type) like '%seller%'
+                or (jsonb_typeof(moved_lead.seller_profile) = 'object' and moved_lead.seller_profile <> '{}'::jsonb))
+            for share of moved_lead
+          ))
+        and ($3::uuid is null or $3::uuid is not distinct from seller_listings.project_id
+          or case when $51::jsonb ? 'mandateId' then $6::uuid else seller_listings.mandate_id end is null
+          or exists (
+            select 1 from broker_mandates moved_mandate
+            where moved_mandate.id = case when $51::jsonb ? 'mandateId' then $6::uuid else seller_listings.mandate_id end
+              and moved_mandate.workspace_id = $2::uuid
+              and (moved_mandate.project_id is null or moved_mandate.project_id = $3::uuid)
+              and (case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end is null
+                or moved_mandate.seller_lead_id is null
+                or moved_mandate.seller_lead_id = case when $51::jsonb ? 'sellerLeadId' then $4::uuid else seller_listings.seller_lead_id end)
+            for share of moved_mandate
+          ))
+        and ($7::uuid is null or exists (
+          select 1 from contacts relationship_contact
+          where relationship_contact.id = $7::uuid and relationship_contact.workspace_id = $2::uuid
+          for share of relationship_contact
+        ))
+        and ($8::uuid is null or exists (
+          select 1 from workspace_users relationship_owner
+          where relationship_owner.id = $8::uuid and relationship_owner.workspace_id = $2::uuid
+          for share of relationship_owner
+        ))
+        and ($9::uuid is null or exists (
+          select 1 from workspace_users relationship_contact_user
+          where relationship_contact_user.id = $9::uuid and relationship_contact_user.workspace_id = $2::uuid
+          for share of relationship_contact_user
+        ))
       returning ${sellerListingReturningSql}
     `,
     [
       propertyId,
       input.session.workspaceId,
-      nullableUuid(input.property.projectId),
-      nullableUuid(input.property.sellerLeadId),
-      nullableUuid(input.property.unitId),
-      nullableUuid(input.property.mandateId),
-      nullableUuid(input.property.ownerContactId),
-      nullableUuid(input.property.ownerUserId),
-      nullableUuid(input.property.contactUserId),
+      links.projectId,
+      relationships.values.sellerLeadId,
+      links.unitId,
+      relationships.values.mandateId,
+      relationships.values.ownerContactId,
+      relationships.values.ownerUserId,
+      relationships.values.contactUserId,
       title,
       address,
       federalState ? normalizeRegion(federalState) : "",
@@ -539,7 +725,7 @@ async function updateSellerListingRecordInTransaction(input: {
       areaSqm,
       optionalNumber(input.property.rooms ?? fields["rooms.zimmer"]),
       optionalInteger(input.property.yearBuilt ?? fields["construction.baujahr"]),
-      priceCents,
+      hasExpectedCore ? null : priceCents,
       priceCents,
       optionalNumber(input.property.expectedGrossYield ?? fields["investment.rendite"]),
       postalCode,
@@ -560,28 +746,38 @@ async function updateSellerListingRecordInTransaction(input: {
       dateOnly(input.property.availableFrom ?? fields["construction.beziehbar_ab"]),
       cleanString(input.property.availableFromText),
       cleanString(input.property.availabilityNote),
-      normalizePriceVisibility(input.property.priceVisibility),
-      JSON.stringify(channelPriceVisibility),
-      toNullablePriceCents(input.property.publicPrice ?? input.property.price ?? fields["costs.kaufpreis"]),
+      Object.hasOwn(input.property, "priceVisibility") ? normalizePriceVisibility(input.property.priceVisibility) : null,
+      Object.hasOwn(input.property, "channelPriceVisibility") ? JSON.stringify(channelPriceVisibility) : null,
+      toNullablePriceCents(input.property.publicPrice),
       toNullablePriceCents(input.property.rentPrice ?? fields["costs.mietpreis_brutto"]),
       toNullablePriceCents(input.property.rentNet),
       toNullablePriceCents(input.property.monthlyCostsGross),
       toNullablePriceCents(input.property.purchaseAncillaryCosts),
-      JSON.stringify(buildCostsSummary(input.property)),
+      JSON.stringify(Object.fromEntries(Object.entries(buildCostsSummary(input.property))
+        .filter(([key, value]) => key !== "source" && value !== null))),
       cleanString(input.property.gdprStatus),
       cleanString(input.property.portalMappingStatus),
       cleanString(input.property.internalNotes) || cleanString(fields["notes.interne_notizen"]),
       JSON.stringify({
-        fieldValues: fields,
+        ...(Object.hasOwn(input.property, "fieldValues") ? { fieldValues: fields } : {}),
         updatedByUserId: input.session.userId,
         updatedFrom: "property_department",
       }),
+      hasExpectedCore ? JSON.stringify(expectedCore) : null,
+      JSON.stringify({ ...relationships.supplied, ...(hasExpectedRelationships ? { _expectedRelationships: expectedRelationships } : {}) }),
+      JSON.stringify(ancillaryInput),
+      hasExpectedAncillaryCosts ? JSON.stringify({ amountCents: expectedAncillaryCosts.amountCents, calculation: expectedAncillaryCalculation }) : null,
     ],
   );
 
-  if (!row) return { persisted: false, reason: "Property not found" };
+  if (!row) return { persisted: false, reason: hasExpectedCore || hasExpectedRelationships || hasExpectedAncillaryCosts
+    ? "Conflict: property was changed, moved or is no longer available; reload before editing again"
+    : "Property not found or project/unit is outside this workspace, or relationship target is invalid" };
 
-  const listingRow = await ensureDefaultUnitForListing(row, input.session);
+  // The relationship editor must not create or modify an implicit default unit.
+  const relationshipOnly = hasExpectedRelationships && Object.keys(input.property)
+    .every((key) => key === "expectedRelationships" || relationshipSnapshotKeys.slice(3).includes(key));
+  const listingRow = relationshipOnly ? row : await ensureDefaultUnitForListing(row, input.session);
   const listing = toSellerListing(listingRow);
   await savePropertyFragments({
     property: input.property,
@@ -937,7 +1133,9 @@ async function attachPropertyDocumentInTransaction(input: {
 }
 
 async function updatePropertyMediaOrderInTransaction(input: {
+  expectedMedia?: unknown;
   mediaItems: unknown;
+  projectId?: unknown;
   propertyId: unknown;
   session: AppSession;
 }): Promise<RepositoryWriteResult<{ count: number }>> {
@@ -948,51 +1146,138 @@ async function updatePropertyMediaOrderInTransaction(input: {
   const propertyId = normalizeEntityId(input.propertyId);
   if (!propertyId) return { persisted: false, reason: "Invalid property id" };
 
-  let count = 0;
-  for (const [index, item] of asObjectArray(input.mediaItems).entries()) {
-    const mediaId = nullableUuid(item.id);
-    if (!mediaId) continue;
-    const isCover = Boolean(item.isCover);
-    if (isCover) {
-      await executeQuery(
-        "update property_media set is_cover = false where workspace_id = $1 and property_id = $2::uuid and id <> $3::uuid",
-        [input.session.workspaceId, propertyId, mediaId],
-      );
-    }
-    const row = await queryOne<IdRow>(
-      `
-        update property_media
-        set
-          position = $4,
-          category = coalesce(nullif($5, ''), category),
-          visibility = coalesce(nullif($6, ''), visibility),
-          is_cover = $7,
-          title = coalesce(nullif($8, ''), title),
-          alt_text = coalesce(nullif($9, ''), alt_text),
-          status = coalesce(nullif($10, ''), status),
-          updated_at = now()
-        where id = $1::uuid
-          and property_id = $2::uuid
-          and workspace_id = $3
-        returning id
-      `,
-      [
-        mediaId,
-        propertyId,
-        input.session.workspaceId,
-        optionalInteger(item.position) ?? index,
-        cleanString(item.category),
-        cleanString(item.visibility),
-        isCover,
-        cleanString(item.title),
-        cleanString(item.altText),
-        cleanString(item.status),
-      ],
-    );
-    if (row) count += 1;
+  if (!Array.isArray(input.mediaItems) || input.mediaItems.length === 0 || input.mediaItems.length > 200) {
+    return { persisted: false, reason: "Invalid media order: provide between 1 and 200 media items" };
+  }
+  const items = asObjectArray(input.mediaItems);
+  if (items.length !== input.mediaItems.length || items.some((item) => !nullableUuid(item.id) ||
+    (item.isCover != null && typeof item.isCover !== "boolean") ||
+    (item.position != null && (typeof item.position !== "number" || !Number.isInteger(item.position) || item.position < 0 || item.position > 2_147_483_647)))) {
+    return { persisted: false, reason: "Invalid media order item, position or cover selection" };
+  }
+  const requested = items.map((item, index) => ({
+    id: nullableUuid(item.id)!.toLowerCase(),
+    position: item.position ?? index,
+    category: cleanString(item.category), visibility: cleanString(item.visibility),
+    is_cover: item.isCover === true, title: cleanString(item.title),
+    alt_text: cleanString(item.altText), status: cleanString(item.status),
+  }));
+  if (new Set(requested.map((item) => item.id)).size !== requested.length || requested.filter((item) => item.is_cover).length > 1) {
+    return { persisted: false, reason: "Invalid media order: duplicate media IDs or multiple cover selections" };
   }
 
-  return { data: { count }, persisted: true };
+  const hasProjectTarget = input.projectId !== undefined;
+  if (hasProjectTarget && input.projectId !== null && (typeof input.projectId !== "string" || !isUuid(input.projectId))) {
+    return { persisted: false, reason: "Invalid media order project id" };
+  }
+  const projectId = typeof input.projectId === "string" ? input.projectId.toLowerCase() : null;
+  let expectedMedia: Array<{ id: string; position: number; is_cover: boolean; updated_at: string }> | null = null;
+  if (input.expectedMedia !== undefined) {
+    if (!Array.isArray(input.expectedMedia) || input.expectedMedia.length > 200) {
+      return { persisted: false, reason: "Invalid expected media snapshot: provide a complete array of at most 200 items" };
+    }
+    const snapshot = asObjectArray(input.expectedMedia);
+    if (snapshot.length !== input.expectedMedia.length || snapshot.some((item) =>
+      typeof item.id !== "string" || !isUuid(item.id) || typeof item.isCover !== "boolean" ||
+      typeof item.position !== "number" || !Number.isInteger(item.position) || item.position < 0 || item.position > 2_147_483_647 ||
+      typeof item.updatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(item.updatedAt) ||
+      !Number.isFinite(Date.parse(item.updatedAt)) || new Date(item.updatedAt).toISOString() !== item.updatedAt)) {
+      return { persisted: false, reason: "Invalid expected media snapshot item, position, cover or timestamp" };
+    }
+    expectedMedia = snapshot.map((item) => ({ id: (item.id as string).toLowerCase(), position: item.position as number,
+      is_cover: item.isCover as boolean, updated_at: item.updatedAt as string }));
+    if (new Set(expectedMedia.map((item) => item.id)).size !== expectedMedia.length) {
+      return { persisted: false, reason: "Invalid expected media snapshot: duplicate media IDs" };
+    }
+  }
+
+  // Validate the complete batch against its persisted property/project/assets
+  // before changing anything. Cover replacement and item edits use ONE UPDATE:
+  // a missing/foreign ID cannot clear the old cover or partially reorder a batch.
+  // Compare an optional complete snapshot against the locked property inventory.
+  const row = await queryPropertyMediaMutation<{ count: number }>({
+    propertyId,
+    workspaceId: input.session.workspaceId,
+    query: `
+    with requested as materialized (
+      select * from jsonb_to_recordset($3::jsonb) as item(
+        id uuid, position integer, category text, visibility text,
+        is_cover boolean, title text, alt_text text, status text
+      )
+    ), expected as materialized (
+      select * from jsonb_to_recordset(coalesce($4::jsonb, '[]'::jsonb)) as item(
+        id uuid, position integer, is_cover boolean, updated_at timestamptz
+      )
+    ), property_target as materialized (
+      select p.id, p.project_id
+      from seller_listings p
+      where p.id = $1::uuid and p.workspace_id = $2::uuid
+        and (not $6::boolean or p.project_id is not distinct from $5::uuid)
+        and (p.project_id is null or exists (
+          select 1 from projects project where project.id = p.project_id and project.workspace_id = p.workspace_id
+        ))
+      for update of p
+    ), current_media as materialized (
+      select pm.*
+      from property_media pm
+      join property_target p on p.id = pm.property_id
+      where pm.workspace_id = $2::uuid
+      order by pm.id
+      for update of pm
+    ), eligible as materialized (
+      select pm.id
+      from current_media pm
+      join property_target p on p.id = pm.property_id and pm.project_id is not distinct from p.project_id
+      join requested r on r.id = pm.id
+      join media_assets ma on ma.id = pm.media_asset_id and ma.workspace_id = pm.workspace_id::text
+      where pm.workspace_id = $2::uuid
+        and (ma.folder !~* '^properties/' or lower(ma.folder) = 'properties/' || p.id::text)
+      for update of ma
+    ), authorized as materialized (
+      select p.id, p.project_id from property_target p
+      where (select count(*) from eligible) = (select count(*) from requested)
+        and ($4::jsonb is null or (
+          (select count(*) from current_media) = (select count(*) from expected)
+          and not exists (
+            select 1 from current_media pm
+            left join expected e on e.id = pm.id
+            where e.id is null or pm.project_id is distinct from p.project_id
+              or pm.position is distinct from e.position or pm.is_cover is distinct from e.is_cover
+              or date_trunc('milliseconds', pm.updated_at) is distinct from e.updated_at
+          )
+        ))
+    ), changes as materialized (
+      select pm.id,
+        case when r.id is not null then r.position else pm.position end as position,
+        coalesce(nullif(r.category, ''), pm.category) as category,
+        coalesce(nullif(r.visibility, ''), pm.visibility) as visibility,
+        case when r.id is not null then r.is_cover else false end as is_cover,
+        coalesce(nullif(r.title, ''), pm.title) as title,
+        coalesce(nullif(r.alt_text, ''), pm.alt_text) as alt_text,
+        coalesce(nullif(r.status, ''), pm.status) as status
+      from current_media pm
+      join authorized p on p.id = pm.property_id and pm.project_id is not distinct from p.project_id
+      left join requested r on r.id = pm.id
+      where pm.workspace_id = $2::uuid
+        and (r.id is not null or (pm.is_cover and exists (select 1 from requested where is_cover)))
+    ), saved as (
+      update property_media pm
+      set position = c.position, category = c.category, visibility = c.visibility,
+        is_cover = c.is_cover, title = c.title, alt_text = c.alt_text, status = c.status,
+        updated_at = greatest(clock_timestamp(), date_trunc('milliseconds', pm.updated_at) + interval '1 millisecond')
+      from changes c
+      where pm.id = c.id and pm.workspace_id = $2::uuid and pm.property_id = $1::uuid
+      returning pm.id
+    )
+    select count(*)::int as count from saved s join requested r on r.id = s.id
+    having count(*) = (select count(*) from requested)
+    `,
+    params: [propertyId, input.session.workspaceId, JSON.stringify(requested), expectedMedia === null ? null : JSON.stringify(expectedMedia), projectId, hasProjectTarget],
+  });
+  if (!row || Number(row.count) !== requested.length) {
+    return { persisted: false, reason: "Conflict: Media order changed or the property/project target is unavailable; reload before retrying" };
+  }
+  return { data: { count: Number(row.count) }, persisted: true };
 }
 
 async function updatePropertyPriceVisibilityInTransaction(input: {
@@ -1647,25 +1932,70 @@ function optionalInteger(value: unknown) {
 }
 
 function toPriceCents(value: unknown) {
-  const parsed = toNumber(value, 0);
-  return Math.round(parsed > 999_999 ? parsed : parsed * 100);
+  return parsePropertyEuroCents(value) ?? 0;
 }
 
 function toNullablePriceCents(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = toNumber(value, Number.NaN);
-  return Number.isFinite(parsed) ? Math.round(parsed > 999_999 ? parsed : parsed * 100) : null;
+  return parsePropertyEuroCents(value);
 }
 
 function toCostCents(euroValue: unknown, centsValue: unknown) {
-  if (euroValue !== null && euroValue !== undefined && euroValue !== "") {
-    return toPriceCents(euroValue);
+  if (!isEmptyMoneyInput(euroValue)) {
+    return parsePropertyEuroCents(euroValue, { allowNegative: true }) ?? 0;
   }
-  if (centsValue !== null && centsValue !== undefined && centsValue !== "") {
-    const parsed = toNumber(centsValue, 0);
-    return Math.round(parsed);
+  return parsePropertyIntegerCents(centsValue, { allowNegative: true }) ?? 0;
+}
+
+/** Validate stored JSON inside the row update, never through a stale pre-read.
+ * CASE guards protect numeric casts even when a legacy payload has malformed JSON values. */
+function normalizedStoredPurchaseCalculationSql() {
+  const config = "(canonical_payload -> 'purchaseAncillaryCalculation')";
+  const rate = `(${config} ->> 'rateBps')::numeric`;
+  return `(case when jsonb_typeof(${config}) = 'object' then case
+    when ${config} - array['mode', 'rateBps', 'version', 'jurisdiction']::text[] = '{}'::jsonb
+      and ${config} @> '{"mode":"percentage","version":1,"jurisdiction":"AT"}'::jsonb
+      and jsonb_typeof(${config} -> 'rateBps') = 'number'
+    then case when ${rate} between 0 and 10000 and trunc(${rate}) = ${rate}
+      then ${config} else null::jsonb end
+    else null::jsonb end else null::jsonb end)`;
+}
+
+function validatePropertyMoney(property: Record<string, unknown>) {
+  const fields = asPlainObject(property.fieldValues);
+  const values = {
+    price: property.price ?? fields["costs.kaufpreis"],
+    publicPrice: property.publicPrice,
+    rentPrice: property.rentPrice ?? fields["costs.mietpreis_brutto"],
+    rentNet: property.rentNet,
+    monthlyCostsGross: property.monthlyCostsGross,
+    purchaseAncillaryCosts: property.purchaseAncillaryCosts,
+  };
+  for (const [field, value] of Object.entries(values)) {
+    if (!isEmptyMoneyInput(value) && parsePropertyEuroCents(value) === null) {
+      return `Invalid property price: ${field} must be a non-negative EUR amount`;
+    }
   }
-  return 0;
+  // Nested cost fragments are written after the listing: reject them up front.
+  return validateCostItemMoney(asObjectArray(property.costItems));
+}
+
+function validateCostItemMoney(costItems: Array<Record<string, unknown>>) {
+  for (const [index, item] of costItems.entries()) {
+    if (!(cleanString(item.costKey) || cleanString(item.key)) || !cleanString(item.label)) continue;
+    for (const field of ["monthlyNet", "monthlyVat", "monthlyGross", "oneTimeNet", "oneTimeVat", "oneTimeGross"]) {
+      const euroValue = item[field];
+      const centsValue = item[`${field}Cents`];
+      const euros = isEmptyMoneyInput(euroValue) ? null : parsePropertyEuroCents(euroValue, { allowNegative: true });
+      const cents = isEmptyMoneyInput(centsValue) ? null : parsePropertyIntegerCents(centsValue, { allowNegative: true });
+      if ((!isEmptyMoneyInput(euroValue) && euros === null) || (!isEmptyMoneyInput(centsValue) && cents === null)) {
+        return `Invalid cost amount: costItems[${index}].${field}`;
+      }
+      if (euros !== null && cents !== null && euros !== cents) {
+        return `Invalid cost amount: costItems[${index}].${field} and ${field}Cents disagree`;
+      }
+    }
+  }
+  return null;
 }
 
 function normalizePriceVisibility(value: unknown): PropertyPriceVisibility {

@@ -6,6 +6,7 @@ import type {
   WorkspaceOperatingModel,
   WorkspaceTeamStructure,
 } from "@/lib/product-model";
+import type { CrmDivision } from "@/lib/crm-division";
 
 export type ID = string;
 
@@ -216,6 +217,7 @@ export type Project = {
   id: ID;
   workspaceId: ID;
   name: string;
+  division?: CrmDivision;
   type: string;
   leads: number;
   revenue: string;
@@ -290,7 +292,9 @@ export type ContactTimelineItem = {
 };
 
 export type Lead = {
+  division?: CrmDivision;
   version?: number;
+  syntheticTest?: boolean;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -405,6 +409,7 @@ export type BuyerSearchProfile = {
 
 export type CrmPipeline = {
   customerType?: WorkspaceCustomerType;
+  division?: CrmDivision;
   id: ID;
   isDefault: boolean;
   key: string;
@@ -592,6 +597,8 @@ export type PropertyCostItem = {
 };
 
 export type PropertyMediaItem = {
+  /** Joined asset exists in this workspace; false means a detached legacy row. */
+  assetAvailable?: boolean;
   id: ID;
   workspaceId: ID;
   projectId?: ID;
@@ -616,6 +623,8 @@ export type PropertyMediaItem = {
 };
 
 export type PropertyDocumentItem = {
+  /** Joined asset exists in this workspace; not a provider HEAD guarantee. */
+  assetAvailable?: boolean;
   id: ID;
   workspaceId: ID;
   projectId?: ID;
@@ -722,8 +731,10 @@ export type CustomerWorkspaceAccess = {
 
 export type Deal = {
   version?: number;
+  syntheticTest?: boolean;
   closedAt?: string;
   id: ID;
+  division?: CrmDivision;
   workspaceId: ID;
   projectId: ID;
   contactId: ID;
@@ -773,6 +784,7 @@ export type PipelineStage = {
 
 export type Task = {
   version?: number;
+  syntheticTest?: boolean;
   id: ID;
   workspaceId: ID;
   projectId: ID;

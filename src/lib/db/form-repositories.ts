@@ -5,6 +5,7 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
 import { getProductRoleCapabilities } from "@/lib/product-model";
+import { websiteSalesActorId, websiteSalesFormId } from "@/lib/website-sales-ingestion";
 import {
   buildPublicFormPath,
   parsePublicSlugLookup,
@@ -385,7 +386,10 @@ export async function upsertWebsiteForm(input: {
   return { form: toWebsiteForm(row), persisted: true };
 }
 
-export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: string }): Promise<FormLookup | null> {
+export async function getPublicWebsiteForm(
+  input: PublicSlugLookup | { formId: string },
+  options: { includeSignedWebsiteSales?: boolean } = {},
+): Promise<FormLookup | null> {
   if (!hasDatabaseUrl()) return null;
 
   const formId = "formId" in input && isUuid(input.formId) ? input.formId : null;
@@ -445,7 +449,7 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
     [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""],
   );
 
-  if (!row) return null;
+  if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
   const publicPath = row.workspacePublicKey
     ? buildPublicFormPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug })
@@ -464,10 +468,13 @@ export async function getPublicWebsiteForm(input: PublicSlugLookup | { formId: s
   };
 }
 
-export async function getPublicWebsiteFormByKey(formKey: string): Promise<FormLookup | null> {
+export async function getPublicWebsiteFormByKey(
+  formKey: string,
+  options: { includeSignedWebsiteSales?: boolean } = {},
+): Promise<FormLookup | null> {
   const route = parsePublicSlugLookup(formKey);
-  if (route) return getPublicWebsiteForm(route);
-  if (isUuid(formKey)) return getPublicWebsiteForm({ formId: formKey });
+  if (route) return getPublicWebsiteForm(route, options);
+  if (isUuid(formKey)) return getPublicWebsiteForm({ formId: formKey }, options);
 
   const legacy = await getLegacyPublicWebsiteFormRoute(formKey);
   if (legacy.status !== "unique") return null;
@@ -475,7 +482,7 @@ export async function getPublicWebsiteFormByKey(formKey: string): Promise<FormLo
   return getPublicWebsiteForm({
     slug: legacy.slug,
     workspacePublicKey: legacy.workspacePublicKey,
-  });
+  }, options);
 }
 
 export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promise<LegacyPublicFormRoute> {
@@ -522,6 +529,7 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
 }
 
 export async function persistWebsiteFormSubmission(input: {
+  actorUserId?: string;
   formData: FormDataLike;
   formKey: string;
   requestUrl: string;
@@ -530,7 +538,9 @@ export async function persistWebsiteFormSubmission(input: {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
 
-  const lookup = await getPublicWebsiteFormByKey(input.formKey);
+  const lookup = await getPublicWebsiteFormByKey(input.formKey, {
+    includeSignedWebsiteSales: input.formKey === websiteSalesFormId && input.actorUserId === websiteSalesActorId,
+  });
   if (!lookup) {
     return { persisted: false, reason: "Form not found" };
   }
@@ -744,7 +754,7 @@ export async function persistWebsiteFormSubmission(input: {
         tracking,
         raw_payload
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, 'live', 'processed', $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, case when $14::boolean then 'test' else 'live' end, 'processed', $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)
       returning id
     `,
     [
@@ -761,6 +771,7 @@ export async function persistWebsiteFormSubmission(input: {
       JSON.stringify(consent),
       JSON.stringify(tracking),
       JSON.stringify(Object.fromEntries(input.formData.entries())),
+      websiteSalesMetadata?.syntheticTest === true,
     ],
   );
 
@@ -789,17 +800,17 @@ export async function persistWebsiteFormSubmission(input: {
   await queryOne(
     `
       update forms
-      set submissions_count = submissions_count + 1,
+      set submissions_count = submissions_count + $2::integer,
           last_submission_at = now(),
           conversion_rate = case
-            when visits_count > 0 then round(((submissions_count + 1)::numeric / visits_count::numeric) * 100, 2)
+            when visits_count > 0 then round(((submissions_count + $2::integer)::numeric / visits_count::numeric) * 100, 2)
             else conversion_rate
           end,
           updated_at = now()
       where id = $1
       returning id
     `,
-    [lookup.id],
+    [lookup.id, websiteSalesMetadata?.syntheticTest === true ? 0 : 1],
   );
 
   const formSession: AppSession = {
@@ -811,7 +822,7 @@ export async function persistWebsiteFormSubmission(input: {
     productRole: "assistant_backoffice",
     role: "owner",
     source: "database",
-    userId: lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
+    userId: input.actorUserId ?? lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
     workspaceId: lookup.workspaceId,
     workspaceName: lookup.workspaceName ?? "Novalure",
   };

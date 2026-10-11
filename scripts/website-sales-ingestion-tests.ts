@@ -62,7 +62,7 @@ test("Website Sales accepts only an IP address supplied by the authenticated web
 test("CRM endpoint uses the dedicated form identity and persistent public-submission protections", async () => {
   const [route, migration] = await Promise.all([
     readFile(new URL("../src/app/api/public/website-sales/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../migrations/087_website_sales_ingestion.sql", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/094_website_sales_ingestion.sql", import.meta.url), "utf8"),
   ]);
 
   assert.match(route, /verifyWebsiteSalesSignature/);

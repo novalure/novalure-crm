@@ -1,0 +1,192 @@
+{
+  "contract": "CRM-U1-C06",
+  "status": "CLOSED_LIVE_VERIFIED",
+  "recordedAt": "2026-10-06T13:25:27Z",
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/u1-c06-production-rls-cutover",
+  "testedCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
+  "productionBaseline": {
+    "projectId": "misty-cloud-70835427",
+    "branchId": "br-snowy-fog-aldx77v8",
+    "database": "neondb",
+    "runtimeRole": "novalure_app",
+    "ledgerRows": 19,
+    "rlsRelations": 0,
+    "forcedRlsRelations": 0,
+    "directCompanyProfilesAccess": true,
+    "tenantRolePresent": false,
+    "activeDeploymentId": "dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah",
+    "activeDeploymentHttp": 200,
+    "activeDeploymentExactProvenance": false
+  },
+  "authoritativeDelta": {
+    "rolePrepare": "060_tenant_rls_pilot_prepare",
+    "providerCompatibility": "061_validate_and_activate_tenant_rls_pilot",
+    "manualContracts": [
+      "057_bot_webhook_legacy_index_cutover",
+      "062_private_media_contract_cutover",
+      "065_notification_guard_search_path_hardening"
+    ],
+    "automaticMigrations": "068-090",
+    "d11Backfill": "migrations/staged/087_d11_crm_source_of_truth_backfill.sql",
+    "d11Contract": {
+      "path": "migrations/staged/087_d11_crm_source_of_truth_contract.sql",
+      "checksum": "68be992a666854784854c41ecfbe9a40dbbbcfa0e1b4b163d1b45bc187d66ab8"
+    },
+    "finalCutover": {
+      "version": "091_production_runtime_forced_rls_cutover",
+      "checksum": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155",
+      "effects": [
+        "FORCE RLS on company_profiles and company_profile_versions",
+        "direct base-table grants removed from novalure_app",
+        "all direct novalure_app ACL entries removed from every forced-RLS table",
+        "scoped read/write views and history function granted only through novalure_tenant_app",
+        "all RLS-enabled public base tables required to be FORCE RLS"
+      ]
+    }
+  },
+  "rehearsal": {
+    "projectId": "misty-cloud-70835427",
+    "sourceBranchId": "br-rapid-wildflower-alacg2lm",
+    "preservedPassingBranchId": "br-super-sun-alust96q",
+    "preservedPassingBranchName": "crm-u1-c06-cutover-pass-20261006",
+    "postgresVersion": "17.11",
+    "ledgerRows": 48,
+    "pendingMigrations": 0,
+    "d11BackfillBatches": 1,
+    "d11Remaining": 0,
+    "rlsRelations": 68,
+    "forcedRlsRelations": 68,
+    "runtimeDirectAclEntriesOnForcedTables": 0,
+    "runtimeIdentity": {
+      "currentUser": "novalure_app",
+      "sessionUser": "novalure_app",
+      "database": "neondb",
+      "login": true,
+      "inherit": false,
+      "superuser": false,
+      "bypassRls": false,
+      "createDb": false,
+      "createRole": false,
+      "replication": false,
+      "tenantRoleMembership": true
+    },
+    "companyProfiles": {
+      "directPrivilege": false,
+      "directQueryDenied": true,
+      "scopedPlatformProjectionAllowed": true,
+      "exposeFunctionCallable": true
+    },
+    "tenantProof": {
+      "unsetContextRows": 0,
+      "ownContextAllowed": true,
+      "foreignContextRows": 0
+    },
+    "application": {
+      "productionBuild": "PASS",
+      "productionModeStartupAgainstRehearsal": "PASS",
+      "rootHttp": 200,
+      "loginHttp": 200,
+      "healthHttp": 200,
+      "versionHttp": 200
+    },
+    "tests": {
+      "unit": "234/234 PASS",
+      "sales": "93/93 PASS",
+      "salesFinal": "50/50 PASS",
+      "d11": "87/87 PASS",
+      "d11StagedMigrationRollback": "1/1 PASS",
+      "g08": "54/54 PASS",
+      "neon061": "11/11 PASS",
+      "integration": "15/15 PASS",
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "dependencyAudit": "Critical 0, High 0"
+    }
+  },
+  "rollbackRestore": {
+    "mechanism": "Neon branch restore to parent with pre-restore state preserved",
+    "result": "PASS",
+    "restoredBranchId": "br-rapid-wildflower-alacg2lm",
+    "restoredLedgerRows": 19,
+    "restoredRlsRelations": 0,
+    "restoredForcedRlsRelations": 0,
+    "preservedCutoverBranchId": "br-super-sun-alust96q",
+    "preservedLedgerRows": 48,
+    "preservedForcedRlsRelations": 68,
+    "expiresAt": "2026-10-13T18:49:59Z"
+  },
+  "productionCutover": {
+    "result": "PASS",
+    "migrationCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
+    "cutoverDeploymentId": "dpl_5j2akNfLibmEVkboK57E9VaqZtoh",
+    "deploymentState": "READY",
+    "deploymentTarget": "production",
+    "platformProvenanceCommit": "04fcbda1cb541d427ac1a631d19a78d0a1f49b1e",
+    "preCutoverBackup": {
+      "branchId": "br-billowing-tree-almi4j0c",
+      "branchName": "crm-u1-c06-production-backup-20261006T124926Z",
+      "state": "ready",
+      "expiresAt": "2026-10-20T12:49:26Z"
+    },
+    "database": {
+      "ledgerRows": 48,
+      "pendingMigrations": 0,
+      "d11BackfillBatches": 1,
+      "d11Remaining": 0,
+      "d11Contract": "PASS",
+      "rlsRelations": 68,
+      "forcedRlsRelations": 68,
+      "runtimeDirectTableAclEntriesOnForcedTables": 0,
+      "runtimeDirectColumnAclEntriesOnForcedTables": 0
+    },
+    "runtimeIdentity": {
+      "currentUser": "novalure_app",
+      "sessionUser": "novalure_app",
+      "database": "neondb",
+      "login": true,
+      "inherit": false,
+      "superuser": false,
+      "bypassRls": false,
+      "createDb": false,
+      "createRole": false,
+      "replication": false,
+      "tenantRoleMembership": true
+    },
+    "companyProfiles": {
+      "directPrivilege": false,
+      "directQueryDenied": true,
+      "workspaceOwnerWriteAllowed": true,
+      "crmAccountWriteAllowed": true,
+      "platformProjectionRows": 1,
+      "platformWriteAllowed": true
+    },
+    "tenantProof": {
+      "unsetProjects": 0,
+      "unsetContacts": 0,
+      "unsetDeals": 0,
+      "unsetCompanyProfiles": 0,
+      "ownProjects": 5,
+      "ownContacts": 6,
+      "ownLeads": 5,
+      "ownDeals": 5,
+      "ownPipelines": 5,
+      "ownMediaAssets": 2,
+      "ownNotes": 6,
+      "foreignProjects": 0,
+      "foreignCompanyProfiles": 0
+    },
+    "application": {
+      "rootHttp": 200,
+      "loginHttp": 200,
+      "healthHttp": 200,
+      "versionHttp": 200,
+      "protectedRoutesFailClosed": true,
+      "recentRuntimeErrorLogs": 0
+    },
+    "rollbackRequired": false
+  },
+  "critical": 0,
+  "high": 0,
+  "secretsIncluded": false
+}

@@ -14,6 +14,7 @@ import { upsertTaskRecord } from "@/lib/db/crm-write-repositories";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { queueTeamsNotification } from "@/lib/db/teams-notification-repositories";
 import { canPersist, isUuid, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { businessKpiSqlPredicate } from "@/lib/website-sales-kpi";
 
 type IdRow = { id: string };
 type CountRow = { count: number | string };
@@ -2025,7 +2026,7 @@ async function createConversionAnalyticsSnapshotInTransaction(input: {
         'all',
         $3::timestamptz,
         $4::timestamptz,
-        (select count(*) from leads where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and received_at between $3::timestamptz and $4::timestamptz),
+        (select count(*) from leads where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and received_at between $3::timestamptz and $4::timestamptz and ${businessKpiSqlPredicate}),
         (
           select count(*)
           from meeting_bookings mb
@@ -2035,9 +2036,9 @@ async function createConversionAnalyticsSnapshotInTransaction(input: {
             and mb.created_at between $3::timestamptz and $4::timestamptz
         ),
         (select count(*) from property_reservations where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and created_at between $3::timestamptz and $4::timestamptz),
-        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz),
-        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage in ('Verloren', 'Disqualifiziert') and coalesce(lost_at, updated_at) between $3::timestamptz and $4::timestamptz),
-        (select coalesce(sum(value_cents), 0) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz),
+        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz and ${businessKpiSqlPredicate}),
+        (select count(*) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage in ('Verloren', 'Disqualifiziert') and coalesce(lost_at, updated_at) between $3::timestamptz and $4::timestamptz and ${businessKpiSqlPredicate}),
+        (select coalesce(sum(value_cents), 0) from deals where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and stage = 'Gewonnen' and coalesce(closed_at, updated_at) between $3::timestamptz and $4::timestamptz and ${businessKpiSqlPredicate}),
         (select count(*)::numeric / greatest(1, extract(day from ($4::timestamptz - $3::timestamptz))) from property_units where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and status = 'sold'),
         jsonb_build_object('createdByUserId', $5::text)
       returning id
@@ -2997,19 +2998,19 @@ async function createPipelineManagementReport(input: { projectId?: string | null
         coalesce((select jsonb_object_agg(coalesce(lost_reason_category, 'unknown'), reason_count) from (
           select lost_reason_category, count(*) as reason_count
           from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and lost_reason_category is not null
+          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and lost_reason_category is not null and ${businessKpiSqlPredicate}
           group by lost_reason_category
         ) reasons), '{}'::jsonb),
         coalesce((select jsonb_agg(owner_row) from (
           select owner_user_id, count(*) as deals, coalesce(sum(value_cents), 0) as value_cents
           from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid)
+          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and ${businessKpiSqlPredicate}
           group by owner_user_id
         ) owner_row), '[]'::jsonb),
         coalesce((select jsonb_agg(stage_row) from (
           select stage, count(*) as deals, coalesce(sum(value_cents), 0) as value_cents
           from deals
-          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid)
+          where workspace_id = $1::uuid and ($2::uuid is null or project_id = $2::uuid) and ${businessKpiSqlPredicate}
           group by stage
         ) stage_row), '[]'::jsonb),
         jsonb_build_object('source', 'analysis_recommendation_completion'),
@@ -3017,6 +3018,7 @@ async function createPipelineManagementReport(input: { projectId?: string | null
       from deals
       where workspace_id = $1::uuid
         and ($2::uuid is null or project_id = $2::uuid)
+        and ${businessKpiSqlPredicate}
       returning id
     `,
     [input.session.workspaceId, projectId, periodStart, periodEnd, normalizeUuid(input.session.userId)],

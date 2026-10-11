@@ -2,6 +2,21 @@
 -- The public website reaches this data only through the signed ingestion route;
 -- no browser receives CRM credentials or a direct database path.
 
+-- Distinct audit principal for the signed website receiver. The bounded
+-- runtime role still passes all existing tenant, classification and project
+-- access policies; no service or database credential is created here.
+insert into workspace_users (id, workspace_id, name, email, role, product_role, status)
+values (
+  '958e424d-681d-4d96-8e73-5d131678a49e',
+  '8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101',
+  'Studio Website Sales ingestion actor',
+  'studio-website-sales@service.invalid',
+  'agent',
+  'novalure_operator',
+  'active'
+)
+on conflict (id) do nothing;
+
 insert into forms (
   id, workspace_id, project_id, name, slug, status, variant, template,
   crm_target, pipeline_stage, owner_mode, campaign, tags, fields, actions, settings

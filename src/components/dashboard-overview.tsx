@@ -29,6 +29,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 
 const NOW = new Date();
 const COMMISSION_RATE = 0.03;
@@ -519,6 +520,7 @@ export function DashboardOverview({
 
   const filteredLeads = useMemo(
     () => leads.filter((lead) => {
+      if (!isBusinessKpiRecord(lead)) return false;
       const employeeMatch = filters.employeeId === "all" || (filters.employeeId === "mine" ? lead.assignedToUserId === users[0]?.id : lead.assignedToUserId === filters.employeeId);
       return filters.leadTypes.includes(getCrmLeadTypeKey(lead.type) as LeadTypeFilter) && isInPeriod(lead.receivedAt, filters.period) && employeeMatch && (filters.region === "Alle" || lead.region === filters.region) && filters.sources.includes(getCrmSourceKey(lead.source) as (typeof sourceOptions)[number]);
     }),
@@ -527,6 +529,7 @@ export function DashboardOverview({
 
   const filteredDeals = useMemo(
     () => deals.filter((deal) => {
+      if (!isBusinessKpiRecord(deal)) return false;
       const linkedLead = getDealLead(deal, leads);
       return !linkedLead || filteredLeads.some((lead) => lead.id === linkedLead.id || lead.contactId === deal.contactId);
     }),
@@ -535,6 +538,7 @@ export function DashboardOverview({
 
   const forecastLeads = useMemo(
     () => leads.filter((lead) => {
+      if (!isBusinessKpiRecord(lead)) return false;
       const employeeMatch = filters.employeeId === "all" || (filters.employeeId === "mine" ? lead.assignedToUserId === users[0]?.id : lead.assignedToUserId === filters.employeeId);
       return filters.leadTypes.includes(getCrmLeadTypeKey(lead.type) as LeadTypeFilter) && employeeMatch && (filters.region === "Alle" || lead.region === filters.region) && filters.sources.includes(getCrmSourceKey(lead.source) as (typeof sourceOptions)[number]);
     }),
@@ -543,6 +547,7 @@ export function DashboardOverview({
 
   const forecastDeals = useMemo(
     () => deals.filter((deal) => {
+      if (!isBusinessKpiRecord(deal)) return false;
       const linkedLead = getDealLead(deal, leads);
 
       if (linkedLead) {

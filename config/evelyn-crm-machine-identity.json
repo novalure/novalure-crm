@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0.0",
+  "identityId": "EVELYN_CRM_SERVICE_IDENTITY",
+  "consumer": "EVELYN",
+  "role": "Evelyn.Service",
+  "environment": "production",
+  "issuer": "https://oidc.vercel.com/novalure",
+  "audience": "urn:novalure:crm:production",
+  "jwks": "https://oidc.vercel.com/.well-known/jwks",
+  "algorithmAllowlist": ["RS256"],
+  "subject": "owner:novalure:project:evelyn:environment:production",
+  "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+  "resourceAlias": "EVELYN_INTERNAL_CANARY_SYNTHETIC",
+  "capabilities": ["crm.tasks.read", "crm.tasks.write"],
+  "maximumTtlSeconds": 43200,
+  "jtiReplayPolicy": "DENY",
+  "rawTokenStorage": false,
+  "browserCookieFallback": false,
+  "personalLoginRuntimeDependency": false,
+  "personalMfaRuntimeDependency": false
+}

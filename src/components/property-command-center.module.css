@@ -1,0 +1,29 @@
+.workspace {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace :where(button, select, summary, a) {
+  min-height: 44px;
+}
+
+.workspace :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--nl-focus-outline, #1e4fc2);
+  outline-offset: 3px;
+}
+
+.workspace :where(article, fieldset, section, aside, form, details) {
+  min-width: 0;
+}
+
+.uploadControl:focus-within {
+  outline: 3px solid var(--nl-focus-outline, #1e4fc2);
+  outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  .workspace :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible,
+  .uploadControl:focus-within {
+    outline-color: Highlight;
+  }
+}

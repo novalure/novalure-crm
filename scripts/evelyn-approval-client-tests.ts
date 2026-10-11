@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   createEvelynApprovalClient, createEvelynApprovalClientForTests, evelynActionHash,
-  evelynRequestJti, EvelynApprovalError, EVELYN_PREVIEW_URL, EVELYN_PREVIEW_AUDIENCE,
+  evelynOwnerApprovalBindingDigest, evelynRequestJti, EvelynApprovalError, EVELYN_PREVIEW_URL, EVELYN_PREVIEW_AUDIENCE,
   type EvelynApprovalAction, type EvelynCreateApprovalRequest, type EvelynVerifyRequest,
 } from "../src/lib/evelyn-approval-client";
 
@@ -31,7 +31,10 @@ function fixture() {
     actionHash, correlationId: create.correlationId };
   const created = { contractVersion: "create-approval-request-v1", environment: "preview", approvalReference: id(12),
     actionId: action.actionId, actionVersion: 1, actionHash, requiredSteps: 2, status: "PENDING", auditReference: id(14), correlationId: create.correlationId };
-  const valid = { contractVersion: "approval-bridge-v1", environment: "preview", status: "VALID", approvalReference: id(12), correlationId: create.correlationId };
+  const ownerAuthorityBase = { approvalClass: "A3" as const, approverRole: "OWNER" as const, delegated: false as const, ownerBound: true as const,
+    tenantId: action.tenantId, actionId: action.actionId, resourceId: action.resourceId, actionVersion: action.actionVersion, actionHash };
+  const valid = { contractVersion: "approval-bridge-v1", environment: "preview", status: "VALID", approvalReference: id(12), correlationId: create.correlationId,
+    ownerAuthority: { ...ownerAuthorityBase, approvalBindingDigest: evelynOwnerApprovalBindingDigest({ approvalReference: id(12), ...ownerAuthorityBase }) } };
   return { action, create, verify, created, valid };
 }
 function harness(response: unknown = fixture().valid, options: { status?: number; timeoutMs?: number; fetch?: typeof fetch; token?: () => Promise<string> } = {}) {
@@ -72,6 +75,17 @@ test("Evelyn client registers 20,370 EUR as two-step pending with separate reque
     jti: evelynRequestJti(headers.get("x-evelyn-request-nonce")!, input, "create"), skipCache: true }, undefined]);
 });
 
+test("C-03: a standard accepted contract below EUR 5,000 still requires A3", async () => {
+  const f=fixture();
+  f.create.action.amount=100;
+  f.create.action.payload.price.netCents=100;
+  f.create.actionHash=evelynActionHash(f.create.action);
+  f.create.policyEvidence={financialTotalKnown:true,standardContract:true,approvedOffer:true,customerAccepted:true,approvedTemplate:true};
+  f.create.policyReferences.approvedTemplateId=id(15);
+  const response={...f.created,actionHash:f.create.actionHash,requiredSteps:1 as const};
+  assert.equal((await harness(response).client.requestApproval(f.create)).requiredSteps,1);
+});
+
 test("Evelyn Verify sends exactly eight fields and returns only a strictly bound VALID response", async () => {
   const f = fixture(), h = harness(f.valid);
   assert.deepEqual(await h.client.verifyApproval(f.verify), f.valid);
@@ -82,7 +96,7 @@ test("Evelyn Verify sends exactly eight fields and returns only a strictly bound
 
 for (const status of ["INVALID", "PENDING", "EXPIRED", "REJECTED", "VERSION_MISMATCH", "ACTION_MISMATCH", "TENANT_MISMATCH"]) {
   test(`Evelyn fail closed: ${status} never authorizes execution`, async () => {
-    const f = fixture(), h = harness({ ...f.valid, status });
+    const f = fixture(), base = { contractVersion: f.valid.contractVersion, environment: f.valid.environment, approvalReference: f.valid.approvalReference, correlationId: f.valid.correlationId }, h = harness({ ...base, status });
     await assert.rejects(h.client.verifyApproval(f.verify), denied(status));
   });
 }
@@ -128,6 +142,19 @@ test("Evelyn fail closed: response schema and authority bindings cannot be widen
   for (const field of ["actionId", "actionVersion", "actionHash", "correlationId"] as const) {
     await assert.rejects(harness({ ...f.created, [field]: "changed" }).client.requestApproval(f.create), denied("RESPONSE_BINDING_MISMATCH"));
   }
+});
+
+test("Evelyn VALID requires exact Owner A3 authority without transmitting an Owner identity", async () => {
+  const f=fixture();
+  assert.deepEqual(Object.keys(f.valid.ownerAuthority).sort(),["actionHash","actionId","actionVersion","approvalBindingDigest","approvalClass","approverRole","delegated","ownerBound","resourceId","tenantId"].sort());
+  assert.equal(Object.keys(f.valid.ownerAuthority).some(key=>/owner.*id|approver.*id/i.test(key)),false);
+  const missing={contractVersion:f.valid.contractVersion,environment:f.valid.environment,status:f.valid.status,approvalReference:f.valid.approvalReference,correlationId:f.valid.correlationId};
+  await assert.rejects(harness(missing).client.verifyApproval(f.verify),denied("MALFORMED_RESPONSE"));
+  for(const change of [{approvalClass:"A2"},{approverRole:"ADMIN"},{delegated:true},{ownerBound:false}])
+    await assert.rejects(harness({...f.valid,ownerAuthority:{...f.valid.ownerAuthority,...change}}).client.verifyApproval(f.verify),denied("OWNER_A3_ATTESTATION_REQUIRED"));
+  for(const change of [{tenantId:id(50)},{actionId:id(50)},{resourceId:id(50)},{actionVersion:2},{actionHash:"0".repeat(64)},{approvalBindingDigest:"0".repeat(64)}])
+    await assert.rejects(harness({...f.valid,ownerAuthority:{...f.valid.ownerAuthority,...change}}).client.verifyApproval(f.verify),denied("OWNER_A3_ATTESTATION_MISMATCH"));
+  await assert.rejects(harness({...f.valid,ownerAuthority:{...f.valid.ownerAuthority,ownerId:id(50)}}).client.verifyApproval(f.verify),denied("OWNER_A3_ATTESTATION_REQUIRED"));
 });
 
 test("Evelyn fail closed: malformed request and wrong tenant are denied before identity/network calls", async () => {
