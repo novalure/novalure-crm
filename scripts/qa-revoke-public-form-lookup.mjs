@@ -32,7 +32,9 @@ try {
   } else {
     if (!role.rolcanlogin) throw new Error("QA_LOOKUP_REVOKE_ROLE_INVALID");
     await owner.query("alter role novalure_public_form_lookup password null");
-    const verified = (await owner.query("select rolpassword is null as revoked from pg_roles where rolname='novalure_public_form_lookup'")).rows[0];
+    // pg_roles always masks rolpassword, so verify the stored state through
+    // the owner-only catalog without reading or logging the password itself.
+    const verified = (await owner.query("select rolpassword is null as revoked from pg_authid where rolname='novalure_public_form_lookup'")).rows[0];
     if (verified?.revoked !== true) throw new Error("QA_LOOKUP_REVOKE_UNVERIFIED");
     console.log("QA_LOOKUP_REVOKE_PASS");
   }
