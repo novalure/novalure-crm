@@ -6,6 +6,7 @@ import {
   publicWebsiteFormView,
 } from "@/lib/db/form-repositories";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "@/lib/db/client";
+import { publicFormSubmissionScope } from "@/lib/db/public-form-lookup-client";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
   const scope = buildPublicSubmissionScope({
     resourceId: lookup.id,
     resourceType: "form",
-    workspaceId: lookup.workspaceId,
+    workspaceId: lookup.form.workspacePublicKey ?? "",
   });
   let hashes: ReturnType<typeof createPublicSubmissionIdempotencyHashes>;
   let proofValidation: ReturnType<typeof verifyPublicSubmissionProof>;
@@ -161,9 +162,12 @@ export async function POST(request: Request) {
     return unavailableResponse();
   }
 
+  const submissionScope = await publicFormSubmissionScope(lookup.id).catch(() => null);
+  if (!submissionScope) return unavailableResponse();
+
   try {
     const snapshot = await withPublicSubmissionTransaction(
-      { actorId: lookup.publicActorId, workspaceId: lookup.workspaceId },
+      { actorId: submissionScope.actorId, workspaceId: submissionScope.workspaceId },
       async () => {
         const claim = await claimPublicSubmissionIdempotency(hashes);
         if (claim.state === "replay") return claim.response;
@@ -223,7 +227,7 @@ export async function POST(request: Request) {
 
         stripPublicSubmissionControlFields(formData);
         const persistence = await persistWebsiteFormSubmission({
-          actorUserId: lookup.publicActorId,
+          actorUserId: submissionScope.actorId,
           formData,
           formKey: formSlug,
           requestUrl: request.url,

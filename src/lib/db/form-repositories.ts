@@ -1,6 +1,7 @@
 import type { AppSession } from "@/lib/auth/session";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { publicFormLegacyRoutes, publicFormLookup } from "@/lib/db/public-form-lookup-client";
 import { withCrmRead } from "@/lib/crm-command";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
@@ -466,10 +467,7 @@ export async function getPublicWebsiteForm(
          order by f.updated_at desc limit 1`,
         args,
       )
-    : (await queryOne<{ form: PublicFormRow | null }>(
-        `select public.crm_public_form_lookup($1::uuid, $2::text, $3::text) as form`,
-        args,
-      ))?.form ?? null;
+    : await publicFormLookup(formId, route?.workspacePublicKey ?? "", route?.slug ?? "") as PublicFormRow | null;
 
   if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
@@ -479,7 +477,7 @@ export async function getPublicWebsiteForm(
 
   return {
     id: row.id,
-    workspaceId: row.workspaceId,
+    workspaceId: row.workspaceId ?? "",
     workspaceName: row.workspaceName,
     projectId: row.projectId ?? null,
     ownerUserId: row.ownerUserId ?? null,
@@ -487,7 +485,7 @@ export async function getPublicWebsiteForm(
     funnelAudience: row.funnelAudience ?? null,
     form: toWebsiteForm(row),
     publicPath,
-    publicActorId: row.publicActorId,
+    publicActorId: row.publicActorId ?? "",
   };
 }
 
@@ -514,14 +512,7 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
   const slug = slugify(slugValue);
   if (!slug) return { status: "not_found", slug };
 
-  const rows = await queryRows<{
-    form_id: string;
-    slug: string;
-    workspace_public_key: string;
-  }>(
-    `select * from public.crm_public_form_legacy_route($1::text)`,
-    [slug],
-  );
+  const rows = await publicFormLegacyRoutes(slug);
 
   if (!rows.length) return { status: "not_found", slug };
   if (rows.length > 1) return { status: "ambiguous", slug };
@@ -544,6 +535,9 @@ export async function persistWebsiteFormSubmission(input: {
 }): Promise<PersistenceResult & { form?: WebsiteForm; redirectUrl?: string }> {
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
+  }
+  if (!hasBoundTenantTransaction()) {
+    return { persisted: false, reason: "Tenant transaction required" };
   }
 
   const lookup = await getPublicWebsiteFormByKey(input.formKey, {

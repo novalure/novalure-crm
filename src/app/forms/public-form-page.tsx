@@ -76,7 +76,7 @@ export async function renderPublicFormPage({
         scope: buildPublicSubmissionScope({
           resourceId: persisted.id,
           resourceType: "form",
-          workspaceId: persisted.workspaceId,
+          workspaceId: persisted.form.workspacePublicKey ?? "",
         }),
       })
     : undefined;

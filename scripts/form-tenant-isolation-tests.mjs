@@ -73,6 +73,9 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       throw error;
     } finally { adminClient.release(); }
 
+    const lookupPool = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: "postgres", max: 2 });
+    try {
+
     const flags = await db.admin.query(
       `select relname, relrowsecurity, relforcerowsecurity from pg_class
        where oid in ('public.forms'::regclass,'public.form_submissions'::regclass) order by relname`,
@@ -97,14 +100,26 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
         and (acl.grantee=0 or acl.grantee='novalure_app'::regrole)
     `);
     assert.equal(ambient.rows[0].count, 0);
-    const published = await db.pool.query("select crm_public_form_lookup(null,$1,'published') as form", [key]);
+    await assert.rejects(db.pool.query("select crm_public_form_lookup(null,$1,'published') as form", [key]), /permission denied/);
+    const published = await lookupPool.query("select crm_public_form_lookup(null,$1,'published') as form", [key]);
     assert.equal(published.rows[0].form.id, ownForm);
-    assert.equal(published.rows[0].form.publicActorId, ownActor);
-    for (const internal of ["projectId", "ownerUserId", "funnelId", "crmTarget", "pipelineStage", "ownerMode", "campaign", "tags", "visits", "submissions", "conversionRate", "lastSubmission"]) {
+    for (const internal of ["workspaceId", "publicActorId", "projectId", "ownerUserId", "funnelId", "crmTarget", "pipelineStage", "ownerMode", "campaign", "tags", "visits", "submissions", "conversionRate", "lastSubmission"]) {
       assert.equal(Object.hasOwn(published.rows[0].form, internal), false, `${internal} is excluded from public SQL lookup`);
     }
-    assert.equal((await db.pool.query("select crm_public_form_lookup(null,$1,'draft') as form", [key])).rows[0].form, null);
-    assert.equal((await db.pool.query("select * from crm_public_form_legacy_route('draft')")).rowCount, 0);
+    await assert.rejects(db.pool.query("select * from crm_public_form_scope($1)", [ownForm]), /permission denied/);
+    const submissionScope = await lookupPool.query("select * from crm_public_form_scope($1)", [ownForm]);
+    assert.deepEqual(submissionScope.rows, [{ workspace_id: ownWorkspace, actor_id: ownActor }]);
+    assert.equal((await lookupPool.query("select crm_public_form_lookup(null,$1,'draft') as form", [key])).rows[0].form, null);
+    assert.equal((await lookupPool.query("select * from crm_public_form_legacy_route('draft')")).rowCount, 0);
+    await assert.rejects(lookupPool.query("select id from forms"), /permission denied/);
+    await assert.rejects(lookupPool.query("select id from form_submissions"), /permission denied/);
+    const lookupClient = await lookupPool.connect();
+    try {
+      await lookupClient.query("begin");
+      await lookupClient.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, ownActor]);
+      await assert.rejects(lookupClient.query("select id from forms"), /permission denied/);
+      await lookupClient.query("rollback");
+    } finally { lookupClient.release(); }
 
     const client = await db.pool.connect();
     try {
@@ -140,6 +155,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     await nativePgTool("pg_restore", [...connection, "--dbname=" + restoredName, "--exit-on-error", "--single-transaction", archive]);
     const restoredAdmin = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "qa_admin", database: restoredName, max: 2 });
     const restoredRuntime = new pg.Pool({ host: "127.0.0.1", port: db.port, user: db.role, database: restoredName, max: 2 });
+    const restoredLookup = new pg.Pool({ host: "127.0.0.1", port: db.port, user: "novalure_public_form_lookup", database: restoredName, max: 2 });
     try {
       const restoredFlags = await restoredAdmin.query(
         `select relname, relrowsecurity, relforcerowsecurity from pg_class
@@ -149,11 +165,15 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await restoredAdmin.query("select id from forms where id=$1", [ownForm])).rowCount, 1);
       assert.equal((await restoredRuntime.query("select id from forms")).rowCount, 0);
       assert.equal((await restoredRuntime.query("select id from form_submissions")).rowCount, 0);
-      assert.equal((await restoredRuntime.query("select crm_public_form_lookup(null,$1,'published') as form", [key])).rows[0].form.id, ownForm);
+      assert.equal((await restoredLookup.query("select crm_public_form_lookup(null,$1,'published') as form", [key])).rows[0].form.id, ownForm);
+      await assert.rejects(restoredRuntime.query("select crm_public_form_lookup(null,$1,'published') as form", [key]), /permission denied/);
+      await assert.rejects(restoredRuntime.query("select * from crm_public_form_scope($1)", [ownForm]), /permission denied/);
       await assert.rejects(restoredRuntime.query("insert into form_submissions(workspace_id,form_id) values($1,$2)", [ownWorkspace, ownForm]), /row-level security|permission denied/);
     } finally {
       await restoredRuntime.end();
+      await restoredLookup.end();
       await restoredAdmin.end();
     }
+    } finally { await lookupPool.end(); }
   } finally { await db.stop(); }
 });

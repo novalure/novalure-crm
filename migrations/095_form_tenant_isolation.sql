@@ -95,6 +95,26 @@ create policy form_submissions_tenant_insert on public.form_submissions
 grant select, insert, update, delete on public.forms to novalure_tenant_app;
 grant select, insert on public.form_submissions to novalure_tenant_app;
 
+-- The public lookup identity is separate from the tenant runtime. It has no
+-- tenant-role membership or table grants and receives no password in SQL.
+do $lookup_role$
+begin
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'novalure_public_form_lookup') then
+    create role novalure_public_form_lookup login noinherit nosuperuser nocreatedb
+      nocreaterole noreplication nobypassrls password null;
+  end if;
+  if not exists (
+    select 1 from pg_catalog.pg_roles r where r.rolname = 'novalure_public_form_lookup'
+      and r.rolcanlogin and not r.rolsuper and not r.rolbypassrls
+      and not r.rolcreatedb and not r.rolcreaterole and not r.rolreplication
+      and not pg_catalog.pg_has_role(r.oid, 'novalure_tenant_app', 'MEMBER')
+      and not pg_catalog.pg_has_role(r.oid, 'novalure_app', 'MEMBER')
+  ) then
+    raise exception 'Unsafe public form lookup role';
+  end if;
+end;
+$lookup_role$;
+
 -- This function accepts only an exact public identifier and returns one
 -- published form. Its caller receives no base-table or submission privilege.
 create function public.crm_public_form_lookup(
@@ -102,7 +122,7 @@ create function public.crm_public_form_lookup(
 ) returns jsonb
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select jsonb_build_object(
-    'id', f.id, 'workspaceId', f.workspace_id,
+    'id', f.id,
     'name', f.name, 'slug', f.slug, 'status', f.status, 'variant', f.variant,
     'template', f.template, 'fields', f.fields,
     'actions', jsonb_build_object('thankYouMessage', f.actions->>'thankYouMessage'),
@@ -113,8 +133,7 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
       'steps', f.settings->'steps',
       'utmCapture', f.settings->'utmCapture'
     ),
-    'workspaceName', w.name, 'workspacePublicKey', w.public_key,
-    'publicActorId', public_actor.id
+    'workspaceName', w.name, 'workspacePublicKey', w.public_key
   )
   from public.forms f
   join public.workspaces w on w.id = f.workspace_id
@@ -135,6 +154,24 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
   limit 1
 $function$;
 
+-- The server uses this only after validating the public submission proof.
+-- Its result is never serialized into the public form response.
+create function public.crm_public_form_scope(p_form_id uuid)
+returns table(workspace_id uuid, actor_id uuid)
+language sql stable security definer set search_path = pg_catalog, public as $function$
+  select f.workspace_id, u.id
+  from public.forms f
+  join lateral (
+    select actor.id from public.workspace_users actor
+    where actor.workspace_id = f.workspace_id and actor.status = 'active'
+      and actor.role in ('owner', 'admin')
+    order by (actor.id = f.owner_user_id) desc, actor.created_at, actor.id
+    limit 1
+  ) u on true
+  where f.id = p_form_id and f.status in ('aktiv', 'eingebaut')
+    and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
+$function$;
+
 create function public.crm_public_form_legacy_route(p_slug text)
 returns table(form_id uuid, slug text, workspace_public_key text)
 language sql stable security definer set search_path = pg_catalog, public as $function$
@@ -151,6 +188,9 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
 $function$;
 
 revoke all on function public.crm_public_form_lookup(uuid,text,text),
-  public.crm_public_form_legacy_route(text) from public, novalure_app;
+  public.crm_public_form_scope(uuid),
+  public.crm_public_form_legacy_route(text) from public, novalure_app, novalure_tenant_app;
+grant usage on schema public to novalure_public_form_lookup;
 grant execute on function public.crm_public_form_lookup(uuid,text,text),
-  public.crm_public_form_legacy_route(text) to novalure_tenant_app;
+  public.crm_public_form_scope(uuid),
+  public.crm_public_form_legacy_route(text) to novalure_public_form_lookup;

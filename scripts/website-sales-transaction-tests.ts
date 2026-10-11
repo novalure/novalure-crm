@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-transport";
+import { closePublicFormLookupPool } from "../src/lib/db/public-form-lookup-client";
 import type { PoolClient } from "@neondatabase/serverless";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
 import { getPublicWebsiteFormByKey, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
@@ -29,6 +30,7 @@ const genericActorId = "b20270d1-3b4e-4964-8e6b-27413a9b5265";
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>;
 const savedEnv = {
   CRM_LOCAL_TEST_DATABASE: process.env.CRM_LOCAL_TEST_DATABASE,
+  CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL: process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL,
   DATABASE_URL: process.env.DATABASE_URL,
   NOVALURE_ABUSE_SECRET: process.env.NOVALURE_ABUSE_SECRET,
   NOVALURE_STUDIO_INGESTION_SECRET: process.env.NOVALURE_STUDIO_INGESTION_SECRET,
@@ -92,12 +94,14 @@ before(async () => {
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
   process.env.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
+  process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = `postgresql://novalure_public_form_lookup@127.0.0.1:${db.port}/postgres`;
   process.env.NOVALURE_ABUSE_SECRET = "synthetic-website-sales-abuse-secret-for-local-tests";
   process.env.NOVALURE_STUDIO_INGESTION_SECRET = "synthetic-website-sales-signing-secret-for-local-tests";
   process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-test-client-ip";
 });
 
 after(async () => {
+  await closePublicFormLookupPool();
   await closeLocalTestPool();
   if (db) await db.stop();
   for (const [key, value] of Object.entries(savedEnv)) {
@@ -292,7 +296,7 @@ test("dedicated Website Sales form cannot be submitted or exposed through generi
     formKey: websiteSalesFormId,
     requestUrl: "https://crm.example.invalid/forms/embed",
   });
-  assert.deepEqual(directPersistence, { persisted: false, reason: "Form not found" });
+  assert.deepEqual(directPersistence, { persisted: false, reason: "Tenant transaction required" });
 
   const embedResponse = await renderGenericEmbed(new Request(`https://crm.example.invalid/forms/embed?form=${websiteSalesFormId}`));
   const embed = await embedResponse.text();
@@ -322,7 +326,7 @@ test("anonymous public form submits through the server transaction without table
   const publicKey = "synthetic-website-sales/generic-public";
   const lookup = await getPublicWebsiteFormByKey(publicKey);
   assert.equal(lookup?.id, genericFormId);
-  assert.equal(lookup?.publicActorId, genericActorId);
+  assert.equal(lookup?.publicActorId, "");
   const data = new FormData();
   data.set("form_slug", publicKey);
   data.set("name", "SYNTHETIC public contact");
@@ -330,7 +334,7 @@ test("anonymous public form submits through the server transaction without table
   data.set("privacy", "true");
   const proof = createPublicSubmissionProof({
     action: publicSubmissionActions.form,
-    scope: buildPublicSubmissionScope({ resourceId: genericFormId, resourceType: "form", workspaceId: websiteSalesWorkspaceId }),
+    scope: buildPublicSubmissionScope({ resourceId: genericFormId, resourceType: "form", workspaceId: "synthetic-website-sales" }),
   });
   data.set(publicSubmissionControlFields.idempotencyKey, proof.idempotencyKey);
   data.set(publicSubmissionControlFields.issuedAt, String(proof.issuedAt));
@@ -394,5 +398,19 @@ test("a stale owner session cannot save a form after database membership loses w
     assert.deepEqual((await db.admin.query<{ name: string }>("select name from forms where id=$1", [genericFormId])).rows, before.rows);
   } finally {
     await db.admin.query("update workspace_users set role='owner' where id=$1", [genericActorId]);
+  }
+});
+
+test("anonymous lookup fails closed without its separate database identity", async () => {
+  const lookupUrl = process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL;
+  try {
+    await closePublicFormLookupPool();
+    delete process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL;
+    await assert.rejects(getPublicWebsiteFormByKey("synthetic-website-sales/generic-public"), /not configured/);
+    process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = process.env.DATABASE_URL;
+    await assert.rejects(getPublicWebsiteFormByKey("synthetic-website-sales/generic-public"), /target differs/);
+  } finally {
+    await closePublicFormLookupPool();
+    process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = lookupUrl;
   }
 });
