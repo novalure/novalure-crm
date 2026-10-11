@@ -67,7 +67,7 @@
     "test:crm-machine-auth": "node --conditions=react-server --import tsx --test scripts/crm-machine-auth-tests.ts",
     "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
     "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
-    "test:website-sales-ingestion": "node --import tsx --test scripts/website-sales-ingestion-tests.ts",
+    "test:website-sales-ingestion": "node --conditions=react-server --import tsx --test scripts/website-sales-ingestion-tests.ts scripts/website-sales-transaction-tests.ts",
     "test:d11": "node --conditions=react-server --import tsx --test scripts/offer-workflow-tests.ts scripts/approval-reference-tests.ts scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
     "test:d11:migrations": "node --conditions=react-server --import tsx --test scripts/d11-staged-migration-tests.ts",
     "test:build-metadata": "node --conditions=react-server --import tsx --test scripts/build-metadata-tests.ts",

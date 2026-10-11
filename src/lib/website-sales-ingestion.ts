@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 export const websiteSalesContractVersion = "website-sales-lead-v1";
 export const websiteSalesFormId = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
 export const websiteSalesWorkspaceId = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
+export const websiteSalesActorId = "958e424d-681d-4d96-8e73-5d131678a49e";
 
 const acceptedPackages = new Set([
   "STARTER",

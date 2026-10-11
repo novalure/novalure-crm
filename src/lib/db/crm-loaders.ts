@@ -56,6 +56,7 @@ import { CrmCommandError, withCrmRead } from "@/lib/crm-command";
 import { crmTables } from "@/lib/db/schema";
 import { defaultLanguage, getLocale } from "@/lib/i18n";
 import { buildPropertyAssets, type PropertyAssetSummary } from "@/lib/property-department";
+import { businessKpiSqlPredicate } from "@/lib/website-sales-kpi";
 
 type CoreCrmData = {
   brokerMandates: BrokerMandate[];
@@ -160,6 +161,7 @@ type ContactRow = {
 
 type LeadRow = {
   version?: number | string;
+  syntheticTest?: boolean;
   id: string;
   division: Lead["division"];
   workspaceId: string;
@@ -189,6 +191,7 @@ type LeadRow = {
 
 type DealRow = {
   version?: number | string;
+  syntheticTest?: boolean;
   id: string;
   division: Deal["division"];
   workspaceId: string;
@@ -1177,7 +1180,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
         project_id,
         count(*)::int as leads
       from leads
-      where workspace_id = $1
+      where workspace_id = $1 and ${businessKpiSqlPredicate}
       group by workspace_id, project_id
     ) l on l.project_id = p.id and l.workspace_id = p.workspace_id
     left join (
@@ -1187,6 +1190,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
         sum(value_cents)::bigint as revenue_cents
       from deals
       where workspace_id = $1
+        and ${businessKpiSqlPredicate}
         and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
       group by workspace_id, project_id
     ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
@@ -1848,7 +1852,7 @@ async function loadProjectsForPropertyAssets(workspaceId: string, projectIds: st
     left join (
       select workspace_id, project_id, count(*)::int as leads
       from leads
-      where workspace_id = $1::uuid and project_id = any($2::uuid[])
+      where workspace_id = $1::uuid and project_id = any($2::uuid[]) and ${businessKpiSqlPredicate}
       group by workspace_id, project_id
     ) l on l.project_id = p.id and l.workspace_id = p.workspace_id
     left join (
@@ -1856,6 +1860,7 @@ async function loadProjectsForPropertyAssets(workspaceId: string, projectIds: st
       from deals
       where workspace_id = $1::uuid
         and project_id = any($2::uuid[])
+        and ${businessKpiSqlPredicate}
         and stage not in ('Gewonnen', 'Verloren', 'Disqualifiziert')
       group by workspace_id, project_id
     ) d on d.project_id = p.id and d.workspace_id = p.workspace_id
@@ -2961,7 +2966,8 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
       hot_status as "hotStatus",
       buyer_profile as "buyerProfile",
       seller_profile as "sellerProfile",
-      investor_profile as "investorProfile"
+      investor_profile as "investorProfile",
+      (metadata #>> '{websiteSales,syntheticTest}') = 'true' as "syntheticTest"
     from leads
     where workspace_id = $1
     order by received_at desc
@@ -2972,6 +2978,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
 
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
+    syntheticTest: row.syntheticTest === true,
     id: row.id,
     division: row.division,
     workspaceId: row.workspaceId,
@@ -3025,7 +3032,8 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
       closed_at as "closedAt",
       risk_level as "riskLevel",
       source,
-      next_action as "nextAction"
+      next_action as "nextAction",
+      (metadata #>> '{websiteSales,syntheticTest}') = 'true' as "syntheticTest"
     from deals
     where workspace_id = $1
     order by updated_at desc
@@ -3036,6 +3044,7 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
 
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
+    syntheticTest: row.syntheticTest === true,
     id: row.id,
     division: row.division,
     workspaceId: row.workspaceId,
@@ -3088,6 +3097,7 @@ export async function loadTasks(workspaceId: string): Promise<Task[]> {
 
   return rows.map((row) => ({
     version: Number(row.version),
+    syntheticTest: (row.metadata?.websiteSales as { syntheticTest?: unknown } | undefined)?.syntheticTest === true,
     description: typeof row.metadata?.description === "string" ? row.metadata.description : undefined,
     id: row.id,
     workspaceId: row.workspaceId,

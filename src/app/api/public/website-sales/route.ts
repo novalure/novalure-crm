@@ -13,11 +13,13 @@ import {
   consumePublicSubmissionRateLimits,
 } from "@/lib/db/public-submission-abuse-repository";
 import { persistWebsiteFormSubmission } from "@/lib/db/form-repositories";
+import { PublicSubmissionTransactionError, queryOne, withPublicSubmissionTransaction } from "@/lib/db/client";
 import {
   createWebsiteSalesReference,
   parseWebsiteSalesLeadPayload,
   resolveWebsiteSalesClientIp,
   verifyWebsiteSalesSignature,
+  websiteSalesActorId,
   websiteSalesFormId,
   websiteSalesWorkspaceId,
 } from "@/lib/website-sales-ingestion";
@@ -76,44 +78,6 @@ export async function POST(request: Request) {
     scope,
   });
 
-  let claim;
-  try {
-    claim = await claimPublicSubmissionIdempotency(hashes);
-  } catch {
-    return failure(503, "temporarily_unavailable");
-  }
-  if (claim.state === "replay") return responseFromSnapshot(claim.response);
-  if (claim.state === "processing" || claim.state === "conflict") {
-    return failure(409, claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict");
-  }
-
-  const complete = async (snapshot: PublicSubmissionResponseSnapshot) => {
-    try {
-      await completePublicSubmissionIdempotency({
-        idempotencyHash: hashes.idempotencyHash,
-        requestHash: hashes.requestHash,
-        response: snapshot,
-      });
-      return responseFromSnapshot(snapshot);
-    } catch {
-      return failure(503, "temporarily_unavailable");
-    }
-  };
-
-  try {
-    const rateLimit = await consumePublicSubmissionRateLimits({
-      policies: createPublicSubmissionRateLimitPolicies({
-        action: "website_form",
-        clientIp,
-        identifier: normalizePublicSubmissionIdentifier(payload.email, "email"),
-        scope,
-      }),
-    });
-    if (!rateLimit.allowed) return complete({ body: { error: "rate_limited" }, kind: "json", status: 429 });
-  } catch {
-    return complete({ body: { error: "temporarily_unavailable" }, kind: "json", status: 503 });
-  }
-
   const formData = new FormData();
   const fields: Record<string, string> = {
     company: payload.company ?? "",
@@ -142,16 +106,74 @@ export async function POST(request: Request) {
   }
   for (const [key, value] of Object.entries(fields)) formData.set(key, value);
 
+  let actor: { id: string } | null;
   try {
-    const persistence = await persistWebsiteFormSubmission({
-      formData,
-      formKey: websiteSalesFormId,
-      requestUrl: String((payload.attribution ?? {}).pageUrl || "https://novalurestudio.ie/"),
-    });
-    if (!persistence.persisted) return complete({ body: { error: "temporarily_unavailable" }, kind: "json", status: 503 });
-    return complete({ body: { accepted: true, reference: createWebsiteSalesReference() }, kind: "json", status: 202 });
+    actor = await queryOne<{ id: string }>(
+      `select id from workspace_users
+       where id = $1::uuid and workspace_id = $2::uuid
+         and status = 'active' and role = 'agent' and product_role = 'novalure_operator'`,
+      [websiteSalesActorId, websiteSalesWorkspaceId],
+    );
+  } catch {
+    return failure(503, "temporarily_unavailable");
+  }
+  if (!actor) {
+    return failure(503, "temporarily_unavailable");
+  }
+  try {
+    const snapshot = await withPublicSubmissionTransaction(
+      { actorId: actor.id, workspaceId: websiteSalesWorkspaceId },
+      async () => {
+        const claim = await claimPublicSubmissionIdempotency(hashes);
+        if (claim.state === "replay") return claim.response;
+        if (claim.state === "processing" || claim.state === "conflict") {
+          return { body: { error: claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict" }, kind: "json", status: 409 } satisfies PublicSubmissionResponseSnapshot;
+        }
+        const rateLimit = await consumePublicSubmissionRateLimits({
+          policies: createPublicSubmissionRateLimitPolicies({
+            action: "website_form",
+            clientIp,
+            identifier: normalizePublicSubmissionIdentifier(payload.email, "email"),
+            scope,
+          }),
+        });
+        if (!rateLimit.allowed) {
+          const rejected: PublicSubmissionResponseSnapshot = { body: { error: "rate_limited" }, kind: "json", status: 429 };
+          await completePublicSubmissionIdempotency({
+            idempotencyHash: hashes.idempotencyHash,
+            requestHash: hashes.requestHash,
+            response: rejected,
+          });
+          return rejected;
+        }
+        const persistence = await persistWebsiteFormSubmission({
+          actorUserId: actor.id,
+          formData,
+          formKey: websiteSalesFormId,
+          requestUrl: String((payload.attribution ?? {}).pageUrl || "https://novalurestudio.ie/"),
+        });
+        if (!persistence.persisted) throw new Error("Website Sales form was not persisted");
+        const accepted: PublicSubmissionResponseSnapshot = {
+          body: { accepted: true, reference: createWebsiteSalesReference() }, kind: "json", status: 202,
+        };
+        await completePublicSubmissionIdempotency({
+          idempotencyHash: hashes.idempotencyHash,
+          requestHash: hashes.requestHash,
+          response: accepted,
+        });
+        return accepted;
+      },
+    );
+    return responseFromSnapshot(snapshot);
   } catch (error) {
-    console.error("website_sales_ingestion_failed", { reason: error instanceof Error ? error.message : "unknown" });
-    return complete({ body: { error: "temporarily_unavailable" }, kind: "json", status: 503 });
+    if (!(error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed)) {
+      // An uncertain COMMIT may have succeeded. Recheck the durable receipt before replying.
+      try {
+        const result = await claimPublicSubmissionIdempotency(hashes);
+        if (result.state === "replay") return responseFromSnapshot(result.response);
+      } catch { /* A retry with the same key will read the eventual committed receipt. */ }
+    }
+    console.error("website_sales_ingestion_failed", { rollbackConfirmed: error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed });
+    return failure(503, "temporarily_unavailable");
   }
 }

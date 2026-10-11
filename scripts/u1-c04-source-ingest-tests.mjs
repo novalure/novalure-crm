@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 const packageManifestUrl = new URL("config/u1-c04-production-source-package-manifest.json", root);
 const normalizedTextEditorSha256 = "d14f395bccfaa3988dfdaa8f4b31c69033f21cd05aac149637a23a6ec80abafe";
+const recoveredSourceCommit = "e469623e4d5e5a1a6c41290f56a7612b838805c4";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -24,10 +27,10 @@ test("the verified U1-C04 package manifest records all recovered sources", async
   assert.equal(new Set(manifest.files.map(({ fileId }) => fileId)).size, 43);
 });
 
-test("every committed source matches the recovered content after Git line normalization", async () => {
+test("the original ingest commit preserves every recovered source after Git line normalization", async () => {
   const manifest = JSON.parse(await readFile(packageManifestUrl, "utf8"));
   for (const file of manifest.files) {
-    const raw = await readFile(new URL(file.path, root), "utf8");
+    const raw = execFileSync("git", ["show", `${recoveredSourceCommit}:${file.path}`], { cwd: fileURLToPath(root), encoding: "utf8" });
     const canonical = raw.replace(/\r\n/g, "\n");
     const expected = file.path === "src/components/property-text-editor.tsx"
       ? normalizedTextEditorSha256

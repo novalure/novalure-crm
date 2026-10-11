@@ -294,6 +294,7 @@ export type ContactTimelineItem = {
 export type Lead = {
   division?: CrmDivision;
   version?: number;
+  syntheticTest?: boolean;
   id: ID;
   workspaceId: ID;
   projectId: ID;
@@ -730,6 +731,7 @@ export type CustomerWorkspaceAccess = {
 
 export type Deal = {
   version?: number;
+  syntheticTest?: boolean;
   closedAt?: string;
   id: ID;
   division?: CrmDivision;
@@ -782,6 +784,7 @@ export type PipelineStage = {
 
 export type Task = {
   version?: number;
+  syntheticTest?: boolean;
   id: ID;
   workspaceId: ID;
   projectId: ID;

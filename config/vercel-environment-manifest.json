@@ -8,6 +8,7 @@
     { "name": "NOVALURE_AUTH_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth secret encryption; minimum length enforced by the app." },
     { "name": "NOVALURE_AUTH_RATE_LIMIT_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth rate-limit key material." },
     { "name": "NOVALURE_SESSION_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Session and CSRF signing secret." },
+    { "name": "NOVALURE_STUDIO_INGESTION_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Signs Website Sales submissions from the Studio backend; minimum length is enforced by the route." },
     { "name": "OAUTH_STATE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth state signing secret." },
     { "name": "OAUTH_TOKEN_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth token encryption key." }
   ],

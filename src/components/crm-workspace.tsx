@@ -56,6 +56,7 @@ import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
+import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 import {
   createDefaultCrmScope,
   createSelectedCrmScope,
@@ -1537,9 +1538,9 @@ function ProjectsCommandCenter({
       </article>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {projects.map((project) => {
-          const projectDeals = deals.filter((deal) => deal.projectId === project.id);
-          const projectTasks = tasks.filter((task) => task.projectId === project.id && task.status === "open");
-          const projectLeads = leads.filter((lead) => lead.projectId === project.id);
+          const projectDeals = deals.filter((deal) => deal.projectId === project.id && isBusinessKpiRecord(deal));
+          const projectTasks = tasks.filter((task) => task.projectId === project.id && task.status === "open" && isBusinessKpiRecord(task));
+          const projectLeads = leads.filter((lead) => lead.projectId === project.id && isBusinessKpiRecord(lead));
 
           return (
             <article className="rounded-lg border border-stone-200 bg-white p-4" key={project.id}>
@@ -1668,15 +1669,18 @@ function AnalyticsCommandCenter({
   tasks: Task[];
 }) {
   const panelCopy = getCommandCentersCopy(copy).analytics;
-  const openDeals = deals.filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren"].includes(deal.stage));
-  const wonDeals = deals.filter((deal) => deal.stage === "Gewonnen" || deal.stage === "Aktiv");
+  const businessLeads = leads.filter(isBusinessKpiRecord);
+  const businessDeals = deals.filter(isBusinessKpiRecord);
+  const businessTasks = tasks.filter(isBusinessKpiRecord);
+  const openDeals = businessDeals.filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert", "Pausiert / Verloren"].includes(deal.stage));
+  const wonDeals = businessDeals.filter((deal) => deal.stage === "Gewonnen" || deal.stage === "Aktiv");
   const pipelineValue = openDeals.reduce((sum, deal) => sum + parseCrmMoney(deal.value), 0);
   const weightedValue = openDeals.reduce((sum, deal) => sum + parseCrmMoney(deal.value) * (deal.probability / 100), 0);
-  const conversion = leads.length ? Math.round((wonDeals.length / leads.length) * 100) : 0;
+  const conversion = businessLeads.length ? Math.round((wonDeals.length / businessLeads.length) * 100) : 0;
   const today = new Date().toISOString().slice(0, 10);
-  const overdueTasks = tasks.filter((task) => task.status === "open" && task.due && task.due < today).length;
+  const overdueTasks = businessTasks.filter((task) => task.status === "open" && task.due && task.due < today).length;
   const bySource = Array.from(
-    leads.reduce<Map<string, number>>((summary, lead) => {
+    businessLeads.reduce<Map<string, number>>((summary, lead) => {
       const sourceKey = getCrmSourceKey(lead.source);
       summary.set(sourceKey, (summary.get(sourceKey) ?? 0) + 1);
       return summary;
@@ -1692,14 +1696,14 @@ function AnalyticsCommandCenter({
       </article>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
-          [panelCopy.leads, leads.length],
+          [panelCopy.leads, businessLeads.length],
           [panelCopy.conversion, `${conversion}%`],
           [panelCopy.pipelineValue, formatCompactEuro(pipelineValue, language)],
           [panelCopy.weightedValue, formatCompactEuro(weightedValue, language)],
           [panelCopy.meetings, calendarEvents.length],
-          [panelCopy.tasks, tasks.length],
+          [panelCopy.tasks, businessTasks.length],
           [panelCopy.overdueTasks, overdueTasks],
-          [panelCopy.speedToLead, leads.filter((lead) => lead.slaDueAt && lead.slaDueAt >= today).length],
+          [panelCopy.speedToLead, businessLeads.filter((lead) => lead.slaDueAt && lead.slaDueAt >= today).length],
         ].map(([label, value]) => (
           <div className="rounded-lg border border-stone-200 bg-white p-4" key={label}>
             <p className="crm-kpi-label text-xs font-semibold uppercase leading-4 text-stone-500">{label}</p>
@@ -2201,19 +2205,21 @@ function RolePriorityPanel({
     nextSteps: [],
     title: roleCopy.title,
   };
-  const openTasks = tasks.filter((task) => task.status === "open");
+  const businessLeads = leads.filter(isBusinessKpiRecord);
+  const businessDeals = deals.filter(isBusinessKpiRecord);
+  const openTasks = tasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task));
   const now = new Date();
-  const pipelineValue = deals
+  const pipelineValue = businessDeals
     .filter((deal) => !["Gewonnen", "Verloren", "Disqualifiziert"].includes(deal.stage))
     .reduce((sum, deal) => sum + parseRolePanelDealValue(deal.value) * (deal.probability / 100), 0);
   const locale = getLocale(language);
   const metricValues = {
     appointments: events.filter((event) => new Date(event.startsAt).getTime() >= now.getTime()).length,
-    hotLeads: leads.filter((lead) => lead.score >= 80 || lead.hotStatus).length,
-    noOwner: leads.filter((lead) => !lead.assignedToUserId).length,
+    hotLeads: businessLeads.filter((lead) => lead.score >= 80 || lead.hotStatus).length,
+    noOwner: businessLeads.filter((lead) => !lead.assignedToUserId).length,
     openTasks: openTasks.length,
     pipeline: new Intl.NumberFormat(locale, { currency: "EUR", maximumFractionDigits: 0, notation: "compact", style: "currency" }).format(pipelineValue),
-    riskDeals: deals.filter((deal) => deal.riskLevel === "hoch" || deal.probability < 45).length,
+    riskDeals: businessDeals.filter((deal) => deal.riskLevel === "hoch" || deal.probability < 45).length,
     unlinkedTasks: openTasks.filter((task) => !task.contactId || !task.projectId).length,
   };
   const prioritizedMetricKeys: Array<keyof typeof metricValues> =
@@ -2625,14 +2631,16 @@ function WorkspaceModeKpis({
 }: {
   context: WorkspaceProductContext;
   copy: ReturnType<typeof getDashboardCopy>;
-  leads: { status: string; type: string }[];
-  tasks: { status: string }[];
+  leads: { status: string; syntheticTest?: boolean; type: string }[];
+  tasks: { status: string; syntheticTest?: boolean }[];
   units: { status: string }[];
 }) {
   const kpiCopy = copy.workspaceMode.kpis;
-  const sellerLeads = leads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Verkäufer").length;
-  const buyerLeads = leads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Käufer").length;
-  const openTasks = tasks.filter((task) => task.status === "open").length;
+  const businessLeads = leads.filter(isBusinessKpiRecord);
+  const businessTasks = tasks.filter(isBusinessKpiRecord);
+  const sellerLeads = businessLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Verkäufer").length;
+  const buyerLeads = businessLeads.filter((lead) => getCrmLeadTypeKey(lead.type) === "Käufer").length;
+  const openTasks = businessTasks.filter((task) => task.status === "open").length;
   const availableUnits = units.filter((unit) => unit.status === "available").length;
   const reservedUnits = units.filter((unit) => unit.status === "reserved").length;
   const soldUnits = units.filter((unit) => unit.status === "sold").length;
@@ -2640,26 +2648,26 @@ function WorkspaceModeKpis({
   const values =
     context.customerType === "property_developer"
       ? [
-          [kpiCopy.projectLeads, leads.length],
+          [kpiCopy.projectLeads, businessLeads.length],
           [kpiCopy.freeUnits, availableUnits],
           [kpiCopy.reservedUnits, reservedUnits],
           [kpiCopy.soldUnits, soldUnits],
         ]
       : context.operatingModel === "novalure_internal"
         ? [
-            [kpiCopy.crmCustomerLeads, leads.length],
-            [kpiCopy.demosTrials, leads.filter((lead) => {
+            [kpiCopy.crmCustomerLeads, businessLeads.length],
+            [kpiCopy.demosTrials, businessLeads.filter((lead) => {
               const leadType = getCrmLeadTypeKey(lead.type);
               return leadType === "Makler" || leadType === "Bauträger";
             }).length],
             [kpiCopy.openApprovals, openTasks],
-            [kpiCopy.managedSla, tasks.length],
+            [kpiCopy.managedSla, businessTasks.length],
           ]
         : [
             [kpiCopy.sellerLeads, sellerLeads],
             [kpiCopy.buyerLeads, buyerLeads],
             [kpiCopy.openTasks, openTasks],
-            [kpiCopy.pipelineLeads, leads.length],
+            [kpiCopy.pipelineLeads, businessLeads.length],
           ];
 
   return (
@@ -2788,6 +2796,8 @@ function InternalWorkspaceView({
   const scopedEventsForView = kind === "managedService" && selectedManagedProjectId !== "all"
     ? sourceCalendarEvents.filter((event) => event.projectId === selectedManagedProjectId)
     : sourceCalendarEvents;
+  const metricLeads = scopedLeads.filter(isBusinessKpiRecord);
+  const metricTasks = scopedTasksForView.filter(isBusinessKpiRecord);
   const selectedManagedWorkspace = managedWorkspaces.find((item) => item.id === selectedManagedWorkspaceId);
   const today = new Date().toISOString().slice(0, 10);
   const scopedCustomers =
@@ -2796,8 +2806,8 @@ function InternalWorkspaceView({
       : kind === "customerSuccess"
         ? customerAccess.filter((item) => item.status === "active" || item.status === "risk" || item.health !== "healthy")
         : customerAccess;
-  const newLeads = scopedLeads.filter((lead) => lead.status === "Neu");
-  const overdueTasks = scopedTasksForView.filter((task) => task.status === "open" && task.due && task.due < today);
+  const newLeads = metricLeads.filter((lead) => lead.status === "Neu");
+  const overdueTasks = metricTasks.filter((task) => task.status === "open" && task.due && task.due < today);
   const meetingsToday = scopedEventsForView.filter((event) => event.startsAt.slice(0, 10) === today);
   const openApprovals = scopedCustomers.filter((item) => item.health === "risk" || item.status === "onboarding");
   const selectedCustomerName = selectedManagedWorkspace?.name ?? scopedCustomers[0]?.customerName ?? context.workspaceName;
@@ -2813,15 +2823,15 @@ function InternalWorkspaceView({
       ? [
             [labels.customers, scopedCustomers.length],
             [labels.blockedSetups, scopedCustomers.filter((item) => item.health === "risk").length],
-            [labels.tasks, sourceTasks.filter((task) => task.status === "open").length],
+            [labels.tasks, sourceTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
             [labels.project, sourceProjects.length],
           ]
       : kind === "customerSuccess"
         ? [
             [labels.activeCustomers, scopedCustomers.filter((item) => item.status === "active").length],
             [labels.riskCustomers, scopedCustomers.filter((item) => item.health === "risk" || item.status === "risk").length],
-            [labels.tasks, sourceTasks.filter((task) => task.status === "open").length],
-            [labels.pipeline, sourceDeals.length],
+            [labels.tasks, sourceTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
+            [labels.pipeline, sourceDeals.filter(isBusinessKpiRecord).length],
           ]
         : [
             [labels.newLeads, newLeads.length],

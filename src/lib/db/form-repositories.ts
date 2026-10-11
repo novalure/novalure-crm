@@ -522,6 +522,7 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
 }
 
 export async function persistWebsiteFormSubmission(input: {
+  actorUserId?: string;
   formData: FormDataLike;
   formKey: string;
   requestUrl: string;
@@ -744,7 +745,7 @@ export async function persistWebsiteFormSubmission(input: {
         tracking,
         raw_payload
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, 'live', 'processed', $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, case when $14::boolean then 'test' else 'live' end, 'processed', $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb)
       returning id
     `,
     [
@@ -761,6 +762,7 @@ export async function persistWebsiteFormSubmission(input: {
       JSON.stringify(consent),
       JSON.stringify(tracking),
       JSON.stringify(Object.fromEntries(input.formData.entries())),
+      websiteSalesMetadata?.syntheticTest === true,
     ],
   );
 
@@ -789,17 +791,17 @@ export async function persistWebsiteFormSubmission(input: {
   await queryOne(
     `
       update forms
-      set submissions_count = submissions_count + 1,
+      set submissions_count = submissions_count + $2::integer,
           last_submission_at = now(),
           conversion_rate = case
-            when visits_count > 0 then round(((submissions_count + 1)::numeric / visits_count::numeric) * 100, 2)
+            when visits_count > 0 then round(((submissions_count + $2::integer)::numeric / visits_count::numeric) * 100, 2)
             else conversion_rate
           end,
           updated_at = now()
       where id = $1
       returning id
     `,
-    [lookup.id],
+    [lookup.id, websiteSalesMetadata?.syntheticTest === true ? 0 : 1],
   );
 
   const formSession: AppSession = {
@@ -811,7 +813,7 @@ export async function persistWebsiteFormSubmission(input: {
     productRole: "assistant_backoffice",
     role: "owner",
     source: "database",
-    userId: lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
+    userId: input.actorUserId ?? lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
     workspaceId: lookup.workspaceId,
     workspaceName: lookup.workspaceName ?? "Novalure",
   };
