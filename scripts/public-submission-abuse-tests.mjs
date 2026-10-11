@@ -241,9 +241,11 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
       bookingRoute.indexOf("await createMeetingBookingWithNotifications"),
   );
   assert.ok(
-    formRoute.indexOf("await claimPublicSubmissionIdempotency") <
-      formRoute.indexOf("await withPublicSubmissionTransaction"),
+    formRoute.indexOf("await withPublicSubmissionTransaction") <
+      formRoute.indexOf("await claimPublicSubmissionIdempotency"),
   );
+  assert.ok(formRoute.indexOf("await claimPublicSubmissionIdempotency") < formRoute.indexOf("await persistWebsiteFormSubmission"));
+  assert.ok(formRoute.indexOf("await persistWebsiteFormSubmission") < formRoute.indexOf("return complete(createPublicFormPersistenceSnapshot"));
   assert.match(repository, /on conflict \(idempotency_hash\) do nothing/);
   assert.match(repository, /existing\.request_hash <> \$4/);
   assert.match(repository, /on conflict \(key_hash, bucket_started_at\) do update/);

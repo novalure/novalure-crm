@@ -2,7 +2,7 @@
 
 ## Scope
 
-Migration `095_form_tenant_isolation` closes the forced RLS omission for `forms` and `form_submissions`. It runs only after `094_website_sales_ingestion`; migration 094 and its checksum are unchanged. The migration removes ambient application and `PUBLIC` table grants, grants only the tenant runtime role, and adds tenant policies with actor and project checks. Published anonymous form lookup uses narrow server-side functions. The application establishes a transaction-local tenant and actor before persisting an anonymous submission. Public HTML and JSON receive a view without CRM routing, ownership, and performance fields.
+Migration `095_form_tenant_isolation` closes the forced RLS omission for `forms` and `form_submissions`. It runs only after `094_website_sales_ingestion`; migration 094 and its checksum are unchanged. The migration removes ambient application and `PUBLIC` table grants, grants only the tenant runtime role, and adds tenant policies with actor and project checks. Published anonymous form lookup uses a narrow SQL projection; internal routing fields are fetched only inside the bound submission transaction. The application commits the idempotency receipt and business writes in that same transaction. Public HTML and JSON receive a view without CRM routing, ownership, campaign, funnel, or performance fields.
 
 Migration 095 is a manual cutover. The migrator requires an explicit `--only=095_form_tenant_isolation --allow-manual-cutover` after the deployment and database preconditions are checked. It must not be applied to Production from this local evidence alone.
 

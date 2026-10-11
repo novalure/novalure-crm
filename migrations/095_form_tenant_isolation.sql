@@ -98,27 +98,26 @@ grant select, insert on public.form_submissions to novalure_tenant_app;
 -- This function accepts only an exact public identifier and returns one
 -- published form. Its caller receives no base-table or submission privilege.
 create function public.crm_public_form_lookup(
-  p_form_id uuid, p_workspace_public_key text, p_slug text, p_allow_signed boolean default false
+  p_form_id uuid, p_workspace_public_key text, p_slug text
 ) returns jsonb
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select jsonb_build_object(
-    'id', f.id, 'workspaceId', f.workspace_id, 'projectId', f.project_id,
-    'ownerUserId', f.owner_user_id, 'funnelId', f.funnel_id,
+    'id', f.id, 'workspaceId', f.workspace_id,
     'name', f.name, 'slug', f.slug, 'status', f.status, 'variant', f.variant,
-    'template', f.template, 'crmTarget', f.crm_target,
-    'pipelineStage', f.pipeline_stage, 'ownerMode', f.owner_mode,
-    'campaign', f.campaign, 'tags', f.tags, 'fields', f.fields,
-    'actions', f.actions, 'settings', f.settings, 'visits', f.visits_count,
-    'submissions', f.submissions_count, 'conversionRate', f.conversion_rate,
-    'lastSubmission', f.last_submission_at, 'workspaceName', w.name,
-    'workspacePublicKey', w.public_key, 'funnelAudience', fn.audience,
-    'publicActorId', case when p_allow_signed and f.id =
-      '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
-      then nullif(current_setting('app.actor_id', true), '')::uuid else public_actor.id end
+    'template', f.template, 'fields', f.fields,
+    'actions', jsonb_build_object('thankYouMessage', f.actions->>'thankYouMessage'),
+    'settings', jsonb_build_object(
+      'doubleOptIn', f.settings->'doubleOptIn',
+      'progressMode', f.settings->'progressMode',
+      'spamProtection', f.settings->'spamProtection',
+      'steps', f.settings->'steps',
+      'utmCapture', f.settings->'utmCapture'
+    ),
+    'workspaceName', w.name, 'workspacePublicKey', w.public_key,
+    'publicActorId', public_actor.id
   )
   from public.forms f
   join public.workspaces w on w.id = f.workspace_id
-  left join public.funnels fn on fn.id = f.funnel_id
   left join lateral (
     select u.id from public.workspace_users u
     where u.workspace_id = f.workspace_id and u.status = 'active'
@@ -127,16 +126,11 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
     limit 1
   ) public_actor on true
   where f.status in ('aktiv', 'eingebaut')
-    and (public_actor.id is not null or (p_allow_signed and f.id =
-      '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid))
+    and public_actor.id is not null
     and ((p_form_id is not null and f.id = p_form_id)
       or (p_form_id is null and p_workspace_public_key <> ''
         and w.public_key = p_workspace_public_key and f.slug = p_slug))
-    and (f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
-      or (p_allow_signed
-        and f.workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
-        and nullif(current_setting('app.actor_id', true), '')::uuid =
-          '6122a6da-e7f4-47fa-bc55-e296bb01af62'::uuid))
+    and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
   order by f.updated_at desc
   limit 1
 $function$;
@@ -156,7 +150,7 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
   limit 2
 $function$;
 
-revoke all on function public.crm_public_form_lookup(uuid,text,text,boolean),
+revoke all on function public.crm_public_form_lookup(uuid,text,text),
   public.crm_public_form_legacy_route(text) from public, novalure_app;
-grant execute on function public.crm_public_form_lookup(uuid,text,text,boolean),
+grant execute on function public.crm_public_form_lookup(uuid,text,text),
   public.crm_public_form_legacy_route(text) to novalure_tenant_app;

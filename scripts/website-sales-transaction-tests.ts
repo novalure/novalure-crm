@@ -334,15 +334,18 @@ test("anonymous public form submits through the server transaction without table
   data.set(publicSubmissionControlFields.expiresAt, String(proof.expiresAt));
   data.set(publicSubmissionControlFields.proof, proof.signature);
   data.set(publicSubmissionControlFields.honeypot, "");
-  const response = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+  const originalRequest = new Request("https://crm.example.invalid/api/forms/submissions", {
     body: data,
     headers: { accept: "application/json", "x-test-client-ip": "192.0.2.10" },
     method: "POST",
-  }));
+  });
+  const response = await submitGenericForm(originalRequest.clone());
   if (response.status !== 200) assert.fail(await response.text());
-  const body = await response.json() as { form: { ownerUserId: string; pipelineStage: string; actions: { createTask: boolean } } };
+  const body = await response.json() as { form: { ownerUserId: string; pipelineStage: string; campaign: string; funnelId: string; actions: { createTask: boolean } } };
   assert.equal(body.form.ownerUserId, "");
   assert.equal(body.form.pipelineStage, "");
+  assert.equal(body.form.campaign, "");
+  assert.equal(body.form.funnelId, "");
   assert.equal(body.form.actions.createTask, false);
   const row = await db.admin.query<{ workspace_id: string; mode: string }>(
     "select workspace_id,mode from form_submissions where form_id=$1",
@@ -350,6 +353,10 @@ test("anonymous public form submits through the server transaction without table
   );
   assert.equal(row.rowCount, 1);
   assert.equal(row.rows[0].workspace_id, websiteSalesWorkspaceId);
+  const replay = await submitGenericForm(originalRequest.clone());
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await replay.json(), body);
+  assert.equal((await db.admin.query("select id from form_submissions where form_id=$1", [genericFormId])).rowCount, 1);
   data.set("workspaceId", "00000000-0000-4000-8000-000000000001");
   const forged = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
     body: data,

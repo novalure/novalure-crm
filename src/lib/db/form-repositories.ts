@@ -1,6 +1,6 @@
 import type { AppSession } from "@/lib/auth/session";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
-import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { withCrmRead } from "@/lib/crm-command";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
@@ -131,6 +131,8 @@ export function publicWebsiteFormView(form: WebsiteForm): WebsiteForm {
     },
     conversionRate: 0,
     crmTarget: "lead",
+    campaign: "",
+    funnelId: "",
     lastSubmission: "",
     ownerMode: "roundRobin",
     ownerUserId: "",
@@ -236,7 +238,12 @@ export async function upsertWebsiteForm(input: {
     return { form: null, persisted: false, reason: "Workspace is not a database UUID" };
   }
 
-  return withCrmRead(input.session, () => upsertWebsiteFormInTenant(input));
+  return withCrmRead(input.session, (_tx, freshSession) => {
+    if (!freshSession.permissions.includes("crm:write")) {
+      return Promise.resolve({ form: null, persisted: false, reason: "CRM write permission is required" });
+    }
+    return upsertWebsiteFormInTenant({ ...input, session: freshSession });
+  });
 }
 
 async function upsertWebsiteFormInTenant(input: { session: AppSession; form: WebsiteForm }) {
@@ -438,11 +445,31 @@ export async function getPublicWebsiteForm(
 
   if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
-  const result = await queryOne<{ form: PublicFormRow | null }>(
-    `select public.crm_public_form_lookup($1::uuid, $2::text, $3::text, $4::boolean) as form`,
-    [formId, route?.workspacePublicKey ?? "", route?.slug ?? "", options.includeSignedWebsiteSales === true],
-  );
-  const row = result?.form ?? null;
+  const args = [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""];
+  const row = hasBoundTenantTransaction()
+    ? await queryOne<PublicFormRow>(
+        `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
+           f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
+           f.status, f.variant, f.template, f.crm_target as "crmTarget",
+           f.pipeline_stage as "pipelineStage", f.owner_mode as "ownerMode",
+           f.campaign, f.tags, f.fields, f.actions, f.settings,
+           f.visits_count as visits, f.submissions_count as submissions,
+           f.conversion_rate as "conversionRate", f.last_submission_at as "lastSubmission",
+           w.name as "workspaceName", w.public_key as "workspacePublicKey",
+           fn.audience as "funnelAudience",
+           nullif(current_setting('app.actor_id', true), '')::uuid as "publicActorId"
+         from forms f join workspaces w on w.id=f.workspace_id
+         left join funnels fn on fn.id=f.funnel_id
+         where f.status in ('aktiv','eingebaut')
+           and (($1::uuid is not null and f.id=$1::uuid)
+             or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
+         order by f.updated_at desc limit 1`,
+        args,
+      )
+    : (await queryOne<{ form: PublicFormRow | null }>(
+        `select public.crm_public_form_lookup($1::uuid, $2::text, $3::text) as form`,
+        args,
+      ))?.form ?? null;
 
   if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
@@ -454,10 +481,10 @@ export async function getPublicWebsiteForm(
     id: row.id,
     workspaceId: row.workspaceId,
     workspaceName: row.workspaceName,
-    projectId: row.projectId,
-    ownerUserId: row.ownerUserId,
-    funnelId: row.funnelId,
-    funnelAudience: row.funnelAudience,
+    projectId: row.projectId ?? null,
+    ownerUserId: row.ownerUserId ?? null,
+    funnelId: row.funnelId ?? null,
+    funnelAudience: row.funnelAudience ?? null,
     form: toWebsiteForm(row),
     publicPath,
     publicActorId: row.publicActorId,

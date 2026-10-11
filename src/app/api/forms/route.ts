@@ -29,7 +29,10 @@ export async function POST(request: Request) {
   const result = await upsertWebsiteForm({ form: body.form, session: auth.session });
 
   if (!result.persisted) {
-    return NextResponse.json({ error: result.reason ?? "Form could not be saved" }, { status: 503 });
+    return NextResponse.json(
+      { error: result.reason ?? "Form could not be saved" },
+      { status: result.reason === "CRM write permission is required" ? 403 : 503 },
+    );
   }
 
   return NextResponse.json({ form: result.form, persisted: true });

@@ -97,10 +97,13 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
         and (acl.grantee=0 or acl.grantee='novalure_app'::regrole)
     `);
     assert.equal(ambient.rows[0].count, 0);
-    const published = await db.pool.query("select crm_public_form_lookup(null,$1,'published',false) as form", [key]);
+    const published = await db.pool.query("select crm_public_form_lookup(null,$1,'published') as form", [key]);
     assert.equal(published.rows[0].form.id, ownForm);
     assert.equal(published.rows[0].form.publicActorId, ownActor);
-    assert.equal((await db.pool.query("select crm_public_form_lookup(null,$1,'draft',false) as form", [key])).rows[0].form, null);
+    for (const internal of ["projectId", "ownerUserId", "funnelId", "crmTarget", "pipelineStage", "ownerMode", "campaign", "tags", "visits", "submissions", "conversionRate", "lastSubmission"]) {
+      assert.equal(Object.hasOwn(published.rows[0].form, internal), false, `${internal} is excluded from public SQL lookup`);
+    }
+    assert.equal((await db.pool.query("select crm_public_form_lookup(null,$1,'draft') as form", [key])).rows[0].form, null);
     assert.equal((await db.pool.query("select * from crm_public_form_legacy_route('draft')")).rowCount, 0);
 
     const client = await db.pool.connect();
@@ -146,7 +149,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await restoredAdmin.query("select id from forms where id=$1", [ownForm])).rowCount, 1);
       assert.equal((await restoredRuntime.query("select id from forms")).rowCount, 0);
       assert.equal((await restoredRuntime.query("select id from form_submissions")).rowCount, 0);
-      assert.equal((await restoredRuntime.query("select crm_public_form_lookup(null,$1,'published',false) as form", [key])).rows[0].form.id, ownForm);
+      assert.equal((await restoredRuntime.query("select crm_public_form_lookup(null,$1,'published') as form", [key])).rows[0].form.id, ownForm);
       await assert.rejects(restoredRuntime.query("insert into form_submissions(workspace_id,form_id) values($1,$2)", [ownWorkspace, ownForm]), /row-level security|permission denied/);
     } finally {
       await restoredRuntime.end();
