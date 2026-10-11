@@ -17,6 +17,7 @@ import type {
   PropertyUnit,
   SellerListing,
   WorkspaceRole,
+  WorkspaceUser,
 } from "@/lib/crm-types";
 import {
   buildPropertyAssets,
@@ -44,6 +45,13 @@ import {
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
 import { formatCurrency, formatNumber, getCrmProjectTypeLabel, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { PropertyCoreEditor } from "@/components/property-core-editor";
+import { PropertyRelationshipEditor } from "@/components/property-relationship-editor";
+import { PropertyMediaGallery } from "@/components/property-media-gallery";
+import { PropertyDocumentReview } from "@/components/property-document-review";
+import { PropertyExposeWorkspace } from "@/components/property-expose-workspace";
+import { createPropertyDraftStore } from "@/lib/property-draft-store";
+import { usePropertyWorkflowCapabilities } from "@/lib/use-property-workflow-capabilities";
 
 type PropertyCommandCenterProps = {
   activeProjectId: string | null;
@@ -71,6 +79,8 @@ type PropertyCommandCenterProps = {
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
   units: PropertyUnit[];
+  users?: WorkspaceUser[];
+  draftUserId?: string;
 };
 
 type PropertyDraft = {
@@ -317,6 +327,8 @@ export function PropertyCommandCenter({
   sessionProductRole,
   sessionRole,
   units,
+  users = [],
+  draftUserId = "current-user",
 }: PropertyCommandCenterProps) {
   const copy = getPropertyDepartmentCopy(language);
   const localizedTabs = useMemo(() => getPropertyDepartmentTabs(language), [language]);
@@ -352,6 +364,10 @@ export function PropertyCommandCenter({
   const [saving, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [editingListingId, setEditingListingId] = useState<string | null>(null);
+  const [editingRelationshipListingId, setEditingRelationshipListingId] = useState<string | null>(null);
+  const [workflowDraftStore] = useState(createPropertyDraftStore);
+  const workflowCapabilities = usePropertyWorkflowCapabilities(context.workspaceId);
   const [draft, setDraft] = useState<PropertyDraft>(() => ({
     address: "",
     areaSqm: "",
@@ -404,6 +420,9 @@ export function PropertyCommandCenter({
   const selectedAsset = assets.find((asset) => asset.id === (focusedAssetId ?? selectedAssetId)) ?? filteredAssets[0] ?? assets[0];
   const selectedUnitBoardScope = createUnitBoardScope(selectedAsset);
   const selectedListingId = listingIdFromAssetId(selectedAsset?.id);
+  const selectedListing = sellerListings.find((listing) => listing.id === selectedListingId && listing.workspaceId === context.workspaceId);
+  const editingListing = sellerListings.find((listing) => listing.id === editingListingId && listing.workspaceId === context.workspaceId);
+  const editingRelationshipListing = sellerListings.find((listing) => listing.id === editingRelationshipListingId && listing.workspaceId === context.workspaceId);
   const selectedCostItems = selectedListingId ? propertyCostItems.filter((item) => item.propertyId === selectedListingId) : [];
   const selectedDocuments = selectedListingId ? propertyDocuments.filter((document) => document.propertyId === selectedListingId) : [];
   const selectedMedia = selectedListingId ? propertyMedia.filter((media) => media.propertyId === selectedListingId) : [];
@@ -489,7 +508,7 @@ export function PropertyCommandCenter({
   }
 
   async function postPropertyOperation(body: Record<string, unknown>) {
-    const response = await csrfFetch("/api/crm/properties", {
+    const response = await csrfFetch(`/api/crm/properties?${new URLSearchParams({ workspaceId: context.workspaceId })}`, {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -499,6 +518,11 @@ export function PropertyCommandCenter({
       throw new Error(typeof payload.error === "string" ? payload.error : copy.notices.actionSaveFailed);
     }
     return payload;
+  }
+
+  async function refreshPropertyData() {
+    if (!onPropertyChanged) throw new Error("refresh_unavailable");
+    await onPropertyChanged();
   }
 
   async function saveSelectedPriceVisibility() {
@@ -524,7 +548,7 @@ export function PropertyCommandCenter({
   }
 
   async function uploadAndAttachFile(file: File, kind: "media" | "document") {
-    if (!selectedAsset?.sellerListingId || saving) return;
+    if (!selectedAsset?.sellerListingId || saving || !workflowCapabilities.canEditProperty) return;
     const setUploading = kind === "media" ? setUploadingMedia : setUploadingDocument;
     setUploading(true);
     setNotice(null);
@@ -534,8 +558,8 @@ export function PropertyCommandCenter({
       formData.append("folder", `properties/${selectedAsset.sellerListingId}`);
       formData.append("name", file.name);
       formData.append("alt", file.name.replace(/\.[^.]+$/, ""));
-      if (kind === "media") formData.append("public", "true");
-      const uploadResponse = await csrfFetch("/api/media", { body: formData, method: "POST" });
+      formData.append("public", "false");
+      const uploadResponse = await csrfFetch(`/api/media?${new URLSearchParams({ workspaceId: context.workspaceId })}`, { body: formData, method: "POST" });
       const uploadPayload = await uploadResponse.json().catch(() => ({ error: copy.notices.uploadFailed }));
       if (!uploadResponse.ok || !uploadPayload.asset?.id) {
         throw new Error(typeof uploadPayload.error === "string" ? uploadPayload.error : copy.notices.uploadFailed);
@@ -549,7 +573,7 @@ export function PropertyCommandCenter({
           position: selectedMedia.length,
           status: "draft",
           title: file.name,
-          visibility: "public",
+          visibility: "private",
         },
         operation: "attach_media",
         projectId: selectedAsset.projectId,
@@ -692,6 +716,52 @@ export function PropertyCommandCenter({
         </div>
       </nav>
 
+      {workflowCapabilities.loading ? (
+        <p role="status" className="text-sm text-stone-600">
+          {language === "de" ? "Aktionsrechte für diesen Workspace werden geprüft…" : "Checking action permissions for this workspace…"}
+        </p>
+      ) : null}
+      {workflowCapabilities.failed ? (
+        <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          {language === "de" ? "Aktionsrechte konnten nicht bestätigt werden. Änderungen bleiben gesperrt." : "Action permissions could not be confirmed. Changes remain disabled."}
+          <button className="ml-2 underline" onClick={workflowCapabilities.retry} type="button">
+            {language === "de" ? "Erneut prüfen" : "Retry"}
+          </button>
+        </p>
+      ) : null}
+
+      {editingListing ? (
+        <PropertyCoreEditor
+          canEdit={workflowCapabilities.canEditProperty}
+          draftStore={workflowDraftStore}
+          draftUserId={draftUserId}
+          key={`${context.workspaceId}:${editingListing.id}`}
+          language={language}
+          listing={editingListing}
+          onChanged={refreshPropertyData}
+          onClose={() => setEditingListingId(null)}
+          workspaceId={context.workspaceId}
+        />
+      ) : null}
+
+      {editingRelationshipListing ? (
+        <PropertyRelationshipEditor
+          brokerMandates={brokerMandates}
+          canEdit={workflowCapabilities.canEditProperty}
+          contacts={contacts}
+          draftStore={workflowDraftStore}
+          draftUserId={draftUserId}
+          key={`${context.workspaceId}:${editingRelationshipListing.id}`}
+          language={language}
+          leads={leads}
+          listing={editingRelationshipListing}
+          onChanged={refreshPropertyData}
+          onClose={() => setEditingRelationshipListingId(null)}
+          users={users}
+          workspaceId={context.workspaceId}
+        />
+      ) : null}
+
       {activeTab === "overview" ? (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
           <article className="rounded-lg border border-stone-200 bg-white p-5">
@@ -810,7 +880,32 @@ export function PropertyCommandCenter({
                     {copy.detail.openUnits}
                   </button>
                   <ActionButton action={actions.publishProperty} onClick={() => setActiveTab("channels")} />
-                  <ActionButton action={actions.changePrice} />
+                  <button
+                    className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+                    disabled={!selectedListing || !workflowCapabilities.canEditProperty}
+                    onClick={() => {
+                      if (selectedListing) {
+                        setEditingRelationshipListingId(null);
+                        setEditingListingId(selectedListing.id);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {language === "de" ? "Stammdaten & Kaufnebenkosten bearbeiten" : "Edit property core & purchase costs"}
+                  </button>
+                  <button
+                    className="min-h-11 rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
+                    disabled={!selectedListing || !workflowCapabilities.canEditProperty}
+                    onClick={() => {
+                      if (selectedListing) {
+                        setEditingListingId(null);
+                        setEditingRelationshipListingId(selectedListing.id);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {language === "de" ? "Verknüpfungen bearbeiten" : "Edit relationships"}
+                  </button>
                   <ActionButton action={actions.approveDocument} onClick={() => setActiveTab("documents")} />
                 </div>
               </>
@@ -1297,7 +1392,7 @@ export function PropertyCommandCenter({
                 <input
                   accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingMedia}
+                  disabled={!selectedAsset?.sellerListingId || uploadingMedia || !workflowCapabilities.canEditProperty}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void uploadAndAttachFile(file, "media");
@@ -1311,7 +1406,7 @@ export function PropertyCommandCenter({
                 <input
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only"
-                  disabled={!selectedAsset?.sellerListingId || uploadingDocument}
+                  disabled={!selectedAsset?.sellerListingId || uploadingDocument || !workflowCapabilities.canEditProperty}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void uploadAndAttachFile(file, "document");
@@ -1323,6 +1418,24 @@ export function PropertyCommandCenter({
               <ActionButton action={actions.approveDocument} />
             </div>
           </div>
+          {notice ? <p aria-atomic="true" className={`mt-3 text-sm font-semibold ${notice.kind === "success" ? "text-emerald-800" : "text-rose-800"}`}
+            role={notice.kind === "success" ? "status" : "alert"}>{notice.message}</p> : null}
+          {selectedListing ? (
+            <div className="mt-4">
+              <PropertyExposeWorkspace
+                draftStore={workflowDraftStore}
+                draftUserId={draftUserId}
+                key={JSON.stringify([context.workspaceId, selectedListing, selectedTextBlocks, selectedMedia, selectedDocuments, selectedCostItems])}
+                language={language}
+                listing={selectedListing}
+                workspaceId={context.workspaceId}
+              />
+            </div>
+          ) : (
+            <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">
+              {language === "de" ? "Für Exposé, Medien und Dokumentprüfung zuerst ein gespeichertes Einzelobjekt auswählen." : "Select a saved property to manage its brochure, media, and document review."}
+            </p>
+          )}
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <section className="grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
@@ -1330,25 +1443,16 @@ export function PropertyCommandCenter({
                   <span className="rounded-md bg-stone-50 px-2 py-1" key={category}>{category}</span>
                 ))}
               </div>
-              <div className="grid gap-2">
-                {selectedMedia.length ? selectedMedia.map((media) => (
-                  <div className="grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 sm:grid-cols-[88px_minmax(0,1fr)_120px]" key={media.id}>
-                    <span
-                      className="h-20 rounded-md bg-stone-200 bg-cover bg-center"
-                      role="img"
-                      style={{ backgroundImage: media.publicUrl || media.url ? `url("${media.publicUrl ?? media.url}")` : undefined }}
-                    />
-                    <span className="min-w-0">
-                      <strong className="block break-words text-sm text-slate-950">{media.title || media.assetName}</strong>
-                      <span className="mt-1 block text-xs font-semibold text-stone-500">{media.category} / {media.visibility}</span>
-                      <span className="mt-1 block text-xs text-stone-600">{media.isCover ? copy.subviews.coverImage : copy.subviews.gallery} / {copy.subviews.position} {media.position}</span>
-                    </span>
-                    <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{media.status}</span>
-                  </div>
-                )) : (
-                  <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">{copy.subviews.noImages}</p>
-                )}
-              </div>
+              <PropertyMediaGallery
+                canEdit={workflowCapabilities.canEditProperty}
+                draftStore={workflowDraftStore}
+                language={language}
+                media={selectedMedia}
+                onChanged={refreshPropertyData}
+                onNotice={(message, error) => setNotice({ kind: error ? "error" : "success", message })}
+                property={selectedListing}
+                workspaceId={context.workspaceId}
+              />
             </section>
             <section className="grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-600">
@@ -1365,6 +1469,15 @@ export function PropertyCommandCenter({
                       <span className="mt-1 block text-xs text-stone-600">{document.requiredForPublication ? copy.subviews.requiredForPublication : copy.subviews.optional}{document.publicUrl ? ` / ${copy.subviews.public}` : ""}</span>
                     </span>
                     <span className="self-start rounded-md bg-white px-2 py-1 text-xs font-semibold text-stone-700">{document.status}</span>
+                    <PropertyDocumentReview
+                      canReview={workflowCapabilities.canReviewDocuments}
+                      document={document}
+                      draftStore={workflowDraftStore}
+                      language={language}
+                      onChanged={refreshPropertyData}
+                      property={selectedAsset}
+                      workspaceId={context.workspaceId}
+                    />
                   </div>
                 )) : (
                   <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">{copy.subviews.noDocuments}</p>

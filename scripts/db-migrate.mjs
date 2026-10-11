@@ -16,11 +16,16 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { Pool } from "@neondatabase/serverless";
+import pg from "pg";
 import {
   assertConnectedDatabaseTarget,
   assertDatabaseTarget,
 } from "./lib/infra-targets.mjs";
+import { applyNeon061Compatibility } from "./lib/neon-061-compat.mjs";
+import { applyMedia062Compatibility } from "./lib/media-062-compat.mjs";
+import { applyCrm080Compatibility } from "./lib/crm-080-compat.mjs";
+
+const { Pool } = pg;
 
 const targetEnvFiles = Object.freeze({
   prod: ".env.production.local",
@@ -39,6 +44,9 @@ const manualCutoverVersions = new Set([
   "061_validate_and_activate_tenant_rls_pilot",
   "062_private_media_contract_cutover",
   "065_notification_guard_search_path_hardening",
+  "091_production_runtime_forced_rls_cutover",
+  "092_crm_production_machine_identity",
+  "093_crm_machine_internal_context",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -48,8 +56,14 @@ const migrationDependencies = new Map([
   ["064_notification_provider_and_lead_assignee_integrity", "050_durable_job_leasing"],
   ["065_notification_guard_search_path_hardening", "064_notification_provider_and_lead_assignee_integrity"],
   ["066_oauth_state_workspace_user_guard", "053_oauth_state_integrity"],
+  ["091_production_runtime_forced_rls_cutover", "090_property_media_delete_runtime"],
+  ["092_crm_production_machine_identity", "091_production_runtime_forced_rls_cutover"],
+  ["093_crm_machine_internal_context", "092_crm_production_machine_identity"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
+const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
+const validMedia062Profiles = new Set(["production", "rehearsal"]);
+const validCrm080Profiles = new Set(["production", "rehearsal"]);
 
 function fail(message) {
   console.error(`[ERROR] ${message}`);
@@ -84,6 +98,9 @@ function parseArgs(argv) {
   const command = args.find((arg) => !arg.startsWith("--"));
   const onlyArg = args.find((arg) => arg.startsWith("--only="));
   const planTokenFileArg = args.find((arg) => arg.startsWith("--plan-token-file="));
+  const neon061ProfileArg = args.find((arg) => arg.startsWith("--neon-061-profile="));
+  const media062ProfileArg = args.find((arg) => arg.startsWith("--media-062-profile="));
+  const crm080ProfileArg = args.find((arg) => arg.startsWith("--crm-080-profile="));
   const allowManualCutover = args.includes("--allow-manual-cutover");
 
   if (!command || !validCommands.has(command)) {
@@ -99,10 +116,48 @@ function parseArgs(argv) {
   if (command === "status" && planTokenFileArg) {
     fail("--plan-token-file is valid only for dry-run or up");
   }
+  const neon061Profile = neon061ProfileArg
+    ? neon061ProfileArg.slice("--neon-061-profile=".length).trim()
+    : "";
+  if (neon061Profile && !validNeon061Profiles.has(neon061Profile)) {
+    fail(`--neon-061-profile must be one of: ${[...validNeon061Profiles].join("|")}`);
+  }
+  if (
+    neon061Profile &&
+    (!allowManualCutover || !onlyArg || !onlyArg.includes("061_validate_and_activate_tenant_rls_pilot"))
+  ) {
+    fail("--neon-061-profile requires the explicit 061 --only target and --allow-manual-cutover");
+  }
+  const media062Profile = media062ProfileArg
+    ? media062ProfileArg.slice("--media-062-profile=".length).trim()
+    : "";
+  if (media062Profile && !validMedia062Profiles.has(media062Profile)) {
+    fail(`--media-062-profile must be one of: ${[...validMedia062Profiles].join("|")}`);
+  }
+  if (
+    media062Profile &&
+    (!allowManualCutover || !onlyArg || !onlyArg.includes("062_private_media_contract_cutover"))
+  ) {
+    fail("--media-062-profile requires the explicit 062 --only target and --allow-manual-cutover");
+  }
+  if (media062Profile && neon061Profile) fail("Select only one compatibility execution profile.");
+  const crm080Profile = crm080ProfileArg
+    ? crm080ProfileArg.slice("--crm-080-profile=".length).trim()
+    : "";
+  if (crm080Profile && !validCrm080Profiles.has(crm080Profile)) {
+    fail(`--crm-080-profile must be one of: ${[...validCrm080Profiles].join("|")}`);
+  }
+  if (crm080Profile && (!onlyArg || onlyArg.slice("--only=".length).trim() !== "080_crm_command_safety")) {
+    fail("--crm-080-profile requires the explicit 080 --only target");
+  }
+  if ([crm080Profile, media062Profile, neon061Profile].filter(Boolean).length > 1) fail("Select only one compatibility execution profile.");
 
   return {
     allowManualCutover,
     command,
+    crm080Profile,
+    media062Profile,
+    neon061Profile,
     only: onlyArg ? onlyArg.slice("--only=".length).trim() : "",
     planTokenFile: planTokenFileArg
       ? planTokenFileArg.slice("--plan-token-file=".length).trim()
@@ -240,7 +295,7 @@ export async function applyCommittedMigrationPlan({ apply, cwd = process.cwd(), 
   for (const migration of plan) await apply(migration);
 }
 
-export function createMigrationPlanToken({ connectedTarget, headCommit, ledgerRows, plan }) {
+export function createMigrationPlanToken({ connectedTarget, executionProfile = null, headCommit, ledgerRows, plan }) {
   const payload = {
     connectedTarget: {
       branchId: connectedTarget.branchId,
@@ -251,6 +306,7 @@ export function createMigrationPlanToken({ connectedTarget, headCommit, ledgerRo
       target: connectedTarget.target,
     },
     format: "novalure-migration-plan-v1",
+    executionProfile,
     headCommit,
     ledger: ledgerRows
       .map((row) => ({ checksum: row.checksum ?? null, version: row.version }))
@@ -626,12 +682,59 @@ function printStatus({ ledger, migrations, plan }) {
   }
 }
 
-async function applyMigration(client, migration) {
+async function applyMigration(client, migration, context = {}) {
   console.log(`Applying ${migration.path}`);
   await client.query("begin");
   try {
     await client.query("set local search_path = public");
-    await client.query({ query_timeout: migrationClientTimeoutMs, text: migration.content });
+    if (migration.version === "080_crm_command_safety" && context.crm080Profile) {
+      await applyCrm080Compatibility({
+        client,
+        executionContext: { headCommit: context.headCommit, planDigest: context.planToken },
+        executionProfile: context.crm080Profile,
+        sql: migration.content,
+        target: {
+          branchId: context.connectedTarget.branchId,
+          databaseName: context.connectedTarget.databaseName,
+          projectId: context.connectedTarget.projectId,
+          runtimeRole: context.runtimeRole,
+        },
+      });
+    } else if (migration.version === "062_private_media_contract_cutover" && context.media062Profile) {
+      await applyMedia062Compatibility({
+        client,
+        executionContext: { headCommit: context.headCommit, planDigest: context.planToken },
+        executionProfile: context.media062Profile,
+        sql: migration.content,
+        target: {
+          branchId: context.connectedTarget.branchId,
+          databaseName: context.connectedTarget.databaseName,
+          projectId: context.connectedTarget.projectId,
+          runtimeRole: context.runtimeRole,
+        },
+      });
+    } else if (
+      migration.version === "061_validate_and_activate_tenant_rls_pilot" &&
+      context.neon061Profile
+    ) {
+      await applyNeon061Compatibility({
+        client,
+        executionContext: {
+          headCommit: context.headCommit,
+          planDigest: context.planToken,
+        },
+        executionProfile: context.neon061Profile,
+        sql: migration.content,
+        target: {
+          branchId: context.connectedTarget.branchId,
+          databaseName: context.connectedTarget.databaseName,
+          projectId: context.connectedTarget.projectId,
+          runtimeRole: context.runtimeRole,
+        },
+      });
+    } else {
+      await client.query({ query_timeout: migrationClientTimeoutMs, text: migration.content });
+    }
     await client.query(
       `
       insert into public.novalure_schema_migrations (version, name, checksum)
@@ -648,7 +751,7 @@ async function applyMigration(client, migration) {
 }
 
 async function main() {
-  const { allowManualCutover, command, only, planTokenFile } = parseArgs(process.argv);
+  const { allowManualCutover, command, crm080Profile, media062Profile, neon061Profile, only, planTokenFile } = parseArgs(process.argv);
   const target = resolveTarget();
   const migrations = readMigrations();
   let headCommit = readGitObjectHash(process.cwd(), "HEAD");
@@ -675,6 +778,20 @@ async function main() {
       target: target.name,
     });
     console.log("Connected database fingerprint verified");
+    if (
+      ((neon061Profile === "production" || media062Profile === "production" || crm080Profile === "production") && target.name !== "prod") ||
+      (((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production") || (crm080Profile && crm080Profile !== "production")) && target.name !== "test")
+    ) {
+      throw new Error("The selected Neon 061 execution profile does not match MIGRATION_TARGET.");
+    }
+    const runtimeRole = process.env[
+      target.name === "prod"
+        ? "NOVALURE_PRODUCTION_DATABASE_ROLE"
+        : "NOVALURE_QA_DATABASE_ROLE"
+    ];
+    if ((neon061Profile || media062Profile || crm080Profile) && !runtimeRole) {
+      throw new Error("The selected compatibility execution profile requires the declared runtime role.");
+    }
     await client.query({
       query_timeout: guardQueryTimeoutMs,
       text: "set search_path = public",
@@ -713,6 +830,7 @@ async function main() {
     assertChecksumSafety({ ledgerRows: ledger.rows, migrations, plan });
     const planToken = createMigrationPlanToken({
       connectedTarget,
+      executionProfile: neon061Profile || (media062Profile ? `media-062:${media062Profile}` : null) || (crm080Profile ? `crm-080:${crm080Profile}` : null),
       headCommit,
       ledgerRows: ledger.rows,
       plan,
@@ -733,7 +851,15 @@ async function main() {
           console.log("No pending migrations.");
         } else {
           await applyCommittedMigrationPlan({
-            apply: (migration) => applyMigration(client, migration),
+            apply: (migration) => applyMigration(client, migration, {
+              connectedTarget,
+              crm080Profile,
+              headCommit,
+              media062Profile,
+              neon061Profile,
+              planToken,
+              runtimeRole,
+            }),
             plan,
           });
         }

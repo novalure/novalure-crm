@@ -1,0 +1,131 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+async function source(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+test("trusted-candidate property surfaces are mounted once in the command center", async () => {
+  const commandCenter = await source("src/components/property-command-center.tsx");
+  for (const component of [
+    "PropertyCoreEditor",
+    "PropertyRelationshipEditor",
+    "PropertyExposeWorkspace",
+    "PropertyMediaGallery",
+    "PropertyDocumentReview",
+  ]) {
+    assert.match(commandCenter, new RegExp(component));
+  }
+  assert.match(commandCenter, /usePropertyWorkflowCapabilities\(context\.workspaceId\)/);
+  assert.match(commandCenter, /canReview=\{workflowCapabilities\.canReviewDocuments\}/);
+  assert.match(commandCenter, /canEdit=\{workflowCapabilities\.canEditProperty\}/);
+  assert.doesNotMatch(commandCenter, /selectedMedia\.length \? selectedMedia\.map/);
+  assert.match(await source("src/components/property-core-editor.tsx"), /PropertyPurchaseCostsInput/);
+});
+
+test("workspace refresh and actor scope are passed to restored editors", async () => {
+  const workspace = await source("src/components/crm-workspace.tsx");
+  assert.match(workspace, /if \(!\(await refreshCoreData\(\)\)\) throw new Error\("refresh_unavailable"\)/);
+  assert.match(workspace, /draftUserId=\{sessionUserId\}/);
+  assert.match(workspace, /users=\{users\}/);
+});
+
+test("property API keeps tenant scope, server capabilities, review, relationship CAS and media CAS", async () => {
+  const route = await source("src/app/api/crm/properties/route.ts");
+  for (const marker of [
+    'resolveWorkspaceScopedSession(request, { permission: "crm:read" })',
+    'readOperation === "capabilities"',
+    'readOperation === "relationship_options"',
+    'operation === "review_document"',
+    'operation === "update_relationships"',
+    "expectedMedia: input.expectedMedia",
+    "projectId: input.projectId",
+  ]) assert.ok(route.includes(marker), marker);
+});
+
+test("repository mutations preserve transaction wrapper and atomic comparison snapshots", async () => {
+  const repository = await source("src/lib/db/property-department-repositories.ts");
+  for (const marker of [
+    "async function updateSellerListingRecordInTransaction",
+    "hasExpectedCore",
+    "hasExpectedRelationships",
+    "hasExpectedAncillaryCosts",
+    "queryPropertyMediaMutation",
+    "withCrmRead(input.session",
+  ]) assert.ok(repository.includes(marker), marker);
+});
+
+test("Exposé routes are private, tenant-scoped, and traced with their immutable assets", async () => {
+  const route = await source("src/app/api/crm/properties/expose/route.ts");
+  const documentRoute = await source("src/app/api/crm/properties/expose/[documentId]/route.ts");
+  const config = await source("next.config.ts");
+  assert.match(route, /private, no-store/);
+  assert.match(route, /resolveWorkspaceScopedSession/);
+  assert.match(documentRoute, /content-security-policy/);
+  assert.match(config, /property-expose-assets\/\*\*\/\*/);
+});
+
+test("private media workflows use tenant transactions and an RLS-scoped runtime grant", async () => {
+  const mediaRoute = await source("src/app/api/media/route.ts");
+  const fileRoute = await source("src/app/api/media/files/[assetId]/route.ts");
+  const deleteRoute = await source("src/app/api/media/[assetId]/route.ts");
+  const migration = await source("migrations/088_property_media_runtime_access.sql");
+  assert.match(mediaRoute, /withCrmRead\(auth\.session/);
+  assert.match(fileRoute, /withCrmRead\(auth\.session/);
+  assert.match(deleteRoute, /resolveWorkspaceScopedSession\(request/);
+  assert.match(migration, /force row level security/);
+  assert.match(migration, /workspace_id = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /actor\.id = nullif\(current_setting\('app\.actor_id'/);
+  assert.match(migration, /grant select, insert, update, delete on table media_assets to novalure_tenant_app/);
+  assert.doesNotMatch(migration, /disable row level security|no force/);
+});
+
+test("restored property audit and Exposé company data stay least-privilege", async () => {
+  const migration = await source("migrations/089_property_surface_runtime_access.sql");
+  const exposeRepository = await source("src/lib/db/property-expose-repositories.ts");
+  assert.match(migration, /alter table property_activity_events force row level security/);
+  assert.match(migration, /actor_user_id = nullif\(current_setting\('app\.actor_id'/);
+  assert.match(migration, /grant select, insert on table property_activity_events to novalure_tenant_app/);
+  assert.match(migration, /security definer[\s\S]*set search_path = pg_catalog, public/);
+  assert.match(migration, /p_workspace = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /revoke all on function crm_property_expose_company_profile\(uuid\) from public/);
+  assert.doesNotMatch(migration, /grant select on (table )?company_profiles/i);
+  assert.match(exposeRepository, /crm_property_expose_company_profile\(p\.workspace_id\)/);
+  assert.doesNotMatch(exposeRepository, /from company_profiles cp/);
+});
+
+test("command-center uploads stay private until an explicit publication workflow", async () => {
+  const commandCenter = await source("src/components/property-command-center.tsx");
+  const interactions = await source("src/lib/property-interactions.ts");
+  assert.match(commandCenter, /operation: "attach_media"/);
+  assert.match(commandCenter, /visibility: "private"/);
+  assert.doesNotMatch(commandCenter, /visibility: "public"/);
+  assert.match(interactions, /visibility: "private"/);
+  assert.match(commandCenter, /activeTab === "documents"[\s\S]*role=\{notice\.kind === "success" \? "status" : "alert"\}[\s\S]*\{notice\.message\}/);
+});
+
+test("property media deletion uses the lifecycle protocol and globally complete scoped counts", async () => {
+  const route = await source("src/app/api/media/[assetId]/route.ts");
+  const store = await source("src/lib/media-store.ts");
+  const lifecycle = await source("src/lib/media-lifecycle.ts");
+  const migration = await source("migrations/090_property_media_delete_runtime.sql");
+  assert.match(route, /parsePropertyMediaDeletionTarget/);
+  assert.match(route, /deletionComplete: true/);
+  assert.match(store, /deleteDatabaseMedia/);
+  assert.match(lifecycle, /crm_media_reference_counts\(\$1::uuid\)/);
+  const remainingReferenceCheck = lifecycle.indexOf("Asset references remain");
+  const assetDelete = lifecycle.indexOf("delete from public.media_assets");
+  assert.ok(remainingReferenceCheck > 0 && assetDelete > remainingReferenceCheck,
+    "zero-reference verification must run while the locked asset still exists");
+  assert.match(migration, /security definer[\s\S]*set search_path = pg_catalog, public/);
+  assert.match(migration, /asset\.workspace_id = nullif\(current_setting\('app\.tenant_id'/);
+  assert.match(migration, /grant execute on function crm_media_reference_counts\(uuid\) to novalure_tenant_app/);
+  assert.doesNotMatch(migration, /grant select on table (property_media|property_documents|bot_document_sends|media_asset_shares)/i);
+});
+
+test("property media mutations reuse the active forced-RLS tenant transaction", async () => {
+  const mutation = await source("src/lib/db/property-media-mutation.ts");
+  assert.match(mutation, /currentTenantTransaction\(\)/);
+  assert.match(mutation, /active\.transaction\.queryOne[\s\S]*for update[\s\S]*active\.transaction\.queryOne<Row>\(input\.query/);
+});

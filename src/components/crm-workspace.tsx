@@ -84,6 +84,7 @@ import type {
   WorkspaceRole,
 } from "@/lib/crm-types";
 import type { PropertyUnitBoardScope, PropertyUnitObjectScope } from "@/lib/property-department";
+import type { CrmDivision } from "@/lib/crm-division";
 import {
   createWorkspaceProductContext,
   isWorkspaceModuleEnabled,
@@ -156,6 +157,7 @@ type ImportSource = "hubspot" | "csv" | "contacts" | "meetings";
 type ProjectWizardDraft = {
   calendarProvider: CalendarProviderChoice;
   customerType: WorkspaceCustomerType;
+  division: CrmDivision;
   funnelTemplateId: string;
   meetingProvider: "microsoft-teams" | "google-meet" | "manual-link";
   name: string;
@@ -3081,6 +3083,7 @@ export function CrmWorkspace({
   const [projectDraft, setProjectDraft] = useState<ProjectWizardDraft>(() => ({
     calendarProvider: workspaceSetup.activeCalendarProvider,
     customerType: workspaceSetup.customerType,
+    division: "REAL_ESTATE_GROWTH",
     funnelTemplateId: funnels[0]?.id ?? "",
     meetingProvider:
       workspaceSetup.activeCalendarProvider === "google"
@@ -3591,6 +3594,7 @@ export function CrmWorkspace({
 
     const nextProject: Partial<Project> = {
       customerType: projectDraft.customerType,
+      division: projectDraft.division,
       defaultOperatingModel: projectDraft.operatingModel,
       defaultPipelineId: projectDraft.pipelineId,
       name: projectDraft.name.trim(),
@@ -4743,7 +4747,7 @@ export function CrmWorkspace({
                 onOpenUnits={handleOpenUnitsFromProperty}
                 onClearPropertyFocus={() => setPropertyFocusAssetId(undefined)}
                 onPropertyChanged={async () => {
-                  await refreshCoreData();
+                  if (!(await refreshCoreData())) throw new Error("refresh_unavailable");
                 }}
                 projectLabel={projectScopeLabel}
                 projects={draftScopeProjects}
@@ -4758,6 +4762,8 @@ export function CrmWorkspace({
                 sessionProductRole={sessionProductRole}
                 sessionRole={sessionRole}
                 units={propertyUnitRecords.filter((unit) => isProjectInActiveScope(unit.projectId))}
+                users={users}
+                draftUserId={sessionUserId}
               />
             ) : null}
 
@@ -5481,6 +5487,22 @@ export function CrmWorkspace({
                         {option.label}
                       </option>
                     ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
+                  Division
+                  <select
+                    className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
+                    onChange={(event) =>
+                      setProjectDraft((current) => ({
+                        ...current,
+                        division: event.target.value as CrmDivision,
+                      }))
+                    }
+                    value={projectDraft.division}
+                  >
+                    <option value="REAL_ESTATE_GROWTH">Real Estate Growth</option>
+                    <option value="WEB_DESIGN">Web Design</option>
                   </select>
                 </label>
                 <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">

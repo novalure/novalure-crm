@@ -161,6 +161,7 @@ type ContactRow = {
 type LeadRow = {
   version?: number | string;
   id: string;
+  division: Lead["division"];
   workspaceId: string;
   projectId: string | null;
   contactId: string | null;
@@ -189,6 +190,7 @@ type LeadRow = {
 type DealRow = {
   version?: number | string;
   id: string;
+  division: Deal["division"];
   workspaceId: string;
   projectId: string | null;
   contactId: string | null;
@@ -248,6 +250,7 @@ type ProjectRow = {
   customerType: Project["customerType"] | null;
   defaultOperatingModel: Project["defaultOperatingModel"] | null;
   defaultPipelineId: string | null;
+  division: Project["division"];
   id: string;
   leads: number | string;
   revenueCents: number | string;
@@ -311,6 +314,7 @@ type BuyerSearchProfileRow = {
 
 type CrmPipelineRow = {
   customerType: CrmPipeline["customerType"] | null;
+  division: CrmPipeline["division"];
   id: string;
   isDefault: boolean;
   key: string;
@@ -1157,6 +1161,7 @@ export async function loadProjects(workspaceId: string): Promise<Project[]> {
       p.id,
       p.workspace_id as "workspaceId",
       p.name,
+      p.division,
       p.type,
       p.status,
       p.customer_type as "customerType",
@@ -1201,6 +1206,7 @@ function mapProjectRow(row: ProjectRow): Project {
     defaultOperatingModel: row.defaultOperatingModel ?? undefined,
     defaultPipelineId: row.defaultPipelineId ?? "",
     id: row.id,
+    division: row.division,
     leads: Number(row.leads ?? 0),
     name: row.name,
     revenue: formatEuroFromCents(row.revenueCents),
@@ -1344,6 +1350,7 @@ export async function loadCrmPipelines(workspaceId: string): Promise<CrmPipeline
       workspace_id as "workspaceId",
       project_id as "projectId",
       customer_type as "customerType",
+      division,
       operating_model as "operatingModel",
       key,
       name,
@@ -1360,6 +1367,7 @@ export async function loadCrmPipelines(workspaceId: string): Promise<CrmPipeline
 
   return rows.map((row) => ({
     customerType: row.customerType ?? undefined,
+    division: row.division,
     id: row.id,
     isDefault: row.isDefault,
     key: row.key,
@@ -2930,6 +2938,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
     select
       id,
       version,
+      division,
       workspace_id as "workspaceId",
       project_id as "projectId",
       contact_id as "contactId",
@@ -2964,6 +2973,7 @@ export async function loadLeads(workspaceId: string): Promise<Lead[]> {
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
+    division: row.division,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
     contactId: row.contactId ?? "",
@@ -2997,6 +3007,7 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
     select
       id,
       version,
+      division,
       workspace_id as "workspaceId",
       project_id as "projectId",
       contact_id as "contactId",
@@ -3026,6 +3037,7 @@ export async function loadDeals(workspaceId: string): Promise<Deal[]> {
   return rows.map((row) => ({
     version: row.version === undefined ? undefined : Number(row.version),
     id: row.id,
+    division: row.division,
     workspaceId: row.workspaceId,
     projectId: row.projectId ?? "",
     contactId: row.contactId ?? "",

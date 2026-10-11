@@ -2,19 +2,23 @@ import { getOfferApprovalReference } from "./approval-reference-repositories";
 import { randomUUID } from "node:crypto";
 import type { AppSession } from "@/lib/auth/session";
 import { assertCrmUuid, assertExpectedVersion, assertProjectGrant, CrmCommandError, crmPayloadDigest, executeCrmCommand, reconcileCrmCommand, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "@/lib/crm-command";
-import { assertFreshOfferSession, assertOfferApproval, nextOfferStatus, offerDate, offerText, offerTotal, parseOfferContent, OfferValidationError, type OfferAction, type OfferContent, type OfferStatus } from "@/lib/offer-workflow";
+import { assertFreshOfferSession, assertOfferApproval, nextOfferStatus, offerApprovalPayload, offerDate, offerText, offerTotal, parseOfferContent, OfferValidationError, type OfferAction, type OfferContent, type OfferStatus } from "@/lib/offer-workflow";
 import { evaluateOutboundConsent } from "@/lib/db/consent-policy";
 
-type OfferRow = { id: string; workspaceId: string; projectId: string; dealId: string; contactId: string; leadId: string; organizationId: string; status: OfferStatus; revision: number; version: number; approvalId: string | null; followUpStatus: string; followUpAt: string | null; responseReference: string | null; content: OfferContent; contentDigest: string; totalNetCents: string | number };
+type OfferRow = { id: string; workspaceId: string; projectId: string; division: string; dealId: string; contactId: string; leadId: string; organizationId: string; status: OfferStatus; revision: number; version: number; approvalId: string | null; followUpStatus: string; followUpAt: string | null; responseReference: string | null; content: OfferContent; contentDigest: string; totalNetCents: string | number };
 type ApprovalRow = { id: string; revision: number; digest: string; actorId: string; expiresAt: string; decision: string };
 export type OfferCommand = { operation: "create" | OfferAction; offerId?: string; dealId?: string; projectId: string; expectedVersion?: number; idempotencyKey: string; correlationId: string; payload: Record<string, unknown> };
-const selectOffer = `select o.id,o.workspace_id as "workspaceId",o.project_id as "projectId",o.deal_id as "dealId",o.contact_id as "contactId",o.lead_id as "leadId",o.organization_id as "organizationId",o.status,o.revision,o.version,o.approval_id as "approvalId",o.follow_up_status as "followUpStatus",o.follow_up_at as "followUpAt",o.response_reference as "responseReference",r.content,r.content_digest as "contentDigest",r.total_net_cents as "totalNetCents" from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision`;
+const selectOffer = `select o.id,o.workspace_id as "workspaceId",o.project_id as "projectId",o.division::text,o.deal_id as "dealId",o.contact_id as "contactId",o.lead_id as "leadId",o.organization_id as "organizationId",o.status,o.revision,o.version,o.approval_id as "approvalId",o.follow_up_status as "followUpStatus",o.follow_up_at as "followUpAt",o.response_reference as "responseReference",r.content,r.content_digest as "contentDigest",r.total_net_cents as "totalNetCents" from crm_offers o join crm_offer_revisions r on r.workspace_id=o.workspace_id and r.offer_id=o.id and r.revision=o.revision`;
 function error(code: string, status = 409): never { throw new CrmCommandError(code, code, status); }
 function normalize(row: OfferRow) { return { ...row, version: Number(row.version), revision: Number(row.revision), totalNetCents: Number(row.totalNetCents) }; }
 function fields(payload: Record<string, unknown>, allowed: string[]) { if (Object.keys(payload).some(key => !allowed.includes(key))) error("UNKNOWN_OFFER_FIELD", 400); }
 async function approvalConfig(tx: TenantTransaction, session: AppSession) {
   const row = await tx.queryOne<{ approverId: string | null }>(`select crm_offer_configured_approver($1::uuid) as "approverId"`, [session.workspaceId]);
   return row?.approverId ?? null;
+}
+async function assertOwnerApprovalAuthority(tx: TenantTransaction, session: AppSession) {
+  const row = await tx.queryOne<{ allowed: boolean }>(`select exists(select 1 from workspace_users where workspace_id=$1::uuid and id=$2::uuid and status='active' and role='owner') as allowed`, [session.workspaceId, session.userId]);
+  if (!row?.allowed) error("OWNER_A3_REQUIRED", 403);
 }
 async function freshApproverSession(tx: TenantTransaction, session: AppSession) {
   if (!session.authSessionId || !session.authIdentityId) error("FRESH_AUTHENTICATION_REQUIRED", 401);
@@ -40,7 +44,8 @@ async function requireApproval(tx: TenantTransaction, offer: OfferRow, session: 
 }
 async function revision(tx: TenantTransaction, offer: { id: string; workspaceId: string; projectId: string; contactId: string; leadId: string; organizationId: string }, number: number, content: OfferContent, actorId: string, requireFuture = true) {
   if (requireFuture && Date.parse(content.validUntil) <= Date.now()) error("OFFER_VALIDITY_MUST_BE_FUTURE", 400);
-  const digest = crmPayloadDigest({ action: "offer.send", workspaceId: offer.workspaceId, projectId: offer.projectId, offerId: offer.id, revision: number, contactId: offer.contactId, leadId: offer.leadId, organizationId: offer.organizationId, content, totalNetCents: offerTotal(content) });
+  const approvalPayload = offerApprovalPayload(content, number);
+  const digest = crmPayloadDigest({ action: "offer.send", workspaceId: offer.workspaceId, projectId: offer.projectId, offerId: offer.id, revision: number, contactId: offer.contactId, leadId: offer.leadId, organizationId: offer.organizationId, approvalPayload, content, totalNetCents: offerTotal(content) });
   await tx.execute(`insert into crm_offer_revisions(workspace_id,project_id,offer_id,revision,content,content_digest,total_net_cents,created_by) values($1::uuid,$2::uuid,$3::uuid,$4,$5::jsonb,$6,$7,$8::uuid)`, [offer.workspaceId, offer.projectId, offer.id, number, JSON.stringify(content), digest, offerTotal(content), actorId]);
   return digest;
 }
@@ -115,6 +120,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
         const approverId = await approvalConfig(tx, session);
         if (!approverId) error("APPROVER_NOT_CONFIGURED", 403);
         if (approverId !== session.userId) error("APPROVER_REQUIRED", 403);
+        await assertOwnerApprovalAuthority(tx, session);
         await freshApproverSession(tx, session);
         if (payload.contentDigest !== offer.contentDigest || payload.revision !== offer.revision) error("APPROVAL_SCOPE_MISMATCH");
         const expiresAt = offerDate(payload.expiresAt, "APPROVAL_EXPIRY");
@@ -125,6 +131,7 @@ export async function executeOfferCommand(session: AppSession, input: OfferComma
       } else if (input.operation === "revoke") {
         fields(payload, ["reason"]);
         if ((await approvalConfig(tx, session)) !== session.userId) error("APPROVER_REQUIRED", 403);
+        await assertOwnerApprovalAuthority(tx, session);
         await freshApproverSession(tx, session);
         const unknown = await tx.queryOne(`select id from crm_offer_deliveries where workspace_id=$1::uuid and offer_id=$2::uuid and revision=$3 and status='UNKNOWN'`, [session.workspaceId, offer.id, offer.revision]);
         if (unknown) error("DELIVERY_OUTCOME_UNKNOWN");

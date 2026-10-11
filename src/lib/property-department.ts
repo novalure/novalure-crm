@@ -404,6 +404,7 @@ export type PropertyUnitBoardScope = {
 };
 
 export type PropertyUnitObjectScope = {
+  originAssetId?: string;
   projectId?: string;
   unitId?: string;
 };

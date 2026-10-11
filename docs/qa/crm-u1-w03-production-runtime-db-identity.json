@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "task": "CRM-U1-W03",
+  "status": "BLOCKED_EXTERNAL",
+  "observedAt": "2026-10-06T10:31:14.480Z",
+  "liveProductionAfterRollback": {
+    "deploymentId": "dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah",
+    "deploymentUrl": "novalure-ddchdfzl0-novalure.vercel.app",
+    "readyState": "READY",
+    "rootHttpStatus": 200,
+    "declaredSourceSha": "206b4e36cb82a208e642f4b38391a92903aecdbe",
+    "sourceWasDirty": true
+  },
+  "failedPromotion": {
+    "deploymentId": "dpl_38hZWMGHUPACAtpMEKyzGPYYvsLn",
+    "gitSha": "3cbc358eac791351d8ecd57e6b796c1429e0210e",
+    "abortCondition": "Production root server-rendering failure",
+    "diagnosis": "The Production database did not contain role novalure_tenant_app.",
+    "rollbackDeploymentId": "dpl_ESYdRFQruH4CcsMnmrnBhZ5vQqah",
+    "rollbackVerified": true,
+    "deploymentRemovedAfterEvidenceCapture": true
+  },
+  "runtimeProof": {
+    "deploymentId": "dpl_qtGxY2zmZYNshaW6fpbwcdvcrHLu",
+    "gitSha": "f86dd91d12e24aa5822102735cb951440b75ddad",
+    "branch": "codex/u1-c03-production-reconciliation",
+    "target": "production",
+    "environment": "production",
+    "path": "GET /api/system/database using the application queryRows connection mechanism and a one-time bearer authorization",
+    "correlationId": "0a4c8069-dd0c-4b75-af61-4badbdec2040",
+    "status": "FAIL",
+    "deploymentRemovedAfterEvidenceCapture": true,
+    "oneTimeCredentialRetained": false
+  },
+  "databaseIdentity": {
+    "database": "neondb",
+    "currentUser": "novalure_app",
+    "sessionUser": "novalure_app",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-snowy-fog-aldx77v8",
+    "bindingMatchesExpectedProject": true
+  },
+  "privileges": {
+    "superuser": false,
+    "sessionSuperuser": false,
+    "bypassRls": false,
+    "sessionBypassRls": false,
+    "createDatabase": false,
+    "sessionCreateDatabase": false,
+    "createRole": false,
+    "sessionCreateRole": false,
+    "replication": false,
+    "sessionReplication": false,
+    "databaseOwner": false,
+    "sessionDatabaseOwner": false,
+    "databaseCreate": false,
+    "sessionDatabaseCreate": false,
+    "schemaCreate": false,
+    "sessionSchemaCreate": false,
+    "readAllData": false,
+    "sessionReadAllData": false,
+    "writeAllData": false,
+    "sessionWriteAllData": false,
+    "reachableElevatedRoles": 0,
+    "ownedOrInheritedPublicTables": 0,
+    "relevantMemberships": [
+      "novalure_app"
+    ],
+    "tenantRuntimeMember": false,
+    "forbiddenCompanyProfilesSelect": true,
+    "requiredRlsTablesProtected": false,
+    "leastPrivilege": false
+  },
+  "schemaStatus": {
+    "migrationLedgerAvailable": false,
+    "migrationRows": 0,
+    "missingExpectedTables": []
+  },
+  "audit": {
+    "event": "runtime_database_identity_proof",
+    "correlationBoundRuntimeLogObserved": true
+  },
+  "security": {
+    "databaseUrlRead": false,
+    "connectionStringRead": false,
+    "passwordRead": false,
+    "critical": 0,
+    "high": 0
+  },
+  "blocker": "Production requires a coordinated, reversible schema and role cutover before the successor runtime can use novalure_tenant_app and satisfy forced-RLS and forbidden-table boundaries. Applying isolated grants or revokes would risk breaking the restored live application."
+}

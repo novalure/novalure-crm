@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { del, get, put } from "@vercel/blob";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import type { MediaLifecycleErrorCode, PropertyMediaDeletionTarget } from "@/lib/media-lifecycle";
 import {
   createMediaShareToken,
   hasExpectedMediaMagicBytes,
@@ -605,22 +606,42 @@ export function mediaAssetPath(asset: MediaAsset) {
   return resolvedPath;
 }
 
-export async function deleteWorkspaceMedia(assetId: string, workspaceId: string) {
-  const asset = hasDatabaseUrl()
-    ? await findWorkspaceMediaAsset(assetId, workspaceId)
-    : (await readMediaLibrary()).assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
-  if (!asset) return null;
-
+export async function deleteWorkspaceMedia(assetId: string, workspaceId: string, options: {
+  actorId?: string;
+  target?: PropertyMediaDeletionTarget;
+} = {}) {
   if (hasDatabaseUrl()) {
-    await executeQuery("delete from media_assets where id = $1 and workspace_id = $2", [assetId, workspaceId]);
-  } else {
+    const { deleteDatabaseMedia, MediaLifecycleError } = await import("@/lib/media-lifecycle");
+    try {
+      return await deleteDatabaseMedia({ assetId, workspaceId, actorId: options.actorId ?? "", target: options.target,
+        assetSelect: `${mediaAssetSelect("ma", false)}, ma.public_token as "publicToken"`,
+        normalizeAsset: row => normalizeMediaAsset(row as MediaAssetRow), deleteFile: deleteStoredFile });
+    } catch (error) {
+      if (error instanceof MediaLifecycleError) throw new MediaStoreError(error.code, error.message);
+      throw error;
+    }
+  }
+  if (options.target) throw new MediaStoreError("MEDIA_DELETE_VISIBILITY_UNCONFIRMED", "Property deletion requires database persistence.");
+  const initialLibrary = await readMediaLibrary();
+  const asset = initialLibrary.assets.find((item) => item.id === assetId && item.workspaceId === workspaceId) ?? null;
+  if (!asset) return null;
+  if (asset.storageAccess !== "private" || asset.isPublic || initialLibrary.shares.some(share => share.assetId === assetId)) {
+    throw new MediaStoreError("MEDIA_DELETE_IN_USE", "This file has a protected lifecycle or sharing history and cannot be deleted here.");
+  }
+  try {
+    await deleteStoredFile(asset);
+  } catch {
+    throw new MediaStoreError("MEDIA_FILE_DELETE_UNCONFIRMED", "File deletion could not be confirmed. The media record has not been removed. Reload and retry.");
+  }
+  try {
     const library = await readMediaLibrary();
-    library.assets = library.assets.filter((item) => item.id !== assetId);
+    library.assets = library.assets.filter((item) => item.id !== assetId || item.workspaceId !== workspaceId);
     library.shares = library.shares.filter((item) => item.assetId !== assetId || item.workspaceId !== workspaceId);
     await writeMediaLibrary(library);
+    if (await findWorkspaceMediaAsset(assetId, workspaceId)) throw new Error("Media record remains after deletion");
+  } catch {
+    throw new MediaStoreError("MEDIA_RECORD_DELETE_UNCONFIRMED", "File deletion was acknowledged, but media record cleanup could not be confirmed. Reload before retrying.");
   }
-
-  await deleteStoredFile(asset).catch(() => undefined);
   return asset;
 }
 
@@ -675,10 +696,13 @@ export async function readMediaAssetContent(asset: MediaAsset) {
 
 export class MediaStoreError extends Error {
   code:
+    | MediaLifecycleErrorCode
     | "FILE_CONTENT_MISMATCH"
     | "FILE_TOO_LARGE"
     | "IMAGE_TOO_LARGE"
     | "INVALID_STORAGE_REFERENCE"
+    | "MEDIA_FILE_DELETE_UNCONFIRMED"
+    | "MEDIA_RECORD_DELETE_UNCONFIRMED"
     | "PRIVATE_STORAGE_UNAVAILABLE"
     | "PUBLIC_STORAGE_UNAVAILABLE"
     | "UNSUPPORTED_FILE_TYPE"
