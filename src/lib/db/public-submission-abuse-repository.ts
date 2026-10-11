@@ -23,6 +23,34 @@ export type PublicSubmissionIdempotencyClaim =
   | { state: "processing" }
   | { response: PublicSubmissionResponseSnapshot; state: "replay" };
 
+// Recovery after an uncertain COMMIT must never create a receipt. If the
+// transaction did not commit, the next normal attempt must be able to claim it.
+export async function readCompletedPublicSubmissionIdempotency(input: {
+  actionHash: string;
+  idempotencyHash: string;
+  requestHash: string;
+  scopeHash: string;
+}): Promise<PublicSubmissionResponseSnapshot | null> {
+  assertSha256Hashes(input);
+  const row = await queryOne<{ responsePayload: unknown }>(
+    `
+      select response_payload as "responsePayload"
+      from public_submission_idempotency
+      where idempotency_hash = $1
+        and action_hash = $2
+        and scope_hash = $3
+        and request_hash = $4
+        and state = 'completed'
+        and response_payload is not null
+    `,
+    [input.idempotencyHash, input.actionHash, input.scopeHash, input.requestHash],
+  );
+  if (!row) return null;
+  const response = parsePublicSubmissionResponseSnapshot(row.responsePayload);
+  if (!response) throw new Error("Public submission replay payload is invalid");
+  return response;
+}
+
 export async function claimPublicSubmissionIdempotency(input: {
   actionHash: string;
   idempotencyHash: string;

@@ -380,7 +380,7 @@ test("CI pins the exact runtime, canonicalizes SBOM and never prints raw app log
   );
   const setupBlocks = [...workflow.matchAll(/uses:\s+actions\/setup-node@[\s\S]*?package-manager-cache:\s*false/g)];
 
-  assert.equal(setupBlocks.length, 3);
+  assert.equal(setupBlocks.length, 4);
   for (const block of setupBlocks) assert.match(block[0], /node-version-file:\s*\.node-version/);
   assert.match(workflow, /canonicalize-sbom\.mjs/);
   assert.match(workflow, /novalure-production-sbom\.components\.sha256/);

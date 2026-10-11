@@ -993,6 +993,7 @@ async function upsertContact(input: {
           select id
           from contacts
           where workspace_id = $1
+            and project_id is not distinct from $4::uuid
             and (
               ($2::text <> '' and lower(email) = lower($2))
               or ($3::text <> '' and phone = $3)
@@ -1000,17 +1001,16 @@ async function upsertContact(input: {
           order by updated_at desc
           limit 1
         `,
-        [input.workspaceId, input.email, input.phone],
+        [input.workspaceId, input.email, input.phone, input.projectId],
       )
     : null;
 
   if (existing) {
-    await queryOne(
+    const updated = await queryOne<IdRow>(
       `
         update contacts
         set
           owner_user_id = coalesce(owner_user_id, $3::uuid),
-          project_id = coalesce($4, project_id),
           name = coalesce(nullif($5, ''), name),
           role = $6,
           source = $7,
@@ -1021,6 +1021,7 @@ async function upsertContact(input: {
           metadata = metadata || $12::jsonb,
           updated_at = now()
         where workspace_id = $1 and id = $2
+          and project_id is not distinct from $4::uuid
         returning id
       `,
       [
@@ -1038,8 +1039,8 @@ async function upsertContact(input: {
         JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
       ],
     );
-
-    return existing.id;
+    if (!updated) throw new Error("Contact project scope changed during submission");
+    return updated.id;
   }
 
   const contact = await queryOne<IdRow>(

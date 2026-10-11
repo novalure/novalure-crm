@@ -14,6 +14,7 @@ import type { AppSession } from "../src/lib/auth/session";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
+  readCompletedPublicSubmissionIdempotency,
 } from "../src/lib/db/public-submission-abuse-repository";
 import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope, createPublicSubmissionProof, publicSubmissionControlFields, publicSubmissionActions } from "../src/lib/security/public-submission-abuse";
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
@@ -193,6 +194,7 @@ test("an ambiguous commit keeps the key guarded and replays its durable success 
     }, { pool: lostCommitAckPool }),
     (error: unknown) => error instanceof PublicSubmissionTransactionError && !error.rollbackConfirmed,
   );
+  assert.deepEqual(await readCompletedPublicSubmissionIdempotency(hashes), snapshot);
   assert.deepEqual(await claimPublicSubmissionIdempotency(hashes), { state: "replay", response: snapshot });
   const after = await counts();
   for (const relation of ["contacts", "leads", "deals", "tasks", "form_submissions"]) {
@@ -208,6 +210,40 @@ test("an ambiguous commit keeps the key guarded and replays its durable success 
   assert.equal(audit.rows[0]?.ingestionSource, "NOVALURE_STUDIO_SIGNED_WEBSITE_SALES");
   assert.deepEqual(await claimPublicSubmissionIdempotency(hashes), { state: "replay", response: snapshot });
   assert.deepEqual(await counts(), after);
+});
+
+test("a failed COMMIT before execution leaves no receipt and permits a normal retry", { timeout: 240_000 }, async () => {
+  const hashes = createPublicSubmissionIdempotencyHashes({
+    action: "website_form",
+    idempotencyKey: randomUUID(),
+    requestFingerprint: "c".repeat(64),
+    scope: buildPublicSubmissionScope({ resourceId: websiteSalesFormId, resourceType: "form", workspaceId: websiteSalesWorkspaceId }),
+  });
+  const local = await getLocalTestPool(process.env.DATABASE_URL!);
+  assert.ok(local);
+  const failedCommitPool = {
+    async connect() {
+      const client = await local.connect();
+      return {
+        async query(sql: string, params?: unknown[]) {
+          if (sql === "commit") throw new Error("SYNTHETIC COMMIT never reached database");
+          return client.query(sql, params);
+        },
+        release() { client.release(); },
+      } as unknown as PoolClient;
+    },
+  };
+  await assert.rejects(
+    withPublicSubmissionTransaction({ actorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+      assert.deepEqual(await claimPublicSubmissionIdempotency(hashes), { state: "claimed" });
+    }, { pool: failedCommitPool }),
+    (error: unknown) => error instanceof PublicSubmissionTransactionError && !error.rollbackConfirmed,
+  );
+  assert.equal(await readCompletedPublicSubmissionIdempotency(hashes), null);
+  assert.equal((await db.admin.query("select idempotency_hash from public_submission_idempotency where idempotency_hash=$1", [hashes.idempotencyHash])).rowCount, 0);
+  await withPublicSubmissionTransaction({ actorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+    assert.deepEqual(await claimPublicSubmissionIdempotency(hashes), { state: "claimed" });
+  });
 });
 
 test("signed HTTP ingestion returns the same success receipt with one set of CRM records", { timeout: 240_000 }, async () => {
@@ -531,4 +567,46 @@ test("form saves keep project scope and reject a cross-project funnel", async ()
   const deniedForeignId = await upsertWebsiteForm({ session, form: { ...form, id: genericFormId, name: "SYNTHETIC foreign override" } });
   assert.equal(deniedForeignId.persisted, false);
   assert.equal((await db.admin.query("select count(*)::integer as count from forms where workspace_id=$1", [workspaceId])).rows[0].count, 2);
+});
+
+test("a public form cannot reparent or enrich a contact in another project", { timeout: 240_000 }, async () => {
+  const otherProjectId = randomUUID();
+  await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC other project','Bauträger')", [otherProjectId, websiteSalesWorkspaceId]);
+  await db.admin.query(
+    `update forms set fields = fields || '[{"id":"phone","crmField":"phone","label":"Phone","type":"tel","required":false}]'::jsonb where id=$1`,
+    [genericFormId],
+  );
+  for (const identifier of ["email", "phone"] as const) {
+    const otherContactId = randomUUID();
+    const email = `synthetic-cross-project-${randomUUID()}@example.invalid`;
+    const phone = `+1555${Math.floor(Math.random() * 9000000 + 1000000)}`;
+    await db.admin.query(
+      "insert into contacts(id,workspace_id,project_id,name,role,email,phone,metadata) values($1,$2,$3,'SYNTHETIC original','SYNTHETIC role',$4,$5,'{\"sentinel\":true}'::jsonb)",
+      [otherContactId, websiteSalesWorkspaceId, otherProjectId, email, phone],
+    );
+    const original = await db.admin.query<{ record: Record<string, unknown> }>("select to_jsonb(c) as record from contacts c where id=$1", [otherContactId]);
+    const data = new FormData();
+    data.set("name", "SYNTHETIC new project contact");
+    data.set("email", identifier === "email" ? email : `synthetic-new-${randomUUID()}@example.invalid`);
+    data.set("phone", identifier === "phone" ? phone : "+15550000000");
+    data.set("privacy", "true");
+    await withPublicSubmissionTransaction({ actorId: genericActorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+      const result = await persistWebsiteFormSubmission({
+        actorUserId: genericActorId,
+        formData: data,
+        formKey: genericFormId,
+        requestUrl: "https://crm.example.invalid/forms/embed",
+      });
+      assert.equal(result.persisted, true);
+    });
+    const unchanged = await db.admin.query<{ record: Record<string, unknown> }>("select to_jsonb(c) as record from contacts c where id=$1", [otherContactId]);
+    assert.deepEqual(unchanged.rows, original.rows, `${identifier} match cannot mutate another project`);
+    const submission = await db.admin.query<{ contact_id: string; project_id: string }>(
+      "select contact_id,project_id from form_submissions where form_id=$1 and raw_payload->>'email'=$2 order by created_at desc limit 1",
+      [genericFormId, data.get("email")],
+    );
+    assert.equal(submission.rows[0]?.project_id, projectId);
+    assert.notEqual(submission.rows[0]?.contact_id, otherContactId);
+    assert.equal((await db.admin.query("select id from contacts where id=$1 and project_id=$2", [submission.rows[0]?.contact_id, projectId])).rowCount, 1);
+  }
 });

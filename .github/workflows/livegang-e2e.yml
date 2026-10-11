@@ -15,6 +15,14 @@ on:
         options:
           - standard
           - isolated-candidate
+      qa_action:
+        description: Run full QA or read-only candidate authentication preflight
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - preflight
 
 permissions:
   contents: read
@@ -29,6 +37,7 @@ env:
 jobs:
   quality:
     name: Lockfile, lint, typecheck, tests and build
+    if: github.event_name != 'workflow_dispatch' || inputs.qa_action != 'preflight'
     runs-on: ubuntu-latest
     env:
       CRM_QA_BROWSER_CHANNEL: chromium
@@ -135,6 +144,7 @@ jobs:
 
   production-sca:
     name: Production dependency audit and SBOM
+    if: github.event_name != 'workflow_dispatch' || inputs.qa_action != 'preflight'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -172,9 +182,44 @@ jobs:
             novalure-production-sbom.components.sha256
           if-no-files-found: error
 
+  qa-auth-preflight:
+    name: Read-only isolated-candidate authentication preflight
+    if: github.event_name == 'workflow_dispatch' && inputs.qa_action == 'preflight' && inputs.qa_profile == 'isolated-candidate'
+    runs-on: ubuntu-latest
+    environment: novalure-qa-candidate
+    concurrency:
+      group: novalure-shared-qa
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install dependencies from lockfile
+        run: npm ci
+      - name: Verify both candidate connections without writes
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+        run: node --use-system-ca scripts/qa-auth-preflight.mjs
+
   qa-e2e:
     name: Manual trusted-candidate QA regression and tenant diagnostics
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.qa_action != 'preflight'
     runs-on: ubuntu-latest
     environment: ${{ inputs.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' || 'novalure-qa' }}
     concurrency:

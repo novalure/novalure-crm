@@ -9,6 +9,7 @@ import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } fro
 import { publicFormSubmissionScope } from "@/lib/db/public-form-lookup-client";
 import {
   claimPublicSubmissionIdempotency,
+  readCompletedPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
   consumePublicSubmissionRateLimits,
 } from "@/lib/db/public-submission-abuse-repository";
@@ -243,8 +244,8 @@ export async function POST(request: Request) {
       // A lost COMMIT acknowledgement may hide a committed business write.
       // Read the durable receipt before replying; the same key stays guarded.
       try {
-        const result = await claimPublicSubmissionIdempotency(hashes);
-        if (result.state === "replay") return responseFromSnapshot(result.response);
+        const response = await readCompletedPublicSubmissionIdempotency(hashes);
+        if (response) return responseFromSnapshot(response);
       } catch { /* A same-key retry can read the eventual committed receipt. */ }
     }
     return unavailableResponse();
