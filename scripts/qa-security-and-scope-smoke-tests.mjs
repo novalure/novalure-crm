@@ -273,7 +273,7 @@ test("protected QA runtime-role binding is explicit and uses only the direct mig
     readFile("scripts/qa-bind-runtime-role.mjs", "utf8"),
   ]);
 
-  assert.match(workflow, /environment: novalure-qa/);
+  assert.match(workflow, /environment: \$\{\{ inputs\.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' \|\| 'novalure-qa' \}\}/);
   assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Bind existing QA runtime role to tenant group[\s\S]*Reset synthetic QA run/);
   assert.match(workflow, /MIGRATION_DATABASE_URL/);
   assert.match(binding, /NOVALURE_QA_DATABASE_ROLE.*novalure_app/);
