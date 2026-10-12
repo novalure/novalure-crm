@@ -40,6 +40,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     const projectForm = randomUUID();
     const ownedDeniedProjectForm = randomUUID();
     const ownedUnassignedForm = randomUUID();
+    const ownedUnassignedSubmission = randomUUID();
     const foreignForm = randomUUID();
     const unpublishedForm = randomUUID();
     const key = randomUUID().replaceAll("-", "");
@@ -179,6 +180,11 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await client.query("select id from forms where id=$1", [ownedUnassignedForm])).rowCount, 1);
       assert.equal((await client.query("update forms set name='SYNTHETIC owned edit' where id=$1 returning id", [ownedUnassignedForm])).rowCount, 1);
       assert.equal((await client.query("update forms set name='forged' where id=$1 returning id", [ownedDeniedProjectForm])).rowCount, 0);
+      assert.equal((await client.query(
+        "insert into form_submissions(id,workspace_id,form_id) values($1,$2,$3) returning id",
+        [ownedUnassignedSubmission, ownWorkspace, ownedUnassignedForm],
+      )).rowCount, 1);
+      assert.equal((await client.query("select id from form_submissions where id=$1", [ownedUnassignedSubmission])).rowCount, 1);
       await client.query("savepoint before_split_project_insert");
       await assert.rejects(client.query(
         "insert into form_submissions(workspace_id,project_id,form_id) values($1,$2,$3)",
@@ -195,6 +201,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, splitActor]);
       assert.equal((await client.query("select id from forms where id=$1", [ownedUnassignedForm])).rowCount, 0);
       assert.equal((await client.query("update forms set name='forged' where id=$1 returning id", [ownedUnassignedForm])).rowCount, 0);
+      assert.equal((await client.query("select id from form_submissions where id=$1", [ownedUnassignedSubmission])).rowCount, 0);
       await client.query("rollback");
       await client.query("begin");
       await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, ownActor]);

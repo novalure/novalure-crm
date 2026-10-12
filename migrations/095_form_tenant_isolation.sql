@@ -91,7 +91,13 @@ create policy form_submissions_tenant_read on public.form_submissions
   using (
     workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
     and (public.crm_workspace_manager(workspace_id)
-      or (project_id is not null and public.crm_project_access(workspace_id, project_id, false)))
+      or (project_id is not null and public.crm_project_access(workspace_id, project_id, false))
+      or (project_id is null and exists (
+        select 1 from public.forms f
+        where f.id = form_id and f.workspace_id = form_submissions.workspace_id
+          and f.project_id is null
+          and f.owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid
+      )))
   );
 
 create policy form_submissions_tenant_insert on public.form_submissions
@@ -105,7 +111,13 @@ create policy form_submissions_tenant_insert on public.form_submissions
         and f.project_id is not distinct from form_submissions.project_id
     )
     and (public.crm_workspace_manager(workspace_id)
-      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true)))
+      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true))
+      or (project_id is null and exists (
+        select 1 from public.forms f
+        where f.id = form_id and f.workspace_id = form_submissions.workspace_id
+          and f.project_id is null
+          and f.owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid
+      )))
   );
 
 -- A form delete would cascade to submissions through the legacy FK. Keep

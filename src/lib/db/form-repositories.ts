@@ -109,7 +109,6 @@ const defaultActions: WebsiteForm["actions"] = {
 };
 
 const defaultSteps: FormStep[] = [{ description: "", id: "step_contact", title: "Kontakt" }];
-const websiteSalesFormSlug = "novalure-studio-website-sales-v1";
 
 const defaultFields: FormField[] = [
   createFallbackField("text", "Name", "name", true, defaultSteps[0].id),
@@ -586,7 +585,7 @@ export async function persistWebsiteFormSubmission(input: {
   const score = scoreFormSubmission(form, answers, consent);
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
-  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, form, signedWebsiteSales, tracking });
+  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, signedWebsiteSales, tracking });
   const source = websiteSalesMetadata ? "Novalure Studio Form" : form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
   const leadType = websiteSalesMetadata ? "Website Sales" : normalizeLeadType(lookup.funnelAudience);
   const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
@@ -1075,11 +1074,10 @@ async function upsertContact(input: {
 
 function getWebsiteSalesMetadata(input: {
   answers: Record<string, unknown>;
-  form: WebsiteForm;
   signedWebsiteSales: boolean;
   tracking: Record<string, unknown>;
 }) {
-  if (input.form.slug !== websiteSalesFormSlug) return null;
+  if (!input.signedWebsiteSales) return null;
   const string = (key: string, limit: number) => {
     const value = input.answers[key];
     return typeof value === "string" ? value.trim().slice(0, limit) : "";
