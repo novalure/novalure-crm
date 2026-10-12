@@ -218,8 +218,11 @@ function createClient(email) {
         challengeBody.set("code", code);
         challengeBody.set("recoveryCodesSaved", "1");
       } else {
-        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
-        assert(Boolean(code), `${email} reuses the enrolled TOTP secret for MFA verification`);
+        // QA users are seeded with this unique workflow run ID. An already
+        // enrolled user on the first login means the isolated fixture is stale.
+        assert(Boolean(enrolledMfaSecret), `${email} has fresh run-scoped MFA enrollment`);
+        const code = createTotpCode(enrolledMfaSecret);
+        assert(Boolean(code), `${email} reuses this run's TOTP enrollment`);
         challengeBody.set("code", code);
       }
 

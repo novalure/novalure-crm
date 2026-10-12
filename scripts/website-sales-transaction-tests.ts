@@ -461,6 +461,16 @@ test("an editor can save a form in a writable project without a funnel", async (
   const editorId = randomUUID();
   const writableProjectId = randomUUID();
   const formId = randomUUID();
+  const foreignWorkspaceId = randomUUID();
+  const foreignOwnerId = randomUUID();
+  await db.admin.query(
+    "insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC foreign form owner','self_service_customer')",
+    [foreignWorkspaceId],
+  );
+  await db.admin.query(
+    "insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC foreign owner',$3,'owner','customer_owner','active')",
+    [foreignOwnerId, foreignWorkspaceId, `foreign-form-owner-${foreignOwnerId}@example.invalid`],
+  );
   await db.admin.query(
     `insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
      values($1,$2,'SYNTHETIC form editor','form-editor@example.invalid','agent','novalure_operator','active')`,
@@ -498,6 +508,15 @@ test("an editor can save a form in a writable project without a funnel", async (
   assert.ok(form, "editor can read the form before saving");
   const saved = await upsertWebsiteForm({ session, form: { ...form, name: "SYNTHETIC edited form" } });
   assert.equal(saved.persisted, true);
+  assert.deepEqual(
+    (await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
+    [{ project_id: writableProjectId, name: "SYNTHETIC edited form" }],
+  );
+  const foreignOwner = await upsertWebsiteForm({
+    session,
+    form: { ...form, ownerMode: "user", ownerUserId: foreignOwnerId, name: "SYNTHETIC forged owner" },
+  });
+  assert.deepEqual(foreignOwner, { form: null, persisted: false, reason: "Form owner is not active in workspace" });
   assert.deepEqual(
     (await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
     [{ project_id: writableProjectId, name: "SYNTHETIC edited form" }],

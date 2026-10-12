@@ -267,6 +267,13 @@ async function upsertWebsiteFormInTenant(input: { session: AppSession; form: Web
   const ownerUserId = form.ownerMode === "user" && isUuid(form.ownerUserId)
     ? form.ownerUserId
     : funnel?.ownerUserId ?? (isUuid(input.session.userId) ? input.session.userId : null);
+  if (ownerUserId) {
+    const owner = await queryOne<{ id: string }>(
+      "select id from workspace_users where workspace_id=$1 and id=$2 and status='active' limit 1",
+      [input.session.workspaceId, ownerUserId],
+    );
+    if (!owner) return { form: null, persisted: false, reason: "Form owner is not active in workspace" };
+  }
   const slug = slugify(form.slug || form.name) || `formular-${Date.now()}`;
   const tags = parseTags(form.tags);
   const settings = {
