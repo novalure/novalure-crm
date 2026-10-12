@@ -1,5 +1,7 @@
 # CRM form tenant isolation repair
 
+> Superseded runtime note: migration 095 and its RLS evidence remain historical and authoritative, but its dedicated public lookup login is not the runtime architecture after migration 096. The canonical successor is the [External Integration Gateway](../security/external-integration-gateway.md). Migration 096 disables `novalure_public_form_lookup`, revokes the old functions, and removes the separate lookup URL/password requirement.
+
 ## Scope
 
 Migration `095_form_tenant_isolation` closes the forced RLS omission for `forms` and `form_submissions`. It runs only after `094_website_sales_ingestion`; migration 094 and its checksum are unchanged. The migration removes ambient application and `PUBLIC` table grants, grants only the tenant runtime role, and adds tenant policies with actor and project checks. It creates a separate `novalure_public_form_lookup` login role with no password, table grants, or tenant-role membership. Only that role can execute the published render lookup and submission-scope functions. The render lookup excludes workspace and actor IDs; the server resolves those through the separate scope function only after checking the form proof. The application commits the idempotency receipt and business writes in one tenant transaction. Public HTML and JSON omit CRM routing, ownership, campaign, funnel, and performance fields.
@@ -26,13 +28,11 @@ The 095 local matrix checks forced RLS, runtime role attributes, no-context defa
 
 ## Coordinated cutover
 
-This change is intentionally fail-closed when `CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL` is absent. The value must point to the same Neon host, port, and database as `DATABASE_URL`, use `novalure_public_form_lookup`, and request `sslmode=verify-full`. The application additionally checks the live role's privileges and database name before each lookup. A credential must be set for that role outside SQL migration files and bound only to the CRM server environment. Keep its value out of logs, PRs, and QA artifacts.
-
-Migration-first makes the current Production app's direct form reads fail after 095; deployment-first makes the new app's public lookups fail until 095 creates the functions and role. Schedule a short public-form maintenance window, drain in-flight submissions, run the guarded 095 migration, set the separate credential and Production environment binding, deploy the exact reviewed app revision, then verify anonymous and signed forms against the Production target before ending the window. Rehearse this order on a Production-derived isolated branch and a protected Preview first. If deployment or binding fails, keep public forms unavailable and forward-fix the credential or deployment; do not remove forced RLS to restore the old path. A database restore requires its own approved recovery procedure.
+The release is now a single governed 094 → 095 → 096 sequence followed by deployment of the exact reviewed gateway revision. Migration 096 must immediately follow 095 in the same maintenance window; it seeds compatibility registry records, grants only the new narrow functions to `novalure_app`, and makes the lookup role unusable. No lookup password or separate database URL is created or bound. Follow the [gateway cutover runbook](../go-live/external-integration-gateway-cutover.md). If migration or deployment fails, keep public integration traffic unavailable and forward-fix or execute the approved database/deployment recovery plan; never disable forced RLS.
 
 ## Open release gates
 
-- Run a Production-derived isolated Neon branch rehearsal with the exact migration and target role inventory. Verify forced RLS, ACLs, anonymous signed and generic forms, lookup-role separation, cross-tenant denial, and a restore path. Keep synthetic and real-origin data evidence separate.
+- Run a Production-derived isolated Neon branch rehearsal with 094, 095, and 096 plus the exact target role inventory. Verify forced RLS, ACLs, anonymous signed and gateway forms, the disabled lookup login, cross-tenant denial, and a restore path. Keep synthetic and real-origin data evidence separate.
 - Obtain exact-head CI and independent AI-agent review on this Draft PR. Resolve any applicable Critical or High finding and re-run the gates for the new head.
 - Before Production migration and deployment, verify target branch, database, runtime role, deployment SHA, migration ledger and checksum, secret boundaries, and the manual cutover plan. Production activation and real CRM/Studio E2E remain pending.
 

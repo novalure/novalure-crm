@@ -100,7 +100,10 @@ export async function applySalesSchema(db, {
       // 094 depends on the operator installed by 092/093. Its unchanged SQL
       // runs in the dedicated Website Sales fixture, which seeds that actor.
       name === "094_website_sales_ingestion.sql" ||
-      name === "095_form_tenant_isolation.sql"
+      name === "095_form_tenant_isolation.sql" ||
+      // 096 depends on the manual 095 cutover. The dedicated gateway fixture
+      // applies 095 and 096 in order after seeding its scoped form data.
+      name === "096_public_integration_gateway.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

@@ -2,6 +2,8 @@
 
 Novalure CLG is a Next.js based real estate CRM workspace for buyer, seller and investor lead operations. The current implementation focuses on a central configurable CRM dashboard, lead inbox, deal pipeline, tasks, funnels, newsletter preparation and calendar context.
 
+Public customer sites use the server-side [External Integration Gateway](docs/security/external-integration-gateway.md). Customer websites never receive database credentials or per-site Postgres roles.
+
 ## Dashboard Features
 
 The central dashboard is implemented in `src/components/dashboard-overview.tsx` and uses the existing mock CRM data from `src/lib/crm-data.ts`.
