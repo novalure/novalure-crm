@@ -93,6 +93,11 @@ async function attestDatabase() {
   requireProof(role?.rolcanlogin && !role.rolsuper && !role.rolbypassrls && !role.rolcreatedb
     && !role.rolcreaterole && !role.rolreplication, "QA_LOOKUP_ROLE_UNSAFE");
   requireProof(await scalar(lookup, "select not has_table_privilege(current_user,'public.forms','SELECT') and not has_table_privilege(current_user,'public.form_submissions','SELECT') as value") === true, "QA_LOOKUP_TABLE_GRANT_UNSAFE");
+  // Immutable CRM events prevent cascading deletion of a seeded workspace.
+  // Each disposable branch therefore runs this candidate matrix only once.
+  requireProof(await scalar(owner, `select count(*)::int as value from workspaces
+    where public_key like 'qa-%' and name like 'SYNTHETIC Candidate %'`) === 0,
+  "QA_CANDIDATE_BRANCH_ALREADY_USED");
 }
 
 async function seedForms() {

@@ -458,7 +458,7 @@ test("anonymous lookup fails closed without its separate database identity", asy
   }
 });
 
-test("an editor can save a form in a writable project without a funnel", async () => {
+test("form publishing requires product authority as well as a writable project", async () => {
   const editorId = randomUUID();
   const writableProjectId = randomUUID();
   const formId = randomUUID();
@@ -507,14 +507,21 @@ test("an editor can save a form in a writable project without a funnel", async (
   const loaded = await listWebsiteForms({ session });
   const form = loaded.forms.find((item) => item.id === formId);
   assert.ok(form, "editor can read the form before saving");
-  const saved = await upsertWebsiteForm({ session, form: { ...form, name: "SYNTHETIC edited form" } });
+  assert.deepEqual(await upsertWebsiteForm({ session, form: { ...form, name: "SYNTHETIC unauthorized edit" } }),
+    { form: null, persisted: false, reason: "Form publishing capability is required" });
+  assert.equal((await db.admin.query<{ name: string }>("select name from forms where id=$1", [formId])).rows[0].name,
+    "SYNTHETIC editable form");
+  await db.admin.query("update workspace_users set product_role='novalure_sales' where id=$1", [editorId]);
+  const publishingSession = { ...session, productRole: "novalure_sales" as const,
+    productPermissions: getProductRoleCapabilities("novalure_sales") };
+  const saved = await upsertWebsiteForm({ session: publishingSession, form: { ...form, name: "SYNTHETIC edited form" } });
   assert.equal(saved.persisted, true);
   assert.deepEqual(
     (await db.admin.query("select project_id,name from forms where id=$1", [formId])).rows,
     [{ project_id: writableProjectId, name: "SYNTHETIC edited form" }],
   );
   const foreignOwner = await upsertWebsiteForm({
-    session,
+    session: publishingSession,
     form: { ...form, ownerMode: "user", ownerUserId: foreignOwnerId, name: "SYNTHETIC forged owner" },
   });
   assert.deepEqual(foreignOwner, { form: null, persisted: false, reason: "Form owner is not active in workspace" });

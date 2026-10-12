@@ -7,7 +7,7 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
 import { extractConsent } from "@/lib/form-consent";
-import { getProductRoleCapabilities } from "@/lib/product-model";
+import { getProductRoleCapabilities, hasProductCapability } from "@/lib/product-model";
 import { websiteSalesActorId, websiteSalesFormId } from "@/lib/website-sales-ingestion";
 import {
   buildPublicFormPath,
@@ -242,6 +242,9 @@ export async function upsertWebsiteForm(input: {
   return withCrmRead(input.session, (_tx, freshSession) => {
     if (!freshSession.permissions.includes("crm:write")) {
       return Promise.resolve({ form: null, persisted: false, reason: "CRM write permission is required" });
+    }
+    if (!hasProductCapability(freshSession.productRole, "funnels:publish")) {
+      return Promise.resolve({ form: null, persisted: false, reason: "Form publishing capability is required" });
     }
     return upsertWebsiteFormInTenant({ ...input, session: freshSession });
   });
