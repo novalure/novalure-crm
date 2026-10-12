@@ -41,6 +41,17 @@ test("form consent accepts explicit affirmative values and fails closed on negat
   data.set("marketing_consent", "true");
   assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: true, marketing: true });
 
+  data.append("privacy", "on");
+  data.append("marketing_consent", "true");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+  data.delete("privacy");
+  data.set("privacy", "on");
+  data.delete("marketing_consent");
+  data.set("marketing_consent", "true");
+  data.append("privacy_consent", "on");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: true });
+  data.delete("privacy_consent");
+
   data.append("privacy_consent", "false");
   data.append("marketing_consent", "false");
   assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });

@@ -3,9 +3,8 @@ import type { WebsiteForm } from "@/lib/form-types";
 type ConsentFormData = Pick<FormData, "getAll">;
 
 function isAffirmativeConsent(values: FormDataEntryValue[]) {
-  return values.length > 0 && values.every((value) =>
-    typeof value === "string" && /^(?:1|true|on|yes)$/i.test(value.trim()),
-  );
+  return values.length === 1 && typeof values[0] === "string"
+    && /^(?:1|true|on|yes)$/i.test(values[0].trim());
 }
 
 export function extractConsent(
