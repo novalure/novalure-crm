@@ -571,6 +571,7 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   assert.doesNotMatch(automaticSteps, /--allow-manual-cutover/);
   assert.match(workflow, /Preview explicit form isolation QA cutover[\s\S]*dry-run --only=095_form_tenant_isolation --allow-manual-cutover[\s\S]*Apply explicit form isolation QA cutover[\s\S]*up --only=095_form_tenant_isolation --allow-manual-cutover/);
   assert.match(workflow, /Preview explicit external integration gateway QA cutover[\s\S]*dry-run --only=096_public_integration_gateway --allow-manual-cutover[\s\S]*Apply explicit external integration gateway QA cutover[\s\S]*up --only=096_public_integration_gateway --allow-manual-cutover/);
+  assert.match(workflow, /Apply explicit external integration gateway QA cutover[\s\S]*Verify gateway runtime binding and retired lookup identity[\s\S]*qa-bind-public-form-lookup\.mjs/);
   assert.ok(
     workflow.indexOf("up --only=095_form_tenant_isolation")
       < workflow.indexOf("dry-run --only=096_public_integration_gateway"),

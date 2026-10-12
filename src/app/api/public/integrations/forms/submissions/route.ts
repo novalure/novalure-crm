@@ -3,6 +3,7 @@ import {
   readExternalRequestOrigin,
   createCorrelationId,
   recordExternalIntegrationEvent,
+  requireExternalIntegrationClientIp,
   resolveExternalIntegration,
   ExternalIntegrationError,
 } from "@/lib/db/external-integration-gateway";
@@ -23,7 +24,6 @@ import {
 import {
   createPublicSubmissionIdempotencyHashes,
   createPublicSubmissionRateLimitPolicies,
-  getTrustedPublicSubmissionClientIp,
   normalizePublicSubmissionIdentifier,
   publicSubmissionActions,
   type PublicSubmissionResponseSnapshot,
@@ -93,10 +93,9 @@ export async function POST(request: Request) {
       requestFingerprint,
       scope,
     });
-    const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-    if (!clientIp) throw new ExternalIntegrationError("temporarily_unavailable", 503);
+    const clientIp = requireExternalIntegrationClientIp(request.headers);
     const identifier = publicIdentifier(lookup.form, fields, idempotencyKey);
-    const snapshot = await withPublicSubmissionTransaction(
+    const result = await withPublicSubmissionTransaction(
       { actorId: resolution.publicActorId, workspaceId: resolution.workspaceId },
       async () => {
         const lockedResolution = await resolveExternalIntegration({
@@ -109,12 +108,15 @@ export async function POST(request: Request) {
           throw new ExternalIntegrationError("integration_not_found", 404);
         }
         const claim = await claimPublicSubmissionIdempotency(hashes);
-        if (claim.state === "replay") return claim.response;
+        if (claim.state === "replay") return { duplicate: true, snapshot: claim.response };
         if (claim.state === "processing" || claim.state === "conflict") {
-          return jsonSnapshot(
-            claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict",
-            409,
-          );
+          return {
+            duplicate: false,
+            snapshot: jsonSnapshot(
+              claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict",
+              409,
+            ),
+          };
         }
         const limit = await consumePublicSubmissionRateLimits({
           policies: createPublicSubmissionRateLimitPolicies({
@@ -124,7 +126,10 @@ export async function POST(request: Request) {
             scope,
           }),
         });
-        if (!limit.allowed) return complete(hashes, jsonSnapshot("rate_limited", 429));
+        if (!limit.allowed) return {
+          duplicate: false,
+          snapshot: await complete(hashes, jsonSnapshot("rate_limited", 429)),
+        };
         const persistence = await persistWebsiteFormSubmission({
           actorUserId: resolution.publicActorId,
           formData,
@@ -132,24 +137,28 @@ export async function POST(request: Request) {
           requestUrl: request.url,
         });
         if (!persistence.persisted) {
-          return complete(hashes, jsonSnapshot(normalizePersistenceReason(persistence.reason), 422));
+          return {
+            duplicate: false,
+            snapshot: await complete(hashes, jsonSnapshot(normalizePersistenceReason(persistence.reason), 422)),
+          };
         }
         const accepted: PublicSubmissionResponseSnapshot = {
           body: { accepted: true, reference: randomUUID() },
           kind: "json",
           status: 202,
         };
-        return complete(hashes, accepted);
+        return { duplicate: false, snapshot: await complete(hashes, accepted) };
       },
     );
+    const { duplicate, snapshot } = result;
     if (snapshot.kind !== "json") throw new ExternalIntegrationError("temporarily_unavailable", 503);
     await recordExternalIntegrationEvent(resolution, {
       capability: "form.submit",
       correlationId: context.correlationId,
       eventType: "form.submit",
-      outcome: snapshot.status >= 400 ? "denied" : "accepted",
+      outcome: duplicate ? "duplicate" : snapshot.status >= 400 ? "denied" : "accepted",
     });
-    observeExternalSuccess({ ...context, status: snapshot.status });
+    observeExternalSuccess({ ...context, outcome: duplicate ? "duplicate" : "accepted", status: snapshot.status });
     return externalJson(origin, snapshot.body, {
       correlationId: context.correlationId,
       status: snapshot.status,

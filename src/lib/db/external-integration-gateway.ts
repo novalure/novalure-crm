@@ -8,7 +8,10 @@ import {
   type TenantScope,
   type TenantTransaction,
 } from "@/lib/db/tenant-client";
-import { createPublicSubmissionOpaqueHash } from "@/lib/security/public-submission-abuse";
+import {
+  createPublicSubmissionOpaqueHash,
+  getTrustedPublicSubmissionClientIp,
+} from "@/lib/security/public-submission-abuse";
 
 export const externalIntegrationCapabilities = [
   "form.read",
@@ -78,6 +81,17 @@ export function readExternalRequestOrigin(request: Request) {
   return normalizeExternalOrigin(value);
 }
 
+/**
+ * Never rate-limit a public integration with an attacker-supplied fallback.
+ * Vercel or an explicitly configured trusted proxy must supply the address;
+ * absence is a fail-closed infrastructure error, not an anonymous bypass.
+ */
+export function requireExternalIntegrationClientIp(headers: Headers) {
+  const clientIp = getTrustedPublicSubmissionClientIp(headers);
+  if (!clientIp) throw new ExternalIntegrationError("trusted_client_ip_unavailable", 503);
+  return clientIp;
+}
+
 export function assertPublicSiteKey(value: string) {
   if (!publicSiteKeyPattern.test(value)) {
     throw new ExternalIntegrationError("integration_not_found", 404);
@@ -109,7 +123,7 @@ export async function legacyPublicFormLookup(
   slug: string,
 ) {
   const row = await queryOne<{ form: Record<string, unknown> | null }>(
-    "select public.crm_external_legacy_form_lookup($1::uuid,$2::text,$3::text) as form",
+    "select public.crm_public_form_lookup($1::uuid,$2::text,$3::text) as form",
     [formId, workspacePublicKey, slug],
   );
   return row?.form ?? null;
@@ -117,7 +131,7 @@ export async function legacyPublicFormLookup(
 
 export async function legacyPublicFormRoutes(slug: string) {
   return queryRows<LegacyFormRouteRow>(
-    "select * from public.crm_external_legacy_form_route($1::text)",
+    "select * from public.crm_public_form_legacy_route($1::text)",
     [slug],
   );
 }
@@ -126,7 +140,7 @@ export async function legacyPublicFormSubmissionScope(formId: string, workspaceP
   if (!workspacePublicKey.trim()) return null;
   return queryOne<{ actorId: string; workspaceId: string }>(
     `select workspace_id as "workspaceId", actor_id as "actorId"
-     from public.crm_external_form_submission_scope($1::uuid,$2::text)`,
+     from public.crm_public_form_scope($1::uuid,$2::text)`,
     [formId, workspacePublicKey],
   );
 }
@@ -384,18 +398,14 @@ export async function getExternalChatContext(input: {
   correlationId: string;
   origin: string;
   publicSiteKey: string;
+  resolution: ExternalIntegrationResolution;
   sessionId: string;
   sessionToken: string;
 }) {
   if (!uuidPattern.test(input.sessionId) || !opaqueKeyPattern.test(input.sessionToken)) {
     throw new ExternalIntegrationError("session_denied", 403);
   }
-  const resolution = await resolveExternalIntegration({
-    capability: "chat.message",
-    origin: input.origin,
-    publicSiteKey: input.publicSiteKey,
-  });
-  if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
+  const resolution = input.resolution;
   const result = await withTenantTransaction(tenantScope(resolution), async (transaction) => {
     await lockExternalIntegration(transaction, resolution, {
       capability: "chat.message",

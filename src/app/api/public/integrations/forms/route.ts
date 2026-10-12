@@ -4,6 +4,7 @@ import {
   ExternalIntegrationError,
   readExternalRequestOrigin,
   recordExternalIntegrationEvent,
+  requireExternalIntegrationClientIp,
   resolveExternalIntegration,
 } from "@/lib/db/external-integration-gateway";
 import { withTenantTransaction } from "@/lib/db/tenant-client";
@@ -12,7 +13,6 @@ import {
   publicWebsiteFormView,
 } from "@/lib/db/form-repositories";
 import { externalFailure, externalJson, externalOptions, observeExternalSuccess } from "@/lib/external-api-response";
-import { getTrustedPublicSubmissionClientIp } from "@/lib/security/public-submission-abuse";
 
 export async function GET(request: Request) {
   const context = { correlationId: createCorrelationId(), operation: "form.read", startedAt: Date.now() };
@@ -31,8 +31,7 @@ export async function GET(request: Request) {
       publicSiteKey,
     });
     if (!resolution?.formId) throw new ExternalIntegrationError("form_not_found", 404);
-    const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-    if (!clientIp) throw new Error("Trusted client IP is unavailable");
+    const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({ clientIp, operation: "form.read", resolution });
     if (!limit.allowed) {
       await recordExternalIntegrationEvent(resolution, {

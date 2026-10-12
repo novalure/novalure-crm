@@ -155,10 +155,11 @@ async function attestRls() {
   requireProof(await scalar(app, "select count(*)::int as value from forms where id=$1", [own.form]) === 0, "QA_NO_CONTEXT_FORM_LEAK");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_NO_CONTEXT_SUBMISSION_LEAK");
   await requireDenied(() => app.query("select version from novalure_schema_migrations limit 1"), "QA_LEDGER_READ_ALLOWED");
-  await requireDenied(() => app.query("select crm_public_form_lookup(null,$1,$2)", [own.key, slug]), "QA_OBSOLETE_LOOKUP_FUNCTION_ALLOWED");
-  const published = await app.query("select crm_external_legacy_form_lookup(null,$1,$2) as form", [own.key, slug]);
-  const draft = await app.query("select crm_external_legacy_form_lookup(null,$1,$2) as form", [own.key, draftSlug]);
-  requireProof(published.rows[0]?.form?.id === own.form && draft.rows[0]?.form === null, "QA_PUBLIC_LOOKUP_INVALID");
+  const published = await app.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, slug]);
+  const directGateway = await app.query("select crm_external_legacy_form_lookup(null,$1,$2) as form", [own.key, slug]);
+  const draft = await app.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, draftSlug]);
+  requireProof(published.rows[0]?.form?.id === own.form && directGateway.rows[0]?.form?.id === own.form
+    && draft.rows[0]?.form === null, "QA_PUBLIC_LOOKUP_INVALID");
   const resolved = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
     [siteKey, publicOrigin, own.form]);
   const deniedOrigin = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
@@ -312,6 +313,22 @@ async function attestHttp() {
   requireProof(anonymousRead.status >= 400, "QA_ANONYMOUS_SUBMISSION_API_READ_ALLOWED");
 }
 
+async function gatewayBusinessEffects() {
+  const row = (await owner.query(`select jsonb_build_object(
+    'contacts',(select count(*)::int from contacts where workspace_id=$1),
+    'leads',(select count(*)::int from leads where workspace_id=$1),
+    'deals',(select count(*)::int from deals where workspace_id=$1),
+    'tasks',(select count(*)::int from tasks where workspace_id=$1),
+    'consents',(select count(*)::int from consent_records where workspace_id=$1),
+    'submissions',(select count(*)::int from form_submissions where workspace_id=$1),
+    'timeline',(select count(*)::int from contact_timeline_items where workspace_id=$1),
+    'audit',(select count(*)::int from audit_logs where workspace_id=$1),
+    'analytics',(select count(*)::int from analytics_events where workspace_id=$1),
+    'speedToLead',(select count(*)::int from speed_to_lead_events where workspace_id=$1)
+  ) value`, [own.workspace])).rows[0];
+  return row.value;
+}
+
 async function attestGateway() {
   const headers = {
     origin: publicOrigin,
@@ -343,18 +360,27 @@ async function attestGateway() {
     "content-type": "application/json",
     "idempotency-key": submissionKey,
   };
-  const before = await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]);
+  const beforeEffects = await gatewayBusinessEffects();
   const first = await fetch(`${base}/api/public/integrations/forms/submissions`, {
     body: submissionBody, headers: submissionHeaders, method: "POST",
   });
   const firstBody = await first.json().catch(() => ({}));
+  const afterFirstEffects = await gatewayBusinessEffects();
   const replay = await fetch(`${base}/api/public/integrations/forms/submissions`, {
     body: submissionBody, headers: submissionHeaders, method: "POST",
   });
   const replayBody = await replay.json().catch(() => ({}));
-  const after = await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]);
+  const afterReplayEffects = await gatewayBusinessEffects();
   requireProof(first.status === 202 && replay.status === 202 && firstBody.reference === replayBody.reference
-    && after === before + 1 && !JSON.stringify(firstBody).includes(own.workspace), "QA_GATEWAY_SUBMISSION_FAILED");
+    && afterFirstEffects.submissions === beforeEffects.submissions + 1
+    && JSON.stringify(afterReplayEffects) === JSON.stringify(afterFirstEffects)
+    && !JSON.stringify(firstBody).includes(own.workspace), "QA_GATEWAY_SUBMISSION_FAILED");
+  const formEvents = (await owner.query(`select outcome,count(*)::int count
+    from external_integration_events where workspace_id=$1 and event_type='form.submit'
+    group by outcome order by outcome`, [own.workspace])).rows;
+  requireProof(JSON.stringify(formEvents) === JSON.stringify([
+    { outcome: "accepted", count: 1 }, { outcome: "duplicate", count: 1 },
+  ]), "QA_GATEWAY_REPLAY_AUDIT_INVALID");
 
   const chatStartKey = randomBytes(24).toString("base64url");
   const chatStart = await fetch(`${base}/api/public/integrations/chat/sessions`, {

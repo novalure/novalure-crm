@@ -25,8 +25,8 @@ After 095, continue directly to 096; do not reopen customer traffic in the inter
 - `forms` and `form_submissions`: RLS enabled and FORCE RLS enabled.
 - All five gateway tables: RLS enabled and FORCE RLS enabled.
 - `novalure_app`: non-owner, non-superuser, no `BYPASSRLS`, no broad public table bypass.
-- `novalure_public_form_lookup`: `NOLOGIN`, password null, no schema usage, no executable old lookup functions.
-- Only `novalure_app` can execute the four migration-096 gateway functions.
+- `novalure_public_form_lookup`: `NOLOGIN`, password null, no schema usage, and no executable functions.
+- Only `novalure_app` can execute the four migration-096 gateway functions and the three compatibility-named `crm_public_form_*` wrappers that delegate to them.
 - No public table grants; no customer database URL or credential; no lookup connection variable in the deployment manifest.
 
 ## Deployment and acceptance

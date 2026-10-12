@@ -137,6 +137,7 @@ create table public.external_chat_sessions (
   constraint external_chat_language_check check (language ~ '^[a-z]{2}(?:-[A-Z]{2})?$'),
   unique (integration_id, idempotency_hash),
   unique (workspace_id, id),
+  unique (workspace_id, id, integration_id),
   foreign key (workspace_id, integration_id)
     references public.external_integrations(workspace_id, id),
   foreign key (workspace_id, project_id)
@@ -160,10 +161,8 @@ create table public.external_chat_messages (
   constraint external_chat_message_content_check check (char_length(content) between 1 and 8000),
   constraint external_chat_message_idempotency_hash_check check (idempotency_hash ~ '^[0-9a-f]{64}$'),
   unique (session_id, idempotency_hash),
-  foreign key (workspace_id, session_id)
-    references public.external_chat_sessions(workspace_id, id) on delete cascade,
-  foreign key (workspace_id, integration_id)
-    references public.external_integrations(workspace_id, id)
+  foreign key (workspace_id, session_id, integration_id)
+    references public.external_chat_sessions(workspace_id, id, integration_id) on delete cascade
 );
 
 create index external_chat_messages_session_created_idx
@@ -243,6 +242,7 @@ create policy external_chat_messages_tenant_read on public.external_chat_message
       select 1 from public.external_chat_sessions s
       where s.workspace_id=external_chat_messages.workspace_id
         and s.id=external_chat_messages.session_id
+        and s.integration_id=external_chat_messages.integration_id
         and (public.crm_workspace_manager(s.workspace_id)
           or (s.project_id is not null and public.crm_project_access(s.workspace_id,s.project_id,false)))
     )
@@ -256,6 +256,7 @@ create policy external_chat_messages_tenant_insert on public.external_chat_messa
       select 1 from public.external_chat_sessions s
       where s.workspace_id=external_chat_messages.workspace_id
         and s.id=external_chat_messages.session_id
+        and s.integration_id=external_chat_messages.integration_id
         and (public.crm_workspace_manager(s.workspace_id)
           or (s.project_id is not null and public.crm_project_access(s.workspace_id,s.project_id,true)))
     )
@@ -282,8 +283,9 @@ grant select, insert on public.external_chat_messages to novalure_tenant_app;
 grant select, insert on public.external_integration_events to novalure_tenant_app;
 
 -- Seed compatibility integrations for existing public forms. Site keys are
--- publishable identifiers, not credentials. External origins remain empty and
--- therefore denied until an authenticated onboarding action configures them.
+-- publishable identifiers, not credentials. Existing CRM-hosted forms retain
+-- their three canonical HTTPS origins; every customer-controlled origin still
+-- requires an authenticated onboarding action.
 insert into public.external_integrations (
   public_site_key, workspace_id, project_id, form_id, integration_type,
   status, mode, allowed_origins, capabilities, configuration, metadata
@@ -298,7 +300,12 @@ select
   'active',
   'training',
   case when f.id = '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
-    then array['https://novalurestudio.ie']::text[] else '{}'::text[] end,
+    then array['https://novalurestudio.ie']::text[]
+    else array[
+      'https://novalure-crm.app',
+      'https://www.novalure-crm.app',
+      'https://novalure-crm-novalure.vercel.app'
+    ]::text[] end,
   case when f.id = '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
     then array['lead.create']::text[] else array['form.read','form.submit']::text[] end,
   jsonb_build_object('legacyCompatibility', true),
@@ -440,6 +447,29 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
     and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
 $function$;
 
+-- Keep the established public-form function contract for the application
+-- runtime while routing it through the registry-backed gateway. The dedicated
+-- database login is disabled below and receives no execute privilege.
+create or replace function public.crm_public_form_lookup(
+  p_form_id uuid, p_workspace_public_key text, p_slug text
+) returns jsonb
+language sql stable security invoker set search_path = pg_catalog, public as $function$
+  select public.crm_external_legacy_form_lookup(p_form_id,p_workspace_public_key,p_slug)
+$function$;
+
+create or replace function public.crm_public_form_scope(
+  p_form_id uuid, p_workspace_public_key text
+) returns table(workspace_id uuid, actor_id uuid)
+language sql stable security invoker set search_path = pg_catalog, public as $function$
+  select * from public.crm_external_form_submission_scope(p_form_id,p_workspace_public_key)
+$function$;
+
+create or replace function public.crm_public_form_legacy_route(p_slug text)
+returns table(form_id uuid, slug text, workspace_public_key text)
+language sql stable security invoker set search_path = pg_catalog, public as $function$
+  select * from public.crm_external_legacy_form_route(p_slug)
+$function$;
+
 -- The SQL-created lookup role is permanently removed from the runtime design.
 do $disable_lookup$
 begin
@@ -464,4 +494,8 @@ grant execute on function public.crm_external_integration_resolve(text,text,text
   public.crm_external_legacy_form_lookup(uuid,text,text),
   public.crm_external_legacy_form_route(text),
   public.crm_external_form_submission_scope(uuid,text)
+  to novalure_app;
+grant execute on function public.crm_public_form_lookup(uuid,text,text),
+  public.crm_public_form_scope(uuid,text),
+  public.crm_public_form_legacy_route(text)
   to novalure_app;

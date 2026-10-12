@@ -5,6 +5,7 @@ import {
   getExternalChatContext,
   readExternalRequestOrigin,
   recordExternalIntegrationEvent,
+  requireExternalIntegrationClientIp,
   resolveExternalIntegration,
   startExternalChatSession,
 } from "@/lib/db/external-integration-gateway";
@@ -15,7 +16,6 @@ import {
   observeExternalSuccess,
   readBoundedJson,
 } from "@/lib/external-api-response";
-import { getTrustedPublicSubmissionClientIp } from "@/lib/security/public-submission-abuse";
 
 export async function POST(request: Request) {
   const context = { correlationId: createCorrelationId(), operation: "chat.start", startedAt: Date.now() };
@@ -30,8 +30,7 @@ export async function POST(request: Request) {
       || text(body.idempotencyKey);
     const resolution = await resolveExternalIntegration({ capability: "chat.start", origin, publicSiteKey });
     if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
-    const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-    if (!clientIp) throw new Error("Trusted client IP is unavailable");
+    const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({
       clientIp,
       operation: "chat.start",
@@ -71,8 +70,7 @@ export async function GET(request: Request) {
     const sessionId = url.searchParams.get("session_id")?.trim() || "";
     const resolution = await resolveExternalIntegration({ capability: "chat.message", origin, publicSiteKey });
     if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
-    const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-    if (!clientIp) throw new Error("Trusted client IP is unavailable");
+    const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({
       clientIp,
       operation: "chat.context",
@@ -90,6 +88,7 @@ export async function GET(request: Request) {
       correlationId: context.correlationId,
       origin,
       publicSiteKey,
+      resolution,
       sessionId,
       sessionToken: request.headers.get("x-novalure-session-token")?.trim() || "",
     });

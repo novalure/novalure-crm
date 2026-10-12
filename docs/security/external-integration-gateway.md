@@ -6,13 +6,15 @@ Customer websites never receive database credentials. Browsers and customer syst
 
 The database remains private behind the existing `novalure_app` runtime. That role must remain non-owner, non-superuser, without `BYPASSRLS`, and a member only of the constrained tenant runtime role required by the existing application. Migration 095 continues to enforce RLS and FORCE RLS on forms and submissions. Migration 096 adds FORCE RLS to all gateway tables and grants the runtime only the exact security-definer gateway functions plus the established tenant-scoped application permissions.
 
-`novalure_public_form_lookup` is a historical migration artifact only. Migration 096 sets it to `NOLOGIN`, removes its password, revokes schema usage and old function execution, and the application no longer reads a dedicated lookup connection variable.
+`novalure_public_form_lookup` is a historical migration artifact only. Migration 096 sets it to `NOLOGIN`, removes its password, and revokes its schema usage and function execution. The application no longer reads a dedicated lookup connection variable. The established `crm_public_form_*` SQL names remain application-only compatibility wrappers over the registry-backed gateway functions; they do not restore the old login or bypass the registry.
 
 The remaining source references are intentionally classified: migration 095 and its QA document preserve audit history; the 095-only isolation fixture proves the historical boundary before 096; the Website Sales transaction fixture asserts the old environment variable is absent and the role is disabled after 096. Production runtime, environment manifests, Candidate QA, and credential bootstrap/reset scripts contain no dependency on that variable or login.
 
 ## Registry and capabilities
 
 An integration maps one public site key to one workspace and optionally one project and form. Status is `test`, `active`, `disabled`, or `revoked`; mode is `training` or `real_customer`. Allowed origins are normalized exact origins. Capabilities are allowlisted and independently enforced:
+
+Migration-created compatibility entries allow only the canonical CRM origins, or `https://novalurestudio.ie` for Website Sales. A customer-controlled origin is never inferred or wildcarded; authenticated onboarding must add it explicitly.
 
 - `form.read` and `form.submit`
 - `chat.start` and `chat.message`
@@ -38,6 +40,8 @@ Legacy public form links are adapters over the new server-only functions. They p
 ## Abuse, audit, and response policy
 
 Origin, status, capability, form ownership, and active owner/admin checks fail closed. Public JSON is size bounded. Submission and chat writes require caller-stable idempotency keys. Public submissions and chat/read traffic use durable opaque-hash rate-limit buckets; raw IP addresses, tokens, and payloads are not stored in those buckets. Session tokens are returned once as scoped bearer material and only their SHA-256 hashes are stored.
+
+The gateway accepts a client address only from Vercel's trusted forwarding header or an explicitly configured trusted proxy header. If that infrastructure assertion is unavailable, the request fails closed with `trusted_client_ip_unavailable`; it never falls back to a caller-controlled value or silently disables IP rate limiting.
 
 Accepted, denied, duplicate, and failed requests emit structured logs with a correlation ID, operation, status, and latency but no site key, session token, personal identifier, tenant ID, database error, or SQL. Resolved operations also append tenant-scoped `external_integration_events` records. Platform alerts should cover elevated denials, rate limits, 5xx responses, latency, downstream failures, and unexpected cross-scope probes.
 

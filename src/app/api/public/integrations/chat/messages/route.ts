@@ -5,6 +5,7 @@ import {
   ExternalIntegrationError,
   readExternalRequestOrigin,
   recordExternalIntegrationEvent,
+  requireExternalIntegrationClientIp,
   resolveExternalIntegration,
 } from "@/lib/db/external-integration-gateway";
 import {
@@ -14,7 +15,6 @@ import {
   observeExternalSuccess,
   readBoundedJson,
 } from "@/lib/external-api-response";
-import { getTrustedPublicSubmissionClientIp } from "@/lib/security/public-submission-abuse";
 
 export async function POST(request: Request) {
   const context = { correlationId: createCorrelationId(), operation: "chat.message", startedAt: Date.now() };
@@ -27,8 +27,7 @@ export async function POST(request: Request) {
     const sessionId = text(body.sessionId);
     const resolution = await resolveExternalIntegration({ capability: "chat.message", origin, publicSiteKey });
     if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
-    const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-    if (!clientIp) throw new Error("Trusted client IP is unavailable");
+    const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({
       clientIp,
       operation: "chat.message",

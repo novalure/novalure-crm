@@ -121,10 +121,10 @@ test("096 forces RLS, disables the lookup login, and exposes only scoped runtime
     "select rolcanlogin,rolpassword from pg_authid where rolname='novalure_public_form_lookup'",
   );
   assert.deepEqual(legacy.rows[0], { rolcanlogin: false, rolpassword: null });
-  await assert.rejects(
-    db.pool.query("select public.crm_public_form_lookup(null,'customer-public','gateway-form')"),
-    /permission denied/,
+  const compatibility = await db.pool.query<{ form: { id: string } | null }>(
+    "select public.crm_public_form_lookup(null,'customer-public','gateway-form') as form",
   );
+  assert.equal(compatibility.rows[0]?.form?.id, formId);
   const valid = await db.pool.query(
     "select * from public.crm_external_integration_resolve($1,$2,'form.read',$3)",
     [siteKey, origin, formId],
@@ -153,6 +153,35 @@ test("tenant and project context cannot be selected by the public caller", async
     await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [workspaceId, actorId]);
     assert.equal((await client.query("select id from external_integrations where workspace_id=$1", [workspaceId])).rowCount, 1);
     assert.equal((await client.query("select id from external_integrations where workspace_id=$1", [foreignWorkspaceId])).rowCount, 0);
+    const originalIntegration = (await client.query<{ id: string }>(
+      "select id from external_integrations where public_site_key=$1",
+      [siteKey],
+    )).rows[0]!.id;
+    const alternateIntegration = randomUUID();
+    const sessionId = randomUUID();
+    await client.query(
+      `insert into external_integrations(id,public_site_key,workspace_id,project_id,integration_type,
+         allowed_origins,capabilities,created_by)
+       values($1,$2,$3,$4,'website_chat',array[$5],array['chat.start','chat.message'],$6)`,
+      [alternateIntegration, `nov_pk_${randomUUID().replaceAll("-", "")}`, workspaceId, projectId, origin, actorId],
+    );
+    await client.query(
+      `insert into external_chat_sessions(id,integration_id,workspace_id,project_id,session_token_hash,
+         idempotency_hash,mode,language,synthetic)
+       values($1,$2,$3,$4,$5,$6,'training','en',true)`,
+      [sessionId, alternateIntegration, workspaceId, projectId, "a".repeat(64), "b".repeat(64)],
+    );
+    await client.query("savepoint mismatched_chat_integration");
+    await assert.rejects(
+      client.query(
+        `insert into external_chat_messages(session_id,integration_id,workspace_id,role,content,idempotency_hash,synthetic)
+         values($1,$2,$3,'visitor','SYNTHETIC mismatch',$4,true)`,
+        [sessionId, originalIntegration, workspaceId, "c".repeat(64)],
+      ),
+      /foreign key|row-level security/,
+    );
+    await client.query("rollback to savepoint mismatched_chat_integration");
+    await client.query("release savepoint mismatched_chat_integration");
     await assert.rejects(
       client.query(
         `insert into external_integrations(public_site_key,workspace_id,project_id,integration_type,allowed_origins,capabilities,created_by)
@@ -271,6 +300,11 @@ test("public form lookup and submission use site mapping, origin, rate and idemp
   assert.equal((await db.admin.query("select id from form_submissions where workspace_id=$1", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query("select id from leads where workspace_id=$1", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query("select id from form_submissions where workspace_id=$1", [foreignWorkspaceId])).rowCount, 0);
+  const stored = await db.admin.query<{ project_id: string; workspace_id: string }>(
+    "select workspace_id,project_id from form_submissions where form_id=$1",
+    [formId],
+  );
+  assert.deepEqual(stored.rows, [{ project_id: projectId, workspace_id: workspaceId }]);
 });
 
 test("public gateway fails closed for malformed, oversized, revoked, and capability-disabled requests", async () => {
@@ -299,6 +333,24 @@ test("public gateway fails closed for malformed, oversized, revoked, and capabil
     },
   ));
   assert.equal(oversized.status, 413);
+  const missingTrustedClientIp = await submitPublicForm(new Request(
+    "https://crm.example/api/public/integrations/forms/submissions",
+    {
+      body: JSON.stringify({
+        fields: { email: "missing-ip@example.invalid", name: "SYNTHETIC missing IP", privacy: "true" },
+        formId,
+        siteKey,
+      }),
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "gateway_missing_trusted_client_ip_0001",
+        origin,
+      },
+      method: "POST",
+    },
+  ));
+  assert.equal(missingTrustedClientIp.status, 503);
+  assert.deepEqual(await missingTrustedClientIp.json(), { error: "trusted_client_ip_unavailable" });
 
   await db.admin.query("update external_integrations set status='revoked',revoked_at=now() where public_site_key=$1", [siteKey]);
   const revoked = await getPublicForm(new Request(
