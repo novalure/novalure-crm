@@ -325,6 +325,87 @@ from public.external_integrations i
 join public.workspaces w on w.id=i.workspace_id
 on conflict do nothing;
 
+-- Keep forms published through the authenticated CRM UI registered after the
+-- one-time migration seed. Customer-controlled origins are never inferred:
+-- this trigger adds only the canonical CRM-hosted origins. An explicit revoke
+-- remains revoked across later form edits.
+create function public.crm_sync_legacy_public_form_integration()
+returns trigger
+language plpgsql security definer set search_path = pg_catalog, public as $function$
+declare
+  v_integration_id uuid;
+begin
+  if new.id = '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid then
+    return new;
+  end if;
+
+  if new.status in ('aktiv','eingebaut') then
+    insert into public.external_integrations (
+      public_site_key, workspace_id, project_id, form_id, integration_type,
+      status, mode, allowed_origins, capabilities, configuration, metadata
+    ) values (
+      'nov_pk_' || replace(new.id::text, '-', ''),
+      new.workspace_id,
+      new.project_id,
+      new.id,
+      'public_form',
+      'active',
+      'training',
+      array[
+        'https://novalure-crm.app',
+        'https://www.novalure-crm.app',
+        'https://novalure-crm-novalure.vercel.app'
+      ]::text[],
+      array['form.read','form.submit']::text[],
+      jsonb_build_object('legacyCompatibility', true),
+      jsonb_build_object('registeredBy', 'crm_sync_legacy_public_form_integration')
+    )
+    on conflict (public_site_key) do update
+      set project_id=excluded.project_id,
+          form_id=excluded.form_id,
+          status=case when public.external_integrations.status='revoked'
+            then 'revoked' else 'active' end,
+          revoked_at=case when public.external_integrations.status='revoked'
+            then public.external_integrations.revoked_at else null end,
+          capabilities=array['form.read','form.submit']::text[],
+          configuration=public.external_integrations.configuration
+            || jsonb_build_object('legacyCompatibility', true),
+          updated_at=now()
+      where public.external_integrations.workspace_id=excluded.workspace_id
+        and public.external_integrations.form_id=excluded.form_id
+        and public.external_integrations.configuration @> '{"legacyCompatibility":true}'::jsonb
+    returning id into v_integration_id;
+
+    if v_integration_id is null then
+      raise exception 'Published form integration identity collision';
+    end if;
+
+    insert into public.external_integration_widget_configs (
+      integration_id, workspace_id, brand_name, assistant_name, language,
+      enabled_capabilities, lead_capture_enabled, chat_enabled
+    )
+    select v_integration_id, new.workspace_id, coalesce(w.name, 'Novalure'),
+      'Evelyn', 'en', array['form.read','form.submit']::text[], true, false
+    from public.workspaces w where w.id=new.workspace_id
+    on conflict (integration_id) do nothing;
+  else
+    update public.external_integrations
+      set status='disabled', revoked_at=null, updated_at=now()
+      where workspace_id=new.workspace_id and form_id=new.id
+        and status <> 'revoked'
+        and configuration @> '{"legacyCompatibility":true}'::jsonb;
+  end if;
+
+  return new;
+end;
+$function$;
+
+revoke all on function public.crm_sync_legacy_public_form_integration() from public;
+
+create trigger forms_sync_legacy_public_integration
+after insert or update of status, project_id on public.forms
+for each row execute function public.crm_sync_legacy_public_form_integration();
+
 create function public.crm_external_integration_resolve(
   p_public_site_key text,
   p_origin text,
@@ -453,20 +534,20 @@ $function$;
 create or replace function public.crm_public_form_lookup(
   p_form_id uuid, p_workspace_public_key text, p_slug text
 ) returns jsonb
-language sql stable security invoker set search_path = pg_catalog, public as $function$
+language sql stable security definer set search_path = pg_catalog, public as $function$
   select public.crm_external_legacy_form_lookup(p_form_id,p_workspace_public_key,p_slug)
 $function$;
 
 create or replace function public.crm_public_form_scope(
   p_form_id uuid, p_workspace_public_key text
 ) returns table(workspace_id uuid, actor_id uuid)
-language sql stable security invoker set search_path = pg_catalog, public as $function$
+language sql stable security definer set search_path = pg_catalog, public as $function$
   select * from public.crm_external_form_submission_scope(p_form_id,p_workspace_public_key)
 $function$;
 
 create or replace function public.crm_public_form_legacy_route(p_slug text)
 returns table(form_id uuid, slug text, workspace_public_key text)
-language sql stable security invoker set search_path = pg_catalog, public as $function$
+language sql stable security definer set search_path = pg_catalog, public as $function$
   select * from public.crm_external_legacy_form_route(p_slug)
 $function$;
 

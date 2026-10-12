@@ -62,6 +62,13 @@ try {
     || binding.branch !== qa.expectedBranchId || !binding.gateway_execute || !binding.compatibility_execute) {
     throw new Error("QA_GATEWAY_BIND_RUNTIME_INVALID");
   }
+  const noContext = (await runtime.query(`select
+    (select count(*)::int from public.forms) forms,
+    (select count(*)::int from public.form_submissions) submissions,
+    (select count(*)::int from public.external_integrations) integrations`)).rows[0];
+  if (noContext.forms !== 0 || noContext.submissions !== 0 || noContext.integrations !== 0) {
+    throw new Error("QA_GATEWAY_BIND_NO_CONTEXT_DATA_VISIBLE");
+  }
   console.log("QA_GATEWAY_BINDING_PASS lookupRole=NOLOGIN password=NULL runtime=novalure_app");
 } catch (error) {
   const code = error instanceof Error && /^QA_[A-Z0-9_]+$/u.test(error.message)

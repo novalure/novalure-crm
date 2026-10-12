@@ -136,12 +136,22 @@ async function seedForms() {
         allowed_origins,capabilities,configuration,metadata
       ) values($1,$2,$3,$4,'public_form','active','training',array[$5],
         array['form.read','form.submit','lead.create','chat.start','chat.message'],'{}','{"synthetic":true}')
+      on conflict(public_site_key) do update set
+        allowed_origins=excluded.allowed_origins,
+        capabilities=excluded.capabilities,
+        status='active',
+        mode='training',
+        metadata=external_integrations.metadata || excluded.metadata
       returning id`, [key, fixture.workspace, fixture.project, fixture.form, publicOrigin]);
       await client.query(`insert into external_integration_widget_configs(
         integration_id,workspace_id,brand_name,assistant_name,enabled_capabilities,
         lead_capture_enabled,chat_enabled
       ) values($1,$2,'SYNTHETIC Candidate','Evelyn',
-        array['form.read','form.submit','lead.create','chat.start','chat.message'],true,true)`,
+        array['form.read','form.submit','lead.create','chat.start','chat.message'],true,true)
+      on conflict(integration_id) do update set
+        enabled_capabilities=excluded.enabled_capabilities,
+        lead_capture_enabled=true,
+        chat_enabled=true`,
       [integration.rows[0].id, fixture.workspace]);
     }
     await client.query("commit");

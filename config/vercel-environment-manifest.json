@@ -12,6 +12,9 @@
     { "name": "OAUTH_STATE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth state signing secret." },
     { "name": "OAUTH_TOKEN_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth token encryption key." }
   ],
+  "runtimeForbidden": [
+    { "name": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL", "targets": ["preview", "production"], "reason": "Retired by External Integration Gateway V1; customer-facing traffic must use the existing application runtime and must never restore a dedicated database login." }
+  ],
   "runtimeConditional": [
     { "feature": "cron", "names": ["CRON_SECRET"] },
     { "feature": "database-binding-metadata", "names": ["POSTGRES_NEON_PROJECT_ID"] },

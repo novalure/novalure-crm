@@ -23,8 +23,11 @@ const foreignWorkspaceId = randomUUID();
 const actorId = randomUUID();
 const foreignActorId = randomUUID();
 const projectId = randomUUID();
+const alternateProjectId = randomUUID();
 const foreignProjectId = randomUUID();
 const formId = randomUUID();
+const foreignFormId = randomUUID();
+const futureFormId = randomUUID();
 const siteKey = `nov_pk_${formId.replaceAll("-", "")}`;
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>;
 const savedEnv = {
@@ -53,8 +56,9 @@ before(async () => {
   await db.admin.query(
     `insert into projects(id,workspace_id,name,type) values
        ($1,$2,'SYNTHETIC customer project','Bauträger'),
-       ($3,$4,'SYNTHETIC foreign project','Bauträger')`,
-    [projectId, workspaceId, foreignProjectId, foreignWorkspaceId],
+       ($3,$2,'SYNTHETIC alternate customer project','Bauträger'),
+       ($4,$5,'SYNTHETIC foreign project','Bauträger')`,
+    [projectId, workspaceId, alternateProjectId, foreignProjectId, foreignWorkspaceId],
   );
   await db.admin.query(
     `insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
@@ -62,6 +66,13 @@ before(async () => {
        '[{"id":"name","crmField":"name","label":"Name","type":"text","required":true},{"id":"email","crmField":"email","label":"Email","type":"email","required":true},{"id":"privacy","crmField":"privacy","label":"Privacy","type":"consent","required":true}]'::jsonb,
        '{"createTask":true,"thankYouMessage":"Thank you"}'::jsonb)`,
     [formId, workspaceId, projectId, actorId],
+  );
+  await db.admin.query(
+    `insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+     values($1,$2,$3,$4,'SYNTHETIC foreign gateway form','foreign-gateway-form','aktiv',
+       '[{"id":"email","crmField":"email","label":"Email","type":"email","required":true}]'::jsonb,
+       '{"createTask":false,"thankYouMessage":"Thank you"}'::jsonb)`,
+    [foreignFormId, foreignWorkspaceId, foreignProjectId, foreignActorId],
   );
   await db.admin.query(
     `insert into novalure_schema_migrations(version,name,checksum) values
@@ -146,12 +157,52 @@ test("096 forces RLS, disables the lookup login, and exposes only scoped runtime
   assert.equal((await db.pool.query("select id from external_integrations")).rowCount, 0);
 });
 
+test("forms published after 096 receive a registry entry without restoring a database login", async () => {
+  await db.admin.query(
+    `insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+     values($1,$2,$3,$4,'SYNTHETIC future form','future-gateway-form','aktiv','[]','{}')`,
+    [futureFormId, workspaceId, projectId, actorId],
+  );
+  const futureKey = `nov_pk_${futureFormId.replaceAll("-", "")}`;
+  const registered = await db.admin.query<{ allowed_origins: string[]; capabilities: string[]; status: string }>(
+    `select allowed_origins,capabilities,status from external_integrations
+     where public_site_key=$1 and workspace_id=$2 and project_id=$3 and form_id=$4`,
+    [futureKey, workspaceId, projectId, futureFormId],
+  );
+  assert.deepEqual(registered.rows, [{
+    allowed_origins: [
+      "https://novalure-crm.app",
+      "https://www.novalure-crm.app",
+      "https://novalure-crm-novalure.vercel.app",
+    ],
+    capabilities: ["form.read", "form.submit"],
+    status: "active",
+  }]);
+  const compatibility = await db.pool.query<{ form: { id: string } | null }>(
+    "select public.crm_public_form_lookup($1,'customer-public','future-gateway-form') as form",
+    [futureFormId],
+  );
+  assert.equal(compatibility.rows[0]?.form?.id, futureFormId);
+  await db.admin.query(
+    "update external_integrations set status='revoked',revoked_at=now() where public_site_key=$1",
+    [futureKey],
+  );
+  await db.admin.query("update forms set status='eingebaut' where id=$1", [futureFormId]);
+  assert.equal((await db.admin.query(
+    "select status from external_integrations where public_site_key=$1",
+    [futureKey],
+  )).rows[0]?.status, "revoked");
+});
+
 test("tenant and project context cannot be selected by the public caller", async () => {
   const client = await db.pool.connect();
   try {
     await client.query("begin");
     await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [workspaceId, actorId]);
-    assert.equal((await client.query("select id from external_integrations where workspace_id=$1", [workspaceId])).rowCount, 1);
+    assert.equal((await client.query(
+      "select id from external_integrations where workspace_id=$1 and public_site_key=$2",
+      [workspaceId, siteKey],
+    )).rowCount, 1);
     assert.equal((await client.query("select id from external_integrations where workspace_id=$1", [foreignWorkspaceId])).rowCount, 0);
     const originalIntegration = (await client.query<{ id: string }>(
       "select id from external_integrations where public_site_key=$1",
@@ -181,7 +232,6 @@ test("tenant and project context cannot be selected by the public caller", async
       /foreign key|row-level security/,
     );
     await client.query("rollback to savepoint mismatched_chat_integration");
-    await client.query("release savepoint mismatched_chat_integration");
     await assert.rejects(
       client.query(
         `insert into external_integrations(public_site_key,workspace_id,project_id,integration_type,allowed_origins,capabilities,created_by)
@@ -258,6 +308,13 @@ test("authenticated onboarding creates a test integration and enforces tenant pr
 });
 
 test("public form lookup and submission use site mapping, origin, rate and idempotency controls", async () => {
+  const alternateContactId = randomUUID();
+  await db.admin.query(
+    `insert into contacts(
+       id,workspace_id,project_id,name,role,source,intent,consent_label,email,metadata
+     ) values($1,$2,$3,'SYNTHETIC same-email alternate project','buyer','QA','QA','QA',$4,'{}')`,
+    [alternateContactId, workspaceId, alternateProjectId, "gateway@example.invalid"],
+  );
   const lookup = await getPublicForm(new Request(
     `https://crm.example/api/public/integrations/forms?site_key=${siteKey}`,
     { headers: { origin, "x-test-client-ip": "203.0.113.10" } },
@@ -300,11 +357,17 @@ test("public form lookup and submission use site mapping, origin, rate and idemp
   assert.equal((await db.admin.query("select id from form_submissions where workspace_id=$1", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query("select id from leads where workspace_id=$1", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query("select id from form_submissions where workspace_id=$1", [foreignWorkspaceId])).rowCount, 0);
-  const stored = await db.admin.query<{ project_id: string; workspace_id: string }>(
-    "select workspace_id,project_id from form_submissions where form_id=$1",
+  const stored = await db.admin.query<{ contact_id: string; project_id: string; workspace_id: string }>(
+    "select workspace_id,project_id,contact_id from form_submissions where form_id=$1",
     [formId],
   );
-  assert.deepEqual(stored.rows, [{ project_id: projectId, workspace_id: workspaceId }]);
+  assert.equal(stored.rows[0]?.workspace_id, workspaceId);
+  assert.equal(stored.rows[0]?.project_id, projectId);
+  assert.notEqual(stored.rows[0]?.contact_id, alternateContactId);
+  assert.deepEqual((await db.admin.query(
+    "select project_id,email from contacts where id=$1",
+    [alternateContactId],
+  )).rows, [{ email: "gateway@example.invalid", project_id: alternateProjectId }]);
 });
 
 test("public gateway fails closed for malformed, oversized, revoked, and capability-disabled requests", async () => {

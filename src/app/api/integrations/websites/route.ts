@@ -51,7 +51,11 @@ async function readJson(request: Request) {
   if (declared > maxBodyBytes) throw new Error("Request is too large");
   const raw = await request.text();
   if (!raw || Buffer.byteLength(raw, "utf8") > maxBodyBytes) throw new Error("Invalid request body");
-  return JSON.parse(raw) as unknown;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error("Invalid JSON");
+  }
 }
 
 function safeFailure(error: unknown) {

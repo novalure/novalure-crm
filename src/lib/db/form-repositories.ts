@@ -1003,6 +1003,9 @@ async function upsertContact(input: {
   websiteSalesMetadata: Record<string, unknown> | null;
   workspaceId: string;
 }) {
+  // Contact identity is project-scoped by design. Reusing a same-email contact
+  // from another project would silently enrich a resource outside the form's
+  // registry-bound project and violate the public ingestion boundary.
   const existing = input.email || input.phone
     ? await queryOne<IdRow>(
         `
