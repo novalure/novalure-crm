@@ -363,6 +363,11 @@ test("anonymous public form submits through the server transaction without table
   const lookup = await getPublicWebsiteFormByKey(publicKey);
   assert.equal(lookup?.id, genericFormId);
   assert.equal(lookup?.publicActorId, "");
+  assert.equal(lookup?.form.ownerUserId, "");
+  assert.equal(lookup?.form.actions.createTask, false);
+  const publicIdLookup = await getPublicWebsiteFormByKey(genericFormId);
+  assert.equal(publicIdLookup?.id, genericFormId);
+  assert.equal(publicIdLookup?.form.ownerUserId, "");
   const data = new FormData();
   data.set("form_slug", publicKey);
   data.set("name", "SYNTHETIC public contact");

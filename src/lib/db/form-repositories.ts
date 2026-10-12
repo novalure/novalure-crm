@@ -460,7 +460,8 @@ export async function getPublicWebsiteForm(
   if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
   const args = [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""];
-  const row = hasBoundTenantTransaction()
+  const tenantBound = hasBoundTenantTransaction();
+  const row = tenantBound
     ? await queryOne<PublicFormRow>(
         `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
            f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
@@ -475,6 +476,7 @@ export async function getPublicWebsiteForm(
          from forms f join workspaces w on w.id=f.workspace_id
          left join funnels fn on fn.id=f.funnel_id
          where f.status in ('aktiv','eingebaut')
+           and f.workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
            and (($1::uuid is not null and f.id=$1::uuid)
              or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
          order by f.updated_at desc limit 1`,
@@ -496,7 +498,7 @@ export async function getPublicWebsiteForm(
     ownerUserId: row.ownerUserId ?? null,
     funnelId: row.funnelId ?? null,
     funnelAudience: row.funnelAudience ?? null,
-    form: toWebsiteForm(row),
+    form: tenantBound ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
     publicPath,
     publicActorId: row.publicActorId ?? "",
   };
@@ -563,6 +565,8 @@ export async function persistWebsiteFormSubmission(input: {
   const form = lookup.form;
   const answers = extractAnswers(form, input.formData);
   const consent = extractConsent(form, input.formData);
+  const signedWebsiteSales = input.formKey === websiteSalesFormId
+    && input.actorUserId === websiteSalesActorId && lookup.id === websiteSalesFormId;
 
   if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {
     return { persisted: false, reason: "privacy_consent_required", form };
@@ -582,7 +586,7 @@ export async function persistWebsiteFormSubmission(input: {
   const score = scoreFormSubmission(form, answers, consent);
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
-  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, form, tracking });
+  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, form, signedWebsiteSales, tracking });
   const source = websiteSalesMetadata ? "Novalure Studio Form" : form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
   const leadType = websiteSalesMetadata ? "Website Sales" : normalizeLeadType(lookup.funnelAudience);
   const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
@@ -828,7 +832,6 @@ export async function persistWebsiteFormSubmission(input: {
     [lookup.id, websiteSalesMetadata?.syntheticTest === true ? 0 : 1],
   );
 
-  const signedWebsiteSales = websiteSalesMetadata !== null && input.actorUserId === websiteSalesActorId;
   const auditProductRole = signedWebsiteSales ? "novalure_operator" : "assistant_backoffice";
   const formSession: AppSession = {
     authenticated: true,
@@ -1073,6 +1076,7 @@ async function upsertContact(input: {
 function getWebsiteSalesMetadata(input: {
   answers: Record<string, unknown>;
   form: WebsiteForm;
+  signedWebsiteSales: boolean;
   tracking: Record<string, unknown>;
 }) {
   if (input.form.slug !== websiteSalesFormSlug) return null;
@@ -1086,7 +1090,7 @@ function getWebsiteSalesMetadata(input: {
     currentWebsiteUrl: string("current_website_url", 2_048),
     leadSource: "NOVALURE_STUDIO_FORM",
     packageInterest: string("package_interest", 40) || "UNDECIDED",
-    syntheticTest: string("synthetic_test", 8) === "true",
+    syntheticTest: input.signedWebsiteSales && string("synthetic_test", 8) === "true",
   };
 }
 
