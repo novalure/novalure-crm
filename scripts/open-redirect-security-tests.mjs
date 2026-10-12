@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { qaRequestUrl } from "./lib/qa-http-origin.mjs";
 import {
   parseFormRedirectAllowlist,
   resolveSafeFormRedirect,
@@ -11,6 +12,22 @@ import {
 
 const trustedOrigin = "https://crm.novalure.example";
 const localFallback = "/safe-fallback";
+
+test("QA client never attaches stored login cookies to a cross-origin challenge URL", () => {
+  const baseUrl = "http://127.0.0.1:3000";
+  assert.equal(qaRequestUrl("/login?step=workspace_selection", baseUrl).href,
+    "http://127.0.0.1:3000/login?step=workspace_selection");
+  assert.equal(qaRequestUrl("http://127.0.0.1:3000/login", baseUrl).href,
+    "http://127.0.0.1:3000/login");
+  for (const path of [
+    "https://attacker.example/login?step=workspace_selection",
+    "//attacker.example/login?step=workspace_selection",
+    "http://127.0.0.1:3001/login",
+    "http://user@127.0.0.1:3000/login",
+  ]) {
+    assert.throws(() => qaRequestUrl(path, baseUrl), /QA_CROSS_ORIGIN_REQUEST_DENIED/, path);
+  }
+});
 
 function resolveLocal(value) {
   return resolveSafeLocalRedirect(value, {

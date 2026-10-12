@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
+import { qaRequestUrl } from "./lib/qa-http-origin.mjs";
 
 const defaultQaPassword = "QA-Novalure-Local-2026!";
 
@@ -140,6 +141,7 @@ function createClient(email) {
   }
 
   async function request(path, options = {}) {
+    const target = qaRequestUrl(path, baseUrl);
     const headers = new Headers(options.headers ?? {});
     if (options.auth !== false && cookies.size > 0) headers.set("cookie", cookieHeader());
     const method = (options.method ?? "GET").toUpperCase();
@@ -163,7 +165,7 @@ function createClient(email) {
       init.body = options.body;
     }
 
-    const response = await fetch(new URL(path, baseUrl), init);
+    const response = await fetch(target, init);
     storeCookies(response.headers);
     const contentType = response.headers.get("content-type") ?? "";
     const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
