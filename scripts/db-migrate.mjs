@@ -69,6 +69,11 @@ const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
 const validMedia062Profiles = new Set(["production", "rehearsal"]);
 const validCrm080Profiles = new Set(["production", "rehearsal"]);
 
+export function compatibilityProfileMatchesTarget(profile, target) {
+  if (!profile) return true;
+  return profile === "production" ? target === "prod" : target === "test";
+}
+
 function fail(message) {
   console.error(`[ERROR] ${message}`);
   process.exit(1);
@@ -784,10 +789,8 @@ async function main() {
       target: target.name,
     });
     console.log("Connected database fingerprint verified");
-    if (
-      ((neon061Profile === "production" || media062Profile === "production" || crm080Profile === "production") && target.name !== "prod") ||
-      (((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production") || (crm080Profile && crm080Profile !== "production")) && target.name !== "test")
-    ) {
+    if (![neon061Profile, media062Profile, crm080Profile]
+      .every((profile) => compatibilityProfileMatchesTarget(profile, target.name))) {
       throw new Error("The selected compatibility execution profile does not match MIGRATION_TARGET.");
     }
     const runtimeRole = process.env[

@@ -544,6 +544,8 @@ create or replace function public.crm_public_form_lookup(
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select public.crm_external_legacy_form_lookup(p_form_id,p_workspace_public_key,p_slug)
 $function$;
+comment on function public.crm_public_form_lookup(uuid,text,text) is
+  'Application-only legacy URL adapter. novalure_app executes it; the retired lookup role is NOLOGIN and has no grant.';
 
 create or replace function public.crm_public_form_scope(
   p_form_id uuid, p_workspace_public_key text
@@ -551,12 +553,16 @@ create or replace function public.crm_public_form_scope(
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select * from public.crm_external_form_submission_scope(p_form_id,p_workspace_public_key)
 $function$;
+comment on function public.crm_public_form_scope(uuid,text) is
+  'Application-only legacy submission adapter. Tenant context is derived server-side; the retired lookup role has no grant.';
 
 create or replace function public.crm_public_form_legacy_route(p_slug text)
 returns table(form_id uuid, slug text, workspace_public_key text)
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select * from public.crm_external_legacy_form_route(p_slug)
 $function$;
+comment on function public.crm_public_form_legacy_route(text) is
+  'Application-only legacy slug adapter. Ambiguous global slugs fail closed and the retired lookup role has no grant.';
 
 -- The SQL-created lookup role is permanently removed from the runtime design.
 do $disable_lookup$

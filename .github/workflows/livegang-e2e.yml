@@ -617,7 +617,7 @@ jobs:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
         run: npm run qa:tenant-isolation -- --operator-only
 
-      - name: Reassert retired lookup identity after Candidate cleanup
+      - name: Revoke and verify retired lookup identity after Candidate cleanup
         if: always() && inputs.qa_profile == 'isolated-candidate'
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
@@ -628,7 +628,7 @@ jobs:
           NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-        run: node --use-system-ca scripts/qa-bind-public-form-lookup.mjs
+        run: node --use-system-ca scripts/qa-revoke-public-form-lookup.mjs
 
       - name: Ensure production server is stopped
         if: always()

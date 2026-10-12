@@ -11,6 +11,7 @@ import test from "node:test";
 import {
   applyCommittedMigrationPlan,
   assertMigrationCommitted,
+  compatibilityProfileMatchesTarget,
   createMigrationPlanToken,
   createMigrationPlan,
   resolveMigrationLedgerState,
@@ -546,6 +547,16 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /never included automatically/);
 });
 
+test("compatibility profiles bind production only to prod and QA or rehearsal only to test", () => {
+  assert.equal(compatibilityProfileMatchesTarget("", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("production", "prod"), true);
+  assert.equal(compatibilityProfileMatchesTarget("production", "test"), false);
+  assert.equal(compatibilityProfileMatchesTarget("qa", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("rehearsal", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("qa", "prod"), false);
+  assert.equal(compatibilityProfileMatchesTarget("rehearsal", "prod"), false);
+});
+
 test("QA migration CI previews before apply and keeps manual tenant cutovers excluded", () => {
   const previewIndex = workflow.indexOf("node scripts/db-migrate.mjs dry-run");
   const applyIndex = workflow.indexOf("node scripts/db-migrate.mjs up");
@@ -572,7 +583,7 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   assert.match(workflow, /Preview explicit form isolation QA cutover[\s\S]*dry-run --only=095_form_tenant_isolation --allow-manual-cutover[\s\S]*Apply explicit form isolation QA cutover[\s\S]*up --only=095_form_tenant_isolation --allow-manual-cutover/);
   assert.match(workflow, /Preview explicit external integration gateway QA cutover[\s\S]*dry-run --only=096_public_integration_gateway --allow-manual-cutover[\s\S]*Apply explicit external integration gateway QA cutover[\s\S]*up --only=096_public_integration_gateway --allow-manual-cutover/);
   assert.match(workflow, /Apply explicit external integration gateway QA cutover[\s\S]*Verify gateway runtime binding and retired lookup identity[\s\S]*qa-bind-public-form-lookup\.mjs/);
-  assert.match(workflow, /Verify final cleanup preserves canonical Growth seeds[\s\S]*Reassert retired lookup identity after Candidate cleanup[\s\S]*qa-bind-public-form-lookup\.mjs/);
+  assert.match(workflow, /Verify final cleanup preserves canonical Growth seeds[\s\S]*Revoke and verify retired lookup identity after Candidate cleanup[\s\S]*qa-revoke-public-form-lookup\.mjs/);
   assert.ok(
     workflow.indexOf("up --only=095_form_tenant_isolation")
       < workflow.indexOf("dry-run --only=096_public_integration_gateway"),

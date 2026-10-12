@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       || url.searchParams.get("site_key")?.trim()
       || "";
     const sessionId = url.searchParams.get("session_id")?.trim() || "";
-    const resolution = await resolveExternalIntegration({ capability: "chat.message", origin, publicSiteKey });
+    const resolution = await resolveExternalIntegration({ capability: "chat.start", origin, publicSiteKey });
     if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
     const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     });
     if (!limit.allowed) {
       await recordExternalIntegrationEvent(resolution, {
-        capability: "chat.message", correlationId: context.correlationId,
+        capability: "chat.start", correlationId: context.correlationId,
         eventType: "chat.session.context", outcome: "denied",
       });
       throw new ExternalIntegrationError("rate_limited", 429);

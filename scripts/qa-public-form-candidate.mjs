@@ -71,6 +71,27 @@ async function requireDenied(task, code) {
   throw new Error(code);
 }
 
+async function attestRetiredLookupRoleCannotAuthenticate() {
+  const retiredTarget = new URL(ownerTarget);
+  retiredTarget.username = "novalure_public_form_lookup";
+  retiredTarget.password = randomBytes(32).toString("base64url");
+  const retired = new pg.Client({
+    connectionString: retiredTarget.toString(),
+    connectionTimeoutMillis: 10_000,
+    ssl: { rejectUnauthorized: true },
+  });
+  try {
+    await retired.connect();
+  } catch (error) {
+    requireProof(error && typeof error === "object" && "code" in error
+      && ["28000", "28P01"].includes(String(error.code)), "QA_LOOKUP_ROLE_AUTH_FAILURE_UNEXPECTED");
+    return;
+  } finally {
+    await retired.end().catch(() => undefined);
+  }
+  throw new Error("QA_LOOKUP_ROLE_AUTHENTICATED");
+}
+
 async function attestDatabase() {
   const identity = (await owner.query(`select current_setting('neon.project_id',true) project,
     current_setting('neon.branch_id',true) branch,current_database() database,current_user role`)).rows[0];
@@ -96,6 +117,7 @@ async function attestDatabase() {
     from pg_roles r join pg_authid a on a.oid=r.oid where r.rolname='novalure_public_form_lookup'`)).rows[0];
   requireProof(!role?.rolcanlogin && role.rolpassword === null && !role.rolsuper && !role.rolbypassrls
     && !role.rolcreatedb && !role.rolcreaterole && !role.rolreplication, "QA_LOOKUP_ROLE_NOT_DISABLED");
+  await attestRetiredLookupRoleCannotAuthenticate();
   // Immutable CRM events prevent cascading deletion of a seeded workspace.
   // Each disposable branch therefore runs this candidate matrix only once.
   requireProof(await scalar(owner, `select count(*)::int as value from workspaces

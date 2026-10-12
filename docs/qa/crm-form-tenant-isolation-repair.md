@@ -28,7 +28,7 @@ The 095 local matrix checks forced RLS, runtime role attributes, no-context defa
 
 ## Coordinated cutover
 
-The release is now a single governed 094 → 095 → 096 sequence followed by deployment of the exact reviewed gateway revision. Migration 096 must immediately follow 095 in the same maintenance window; it seeds compatibility registry records, grants only the new narrow functions to `novalure_app`, and makes the lookup role unusable. No lookup password or separate database URL is created or bound. Follow the [gateway cutover runbook](../go-live/external-integration-gateway-cutover.md). If migration or deployment fails, keep public integration traffic unavailable and forward-fix or execute the approved database/deployment recovery plan; never disable forced RLS.
+The release is now a single governed 094 → 095 → 096 sequence followed by deployment of the exact reviewed gateway revision. This ordering is enforced twice in executable code: the migration runner declares 096's checksummed dependency on 095, and migration 096 refuses execution unless the canonical 095 ledger row exists. Migration 096 must immediately follow 095 in the same maintenance window; it seeds compatibility registry records, grants only the new narrow functions to `novalure_app`, and makes the lookup role unusable. No lookup password or separate database URL is created or bound. Follow the [gateway cutover runbook](../go-live/external-integration-gateway-cutover.md). If migration or deployment fails, keep public integration traffic unavailable and forward-fix or execute the approved database/deployment recovery plan; never disable forced RLS.
 
 ## Open release gates
 

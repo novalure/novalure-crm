@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { queryOne, queryRows } from "@/lib/db/client";
 import { consumePublicSubmissionRateLimits } from "@/lib/db/public-submission-abuse-repository";
 import {
@@ -161,6 +161,11 @@ function sha256(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function sessionTokenMatches(storedHash: string, candidateHash: string) {
+  if (!/^[0-9a-f]{64}$/u.test(storedHash) || !/^[0-9a-f]{64}$/u.test(candidateHash)) return false;
+  return timingSafeEqual(Buffer.from(storedHash, "hex"), Buffer.from(candidateHash, "hex"));
+}
+
 function assertOpaqueKey(value: string, code = "idempotency_key_required") {
   if (!opaqueKeyPattern.test(value)) throw new ExternalIntegrationError(code, 400);
   return value;
@@ -303,8 +308,14 @@ export async function startExternalChatSession(input: {
         resolution.integrationMode === "training",
       ],
     );
-    const resolved = await transaction.queryOne<{ id: string; mode: ExternalIntegrationMode; status: string }>(
-      `select id,mode,status from public.external_chat_sessions
+    const resolved = await transaction.queryOne<{
+      id: string;
+      mode: ExternalIntegrationMode;
+      sessionTokenHash: string;
+      status: string;
+    }>(
+      `select id,mode,status,session_token_hash as "sessionTokenHash"
+       from public.external_chat_sessions
        where integration_id=$1::uuid and idempotency_hash=$2 and session_token_hash=$3`,
       [resolution.integrationId, idempotencyHash, tokenHash],
     );
@@ -316,7 +327,9 @@ export async function startExternalChatSession(input: {
     });
     return resolved;
   });
-  if (!session) throw new ExternalIntegrationError("temporarily_unavailable", 503);
+  if (!session || !sessionTokenMatches(session.sessionTokenHash, tokenHash)) {
+    throw new ExternalIntegrationError("temporarily_unavailable", 503);
+  }
   return {
     mode: session.mode,
     sessionId: session.id,
@@ -408,7 +421,7 @@ export async function getExternalChatContext(input: {
   const resolution = input.resolution;
   const result = await withTenantTransaction(tenantScope(resolution), async (transaction) => {
     await lockExternalIntegration(transaction, resolution, {
-      capability: "chat.message",
+      capability: "chat.start",
       origin: input.origin,
       publicSiteKey: input.publicSiteKey,
     });
@@ -424,7 +437,7 @@ export async function getExternalChatContext(input: {
       [input.sessionId],
     );
     await appendIntegrationEvent(transaction, resolution, {
-      capability: "chat.message",
+      capability: "chat.start",
       correlationId: input.correlationId,
       eventType: "chat.session.context",
       outcome: "accepted",
