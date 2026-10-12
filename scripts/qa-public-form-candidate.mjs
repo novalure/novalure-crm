@@ -51,6 +51,7 @@ const draftSlug = `draft-${marker}`;
 const siteKey = `nov_pk_${own.form.replaceAll("-", "")}`;
 const foreignSiteKey = `nov_pk_${foreign.form.replaceAll("-", "")}`;
 const publicOrigin = base;
+const foreignOrigin = "https://foreign-candidate.example";
 const formFields = JSON.stringify([
   { id: "name", crmField: "name", label: "Name", type: "text", required: true },
   { id: "email", crmField: "email", label: "Email", type: "email", required: true },
@@ -130,7 +131,10 @@ async function seedForms() {
     [own.deniedForm, own.workspace, own.project, own.viewer, `SYNTHETIC restricted ${marker}`, `restricted-${marker}`, formFields]);
     await client.query("insert into form_submissions(id,workspace_id,project_id,form_id) values($1,$2,$3,$4)",
       [randomUUID(), foreign.workspace, foreign.project, foreign.form]);
-    for (const [fixture, key] of [[own, siteKey], [foreign, foreignSiteKey]]) {
+    for (const [fixture, key, allowedOrigin] of [
+      [own, siteKey, publicOrigin],
+      [foreign, foreignSiteKey, foreignOrigin],
+    ]) {
       const integration = await client.query(`insert into external_integrations(
         public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,
         allowed_origins,capabilities,configuration,metadata
@@ -142,7 +146,7 @@ async function seedForms() {
         status='active',
         mode='training',
         metadata=external_integrations.metadata || excluded.metadata
-      returning id`, [key, fixture.workspace, fixture.project, fixture.form, publicOrigin]);
+      returning id`, [key, fixture.workspace, fixture.project, fixture.form, allowedOrigin]);
       await client.query(`insert into external_integration_widget_configs(
         integration_id,workspace_id,brand_name,assistant_name,enabled_capabilities,
         lead_capture_enabled,chat_enabled
@@ -176,7 +180,12 @@ async function attestRls() {
     [siteKey, "https://wrong.example", own.form]);
   const deniedProjectForm = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
     [siteKey, publicOrigin, foreign.form]);
-  requireProof(resolved.rowCount === 1 && deniedOrigin.rowCount === 0 && deniedProjectForm.rowCount === 0,
+  const deniedForeignOrigin = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [foreignSiteKey, publicOrigin, foreign.form]);
+  const resolvedForeign = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [foreignSiteKey, foreignOrigin, foreign.form]);
+  requireProof(resolved.rowCount === 1 && deniedOrigin.rowCount === 0 && deniedProjectForm.rowCount === 0
+    && deniedForeignOrigin.rowCount === 0 && resolvedForeign.rowCount === 1,
     "QA_GATEWAY_RESOLUTION_INVALID");
   const client = await app.connect();
   try {

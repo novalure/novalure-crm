@@ -62,6 +62,12 @@ try {
     || binding.branch !== qa.expectedBranchId || !binding.gateway_execute || !binding.compatibility_execute) {
     throw new Error("QA_GATEWAY_BIND_RUNTIME_INVALID");
   }
+  const physical = (await owner.query(`select
+    (select count(*)::int from public.forms) forms,
+    (select count(*)::int from public.external_integrations) integrations`)).rows[0];
+  if (physical.forms < 1 || physical.integrations < 1) {
+    throw new Error("QA_GATEWAY_BIND_PHYSICAL_FIXTURE_MISSING");
+  }
   const noContext = (await runtime.query(`select
     (select count(*)::int from public.forms) forms,
     (select count(*)::int from public.form_submissions) submissions,

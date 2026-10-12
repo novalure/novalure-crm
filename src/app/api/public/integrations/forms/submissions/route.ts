@@ -6,6 +6,7 @@ import {
   requireExternalIntegrationClientIp,
   resolveExternalIntegration,
   ExternalIntegrationError,
+  type ExternalIntegrationResolution,
 } from "@/lib/db/external-integration-gateway";
 import { withTenantTransaction } from "@/lib/db/tenant-client";
 import {
@@ -42,6 +43,7 @@ const idempotencyPattern = /^[A-Za-z0-9_-]{32,128}$/u;
 export async function POST(request: Request) {
   const context = { correlationId: createCorrelationId(), operation: "form.submit", startedAt: Date.now() };
   let origin = "null";
+  let auditResolution: ExternalIntegrationResolution | null = null;
   try {
     origin = readExternalRequestOrigin(request);
     const body = await readBoundedJson(request);
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
       publicSiteKey,
     });
     if (!resolution?.formId) throw new ExternalIntegrationError("form_not_found", 404);
+    auditResolution = resolution;
     const lookup = await withTenantTransaction(
       { actorId: resolution.publicActorId, workspaceId: resolution.workspaceId },
       (transaction) => getPublicWebsiteForm(
@@ -164,6 +167,14 @@ export async function POST(request: Request) {
       status: snapshot.status,
     });
   } catch (error) {
+    if (auditResolution) {
+      await recordExternalIntegrationEvent(auditResolution, {
+        capability: "form.submit",
+        correlationId: context.correlationId,
+        eventType: "form.submit",
+        outcome: error instanceof ExternalIntegrationError && error.status < 500 ? "denied" : "failed",
+      }).catch(() => undefined);
+    }
     if (error instanceof PublicSubmissionTransactionError && !error.rollbackConfirmed) {
       // The request key remains stable; a caller retry reconciles the durable receipt.
       return externalFailure(error, origin, context);

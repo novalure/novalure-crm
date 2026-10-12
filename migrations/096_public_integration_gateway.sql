@@ -481,13 +481,14 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
   )
   from public.forms f
   join public.workspaces w on w.id=f.workspace_id
-  join public.external_integrations i on i.workspace_id=f.workspace_id and i.form_id=f.id
-    and i.status in ('test','active') and 'form.read'=any(i.capabilities)
   where f.status in ('aktiv','eingebaut')
     and ((p_form_id is not null and f.id=p_form_id)
       or (p_form_id is null and p_workspace_public_key<>''
         and w.public_key=p_workspace_public_key and f.slug=p_slug))
     and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
+    and exists (select 1 from public.external_integrations i
+      where i.workspace_id=f.workspace_id and i.form_id=f.id
+        and i.status in ('test','active') and 'form.read'=any(i.capabilities))
     and exists (select 1 from public.workspace_users u
       where u.workspace_id=f.workspace_id and u.status='active' and u.role in ('owner','admin'))
   order by f.updated_at desc limit 1
@@ -496,17 +497,22 @@ $function$;
 create function public.crm_external_legacy_form_route(p_slug text)
 returns table(form_id uuid, slug text, workspace_public_key text)
 language sql stable security definer set search_path = pg_catalog, public as $function$
-  select f.id, f.slug, w.public_key
-  from public.forms f
-  join public.workspaces w on w.id=f.workspace_id
-  join public.external_integrations i on i.workspace_id=f.workspace_id and i.form_id=f.id
-    and i.status in ('test','active') and 'form.read'=any(i.capabilities)
-  where f.status in ('aktiv','eingebaut')
-    and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
-    and (f.slug=p_slug or f.settings->>'legacyId'=p_slug)
-    and exists (select 1 from public.workspace_users u
-      where u.workspace_id=f.workspace_id and u.status='active' and u.role in ('owner','admin'))
-  order by f.updated_at desc limit 2
+  with candidates as materialized (
+    select f.id, f.slug, w.public_key
+    from public.forms f
+    join public.workspaces w on w.id=f.workspace_id
+    where f.status in ('aktiv','eingebaut')
+      and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
+      and (f.slug=p_slug or f.settings->>'legacyId'=p_slug)
+      and exists (select 1 from public.external_integrations i
+        where i.workspace_id=f.workspace_id and i.form_id=f.id
+          and i.status in ('test','active') and 'form.read'=any(i.capabilities))
+      and exists (select 1 from public.workspace_users u
+        where u.workspace_id=f.workspace_id and u.status='active' and u.role in ('owner','admin'))
+  ), counted as (
+    select candidates.*, count(*) over () as candidate_count from candidates
+  )
+  select id, slug, public_key from counted where candidate_count=1
 $function$;
 
 create function public.crm_external_form_submission_scope(
@@ -516,8 +522,6 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
   select f.workspace_id, actor.id
   from public.forms f
   join public.workspaces w on w.id=f.workspace_id
-  join public.external_integrations i on i.workspace_id=f.workspace_id and i.form_id=f.id
-    and i.status in ('test','active') and 'form.submit'=any(i.capabilities)
   join lateral (
     select u.id from public.workspace_users u
     where u.workspace_id=f.workspace_id and u.status='active' and u.role in ('owner','admin')
@@ -526,6 +530,9 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
   where f.id=p_form_id and w.public_key=p_workspace_public_key
     and f.status in ('aktiv','eingebaut')
     and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
+    and exists (select 1 from public.external_integrations i
+      where i.workspace_id=f.workspace_id and i.form_id=f.id
+        and i.status in ('test','active') and 'form.submit'=any(i.capabilities))
 $function$;
 
 -- Keep the established public-form function contract for the application

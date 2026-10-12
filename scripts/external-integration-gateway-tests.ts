@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
@@ -54,11 +54,16 @@ before(async () => {
     [actorId, workspaceId, foreignActorId, foreignWorkspaceId],
   );
   await db.admin.query(
-    `insert into projects(id,workspace_id,name,type) values
-       ($1,$2,'SYNTHETIC customer project','Bauträger'),
-       ($3,$2,'SYNTHETIC alternate customer project','Bauträger'),
-       ($4,$5,'SYNTHETIC foreign project','Bauträger')`,
-    [projectId, workspaceId, alternateProjectId, foreignProjectId, foreignWorkspaceId],
+    "insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC customer project','Bauträger')",
+    [projectId, workspaceId],
+  );
+  await db.admin.query(
+    "insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC alternate customer project','Bauträger')",
+    [alternateProjectId, workspaceId],
+  );
+  await db.admin.query(
+    "insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC foreign project','Bauträger')",
+    [foreignProjectId, foreignWorkspaceId],
   );
   await db.admin.query(
     `insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
@@ -136,6 +141,21 @@ test("096 forces RLS, disables the lookup login, and exposes only scoped runtime
     "select public.crm_public_form_lookup(null,'customer-public','gateway-form') as form",
   );
   assert.equal(compatibility.rows[0]?.form?.id, formId);
+  await db.admin.query(
+    `insert into external_integrations(
+       public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,
+       allowed_origins,capabilities,configuration)
+     values($1,$2,$3,$4,'customer_website','active','training',array[$5],array['form.read'],'{}')`,
+    [`nov_pk_${randomUUID().replaceAll("-", "")}`, workspaceId, projectId, formId, origin],
+  );
+  assert.equal((await db.pool.query(
+    "select * from public.crm_public_form_legacy_route('gateway-form')",
+  )).rowCount, 1);
+  await db.admin.query("update forms set slug='gateway-form' where id=$1", [foreignFormId]);
+  assert.equal((await db.pool.query(
+    "select * from public.crm_public_form_legacy_route('gateway-form')",
+  )).rowCount, 0);
+  await db.admin.query("update forms set slug='foreign-gateway-form' where id=$1", [foreignFormId]);
   const valid = await db.pool.query(
     "select * from public.crm_external_integration_resolve($1,$2,'form.read',$3)",
     [siteKey, origin, formId],
@@ -450,6 +470,16 @@ test("training chat foundation is scoped, replay-safe, and has no CRM or outboun
   const session = await first.json() as { mode: string; sessionId: string; sessionToken: string };
   assert.deepEqual(await replay.json(), session);
   assert.equal(session.mode, "training");
+  const persistedSession = await db.admin.query<{ public_site_key: string; session_token_hash: string }>(
+    `select i.public_site_key,s.session_token_hash
+     from external_chat_sessions s join external_integrations i on i.id=s.integration_id
+     where s.id=$1`,
+    [session.sessionId],
+  );
+  assert.deepEqual(persistedSession.rows, [{
+    public_site_key: siteKey,
+    session_token_hash: createHash("sha256").update(session.sessionToken).digest("hex"),
+  }]);
 
   const message = await appendChatMessage(new Request("https://crm.example/api/public/integrations/chat/messages", {
     body: JSON.stringify({
@@ -510,9 +540,9 @@ test("training chat foundation is scoped, replay-safe, and has no CRM or outboun
   assert.equal((await db.admin.query("select id from external_chat_messages where workspace_id=$1 and synthetic", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query("select id from leads where workspace_id=$1", [workspaceId])).rowCount, 1);
   assert.equal((await db.admin.query(
-    "select id from external_integration_events where workspace_id=$1",
+    "select id from external_integration_events where workspace_id=$1 and event_type like 'chat.%'",
     [workspaceId],
-  )).rowCount, 8);
+  )).rowCount, 5);
 });
 
 test("chat session creation is durably rate limited", async () => {

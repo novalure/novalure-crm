@@ -65,6 +65,11 @@ test("environment manifest separates expected names from unverified remote parit
     }
   }
   assert.deepEqual(
+    [...directReferences].filter(name => runtimeForbidden.includes(name)).sort(),
+    [],
+    "forbidden runtime variables must have no application reference",
+  );
+  assert.deepEqual(
     [...directReferences].filter(name => !classified.has(name)).sort(),
     [],
     "every directly referenced runtime/build variable must be classified",

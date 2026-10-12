@@ -788,7 +788,7 @@ async function main() {
       ((neon061Profile === "production" || media062Profile === "production" || crm080Profile === "production") && target.name !== "prod") ||
       (((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production") || (crm080Profile && crm080Profile !== "production")) && target.name !== "test")
     ) {
-      throw new Error("The selected Neon 061 execution profile does not match MIGRATION_TARGET.");
+      throw new Error("The selected compatibility execution profile does not match MIGRATION_TARGET.");
     }
     const runtimeRole = process.env[
       target.name === "prod"

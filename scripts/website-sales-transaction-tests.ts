@@ -97,6 +97,10 @@ before(async () => {
     [genericFormId, websiteSalesWorkspaceId, projectId, genericActorId],
   );
   await db.admin.query(await readFile(new URL("../migrations/096_public_integration_gateway.sql", import.meta.url), "utf8"));
+  await db.admin.query(
+    `insert into novalure_schema_migrations(version,name,checksum)
+     values('096_public_integration_gateway','096_public_integration_gateway.sql','synthetic-prerequisite')`,
+  );
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
   process.env.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
