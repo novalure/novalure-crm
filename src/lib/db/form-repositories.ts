@@ -569,12 +569,12 @@ export async function persistWebsiteFormSubmission(input: {
     && input.actorUserId === websiteSalesActorId && lookup.id === websiteSalesFormId;
 
   if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {
-    return { persisted: false, reason: "privacy_consent_required", form };
+    return { persisted: false, reason: "privacy_consent_required" };
   }
 
   const validationError = validateWebsiteFormSubmission(form, answers, input.formData, consent);
   if (validationError) {
-    return { persisted: false, reason: validationError, form };
+    return { persisted: false, reason: validationError };
   }
 
   const tracking = extractTracking(input.formData, input.requestUrl, form);

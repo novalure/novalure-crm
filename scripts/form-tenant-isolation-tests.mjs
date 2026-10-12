@@ -190,6 +190,12 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
         [ownWorkspace, readProject, projectForm],
       ), /row-level security|permission denied/);
       await client.query("rollback");
+      await db.admin.query("update workspace_users set status='suspended' where id=$1", [splitActor]);
+      await client.query("begin");
+      await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, splitActor]);
+      assert.equal((await client.query("select id from forms where id=$1", [ownedUnassignedForm])).rowCount, 0);
+      assert.equal((await client.query("update forms set name='forged' where id=$1 returning id", [ownedUnassignedForm])).rowCount, 0);
+      await client.query("rollback");
       await client.query("begin");
       await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [ownWorkspace, ownActor]);
       await assert.rejects(client.query("insert into form_submissions(workspace_id,form_id) values($1,$2)", [foreignWorkspace, foreignForm]), /row-level security|permission denied/);

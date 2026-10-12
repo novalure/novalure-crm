@@ -159,6 +159,18 @@ export async function consumePublicSubmissionRateLimits(input: {
     }
   }
 
+  // A repeated opaque key can refer to only one SQL conflict row. Apply the
+  // strictest limit over the longest window so duplicate inputs cannot relax
+  // any of the supplied policies or abort a valid transaction.
+  const policies = [...input.policies.reduce((byHash, policy) => {
+    const prior = byHash.get(policy.keyHash);
+    byHash.set(policy.keyHash, prior
+      ? { keyHash: policy.keyHash, limit: Math.min(prior.limit, policy.limit),
+          windowSeconds: Math.max(prior.windowSeconds, policy.windowSeconds) }
+      : policy);
+    return byHash;
+  }, new Map<string, { keyHash: string; limit: number; windowSeconds: number }>()).values()];
+
   const row = await queryOne<RateLimitRow>(
     `
       with policies as (
@@ -204,9 +216,9 @@ export async function consumePublicSubmissionRateLimits(input: {
         (select count(*) from consumed) = cardinality($1::text[]) as allowed
     `,
     [
-      input.policies.map((policy) => policy.keyHash),
-      input.policies.map((policy) => policy.limit),
-      input.policies.map((policy) => policy.windowSeconds),
+      policies.map((policy) => policy.keyHash),
+      policies.map((policy) => policy.limit),
+      policies.map((policy) => policy.windowSeconds),
     ],
   );
 

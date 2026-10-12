@@ -14,6 +14,7 @@ import type { AppSession } from "../src/lib/auth/session";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
+  consumePublicSubmissionRateLimits,
   readCompletedPublicSubmissionIdempotency,
 } from "../src/lib/db/public-submission-abuse-repository";
 import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope, createPublicSubmissionProof, publicSubmissionControlFields, publicSubmissionActions } from "../src/lib/security/public-submission-abuse";
@@ -614,4 +615,29 @@ test("a public form cannot reparent or enrich a contact in another project", { t
     assert.notEqual(submission.rows[0]?.contact_id, otherContactId);
     assert.equal((await db.admin.query("select id from contacts where id=$1 and project_id=$2", [submission.rows[0]?.contact_id, projectId])).rowCount, 1);
   }
+});
+
+test("duplicate rate keys apply the strictest policy once", async () => {
+  const keyHash = "e".repeat(64);
+  await withPublicSubmissionTransaction({ actorId: genericActorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+    const policies = [
+      { keyHash, limit: 5, windowSeconds: 600 },
+      { keyHash, limit: 1, windowSeconds: 900 },
+    ];
+    assert.deepEqual(await consumePublicSubmissionRateLimits({ policies }), { allowed: true });
+    assert.deepEqual(await consumePublicSubmissionRateLimits({ policies }), { allowed: false });
+  });
+});
+
+test("failed public validation does not return the internal form", async () => {
+  const data = new FormData();
+  data.set("privacy", "false");
+  await withPublicSubmissionTransaction({ actorId: genericActorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+    assert.deepEqual(await persistWebsiteFormSubmission({
+      actorUserId: genericActorId,
+      formData: data,
+      formKey: genericFormId,
+      requestUrl: "https://crm.example.invalid/forms/embed",
+    }), { persisted: false, reason: "privacy_consent_required" });
+  });
 });
