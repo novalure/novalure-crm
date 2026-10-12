@@ -4,7 +4,6 @@ import { createHmac, randomUUID } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 import { qaRequestUrl } from "./lib/qa-http-origin.mjs";
 
-const defaultQaPassword = "QA-Novalure-Local-2026!";
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -41,8 +40,8 @@ function qaEmail(localPart) {
 const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const trustedOrigin = new URL(baseUrl).origin;
 const configuredQaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.NOVALURE_QA_SEED_PASSWORD;
-if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
-const qaPassword = configuredQaPassword || defaultQaPassword;
+if (!configuredQaPassword) throw new Error("NOVALURE_QA_PASSWORD or NOVALURE_QA_SEED_PASSWORD is required.");
+const qaPassword = configuredQaPassword;
 
 const users = {
   admin: qaEmail("qa-platform-admin"),

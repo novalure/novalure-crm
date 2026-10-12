@@ -7,7 +7,6 @@ import { neon } from "@neondatabase/serverless";
 import { assertDatabaseHost, assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const scrypt = promisify(scryptCallback);
-const defaultQaPassword = "QA-Novalure-Local-2026!";
 const runStamp = Date.now();
 const marker = `CODEXTEST_PRODUCTROLE_INVITE_${runStamp}`;
 const createdUserIds = [];
@@ -283,8 +282,8 @@ const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://127.0.0.1:3000").re
 const qaPassword =
   process.env.NOVALURE_QA_PASSWORD ||
   process.env.NOVALURE_QA_SEED_PASSWORD ||
-  process.env.QA_LOGIN_PASSWORD ||
-  defaultQaPassword;
+  process.env.QA_LOGIN_PASSWORD;
+if (!qaPassword) throw new Error("A QA login password is required.");
 
 if (!databaseUrl) throw new Error("DATABASE_URL or POSTGRES_URL is required.");
 

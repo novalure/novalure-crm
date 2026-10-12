@@ -6,7 +6,6 @@ import { neon, Pool } from "@neondatabase/serverless";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const scrypt = promisify(scryptCallback);
-const defaultQaPassword = "QA-Novalure-Local-2026!";
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -54,8 +53,8 @@ function json(value) {
 }
 
 const configuredQaPassword = process.env.NOVALURE_QA_SEED_PASSWORD || process.env.NOVALURE_QA_PASSWORD;
-if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
-const qaPassword = configuredQaPassword || defaultQaPassword;
+if (!configuredQaPassword) throw new Error("NOVALURE_QA_SEED_PASSWORD or NOVALURE_QA_PASSWORD is required.");
+const qaPassword = configuredQaPassword;
 const databaseUrl = qaTarget.databaseUrl;
 
 const sql = neon(databaseUrl);
@@ -1224,12 +1223,7 @@ async function main() {
   for (const user of users) {
     console.log(`- ${user.email} (${user.productRole})`);
   }
-  if (qaPassword === defaultQaPassword) {
-    console.log(`Default local QA password: ${defaultQaPassword}`);
-    console.log("Override with NOVALURE_QA_SEED_PASSWORD for non-local test environments.");
-  } else {
-    console.log("QA password source: NOVALURE_QA_SEED_PASSWORD or NOVALURE_QA_PASSWORD.");
-  }
+  console.log("QA password source: NOVALURE_QA_SEED_PASSWORD or NOVALURE_QA_PASSWORD.");
 }
 
 main().catch((error) => {
