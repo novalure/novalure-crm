@@ -260,7 +260,7 @@ async function attestHttp() {
   requireProof(required.every(key => negativeInputs.get(key)), "QA_NEGATIVE_CONSENT_PROOF_MISSING");
   const negativeBody = new URLSearchParams({ form_id: `${own.key}/${slug}`, form_slug: `${own.key}/${slug}`,
     return_to: publicPath, name: `SYNTHETIC Denied ${marker}`, email: `denied-${marker}@example.invalid`,
-    privacy: "false", marketing_consent: "false",
+    privacy: "false",
     ...Object.fromEntries(required.map(key => [key, negativeInputs.get(key)])) }).toString();
   const negativeResponse = await fetch(`${base}/api/forms/submissions`, {
     ...options,
