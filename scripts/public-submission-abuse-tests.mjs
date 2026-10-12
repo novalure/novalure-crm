@@ -48,6 +48,8 @@ test("form consent accepts explicit affirmative values and fails closed on negat
   const newsletter = { doubleOptIn: true, template: "newsletter" };
   const newsletterData = new FormData();
   newsletterData.set("privacy_consent", "1");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: false });
+  newsletterData.set("marketing_consent", "yes");
   assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: true });
   newsletterData.set("marketing_consent", "false");
   assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: false });

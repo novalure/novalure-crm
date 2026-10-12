@@ -933,7 +933,7 @@ export async function persistWebsiteFormSubmission(input: {
           workspaceId: lookup.workspaceId,
         })
       : null,
-    form.template === "newsletter" || form.actions.newsletterList
+    consent.marketing && (form.template === "newsletter" || form.actions.newsletterList)
       ? writeCrmAnalyticsEvent({
           channel: "email",
           contactId,

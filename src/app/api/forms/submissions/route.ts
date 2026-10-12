@@ -194,9 +194,7 @@ export async function POST(request: Request) {
 
         const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
         if (!clientIp) {
-          return complete(createPublicFormFailureSnapshot({
-            formSlug, reason: "temporarily_unavailable", request, returnTo, source, status: 503,
-          }));
+          throw new Error("PUBLIC_SUBMISSION_CLIENT_IP_UNAVAILABLE");
         }
 
         try {
@@ -215,9 +213,7 @@ export async function POST(request: Request) {
             }));
           }
         } catch {
-          return complete(createPublicFormFailureSnapshot({
-            formSlug, reason: "temporarily_unavailable", request, returnTo, source, status: 503,
-          }));
+          throw new Error("PUBLIC_SUBMISSION_RATE_LIMIT_UNAVAILABLE");
         }
 
         if (hasPublicSubmissionHoneypotValue(formData)) {

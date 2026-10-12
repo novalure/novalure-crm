@@ -64,12 +64,26 @@ create policy forms_tenant_write on public.forms
   using (
     workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
     and (public.crm_workspace_manager(workspace_id)
-      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true)))
+      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true))
+      or (project_id is null
+        and owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid
+        and exists (
+          select 1 from public.workspace_users actor
+          where actor.id = owner_user_id and actor.workspace_id = forms.workspace_id
+            and actor.status = 'active'
+        )))
   )
   with check (
     workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
     and (public.crm_workspace_manager(workspace_id)
-      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true)))
+      or (project_id is not null and public.crm_project_access(workspace_id, project_id, true))
+      or (project_id is null
+        and owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid
+        and exists (
+          select 1 from public.workspace_users actor
+          where actor.id = owner_user_id and actor.workspace_id = forms.workspace_id
+            and actor.status = 'active'
+        )))
   );
 
 create policy form_submissions_tenant_read on public.form_submissions

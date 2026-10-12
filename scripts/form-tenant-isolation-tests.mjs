@@ -177,6 +177,8 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await client.query("select id from forms where id=$1", [projectForm])).rowCount, 1);
       assert.equal((await client.query("select id from forms where id=$1", [ownedDeniedProjectForm])).rowCount, 0);
       assert.equal((await client.query("select id from forms where id=$1", [ownedUnassignedForm])).rowCount, 1);
+      assert.equal((await client.query("update forms set name='SYNTHETIC owned edit' where id=$1 returning id", [ownedUnassignedForm])).rowCount, 1);
+      assert.equal((await client.query("update forms set name='forged' where id=$1 returning id", [ownedDeniedProjectForm])).rowCount, 0);
       await client.query("savepoint before_split_project_insert");
       await assert.rejects(client.query(
         "insert into form_submissions(workspace_id,project_id,form_id) values($1,$2,$3)",

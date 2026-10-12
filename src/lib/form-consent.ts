@@ -17,10 +17,7 @@ export function extractConsent(
     ...formData.getAll("privacy"),
     ...formData.getAll("privacy_consent"),
   ]);
-  const marketingValues = formData.getAll("marketing_consent");
-  const marketing = marketingValues.length > 0
-    ? isAffirmativeConsent(marketingValues)
-    : form.template === "newsletter" && privacy;
+  const marketing = isAffirmativeConsent(formData.getAll("marketing_consent"));
 
   return { doubleOptIn: form.doubleOptIn, marketing, privacy };
 }
