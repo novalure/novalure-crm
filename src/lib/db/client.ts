@@ -25,6 +25,10 @@ export function hasDatabaseUrl(env: NodeJS.ProcessEnv = process.env) {
   return Boolean(resolveDatabaseUrl(env));
 }
 
+export function hasBoundTenantTransaction() {
+  return Boolean(currentTenantTransaction() || publicSubmissionTransactions.getStore());
+}
+
 function cleanDatabaseUrl(value: string | undefined) {
   if (!value) return "";
 

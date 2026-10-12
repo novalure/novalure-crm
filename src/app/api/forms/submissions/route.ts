@@ -3,9 +3,13 @@ import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
 import {
   getPublicWebsiteFormByKey,
   persistWebsiteFormSubmission,
+  publicWebsiteFormView,
 } from "@/lib/db/form-repositories";
+import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "@/lib/db/client";
+import { publicFormSubmissionScope } from "@/lib/db/public-form-lookup-client";
 import {
   claimPublicSubmissionIdempotency,
+  readCompletedPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
   consumePublicSubmissionRateLimits,
 } from "@/lib/db/public-submission-abuse-repository";
@@ -127,7 +131,7 @@ export async function POST(request: Request) {
   const scope = buildPublicSubmissionScope({
     resourceId: lookup.id,
     resourceType: "form",
-    workspaceId: lookup.workspaceId,
+    workspaceId: lookup.form.workspacePublicKey ?? "",
   });
   let hashes: ReturnType<typeof createPublicSubmissionIdempotencyHashes>;
   let proofValidation: ReturnType<typeof verifyPublicSubmissionProof>;
@@ -159,128 +163,88 @@ export async function POST(request: Request) {
     return unavailableResponse();
   }
 
-  let claim: Awaited<ReturnType<typeof claimPublicSubmissionIdempotency>>;
+  const submissionScope = await publicFormSubmissionScope(lookup.id, lookup.form.workspacePublicKey ?? "").catch(() => null);
+  if (!submissionScope) return unavailableResponse();
+
   try {
-    claim = await claimPublicSubmissionIdempotency(hashes);
-  } catch {
+    const snapshot = await withPublicSubmissionTransaction(
+      { actorId: submissionScope.actorId, workspaceId: submissionScope.workspaceId },
+      async () => {
+        const claim = await claimPublicSubmissionIdempotency(hashes);
+        if (claim.state === "replay") return claim.response;
+        if (claim.state === "processing" || claim.state === "conflict") {
+          return createPublicFormFailureSnapshot({
+            formSlug,
+            reason: claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict",
+            request,
+            returnTo,
+            source,
+            status: 409,
+          });
+        }
+
+        const complete = async (response: PublicSubmissionResponseSnapshot) => {
+          await completePublicSubmissionIdempotency({
+            idempotencyHash: hashes.idempotencyHash,
+            requestHash: hashes.requestHash,
+            response,
+          });
+          return response;
+        };
+
+        const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
+        if (!clientIp) {
+          throw new Error("PUBLIC_SUBMISSION_CLIENT_IP_UNAVAILABLE");
+        }
+
+        try {
+          const identifier = getPublicFormIdentifier(lookup.form, formData, proofValidation.proof.idempotencyKey);
+          const rateLimit = await consumePublicSubmissionRateLimits({
+            policies: createPublicSubmissionRateLimitPolicies({
+              action: publicSubmissionActions.form,
+              clientIp,
+              identifier,
+              scope,
+            }),
+          });
+          if (!rateLimit.allowed) {
+            return complete(createPublicFormFailureSnapshot({
+              formSlug, reason: "rate_limited", request, returnTo, source, status: 429,
+            }));
+          }
+        } catch {
+          throw new Error("PUBLIC_SUBMISSION_RATE_LIMIT_UNAVAILABLE");
+        }
+
+        if (hasPublicSubmissionHoneypotValue(formData)) {
+          return complete(createPublicFormFailureSnapshot({
+            formSlug, reason: "submission_rejected", request, returnTo, source, status: 400,
+          }));
+        }
+
+        stripPublicSubmissionControlFields(formData);
+        const persistence = await persistWebsiteFormSubmission({
+          actorUserId: submissionScope.actorId,
+          formData,
+          formKey: formSlug,
+          requestUrl: request.url,
+        });
+        return complete(createPublicFormPersistenceSnapshot({
+          formSlug, persistence, request, returnTo, source,
+        }));
+      },
+    );
+    return responseFromSnapshot(snapshot);
+  } catch (error) {
+    if (!(error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed)) {
+      // A lost COMMIT acknowledgement may hide a committed business write.
+      // Read the durable receipt before replying; the same key stays guarded.
+      try {
+        const response = await readCompletedPublicSubmissionIdempotency(hashes);
+        if (response) return responseFromSnapshot(response);
+      } catch { /* A same-key retry can read the eventual committed receipt. */ }
+    }
     return unavailableResponse();
-  }
-  if (claim.state === "replay") return responseFromSnapshot(claim.response);
-  if (claim.state === "processing" || claim.state === "conflict") {
-    return responseFromSnapshot(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: claim.state === "processing" ? "submission_in_progress" : "submission_replay_conflict",
-        request,
-        returnTo,
-        source,
-        status: 409,
-      }),
-    );
-  }
-
-  const complete = async (response: PublicSubmissionResponseSnapshot) => {
-    try {
-      await completePublicSubmissionIdempotency({
-        idempotencyHash: hashes.idempotencyHash,
-        requestHash: hashes.requestHash,
-        response,
-      });
-      return responseFromSnapshot(response);
-    } catch {
-      return unavailableResponse();
-    }
-  };
-
-  const clientIp = getTrustedPublicSubmissionClientIp(request.headers);
-  if (!clientIp) {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "temporarily_unavailable",
-        request,
-        returnTo,
-        source,
-        status: 503,
-      }),
-    );
-  }
-
-  try {
-    const identifier = getPublicFormIdentifier(lookup.form, formData, proofValidation.proof.idempotencyKey);
-    const rateLimit = await consumePublicSubmissionRateLimits({
-      policies: createPublicSubmissionRateLimitPolicies({
-        action: publicSubmissionActions.form,
-        clientIp,
-        identifier,
-        scope,
-      }),
-    });
-    if (!rateLimit.allowed) {
-      return complete(
-        createPublicFormFailureSnapshot({
-          formSlug,
-          reason: "rate_limited",
-          request,
-          returnTo,
-          source,
-          status: 429,
-        }),
-      );
-    }
-  } catch {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "temporarily_unavailable",
-        request,
-        returnTo,
-        source,
-        status: 503,
-      }),
-    );
-  }
-
-  if (hasPublicSubmissionHoneypotValue(formData)) {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "submission_rejected",
-        request,
-        returnTo,
-        source,
-        status: 400,
-      }),
-    );
-  }
-
-  stripPublicSubmissionControlFields(formData);
-  try {
-    const persistence = await persistWebsiteFormSubmission({
-      formData,
-      formKey: formSlug,
-      requestUrl: request.url,
-    });
-    return complete(
-      createPublicFormPersistenceSnapshot({
-        formSlug,
-        persistence,
-        request,
-        returnTo,
-        source,
-      }),
-    );
-  } catch {
-    return complete(
-      createPublicFormFailureSnapshot({
-        formSlug,
-        reason: "temporarily_unavailable",
-        request,
-        returnTo,
-        source,
-        status: 503,
-      }),
-    );
   }
 }
 
@@ -294,7 +258,7 @@ function createPublicFormPersistenceSnapshot(input: {
   if (input.request.headers.get("accept")?.includes("application/json")) {
     return {
       body: input.persistence.persisted
-        ? { persisted: true, form: input.persistence.form }
+        ? { persisted: true, form: input.persistence.form ? publicWebsiteFormView(input.persistence.form) : undefined }
         : { error: normalizePublicFormReason(input.persistence.reason), persisted: false },
       kind: "json",
       status: input.persistence.persisted ? 200 : getFailureStatus(input.persistence.reason),

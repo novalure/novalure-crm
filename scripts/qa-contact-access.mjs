@@ -8,7 +8,6 @@ import { createJiti } from "jiti";
 import { assertDatabaseTarget } from "./lib/infra-targets.mjs";
 
 const scrypt = promisify(scryptCallback);
-const defaultQaPassword = "QA-Novalure-Local-2026!";
 const runStamp = Date.now();
 const marker = `QAACCESS_CONTACT_ACCESS_${runStamp}`;
 
@@ -50,7 +49,8 @@ async function hashPassword(password) {
 
 loadEnv(".env.local");
 
-const qaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.QA_LOGIN_PASSWORD || defaultQaPassword;
+const qaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.QA_LOGIN_PASSWORD;
+if (!qaPassword) throw new Error("NOVALURE_QA_PASSWORD or QA_LOGIN_PASSWORD is required.");
 const databaseUrl =
   cleanDatabaseUrl(process.env.DATABASE_URL) ||
   cleanDatabaseUrl(process.env.POSTGRES_URL) ||

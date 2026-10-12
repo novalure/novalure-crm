@@ -99,7 +99,8 @@ export async function applySalesSchema(db, {
       name === "093_crm_machine_internal_context.sql" ||
       // 094 depends on the operator installed by 092/093. Its unchanged SQL
       // runs in the dedicated Website Sales fixture, which seeds that actor.
-      name === "094_website_sales_ingestion.sql"
+      name === "094_website_sales_ingestion.sql" ||
+      name === "095_form_tenant_isolation.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

@@ -23,6 +23,34 @@ export type PublicSubmissionIdempotencyClaim =
   | { state: "processing" }
   | { response: PublicSubmissionResponseSnapshot; state: "replay" };
 
+// Recovery after an uncertain COMMIT must never create a receipt. If the
+// transaction did not commit, the next normal attempt must be able to claim it.
+export async function readCompletedPublicSubmissionIdempotency(input: {
+  actionHash: string;
+  idempotencyHash: string;
+  requestHash: string;
+  scopeHash: string;
+}): Promise<PublicSubmissionResponseSnapshot | null> {
+  assertSha256Hashes(input);
+  const row = await queryOne<{ responsePayload: unknown }>(
+    `
+      select response_payload as "responsePayload"
+      from public_submission_idempotency
+      where idempotency_hash = $1
+        and action_hash = $2
+        and scope_hash = $3
+        and request_hash = $4
+        and state = 'completed'
+        and response_payload is not null
+    `,
+    [input.idempotencyHash, input.actionHash, input.scopeHash, input.requestHash],
+  );
+  if (!row) return null;
+  const response = parsePublicSubmissionResponseSnapshot(row.responsePayload);
+  if (!response) throw new Error("Public submission replay payload is invalid");
+  return response;
+}
+
 export async function claimPublicSubmissionIdempotency(input: {
   actionHash: string;
   idempotencyHash: string;
@@ -131,6 +159,18 @@ export async function consumePublicSubmissionRateLimits(input: {
     }
   }
 
+  // A repeated opaque key can refer to only one SQL conflict row. Apply the
+  // strictest limit over the longest window so duplicate inputs cannot relax
+  // any of the supplied policies or abort a valid transaction.
+  const policies = [...input.policies.reduce((byHash, policy) => {
+    const prior = byHash.get(policy.keyHash);
+    byHash.set(policy.keyHash, prior
+      ? { keyHash: policy.keyHash, limit: Math.min(prior.limit, policy.limit),
+          windowSeconds: Math.max(prior.windowSeconds, policy.windowSeconds) }
+      : policy);
+    return byHash;
+  }, new Map<string, { keyHash: string; limit: number; windowSeconds: number }>()).values()];
+
   const row = await queryOne<RateLimitRow>(
     `
       with policies as (
@@ -176,9 +216,9 @@ export async function consumePublicSubmissionRateLimits(input: {
         (select count(*) from consumed) = cardinality($1::text[]) as allowed
     `,
     [
-      input.policies.map((policy) => policy.keyHash),
-      input.policies.map((policy) => policy.limit),
-      input.policies.map((policy) => policy.windowSeconds),
+      policies.map((policy) => policy.keyHash),
+      policies.map((policy) => policy.limit),
+      policies.map((policy) => policy.windowSeconds),
     ],
   );
 

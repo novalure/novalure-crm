@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { extractConsent } from "../src/lib/form-consent.ts";
 import {
   assertPublicSubmissionAbuseConfiguration,
   bookingSubmissionBodyLimits,
@@ -28,6 +29,42 @@ const secret = "qa-public-abuse-secret-with-at-least-32-bytes-2026";
 const workspaceId = "11111111-1111-4111-8111-111111111111";
 const resourceId = "22222222-2222-4222-8222-222222222222";
 const nowSeconds = 1_800_000_000;
+
+test("form consent accepts explicit affirmative values and fails closed on negatives or conflicts", () => {
+  const form = { doubleOptIn: false, template: "standard" };
+  const data = new FormData();
+  data.set("privacy", "false");
+  data.set("marketing_consent", "false");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+
+  data.set("privacy", "on");
+  data.set("marketing_consent", "true");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: true, marketing: true });
+
+  data.append("privacy", "on");
+  data.append("marketing_consent", "true");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+  data.delete("privacy");
+  data.set("privacy", "on");
+  data.delete("marketing_consent");
+  data.set("marketing_consent", "true");
+  data.append("privacy_consent", "on");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: true });
+  data.delete("privacy_consent");
+
+  data.append("privacy_consent", "false");
+  data.append("marketing_consent", "false");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+
+  const newsletter = { doubleOptIn: true, template: "newsletter" };
+  const newsletterData = new FormData();
+  newsletterData.set("privacy_consent", "1");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: false });
+  newsletterData.set("marketing_consent", "yes");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: true });
+  newsletterData.set("marketing_consent", "false");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: false });
+});
 
 process.env.NOVALURE_ABUSE_SECRET = secret;
 
@@ -241,9 +278,11 @@ test("source and migration preserve atomic claim/rate/slot concurrency ordering"
       bookingRoute.indexOf("await createMeetingBookingWithNotifications"),
   );
   assert.ok(
-    formRoute.indexOf("await claimPublicSubmissionIdempotency") <
-      formRoute.indexOf("await persistWebsiteFormSubmission"),
+    formRoute.indexOf("await withPublicSubmissionTransaction") <
+      formRoute.indexOf("await claimPublicSubmissionIdempotency"),
   );
+  assert.ok(formRoute.indexOf("await claimPublicSubmissionIdempotency") < formRoute.indexOf("await persistWebsiteFormSubmission"));
+  assert.ok(formRoute.indexOf("await persistWebsiteFormSubmission") < formRoute.indexOf("return complete(createPublicFormPersistenceSnapshot"));
   assert.match(repository, /on conflict \(idempotency_hash\) do nothing/);
   assert.match(repository, /existing\.request_hash <> \$4/);
   assert.match(repository, /on conflict \(key_hash, bucket_started_at\) do update/);

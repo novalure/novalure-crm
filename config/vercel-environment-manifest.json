@@ -3,6 +3,7 @@
   "scope": ["preview", "production"],
   "valueInspection": "FORBIDDEN",
   "runtimeRequired": [
+    { "name": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Separate published-form lookup role connection; must match DATABASE_URL host, port and database with verified TLS. Binding is not yet provisioned." },
     { "name": "DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Tenant-scoped pooled application connection." },
     { "name": "NOVALURE_ABUSE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Minimum 32-byte public-submission abuse secret." },
     { "name": "NOVALURE_AUTH_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth secret encryption; minimum length enforced by the app." },
@@ -56,6 +57,7 @@
     "NOVALURE_DEMO_USER_NAME",
     "NOVALURE_DEMO_USER_ROLE",
     "NOVALURE_NOTIFICATION_TEST_SINK_URL",
+    "NOVALURE_QA_RUN_PREFIX",
     "NOVALURE_TRUST_AUTH_HEADERS"
   ],
   "forbiddenInProduction": [
@@ -63,6 +65,7 @@
     "NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS",
     "NOVALURE_DEMO_AUTH_ENABLED",
     "NOVALURE_NOTIFICATION_TEST_SINK_URL",
+    "NOVALURE_QA_RUN_PREFIX",
     "NOVALURE_TRUST_AUTH_HEADERS"
   ],
   "remoteComparison": {

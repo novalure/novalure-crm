@@ -9,6 +9,7 @@ import {
 } from "@/lib/security/public-submission-abuse";
 import {
   claimPublicSubmissionIdempotency,
+  readCompletedPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
   consumePublicSubmissionRateLimits,
 } from "@/lib/db/public-submission-abuse-repository";
@@ -169,8 +170,8 @@ export async function POST(request: Request) {
     if (!(error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed)) {
       // An uncertain COMMIT may have succeeded. Recheck the durable receipt before replying.
       try {
-        const result = await claimPublicSubmissionIdempotency(hashes);
-        if (result.state === "replay") return responseFromSnapshot(result.response);
+        const response = await readCompletedPublicSubmissionIdempotency(hashes);
+        if (response) return responseFromSnapshot(response);
       } catch { /* A retry with the same key will read the eventual committed receipt. */ }
     }
     console.error("website_sales_ingestion_failed", { rollbackConfirmed: error instanceof PublicSubmissionTransactionError && error.rollbackConfirmed });

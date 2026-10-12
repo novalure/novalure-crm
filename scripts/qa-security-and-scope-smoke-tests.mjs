@@ -273,7 +273,7 @@ test("protected QA runtime-role binding is explicit and uses only the direct mig
     readFile("scripts/qa-bind-runtime-role.mjs", "utf8"),
   ]);
 
-  assert.match(workflow, /environment: novalure-qa/);
+  assert.match(workflow, /environment: \$\{\{ inputs\.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' \|\| 'novalure-qa' \}\}/);
   assert.match(workflow, /Apply checksummed QA migrations[\s\S]*Bind existing QA runtime role to tenant group[\s\S]*Reset synthetic QA run/);
   assert.match(workflow, /MIGRATION_DATABASE_URL/);
   assert.match(binding, /NOVALURE_QA_DATABASE_ROLE.*novalure_app/);
@@ -381,6 +381,10 @@ test("CI pins the exact runtime, canonicalizes SBOM and never prints raw app log
   const setupBlocks = [...workflow.matchAll(/uses:\s+actions\/setup-node@[\s\S]*?package-manager-cache:\s*false/g)];
 
   assert.equal(setupBlocks.length, 3);
+  assert.match(workflow, /quality:\s*\n\s+name: Lockfile, lint, typecheck, tests and build\s*\n\s+runs-on:/);
+  assert.match(workflow, /production-sca:\s*\n\s+name: Production dependency audit and SBOM\s*\n\s+runs-on:/);
+  assert.doesNotMatch(workflow, /qa_action:/);
+  assert.match(workflow, /Read-only candidate runtime and migration authentication preflight[\s\S]*?Preview checksummed QA migration plan without writes/);
   for (const block of setupBlocks) assert.match(block[0], /node-version-file:\s*\.node-version/);
   assert.match(workflow, /canonicalize-sbom\.mjs/);
   assert.match(workflow, /novalure-production-sbom\.components\.sha256/);

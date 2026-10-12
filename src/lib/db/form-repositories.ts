@@ -1,10 +1,13 @@
 import type { AppSession } from "@/lib/auth/session";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
-import { hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
+import { publicFormLegacyRoutes, publicFormLookup } from "@/lib/db/public-form-lookup-client";
+import { withCrmRead } from "@/lib/crm-command";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
-import { getProductRoleCapabilities } from "@/lib/product-model";
+import { extractConsent } from "@/lib/form-consent";
+import { getProductRoleCapabilities, hasProductCapability } from "@/lib/product-model";
 import { websiteSalesActorId, websiteSalesFormId } from "@/lib/website-sales-ingestion";
 import {
   buildPublicFormPath,
@@ -53,6 +56,7 @@ type FormRow = {
 };
 
 type PublicFormRow = FormRow & {
+  publicActorId: string;
   workspaceName: string | null;
   funnelAudience: string | null;
 };
@@ -80,6 +84,7 @@ type FormLookup = {
   funnelAudience: string | null;
   form: WebsiteForm;
   publicPath: string | null;
+  publicActorId: string;
 };
 
 type LegacyPublicFormRoute =
@@ -104,7 +109,6 @@ const defaultActions: WebsiteForm["actions"] = {
 };
 
 const defaultSteps: FormStep[] = [{ description: "", id: "step_contact", title: "Kontakt" }];
-const websiteSalesFormSlug = "novalure-studio-website-sales-v1";
 
 const defaultFields: FormField[] = [
   createFallbackField("text", "Name", "name", true, defaultSteps[0].id),
@@ -113,11 +117,42 @@ const defaultFields: FormField[] = [
   createFallbackField("consent", "Datenschutz akzeptieren", "privacy", true, defaultSteps[0].id),
 ];
 
+/** Keep CRM routing, owner and performance fields out of anonymous HTML/JSON. */
+export function publicWebsiteFormView(form: WebsiteForm): WebsiteForm {
+  return {
+    ...form,
+    actions: {
+      createTask: false,
+      followUpEmail: false,
+      internalNotification: false,
+      newsletterList: false,
+      redirectUrl: "",
+      showMeeting: false,
+      thankYouMessage: form.actions.thankYouMessage,
+    },
+    conversionRate: 0,
+    crmTarget: "lead",
+    campaign: "",
+    funnelId: "",
+    lastSubmission: "",
+    ownerMode: "roundRobin",
+    ownerUserId: "",
+    pipelineStage: "",
+    submissions: 0,
+    tags: "",
+    visits: 0,
+  };
+}
+
 export async function listWebsiteForms(input: { session: AppSession; limit?: number }): Promise<FormsRuntimePayload> {
   if (!hasDatabaseUrl() || !isUuid(input.session.workspaceId)) {
     return { forms: [], source: "fallback", submissions: [] };
   }
 
+  return withCrmRead(input.session, () => listWebsiteFormsInTenant(input));
+}
+
+async function listWebsiteFormsInTenant(input: { session: AppSession; limit?: number }): Promise<FormsRuntimePayload> {
   try {
     const forms = await queryRows<FormRow>(
       `
@@ -204,13 +239,44 @@ export async function upsertWebsiteForm(input: {
     return { form: null, persisted: false, reason: "Workspace is not a database UUID" };
   }
 
+  return withCrmRead(input.session, (_tx, freshSession) => {
+    if (!freshSession.permissions.includes("crm:write")) {
+      return Promise.resolve({ form: null, persisted: false, reason: "CRM write permission is required" });
+    }
+    if (!hasProductCapability(freshSession.productRole, "funnels:publish")) {
+      return Promise.resolve({ form: null, persisted: false, reason: "Form publishing capability is required" });
+    }
+    return upsertWebsiteFormInTenant({ ...input, session: freshSession });
+  });
+}
+
+async function upsertWebsiteFormInTenant(input: { session: AppSession; form: WebsiteForm }) {
   const form = normalizeWebsiteForm(input.form);
-  const existingId = await resolveExistingFormId(input.session.workspaceId, form);
+  const existing = await resolveExistingForm(input.session.workspaceId, form);
+  if (isUuid(form.id) && !existing) {
+    return { form: null, persisted: false, reason: "Form not found" };
+  }
+  const existingId = existing?.id ?? null;
   const funnel = await resolveFunnel(input.session.workspaceId, form.funnelId);
-  const projectId = funnel?.projectId ?? (await resolveFallbackProjectId(input.session.workspaceId));
+  if (isUuid(form.funnelId) && !funnel) {
+    return { form: null, persisted: false, reason: "Form funnel is not accessible" };
+  }
+  if (existing && funnel?.projectId && funnel.projectId !== existing.projectId) {
+    return { form: null, persisted: false, reason: "Form project cannot be changed" };
+  }
+  const projectId = existing
+    ? existing.projectId
+    : funnel?.projectId ?? (await resolveFallbackProjectId(input.session.workspaceId));
   const ownerUserId = form.ownerMode === "user" && isUuid(form.ownerUserId)
     ? form.ownerUserId
     : funnel?.ownerUserId ?? (isUuid(input.session.userId) ? input.session.userId : null);
+  if (ownerUserId) {
+    const owner = await queryOne<{ id: string }>(
+      "select id from workspace_users where workspace_id=$1 and id=$2 and status='active' limit 1",
+      [input.session.workspaceId, ownerUserId],
+    );
+    if (!owner) return { form: null, persisted: false, reason: "Form owner is not active in workspace" };
+  }
   const slug = slugify(form.slug || form.name) || `formular-${Date.now()}`;
   const tags = parseTags(form.tags);
   const settings = {
@@ -319,7 +385,7 @@ export async function upsertWebsiteForm(input: {
           values (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14::text[], $15::jsonb, $16::jsonb, $17::jsonb,
-            $18, $19, $20, $21::timestamptz
+            0, 0, 0, null
           )
           returning
             id,
@@ -364,10 +430,6 @@ export async function upsertWebsiteForm(input: {
           JSON.stringify(form.fields),
           JSON.stringify(form.actions),
           JSON.stringify(settings),
-          form.visits,
-          form.submissions,
-          form.conversionRate,
-          form.lastSubmission || null,
         ],
       );
 
@@ -402,52 +464,30 @@ export async function getPublicWebsiteForm(
 
   if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
-  const row = await queryOne<PublicFormRow>(
-    `
-      select
-        f.id,
-        f.workspace_id as "workspaceId",
-        f.project_id as "projectId",
-        f.owner_user_id as "ownerUserId",
-        f.funnel_id as "funnelId",
-        f.name,
-        f.slug,
-        f.status,
-        f.variant,
-        f.template,
-        f.crm_target as "crmTarget",
-        f.pipeline_stage as "pipelineStage",
-        f.owner_mode as "ownerMode",
-        f.campaign,
-        f.tags,
-        f.fields,
-        f.actions,
-        f.settings,
-        f.visits_count as visits,
-        f.submissions_count as submissions,
-        f.conversion_rate as "conversionRate",
-        f.last_submission_at as "lastSubmission",
-        w.name as "workspaceName",
-        w.public_key as "workspacePublicKey",
-        fn.audience as "funnelAudience"
-      from forms f
-      join workspaces w on w.id = f.workspace_id
-      left join funnels fn on fn.id = f.funnel_id
-      where f.status in ('aktiv', 'eingebaut')
-        and (
-          ($1::uuid is not null and f.id = $1::uuid)
-          or (
-            $1::uuid is null
-            and w.public_key = $2
-            and f.slug = $3
-          )
-        )
-      order by case when f.status = 'eingebaut' then 0 when f.status = 'aktiv' then 1 else 2 end,
-        f.updated_at desc
-      limit 1
-    `,
-    [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""],
-  );
+  const args = [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""];
+  const tenantBound = hasBoundTenantTransaction();
+  const row = tenantBound
+    ? await queryOne<PublicFormRow>(
+        `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
+           f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
+           f.status, f.variant, f.template, f.crm_target as "crmTarget",
+           f.pipeline_stage as "pipelineStage", f.owner_mode as "ownerMode",
+           f.campaign, f.tags, f.fields, f.actions, f.settings,
+           f.visits_count as visits, f.submissions_count as submissions,
+           f.conversion_rate as "conversionRate", f.last_submission_at as "lastSubmission",
+           w.name as "workspaceName", w.public_key as "workspacePublicKey",
+           fn.audience as "funnelAudience",
+           nullif(current_setting('app.actor_id', true), '')::uuid as "publicActorId"
+         from forms f join workspaces w on w.id=f.workspace_id
+         left join funnels fn on fn.id=f.funnel_id
+         where f.status in ('aktiv','eingebaut')
+           and f.workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
+           and (($1::uuid is not null and f.id=$1::uuid)
+             or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
+         order by f.updated_at desc limit 1`,
+        args,
+      )
+    : await publicFormLookup(formId, route?.workspacePublicKey ?? "", route?.slug ?? "") as PublicFormRow | null;
 
   if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
@@ -457,14 +497,15 @@ export async function getPublicWebsiteForm(
 
   return {
     id: row.id,
-    workspaceId: row.workspaceId,
+    workspaceId: row.workspaceId ?? "",
     workspaceName: row.workspaceName,
-    projectId: row.projectId,
-    ownerUserId: row.ownerUserId,
-    funnelId: row.funnelId,
-    funnelAudience: row.funnelAudience,
-    form: toWebsiteForm(row),
+    projectId: row.projectId ?? null,
+    ownerUserId: row.ownerUserId ?? null,
+    funnelId: row.funnelId ?? null,
+    funnelAudience: row.funnelAudience ?? null,
+    form: tenantBound ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
     publicPath,
+    publicActorId: row.publicActorId ?? "",
   };
 }
 
@@ -491,40 +532,18 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
   const slug = slugify(slugValue);
   if (!slug) return { status: "not_found", slug };
 
-  const rows = await queryRows<{
-    formId: string;
-    slug: string;
-    workspacePublicKey: string;
-  }>(
-    `
-      select
-        f.id as "formId",
-        f.slug,
-        w.public_key as "workspacePublicKey"
-      from forms f
-      join workspaces w on w.id = f.workspace_id
-      where f.status in ('aktiv', 'eingebaut')
-        and (
-          f.slug = $1
-          or f.settings->>'legacyId' = $1
-        )
-      order by case when f.status = 'eingebaut' then 0 when f.status = 'aktiv' then 1 else 2 end,
-        f.updated_at desc
-      limit 2
-    `,
-    [slug],
-  );
+  const rows = await publicFormLegacyRoutes(slug);
 
   if (!rows.length) return { status: "not_found", slug };
   if (rows.length > 1) return { status: "ambiguous", slug };
 
   const [row] = rows;
   return {
-    canonicalPath: buildPublicFormPath({ workspacePublicKey: row.workspacePublicKey, slug: row.slug }),
-    formId: row.formId,
+    canonicalPath: buildPublicFormPath({ workspacePublicKey: row.workspace_public_key, slug: row.slug }),
+    formId: row.form_id,
     slug: row.slug,
     status: "unique",
-    workspacePublicKey: row.workspacePublicKey,
+    workspacePublicKey: row.workspace_public_key,
   };
 }
 
@@ -537,6 +556,9 @@ export async function persistWebsiteFormSubmission(input: {
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
   }
+  if (!hasBoundTenantTransaction()) {
+    return { persisted: false, reason: "Tenant transaction required" };
+  }
 
   const lookup = await getPublicWebsiteFormByKey(input.formKey, {
     includeSignedWebsiteSales: input.formKey === websiteSalesFormId && input.actorUserId === websiteSalesActorId,
@@ -544,18 +566,23 @@ export async function persistWebsiteFormSubmission(input: {
   if (!lookup) {
     return { persisted: false, reason: "Form not found" };
   }
+  if (input.actorUserId && input.actorUserId !== lookup.publicActorId) {
+    return { persisted: false, reason: "Actor context mismatch" };
+  }
 
   const form = lookup.form;
   const answers = extractAnswers(form, input.formData);
   const consent = extractConsent(form, input.formData);
+  const signedWebsiteSales = input.formKey === websiteSalesFormId
+    && input.actorUserId === websiteSalesActorId && lookup.id === websiteSalesFormId;
 
   if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {
-    return { persisted: false, reason: "privacy_consent_required", form };
+    return { persisted: false, reason: "privacy_consent_required" };
   }
 
   const validationError = validateWebsiteFormSubmission(form, answers, input.formData, consent);
   if (validationError) {
-    return { persisted: false, reason: validationError, form };
+    return { persisted: false, reason: validationError };
   }
 
   const tracking = extractTracking(input.formData, input.requestUrl, form);
@@ -567,7 +594,7 @@ export async function persistWebsiteFormSubmission(input: {
   const score = scoreFormSubmission(form, answers, consent);
   const now = new Date().toISOString();
   const slaDueAt = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
-  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, form, tracking });
+  const websiteSalesMetadata = getWebsiteSalesMetadata({ answers, signedWebsiteSales, tracking });
   const source = websiteSalesMetadata ? "Novalure Studio Form" : form.template === "newsletter" ? "Newsletter" : form.funnelId ? "Website Funnel" : "Website";
   const leadType = websiteSalesMetadata ? "Website Sales" : normalizeLeadType(lookup.funnelAudience);
   const assignedOwnerId = form.ownerMode === "user" && isUuid(lookup.ownerUserId) ? lookup.ownerUserId : null;
@@ -813,7 +840,6 @@ export async function persistWebsiteFormSubmission(input: {
     [lookup.id, websiteSalesMetadata?.syntheticTest === true ? 0 : 1],
   );
 
-  const signedWebsiteSales = websiteSalesMetadata !== null && input.actorUserId === websiteSalesActorId;
   const auditProductRole = signedWebsiteSales ? "novalure_operator" : "assistant_backoffice";
   const formSession: AppSession = {
     authenticated: true,
@@ -824,7 +850,7 @@ export async function persistWebsiteFormSubmission(input: {
     productRole: auditProductRole,
     role: signedWebsiteSales ? "agent" : "owner",
     source: "database",
-    userId: input.actorUserId ?? lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
+    userId: lookup.publicActorId,
     workspaceId: lookup.workspaceId,
     workspaceName: lookup.workspaceName ?? "Novalure",
   };
@@ -918,7 +944,7 @@ export async function persistWebsiteFormSubmission(input: {
           workspaceId: lookup.workspaceId,
         })
       : null,
-    form.template === "newsletter" || form.actions.newsletterList
+    consent.marketing && (form.template === "newsletter" || form.actions.newsletterList)
       ? writeCrmAnalyticsEvent({
           channel: "email",
           contactId,
@@ -979,6 +1005,7 @@ async function upsertContact(input: {
           select id
           from contacts
           where workspace_id = $1
+            and project_id is not distinct from $4::uuid
             and (
               ($2::text <> '' and lower(email) = lower($2))
               or ($3::text <> '' and phone = $3)
@@ -986,17 +1013,16 @@ async function upsertContact(input: {
           order by updated_at desc
           limit 1
         `,
-        [input.workspaceId, input.email, input.phone],
+        [input.workspaceId, input.email, input.phone, input.projectId],
       )
     : null;
 
   if (existing) {
-    await queryOne(
+    const updated = await queryOne<IdRow>(
       `
         update contacts
         set
           owner_user_id = coalesce(owner_user_id, $3::uuid),
-          project_id = coalesce($4, project_id),
           name = coalesce(nullif($5, ''), name),
           role = $6,
           source = $7,
@@ -1007,6 +1033,7 @@ async function upsertContact(input: {
           metadata = metadata || $12::jsonb,
           updated_at = now()
         where workspace_id = $1 and id = $2
+          and project_id is not distinct from $4::uuid
         returning id
       `,
       [
@@ -1024,8 +1051,8 @@ async function upsertContact(input: {
         JSON.stringify({ answers: input.answers, formId: input.form.id, tracking: input.tracking, websiteSales: input.websiteSalesMetadata }),
       ],
     );
-
-    return existing.id;
+    if (!updated) throw new Error("Contact project scope changed during submission");
+    return updated.id;
   }
 
   const contact = await queryOne<IdRow>(
@@ -1056,10 +1083,10 @@ async function upsertContact(input: {
 
 function getWebsiteSalesMetadata(input: {
   answers: Record<string, unknown>;
-  form: WebsiteForm;
+  signedWebsiteSales: boolean;
   tracking: Record<string, unknown>;
 }) {
-  if (input.form.slug !== websiteSalesFormSlug) return null;
+  if (!input.signedWebsiteSales) return null;
   const string = (key: string, limit: number) => {
     const value = input.answers[key];
     return typeof value === "string" ? value.trim().slice(0, limit) : "";
@@ -1070,25 +1097,23 @@ function getWebsiteSalesMetadata(input: {
     currentWebsiteUrl: string("current_website_url", 2_048),
     leadSource: "NOVALURE_STUDIO_FORM",
     packageInterest: string("package_interest", 40) || "UNDECIDED",
-    syntheticTest: string("synthetic_test", 8) === "true",
+    syntheticTest: input.signedWebsiteSales && string("synthetic_test", 8) === "true",
   };
 }
 
-async function resolveExistingFormId(workspaceId: string, form: WebsiteForm) {
+async function resolveExistingForm(workspaceId: string, form: WebsiteForm) {
   if (isUuid(form.id)) {
-    const row = await queryOne<IdRow>(
-      "select id from forms where workspace_id = $1 and id = $2 limit 1",
+    const row = await queryOne<{ id: string; projectId: string | null }>(
+      'select id, project_id as "projectId" from forms where workspace_id = $1 and id = $2 limit 1',
       [workspaceId, form.id],
     );
-    if (row) return row.id;
+    if (row) return row;
   }
 
-  const legacy = await queryOne<IdRow>(
-    "select id from forms where workspace_id = $1 and settings->>'legacyId' = $2 limit 1",
+  return queryOne<{ id: string; projectId: string | null }>(
+    'select id, project_id as "projectId" from forms where workspace_id = $1 and settings->>\'legacyId\' = $2 limit 1',
     [workspaceId, form.id],
   );
-
-  return legacy?.id ?? null;
 }
 
 async function resolveFunnel(workspaceId: string, funnelId: string) {
@@ -1111,6 +1136,8 @@ async function resolveFallbackProjectId(workspaceId: string) {
       select id
       from projects
       where workspace_id = $1
+        and (public.crm_workspace_manager(workspace_id)
+          or public.crm_project_access(workspace_id, id, true))
       order by created_at asc
       limit 1
     `,
@@ -1221,17 +1248,6 @@ function extractAnswers(form: WebsiteForm, formData: FormDataLike) {
   }
 
   return answers;
-}
-
-function extractConsent(form: WebsiteForm, formData: FormDataLike) {
-  const privacy = Boolean(formData.get("privacy")) || Boolean(formData.get("privacy_consent"));
-  const marketing = Boolean(formData.get("marketing_consent")) || (form.template === "newsletter" && privacy);
-
-  return {
-    doubleOptIn: form.doubleOptIn,
-    marketing,
-    privacy,
-  };
 }
 
 function validateWebsiteFormSubmission(

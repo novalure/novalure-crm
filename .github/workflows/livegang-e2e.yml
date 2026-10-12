@@ -6,6 +6,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      qa_profile:
+        description: QA credential profile
+        type: choice
+        required: true
+        default: standard
+        options:
+          - standard
+          - isolated-candidate
 
 permissions:
   contents: read
@@ -96,6 +105,12 @@ jobs:
       - name: Sales schema upgrade, rollback and native restore
         run: npm run test:sales:migrations
 
+      - name: Form tenant isolation and published lookup
+        run: npm run test:form-isolation
+
+      - name: Signed and anonymous website form ingestion
+        run: npm run test:website-sales-ingestion
+
       - name: Isolated sales browser flows
         run: npm run qa:sales:e2e
 
@@ -161,7 +176,7 @@ jobs:
     name: Manual trusted-candidate QA regression and tenant diagnostics
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: novalure-qa
+    environment: ${{ inputs.qa_profile == 'isolated-candidate' && 'novalure-qa-candidate' || 'novalure-qa' }}
     concurrency:
       group: novalure-shared-qa
       cancel-in-progress: false
@@ -248,6 +263,22 @@ jobs:
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
         run: npm run ci:qa-target
 
+      - name: Read-only candidate runtime and migration authentication preflight
+        if: inputs.qa_profile == 'isolated-candidate'
+        env:
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+        run: node --use-system-ca scripts/qa-auth-preflight.mjs
+
       - name: Preview checksummed QA migration plan without writes
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
@@ -264,6 +295,7 @@ jobs:
         run: node scripts/db-migrate.mjs dry-run --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Apply checksummed QA migrations
+        # The default plan excludes 095; isolated-candidate applies it explicitly below.
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}
@@ -277,6 +309,51 @@ jobs:
           NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
         run: node scripts/db-migrate.mjs up --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
+
+      - name: Preview explicit form isolation QA cutover
+        if: inputs.qa_profile == 'isolated-candidate'
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-form-isolation-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          MIGRATION_TARGET: test
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/db-migrate.mjs dry-run --only=095_form_tenant_isolation --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
+
+      - name: Apply explicit form isolation QA cutover
+        if: inputs.qa_profile == 'isolated-candidate'
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-form-isolation-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          MIGRATION_TARGET: test
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_ROLE }}
+          NOVALURE_QA_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_HOST }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          POSTGRES_NEON_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+        run: node scripts/db-migrate.mjs up --only=095_form_tenant_isolation --allow-manual-cutover --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
+
+      - name: Bind isolated QA public Form lookup identity
+        if: inputs.qa_profile == 'isolated-candidate'
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+        run: node scripts/qa-bind-public-form-lookup.mjs
 
       - name: Bind existing QA runtime role to tenant group
         env:
@@ -379,6 +456,7 @@ jobs:
         shell: bash
         env:
           DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
           NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
           NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
           NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
@@ -412,6 +490,21 @@ jobs:
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
           NOVALURE_QA_PASSWORD: ${{ secrets.NOVALURE_QA_PASSWORD }}
         run: npm run test:e2e
+
+      - name: Run isolated public Form and Website Sales candidate matrix
+        if: inputs.qa_profile == 'isolated-candidate'
+        env:
+          DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+        run: node --conditions=react-server --import tsx scripts/qa-public-form-candidate.mjs
 
       - name: Stop production server before RLS diagnostic
         if: always()
@@ -496,6 +589,19 @@ jobs:
           if [ -f /tmp/novalure-livegang.pid ]; then
             kill "$(cat /tmp/novalure-livegang.pid)" || true
           fi
+
+      - name: Revoke isolated QA public Form lookup password
+        if: always() && inputs.qa_profile == 'isolated-candidate'
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+        run: node --use-system-ca scripts/qa-revoke-public-form-lookup.mjs
 
       - name: Print app log on failure
         if: failure()

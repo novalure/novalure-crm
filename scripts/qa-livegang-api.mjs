@@ -2,8 +2,8 @@
 import fs from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
 import { assertQaTarget } from "./qa-target-guard.mjs";
+import { qaRequestUrl } from "./lib/qa-http-origin.mjs";
 
-const defaultQaPassword = "QA-Novalure-Local-2026!";
 
 function loadEnv(path) {
   if (!fs.existsSync(path)) return;
@@ -40,8 +40,8 @@ function qaEmail(localPart) {
 const baseUrl = (process.env.NOVALURE_QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const trustedOrigin = new URL(baseUrl).origin;
 const configuredQaPassword = process.env.NOVALURE_QA_PASSWORD || process.env.NOVALURE_QA_SEED_PASSWORD;
-if (!configuredQaPassword && process.env.CI) throw new Error("NOVALURE_QA_PASSWORD is required in CI.");
-const qaPassword = configuredQaPassword || defaultQaPassword;
+if (!configuredQaPassword) throw new Error("NOVALURE_QA_PASSWORD or NOVALURE_QA_SEED_PASSWORD is required.");
+const qaPassword = configuredQaPassword;
 
 const users = {
   admin: qaEmail("qa-platform-admin"),
@@ -140,6 +140,7 @@ function createClient(email) {
   }
 
   async function request(path, options = {}) {
+    const target = qaRequestUrl(path, baseUrl);
     const headers = new Headers(options.headers ?? {});
     if (options.auth !== false && cookies.size > 0) headers.set("cookie", cookieHeader());
     const method = (options.method ?? "GET").toUpperCase();
@@ -163,7 +164,7 @@ function createClient(email) {
       init.body = options.body;
     }
 
-    const response = await fetch(new URL(path, baseUrl), init);
+    const response = await fetch(target, init);
     storeCookies(response.headers);
     const contentType = response.headers.get("content-type") ?? "";
     const json = contentType.includes("application/json") ? await response.json().catch(() => null) : null;
@@ -216,8 +217,11 @@ function createClient(email) {
         challengeBody.set("code", code);
         challengeBody.set("recoveryCodesSaved", "1");
       } else {
-        const code = enrolledMfaSecret ? createTotpCode(enrolledMfaSecret) : null;
-        assert(Boolean(code), `${email} reuses the enrolled TOTP secret for MFA verification`);
+        // QA users are seeded with this unique workflow run ID. An already
+        // enrolled user on the first login means the isolated fixture is stale.
+        assert(Boolean(enrolledMfaSecret), `${email} has fresh run-scoped MFA enrollment`);
+        const code = createTotpCode(enrolledMfaSecret);
+        assert(Boolean(code), `${email} reuses this run's TOTP enrollment`);
         challengeBody.set("code", code);
       }
 
@@ -256,7 +260,9 @@ async function getWorkspaces(client) {
 async function getCore(client, workspaceId) {
   const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
   const { json, response } = await client.request(`/api/crm/core${query}`);
-  assert(response.ok, `${client.email} can load /api/crm/core${workspaceId ? " for switched workspace" : ""}`);
+  const errorCode = String(json?.code ?? json?.error ?? "unknown");
+  const safeCode = /^[A-Za-z0-9_]{1,80}$/u.test(errorCode) ? errorCode : "redacted";
+  assert(response.ok, `${client.email} can load /api/crm/core${workspaceId ? " for switched workspace" : ""} (HTTP ${response.status}; code=${safeCode})`);
   return json?.data ?? json;
 }
 
