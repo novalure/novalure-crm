@@ -373,6 +373,27 @@ test("060 and 061 remain manual even when alias handling is active", () => {
   );
 });
 
+test("standard QA includes 094 but never applies pending manual 095", () => {
+  const migrations = [
+    migration("094_website_sales_ingestion", "sha-094"),
+    migration("095_form_tenant_isolation", "sha-095", { manualCutover: true }),
+  ];
+  assert.deepEqual(
+    createMigrationPlan({ ledgerRows: [], migrations, only: "" }),
+    [migrations[0]],
+  );
+  const ledgerRows = [ledgerRow("094_website_sales_ingestion", "sha-094")];
+  assert.deepEqual(createMigrationPlan({ ledgerRows, migrations, only: "" }), []);
+  assert.throws(
+    () => createMigrationPlan({ ledgerRows, migrations, only: "095_form_tenant_isolation" }),
+    /Refusing manual cutover migration 095_form_tenant_isolation/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({ allowManualCutover: true, ledgerRows, migrations, only: "095_form_tenant_isolation" }),
+    [migrations[1]],
+  );
+});
+
 test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {
   assert.doesNotMatch(webhookExpand, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
   assert.match(webhookCutover, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);

@@ -295,6 +295,7 @@ jobs:
         run: node scripts/db-migrate.mjs dry-run --plan-token-file="$MIGRATION_PLAN_TOKEN_FILE"
 
       - name: Apply checksummed QA migrations
+        # The default plan excludes 095; isolated-candidate applies it explicitly below.
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           MIGRATION_PLAN_TOKEN_FILE: ${{ runner.temp }}/novalure-migration-plan-${{ github.run_id }}-${{ github.run_attempt }}

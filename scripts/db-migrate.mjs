@@ -573,6 +573,8 @@ export function createMigrationPlan({ allowManualCutover, ledgerRows, migrations
   }
 
   return runnable.filter((migration) => {
+    // Standard QA up/dry-run never selects manual cutovers, including 095.
+    // Migration 095 requires its separate --only and --allow-manual-cutover plan.
     if (migration.manualCutover) return false;
     if (appliedVersions.has(migration.version)) return false;
     if (hasBaseline && migration.number < baselineNumber) return false;
