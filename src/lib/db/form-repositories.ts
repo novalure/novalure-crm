@@ -382,7 +382,7 @@ async function upsertWebsiteFormInTenant(input: { session: AppSession; form: Web
           values (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14::text[], $15::jsonb, $16::jsonb, $17::jsonb,
-            $18, $19, $20, $21::timestamptz
+            0, 0, 0, null
           )
           returning
             id,
@@ -427,10 +427,6 @@ async function upsertWebsiteFormInTenant(input: { session: AppSession; form: Web
           JSON.stringify(form.fields),
           JSON.stringify(form.actions),
           JSON.stringify(settings),
-          0,
-          0,
-          0,
-          null,
         ],
       );
 
@@ -566,6 +562,9 @@ export async function persistWebsiteFormSubmission(input: {
   });
   if (!lookup) {
     return { persisted: false, reason: "Form not found" };
+  }
+  if (input.actorUserId && input.actorUserId !== lookup.publicActorId) {
+    return { persisted: false, reason: "Actor context mismatch" };
   }
 
   const form = lookup.form;
@@ -848,7 +847,7 @@ export async function persistWebsiteFormSubmission(input: {
     productRole: auditProductRole,
     role: signedWebsiteSales ? "agent" : "owner",
     source: "database",
-    userId: input.actorUserId ?? lookup.ownerUserId ?? "00000000-0000-0000-0000-000000000000",
+    userId: lookup.publicActorId,
     workspaceId: lookup.workspaceId,
     workspaceName: lookup.workspaceName ?? "Novalure",
   };

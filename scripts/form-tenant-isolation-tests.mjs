@@ -139,9 +139,10 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
     for (const internal of ["workspaceId", "publicActorId", "projectId", "ownerUserId", "funnelId", "crmTarget", "pipelineStage", "ownerMode", "campaign", "tags", "visits", "submissions", "conversionRate", "lastSubmission"]) {
       assert.equal(Object.hasOwn(published.rows[0].form, internal), false, `${internal} is excluded from public SQL lookup`);
     }
-    await assert.rejects(db.pool.query("select * from crm_public_form_scope($1)", [ownForm]), /permission denied/);
-    const submissionScope = await lookupPool.query("select * from crm_public_form_scope($1)", [ownForm]);
+    await assert.rejects(db.pool.query("select * from crm_public_form_scope($1,$2)", [ownForm, key]), /permission denied/);
+    const submissionScope = await lookupPool.query("select * from crm_public_form_scope($1,$2)", [ownForm, key]);
     assert.deepEqual(submissionScope.rows, [{ workspace_id: ownWorkspace, actor_id: ownActor }]);
+    assert.equal((await lookupPool.query("select * from crm_public_form_scope($1,$2)", [ownForm, "wrong-workspace-key"])).rowCount, 0);
     assert.equal((await lookupPool.query("select crm_public_form_lookup(null,$1,'draft') as form", [key])).rows[0].form, null);
     assert.equal((await lookupPool.query("select * from crm_public_form_legacy_route('draft')")).rowCount, 0);
     await assert.rejects(lookupPool.query("select id from forms"), /permission denied/);
@@ -237,7 +238,7 @@ test("095 enforces form tenant isolation and preserves narrow published lookup",
       assert.equal((await restoredRuntime.query("select id from form_submissions")).rowCount, 0);
       assert.equal((await restoredLookup.query("select crm_public_form_lookup(null,$1,'published') as form", [key])).rows[0].form.id, ownForm);
       await assert.rejects(restoredRuntime.query("select crm_public_form_lookup(null,$1,'published') as form", [key]), /permission denied/);
-      await assert.rejects(restoredRuntime.query("select * from crm_public_form_scope($1)", [ownForm]), /permission denied/);
+      await assert.rejects(restoredRuntime.query("select * from crm_public_form_scope($1,$2)", [ownForm, key]), /permission denied/);
       await assert.rejects(restoredRuntime.query("insert into form_submissions(workspace_id,form_id) values($1,$2)", [ownWorkspace, ownForm]), /row-level security|permission denied/);
     } finally {
       await restoredRuntime.end();

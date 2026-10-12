@@ -104,12 +104,13 @@ export async function publicFormLegacyRoutes(slug: string) {
   } finally { client.release(); }
 }
 
-export async function publicFormSubmissionScope(formId: string) {
+export async function publicFormSubmissionScope(formId: string, workspacePublicKey: string) {
+  if (!workspacePublicKey.trim()) throw new Error("Public form workspace key is required");
   const client = await verifiedClient();
   try {
     const result = await client.query<{ workspaceId: string; actorId: string }>(
-      'select workspace_id as "workspaceId", actor_id as "actorId" from public.crm_public_form_scope($1::uuid)',
-      [formId],
+      'select workspace_id as "workspaceId", actor_id as "actorId" from public.crm_public_form_scope($1::uuid,$2::text)',
+      [formId, workspacePublicKey],
     );
     return result.rows[0] ?? null;
   } finally { client.release(); }

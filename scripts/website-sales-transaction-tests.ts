@@ -687,6 +687,19 @@ test("failed public validation does not return the internal form", async () => {
   assert.deepEqual(await response.json(), { error: "privacy_consent_required", persisted: false });
 });
 
+test("public form audit actor must match the bound tenant transaction", async () => {
+  const before = await counts();
+  await withPublicSubmissionTransaction({ actorId: genericActorId, workspaceId: websiteSalesWorkspaceId }, async () => {
+    assert.deepEqual(await persistWebsiteFormSubmission({
+      actorUserId: randomUUID(),
+      formData: formData(`synthetic-forged-actor-${randomUUID()}@example.invalid`),
+      formKey: genericFormId,
+      requestUrl: "https://crm.example.invalid/forms/embed",
+    }), { persisted: false, reason: "Actor context mismatch" });
+  });
+  assert.deepEqual(await counts(), before);
+});
+
 test("database-backed trusted headers cannot mint an absent workspace session", async () => {
   const priorHeaders = process.env.NOVALURE_TRUST_AUTH_HEADERS;
   const priorDemo = process.env.NOVALURE_DEMO_AUTH_ENABLED;

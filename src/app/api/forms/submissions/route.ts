@@ -163,7 +163,7 @@ export async function POST(request: Request) {
     return unavailableResponse();
   }
 
-  const submissionScope = await publicFormSubmissionScope(lookup.id).catch(() => null);
+  const submissionScope = await publicFormSubmissionScope(lookup.id, lookup.form.workspacePublicKey ?? "").catch(() => null);
   if (!submissionScope) return unavailableResponse();
 
   try {

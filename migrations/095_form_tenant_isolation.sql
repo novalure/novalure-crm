@@ -186,11 +186,12 @@ $function$;
 
 -- The server uses this only after validating the public submission proof.
 -- Its result is never serialized into the public form response.
-create function public.crm_public_form_scope(p_form_id uuid)
+create function public.crm_public_form_scope(p_form_id uuid, p_workspace_public_key text)
 returns table(workspace_id uuid, actor_id uuid)
 language sql stable security definer set search_path = pg_catalog, public as $function$
   select f.workspace_id, u.id
   from public.forms f
+  join public.workspaces w on w.id = f.workspace_id
   join lateral (
     select actor.id from public.workspace_users actor
     where actor.workspace_id = f.workspace_id and actor.status = 'active'
@@ -199,6 +200,7 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
     limit 1
   ) u on true
   where f.id = p_form_id and f.status in ('aktiv', 'eingebaut')
+    and p_workspace_public_key <> '' and w.public_key = p_workspace_public_key
     and f.id <> '0f98b9fd-d300-4a34-a14c-54a1a61b2415'::uuid
 $function$;
 
@@ -218,9 +220,9 @@ language sql stable security definer set search_path = pg_catalog, public as $fu
 $function$;
 
 revoke all on function public.crm_public_form_lookup(uuid,text,text),
-  public.crm_public_form_scope(uuid),
+  public.crm_public_form_scope(uuid,text),
   public.crm_public_form_legacy_route(text) from public, novalure_app, novalure_tenant_app;
 grant usage on schema public to novalure_public_form_lookup;
 grant execute on function public.crm_public_form_lookup(uuid,text,text),
-  public.crm_public_form_scope(uuid),
+  public.crm_public_form_scope(uuid,text),
   public.crm_public_form_legacy_route(text) to novalure_public_form_lookup;
