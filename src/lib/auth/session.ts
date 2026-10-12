@@ -327,6 +327,11 @@ export async function getSessionFromHeaders(headers: Pick<Headers, "get">): Prom
     }
   }
 
+  if (hasDatabaseUrl() && !demoAuthEnabled) {
+    // A database-backed header identity must resolve to an active membership.
+    return null;
+  }
+
   if (strictAuthEnabled) {
     return null;
   }

@@ -11,6 +11,7 @@ import { getPublicWebsiteFormByKey, listWebsiteForms, persistWebsiteFormSubmissi
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
 import type { AppSession } from "../src/lib/auth/session";
+import { getSessionFromHeaders } from "../src/lib/auth/session";
 import {
   claimPublicSubmissionIdempotency,
   completePublicSubmissionIdempotency,
@@ -579,11 +580,16 @@ test("form saves keep project scope and reject a cross-project funnel", async ()
   const forgedNewForm = {
     ...form, id: "form_new_synthetic", name: "SYNTHETIC new scoped form", slug: "new-scoped-form",
     workspaceId: websiteSalesWorkspaceId, projectId: readProjectId,
+    visits: 999, submissions: 888, conversionRate: 77, lastSubmission: "2026-10-12T00:00:00.000Z",
   };
   const newForm = await upsertWebsiteForm({ session, form: forgedNewForm });
   assert.equal(newForm.persisted, true);
-  assert.deepEqual((await db.admin.query("select workspace_id,project_id from forms where id=$1", [newForm.form?.id])).rows,
-    [{ workspace_id: workspaceId, project_id: writeProjectId }]);
+  assert.deepEqual((await db.admin.query(
+    "select workspace_id,project_id,visits_count,submissions_count,conversion_rate,last_submission_at from forms where id=$1",
+    [newForm.form?.id],
+  )).rows,
+  [{ workspace_id: workspaceId, project_id: writeProjectId,
+    visits_count: 0, submissions_count: 0, conversion_rate: "0.00", last_submission_at: null }]);
 
   const deniedMove = await upsertWebsiteForm({ session, form: { ...form, funnelId: readFunnelId, name: "SYNTHETIC forbidden move" } });
   assert.equal(deniedMove.persisted, false);
@@ -679,4 +685,24 @@ test("failed public validation does not return the internal form", async () => {
   }));
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), { error: "privacy_consent_required", persisted: false });
+});
+
+test("database-backed trusted headers cannot mint an absent workspace session", async () => {
+  const priorHeaders = process.env.NOVALURE_TRUST_AUTH_HEADERS;
+  const priorDemo = process.env.NOVALURE_DEMO_AUTH_ENABLED;
+  try {
+    process.env.NOVALURE_TRUST_AUTH_HEADERS = "1";
+    delete process.env.NOVALURE_DEMO_AUTH_ENABLED;
+    const headers = new Headers({
+      "x-novalure-workspace-id": randomUUID(),
+      "x-novalure-user-id": randomUUID(),
+      "x-novalure-role": "owner",
+    });
+    assert.equal(await getSessionFromHeaders(headers), null);
+  } finally {
+    if (priorHeaders === undefined) delete process.env.NOVALURE_TRUST_AUTH_HEADERS;
+    else process.env.NOVALURE_TRUST_AUTH_HEADERS = priorHeaders;
+    if (priorDemo === undefined) delete process.env.NOVALURE_DEMO_AUTH_ENABLED;
+    else process.env.NOVALURE_DEMO_AUTH_ENABLED = priorDemo;
+  }
 });

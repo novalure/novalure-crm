@@ -427,10 +427,10 @@ async function upsertWebsiteFormInTenant(input: { session: AppSession; form: Web
           JSON.stringify(form.fields),
           JSON.stringify(form.actions),
           JSON.stringify(settings),
-          form.visits,
-          form.submissions,
-          form.conversionRate,
-          form.lastSubmission || null,
+          0,
+          0,
+          0,
+          null,
         ],
       );
 
