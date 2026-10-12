@@ -88,6 +88,11 @@ test("workspace-scoped sessions adopt an active target membership before authori
   assert.match(session, /workspace\.cross_workspace_view/);
   assert.doesNotMatch(auditBlock, /catch/);
   assert.match(session, /Workspace switch audit could not be persisted/);
+  const auditCallIndex = session.indexOf("await auditCrossWorkspaceView({", authorizationIndex);
+  const auditFailureIndex = session.indexOf("Workspace switch audit could not be persisted", auditCallIndex);
+  const releaseIndex = session.indexOf("return authorization;", auditFailureIndex);
+  assert.ok(authorizationIndex < auditCallIndex && auditCallIndex < auditFailureIndex && auditFailureIndex < releaseIndex,
+    "target authorization cannot be returned before the audit commits or its failure is denied");
 });
 
 test("workspace list is membership-backed and maps target roles and permissions", () => {

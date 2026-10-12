@@ -684,6 +684,8 @@ export async function resolveWorkspaceScopedSession(
   const authorization = authorizeWorkspaceScopedSession(targetSession, input);
   if (!authorization.ok) return authorization;
 
+  // Target access is returned only after its audit transaction commits.
+  // An audit error yields 503 below, before a caller can receive the session.
   try {
     await auditCrossWorkspaceView({
       fromWorkspaceId: originSession.workspaceId,
