@@ -412,10 +412,16 @@ async function attestGateway() {
   });
   const replayBody = await replay.json().catch(() => ({}));
   const afterReplayEffects = await gatewayBusinessEffects();
-  requireProof(first.status === 202 && replay.status === 202 && firstBody.reference === replayBody.reference
-    && afterFirstEffects.submissions === beforeEffects.submissions + 1
-    && JSON.stringify(afterReplayEffects) === JSON.stringify(afterFirstEffects)
-    && !JSON.stringify(firstBody).includes(own.workspace), "QA_GATEWAY_SUBMISSION_FAILED");
+  requireProof(first.status === 202, `QA_GATEWAY_FIRST_STATUS_${first.status}`);
+  requireProof(replay.status === 202, `QA_GATEWAY_REPLAY_STATUS_${replay.status}`);
+  requireProof(typeof firstBody.reference === "string" && firstBody.reference.length > 0,
+    "QA_GATEWAY_FIRST_REFERENCE_MISSING");
+  requireProof(firstBody.reference === replayBody.reference, "QA_GATEWAY_REPLAY_REFERENCE_MISMATCH");
+  requireProof(afterFirstEffects.submissions === beforeEffects.submissions + 1,
+    "QA_GATEWAY_SUBMISSION_EFFECT_MISSING");
+  requireProof(JSON.stringify(afterReplayEffects) === JSON.stringify(afterFirstEffects),
+    "QA_GATEWAY_REPLAY_CREATED_BUSINESS_EFFECT");
+  requireProof(!JSON.stringify(firstBody).includes(own.workspace), "QA_GATEWAY_RESPONSE_TENANT_LEAK");
   const formEvents = (await owner.query(`select outcome,count(*)::int count
     from external_integration_events where workspace_id=$1 and event_type='form.submit'
     group by outcome order by outcome`, [own.workspace])).rows;
