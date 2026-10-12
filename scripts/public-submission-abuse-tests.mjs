@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { extractConsent } from "../src/lib/form-consent.ts";
 import {
   assertPublicSubmissionAbuseConfiguration,
   bookingSubmissionBodyLimits,
@@ -28,6 +29,29 @@ const secret = "qa-public-abuse-secret-with-at-least-32-bytes-2026";
 const workspaceId = "11111111-1111-4111-8111-111111111111";
 const resourceId = "22222222-2222-4222-8222-222222222222";
 const nowSeconds = 1_800_000_000;
+
+test("form consent accepts explicit affirmative values and fails closed on negatives or conflicts", () => {
+  const form = { doubleOptIn: false, template: "standard" };
+  const data = new FormData();
+  data.set("privacy", "false");
+  data.set("marketing_consent", "false");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+
+  data.set("privacy", "on");
+  data.set("marketing_consent", "true");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: true, marketing: true });
+
+  data.append("privacy_consent", "false");
+  data.append("marketing_consent", "false");
+  assert.deepEqual(extractConsent(form, data), { doubleOptIn: false, privacy: false, marketing: false });
+
+  const newsletter = { doubleOptIn: true, template: "newsletter" };
+  const newsletterData = new FormData();
+  newsletterData.set("privacy_consent", "1");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: true });
+  newsletterData.set("marketing_consent", "false");
+  assert.deepEqual(extractConsent(newsletter, newsletterData), { doubleOptIn: true, privacy: true, marketing: false });
+});
 
 process.env.NOVALURE_ABUSE_SECRET = secret;
 

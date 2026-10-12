@@ -46,7 +46,8 @@ const owner = new pg.Pool({ connectionString: ownerTarget.toString(), ssl: { rej
 const app = new pg.Pool({ connectionString: appTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const lookup = new pg.Pool({ connectionString: lookupTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const marker = randomBytes(12).toString("hex");
-const own = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
+const own = { workspace: randomUUID(), actor: randomUUID(), viewer: randomUUID(), project: randomUUID(),
+  form: randomUUID(), deniedForm: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
 const foreign = { workspace: randomUUID(), actor: randomUUID(), project: randomUUID(), form: randomUUID(), key: `qa-foreign-${marker}` };
 const salesForm = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
 const salesWorkspace = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
@@ -107,6 +108,9 @@ async function seedForms() {
       await client.query("insert into projects(id,workspace_id,name,type) values($1,$2,$3,'Bauträger')",
         [fixture.project, fixture.workspace, `SYNTHETIC Candidate ${marker}`]);
     }
+    await client.query(`insert into workspace_users(id,workspace_id,name,email,role,product_role,status)
+      values($1,$2,'SYNTHETIC restricted form owner',$3,'agent','broker_agent','active')`,
+    [own.viewer, own.workspace, `candidate-${own.viewer}@example.invalid`]);
     await client.query(`insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
       values($1,$2,$3,$4,$5,$6,'aktiv',$7::jsonb,'{}'::jsonb),
             ($8,$2,$3,$4,$9,$10,'entwurf',$7::jsonb,'{}'::jsonb),
@@ -114,6 +118,9 @@ async function seedForms() {
     [own.form, own.workspace, own.project, own.actor, `SYNTHETIC Published ${marker}`, slug, formFields,
       own.draft, `SYNTHETIC Draft ${marker}`, draftSlug,
       foreign.form, foreign.workspace, foreign.project, foreign.actor, `SYNTHETIC Foreign ${marker}`, `foreign-${marker}`]);
+    await client.query(`insert into forms(id,workspace_id,project_id,owner_user_id,name,slug,status,fields,actions)
+      values($1,$2,$3,$4,$5,$6,'entwurf',$7::jsonb,'{}'::jsonb)`,
+    [own.deniedForm, own.workspace, own.project, own.viewer, `SYNTHETIC restricted ${marker}`, `restricted-${marker}`, formFields]);
     await client.query("insert into form_submissions(id,workspace_id,project_id,form_id) values($1,$2,$3,$4)",
       [randomUUID(), foreign.workspace, foreign.project, foreign.form]);
     await client.query("commit");
@@ -154,6 +161,11 @@ async function attestRls() {
     await requireDenied(() => client.query("delete from forms where id=$1", [own.form]), "QA_FORM_DELETE_ALLOWED");
     await client.query("rollback to savepoint form_delete");
     await client.query("release savepoint form_delete");
+    await client.query("rollback");
+    await client.query("begin");
+    await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [own.workspace, own.viewer]);
+    requireProof((await client.query("select id from forms where id=$1", [own.deniedForm])).rowCount === 0,
+      "QA_FORM_OWNER_PROJECT_ACCESS_BYPASS");
     await client.query("rollback");
   } finally { client.release(); }
 }
@@ -243,6 +255,17 @@ async function attestHttp() {
   requireProof([302,303].includes(first.status) && second.status === first.status && after === before + 1, "QA_ANONYMOUS_SUBMISSION_OR_REPLAY_FAILED");
   requireProof(first.headers.get("location") === second.headers.get("location"), "QA_SUBMISSION_REPLAY_MISMATCH");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_ANONYMOUS_SUBMISSION_READ_LEAK");
+  const negativePage = await fetch(`${base}${publicPath}`, { redirect: "manual" });
+  const negativeInputs = hiddenInputs(await negativePage.text());
+  requireProof(required.every(key => negativeInputs.get(key)), "QA_NEGATIVE_CONSENT_PROOF_MISSING");
+  const negativeBody = new URLSearchParams({ form_id: `${own.key}/${slug}`, form_slug: `${own.key}/${slug}`,
+    return_to: publicPath, name: `SYNTHETIC Denied ${marker}`, email: `denied-${marker}@example.invalid`,
+    privacy: "false", marketing_consent: "false",
+    ...Object.fromEntries(required.map(key => [key, negativeInputs.get(key)])) }).toString();
+  const negativeResponse = await fetch(`${base}/api/forms/submissions`, { ...options, body: negativeBody });
+  requireProof(negativeResponse.status === 422
+    && await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === after,
+  "QA_FALSE_CONSENT_ACCEPTED");
   const tenant = await app.connect();
   try {
     await tenant.query("begin");

@@ -6,6 +6,7 @@ import { withCrmRead } from "@/lib/crm-command";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
+import { extractConsent } from "@/lib/form-consent";
 import { getProductRoleCapabilities } from "@/lib/product-model";
 import { websiteSalesActorId, websiteSalesFormId } from "@/lib/website-sales-ingestion";
 import {
@@ -1236,17 +1237,6 @@ function extractAnswers(form: WebsiteForm, formData: FormDataLike) {
   }
 
   return answers;
-}
-
-function extractConsent(form: WebsiteForm, formData: FormDataLike) {
-  const privacy = Boolean(formData.get("privacy")) || Boolean(formData.get("privacy_consent"));
-  const marketing = Boolean(formData.get("marketing_consent")) || (form.template === "newsletter" && privacy);
-
-  return {
-    doubleOptIn: form.doubleOptIn,
-    marketing,
-    privacy,
-  };
 }
 
 function validateWebsiteFormSubmission(

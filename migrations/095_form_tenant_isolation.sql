@@ -55,7 +55,8 @@ create policy forms_tenant_read on public.forms
     )
     and (public.crm_workspace_manager(workspace_id)
       or (project_id is not null and public.crm_project_access(workspace_id, project_id, false))
-      or owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid)
+      or (project_id is null
+        and owner_user_id = nullif(current_setting('app.actor_id', true), '')::uuid))
   );
 
 create policy forms_tenant_write on public.forms
