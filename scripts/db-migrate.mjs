@@ -71,7 +71,9 @@ const validCrm080Profiles = new Set(["production", "rehearsal"]);
 
 export function compatibilityProfileMatchesTarget(profile, target) {
   if (!profile) return true;
-  return profile === "production" ? target === "prod" : target === "test";
+  if (profile === "production") return target === "prod";
+  if (profile === "qa" || profile === "rehearsal") return target === "test";
+  return false;
 }
 
 function fail(message) {

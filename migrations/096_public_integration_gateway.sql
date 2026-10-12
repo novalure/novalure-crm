@@ -50,10 +50,10 @@ create table public.external_integrations (
     check (mode in ('training','real_customer')),
   constraint external_integrations_capabilities_check check (
     capabilities <@ array[
-      'form.read','form.submit','chat.start','chat.message','lead.create',
+      'form.read','form.submit','chat.start','chat.context','chat.message','lead.create',
       'callback.request','appointment.request'
     ]::text[]
-    and cardinality(capabilities) <= 7
+    and cardinality(capabilities) <= 8
   ),
   constraint external_integrations_configuration_object_check
     check (jsonb_typeof(configuration) = 'object'),
@@ -108,7 +108,7 @@ create table public.external_integration_widget_configs (
   constraint external_widget_message_check check (char_length(welcome_message) between 1 and 500),
   constraint external_widget_capabilities_check check (
     enabled_capabilities <@ array[
-      'form.read','form.submit','chat.start','chat.message','lead.create',
+      'form.read','form.submit','chat.start','chat.context','chat.message','lead.create',
       'callback.request','appointment.request'
     ]::text[]
   ),
@@ -339,7 +339,7 @@ begin
     return new;
   end if;
 
-  if new.status in ('aktiv','eingebaut') then
+  if new.status in ('aktiv','eingebaut') and new.project_id is not null then
     insert into public.external_integrations (
       public_site_key, workspace_id, project_id, form_id, integration_type,
       status, mode, allowed_origins, capabilities, configuration, metadata

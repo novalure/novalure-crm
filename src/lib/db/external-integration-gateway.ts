@@ -17,6 +17,7 @@ export const externalIntegrationCapabilities = [
   "form.read",
   "form.submit",
   "chat.start",
+  "chat.context",
   "chat.message",
   "lead.create",
   "callback.request",
@@ -151,10 +152,11 @@ function chatSecret() {
   return secret;
 }
 
-function deterministicSessionToken(integrationId: string, idempotencyKey: string) {
-  return createHmac("sha256", chatSecret())
+function deriveSessionCredential(integrationId: string, idempotencyKey: string) {
+  const sessionToken = createHmac("sha256", chatSecret())
     .update(`external-chat-session-v1\n${integrationId}\n${idempotencyKey}`)
     .digest("base64url");
+  return { sessionToken, sessionTokenHash: sha256(sessionToken) };
 }
 
 function sha256(value: string) {
@@ -282,8 +284,10 @@ export async function startExternalChatSession(input: {
   if (!resolution || resolution.widgetConfiguration.chatEnabled !== true) {
     throw new ExternalIntegrationError("integration_not_found", 404);
   }
-  const token = deterministicSessionToken(resolution.integrationId, idempotencyKey);
-  const tokenHash = sha256(token);
+  const { sessionToken, sessionTokenHash } = deriveSessionCredential(
+    resolution.integrationId,
+    idempotencyKey,
+  );
   const idempotencyHash = sha256(`${resolution.integrationId}\n${idempotencyKey}`);
   const session = await withTenantTransaction(tenantScope(resolution), async (transaction) => {
     await lockExternalIntegration(transaction, resolution, {
@@ -301,7 +305,7 @@ export async function startExternalChatSession(input: {
         resolution.integrationId,
         resolution.workspaceId,
         resolution.projectId,
-        tokenHash,
+        sessionTokenHash,
         idempotencyHash,
         resolution.integrationMode,
         language,
@@ -317,7 +321,7 @@ export async function startExternalChatSession(input: {
       `select id,mode,status,session_token_hash as "sessionTokenHash"
        from public.external_chat_sessions
        where integration_id=$1::uuid and idempotency_hash=$2 and session_token_hash=$3`,
-      [resolution.integrationId, idempotencyHash, tokenHash],
+      [resolution.integrationId, idempotencyHash, sessionTokenHash],
     );
     await appendIntegrationEvent(transaction, resolution, {
       capability: "chat.start",
@@ -327,13 +331,13 @@ export async function startExternalChatSession(input: {
     });
     return resolved;
   });
-  if (!session || !sessionTokenMatches(session.sessionTokenHash, tokenHash)) {
+  if (!session || !sessionTokenMatches(session.sessionTokenHash, sessionTokenHash)) {
     throw new ExternalIntegrationError("temporarily_unavailable", 503);
   }
   return {
     mode: session.mode,
     sessionId: session.id,
-    sessionToken: token,
+    sessionToken,
     status: session.status,
     widget: resolution.widgetConfiguration,
   };
@@ -421,7 +425,7 @@ export async function getExternalChatContext(input: {
   const resolution = input.resolution;
   const result = await withTenantTransaction(tenantScope(resolution), async (transaction) => {
     await lockExternalIntegration(transaction, resolution, {
-      capability: "chat.start",
+      capability: "chat.context",
       origin: input.origin,
       publicSiteKey: input.publicSiteKey,
     });
@@ -437,7 +441,7 @@ export async function getExternalChatContext(input: {
       [input.sessionId],
     );
     await appendIntegrationEvent(transaction, resolution, {
-      capability: "chat.start",
+      capability: "chat.context",
       correlationId: input.correlationId,
       eventType: "chat.session.context",
       outcome: "accepted",

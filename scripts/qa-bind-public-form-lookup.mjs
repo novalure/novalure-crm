@@ -68,11 +68,13 @@ try {
   if (physical.forms < 1 || physical.integrations < 1) {
     throw new Error("QA_GATEWAY_BIND_PHYSICAL_FIXTURE_MISSING");
   }
-  const noContext = (await runtime.query(`select
+  // Physical rows exist (proved above), while the app role's server-owned RLS
+  // context is intentionally unset. Zero here proves default-deny, not emptiness.
+  const rlsDefaultDeny = (await runtime.query(`select
     (select count(*)::int from public.forms) forms,
     (select count(*)::int from public.form_submissions) submissions,
     (select count(*)::int from public.external_integrations) integrations`)).rows[0];
-  if (noContext.forms !== 0 || noContext.submissions !== 0 || noContext.integrations !== 0) {
+  if (rlsDefaultDeny.forms !== 0 || rlsDefaultDeny.submissions !== 0 || rlsDefaultDeny.integrations !== 0) {
     throw new Error("QA_GATEWAY_BIND_NO_CONTEXT_DATA_VISIBLE");
   }
   console.log("QA_GATEWAY_BINDING_PASS lookupRole=NOLOGIN password=NULL runtime=novalure_app");

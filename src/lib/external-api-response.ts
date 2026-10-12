@@ -68,7 +68,7 @@ export function observeExternalSuccess(input: {
   }));
 }
 
-export async function readBoundedJson(request: Request, maxBytes = 65_536) {
+export async function readBoundedJsonObject(request: Request, maxBytes = 65_536) {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") throw new ExternalIntegrationError("unsupported_content_type", 415);
   const declared = request.headers.get("content-length");
@@ -81,6 +81,8 @@ export async function readBoundedJson(request: Request, maxBytes = 65_536) {
   }
   try {
     const parsed = JSON.parse(raw) as unknown;
+    // Public gateway contracts require a JSON object, not an arbitrary JSON
+    // primitive. Valid primitives are deliberately rejected as invalid input.
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("object required");
     }

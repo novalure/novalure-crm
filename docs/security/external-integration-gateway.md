@@ -17,7 +17,7 @@ An integration maps one public site key to one workspace and optionally one proj
 Migration-created compatibility entries allow only the canonical CRM origins, or `https://novalurestudio.ie` for Website Sales. A database trigger registers forms published later through the authenticated CRM UI with those same canonical CRM origins and preserves explicit revocation. A customer-controlled origin is never inferred or wildcarded; authenticated onboarding must add it explicitly.
 
 - `form.read` and `form.submit`
-- `chat.start` and `chat.message`
+- `chat.start`, `chat.context`, and `chat.message`
 - `lead.create`
 - `callback.request` and `appointment.request` for later narrow operations
 

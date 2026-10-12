@@ -555,6 +555,7 @@ test("compatibility profiles bind production only to prod and QA or rehearsal on
   assert.equal(compatibilityProfileMatchesTarget("rehearsal", "test"), true);
   assert.equal(compatibilityProfileMatchesTarget("qa", "prod"), false);
   assert.equal(compatibilityProfileMatchesTarget("rehearsal", "prod"), false);
+  assert.equal(compatibilityProfileMatchesTarget("unexpected", "test"), false);
 });
 
 test("QA migration CI previews before apply and keeps manual tenant cutovers excluded", () => {

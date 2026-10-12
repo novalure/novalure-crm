@@ -13,7 +13,7 @@ import {
   externalJson,
   externalOptions,
   observeExternalSuccess,
-  readBoundedJson,
+  readBoundedJsonObject,
 } from "@/lib/external-api-response";
 
 export async function POST(request: Request) {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   let origin = "null";
   try {
     origin = readExternalRequestOrigin(request);
-    const body = await readBoundedJson(request, 16_384);
+    const body = await readBoundedJsonObject(request, 16_384);
     const publicSiteKey = request.headers.get("x-novalure-site-key")?.trim()
       || text(body.siteKey);
     const sessionId = text(body.sessionId);

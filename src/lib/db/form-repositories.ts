@@ -469,7 +469,12 @@ export async function getPublicWebsiteForm(
   if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
   const args = [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""];
-  const tenantBound = Boolean(options.transaction) || hasBoundTenantTransaction();
+  // Both signals are server-owned capabilities: TenantTransaction cannot be
+  // constructed from request data, and the ambient flag comes from the
+  // application's AsyncLocalStorage transaction wrapper. Public URL inputs
+  // never select tenant scope; without either signal the app-only compatibility
+  // function performs the registry-backed legacy lookup.
+  const serverTenantTransactionActive = Boolean(options.transaction) || hasBoundTenantTransaction();
   const tenantSql = `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
        f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
        f.status, f.variant, f.template, f.crm_target as "crmTarget",
@@ -487,7 +492,7 @@ export async function getPublicWebsiteForm(
        and (($1::uuid is not null and f.id=$1::uuid)
          or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
      order by f.updated_at desc limit 1`;
-  const row = tenantBound
+  const row = serverTenantTransactionActive
     ? options.transaction
       ? await options.transaction.queryOne<PublicFormRow>(tenantSql, args)
       : await queryOne<PublicFormRow>(tenantSql, args)
@@ -507,7 +512,7 @@ export async function getPublicWebsiteForm(
     ownerUserId: row.ownerUserId ?? null,
     funnelId: row.funnelId ?? null,
     funnelAudience: row.funnelAudience ?? null,
-    form: tenantBound ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
+    form: serverTenantTransactionActive ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
     publicPath,
     publicActorId: row.publicActorId ?? "",
   };

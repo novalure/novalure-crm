@@ -161,7 +161,7 @@ async function seedForms() {
         public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,
         allowed_origins,capabilities,configuration,metadata
       ) values($1,$2,$3,$4,'public_form','active','training',array[$5],
-        array['form.read','form.submit','lead.create','chat.start','chat.message'],'{}','{"synthetic":true}')
+        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],'{}','{"synthetic":true}')
       on conflict(public_site_key) do update set
         allowed_origins=excluded.allowed_origins,
         capabilities=excluded.capabilities,
@@ -173,7 +173,7 @@ async function seedForms() {
         integration_id,workspace_id,brand_name,assistant_name,enabled_capabilities,
         lead_capture_enabled,chat_enabled
       ) values($1,$2,'SYNTHETIC Candidate','Evelyn',
-        array['form.read','form.submit','lead.create','chat.start','chat.message'],true,true)
+        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],true,true)
       on conflict(integration_id) do update set
         enabled_capabilities=excluded.enabled_capabilities,
         lead_capture_enabled=true,

@@ -112,6 +112,8 @@ jobs:
         run: npm run test:website-sales-ingestion
 
       - name: External integration gateway, public forms and training chat
+        # This test owns only disposable local PostgreSQL and starts no server.
+        # The later sales E2E process owns and closes its children in finally.
         run: npm run test:external-integration-gateway
 
       - name: Isolated sales browser flows

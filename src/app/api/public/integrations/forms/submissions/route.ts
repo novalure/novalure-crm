@@ -34,7 +34,7 @@ import {
   externalJson,
   externalOptions,
   observeExternalSuccess,
-  readBoundedJson,
+  readBoundedJsonObject,
 } from "@/lib/external-api-response";
 import type { WebsiteForm } from "@/lib/form-types";
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   let auditResolution: ExternalIntegrationResolution | null = null;
   try {
     origin = readExternalRequestOrigin(request);
-    const body = await readBoundedJson(request);
+    const body = await readBoundedJsonObject(request);
     const publicSiteKey = request.headers.get("x-novalure-site-key")?.trim()
       || stringValue(body.siteKey)
       || "";
@@ -145,12 +145,14 @@ export async function POST(request: Request) {
             snapshot: await complete(hashes, jsonSnapshot(normalizePersistenceReason(persistence.reason), 422)),
           };
         }
-        const accepted: PublicSubmissionResponseSnapshot = {
+        const durableAcceptedReceipt: PublicSubmissionResponseSnapshot = {
           body: { accepted: true, reference: randomUUID() },
           kind: "json",
           status: 202,
         };
-        return { duplicate: false, snapshot: await complete(hashes, accepted) };
+        // The domain write and completed idempotency receipt share this same
+        // transaction. withPublicSubmissionTransaction returns only after COMMIT.
+        return { duplicate: false, snapshot: await complete(hashes, durableAcceptedReceipt) };
       },
     );
     const { duplicate, snapshot } = result;

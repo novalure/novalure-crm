@@ -91,13 +91,13 @@ before(async () => {
   await db.admin.query(await readFile(new URL("../migrations/096_public_integration_gateway.sql", import.meta.url), "utf8"));
   await db.admin.query(
     `update external_integrations set allowed_origins=array[$2],
-       capabilities=array['form.read','form.submit','lead.create','chat.start','chat.message'],
+       capabilities=array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],
        mode='training' where public_site_key=$1`,
     [siteKey, origin],
   );
   await db.admin.query(
     `update external_integration_widget_configs set chat_enabled=true,
-       enabled_capabilities=array['form.read','form.submit','lead.create','chat.start','chat.message']
+       enabled_capabilities=array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message']
      where integration_id=(select id from external_integrations where public_site_key=$1)`,
     [siteKey],
   );
@@ -203,6 +203,20 @@ test("forms published after 096 receive a registry entry without restoring a dat
     [futureFormId],
   );
   assert.equal(compatibility.rows[0]?.form?.id, futureFormId);
+  await db.admin.query("update forms set project_id=null where id=$1", [futureFormId]);
+  assert.equal((await db.admin.query(
+    "select status from external_integrations where public_site_key=$1",
+    [futureKey],
+  )).rows[0]?.status, "disabled");
+  assert.equal((await db.pool.query(
+    "select * from public.crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [futureKey, "https://novalure-crm.app", futureFormId],
+  )).rowCount, 0);
+  await db.admin.query("update forms set project_id=$2 where id=$1", [futureFormId, projectId]);
+  assert.equal((await db.admin.query(
+    "select status from external_integrations where public_site_key=$1",
+    [futureKey],
+  )).rows[0]?.status, "active");
   await db.admin.query(
     "update external_integrations set status='revoked',revoked_at=now() where public_site_key=$1",
     [futureKey],
@@ -233,7 +247,7 @@ test("tenant and project context cannot be selected by the public caller", async
     await client.query(
       `insert into external_integrations(id,public_site_key,workspace_id,project_id,integration_type,
          allowed_origins,capabilities,created_by)
-       values($1,$2,$3,$4,'website_chat',array[$5],array['chat.start','chat.message'],$6)`,
+       values($1,$2,$3,$4,'website_chat',array[$5],array['chat.start','chat.context','chat.message'],$6)`,
       [alternateIntegration, `nov_pk_${randomUUID().replaceAll("-", "")}`, workspaceId, projectId, origin, actorId],
     );
     await client.query(
@@ -298,7 +312,7 @@ test("authenticated onboarding creates a test integration and enforces tenant pr
   await assert.rejects(
     createWebsiteIntegration(session, {
       allowedOrigins: [origin],
-      capabilities: ["chat.start", "chat.message"],
+      capabilities: ["chat.start", "chat.context", "chat.message"],
       integrationType: "website_chat",
       mode: "training",
       projectId: foreignProjectId,
@@ -307,7 +321,7 @@ test("authenticated onboarding creates a test integration and enforces tenant pr
   );
   const created = await createWebsiteIntegration(session, {
     allowedOrigins: [origin],
-    capabilities: ["chat.start", "chat.message"],
+    capabilities: ["chat.start", "chat.context", "chat.message"],
     integrationType: "website_chat",
     mode: "training",
     projectId,

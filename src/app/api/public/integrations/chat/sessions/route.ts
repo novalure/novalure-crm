@@ -14,7 +14,7 @@ import {
   externalJson,
   externalOptions,
   observeExternalSuccess,
-  readBoundedJson,
+  readBoundedJsonObject,
 } from "@/lib/external-api-response";
 
 export async function POST(request: Request) {
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   let origin = "null";
   try {
     origin = readExternalRequestOrigin(request);
-    const body = await readBoundedJson(request, 16_384);
+    const body = await readBoundedJsonObject(request, 16_384);
     const publicSiteKey = request.headers.get("x-novalure-site-key")?.trim()
       || text(body.siteKey)
       || "";
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       || url.searchParams.get("site_key")?.trim()
       || "";
     const sessionId = url.searchParams.get("session_id")?.trim() || "";
-    const resolution = await resolveExternalIntegration({ capability: "chat.start", origin, publicSiteKey });
+    const resolution = await resolveExternalIntegration({ capability: "chat.context", origin, publicSiteKey });
     if (!resolution) throw new ExternalIntegrationError("integration_not_found", 404);
     const clientIp = requireExternalIntegrationClientIp(request.headers);
     const limit = await consumeExternalIntegrationRateLimit({
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
     });
     if (!limit.allowed) {
       await recordExternalIntegrationEvent(resolution, {
-        capability: "chat.start", correlationId: context.correlationId,
+        capability: "chat.context", correlationId: context.correlationId,
         eventType: "chat.session.context", outcome: "denied",
       });
       throw new ExternalIntegrationError("rate_limited", 429);
