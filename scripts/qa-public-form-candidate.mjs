@@ -262,7 +262,11 @@ async function attestHttp() {
     return_to: publicPath, name: `SYNTHETIC Denied ${marker}`, email: `denied-${marker}@example.invalid`,
     privacy: "false", marketing_consent: "false",
     ...Object.fromEntries(required.map(key => [key, negativeInputs.get(key)])) }).toString();
-  const negativeResponse = await fetch(`${base}/api/forms/submissions`, { ...options, body: negativeBody });
+  const negativeResponse = await fetch(`${base}/api/forms/submissions`, {
+    ...options,
+    body: negativeBody,
+    headers: { ...options.headers, accept: "application/json" },
+  });
   requireProof(negativeResponse.status === 422
     && await scalar(owner, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === after,
   "QA_FALSE_CONSENT_ACCEPTED");

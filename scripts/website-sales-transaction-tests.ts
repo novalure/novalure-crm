@@ -640,4 +640,24 @@ test("failed public validation does not return the internal form", async () => {
       requestUrl: "https://crm.example.invalid/forms/embed",
     }), { persisted: false, reason: "privacy_consent_required" });
   });
+  const publicKey = "synthetic-website-sales/generic-public";
+  const proof = createPublicSubmissionProof({
+    action: publicSubmissionActions.form,
+    scope: buildPublicSubmissionScope({ resourceId: genericFormId, resourceType: "form", workspaceId: "synthetic-website-sales" }),
+  });
+  data.set("form_slug", publicKey);
+  data.set("name", "SYNTHETIC denied contact");
+  data.set("email", "denied-public@example.invalid");
+  data.set(publicSubmissionControlFields.idempotencyKey, proof.idempotencyKey);
+  data.set(publicSubmissionControlFields.issuedAt, String(proof.issuedAt));
+  data.set(publicSubmissionControlFields.expiresAt, String(proof.expiresAt));
+  data.set(publicSubmissionControlFields.proof, proof.signature);
+  data.set(publicSubmissionControlFields.honeypot, "");
+  const response = await submitGenericForm(new Request("https://crm.example.invalid/api/forms/submissions", {
+    body: data,
+    headers: { accept: "application/json", "x-test-client-ip": "192.0.2.10" },
+    method: "POST",
+  }));
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "privacy_consent_required", persisted: false });
 });
