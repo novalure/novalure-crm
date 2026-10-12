@@ -198,6 +198,18 @@ test("forms published after 096 receive a registry entry without restoring a dat
     capabilities: ["form.read", "form.submit"],
     status: "active",
   }]);
+  const configuredCapabilities = [
+    "form.read", "form.submit", "lead.create", "chat.start", "chat.context", "chat.message",
+  ];
+  await db.admin.query(
+    "update external_integrations set capabilities=$2 where public_site_key=$1",
+    [futureKey, configuredCapabilities],
+  );
+  await db.admin.query("update forms set status='eingebaut' where id=$1", [futureFormId]);
+  assert.deepEqual((await db.admin.query(
+    "select capabilities from external_integrations where public_site_key=$1",
+    [futureKey],
+  )).rows[0]?.capabilities, configuredCapabilities);
   const compatibility = await db.pool.query<{ form: { id: string } | null }>(
     "select public.crm_public_form_lookup($1,'customer-public','future-gateway-form') as form",
     [futureFormId],

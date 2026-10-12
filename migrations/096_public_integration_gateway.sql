@@ -367,7 +367,6 @@ begin
             then 'revoked' else 'active' end,
           revoked_at=case when public.external_integrations.status='revoked'
             then public.external_integrations.revoked_at else null end,
-          capabilities=array['form.read','form.submit']::text[],
           configuration=public.external_integrations.configuration
             || jsonb_build_object('legacyCompatibility', true),
           updated_at=now()
