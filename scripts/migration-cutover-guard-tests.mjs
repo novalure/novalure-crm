@@ -11,6 +11,7 @@ import test from "node:test";
 import {
   applyCommittedMigrationPlan,
   assertMigrationCommitted,
+  compatibilityProfileMatchesTarget,
   createMigrationPlanToken,
   createMigrationPlan,
   resolveMigrationLedgerState,
@@ -373,10 +374,11 @@ test("060 and 061 remain manual even when alias handling is active", () => {
   );
 });
 
-test("standard QA includes 094 but never applies pending manual 095", () => {
+test("standard QA includes 094 but never applies pending manual 095 or 096", () => {
   const migrations = [
     migration("094_website_sales_ingestion", "sha-094"),
     migration("095_form_tenant_isolation", "sha-095", { manualCutover: true }),
+    migration("096_public_integration_gateway", "sha-096", { manualCutover: true }),
   ];
   assert.deepEqual(
     createMigrationPlan({ ledgerRows: [], migrations, only: "" }),
@@ -391,6 +393,24 @@ test("standard QA includes 094 but never applies pending manual 095", () => {
   assert.deepEqual(
     createMigrationPlan({ allowManualCutover: true, ledgerRows, migrations, only: "095_form_tenant_isolation" }),
     [migrations[1]],
+  );
+  assert.throws(
+    () => createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows,
+      migrations,
+      only: "096_public_integration_gateway",
+    }),
+    /required predecessor 095_form_tenant_isolation/,
+  );
+  assert.deepEqual(
+    createMigrationPlan({
+      allowManualCutover: true,
+      ledgerRows: [...ledgerRows, ledgerRow("095_form_tenant_isolation", "sha-095")],
+      migrations,
+      only: "096_public_integration_gateway",
+    }),
+    [migrations[2]],
   );
 });
 
@@ -515,6 +535,8 @@ test("automatic migration plans exclude every release cutover phase", () => {
   assert.match(runner, /"065_notification_guard_search_path_hardening"/);
   assert.match(runner, /"091_production_runtime_forced_rls_cutover"/);
   assert.match(runner, /"092_crm_production_machine_identity"/);
+  assert.match(runner, /"095_form_tenant_isolation"/);
+  assert.match(runner, /"096_public_integration_gateway"/);
   assert.match(runner, /if \(migration\.manualCutover\) return false/);
 });
 
@@ -523,6 +545,17 @@ test("a manual cutover requires a single explicit version and opt-in flag", () =
   assert.match(runner, /migration\.manualCutover && !allowManualCutover/);
   assert.match(runner, /Refusing manual cutover migration/);
   assert.match(runner, /never included automatically/);
+});
+
+test("compatibility profiles bind production only to prod and QA or rehearsal only to test", () => {
+  assert.equal(compatibilityProfileMatchesTarget("", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("production", "prod"), true);
+  assert.equal(compatibilityProfileMatchesTarget("production", "test"), false);
+  assert.equal(compatibilityProfileMatchesTarget("qa", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("rehearsal", "test"), true);
+  assert.equal(compatibilityProfileMatchesTarget("qa", "prod"), false);
+  assert.equal(compatibilityProfileMatchesTarget("rehearsal", "prod"), false);
+  assert.equal(compatibilityProfileMatchesTarget("unexpected", "test"), false);
 });
 
 test("QA migration CI previews before apply and keeps manual tenant cutovers excluded", () => {
@@ -549,6 +582,14 @@ test("QA migration CI previews before apply and keeps manual tenant cutovers exc
   const automaticSteps = workflow.slice(workflow.indexOf("Preview checksummed QA migration plan"), workflow.indexOf("Preview explicit form isolation QA cutover"));
   assert.doesNotMatch(automaticSteps, /--allow-manual-cutover/);
   assert.match(workflow, /Preview explicit form isolation QA cutover[\s\S]*dry-run --only=095_form_tenant_isolation --allow-manual-cutover[\s\S]*Apply explicit form isolation QA cutover[\s\S]*up --only=095_form_tenant_isolation --allow-manual-cutover/);
+  assert.match(workflow, /Preview explicit external integration gateway QA cutover[\s\S]*dry-run --only=096_public_integration_gateway --allow-manual-cutover[\s\S]*Apply explicit external integration gateway QA cutover[\s\S]*up --only=096_public_integration_gateway --allow-manual-cutover/);
+  assert.match(workflow, /Apply explicit external integration gateway QA cutover[\s\S]*Verify gateway runtime binding and retired lookup identity[\s\S]*qa-bind-public-form-lookup\.mjs/);
+  assert.match(workflow, /Verify final cleanup preserves canonical Growth seeds[\s\S]*Revoke and verify retired lookup identity after Candidate cleanup[\s\S]*qa-revoke-public-form-lookup\.mjs/);
+  assert.ok(
+    workflow.indexOf("up --only=095_form_tenant_isolation")
+      < workflow.indexOf("dry-run --only=096_public_integration_gateway"),
+    "QA CI must apply 095 before previewing 096",
+  );
 });
 
 test("the dedicated QA 057 cutover is explicit, isolated, and checksummed", () => {

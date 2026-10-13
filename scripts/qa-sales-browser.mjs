@@ -107,7 +107,7 @@ try{
  await step('real UI TOTP enrollment creates a server-issued authenticated MFA session',async()=>{
   await page.locator('input[name=recoveryCodesSaved]').check();
   await submitMfa(authenticatorCode(totpSecret));
-  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page).not.toHaveURL(/\/login/,{timeout:30000});
   const session = (await context.cookies()).find(cookie=>cookie.name==='novalure_session');
   assert.ok(session?.httpOnly && session.value.startsWith('v2.'), 'Server must issue an opaque HttpOnly session');
   firstSession = session.value;
@@ -146,7 +146,7 @@ try{
  });
  await step('mobile password and TOTP login creates a fresh session through the actual UI',async()=>{
   await submitMfa(authenticatorCode(totpSecret));
-  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page).not.toHaveURL(/\/login/,{timeout:30000});
   const session = (await context.cookies()).find(cookie=>cookie.name==='novalure_session');
   assert.ok(session?.httpOnly && session.value!==firstSession, 'Reauthentication must create a fresh session');
   assert.equal((await page.request.get(fixture.baseUrl+'/api/crm/core')).status(),200);

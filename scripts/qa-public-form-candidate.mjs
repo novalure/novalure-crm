@@ -13,7 +13,6 @@ if (process.env.DATABASE_URL?.trim() !== qa.databaseUrl) {
   throw new Error("QA_FORM_RUNTIME_TARGET_INVALID");
 }
 const ownerUrl = process.env.NOVALURE_QA_MIGRATION_DATABASE_URL?.trim();
-const lookupUrl = process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL?.trim();
 const salesSecret = process.env.NOVALURE_STUDIO_INGESTION_SECRET?.trim();
 const base = process.env.NOVALURE_QA_BASE_URL?.trim();
 const productionHost = process.env.NOVALURE_PRODUCTION_DATABASE_HOST?.trim().toLowerCase();
@@ -34,17 +33,13 @@ function safeUrl(value, role, pooled) {
   return parsed;
 }
 
-requireProof(Boolean(ownerUrl && lookupUrl && base && productionHost && salesSecret?.length >= 32), "QA_INPUT_MISSING");
+requireProof(Boolean(ownerUrl && base && productionHost && salesSecret?.length >= 32), "QA_INPUT_MISSING");
 const ownerTarget = safeUrl(ownerUrl, "neondb_owner", false);
-requireProof(new URL(lookupUrl).searchParams.get("sslmode") === "verify-full", "QA_LOOKUP_TLS_MODE_INVALID");
-const lookupTarget = safeUrl(lookupUrl, "novalure_public_form_lookup", true);
 const appTarget = safeUrl(qa.databaseUrl, "novalure_app", true);
-requireProof(lookupTarget.hostname === appTarget.hostname && lookupTarget.searchParams.get("sslmode") === "verify-full", "QA_LOOKUP_BINDING_INVALID");
 requireProof(base === "http://127.0.0.1:3000", "QA_HTTP_TARGET_INVALID");
 
 const owner = new pg.Pool({ connectionString: ownerTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const app = new pg.Pool({ connectionString: appTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
-const lookup = new pg.Pool({ connectionString: lookupTarget.toString(), ssl: { rejectUnauthorized: true }, max: 2 });
 const marker = randomBytes(12).toString("hex");
 const own = { workspace: randomUUID(), actor: randomUUID(), viewer: randomUUID(), project: randomUUID(),
   form: randomUUID(), deniedForm: randomUUID(), draft: randomUUID(), key: `qa-${marker}` };
@@ -53,6 +48,10 @@ const salesForm = "0f98b9fd-d300-4a34-a14c-54a1a61b2415";
 const salesWorkspace = "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101";
 const slug = `candidate-${marker}`;
 const draftSlug = `draft-${marker}`;
+const siteKey = `nov_pk_${own.form.replaceAll("-", "")}`;
+const foreignSiteKey = `nov_pk_${foreign.form.replaceAll("-", "")}`;
+const publicOrigin = base;
+const foreignOrigin = "https://foreign-candidate.example";
 const formFields = JSON.stringify([
   { id: "name", crmField: "name", label: "Name", type: "text", required: true },
   { id: "email", crmField: "email", label: "Email", type: "email", required: true },
@@ -72,13 +71,35 @@ async function requireDenied(task, code) {
   throw new Error(code);
 }
 
+async function attestRetiredLookupRoleCannotAuthenticate() {
+  const retiredTarget = new URL(ownerTarget);
+  retiredTarget.username = "novalure_public_form_lookup";
+  retiredTarget.password = randomBytes(32).toString("base64url");
+  const retired = new pg.Client({
+    connectionString: retiredTarget.toString(),
+    connectionTimeoutMillis: 10_000,
+    ssl: { rejectUnauthorized: true },
+  });
+  try {
+    await retired.connect();
+  } catch (error) {
+    requireProof(error && typeof error === "object" && "code" in error
+      && ["28000", "28P01"].includes(String(error.code)), "QA_LOOKUP_ROLE_AUTH_FAILURE_UNEXPECTED");
+    return;
+  } finally {
+    await retired.end().catch(() => undefined);
+  }
+  throw new Error("QA_LOOKUP_ROLE_AUTHENTICATED");
+}
+
 async function attestDatabase() {
   const identity = (await owner.query(`select current_setting('neon.project_id',true) project,
     current_setting('neon.branch_id',true) branch,current_database() database,current_user role`)).rows[0];
   requireProof(identity.project === qa.expectedProjectId && identity.branch === qa.expectedBranchId
     && identity.database === qa.expectedDatabase && identity.role === "neondb_owner", "QA_OWNER_FINGERPRINT_INVALID");
-  for (const number of ["094", "095"]) {
-    const name = number === "094" ? "website_sales_ingestion" : "form_tenant_isolation";
+  for (const number of ["094", "095", "096"]) {
+    const name = number === "094" ? "website_sales_ingestion"
+      : number === "095" ? "form_tenant_isolation" : "public_integration_gateway";
     const version = `${number}_${name}`;
     const bytes = await readFile(new URL(`../migrations/${version}.sql`, import.meta.url));
     const checksum = createHash("sha256").update(bytes).digest("hex");
@@ -86,13 +107,17 @@ async function attestDatabase() {
     requireProof(ledger.rows.length === 1 && ledger.rows[0].checksum === checksum, `QA_LEDGER_${number}_INVALID`);
   }
   const flags = (await owner.query(`select relname,relrowsecurity,relforcerowsecurity from pg_class
-    where oid in ('public.forms'::regclass,'public.form_submissions'::regclass) order by relname`)).rows;
-  requireProof(flags.length === 2 && flags.every(row => row.relrowsecurity && row.relforcerowsecurity), "QA_FORM_RLS_INVALID");
-  const role = (await owner.query(`select rolcanlogin,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication
-    from pg_roles where rolname='novalure_public_form_lookup'`)).rows[0];
-  requireProof(role?.rolcanlogin && !role.rolsuper && !role.rolbypassrls && !role.rolcreatedb
-    && !role.rolcreaterole && !role.rolreplication, "QA_LOOKUP_ROLE_UNSAFE");
-  requireProof(await scalar(lookup, "select not has_table_privilege(current_user,'public.forms','SELECT') and not has_table_privilege(current_user,'public.form_submissions','SELECT') as value") === true, "QA_LOOKUP_TABLE_GRANT_UNSAFE");
+    where oid in ('public.forms'::regclass,'public.form_submissions'::regclass,
+      'public.external_integrations'::regclass,'public.external_integration_widget_configs'::regclass,
+      'public.external_chat_sessions'::regclass,'public.external_chat_messages'::regclass,
+      'public.external_integration_events'::regclass) order by relname`)).rows;
+  requireProof(flags.length === 7 && flags.every(row => row.relrowsecurity && row.relforcerowsecurity), "QA_GATEWAY_RLS_INVALID");
+  const role = (await owner.query(`select r.rolcanlogin,r.rolsuper,r.rolbypassrls,r.rolcreatedb,
+      r.rolcreaterole,r.rolreplication,a.rolpassword
+    from pg_roles r join pg_authid a on a.oid=r.oid where r.rolname='novalure_public_form_lookup'`)).rows[0];
+  requireProof(!role?.rolcanlogin && role.rolpassword === null && !role.rolsuper && !role.rolbypassrls
+    && !role.rolcreatedb && !role.rolcreaterole && !role.rolreplication, "QA_LOOKUP_ROLE_NOT_DISABLED");
+  await attestRetiredLookupRoleCannotAuthenticate();
   // Immutable CRM events prevent cascading deletion of a seeded workspace.
   // Each disposable branch therefore runs this candidate matrix only once.
   requireProof(await scalar(owner, `select count(*)::int as value from workspaces
@@ -128,6 +153,33 @@ async function seedForms() {
     [own.deniedForm, own.workspace, own.project, own.viewer, `SYNTHETIC restricted ${marker}`, `restricted-${marker}`, formFields]);
     await client.query("insert into form_submissions(id,workspace_id,project_id,form_id) values($1,$2,$3,$4)",
       [randomUUID(), foreign.workspace, foreign.project, foreign.form]);
+    for (const [fixture, key, allowedOrigin] of [
+      [own, siteKey, publicOrigin],
+      [foreign, foreignSiteKey, foreignOrigin],
+    ]) {
+      const integration = await client.query(`insert into external_integrations(
+        public_site_key,workspace_id,project_id,form_id,integration_type,status,mode,
+        allowed_origins,capabilities,configuration,metadata
+      ) values($1,$2,$3,$4,'public_form','active','training',array[$5],
+        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],'{}','{"synthetic":true}')
+      on conflict(public_site_key) do update set
+        allowed_origins=excluded.allowed_origins,
+        capabilities=excluded.capabilities,
+        status='active',
+        mode='training',
+        metadata=external_integrations.metadata || excluded.metadata
+      returning id`, [key, fixture.workspace, fixture.project, fixture.form, allowedOrigin]);
+      await client.query(`insert into external_integration_widget_configs(
+        integration_id,workspace_id,brand_name,assistant_name,enabled_capabilities,
+        lead_capture_enabled,chat_enabled
+      ) values($1,$2,'SYNTHETIC Candidate','Evelyn',
+        array['form.read','form.submit','lead.create','chat.start','chat.context','chat.message'],true,true)
+      on conflict(integration_id) do update set
+        enabled_capabilities=excluded.enabled_capabilities,
+        lead_capture_enabled=true,
+        chat_enabled=true`,
+      [integration.rows[0].id, fixture.workspace]);
+    }
     await client.query("commit");
   } catch (error) { await client.query("rollback"); throw error; }
   finally { client.release(); }
@@ -139,11 +191,24 @@ async function attestRls() {
   requireProof(await scalar(app, "select count(*)::int as value from forms where id=$1", [own.form]) === 0, "QA_NO_CONTEXT_FORM_LEAK");
   requireProof(await scalar(app, "select count(*)::int as value from form_submissions where form_id=$1", [own.form]) === 0, "QA_NO_CONTEXT_SUBMISSION_LEAK");
   await requireDenied(() => app.query("select version from novalure_schema_migrations limit 1"), "QA_LEDGER_READ_ALLOWED");
-  await requireDenied(() => lookup.query("select id from forms limit 1"), "QA_LOOKUP_BASE_READ_ALLOWED");
-  await requireDenied(() => lookup.query("select id from form_submissions limit 1"), "QA_LOOKUP_SUBMISSION_READ_ALLOWED");
-  const published = await lookup.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, slug]);
-  const draft = await lookup.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, draftSlug]);
-  requireProof(published.rows[0]?.form?.id === own.form && draft.rows[0]?.form === null, "QA_PUBLIC_LOOKUP_INVALID");
+  const published = await app.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, slug]);
+  const directGateway = await app.query("select crm_external_legacy_form_lookup(null,$1,$2) as form", [own.key, slug]);
+  const draft = await app.query("select crm_public_form_lookup(null,$1,$2) as form", [own.key, draftSlug]);
+  requireProof(published.rows[0]?.form?.id === own.form && directGateway.rows[0]?.form?.id === own.form
+    && draft.rows[0]?.form === null, "QA_PUBLIC_LOOKUP_INVALID");
+  const resolved = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [siteKey, publicOrigin, own.form]);
+  const deniedOrigin = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [siteKey, "https://wrong.example", own.form]);
+  const deniedProjectForm = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [siteKey, publicOrigin, foreign.form]);
+  const deniedForeignOrigin = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [foreignSiteKey, publicOrigin, foreign.form]);
+  const resolvedForeign = await app.query("select * from crm_external_integration_resolve($1,$2,'form.read',$3)",
+    [foreignSiteKey, foreignOrigin, foreign.form]);
+  requireProof(resolved.rowCount === 1 && deniedOrigin.rowCount === 0 && deniedProjectForm.rowCount === 0
+    && deniedForeignOrigin.rowCount === 0 && resolvedForeign.rowCount === 1,
+    "QA_GATEWAY_RESOLUTION_INVALID");
   const client = await app.connect();
   try {
     await client.query("begin");
@@ -289,6 +354,118 @@ async function attestHttp() {
   requireProof(anonymousRead.status >= 400, "QA_ANONYMOUS_SUBMISSION_API_READ_ALLOWED");
 }
 
+async function gatewayBusinessEffects() {
+  const row = (await owner.query(`select jsonb_build_object(
+    'contacts',(select count(*)::int from contacts where workspace_id=$1),
+    'leads',(select count(*)::int from leads where workspace_id=$1),
+    'deals',(select count(*)::int from deals where workspace_id=$1),
+    'tasks',(select count(*)::int from tasks where workspace_id=$1),
+    'consents',(select count(*)::int from consent_records where workspace_id=$1),
+    'submissions',(select count(*)::int from form_submissions where workspace_id=$1),
+    'timeline',(select count(*)::int from contact_timeline_items where workspace_id=$1),
+    'audit',(select count(*)::int from audit_logs where workspace_id=$1),
+    'analytics',(select count(*)::int from analytics_events where workspace_id=$1),
+    'speedToLead',(select count(*)::int from speed_to_lead_events where workspace_id=$1)
+  ) value`, [own.workspace])).rows[0];
+  return row.value;
+}
+
+async function attestGateway() {
+  const headers = {
+    origin: publicOrigin,
+    "x-forwarded-for": "198.51.100.44",
+    "x-novalure-site-key": siteKey,
+  };
+  const lookup = await fetch(`${base}/api/public/integrations/forms?form_id=${own.form}`, { headers });
+  const lookupBody = await lookup.json().catch(() => ({}));
+  requireProof(lookup.status === 200 && lookupBody.form?.id === own.form
+    && !JSON.stringify(lookupBody).includes(own.workspace)
+    && !JSON.stringify(lookupBody).includes(own.project), "QA_GATEWAY_PUBLIC_LOOKUP_FAILED");
+  const wrongOrigin = await fetch(`${base}/api/public/integrations/forms?form_id=${own.form}`, {
+    headers: { ...headers, origin: "https://wrong.example" },
+  });
+  const wrongForm = await fetch(`${base}/api/public/integrations/forms?form_id=${foreign.form}`, { headers });
+  requireProof(wrongOrigin.status === 404 && wrongForm.status === 404, "QA_GATEWAY_SCOPE_BYPASS");
+
+  const submissionKey = randomBytes(24).toString("base64url");
+  const submissionBody = JSON.stringify({
+    fields: {
+      email: `gateway-${marker}@example.invalid`,
+      name: `SYNTHETIC Gateway ${marker}`,
+      privacy: "true",
+    },
+    formId: own.form,
+  });
+  const submissionHeaders = {
+    ...headers,
+    "content-type": "application/json",
+    "idempotency-key": submissionKey,
+  };
+  const beforeEffects = await gatewayBusinessEffects();
+  const first = await fetch(`${base}/api/public/integrations/forms/submissions`, {
+    body: submissionBody, headers: submissionHeaders, method: "POST",
+  });
+  const firstBody = await first.json().catch(() => ({}));
+  const afterFirstEffects = await gatewayBusinessEffects();
+  const replay = await fetch(`${base}/api/public/integrations/forms/submissions`, {
+    body: submissionBody, headers: submissionHeaders, method: "POST",
+  });
+  const replayBody = await replay.json().catch(() => ({}));
+  const afterReplayEffects = await gatewayBusinessEffects();
+  requireProof(first.status === 202, `QA_GATEWAY_FIRST_STATUS_${first.status}`);
+  requireProof(replay.status === 202, `QA_GATEWAY_REPLAY_STATUS_${replay.status}`);
+  requireProof(typeof firstBody.reference === "string" && firstBody.reference.length > 0,
+    "QA_GATEWAY_FIRST_REFERENCE_MISSING");
+  requireProof(firstBody.reference === replayBody.reference, "QA_GATEWAY_REPLAY_REFERENCE_MISMATCH");
+  requireProof(afterFirstEffects.submissions === beforeEffects.submissions + 1,
+    "QA_GATEWAY_SUBMISSION_EFFECT_MISSING");
+  requireProof(JSON.stringify(afterReplayEffects) === JSON.stringify(afterFirstEffects),
+    "QA_GATEWAY_REPLAY_CREATED_BUSINESS_EFFECT");
+  requireProof(!JSON.stringify(firstBody).includes(own.workspace), "QA_GATEWAY_RESPONSE_TENANT_LEAK");
+  const formEvents = (await owner.query(`select outcome,count(*)::int count
+    from external_integration_events where workspace_id=$1 and event_type='form.submit'
+    group by outcome order by outcome`, [own.workspace])).rows;
+  requireProof(JSON.stringify(formEvents) === JSON.stringify([
+    { outcome: "accepted", count: 1 }, { outcome: "duplicate", count: 1 },
+  ]), "QA_GATEWAY_REPLAY_AUDIT_INVALID");
+
+  const chatStartKey = randomBytes(24).toString("base64url");
+  const chatStart = await fetch(`${base}/api/public/integrations/chat/sessions`, {
+    body: JSON.stringify({ idempotencyKey: chatStartKey, language: "en" }),
+    headers: { ...headers, "content-type": "application/json" },
+    method: "POST",
+  });
+  const session = await chatStart.json().catch(() => ({}));
+  requireProof(chatStart.status === 201 && session.mode === "training"
+    && typeof session.sessionId === "string" && typeof session.sessionToken === "string",
+  "QA_GATEWAY_CHAT_START_FAILED");
+  const message = await fetch(`${base}/api/public/integrations/chat/messages`, {
+    body: JSON.stringify({
+      idempotencyKey: randomBytes(24).toString("base64url"),
+      message: "SYNTHETIC Candidate chat message",
+      sessionId: session.sessionId,
+    }),
+    headers: {
+      ...headers,
+      "content-type": "application/json",
+      "x-novalure-session-token": session.sessionToken,
+    },
+    method: "POST",
+  });
+  const context = await fetch(
+    `${base}/api/public/integrations/chat/sessions?session_id=${session.sessionId}`,
+    { headers: { ...headers, "x-novalure-session-token": session.sessionToken } },
+  );
+  const contextBody = await context.json().catch(() => ({}));
+  requireProof(message.status === 202 && context.status === 200
+    && contextBody.mode === "training" && contextBody.messages?.length === 1
+    && contextBody.messages[0]?.content === "SYNTHETIC Candidate chat message",
+  "QA_GATEWAY_CHAT_CONTEXT_FAILED");
+  requireProof(await scalar(owner, `select count(*)::int as value from external_chat_sessions
+    where integration_id=(select id from external_integrations where public_site_key=$1) and synthetic`, [siteKey]) === 1,
+  "QA_GATEWAY_CHAT_NOT_SYNTHETIC");
+}
+
 async function attestWebsiteSales() {
   const idempotencyKey = randomBytes(24).toString("base64url");
   const payload = { version: "website-sales-lead-v1", name: `SYNTHETIC Studio ${marker}`,
@@ -322,12 +499,13 @@ try {
   await attestRls();
   await attestFormSaving();
   await attestHttp();
+  await attestGateway();
   await attestWebsiteSales();
-  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095 forms=RLS_FORCE formSave=PASS lookup=SCOPED anonymous=PASS sales=PASS replay=PASS`);
+  console.log(`CRM_CANDIDATE_QA_PASS project=${qa.expectedProjectId} branch=${qa.expectedBranchId} migration=094,095,096 forms=RLS_FORCE formSave=PASS gateway=PASS chat=TRAINING sales=PASS replay=PASS lookupRole=NOLOGIN`);
 } catch (error) {
   const code = error instanceof Error && /^QA_[A-Z0-9_]+$/u.test(error.message) ? error.message : "QA_UNEXPECTED_FAILURE";
   console.error(`CRM_CANDIDATE_QA_FAIL code=${code}`);
   process.exitCode = 1;
 } finally {
-  await Promise.allSettled([owner.end(), app.end(), lookup.end()]);
+  await Promise.allSettled([owner.end(), app.end()]);
 }

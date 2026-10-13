@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-transport";
-import { closePublicFormLookupPool } from "../src/lib/db/public-form-lookup-client";
 import type { PoolClient } from "@neondatabase/serverless";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
 import { getPublicWebsiteFormByKey, listWebsiteForms, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
@@ -33,7 +32,6 @@ const genericActorId = "b20270d1-3b4e-4964-8e6b-27413a9b5265";
 let db: Awaited<ReturnType<typeof startLocalSalesDb>>;
 const savedEnv = {
   CRM_LOCAL_TEST_DATABASE: process.env.CRM_LOCAL_TEST_DATABASE,
-  CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL: process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL,
   DATABASE_URL: process.env.DATABASE_URL,
   NOVALURE_ABUSE_SECRET: process.env.NOVALURE_ABUSE_SECRET,
   NOVALURE_STUDIO_INGESTION_SECRET: process.env.NOVALURE_STUDIO_INGESTION_SECRET,
@@ -77,6 +75,10 @@ before(async () => {
      values('094_website_sales_ingestion','094_website_sales_ingestion.sql','synthetic-prerequisite')`,
   );
   await db.admin.query(await readFile(new URL("../migrations/095_form_tenant_isolation.sql", import.meta.url), "utf8"));
+  await db.admin.query(
+    `insert into novalure_schema_migrations(version,name,checksum)
+     values('095_form_tenant_isolation','095_form_tenant_isolation.sql','synthetic-prerequisite')`,
+  );
   const membershipCount = await db.admin.query<{ count: string }>(
     "select count(*)::text as count from workspace_users where workspace_id=$1",
     [websiteSalesWorkspaceId],
@@ -94,17 +96,20 @@ before(async () => {
        '{"createTask":true}'::jsonb)`,
     [genericFormId, websiteSalesWorkspaceId, projectId, genericActorId],
   );
+  await db.admin.query(await readFile(new URL("../migrations/096_public_integration_gateway.sql", import.meta.url), "utf8"));
+  await db.admin.query(
+    `insert into novalure_schema_migrations(version,name,checksum)
+     values('096_public_integration_gateway','096_public_integration_gateway.sql','synthetic-prerequisite')`,
+  );
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
   process.env.DATABASE_URL = `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`;
-  process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = `postgresql://novalure_public_form_lookup@127.0.0.1:${db.port}/postgres`;
   process.env.NOVALURE_ABUSE_SECRET = "synthetic-website-sales-abuse-secret-for-local-tests";
   process.env.NOVALURE_STUDIO_INGESTION_SECRET = "synthetic-website-sales-signing-secret-for-local-tests";
   process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER = "x-test-client-ip";
 });
 
 after(async () => {
-  await closePublicFormLookupPool();
   await closeLocalTestPool();
   if (db) await db.stop();
   for (const [key, value] of Object.entries(savedEnv)) {
@@ -444,18 +449,14 @@ test("a stale owner session cannot save a form after database membership loses w
   }
 });
 
-test("anonymous lookup fails closed without its separate database identity", async () => {
-  const lookupUrl = process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL;
-  try {
-    await closePublicFormLookupPool();
-    delete process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL;
-    await assert.rejects(getPublicWebsiteFormByKey("synthetic-website-sales/generic-public"), /not configured/);
-    process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = process.env.DATABASE_URL;
-    await assert.rejects(getPublicWebsiteFormByKey("synthetic-website-sales/generic-public"), /target differs/);
-  } finally {
-    await closePublicFormLookupPool();
-    process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL = lookupUrl;
-  }
+test("anonymous lookup uses the application gateway and requires no dedicated database identity", async () => {
+  const lookup = await getPublicWebsiteFormByKey("synthetic-website-sales/generic-public");
+  assert.equal(lookup?.id, genericFormId);
+  const role = await db.admin.query<{ rolcanlogin: boolean; rolpassword: string | null }>(
+    "select rolcanlogin,rolpassword from pg_authid where rolname='novalure_public_form_lookup'",
+  );
+  assert.deepEqual(role.rows[0], { rolcanlogin: false, rolpassword: null });
+  assert.equal(process.env.CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL, undefined);
 });
 
 test("form publishing requires product authority as well as a writable project", async () => {

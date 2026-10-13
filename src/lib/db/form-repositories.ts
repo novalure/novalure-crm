@@ -1,8 +1,12 @@
 import type { AppSession } from "@/lib/auth/session";
 import { writeCrmAnalyticsEvent } from "@/lib/db/analytics-event-repositories";
 import { hasBoundTenantTransaction, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
-import { publicFormLegacyRoutes, publicFormLookup } from "@/lib/db/public-form-lookup-client";
+import {
+  legacyPublicFormLookup,
+  legacyPublicFormRoutes,
+} from "@/lib/db/external-integration-gateway";
 import { withCrmRead } from "@/lib/crm-command";
+import type { TenantTransaction } from "@/lib/db/tenant-client";
 import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import { isUuid, writeAuditLog, type PersistenceResult } from "@/lib/db/runtime-repositories";
 import { createFormField } from "@/lib/form-types";
@@ -450,7 +454,7 @@ async function upsertWebsiteFormInTenant(input: { session: AppSession; form: Web
 
 export async function getPublicWebsiteForm(
   input: PublicSlugLookup | { formId: string },
-  options: { includeSignedWebsiteSales?: boolean } = {},
+  options: { includeSignedWebsiteSales?: boolean; transaction?: TenantTransaction } = {},
 ): Promise<FormLookup | null> {
   if (!hasDatabaseUrl()) return null;
 
@@ -465,29 +469,34 @@ export async function getPublicWebsiteForm(
   if (!formId && (!route?.workspacePublicKey || !route.slug)) return null;
 
   const args = [formId, route?.workspacePublicKey ?? "", route?.slug ?? ""];
-  const tenantBound = hasBoundTenantTransaction();
-  const row = tenantBound
-    ? await queryOne<PublicFormRow>(
-        `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
-           f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
-           f.status, f.variant, f.template, f.crm_target as "crmTarget",
-           f.pipeline_stage as "pipelineStage", f.owner_mode as "ownerMode",
-           f.campaign, f.tags, f.fields, f.actions, f.settings,
-           f.visits_count as visits, f.submissions_count as submissions,
-           f.conversion_rate as "conversionRate", f.last_submission_at as "lastSubmission",
-           w.name as "workspaceName", w.public_key as "workspacePublicKey",
-           fn.audience as "funnelAudience",
-           nullif(current_setting('app.actor_id', true), '')::uuid as "publicActorId"
-         from forms f join workspaces w on w.id=f.workspace_id
-         left join funnels fn on fn.id=f.funnel_id
-         where f.status in ('aktiv','eingebaut')
-           and f.workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
-           and (($1::uuid is not null and f.id=$1::uuid)
-             or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
-         order by f.updated_at desc limit 1`,
-        args,
-      )
-    : await publicFormLookup(formId, route?.workspacePublicKey ?? "", route?.slug ?? "") as PublicFormRow | null;
+  // Both signals are server-owned capabilities: TenantTransaction cannot be
+  // constructed from request data, and the ambient flag comes from the
+  // application's AsyncLocalStorage transaction wrapper. Public URL inputs
+  // never select tenant scope; without either signal the app-only compatibility
+  // function performs the registry-backed legacy lookup.
+  const serverTenantTransactionActive = Boolean(options.transaction) || hasBoundTenantTransaction();
+  const tenantSql = `select f.id, f.workspace_id as "workspaceId", f.project_id as "projectId",
+       f.owner_user_id as "ownerUserId", f.funnel_id as "funnelId", f.name, f.slug,
+       f.status, f.variant, f.template, f.crm_target as "crmTarget",
+       f.pipeline_stage as "pipelineStage", f.owner_mode as "ownerMode",
+       f.campaign, f.tags, f.fields, f.actions, f.settings,
+       f.visits_count as visits, f.submissions_count as submissions,
+       f.conversion_rate as "conversionRate", f.last_submission_at as "lastSubmission",
+       w.name as "workspaceName", w.public_key as "workspacePublicKey",
+       fn.audience as "funnelAudience",
+       nullif(current_setting('app.actor_id', true), '')::uuid as "publicActorId"
+     from forms f join workspaces w on w.id=f.workspace_id
+     left join funnels fn on fn.id=f.funnel_id
+     where f.status in ('aktiv','eingebaut')
+       and f.workspace_id = nullif(current_setting('app.tenant_id', true), '')::uuid
+       and (($1::uuid is not null and f.id=$1::uuid)
+         or ($1::uuid is null and w.public_key=$2::text and f.slug=$3::text))
+     order by f.updated_at desc limit 1`;
+  const row = serverTenantTransactionActive
+    ? options.transaction
+      ? await options.transaction.queryOne<PublicFormRow>(tenantSql, args)
+      : await queryOne<PublicFormRow>(tenantSql, args)
+    : await legacyPublicFormLookup(formId, route?.workspacePublicKey ?? "", route?.slug ?? "") as PublicFormRow | null;
 
   if (!row || (row.id === websiteSalesFormId && !options.includeSignedWebsiteSales)) return null;
 
@@ -503,7 +512,7 @@ export async function getPublicWebsiteForm(
     ownerUserId: row.ownerUserId ?? null,
     funnelId: row.funnelId ?? null,
     funnelAudience: row.funnelAudience ?? null,
-    form: tenantBound ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
+    form: serverTenantTransactionActive ? toWebsiteForm(row) : publicWebsiteFormView(toWebsiteForm(row)),
     publicPath,
     publicActorId: row.publicActorId ?? "",
   };
@@ -511,7 +520,7 @@ export async function getPublicWebsiteForm(
 
 export async function getPublicWebsiteFormByKey(
   formKey: string,
-  options: { includeSignedWebsiteSales?: boolean } = {},
+  options: { includeSignedWebsiteSales?: boolean; transaction?: TenantTransaction } = {},
 ): Promise<FormLookup | null> {
   const route = parsePublicSlugLookup(formKey);
   if (route) return getPublicWebsiteForm(route, options);
@@ -532,7 +541,7 @@ export async function getLegacyPublicWebsiteFormRoute(slugValue: string): Promis
   const slug = slugify(slugValue);
   if (!slug) return { status: "not_found", slug };
 
-  const rows = await publicFormLegacyRoutes(slug);
+  const rows = await legacyPublicFormRoutes(slug);
 
   if (!rows.length) return { status: "not_found", slug };
   if (rows.length > 1) return { status: "ambiguous", slug };
@@ -999,6 +1008,9 @@ async function upsertContact(input: {
   websiteSalesMetadata: Record<string, unknown> | null;
   workspaceId: string;
 }) {
+  // Contact identity is project-scoped by design. Reusing a same-email contact
+  // from another project would silently enrich a resource outside the form's
+  // registry-bound project and violate the public ingestion boundary.
   const existing = input.email || input.phone
     ? await queryOne<IdRow>(
         `

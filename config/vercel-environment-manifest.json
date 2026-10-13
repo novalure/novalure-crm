@@ -3,7 +3,6 @@
   "scope": ["preview", "production"],
   "valueInspection": "FORBIDDEN",
   "runtimeRequired": [
-    { "name": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Separate published-form lookup role connection; must match DATABASE_URL host, port and database with verified TLS. Binding is not yet provisioned." },
     { "name": "DATABASE_URL", "targets": ["preview", "production"], "kind": "secret", "notes": "Tenant-scoped pooled application connection." },
     { "name": "NOVALURE_ABUSE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Minimum 32-byte public-submission abuse secret." },
     { "name": "NOVALURE_AUTH_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Auth secret encryption; minimum length enforced by the app." },
@@ -12,6 +11,9 @@
     { "name": "NOVALURE_STUDIO_INGESTION_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "Signs Website Sales submissions from the Studio backend; minimum length is enforced by the route." },
     { "name": "OAUTH_STATE_SECRET", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth state signing secret." },
     { "name": "OAUTH_TOKEN_ENCRYPTION_KEY", "targets": ["preview", "production"], "kind": "sensitive", "notes": "OAuth token encryption key." }
+  ],
+  "runtimeForbidden": [
+    { "name": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL", "targets": ["preview", "production"], "reason": "Retired by External Integration Gateway V1; customer-facing traffic must use the existing application runtime and must never restore a dedicated database login." }
   ],
   "runtimeConditional": [
     { "feature": "cron", "names": ["CRON_SECRET"] },

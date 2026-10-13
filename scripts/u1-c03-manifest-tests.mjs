@@ -24,8 +24,14 @@ test("Production source reconciliation manifest is exact and provenance-safe", a
 test("environment manifest separates expected names from unverified remote parity", async () => {
   const manifest = await json("config/vercel-environment-manifest.json");
   const required = manifest.runtimeRequired.map(({ name }) => name);
+  const runtimeForbidden = manifest.runtimeForbidden.map(({ name }) => name);
   assert.deepEqual(required, [...required].sort());
+  assert.deepEqual(runtimeForbidden, [...runtimeForbidden].sort());
   assert.equal(new Set(required).size, required.length);
+  assert.equal(new Set(runtimeForbidden).size, runtimeForbidden.length);
+  assert.equal(required.some(name => runtimeForbidden.includes(name)), false);
+  assert.deepEqual(runtimeForbidden, ["CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL"]);
+  assert.deepEqual(manifest.runtimeForbidden[0].targets, ["preview", "production"]);
   assert.equal(manifest.valueInspection, "FORBIDDEN");
   assert.equal(manifest.remoteComparison.valuesRead, false);
   assert.equal(manifest.remoteComparison.status, "PARTIAL");
@@ -38,6 +44,7 @@ test("environment manifest separates expected names from unverified remote parit
 
   const classified = new Set([
     ...manifest.runtimeRequired.map(({ name }) => name),
+    ...manifest.runtimeForbidden.map(({ name }) => name),
     ...manifest.runtimeConditional.flatMap(({ names }) => names),
     ...manifest.databaseAliases.pooledAccepted,
     ...manifest.databaseAliases.unpooledAccepted,
@@ -57,6 +64,11 @@ test("environment manifest separates expected names from unverified remote parit
       directReferences.add(match[1] ?? match[2]);
     }
   }
+  assert.deepEqual(
+    [...directReferences].filter(name => runtimeForbidden.includes(name)).sort(),
+    [],
+    "forbidden runtime variables must have no application reference",
+  );
   assert.deepEqual(
     [...directReferences].filter(name => !classified.has(name)).sort(),
     [],

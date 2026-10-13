@@ -6,7 +6,7 @@ import {
   publicWebsiteFormView,
 } from "@/lib/db/form-repositories";
 import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "@/lib/db/client";
-import { publicFormSubmissionScope } from "@/lib/db/public-form-lookup-client";
+import { legacyPublicFormSubmissionScope } from "@/lib/db/external-integration-gateway";
 import {
   claimPublicSubmissionIdempotency,
   readCompletedPublicSubmissionIdempotency,
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
     return unavailableResponse();
   }
 
-  const submissionScope = await publicFormSubmissionScope(lookup.id, lookup.form.workspacePublicKey ?? "").catch(() => null);
+  const submissionScope = await legacyPublicFormSubmissionScope(lookup.id, lookup.form.workspacePublicKey ?? "").catch(() => null);
   if (!submissionScope) return unavailableResponse();
 
   try {

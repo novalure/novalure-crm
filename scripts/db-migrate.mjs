@@ -48,6 +48,7 @@ const manualCutoverVersions = new Set([
   "092_crm_production_machine_identity",
   "093_crm_machine_internal_context",
   "095_form_tenant_isolation",
+  "096_public_integration_gateway",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -61,11 +62,19 @@ const migrationDependencies = new Map([
   ["092_crm_production_machine_identity", "091_production_runtime_forced_rls_cutover"],
   ["093_crm_machine_internal_context", "092_crm_production_machine_identity"],
   ["095_form_tenant_isolation", "094_website_sales_ingestion"],
+  ["096_public_integration_gateway", "095_form_tenant_isolation"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);
 const validMedia062Profiles = new Set(["production", "rehearsal"]);
 const validCrm080Profiles = new Set(["production", "rehearsal"]);
+
+export function compatibilityProfileMatchesTarget(profile, target) {
+  if (!profile) return true;
+  if (profile === "production") return target === "prod";
+  if (profile === "qa" || profile === "rehearsal") return target === "test";
+  return false;
+}
 
 function fail(message) {
   console.error(`[ERROR] ${message}`);
@@ -782,11 +791,9 @@ async function main() {
       target: target.name,
     });
     console.log("Connected database fingerprint verified");
-    if (
-      ((neon061Profile === "production" || media062Profile === "production" || crm080Profile === "production") && target.name !== "prod") ||
-      (((neon061Profile && neon061Profile !== "production") || (media062Profile && media062Profile !== "production") || (crm080Profile && crm080Profile !== "production")) && target.name !== "test")
-    ) {
-      throw new Error("The selected Neon 061 execution profile does not match MIGRATION_TARGET.");
+    if (![neon061Profile, media062Profile, crm080Profile]
+      .every((profile) => compatibilityProfileMatchesTarget(profile, target.name))) {
+      throw new Error("The selected compatibility execution profile does not match MIGRATION_TARGET.");
     }
     const runtimeRole = process.env[
       target.name === "prod"
