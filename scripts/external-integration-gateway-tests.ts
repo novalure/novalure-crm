@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { applySalesSchema, startLocalSalesDb } from "./lib/local-sales-db.mjs";
+import { verifyRetiredLookupCleanup } from "./lib/retired-lookup-cleanup.mjs";
 import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { GET as getPublicForm } from "../src/app/api/public/integrations/forms/route";
 import { POST as submitPublicForm } from "../src/app/api/public/integrations/forms/submissions/route";
@@ -175,6 +176,31 @@ test("096 forces RLS, disables the lookup login, and exposes only scoped runtime
     [siteKey, origin, randomUUID()],
   )).rowCount, 0);
   assert.equal((await db.pool.query("select id from external_integrations")).rowCount, 0);
+});
+
+test("QA cleanup preserves pre-cutover login state and exposes post-cutover drift", async () => {
+  const owner = await db.admin.connect();
+  try {
+    await owner.query("begin");
+    await owner.query("alter role novalure_public_form_lookup login password 'synthetic-legacy-test-password'");
+    assert.equal(await verifyRetiredLookupCleanup(owner), "QA_LOOKUP_PASSWORD_REVOKED cutover096=NOT_APPLIED");
+    assert.deepEqual((await owner.query(
+      "select rolcanlogin,rolpassword from pg_authid where rolname='novalure_public_form_lookup'",
+    )).rows[0], { rolcanlogin: true, rolpassword: null });
+    await owner.query("rollback");
+    await owner.query("begin");
+    await owner.query(`insert into novalure_schema_migrations(version,name,checksum)
+      values('096_public_integration_gateway','096_public_integration_gateway.sql','synthetic-cutover')`);
+    assert.equal(await verifyRetiredLookupCleanup(owner), "QA_LOOKUP_REVOKE_PASS lookupRole=NOLOGIN password=NULL");
+    await owner.query("alter role novalure_public_form_lookup login");
+    await assert.rejects(verifyRetiredLookupCleanup(owner), /QA_LOOKUP_REVOKE_UNVERIFIED/);
+    assert.equal((await owner.query(
+      "select rolcanlogin from pg_roles where rolname='novalure_public_form_lookup'",
+    )).rows[0]?.rolcanlogin, true);
+  } finally {
+    await owner.query("rollback");
+    owner.release();
+  }
 });
 
 test("forms published after 096 receive a registry entry without restoring a database login", async () => {
