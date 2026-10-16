@@ -24,8 +24,8 @@ Ziel- oder Nutzungsfreigabe für den Studio-Chat.
 | Kalenderverfügbarkeit | Graph-`calendarView`-Code, synthetisch getestet | Berechtigung nicht belegt | Nein | Genehmigung und gesonderter realer QA-Lesenachweis für den Testkalender |
 | Terminerstellung | Graph-Event-Code, synthetisch getestet | Berechtigung nicht belegt | Nein | Genehmigung und gesonderter realer QA-Erstellnachweis mit Testteilnehmer |
 | Teams-Besprechung | Teams-Link-Auswertung, synthetisch getestet | Berechtigung nicht belegt | Nein | Genehmigung und gesonderter realer QA-Linknachweis |
-| Testempfänger | Noch keine Liste | Nein | Nein | Freigegebene E-Mail-Adressen und Nachweis, dass nur diese Einladungen empfangen dürfen |
-| Terminregeln | Validierung im Code | Keine Werte freigegeben | Nein | IANA-Zeitzone, Dauer, Intervall, Wochentagsfenster, Vorlauf, Puffer, Horizont und Genehmigungs-ID |
+| Testempfänger | `romaustria82@gmail.com` wurde vom Auftraggeber für isolierte QA benannt und als einziger Kandidat in die Vorlage übernommen | QA-Zielbindung und Empfängerfreigabe nicht belegt | Nein | Bestätigung der Zielbindung und dokumentierte Testempfängerfreigabe; die Adresse ist kein Kalenderorganisator |
+| Terminregeln | Kandidat: 30 Minuten, Mo–Fr 09:00–17:00 Europe/Dublin, 15 Minuten Puffer, 24 Stunden Vorlauf, 7 Tage Horizont | Produktionsfreigabe nicht erteilt | Nein | Bestätigung des Vorschlags, Startintervall in Minuten und Genehmigungs-ID |
 | Studio–CRM-Verbindung | Versionierte HMAC-Schnittstelle im Code | QA-Bindung nicht belegt | Nein | Exakte HTTPS-Preview-Origins, Studio-/CRM-Projektidentität und dieselbe sicher hinterlegte Signatur auf beiden QA-Seiten |
 | Dauerhafter Status | Migration 097 und CRM-Beleg-/Buchungstabellen lokal getestet | QA-Migration nicht freigegeben/angewandt | Nein | Freigabe und Nachweis von Migration 097, Laufzeit-RLS, Lead-/Buchungsbeleg, Wiederaufnahme und Rollback im isolierten QA-Ziel |
 
@@ -39,6 +39,12 @@ Besuchertexte in die Vorlage schreiben. Der lokale, rein statische Check:
 ```powershell
 npm run qa:studio-sales:preflight -- .npm-cache/qa/studio-sales-qa-config.json
 ```
+
+Die Vorlage enthält jetzt ausschließlich die vom Auftraggeber genannten
+Kandidatenwerte. `organizerId`, `calendarId`, `intervalMinutes`, Freigabe- und
+QA-Zielkennungen bleiben leer. Sie aktiviert keinen Kalender. Die
+Slotberechnung verlangt, dass Start **und Ende** innerhalb 09:00–17:00 liegen;
+vorhandene Belegungen und beidseitiger Puffer werden berücksichtigt.
 
 Ohne ausgefüllte Vorlage liefert der Check `QA_BLOCKED` und nur Feldnamen.
 Ein vollständiger Kandidat beweist noch weder externe Freigabe noch

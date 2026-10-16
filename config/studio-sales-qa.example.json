@@ -19,15 +19,21 @@
     "approvalId": null,
     "organizerId": null,
     "calendarId": null,
-    "timeZone": null,
-    "durationMinutes": null,
+    "timeZone": "Europe/Dublin",
+    "durationMinutes": 30,
     "intervalMinutes": null,
-    "minNoticeMinutes": null,
-    "bufferMinutes": null,
-    "horizonDays": null,
-    "hours": {}
+    "minNoticeMinutes": 1440,
+    "bufferMinutes": 15,
+    "horizonDays": 7,
+    "hours": {
+      "1": [{ "start": 540, "end": 1020 }],
+      "2": [{ "start": 540, "end": 1020 }],
+      "3": [{ "start": 540, "end": 1020 }],
+      "4": [{ "start": 540, "end": 1020 }],
+      "5": [{ "start": 540, "end": 1020 }]
+    }
   },
-  "approvedTestRecipients": [],
+  "approvedTestRecipients": ["romaustria82@gmail.com"],
   "evidence": {
     "isolatedTargetApproval": null,
     "calendarReadApproval": null,
