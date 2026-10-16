@@ -17,11 +17,11 @@
   "studioActorId": "6122a6da-e7f4-47fa-bc55-e296bb01af62",
   "calendarPolicy": {
     "approvalId": null,
-    "organizerId": null,
+    "organizerId": "c1a67ebd-e3f6-428d-a4aa-17f8cf4c9052",
     "calendarId": null,
     "timeZone": "Europe/Dublin",
     "durationMinutes": 30,
-    "intervalMinutes": null,
+    "intervalMinutes": 15,
     "minNoticeMinutes": 1440,
     "bufferMinutes": 15,
     "horizonDays": 7,
