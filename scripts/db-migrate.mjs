@@ -63,6 +63,7 @@ const migrationDependencies = new Map([
   ["093_crm_machine_internal_context", "092_crm_production_machine_identity"],
   ["095_form_tenant_isolation", "094_website_sales_ingestion"],
   ["096_public_integration_gateway", "095_form_tenant_isolation"],
+  ["097_studio_sales_calendar_bridge", "096_public_integration_gateway"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

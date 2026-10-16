@@ -161,6 +161,26 @@ async function getGraphToken(workspaceId?: string): Promise<GraphToken | null> {
   };
 }
 
+/** Studio booking must use an explicitly bound organizer, never an ambient /me token. */
+export async function getMicrosoftCalendarAppToken(expectedOrganizerId: string): Promise<string | null> {
+  const tenantId = envValue("MICROSOFT_TENANT_ID");
+  const clientId = envValue("MICROSOFT_CLIENT_ID");
+  const clientSecret = envValue("MICROSOFT_CLIENT_SECRET");
+  const calendarUserId = envValue("MICROSOFT_CALENDAR_USER_ID");
+  if (!tenantId || !clientId || !clientSecret || !calendarUserId ||
+      calendarUserId !== expectedOrganizerId) return null;
+  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret,
+      grant_type: "client_credentials", scope: "https://graph.microsoft.com/.default" }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  const data = await response.json().catch(() => ({})) as { access_token?: string };
+  if (!response.ok || !data.access_token) throw new Error("calendar_auth_unavailable");
+  return data.access_token;
+}
+
 export async function syncMicrosoftCalendarEvent(input: {
   subject: string;
   startsAt: string;

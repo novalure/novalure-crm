@@ -121,6 +121,17 @@ export async function POST(request: Request) {
   if (!actor) {
     return failure(503, "temporarily_unavailable");
   }
+  if (request.headers.get("x-novalure-status-only") === "1") {
+    try {
+      const snapshot = await withPublicSubmissionTransaction(
+        { actorId: actor.id, workspaceId: websiteSalesWorkspaceId },
+        () => readCompletedPublicSubmissionIdempotency(hashes),
+      );
+      return snapshot ? responseFromSnapshot(snapshot) : failure(404, "submission_not_confirmed");
+    } catch {
+      return failure(503, "temporarily_unavailable");
+    }
+  }
   try {
     const snapshot = await withPublicSubmissionTransaction(
       { actorId: actor.id, workspaceId: websiteSalesWorkspaceId },
@@ -154,8 +165,20 @@ export async function POST(request: Request) {
           requestUrl: String((payload.attribution ?? {}).pageUrl || "https://novalurestudio.ie/"),
         });
         if (!persistence.persisted) throw new Error("Website Sales form was not persisted");
+        if (!persistence.ids?.leadId || !persistence.ids.submissionId) {
+          throw new Error("Website Sales CRM identifiers were not persisted");
+        }
+        const reference = createWebsiteSalesReference();
+        await queryOne<{ reference: string }>(
+          `insert into studio_sales_handoffs
+             (workspace_id, reference, lead_id, submission_id, contact_email, idempotency_hash)
+           values ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6)
+           returning reference`,
+          [websiteSalesWorkspaceId, reference, persistence.ids.leadId,
+            persistence.ids.submissionId, payload.email, hashes.idempotencyHash],
+        );
         const accepted: PublicSubmissionResponseSnapshot = {
-          body: { accepted: true, reference: createWebsiteSalesReference() }, kind: "json", status: 202,
+          body: { accepted: true, reference, crmLeadId: persistence.ids.leadId }, kind: "json", status: 202,
         };
         await completePublicSubmissionIdempotency({
           idempotencyHash: hashes.idempotencyHash,

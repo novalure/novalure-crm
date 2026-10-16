@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { startLocalSalesDb, applySalesSchema } from "./lib/local-sales-db.mjs";
 import { closeLocalTestPool, getLocalTestPool } from "../src/lib/db/local-test-transport";
 import type { PoolClient } from "@neondatabase/serverless";
-import { PublicSubmissionTransactionError, withPublicSubmissionTransaction } from "../src/lib/db/client";
+import { PublicSubmissionTransactionError, queryRows, withPublicSubmissionTransaction } from "../src/lib/db/client";
 import { getPublicWebsiteFormByKey, listWebsiteForms, persistWebsiteFormSubmission, upsertWebsiteForm } from "../src/lib/db/form-repositories";
 import { getRolePermissions } from "../src/lib/auth/permissions";
 import { getProductRoleCapabilities } from "../src/lib/product-model";
@@ -21,6 +21,9 @@ import { createPublicSubmissionIdempotencyHashes, buildPublicSubmissionScope, cr
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
 import { buildWebsiteSalesSignature, websiteSalesContractVersion } from "../src/lib/website-sales-ingestion";
 import { POST as ingestWebsiteSales } from "../src/app/api/public/website-sales/route";
+import { POST as studioBookingPost } from "../src/app/api/public/website-sales/booking/route";
+import { availableStudioSlots } from "../src/lib/studio-sales-booking";
+import type { StudioCalendarPolicy } from "../src/lib/integrations/studio-microsoft-calendar";
 import { POST as submitGenericForm } from "../src/app/api/forms/submissions/route";
 import { GET as renderGenericEmbed } from "../src/app/forms/embed/route";
 import { isBusinessKpiRecord, businessKpiSqlPredicate } from "../src/lib/website-sales-kpi";
@@ -37,6 +40,13 @@ const savedEnv = {
   NOVALURE_STUDIO_INGESTION_SECRET: process.env.NOVALURE_STUDIO_INGESTION_SECRET,
   NOVALURE_TRUSTED_CLIENT_IP_HEADER: process.env.NOVALURE_TRUSTED_CLIENT_IP_HEADER,
   NODE_ENV: process.env.NODE_ENV,
+  STUDIO_BOOKING_REAL_MODE: process.env.STUDIO_BOOKING_REAL_MODE,
+  STUDIO_BOOKING_POLICY_JSON: process.env.STUDIO_BOOKING_POLICY_JSON,
+  STUDIO_BOOKING_CONFIG_APPROVAL_ID: process.env.STUDIO_BOOKING_CONFIG_APPROVAL_ID,
+  MICROSOFT_TENANT_ID: process.env.MICROSOFT_TENANT_ID,
+  MICROSOFT_CLIENT_ID: process.env.MICROSOFT_CLIENT_ID,
+  MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
+  MICROSOFT_CALENDAR_USER_ID: process.env.MICROSOFT_CALENDAR_USER_ID,
 };
 
 before(async () => {
@@ -100,6 +110,11 @@ before(async () => {
   await db.admin.query(
     `insert into novalure_schema_migrations(version,name,checksum)
      values('096_public_integration_gateway','096_public_integration_gateway.sql','synthetic-prerequisite')`,
+  );
+  await db.admin.query(await readFile(new URL("../migrations/097_studio_sales_calendar_bridge.sql", import.meta.url), "utf8"));
+  await db.admin.query(
+    `insert into novalure_schema_migrations(version,name,checksum)
+     values('097_studio_sales_calendar_bridge','097_studio_sales_calendar_bridge.sql','synthetic-prerequisite')`,
   );
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.CRM_LOCAL_TEST_DATABASE = "1";
@@ -268,26 +283,207 @@ test("signed HTTP ingestion returns the same success receipt with one set of CRM
   });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = buildWebsiteSalesSignature({ body, secret: process.env.NOVALURE_STUDIO_INGESTION_SECRET!, timestamp });
-  const submit = () => ingestWebsiteSales(new Request("https://crm.example.invalid/api/public/website-sales", {
+  const submit = (statusOnly = false) => ingestWebsiteSales(new Request("https://crm.example.invalid/api/public/website-sales", {
     body,
     headers: {
       "content-type": "application/json",
       "x-novalure-client-ip": "203.0.113.10",
       "x-novalure-signature": signature,
       "x-novalure-timestamp": timestamp,
+      ...(statusOnly ? { "x-novalure-status-only": "1" } : {}),
     },
     method: "POST",
   }));
   const first = await submit();
   assert.equal(first.status, 202);
   const receipt = await first.json();
+  assert.match(receipt.crmLeadId, /^[0-9a-f-]{36}$/);
   const second = await submit();
   assert.equal(second.status, 202);
   assert.deepEqual(await second.json(), receipt);
+  const status = await submit(true);
+  assert.equal(status.status, 202);
+  assert.deepEqual(await status.json(), receipt);
+  const durable = await db.admin.query(
+    "select lead_id, submission_id from studio_sales_handoffs where reference=$1", [receipt.reference],
+  );
+  assert.equal(durable.rows.length, 1);
+  assert.equal(durable.rows[0].lead_id, receipt.crmLeadId);
   const after = await counts();
   for (const relation of ["contacts", "leads", "deals", "tasks", "form_submissions"]) {
     assert.equal(after[relation], before[relation] + 1, `${relation} was inserted once`);
   }
+});
+
+test("Studio booking persists the lead link, deduplicates creation and reconciles a provider timeout", { timeout: 240_000 }, async () => {
+  const secret = process.env.NOVALURE_STUDIO_INGESTION_SECRET!;
+  const leadBody = JSON.stringify({ company: "SYNTHETIC Studio Booking", consent: true,
+    email: "studio-booking@example.invalid", idempotencyKey: randomUUID(),
+    message: "SYNTHETIC website booking consultation", name: "SYNTHETIC Buyer",
+    packageInterest: "UNDECIDED", syntheticTest: true, version: websiteSalesContractVersion });
+  const timestamp = String(Math.floor(Date.now() / 1_000));
+  const leadSignature = buildWebsiteSalesSignature({ body: leadBody, secret, timestamp });
+  const lead = await ingestWebsiteSales(new Request("https://crm.example.invalid/api/public/website-sales", {
+    method: "POST", body: leadBody, headers: { "content-type": "application/json",
+      "x-novalure-client-ip": "203.0.113.10", "x-novalure-signature": leadSignature,
+      "x-novalure-timestamp": timestamp },
+  }));
+  assert.equal(lead.status, 202);
+  const leadReceipt = await lead.json();
+  const policy: StudioCalendarPolicy = { approvalId: "SYNTHETIC-QA-2026",
+    organizerId: "synthetic-franz@example.invalid", calendarId: "synthetic-calendar-id",
+    timeZone: "UTC", durationMinutes: 30, intervalMinutes: 30, minNoticeMinutes: 0,
+    bufferMinutes: 15, horizonDays: 2,
+    hours: Object.fromEntries(Array.from({ length: 7 }, (_, day) =>
+      [String(day), [{ start: 0, end: 1440 }]])) };
+  Object.assign(process.env, { STUDIO_BOOKING_REAL_MODE: "1",
+    STUDIO_BOOKING_POLICY_JSON: JSON.stringify(policy),
+    STUDIO_BOOKING_CONFIG_APPROVAL_ID: policy.approvalId,
+    MICROSOFT_TENANT_ID: "synthetic-tenant", MICROSOFT_CLIENT_ID: "synthetic-client",
+    MICROSOFT_CLIENT_SECRET: "synthetic-secret", MICROSOFT_CALENDAR_USER_ID: policy.organizerId });
+  const originalFetch = global.fetch;
+  const events: Array<{ id: string; transactionId: string; start: { dateTime: string };
+    end: { dateTime: string }; showAs: string; onlineMeeting: { joinUrl: string } }> = [];
+  let creates = 0;
+  let timeoutAfterCreate = false;
+  let denyGraph = false;
+  const createdPayloads: Array<Record<string, unknown>> = [];
+  global.fetch = async (url, options = {}) => {
+    const target = String(url);
+    if (target.startsWith("https://login.microsoftonline.com/")) {
+      if (denyGraph) return new Response(JSON.stringify({ error: "denied" }), { status: 403 });
+      return new Response(JSON.stringify({ access_token: "SYNTHETIC-TOKEN" }), { status: 200 });
+    }
+    if (target.includes("/calendarView")) {
+      return new Response(JSON.stringify({ value: events }), { status: 200 });
+    }
+    if (target.endsWith("/events") && options.method === "POST") {
+      creates += 1;
+      const payload = JSON.parse(String(options.body));
+      createdPayloads.push(payload);
+      events.push({ id: `SYNTHETIC-GRAPH-${creates}`, transactionId: payload.transactionId,
+        start: payload.start, end: payload.end, showAs: "busy",
+        onlineMeeting: { joinUrl: payload.isOnlineMeeting
+          ? "https://teams.microsoft.com/l/meetup-join/synthetic" : "" } });
+      if (timeoutAfterCreate) throw new Error("SYNTHETIC timeout after provider creation");
+      return new Response(JSON.stringify(events.at(-1)), { status: 201 });
+    }
+    throw new Error("Unexpected synthetic provider request");
+  };
+  const signedBooking = async (body: Record<string, unknown>, badSignature = false) => {
+    const raw = JSON.stringify(body);
+    const signature = createHmac("sha256", secret)
+      .update(`website-sales-booking-v1.${timestamp}.${raw}`).digest("base64url");
+    return studioBookingPost(new Request("https://crm.example.invalid/api/public/website-sales/booking", {
+      method: "POST", body: raw, headers: { "content-type": "application/json",
+        "x-novalure-signature": badSignature ? "invalid" : signature,
+        "x-novalure-timestamp": timestamp },
+    }));
+  };
+  try {
+    assert.equal((await signedBooking({ operation: "availability", kind: "teams",
+      visitorTimeZone: "UTC" }, true)).status, 401);
+    const availability = await signedBooking({ operation: "availability", kind: "teams",
+      visitorTimeZone: "UTC" });
+    assert.equal(availability.status, 200);
+    const slots = (await availability.json()).slots as Array<{ start: string }>;
+    assert.ok(slots.length >= 2);
+    const booking = { confirmed: true, idempotencyKey: randomUUID(),
+      crmReference: leadReceipt.reference, kind: "teams", visitorTimeZone: "UTC",
+      start: slots[0].start, name: "SYNTHETIC Buyer", email: "studio-booking@example.invalid",
+      phone: "", reason: "SYNTHETIC website consultation" };
+    assert.equal((await signedBooking({ operation: "book", booking: { ...booking,
+      crmReference: "NL-00000000" } })).status, 503);
+    const first = await signedBooking({ operation: "book", booking });
+    assert.equal(first.status, 200);
+    const receipt = await first.json();
+    assert.equal(receipt.status, "booked");
+    assert.equal(receipt.eventId, "SYNTHETIC-GRAPH-1");
+    assert.equal(receipt.invitationTriggered, true);
+    assert.equal((await signedBooking({ operation: "book", booking })).status, 200);
+    assert.equal((await signedBooking({ operation: "book", booking: {
+      ...booking, idempotencyKey: randomUUID() } })).status, 409);
+    assert.equal(creates, 1);
+    const stored = await db.admin.query(
+      "select b.lead_id, b.provider_event_id, b.status from studio_sales_bookings b where b.crm_reference=$1",
+      [leadReceipt.reference]);
+    assert.equal(stored.rows[0].lead_id, leadReceipt.crmLeadId);
+    assert.equal(stored.rows[0].provider_event_id, receipt.eventId);
+    assert.equal(stored.rows[0].status, "booked");
+    const otherActorRows = await withPublicSubmissionTransaction(
+      { actorId: genericActorId, workspaceId: websiteSalesWorkspaceId },
+      () => queryRows("select reference from studio_sales_handoffs where reference=$1", [leadReceipt.reference]),
+    );
+    assert.equal(otherActorRows.length, 0);
+    const secondBooking = { ...booking, idempotencyKey: randomUUID(), start: slots.at(-1)!.start };
+    timeoutAfterCreate = true;
+    const uncertain = await signedBooking({ operation: "book", booking: secondBooking });
+    assert.equal((await uncertain.json()).status, "uncertain");
+    timeoutAfterCreate = false;
+    const changedPolicy = { ...policy, calendarId: "synthetic-other-calendar",
+      approvalId: "SYNTHETIC-QA-OTHER" };
+    process.env.STUDIO_BOOKING_POLICY_JSON = JSON.stringify(changedPolicy);
+    process.env.STUDIO_BOOKING_CONFIG_APPROVAL_ID = changedPolicy.approvalId;
+    const mismatched = await signedBooking({ operation: "status",
+      idempotencyKey: secondBooking.idempotencyKey, crmReference: leadReceipt.reference });
+    assert.equal((await mismatched.json()).status, "uncertain");
+    process.env.STUDIO_BOOKING_POLICY_JSON = JSON.stringify(policy);
+    process.env.STUDIO_BOOKING_CONFIG_APPROVAL_ID = policy.approvalId;
+    const reconciled = await signedBooking({ operation: "status",
+      idempotencyKey: secondBooking.idempotencyKey, crmReference: leadReceipt.reference });
+    assert.equal((await reconciled.json()).status, "booked");
+    assert.equal(creates, 2);
+    const phoneBooking = { ...booking, idempotencyKey: randomUUID(), kind: "phone",
+      phone: "+353 00 000 0000", start: slots.at(-3)!.start };
+    const phoneResult = await signedBooking({ operation: "book", booking: phoneBooking });
+    const phoneReceipt = await phoneResult.json();
+    assert.equal(phoneReceipt.status, "booked");
+    assert.equal(phoneReceipt.teamsUrl, null);
+    assert.equal(createdPayloads.at(-1)?.isOnlineMeeting, false);
+    assert.equal((createdPayloads.at(-1)?.attendees as Array<{ emailAddress: { address: string } }>)[0].emailAddress.address,
+      booking.email);
+    const parallelSlot = slots.at(-5)!.start;
+    const parallel = await Promise.all([randomUUID(), randomUUID()].map((key) =>
+      signedBooking({ operation: "book", booking: { ...booking, idempotencyKey: key,
+        start: parallelSlot } })));
+    assert.deepEqual(parallel.map((response) => response.status).sort(), [200, 409]);
+    assert.equal(creates, 4);
+    await db.admin.query(`create function synthetic_studio_finish_failure() returns trigger
+      language plpgsql as $$ begin if new.status='booked' then
+      raise exception 'SYNTHETIC CRM link failure'; end if; return new; end $$`);
+    await db.admin.query(`create trigger synthetic_studio_finish_failure before update
+      on studio_sales_bookings for each row execute function synthetic_studio_finish_failure()`);
+    const failedLink = { ...booking, idempotencyKey: randomUUID(), start: slots.at(-7)!.start };
+    try {
+      const result = await signedBooking({ operation: "book", booking: failedLink });
+      assert.equal((await result.json()).status, "uncertain");
+      assert.equal(creates, 5);
+    } finally {
+      await db.admin.query("drop trigger if exists synthetic_studio_finish_failure on studio_sales_bookings");
+      await db.admin.query("drop function if exists synthetic_studio_finish_failure()");
+    }
+    const linkRecovered = await signedBooking({ operation: "status",
+      idempotencyKey: failedLink.idempotencyKey, crmReference: leadReceipt.reference });
+    assert.equal((await linkRecovered.json()).status, "booked");
+    assert.equal(creates, 5);
+    denyGraph = true;
+    const denied = await signedBooking({ operation: "availability", kind: "teams",
+      visitorTimeZone: "UTC" });
+    assert.equal(denied.status, 503);
+    assert.equal((await denied.json()).status, "request_only");
+    assert.equal(creates, 5);
+  } finally { global.fetch = originalFetch; }
+});
+
+test("Studio slot generation omits DST gaps and repeated local clocks", () => {
+  const policy: StudioCalendarPolicy = { approvalId: "SYNTHETIC-QA-2026",
+    organizerId: "synthetic", calendarId: "synthetic", timeZone: "Europe/Dublin",
+    durationMinutes: 30, intervalMinutes: 30, minNoticeMinutes: 0, bufferMinutes: 0,
+    horizonDays: 1, hours: { "0": [{ start: 60, end: 180 }] } };
+  const spring = availableStudioSlots(policy, [], new Date("2026-03-29T00:00:00Z"));
+  const autumn = availableStudioSlots(policy, [], new Date("2026-10-25T00:00:00Z"));
+  assert.equal(spring.length, 2);
+  assert.equal(autumn.length, 2);
 });
 
 test("public submission transactions reject an invalid scope or privileged role before business writes", async () => {
@@ -353,10 +549,10 @@ test("synthetic records are visible in operational storage but excluded by KPI p
     `select ${businessKpiSqlPredicate} as synthetic from leads where workspace_id=$1`,
     [websiteSalesWorkspaceId],
   );
-  assert.equal(rows.rows.length, 3);
   assert.ok(rows.rows.every((row) => row.synthetic === false));
   const submissions = await db.admin.query<{ mode: string }>("select mode from form_submissions where form_id=$1", [websiteSalesFormId]);
-  assert.equal(submissions.rows.length, 3);
+  assert.ok(rows.rows.length >= 3);
+  assert.equal(submissions.rows.length, rows.rows.length);
   assert.ok(submissions.rows.every((row) => row.mode === "test"));
   const form = await db.admin.query<{ submissions_count: number }>("select submissions_count from forms where id=$1", [websiteSalesFormId]);
   assert.equal(form.rows[0].submissions_count, 0);
