@@ -1,0 +1,40 @@
+{
+  "approvalRecordId": null,
+  "studioPreviewOrigin": null,
+  "crmPreviewOrigin": null,
+  "studioProjectId": null,
+  "crmProjectId": null,
+  "qaRunPrefix": null,
+  "database": {
+    "qaProjectId": null,
+    "qaBranchId": null,
+    "qaDatabaseName": null,
+    "qaRuntimeRole": null,
+    "qaPoolerHost": null,
+    "productionHostForComparison": null
+  },
+  "studioWorkspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+  "studioActorId": "6122a6da-e7f4-47fa-bc55-e296bb01af62",
+  "calendarPolicy": {
+    "approvalId": null,
+    "organizerId": null,
+    "calendarId": null,
+    "timeZone": null,
+    "durationMinutes": null,
+    "intervalMinutes": null,
+    "minNoticeMinutes": null,
+    "bufferMinutes": null,
+    "horizonDays": null,
+    "hours": {}
+  },
+  "approvedTestRecipients": [],
+  "evidence": {
+    "isolatedTargetApproval": null,
+    "calendarReadApproval": null,
+    "eventCreateApproval": null,
+    "teamsMeetingApproval": null,
+    "testRecipientApproval": null,
+    "sharedSigningSecretBinding": null,
+    "migration097AndRollbackApproval": null
+  }
+}

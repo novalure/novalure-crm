@@ -1,5 +1,7 @@
 import { getMicrosoftCalendarAppToken } from "@/lib/integrations/microsoft-calendar";
 import { escapeHtmlText } from "@/lib/security/public-submission-abuse";
+import { isStudioIsolatedLocalTest, studioQaRecipients,
+  studioQaTargetConfiguration } from "@/lib/studio-sales-qa-readiness";
 
 export type StudioCalendarPolicy = {
   approvalId: string;
@@ -12,6 +14,7 @@ export type StudioCalendarPolicy = {
   bufferMinutes: number;
   horizonDays: number;
   hours: Record<string, Array<{ start: number; end: number }>>;
+  qaRecipients?: string[];
 };
 export type StudioCalendarEvent = {
   confirmed: true;
@@ -26,10 +29,13 @@ function validZone(value: string) {
 }
 
 export function readStudioCalendarPolicy(env: NodeJS.ProcessEnv = process.env): StudioCalendarPolicy | null {
-  const isolatedLocalTest = env.NODE_ENV === "test" && env.CRM_LOCAL_TEST_DATABASE === "1";
+  const isolatedLocalTest = isStudioIsolatedLocalTest(env);
   if (!isolatedLocalTest && env.VERCEL_ENV !== "preview") return null;
+  const recipients = isolatedLocalTest ? [] : studioQaRecipients(env);
+  if (!isolatedLocalTest && (!studioQaTargetConfiguration(env) || !recipients)) return null;
   if (env.STUDIO_BOOKING_REAL_MODE !== "1" || !env.STUDIO_BOOKING_POLICY_JSON ||
-      !env.STUDIO_BOOKING_CONFIG_APPROVAL_ID) return null;
+      !env.STUDIO_BOOKING_CONFIG_APPROVAL_ID || !env.MICROSOFT_TENANT_ID?.trim() ||
+      !env.MICROSOFT_CLIENT_ID?.trim() || !env.MICROSOFT_CLIENT_SECRET?.trim()) return null;
   let value: Partial<StudioCalendarPolicy>;
   try { value = JSON.parse(env.STUDIO_BOOKING_POLICY_JSON) as Partial<StudioCalendarPolicy>; }
   catch { return null; }
@@ -50,7 +56,7 @@ export function readStudioCalendarPolicy(env: NodeJS.ProcessEnv = process.env): 
       !Number.isInteger(window.start) || !Number.isInteger(window.end) ||
       window.start < 0 || window.end > 1440 || window.end <= window.start)) return null;
   }
-  return value as StudioCalendarPolicy;
+  return { ...value, qaRecipients: recipients } as StudioCalendarPolicy;
 }
 
 function calendarRoot(policy: StudioCalendarPolicy) {

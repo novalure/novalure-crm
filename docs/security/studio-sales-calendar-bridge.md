@@ -56,6 +56,11 @@ leaves the booking row for the same reconciliation path. The visitor receives
 
 ## Configuration and proof still required
 
+The current isolated-QA inventory, secret-free template, fail-closed checks and
+run sequence are in [Studio Sales isolated QA](../qa/studio-sales-isolated-qa.md).
+Preview booking now additionally requires a matching Neon target fingerprint
+and an explicit QA recipient allowlist; neither is provided by this branch.
+
 - Approved isolated Preview CRM and Neon target, separate from Production.
 - Approved Franz organizer ID, exact calendar ID, IANA time zone, duration,
   slot interval, daily windows, notice, buffer and horizon in

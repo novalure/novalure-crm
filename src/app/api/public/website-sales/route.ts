@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/public-submission-abuse-repository";
 import { persistWebsiteFormSubmission } from "@/lib/db/form-repositories";
 import { PublicSubmissionTransactionError, queryOne, withPublicSubmissionTransaction } from "@/lib/db/client";
+import { studioQaDatabaseMatches, studioQaRecipients } from "@/lib/studio-sales-qa-readiness";
 import {
   createWebsiteSalesReference,
   parseWebsiteSalesLeadPayload,
@@ -66,6 +67,12 @@ export async function POST(request: Request) {
   const clientIp = resolveWebsiteSalesClientIp(request.headers.get("x-novalure-client-ip"));
   if (!payload) return failure(400, "invalid_submission");
   if (!clientIp) return failure(400, "invalid_client_ip");
+  if (process.env.VERCEL_ENV === "preview" && process.env.STUDIO_BOOKING_REAL_MODE === "1") {
+    const recipients = studioQaRecipients();
+    if (!recipients || !recipients.includes(payload.email) || !await studioQaDatabaseMatches()) {
+      return failure(503, "studio_qa_target_unverified");
+    }
+  }
 
   const scope = buildPublicSubmissionScope({
     resourceId: websiteSalesFormId,

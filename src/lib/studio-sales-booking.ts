@@ -203,6 +203,9 @@ export async function studioBookingStatus(policy: StudioCalendarPolicy, input: {
 
 export async function studioBook(policy: StudioCalendarPolicy, raw: unknown) {
   const input = validatedBooking(raw);
+  if (policy.qaRecipients?.length && !policy.qaRecipients.includes(input.email)) {
+    throw new StudioBookingFailure("qa_recipient_not_approved");
+  }
   const keyHash = sha(`studio-booking-v1:${input.idempotencyKey}`);
   const requestHash = sha(JSON.stringify({ reference: input.crmReference, kind: input.kind,
     visitorTimeZone: input.visitorTimeZone, start: input.start, name: input.name,

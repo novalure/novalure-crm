@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readStudioCalendarPolicy } from "@/lib/integrations/studio-microsoft-calendar";
+import { studioQaDatabaseMatches } from "@/lib/studio-sales-qa-readiness";
 import { StudioBookingFailure, studioBook, studioBookingAvailability,
   studioBookingStatus } from "@/lib/studio-sales-booking";
 
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
   })) return reply(401, { status: "failed", code: "unauthorized" });
   const policy = readStudioCalendarPolicy();
   if (!policy) return reply(503, { status: "request_only", code: "booking_configuration_unavailable" });
+  if (!await studioQaDatabaseMatches()) {
+    return reply(503, { status: "request_only", code: "qa_target_unverified" });
+  }
   let body: Record<string, unknown>;
   try { body = JSON.parse(rawBody) as Record<string, unknown>; }
   catch { return reply(400, { status: "failed", code: "invalid_json" }); }
