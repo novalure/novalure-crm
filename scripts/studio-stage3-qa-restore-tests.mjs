@@ -15,6 +15,7 @@ const providerDefaultGrants = [
   ...['SELECT', 'UPDATE', 'USAGE'].map((privilege_type) => ({ owner: 'cloud_admin', schema: 'public', defaclobjtype: 'S', grantee: 'neon_superuser', grantor: 'cloud_admin', privilege_type, is_grantable: true })),
   ...['DELETE', 'INSERT', 'MAINTAIN', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE'].map((privilege_type) => ({ owner: 'cloud_admin', schema: 'public', defaclobjtype: 'r', grantee: 'neon_superuser', grantor: 'cloud_admin', privilege_type, is_grantable: true }))
 ];
+const providerDefaultAclObjects = ['sequences', 'tables'].map((kind) => ({ catalog: 'pg_default_acl', object_type: 'default acl', schema: null, name: null, identity: 'for role cloud_admin in schema public on ' + kind }));
 const sourceProfile = await captureExtensionMetadata({ query: async (sql) => ({ rows:
   sql === extensionQueries.server ? [{ version: '17.11', version_num: 170011 }] :
     sql === extensionQueries.installed ? installed : sql === extensionQueries.members ? members :
@@ -25,7 +26,7 @@ const fp = () => ({ databaseName: sourceTarget.databaseName, projectId: sourceTa
   executionReceipts: { sha256: 'c'.repeat(64), original061Verified: true },
   data: { sha256: 'd'.repeat(64), tables: 141, rows: 118 },
   classification: { markerChecks: 'PASS_NARROW_MARKER_CHECKS' } });
-function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false, preparedMembers = members, preparedPrivileges = privileges, defaultGrants = [], preparedDefaultGrants } = {}) {
+function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false, preparedMembers = members, preparedPrivileges = privileges, defaultGrants = [], preparedDefaultGrants, defaultAclObjects = [], preparedDefaultAclObjects } = {}) {
   const calls = []; let roleReads = 0, extensionCreates = 0, installedReads = 0;
   return { calls, async query(sql) {
     calls.push(sql);
@@ -46,9 +47,9 @@ function targetClient({ nonempty = false, badIdentity = false, existing = false,
     if (sql === extensionQueries.available) return { rows: sourceExtensions.filter((row) => !unavailableVersion || row.name !== 'vector') };
     if (sql === extensionQueries.globalObjects) return { rows: [{ count: extraGlobal ? 1 : 0 }] };
     if (sql === extensionQueries.userObjects) return { rows: extensionCreates === 2
-      ? [...sourceExtensions.map((row) => ({ catalog: 'pg_extension', object_type: 'extension', schema: null, name: row.name, identity: row.name })), ...preparedMembers,
+      ? [...(preparedDefaultAclObjects || defaultAclObjects), ...sourceExtensions.map((row) => ({ catalog: 'pg_extension', object_type: 'extension', schema: null, name: row.name, identity: row.name })), ...preparedMembers,
         ...(preparedExtraObject ? [{ catalog: 'pg_proc', object_type: 'function', schema: 'public', name: 'extra', identity: 'public.extra()' }] : [])]
-      : nonempty ? [{ catalog: 'pg_class', object_type: 'table', schema: 'public', name: 'extra', identity: 'public.extra' }] : [] };
+      : [...defaultAclObjects, ...(nonempty ? [{ catalog: 'pg_class', object_type: 'table', schema: 'public', name: 'extra', identity: 'public.extra' }] : [])] };
     if (sql.startsWith('create extension')) extensionCreates++;
     if (sql.startsWith('select rolname')) {
       roleReads += 1;
@@ -292,7 +293,7 @@ test('the two actual provider default ACLs are preserved exactly before and afte
           sql === catalogQueries.schemaGrants ? schemaGrants : sql === catalogQueries.defaultGrants ? providerDefaultGrants : [] }) });
   assert.equal(profile.defaultGrants.length, 11); assert.equal(profile.format, 'studio-stage3-source-extension-profile-v2');
   const report = { ...fp(), extensionProfile: profile };
-  const fixture = (targetOptions = {}) => runOptions({ targetOptions: { defaultGrants: providerDefaultGrants, ...targetOptions },
+  const fixture = (targetOptions = {}) => runOptions({ targetOptions: { defaultGrants: providerDefaultGrants, defaultAclObjects: providerDefaultAclObjects, ...targetOptions },
     options: { approvedSource: report, capture: async () => report } });
   assert.equal((await restoreSelectedQa(fixture().options)).status, 'PASS');
   const changedRows = [
@@ -304,6 +305,14 @@ test('the two actual provider default ACLs are preserved exactly before and afte
   for (const rows of changedRows) for (const stage of ['initial', 'prepared']) {
     const run = fixture(stage === 'initial' ? { defaultGrants: rows } : { preparedDefaultGrants: rows });
     await assert.rejects(restoreSelectedQa(run.options), /TARGET_DEFAULT_ACL_MISMATCH/u);
+    assert.ok(!run.nativeCalls.some(([, action]) => action === 'restore'));
+    if (stage === 'initial') assert.equal(run.passwords.length, 0);
+  }
+  for (const objects of [providerDefaultAclObjects.slice(1),
+    [...providerDefaultAclObjects, { ...providerDefaultAclObjects[0], identity: 'for role other_owner in schema public on sequences' }],
+    [{ ...providerDefaultAclObjects[0], object_type: 'function' }, providerDefaultAclObjects[1]]]) for (const stage of ['initial', 'prepared']) {
+    const run = fixture(stage === 'initial' ? { defaultAclObjects: objects } : { preparedDefaultAclObjects: objects });
+    await assert.rejects(restoreSelectedQa(run.options), /TARGET_DEFAULT_ACL_OBJECT_MISMATCH/u);
     assert.ok(!run.nativeCalls.some(([, action]) => action === 'restore'));
     if (stage === 'initial') assert.equal(run.passwords.length, 0);
   }

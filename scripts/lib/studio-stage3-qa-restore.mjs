@@ -58,6 +58,21 @@ async function assertDatabaseMetadataMatches(client, expected) {
   return actual;
 }
 const privilegesSubset = (actual, source) => actual.every((privilege) => source.some((expected) => same(privilege, expected)));
+function withoutVerifiedDefaultAclObjects(objects, sourceGrants) {
+  const expected = new Map();
+  for (const grant of sourceGrants) {
+    // Only schema-scoped ACLs outside system schemas occur in this dependency
+    // inventory. ALL_SCHEMAS/system defaults remain fully compared above.
+    if (grant.schema === 'ALL_SCHEMAS' || /^pg_/u.test(grant.schema) || grant.schema === 'information_schema') continue;
+    const kind = { S: 'sequences', r: 'tables' }[grant.defaclobjtype];
+    requireValue(grant.schema === 'public' && /^[a-z_][a-z0-9_]*$/u.test(grant.owner) && kind, 'SOURCE_DEFAULT_ACL_OBJECT_UNSUPPORTED');
+    const identity = 'for role ' + grant.owner + ' in schema public on ' + kind;
+    expected.set(identity, { catalog: 'pg_default_acl', object_type: 'default acl', schema: null, name: null, identity });
+  }
+  const defaults = objects.filter((row) => row.catalog === 'pg_default_acl');
+  requireValue(defaults.length === expected.size && defaults.every((row) => same(row, expected.get(row.identity))), 'TARGET_DEFAULT_ACL_OBJECT_MISMATCH');
+  return objects.filter((row) => row.catalog !== 'pg_default_acl');
+}
 export async function inspectRestoreCatalog(client, sourceProfile, prepared = false, baseline) {
   assertSourceExtensionProfile(sourceProfile);
   const actual = await captureExtensionMetadata(client);
@@ -69,7 +84,9 @@ export async function inspectRestoreCatalog(client, sourceProfile, prepared = fa
   requireValue(actual.schemaGrants.every((row) => row.is_grantable === false && row.grantor === row.owner &&
     ((row.grantee === 'PUBLIC' && row.privilege_type === 'USAGE') ||
      (row.grantee === row.owner && ['USAGE', 'CREATE'].includes(row.privilege_type)))), 'TARGET_SCHEMA_ACL_NOT_STANDARD');
-  const objects = (await client.query(extensionQueries.userObjects)).rows;
+  // Exclude only the exact dependency objects derived from the source default
+  // ACL groups, after every actual privilege row has already matched source.
+  const objects = withoutVerifiedDefaultAclObjects((await client.query(extensionQueries.userObjects)).rows, sourceProfile.defaultGrants);
   const globals = (await client.query(extensionQueries.globalObjects)).rows[0];
   requireValue(globals?.count === 0, 'TARGET_EXTRA_GLOBAL_OBJECTS');
   if (!prepared) {
