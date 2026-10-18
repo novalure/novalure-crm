@@ -51,6 +51,7 @@ const knownReferences = [
   { table_name: "media_asset_shares", columns: ["asset_id", "workspace_id"], target_columns: ["id", "workspace_id"], delete_action: "c" },
   { table_name: "property_documents", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
   { table_name: "property_media", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
+  { table_name: "studio_enquiry_assets", columns: ["media_asset_id", "workspace_id"], target_columns: ["id", "workspace_id"], delete_action: "a" },
 ];
 export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown>[]) {
   return rows.length === knownReferences.length && knownReferences.every(expected => rows.filter(row =>
@@ -113,7 +114,7 @@ export async function deleteDatabaseMedia(input: {
       const expectedMedia = input.target?.attachmentKind === "media" ? 1 : 0;
       const expectedDocuments = input.target?.attachmentKind === "document" ? 1 : 0;
       if (!references || references.media_count !== expectedMedia || references.document_count !== expectedDocuments ||
-        references.send_count !== 0 || references.share_count !== 0 ||
+        references.send_count !== 0 || references.share_count !== 0 || references.studio_count !== 0 ||
         asset.storageAccess !== "private" || asset.isPublic || row.publicToken != null) {
         throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This file has another use, sharing history or a protected lifecycle and cannot be deleted here.");
       }

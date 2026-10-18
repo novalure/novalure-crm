@@ -111,6 +111,12 @@ jobs:
       - name: Signed and anonymous website form ingestion
         run: npm run test:website-sales-ingestion
 
+      - name: Confirmed Studio enquiry and private attachment handoff
+        run: npm run test:studio-enquiry
+
+      - name: Tenant scoped Studio enquiry detail display
+        run: npm run test:studio-enquiry-view
+
       - name: External integration gateway, public forms and training chat
         # This test owns only disposable local PostgreSQL and starts no server.
         # The later sales E2E process owns and closes its children in finally.

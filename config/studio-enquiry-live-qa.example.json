@@ -1,0 +1,27 @@
+{
+  "runId": "GOLIVETEST_REPLACE_WITH_UNIQUE_RUN",
+  "approvalId": "",
+  "signingSecret": "",
+  "qaEmail": "",
+  "qaPhone": "",
+  "crm": {
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "branch": "codex/studio-preview-crm-handoff",
+    "deploymentId": "",
+    "gitSha": "",
+    "origin": ""
+  },
+  "qa": {
+    "databaseUrl": "",
+    "host": "",
+    "projectId": "",
+    "branchId": "",
+    "databaseName": "",
+    "role": "",
+    "productionHost": ""
+  },
+  "logins": {
+    "sameWorkspace": { "email": "", "password": "", "userId": "", "workspaceId": "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101" },
+    "foreignWorkspace": { "email": "", "password": "", "userId": "", "workspaceId": "" }
+  }
+}

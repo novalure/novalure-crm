@@ -38,6 +38,7 @@ import {
 } from "@/lib/lead-deadline";
 import { PropertySalesWorkflow, openPropertySalesWorkflow } from "@/components/property-sales-workflow";
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
+import { StudioEnquiryDetails } from "@/components/studio-enquiry-details";
 
 type LeadInboxProps = {
   activeProjectId: string | null;
@@ -1387,7 +1388,7 @@ export function LeadInbox({
                     {text.selectedLead}
                   </p>
                   <h4 className="mt-1 break-words text-xl font-semibold">
-                    {selected.contact?.name ?? copy.unknownContact}
+                    {selected.contact?.name || copy.unknownContact}
                   </h4>
                   <p className="mt-1 break-words text-sm text-stone-600">
                     {selected.project?.name ?? copy.noProject} · {getCrmLeadTypeLabel(selected.lead.type, language)}
@@ -1405,6 +1406,8 @@ export function LeadInbox({
                   {selected.lead.budget ? ` ${copy.budget}: ${selected.lead.budget}.` : ""}
                 </p>
               </div>
+
+              {selected.lead.hasStudioEnquiry && <StudioEnquiryDetails key={selected.lead.id} leadId={selected.lead.id}/>}
 
               <div className="grid gap-2 text-sm sm:grid-cols-2 2xl:grid-cols-1">
                 <div className="rounded-md bg-stone-50 p-3">

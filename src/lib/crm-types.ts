@@ -292,6 +292,7 @@ export type ContactTimelineItem = {
 };
 
 export type Lead = {
+  hasStudioEnquiry?: boolean;
   division?: CrmDivision;
   version?: number;
   syntheticTest?: boolean;
