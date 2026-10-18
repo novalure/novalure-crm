@@ -24,7 +24,7 @@ export const prepareTargetQueries = Object.freeze({
   identity: "select current_setting('neon.project_id',true) as project,current_setting('neon.branch_id',true) as branch,current_database() as database,current_user as role,session_user as session_role,pg_backend_pid() as pid,(select oid::int from pg_database where datname=current_database()) as database_oid,(select pg_get_userbyid(datdba) from pg_database where datname=current_database()) as database_owner,current_setting('server_version_num')::int as server_version_num,(select rolcreatedb from pg_roles where rolname=current_user) as can_create_database",
   databases: 'select datname as name,datistemplate as is_template,pg_get_userbyid(datdba) as owner from pg_database order by datname',
   roles: "select rolname as name,rolcanlogin as login,rolsuper as superuser,rolbypassrls as bypassrls,rolcreatedb as create_database,rolcreaterole as create_role from pg_roles where rolname !~ '^pg_' order by rolname",
-  sessions: "select pid,datname as database,usename as role from pg_stat_activity where backend_type='client backend' order by pid",
+  sessions: "select pid,datname as database,usename as role,state from pg_stat_activity where backend_type='client backend' order by pid",
   prepared: 'select count(*)::int as count from pg_prepared_xacts'
 });
 
@@ -43,8 +43,14 @@ async function assertNoAppRoles(client) {
 }
 async function assertSessions(client, allowed) {
   const rows = (await client.query(prepareTargetQueries.sessions)).rows;
-  requireValue(rows.length === allowed.size && rows.every((row) => allowed.get(row.pid) === row.database && row.role === 'neondb_owner'), 'PREPARE_TARGET_FOREIGN_SESSION');
+  const owned = rows.filter((row) => allowed.has(row.pid));
+  const provider = rows.filter((row) => !allowed.has(row.pid));
+  requireValue(owned.length === allowed.size && owned.every((row) => allowed.get(row.pid) === row.database && row.role === 'neondb_owner') &&
+    provider.every((row) => row.database === 'postgres' && row.role === 'cloud_admin' && row.state === 'idle'), 'PREPARE_TARGET_FOREIGN_SESSION');
   requireValue((await client.query(prepareTargetQueries.prepared)).rows[0]?.count === 0, 'PREPARE_TARGET_PREPARED_TRANSACTION');
+  // Background PIDs and this run's own PID change between connections. Bind the
+  // reviewed plan to exact provider database/role/state/count, never ephemeral IDs.
+  return { count: provider.length, inventory: provider.map(({ database, role, state }) => ({ database, role, state })) };
 }
 async function assertNames(client, expected) {
   const rows = (await client.query(prepareTargetQueries.databases)).rows;
@@ -76,11 +82,12 @@ export async function capturePrepareTargetPreflight(client, sourceReport) {
   try {
     const selected = await identity(client, 'neondb');
     const databases = await assertNames(client, initialNames);
-    const providerRoles = await assertNoAppRoles(client); await assertSessions(client, new Map([[selected.pid, 'neondb']]));
+    const providerRoles = await assertNoAppRoles(client);
+    const providerBackgroundSessions = await assertSessions(client, new Map([[selected.pid, 'neondb']]));
     const database = await captureDatabaseMetadata(client); assertProviderBaseline(database, source);
     const extensionProfile = await emptyCatalog(client, sourceReport);
     const plan = { format: 'studio-stage3-prepare-target-preflight-v1', projectId: restoreProject, branchId: restoreBranch,
-      databaseName: 'neondb', databaseOid: selected.database_oid, database, extensionProfile, databases, providerRoles,
+      databaseName: 'neondb', databaseOid: selected.database_oid, database, extensionProfile, databases, providerRoles, providerBackgroundSessions,
       managementDatabase, providerBaselineDatabase, sourceDatabaseSha256: source.sha256,
       sourceExtensionProfileSha256: sourceReport.extensionProfile.sha256,
       sourceGlobalRoleSettingsSha256: source.globalRoleSettings.sha256,
@@ -105,7 +112,8 @@ export async function prepareSelectedQaTarget({ connect, sourceReport, approvedP
   const close = async (client) => { await client.end(); clients.delete(client); };
   const allowed = () => new Map([...clients.values()].map(({ name, pid }) => [pid, name]));
   const guard = async (client, names) => {
-    await assertNames(client, names); await assertNoAppRoles(client); await assertSessions(client, allowed());
+    await assertNames(client, names); await assertNoAppRoles(client);
+    evidence.providerBackgroundSessions = await assertSessions(client, allowed());
     requireValue((await captureDatabaseMetadata(client)).globalRoleSettings.count === 0, 'PREPARE_TARGET_GLOBAL_ROLE_SETTINGS_EXIST');
   };
   const write = async (client, phase, sql) => {

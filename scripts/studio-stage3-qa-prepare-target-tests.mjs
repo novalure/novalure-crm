@@ -32,7 +32,7 @@ const sourceReport = { ...sourceTarget, databaseName: sourceTarget.databaseName,
 
 function cluster(options = {}) {
   const databases = new Map(['neondb', 'postgres', 'template0', 'template1'].map((name, i) => [name, { oid: 100 + i, provider: name === 'neondb' }]));
-  const clients = new Map(), calls = [], writes = [], evidence = []; let nextPid = 1000, nextOid = 200;
+  const clients = new Map(), calls = [], writes = [], evidence = []; let nextPid = 1000 + (options.pidOffset || 0), nextOid = 200;
   const connect = async (database) => {
     assert.ok(databases.has(database), 'Synthetic database must already exist');
     const pid = ++nextPid;
@@ -44,7 +44,8 @@ function cluster(options = {}) {
         database_owner: options.badOwner ? 'other_owner' : 'neondb_owner', server_version_num: options.badVersion ? 170011 : 180006, can_create_database: !options.noCreatedb }] };
       if (sql === prepareTargetQueries.databases) return { rows: [...databases.keys(), ...(options.existingName ? [options.existingName] : [])].sort().map((name) => ({ name, is_template: /^template[01]$/u.test(name), owner: ['postgres', 'template0', 'template1'].includes(name) ? 'cloud_admin' : 'neondb_owner' })) };
       if (sql === prepareTargetQueries.roles) return { rows: options.roleRows || [...providerRolesFixture, ...(options.appRole ? [{ name: 'novalure_app' }] : []), ...(options.unknownRole ? [{ name: 'unknown_app' }] : [])].sort((a, b) => a.name.localeCompare(b.name)) };
-      if (sql === prepareTargetQueries.sessions) return { rows: [...clients.entries()].map(([id, name]) => ({ pid: id, database: name, role: 'neondb_owner' })).concat(options.foreignSession || (options.lateSession && writes.length) ? [{ pid: 999, database: 'neondb', role: 'neondb_owner' }] : []) };
+      if (sql === prepareTargetQueries.sessions) return { rows: [...clients.entries()].map(([id, name]) => ({ pid: id, database: name, role: 'neondb_owner', state: id === pid ? 'active' : 'idle' }))
+        .concat(options.foreignSession || (options.lateSession && writes.length) ? [{ pid: 999, database: 'neondb', role: 'neondb_owner', state: 'idle' }] : [], options.providerSessions || []) };
       if (sql === prepareTargetQueries.prepared) return { rows: [{ count: options.preparedTransaction ? 1 : 0 }] };
       if (sql === databaseQueries.properties) return { rows: [{ ...properties, ...(options.propertyDrift && database === 'neondb' ? { ctype: 'different' } : {}) }] };
       if (sql === databaseQueries.acl) return { rows: entry.provider ? options.baselineAcl || providerAcl : options.freshAclDrift ? providerAcl : sourceAcl };
@@ -150,6 +151,31 @@ test('a late foreign connection stops before rename without terminating sessions
   await assert.rejects(prepare(run, plan), /PREPARE_TARGET_FOREIGN_SESSION/u);
   assert.equal(run.writes.length, 1); assert.ok(run.databases.has('neondb')); assert.ok(run.databases.has(managementDatabase));
   assert.equal(run.evidence.at(-1).status, 'FAIL'); assert.equal(run.clients.size, 0);
+});
+test('only idle cloud_admin sessions in unchanged postgres are allowed and reported without unstable PIDs', async () => {
+  const providerSessions = [900001, 900002, 900003].map((pid) => ({ pid, database: 'postgres', role: 'cloud_admin', state: 'idle' }));
+  const run = cluster({ providerSessions }); const plan = await preflight(run);
+  const otherPids = cluster({ pidOffset: 500, providerSessions: providerSessions.map((row) => ({ ...row, pid: row.pid + 100 })) });
+  assert.equal((await preflight(otherPids)).sha256, plan.sha256);
+  assert.equal(plan.providerBackgroundSessions.count, 3);
+  assert.deepEqual(plan.providerBackgroundSessions.inventory, providerSessions.map(({ database, role, state }) => ({ database, role, state })));
+  assert.ok(!JSON.stringify(plan).includes('900001'));
+  const result = await prepare(run, plan);
+  assert.equal(result.status, 'PASS'); assert.deepEqual(result.providerBackgroundSessions, plan.providerBackgroundSessions);
+  assert.ok(run.writes.every((sql) => !/terminate|cancel|alter.*postgres/u.test(sql)));
+});
+test('provider-looking sessions with another role, active state or any changed database still fail before writes', async () => {
+  const background = { pid: 900001, database: 'postgres', role: 'cloud_admin', state: 'idle' };
+  for (const row of [
+    { ...background, role: 'neon_service' }, { ...background, role: 'neondb_owner' },
+    { ...background, state: 'active' }, { ...background, state: 'idle in transaction' }, { ...background, state: null },
+    { ...background, database: 'neondb' }, { ...background, database: managementDatabase }, { ...background, database: providerBaselineDatabase },
+    { ...background, database: 'unrelated_database' }
+  ]) {
+    const run = cluster({ providerSessions: [row] });
+    await assert.rejects(preflight(run), /PREPARE_TARGET_FOREIGN_SESSION/u);
+    assert.equal(run.writes.length, 0);
+  }
 });
 test('template0 ACL mismatch or preserved OID drift stops without trying to repair ACLs or continue', async () => {
   const clean = cluster(); const plan = await preflight(clean);
