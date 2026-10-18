@@ -14,8 +14,8 @@ const sqlHash = (value) => createHash('sha256').update(value.replace(/\r\n/gu, '
 const equal = (a, b) => canonical(a) === canonical(b);
 export const freshBootstrapTarget = Object.freeze({ projectId: restoreProject, branchId: restoreBranch, databaseName: 'neondb', runtimeRole: 'novalure_app' });
 export const freshBootstrapBaseline = Object.freeze({ apiOid: 16396, managementOid: 32768, postgresOid: 5,
-  apiDatabase: '0e6d312a3dda0a7970015261fea62a84f7cbe4c6e05e08707865b1c509c9578b',
-  apiCatalog: '275fc9d31817c338148e51dcb1d3e8ea0a711d71cc29f3021b2168bca1396194',
+  baselineDatabaseDigest: '0e6d312a3dda0a7970015261fea62a84f7cbe4c6e05e08707865b1c509c9578b',
+  baselineExtensionDigest: '275fc9d31817c338148e51dcb1d3e8ea0a711d71cc29f3021b2168bca1396194',
   managementDatabase: 'c44118eae43133c199b6468dc98daddb7adabbc7bbdfa13de2e7d8ff247ac98c',
   managementCatalog: '1ec02902dd68d84e2c6a1550cc5ba49b6ca8bf5770aabf48bf6430874f1cd412',
   originalPlan: '17784722dcebd0e8d213e2b040ce5c9d5c5cc392ac48fb42f7aed3e44cbeedf9',
@@ -55,10 +55,10 @@ function historyBindings(history) {
   const denial = history.nativeDenial;
   requireValue(denial?.status === 'BLOCKED_PROVIDER_42501' && denial.sqlState === '42501' && denial.rollbackConfirmed === true &&
     denial.effectiveRightsChanged === false && denial.sourceWrites === 0 && denial.commitAllowed === false && equal(denial.before, denial.after) &&
-    denial.before.database === freshBootstrapBaseline.apiDatabase && denial.before.extensionProfile === freshBootstrapBaseline.apiCatalog,
+    denial.before.database === freshBootstrapBaseline.baselineDatabaseDigest && denial.before.extensionProfile === freshBootstrapBaseline.baselineExtensionDigest,
   'ROLLED_BACK_NATIVE_DENIAL_REQUIRED');
   requireValue(history.startInventory?.readOnly === true, 'EXPLICIT_CURRENT_READONLY_INVENTORY_REQUIRED');
-  for (const [name, databaseHash, catalogHash] of [['neondb', freshBootstrapBaseline.apiDatabase, freshBootstrapBaseline.apiCatalog],
+  for (const [name, databaseHash, catalogHash] of [['neondb', freshBootstrapBaseline.baselineDatabaseDigest, freshBootstrapBaseline.baselineExtensionDigest],
     [managementDatabase, freshBootstrapBaseline.managementDatabase, freshBootstrapBaseline.managementCatalog]]) {
     const row = history.startInventory.databases?.find((entry) => entry.identity?.database === name);
     requireValue(row?.identity.project === restoreProject && row.identity.branch === restoreBranch && row.identity.role === 'neondb_owner' &&
@@ -112,7 +112,7 @@ async function preflight(context, { history, manifest, headCommit, cutoverSource
   const control = await context.open('postgres'); requireValue(control.identity.database_oid === 5, 'PINNED_POSTGRES_MANAGEMENT_OID_REQUIRED');
   const diagnostics = await guard(context, control.client, initialNames, bindings.providerRoles);
   const captured = {};
-  for (const [name, oid, expectedDatabase, expectedCatalog] of [['neondb', 16396, freshBootstrapBaseline.apiDatabase, freshBootstrapBaseline.apiCatalog],
+  for (const [name, oid, expectedDatabase, expectedCatalog] of [['neondb', 16396, freshBootstrapBaseline.baselineDatabaseDigest, freshBootstrapBaseline.baselineExtensionDigest],
     [managementDatabase, 32768, freshBootstrapBaseline.managementDatabase, freshBootstrapBaseline.managementCatalog]]) {
     const selected = await context.open(name);
     requireValue(selected.identity.database_oid === oid, 'FRESH_BASELINE_DATABASE_OID_MISMATCH');
@@ -171,7 +171,7 @@ export async function runFreshBootstrap({ connect, history, manifest, headCommit
     const baseline = await context.open(providerBaselineDatabase);
     requireValue(baseline.identity.database_oid === 16396, 'PRESERVED_API_DATABASE_OID_MISMATCH');
     const unchanged = await snapshot(baseline.client);
-    requireValue(unchanged.database.sha256 === freshBootstrapBaseline.apiDatabase && unchanged.extensionProfile.sha256 === freshBootstrapBaseline.apiCatalog &&
+    requireValue(unchanged.database.sha256 === freshBootstrapBaseline.baselineDatabaseDigest && unchanged.extensionProfile.sha256 === freshBootstrapBaseline.baselineExtensionDigest &&
       hash(unchanged.objects) === actual.bound.databases.neondb.objectsSha256, 'PRESERVED_API_DATABASE_CHANGED');
     await context.close(baseline.client); await guard(context, control, preservedNames, providerRoles);
     await step('create_new_original_sql_database', () => control.query('create database "neondb" with template "template0" owner "neondb_owner"'));
@@ -224,7 +224,7 @@ export async function runFreshBootstrap({ connect, history, manifest, headCommit
     evidence.final = { databaseOid: fresh.identity.database_oid, ledgerRows: ledger.length, ledgerSha256: hash(ledger), schemaCategories: finalCatalog,
       extensions: (await fresh.client.query(extensionQueries.installed)).rows, sourceEquivalenceClaimed: false };
     for (const [name, expectedOid, expectedDatabase, expectedCatalog, expectedObjects] of [
-      [providerBaselineDatabase, 16396, freshBootstrapBaseline.apiDatabase, freshBootstrapBaseline.apiCatalog, actual.bound.databases.neondb.objectsSha256],
+      [providerBaselineDatabase, 16396, freshBootstrapBaseline.baselineDatabaseDigest, freshBootstrapBaseline.baselineExtensionDigest, actual.bound.databases.neondb.objectsSha256],
       [managementDatabase, 32768, freshBootstrapBaseline.managementDatabase, freshBootstrapBaseline.managementCatalog, actual.bound.databases[managementDatabase].objectsSha256]
     ]) {
       const selected = await context.open(name); const retained = await snapshot(selected.client);

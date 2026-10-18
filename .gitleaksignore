@@ -11,3 +11,9 @@ de42e6b7791101b11a515726f26f8676f5fdd897:docs/audit/2026-09-02/justimmo-inspired
 de42e6b7791101b11a515726f26f8676f5fdd897:scripts/funnel-rbac-contract-tests.mjs:generic-api-key:198
 # Reviewed historical false positive: public portal identifier immobilienscout24, not authentication data.
 de42e6b7791101b11a515726f26f8676f5fdd897:src/lib/property-export/provider-adapters.ts:generic-api-key:38
+# Exact historical false positives: immutable database/catalog SHA-256 digests.
+# Both values equal the committed original-preflight database.sha256 and
+# extensionProfile.sha256 evidence; neither value is an authentication credential.
+# Keep full-history/tree scanning and all generic-api-key rules enabled.
+61ac6b71a20261e9b72a000953eb08e9dcbd9873:scripts/lib/studio-stage3-qa-fresh-bootstrap.mjs:generic-api-key:17
+61ac6b71a20261e9b72a000953eb08e9dcbd9873:scripts/lib/studio-stage3-qa-fresh-bootstrap.mjs:generic-api-key:18

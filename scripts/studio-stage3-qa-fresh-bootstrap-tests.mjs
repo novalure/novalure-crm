@@ -32,7 +32,7 @@ function history() { return {
   startInventory: { readOnly: true, databases: [['neondb', apiSnapshot], [managementDatabase, managementSnapshot]].map(([database, snapshot]) => ({ identity: {
     project: freshBootstrapTarget.projectId, branch: freshBootstrapTarget.branchId, database, role: 'neondb_owner', session_role: 'neondb_owner' }, ...snapshot })) },
   nativeDenial: { status: 'BLOCKED_PROVIDER_42501', sqlState: '42501', rollbackConfirmed: true, effectiveRightsChanged: false, sourceWrites: 0, commitAllowed: false,
-    before: { database: freshBootstrapBaseline.apiDatabase, extensionProfile: freshBootstrapBaseline.apiCatalog }, after: { database: freshBootstrapBaseline.apiDatabase, extensionProfile: freshBootstrapBaseline.apiCatalog } }
+    before: { database: freshBootstrapBaseline.baselineDatabaseDigest, extensionProfile: freshBootstrapBaseline.baselineExtensionDigest }, after: { database: freshBootstrapBaseline.baselineDatabaseDigest, extensionProfile: freshBootstrapBaseline.baselineExtensionDigest } }
 }; }
 function cluster(options = {}) {
   const databases = new Map([['neondb', { oid: 16396, kind: 'api' }], ['postgres', { oid: 5 }], [managementDatabase, { oid: 32768, kind: 'management' }], ['template0', { oid: 4 }], ['template1', { oid: 1 }]]);

@@ -216,3 +216,15 @@ original owner/ACL/RLS/data/ledger/061 native restore and all exact fingerprints
 remain required. PostgreSQL's template0/transaction restrictions are documented
 in [CREATE DATABASE](https://www.postgresql.org/docs/18/sql-createdatabase.html)
 and [ALTER DATABASE](https://www.postgresql.org/docs/18/sql-alterdatabase.html).
+
+
+### Exact inert Gitleaks digest findings
+
+The two historical generic-api-key findings in original fresh-bootstrap commit
+61ac6b71a20261e9b72a000953eb08e9dcbd9873 are immutable database/catalog SHA-256
+fingerprints, matching the committed original-preflight database.sha256 and
+extensionProfile.sha256 evidence. They are not credentials. Only their two exact
+historical finding identifiers are recorded in .gitleaksignore; full-history and
+current-tree scanning and every rule remain enabled. The corresponding constant
+keys now use baselineDatabaseDigest and baselineExtensionDigest; their values,
+comparisons and fail-closed evidence bindings are unchanged. No history is rewritten.
