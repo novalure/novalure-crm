@@ -4,6 +4,17 @@ import { createRecoveryCodes, createTotpSecret, verifyTotpCode } from '../src/li
 import { validateFixtureConfig, makeCredentials, loginPlan, fixtureTarget, seedLoginFixtures, parseEnrollmentHtml, normalQaLogin, providerAdminProfile, migrationChecksum } from './studio-stage3-login-fixture.mjs';
 
 const config=()=>({approvalId:'SYNTHETIC_ST3_ONLY',target:{...fixtureTarget},adminUriFile:'private/admin.txt',credentialsFile:'private/new-logins.json'});
+test('every actual login-plan identifier is a 36-character UUIDv4 and stable across fresh module evaluation',async()=>{
+  const ids=Object.values(loginPlan).flatMap(account=>[account.userId,account.workspaceId]);
+  assert.equal(ids.length,4);
+  assert.equal(new Set(ids).size,4);
+  for(const id of ids){
+    assert.equal(id.length,36);
+    assert.match(id,/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+  }
+  const fresh=await import('./studio-stage3-login-fixture.mjs?uuid-contract');
+  assert.deepEqual(fresh.loginPlan,loginPlan);
+});
 test('fixture is pinned to the exact disposable QA target and requires distinct private files',()=>{
   assert.equal(validateFixtureConfig(config()).target.branchId,fixtureTarget.branchId);
   for(const [key,value] of [['projectId','foreign'],['branchId','br-foreign'],['databaseName','customer'],['role','novalure_app']]){

@@ -26,7 +26,7 @@ const schemaVersion = 'studio-stage3-normal-login-v1';
 function stableUuid(key) {
   const h=createHash('sha256').update(schemaVersion+':'+fixtureTarget.branchId+':'+key).digest('hex').split('');
   h[12]='4';h[16]=((parseInt(h[16],16)&3)|8).toString(16);
-  const s=h.join('');return [s.slice(0,8),s.slice(8,12),s.slice(12,16),s.slice(16,20),s.slice(20)].join('-');
+  const s=h.join('');return [s.slice(0,8),s.slice(8,12),s.slice(12,16),s.slice(16,20),s.slice(20,32)].join('-');
 }
 export const loginPlan = Object.freeze({
   sameWorkspace:Object.freeze({email:'st1-studio-owner@example.invalid',userId:stableUuid('studio-owner'),workspaceId,name:'SYNTHETIC ST1 Studio QA owner'}),
