@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validateLiveQaConfig, validateQaPut, parseCurlResponse } from "./studio-enquiry-live-qa.mjs";
+import { validateLiveQaConfig, validateQaPut, parseCurlResponse, liveQaDatabaseOptions } from "./studio-enquiry-live-qa.mjs";
 const operationId='4d1aac3d-d3dc-40f5-87c1-3664e1272da7', sourceId='e173fc56-165c-4920-aa9c-5c945ea6db8a', assetId='fe711063-f9a1-4289-8f70-2b7c96635018';
 const workspace='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101';
 const content={mime:'image/png',bytes:123,sha256:'a'.repeat(64)};
@@ -13,8 +13,13 @@ test('live harness grants reject foreign endpoint, scope, role, credential heade
   }
 });
 test('live harness requires exact isolated Preview and rejects Production DB identity before any request',()=>{
-  const config={runId:'GOLIVETEST_STUDIO_123456',approvalId:'synthetic',signingSecret:'a'.repeat(32),qaEmail:'synthetic@example.invalid',crm:{projectId:'prj_R32Okl6AHijTohvuKmryuTLjWMsk',branch:'codex/studio-preview-crm-handoff',deploymentId:'dpl_synthetic123',gitSha:'a'.repeat(40),origin:'https://crm-synthetic.vercel.app'},qa:{databaseUrl:'postgresql://app:synthetic@ep-qa-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require',host:'ep-qa-pooler.eu-west-2.aws.neon.tech',productionHost:'ep-prod-pooler.eu-west-2.aws.neon.tech',projectId:'syntheticProject',branchId:'syntheticBranch',databaseName:'neondb',role:'app'}};
+  const config={runId:'GOLIVETEST_STUDIO_123456',approvalId:'synthetic',signingSecret:'a'.repeat(32),qaEmail:'synthetic@example.invalid',crm:{projectId:'prj_R32Okl6AHijTohvuKmryuTLjWMsk',branch:'codex/studio-preview-crm-handoff',deploymentId:'dpl_synthetic123',gitSha:'a'.repeat(40),origin:'https://crm-synthetic.vercel.app'},qa:{databaseUrl:'postgresql://app:synthetic@ep-qa-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full',host:'ep-qa-pooler.eu-west-2.aws.neon.tech',productionHost:'ep-prod-pooler.eu-west-2.aws.neon.tech',projectId:'syntheticProject',branchId:'syntheticBranch',databaseName:'neondb',role:'app'}};
   assert.equal(validateLiveQaConfig(config),config);
+  const options=liveQaDatabaseOptions(config);assert.equal(options.ssl.rejectUnauthorized,true);assert.ok(options.ssl.ca.length>0);
+  assert.equal(options.host,config.qa.host);assert.equal(Object.hasOwn(options,'connectionString'),false);
+  for(const query of ['', '?sslmode=require', '?sslmode=require&uselibpqcompat=true', '?sslmode=verify-full&sslrootcert=system', '?sslmode=verify-full&options=-c%20ssl=off']){
+    const unsafe=structuredClone(config);unsafe.qa.databaseUrl=config.qa.databaseUrl.split('?')[0]+query;assert.throws(()=>liveQaDatabaseOptions(unsafe),/invalid_qa_database/);
+  }
   for(const change of [c=>c.crm.projectId='foreign',c=>c.crm.branch='main',c=>c.crm.origin='https://novalure-crm.ie',c=>c.qa.productionHost=c.qa.host,c=>c.signingSecret='short']){const c=structuredClone(config);change(c);assert.throws(()=>validateLiveQaConfig(c));}
 });
 test('CLI response parser preserves binary private media and separate cookies without exposing them',()=>{

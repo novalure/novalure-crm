@@ -51,7 +51,7 @@ const knownReferences = [
   { table_name: "media_asset_shares", columns: ["asset_id", "workspace_id"], target_columns: ["id", "workspace_id"], delete_action: "c" },
   { table_name: "property_documents", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
   { table_name: "property_media", columns: ["media_asset_id"], target_columns: ["id"], delete_action: "n" },
-  { table_name: "studio_enquiry_assets", columns: ["media_asset_id", "workspace_id"], target_columns: ["id", "workspace_id"], delete_action: "a" },
+  { table_name: "studio_enquiry_assets", columns: ["media_asset_id", "workspace_id", "operation_id"], target_columns: ["id", "workspace_id", "studio_enquiry_operation_id"], delete_action: "a" },
 ];
 export function hasCompleteMediaReferenceVisibility(rows: Record<string, unknown>[]) {
   return rows.length === knownReferences.length && knownReferences.every(expected => rows.filter(row =>
@@ -103,9 +103,14 @@ export async function deleteDatabaseMedia(input: {
           throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This is the active Exposé. Explicitly remove or replace the active selection before deleting the file.");
         }
       }
-      const row = await transaction.queryOne(`select ${input.assetSelect} from public.media_assets ma
+      const row = await transaction.queryOne(`select ${input.assetSelect},ma.studio_enquiry_operation_id as "studioEnquiryOperationId" from public.media_assets ma
         where ma.id = $1 and ma.workspace_id = $2 for update of ma`, [input.assetId, input.workspaceId]);
       if (!row) return null;
+      // The locked row itself proves protection, even when a SECURITY DEFINER
+      // owner cannot see the separate Studio reference table under FORCE RLS.
+      if (row.studioEnquiryOperationId != null) {
+        throw new MediaLifecycleError("MEDIA_DELETE_IN_USE", "This file has a protected lifecycle and cannot be deleted here.");
+      }
       const asset = input.normalizeAsset(row);
       if (!hasCompleteMediaReferenceVisibility(await transaction.query(referenceCatalogSql))) {
         throw new MediaLifecycleError("MEDIA_DELETE_VISIBILITY_UNCONFIRMED", "All media references could not be verified. Nothing was deleted.");

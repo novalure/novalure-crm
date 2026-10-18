@@ -279,3 +279,147 @@ test("confirmed summaries beyond legacy 3000 characters remain complete in the l
   const row=await db.admin.query<{intent:string;metadata:{studioEnquiry:{snapshot:StudioEnquirySnapshot}}}>('select intent,metadata from leads where id=$1',[result.crmLeadId]);
   assert.equal(row.rows[0].intent,s.brief.summary);assert.equal(row.rows[0].metadata.studioEnquiry.snapshot.brief.summary,s.brief.summary);
 });
+
+test("ordinary SECURITY DEFINER owners cannot hide linked Studio references behind FORCE RLS", async () => {
+  const r = request();
+  await executeStudioEnquiry(r, { store }); await copy(r);
+  await executeStudioEnquiry(withAction(r, "finalize"), { store });
+  const assetId = studioEnquiryTargets(r)[0].assetId;
+  const ordinaryOwner = "synthetic_st3_guard_" + randomUUID().replaceAll("-", "");
+  const otherActor = randomUUID(), foreignWorkspace = randomUUID(), foreignActor = randomUUID();
+  const connection = await db.admin.connect();
+  const failures: string[] = [];
+  try {
+    await connection.query("begin");
+    // Entire owner/role experiment is local and transactionally rolled back.
+    // No superuser/BYPASSRLS flag, FORCE RLS change, or broad runtime grant is used.
+    await connection.query("create role " + ordinaryOwner +
+      " nologin inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
+    await connection.query("grant usage on schema public to " + ordinaryOwner);
+    await connection.query("grant select on media_assets,workspace_users,property_media,property_documents,bot_document_sends,media_asset_shares to " + ordinaryOwner);
+    await connection.query("alter table public.studio_enquiry_assets owner to " + ordinaryOwner);
+    await connection.query("alter function public.studio_enquiry_protect_asset() owner to " + ordinaryOwner);
+    await connection.query("alter function public.crm_media_reference_counts(uuid) owner to " + ordinaryOwner);
+    await connection.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC other owner','ordinary-owner-stage3@example.invalid','owner','novalure_operator','active')",
+      [otherActor, websiteSalesWorkspaceId]);
+    await connection.query("insert into workspaces(id,name) values($1,'SYNTHETIC ordinary guard foreign')", [foreignWorkspace]);
+    await connection.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC foreign owner','ordinary-foreign-stage3@example.invalid','owner','novalure_operator','active')",
+      [foreignActor, foreignWorkspace]);
+    const role = await connection.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
+      "select rolsuper,rolbypassrls from pg_roles where rolname=$1", [ordinaryOwner]);
+    assert.deepEqual(role.rows, [{ rolsuper: false, rolbypassrls: false }]);
+    const forced = await connection.query<{ relforcerowsecurity: boolean }>(
+      "select relforcerowsecurity from pg_class where oid='public.studio_enquiry_assets'::regclass");
+    assert.equal(forced.rows[0].relforcerowsecurity, true);
+
+    const probe = async (label: string, workspace: string, actorId: string) => {
+      await connection.query("set local role novalure_tenant_app");
+      await connection.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",
+        [workspace, actorId]);
+      for (const [field, value] of [["is_public", "true"], ["relative_path", "relative_path || '.changed'"],
+        ["studio_enquiry_operation_id", "null"], ["studio_enquiry_operation_id", "'" + randomUUID() + "'::uuid"]]) {
+        await connection.query("savepoint synthetic_guard_mutation");
+        try {
+          const changed = await connection.query("update public.media_assets set " + field + "=" + value +
+            " where id=$1::uuid returning id", [assetId]);
+          if (changed.rowCount !== 0) failures.push(label + ": permitted " + field + " mutation");
+        } catch (error) {
+          // A database rejection is fail-closed. Restore the savepoint before
+          // checking the next independent mutation/context.
+          assert.ok(error instanceof Error);
+        } finally {
+          await connection.query("rollback to savepoint synthetic_guard_mutation");
+          await connection.query("release savepoint synthetic_guard_mutation");
+        }
+      }
+      await connection.query("savepoint synthetic_guard_count");
+      try {
+        const references = await connection.query<{ studio_count: number }>(
+          "select * from public.crm_media_reference_counts($1::uuid)", [assetId]);
+        if (workspace === websiteSalesWorkspaceId && references.rows.length !== 0 &&
+            references.rows[0].studio_count < 1) {
+          failures.push(label + ": reference counter returned a false zero in-use indicator");
+        }
+      } catch (error) {
+        assert.ok(error instanceof Error, "incomplete reference visibility must fail closed");
+      } finally {
+        await connection.query("rollback to savepoint synthetic_guard_count");
+        await connection.query("release savepoint synthetic_guard_count");
+      }
+      if (workspace === websiteSalesWorkspaceId) {
+        let storageDeletes = 0;
+        // Reuse this connection so the uncommitted ordinary-owner setup is
+        // visible; map the helper's transaction onto a nested savepoint.
+        const nestedPool = {
+          async connect() {
+            return {
+              async query(sql: string, params: readonly unknown[] = []) {
+                if (sql.trim().toLowerCase() === "begin") return connection.query("savepoint synthetic_media_delete");
+                if (sql.trim().toLowerCase() === "rollback") {
+                  await connection.query("rollback to savepoint synthetic_media_delete");
+                  return connection.query("release savepoint synthetic_media_delete");
+                }
+                if (sql.trim().toLowerCase() === "commit") {
+                  const result = await connection.query("release savepoint synthetic_media_delete");
+                  return { ...result, command: "COMMIT" };
+                }
+                return connection.query(sql, [...params]);
+              },
+              release() {},
+            };
+          },
+        } as unknown as TenantPool;
+        await assert.rejects(deleteDatabaseMedia({
+          assetId, workspaceId: workspace, actorId, assetSelect: "ma.*",
+          normalizeAsset: row => ({ ...row, storageAccess: row.storage_access, isPublic: row.is_public }) as MediaAsset,
+          deleteFile: async () => { storageDeletes++; }, pool: nestedPool,
+        }), /another use|protected lifecycle/);
+        assert.equal(storageDeletes, 0, label + ": private Blob deletion must not start");
+      }
+      await connection.query("reset role");
+    };
+
+    await probe("ordinary owner without tenant-role membership / Studio actor", websiteSalesWorkspaceId, websiteSalesActorId);
+    // This second safe ordinary-owner shape verifies that inheriting the normal
+    // policy role cannot make the global immutability check actor-filtered.
+    await connection.query("grant novalure_tenant_app to " + ordinaryOwner);
+    await probe("ordinary owner with tenant-role membership / Studio actor", websiteSalesWorkspaceId, websiteSalesActorId);
+    await probe("ordinary owner with tenant-role membership / other same-workspace actor", websiteSalesWorkspaceId, otherActor);
+    await probe("ordinary owner with tenant-role membership / foreign workspace", foreignWorkspace, foreignActor);
+    await probe("ordinary owner with tenant-role membership / empty tenant context", "", "");
+  } finally {
+    await connection.query("rollback");
+    connection.release();
+  }
+  assert.deepEqual(failures, [], "linked Studio files must remain immutable and reference visibility must never report a false zero");
+});
+
+
+test("Studio source links require the exact immutable media operation marker", async () => {
+  const r = request(); await executeStudioEnquiry(r, { store }); await copy(r);
+  await executeStudioEnquiry(withAction(r, "finalize"), { store });
+  const id = studioEnquiryTargets(r)[0].assetId;
+  const marked = await db.admin.query<{ studio_enquiry_operation_id: string }>(
+    "select studio_enquiry_operation_id from media_assets where id=$1::uuid", [id]);
+  assert.equal(marked.rows[0].studio_enquiry_operation_id, r.operationId);
+  const unmarked = randomUUID();
+  await assert.rejects(withPublicSubmissionTransaction(actor, async () => {
+    await queryRows("insert into media_assets(id,workspace_id,name,original_name,folder,mime_type,size_bytes,url,relative_path,storage_provider,storage_access,is_public) values($1::uuid,$2,'unmarked.pdf','unmarked.pdf','unused','application/pdf',1,$3,$4,'vercel-blob','private',false)",
+      [unmarked, websiteSalesWorkspaceId, "/api/media/files/" + unmarked, websiteSalesWorkspaceId + "/unused/" + unmarked + ".pdf"]);
+    await queryRows("insert into studio_enquiry_assets(operation_id,workspace_id,source_id,variant,media_asset_id,sha256,original_sha256) values($1::uuid,$2,$3::uuid,'original',$4::uuid,$5,$5)",
+      [r.operationId, websiteSalesWorkspaceId, randomUUID(), unmarked, "a".repeat(64)]);
+  }), /Public submission transaction failed/);
+  assert.equal((await db.admin.query("select id from media_assets where id=$1::uuid", [unmarked])).rowCount, 0);
+  const other = request(snapshot(false)); await executeStudioEnquiry(other, { store });
+  await assert.rejects(withPublicSubmissionTransaction(actor, () => queryRows(
+    "insert into studio_enquiry_assets(operation_id,workspace_id,source_id,variant,media_asset_id,sha256,original_sha256) values($1::uuid,$2,$3::uuid,'original',$4::uuid,$5,$5)",
+    [other.operationId, websiteSalesWorkspaceId, randomUUID(), id, "a".repeat(64)])), /Public submission transaction failed/);
+  await assert.rejects(withPublicSubmissionTransaction(actor, () => queryRows(
+    "update media_assets set studio_enquiry_operation_id=null where id=$1::uuid", [id])), /Public submission transaction failed/);
+  // An ordinary media row cannot be reclassified after insertion.
+  await withPublicSubmissionTransaction(actor, () => queryRows(
+    "insert into media_assets(id,workspace_id,name,original_name,folder,mime_type,size_bytes,url,relative_path,storage_provider,storage_access,is_public) values($1::uuid,$2,'ordinary.pdf','ordinary.pdf','unused','application/pdf',1,$3,$4,'vercel-blob','private',false)",
+    [unmarked, websiteSalesWorkspaceId, "/api/media/files/" + unmarked, websiteSalesWorkspaceId + "/unused/" + unmarked + ".pdf"]));
+  await assert.rejects(withPublicSubmissionTransaction(actor, () => queryRows(
+    "update media_assets set studio_enquiry_operation_id=$2::uuid where id=$1::uuid", [unmarked, r.operationId])), /Public submission transaction failed/);
+});

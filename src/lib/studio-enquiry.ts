@@ -163,10 +163,10 @@ function formInput(snapshot: StudioEnquirySnapshot) {
 }
 async function persistTarget(target: EnquiryTarget, file: StudioEnquiryFile, request: StudioEnquiryRequest, stored: Set<string>) {
   if (!stored.has(target.assetId)) await queryRows(`insert into media_assets(id,workspace_id,name,original_name,folder,mime_type,size_bytes,url,
-    relative_path,storage_provider,storage_access,alt,is_public,public_token)
-    values($1::uuid,$2,$3,$3,$4,$5,$6,$7,$8,'vercel-blob','private',$3,false,null)`,
+    relative_path,storage_provider,storage_access,alt,is_public,public_token,studio_enquiry_operation_id)
+    values($1::uuid,$2,$3,$3,$4,$5,$6,$7,$8,'vercel-blob','private',$3,false,null,$9::uuid)`,
     [target.assetId, websiteSalesWorkspaceId, target.name, `studio-enquiries/${request.operationId.toLowerCase()}`,
-      target.mime, target.bytes, `/api/media/files/${target.assetId}`, target.pathname]);
+      target.mime, target.bytes, `/api/media/files/${target.assetId}`, target.pathname, request.operationId]);
   stored.add(target.assetId);
   await queryRows(`insert into studio_enquiry_assets(operation_id,workspace_id,source_id,variant,media_asset_id,sha256,original_sha256)
     values($1::uuid,$2,$3::uuid,$4,$5::uuid,$6,$7)`,

@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import pg from "pg";
+import { getCACertificates } from "node:tls";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { buildStudioEnquirySignature, parseStudioEnquiryRequest } from "../src/lib/studio-enquiry-contract.ts";
@@ -35,8 +36,19 @@ export function validateLiveQaConfig(config) {
     /^[a-z0-9-]+-pooler\.[a-z0-9.-]+\.neon\.tech$/.test(q.host) &&
     decodeURIComponent(database.pathname.slice(1)) === q.databaseName && decodeURIComponent(database.username) === q.role &&
     typeof q.projectId === "string" && q.projectId.length > 0 && typeof q.branchId === "string" && q.branchId.length > 0 &&
-    !["disable", "no-verify", "allow", "prefer"].includes(database.searchParams.get("sslmode")), "invalid_qa_database");
+    (!database.port || database.port === '5432') && database.searchParams.get('sslmode') === 'verify-full' &&
+    [...database.searchParams.keys()].every(key=>['sslmode','channel_binding'].includes(key)) &&
+    (!database.searchParams.has('channel_binding') || database.searchParams.get('channel_binding') === 'require'), "invalid_qa_database");
   return config;
+}
+export function liveQaDatabaseOptions(config) {
+  validateLiveQaConfig(config);
+  const uri=new URL(config.qa.databaseUrl);
+  // Do not pass connectionString or free URI options to pg's compatibility parser.
+  return {host:uri.hostname,port:5432,user:decodeURIComponent(uri.username),password:decodeURIComponent(uri.password),
+    database:decodeURIComponent(uri.pathname.slice(1)),ssl:{rejectUnauthorized:true,
+      ca:getCACertificates('default').concat(getCACertificates('system')).join('\n')},enableChannelBinding:true,
+    max:2,connectionTimeoutMillis:10000,statement_timeout:15000,query_timeout:20000};
 }
 export function parseCurlResponse(bytes) {
   let offset = 0, status = 0, headers = new Map();
@@ -199,7 +211,7 @@ export async function runLiveQa(configFile) {
     const versionBody = JSON.parse(version.body.toString("utf8"));
     check(versionBody.gitSha === config.crm.gitSha && versionBody.branch === branch &&
       (!versionBody.deploymentId || versionBody.deploymentId === config.crm.deploymentId), "runtime_revision_mismatch");
-    pool = new pg.Pool({ connectionString: config.qa.databaseUrl, max: 2, connectionTimeoutMillis: 10_000, statement_timeout: 15_000, query_timeout: 20_000 });
+    pool = new pg.Pool(liveQaDatabaseOptions(config));
     const actual = (await pool.query(`select current_setting('neon.project_id',true) as project,current_setting('neon.branch_id',true) as branch,
       current_database() as name,current_user as role,(not r.rolsuper and not r.rolbypassrls and not r.rolcreatedb and not r.rolcreaterole
        and pg_has_role(r.oid,'novalure_tenant_app','USAGE') and not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace

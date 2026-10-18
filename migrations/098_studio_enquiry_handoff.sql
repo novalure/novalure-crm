@@ -32,6 +32,23 @@ create table public.studio_enquiry_transfers (
   check((state='reserved' and lead_id is null and submission_id is null and accepted_at is null)
     or (state='accepted' and lead_id is not null and submission_id is not null and accepted_at is not null))
 );
+-- The immutable row marker makes protection independent of SECURITY DEFINER
+-- ownership and FORCE RLS reference visibility. Existing ordinary assets stay NULL.
+alter table public.media_assets
+  add column studio_enquiry_operation_id uuid,
+  add constraint media_assets_studio_enquiry_operation_fk
+    foreign key(studio_enquiry_operation_id) references public.studio_enquiry_transfers(operation_id),
+  add constraint media_assets_studio_enquiry_private_check check (
+    studio_enquiry_operation_id is null or (
+      workspace_id='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'
+      and storage_provider is not distinct from 'vercel-blob'
+      and storage_access is not distinct from 'private'
+      and is_public is false and public_token is null
+    )
+  ),
+  add constraint media_assets_studio_enquiry_identity_key
+    unique(id,workspace_id,studio_enquiry_operation_id);
+
 create table public.studio_enquiry_assets (
   operation_id uuid not null,
   workspace_id text not null check(workspace_id='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101'),
@@ -44,7 +61,8 @@ create table public.studio_enquiry_assets (
   created_at timestamptz not null default now(),
   primary key(operation_id,source_id,variant),
   foreign key(operation_id,workspace_uuid) references public.studio_enquiry_transfers(operation_id,workspace_id),
-  foreign key(media_asset_id,workspace_id) references public.media_assets(id,workspace_id)
+  foreign key(media_asset_id,workspace_id,operation_id)
+    references public.media_assets(id,workspace_id,studio_enquiry_operation_id)
 );
 
 create function public.studio_enquiry_immutable_confirmation() returns trigger
@@ -96,13 +114,17 @@ grant select,insert,update on public.studio_enquiry_transfers to novalure_tenant
 grant select,insert on public.studio_enquiry_assets to novalure_tenant_app;
 
 -- Ordinary media publication or path edits must not change a confirmed source.
--- SECURITY DEFINER sees references even when the current reader cannot see the
--- Studio-only handoff table. It reveals no row or customer material.
+-- The OLD-row marker does not query an RLS-filtered reference table. Markers
+-- are insert-only; an ordinary media update cannot add, remove or redirect one.
 create function public.studio_enquiry_protect_asset() returns trigger
 language plpgsql security definer set search_path=pg_catalog,public as $fn$
 begin
-  if exists(select 1 from public.studio_enquiry_assets where media_asset_id=old.id)
-    and (new.workspace_id is distinct from old.workspace_id or new.relative_path is distinct from old.relative_path
+  if new.studio_enquiry_operation_id is distinct from old.studio_enquiry_operation_id then
+    raise exception 'Studio handoff asset marker is immutable';
+  end if;
+  if old.studio_enquiry_operation_id is not null
+    and (new.id is distinct from old.id or new.workspace_id is distinct from old.workspace_id
+      or new.relative_path is distinct from old.relative_path
       or new.storage_provider is distinct from old.storage_provider or new.storage_access is distinct from old.storage_access
       or new.mime_type is distinct from old.mime_type or new.size_bytes is distinct from old.size_bytes
       or new.url is distinct from old.url or new.original_name is distinct from old.original_name
@@ -123,15 +145,28 @@ create function public.crm_media_reference_counts(p_asset uuid)
 returns table(media_count integer,document_count integer,send_count integer,share_count integer,studio_count integer)
 language sql stable security definer set search_path=pg_catalog,public as $fn$
   select
-    (select count(*)::integer from public.property_media where media_asset_id=p_asset),
-    (select count(*)::integer from public.property_documents where media_asset_id=p_asset),
-    (select count(*)::integer from public.bot_document_sends where media_asset_id=p_asset),
-    (select count(*)::integer from public.media_asset_shares where asset_id=p_asset),
-    (select count(*)::integer from public.studio_enquiry_assets where media_asset_id=p_asset)
-  where exists(select 1 from public.media_assets asset where asset.id=p_asset
-    and asset.workspace_id=nullif(current_setting('app.tenant_id',true),''))
+    case when row_security_active('public.property_media'::regclass) then -1
+      else (select count(*)::integer from public.property_media where media_asset_id=p_asset) end,
+    case when row_security_active('public.property_documents'::regclass) then -1
+      else (select count(*)::integer from public.property_documents where media_asset_id=p_asset) end,
+    case when row_security_active('public.bot_document_sends'::regclass) then -1
+      else (select count(*)::integer from public.bot_document_sends where media_asset_id=p_asset) end,
+    case when row_security_active('public.media_asset_shares'::regclass) then -1
+      else (select count(*)::integer from public.media_asset_shares where asset_id=p_asset) end,
+    -- This is an in-use indicator, not a potentially RLS-filtered link count.
+    case when asset.studio_enquiry_operation_id is not null then 1 else 0 end
+  from public.media_assets asset
+  where asset.id=p_asset and asset.workspace_id=nullif(current_setting('app.tenant_id',true),'')
     and exists(select 1 from public.workspace_users a where a.workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid
       and a.id=nullif(current_setting('app.actor_id',true),'')::uuid and a.status='active' and a.role in ('owner','admin','agent'))
+    -- A marked row is already protected. An unmarked row needs complete
+    -- visibility of every other supported reference before reporting zero.
+    and (asset.studio_enquiry_operation_id is not null or (
+      not row_security_active('public.property_media'::regclass)
+      and not row_security_active('public.property_documents'::regclass)
+      and not row_security_active('public.bot_document_sends'::regclass)
+      and not row_security_active('public.media_asset_shares'::regclass)
+    ))
 $fn$;
 revoke all on function public.crm_media_reference_counts(uuid) from public;
 grant execute on function public.crm_media_reference_counts(uuid) to novalure_tenant_app;
