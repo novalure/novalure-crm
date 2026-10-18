@@ -40,6 +40,16 @@ definitions and owners, and records effective extension and public-schema ACLs
 for the reviewed pre-restore subset check. Unknown extension-member catalog
 classes fail closed. Earlier reports without this profile cannot authorize the
 new restore. No application row, function body or setting value is printed.
+Version5 requires extension-profile-v2 with the complete OID-free default-ACL
+inventory for every schema, including empty ACL records. Owner, schema, object
+kind, grantee, grantor, privilege and grant option are retained. The actual source
+and original target both have two public default-ACL definitions owned by
+cloud_admin and granted to neon_superuser: sequence SELECT/UPDATE/USAGE and table
+DELETE/INSERT/MAINTAIN/REFERENCES/SELECT/TRIGGER/TRUNCATE/UPDATE, all with grant
+option. These eleven flattened privilege rows must match source exactly both
+before and after extension setup. An added, missing, wider, narrower or otherwise
+changed ACL fails; none is ignored, exempted or rewritten. Reports predating this
+required profile cannot authorize preparation or restore.
 Only hashes/counts, nonsecret catalog metadata and aggregate QA-marker results
 are returned. The single company profile is accepted only with exact migration036 static
 operator fields AND migration078's mandatory needs_review status with both
@@ -115,7 +125,7 @@ VERSION '1.3' and VERSION '0.8.0'. It never rewrites the native archive or its S
 updates an existing extension, or substitutes the target's newer defaults.
 
 Before initial setup there must be no user-namespace-dependent objects, extra
-schemas, default ACLs, event triggers, foreign-data wrappers/servers,
+schemas, event triggers, foreign-data wrappers/servers,
 publications or large objects. After extension installation and immediately
 before native restore, only the exact source extension-member identities,
 definitions, owners and versions may exist. Recursive dependency inventory also
@@ -163,8 +173,12 @@ CURRENT_DATABASE settings. Initial target properties/settings must equal source
 and its ACL must be exactly source plus those three observed provider rights.
 The same pristine catalog gate used by native restore checks absence of user
 objects/extra schemas/global objects, standard public-schema ACLs and the sole
-initial plpgsql extension. No foreign client sessions or prepared transactions
-are allowed; none are terminated. Any unexpected metadata fails before setup.
+initial plpgsql extension and exact source default ACLs. No foreign client
+sessions in any changed database or prepared transactions are allowed. The sole
+background-session exception is cloud_admin in unchanged postgres with state
+exactly idle; its database/role/state inventory and count are recorded without
+ephemeral PIDs. No session is terminated. Any other role/database/state or
+unexpected metadata fails before setup.
 
 Use Node24 from a reviewed clean commit:
 

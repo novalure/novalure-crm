@@ -25,11 +25,11 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const plpgsql = Object.freeze({ name: 'plpgsql', version: '1.0', schema: 'pg_catalog', owner: 'cloud_admin' });
 const installedProfile = Object.freeze([sourceExtensions[0], plpgsql, sourceExtensions[1]]);
 function assertSourceExtensionProfile(profile) {
-  requireValue(profile?.format === 'studio-stage3-source-extension-profile-v1' &&
+  requireValue(profile?.format === 'studio-stage3-source-extension-profile-v2' &&
     profile.server?.version_num === 170011 && same(profile.extensions, installedProfile) &&
     profile.memberCount > 0 && /^[a-f0-9]{64}$/u.test(profile.structureSha256 || '') &&
     /^[a-f0-9]{64}$/u.test(profile.memberIdentitiesSha256 || '') &&
-    Array.isArray(profile.privileges) && Array.isArray(profile.schemaGrants) &&
+    Array.isArray(profile.privileges) && Array.isArray(profile.schemaGrants) && Array.isArray(profile.defaultGrants) &&
     profile.namespaces?.length === 1 && profile.namespaces[0].nspname === 'public', 'SOURCE_EXTENSION_PROFILE_NOT_APPROVED');
 }
 export function verifyApprovedSource(report, approved) {
@@ -64,6 +64,7 @@ export async function inspectRestoreCatalog(client, sourceProfile, prepared = fa
   requireValue(actual.server.version_num === 180006, 'PINNED_TARGET_POSTGRESQL18_6_REQUIRED');
   requireValue(same(actual.extensions, prepared ? installedProfile : [plpgsql]), 'TARGET_EXTENSION_VERSION_OR_IDENTITY_MISMATCH');
   requireValue(same(actual.namespaces, sourceProfile.namespaces), 'TARGET_SCHEMA_OWNER_OR_EXTRA_SCHEMA_MISMATCH');
+  requireValue(same(actual.defaultGrants, sourceProfile.defaultGrants), 'TARGET_DEFAULT_ACL_MISMATCH');
   requireValue(privilegesSubset(actual.schemaGrants, sourceProfile.schemaGrants), 'TARGET_SCHEMA_ACL_EXCEEDS_SOURCE');
   requireValue(actual.schemaGrants.every((row) => row.is_grantable === false && row.grantor === row.owner &&
     ((row.grantee === 'PUBLIC' && row.privilege_type === 'USAGE') ||

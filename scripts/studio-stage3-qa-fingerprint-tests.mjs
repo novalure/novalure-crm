@@ -196,3 +196,16 @@ test('aggregate extension members use OID-free aggregate metadata and changing t
   assert.notEqual(before.extensionProfile.structureSha256, changed.extensionProfile.structureSha256);
   assert.notEqual(before.extensionProfile.sha256, changed.extensionProfile.sha256);
 });
+test('all default-ACL metadata is included in the required extension profile and full schema fingerprint', async () => {
+  const defaultGrants = [{ owner: 'cloud_admin', schema: 'public', defaclobjtype: 'S', grantee: 'neon_superuser', grantor: 'cloud_admin', privilege_type: 'USAGE', is_grantable: true }];
+  const first = await captureQaDatabase({ client: fakeClient({ catalogOverride: { defaultGrants } }), target: source, manifest, sql061 });
+  assert.equal(first.format, 'studio-stage3-qa-readonly-fingerprint-v5');
+  assert.equal(first.extensionProfile.format, 'studio-stage3-source-extension-profile-v2');
+  assert.deepEqual(first.extensionProfile.defaultGrants, defaultGrants);
+  const extraEmptyAcl = { owner: 'cloud_admin', schema: 'pg_catalog', defaclobjtype: 'T', grantee: null, grantor: null, privilege_type: null, is_grantable: null };
+  const changed = await captureQaDatabase({ client: fakeClient({ catalogOverride: { defaultGrants: [...defaultGrants, extraEmptyAcl] } }), target: source, manifest, sql061 });
+  assert.notEqual(first.schema.sha256, changed.schema.sha256);
+  assert.notEqual(first.extensionProfile.sha256, changed.extensionProfile.sha256);
+  assert.match(catalogQueries.defaultGrants, /left join lateral aclexplode\(d\.defaclacl\) a on true/u, 'An empty ACL record must remain visible');
+  assert.ok(!catalogQueries.defaultGrants.includes("where d.defaclnamespace"), 'Every default-ACL schema is covered');
+});

@@ -126,7 +126,7 @@ export const catalogQueries = {
       columnGrants: "select c.relname,col.attname,case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_attribute col join pg_class c on c.oid=col.attrelid cross join lateral aclexplode(col.attacl) a left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor where c.relnamespace='public'::regnamespace and col.attnum>0 and not col.attisdropped order by c.relname,col.attname,grantee,grantor,a.privilege_type",
       functionGrants: "select p.proname,pg_get_function_identity_arguments(p.oid) as arguments,case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_proc p cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor where p.pronamespace='public'::regnamespace order by p.proname,arguments,grantee,grantor,a.privilege_type",
       schemaGrants: "select n.nspname,owner.rolname as owner,case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_namespace n join pg_roles owner on owner.oid=n.nspowner cross join lateral aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor where n.nspname='public' order by grantee,grantor,a.privilege_type",
-      defaultGrants: "select owner.rolname as owner,coalesce(n.nspname,'ALL_SCHEMAS') as schema,d.defaclobjtype,case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_default_acl d join pg_roles owner on owner.oid=d.defaclrole left join pg_namespace n on n.oid=d.defaclnamespace cross join lateral aclexplode(d.defaclacl) a left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor where d.defaclnamespace=0 or n.nspname='public' order by owner.rolname,schema,d.defaclobjtype,grantee,grantor,a.privilege_type",
+       defaultGrants: "select owner.rolname as owner,coalesce(n.nspname,'ALL_SCHEMAS') as schema,d.defaclobjtype,case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_default_acl d join pg_roles owner on owner.oid=d.defaclrole left join pg_namespace n on n.oid=d.defaclnamespace left join lateral aclexplode(d.defaclacl) a on true left join pg_roles grantee on grantee.oid=a.grantee left join pg_roles grantor on grantor.oid=a.grantor order by owner.rolname,schema,d.defaclobjtype,grantee,grantor,a.privilege_type",
       sequences: "select sequencename,sequenceowner,data_type,start_value,min_value,max_value,increment_by,cycle,cache_size,last_value from pg_sequences where schemaname='public' order by sequencename",
 };
 
@@ -193,7 +193,7 @@ export const extensionQueries = {
     union
     select d.classid,d.objid,d.objsubid from pg_depend d join objects o on d.refclassid=o.classid and d.refobjid=o.objid
   ) select ${objectIdentity} from objects m cross join lateral pg_identify_object(m.classid,m.objid,m.objsubid) i order by catalog,identity,object_type`,
-  globalObjects: "select (select count(*)::int from pg_event_trigger)+(select count(*)::int from pg_foreign_data_wrapper)+(select count(*)::int from pg_foreign_server)+(select count(*)::int from pg_publication)+(select count(*)::int from pg_default_acl)+(select count(*)::int from pg_largeobject_metadata) as count"
+  globalObjects: "select (select count(*)::int from pg_event_trigger)+(select count(*)::int from pg_foreign_data_wrapper)+(select count(*)::int from pg_foreign_server)+(select count(*)::int from pg_publication)+(select count(*)::int from pg_largeobject_metadata) as count"
 };
 export const identityHash = (rows) => hash(canonical(rows.map(({ catalog, object_type, schema, name, identity }) =>
   ({ catalog, object_type, schema, name, identity })).sort((a, b) => canonical(a).localeCompare(canonical(b)))));
@@ -206,9 +206,10 @@ export async function captureExtensionMetadata(client) {
   const privileges = (await client.query(extensionQueries.privileges)).rows;
   const namespaces = (await client.query(catalogQueries.namespaces)).rows;
   const schemaGrants = (await client.query(catalogQueries.schemaGrants)).rows;
+  const defaultGrants = (await client.query(catalogQueries.defaultGrants)).rows;
   const normalized = { extensions, memberCount: members.length, structureSha256: hash(canonical(members)),
-    memberIdentitiesSha256: identityHash(members), privileges, namespaces, schemaGrants };
-  return { format: 'studio-stage3-source-extension-profile-v1', server, ...normalized, sha256: hash(canonical(normalized)) };
+    memberIdentitiesSha256: identityHash(members), privileges, namespaces, schemaGrants, defaultGrants };
+  return { format: 'studio-stage3-source-extension-profile-v2', server, ...normalized, sha256: hash(canonical(normalized)) };
 }
 
 /** Read-only SQL only: never creates ledger rows, schema, roles, credentials or fixtures. */
@@ -260,7 +261,7 @@ export async function captureQaDatabase({ client, target, manifest, sql061 }) {
     const unclassifiedTables = active.filter((row) => !row.knownSeedOrFixtureTable).map((row) => row.table);
     const unclassifiedSchemas = catalog.namespaces.filter((row) => row.nspname !== 'public').map((row) => row.nspname);
     const databaseCatalog = Object.fromEntries(Object.entries(catalog).filter(([name]) => !['roles', 'memberships'].includes(name)));
-    const report = { format: 'studio-stage3-qa-readonly-fingerprint-v4', databaseName: target.databaseName,
+    const report = { format: 'studio-stage3-qa-readonly-fingerprint-v5', databaseName: target.databaseName,
       projectId: target.projectId, branchId: target.branchId, readOnlyTransaction: true, database, extensionProfile,
       schema: { sha256: hash(canonical(databaseCatalog)), categories,
         clusterRolesSha256: hash(canonical({ roles: catalog.roles, memberships: catalog.memberships, globalRoleSettings: database.globalRoleSettings })) },

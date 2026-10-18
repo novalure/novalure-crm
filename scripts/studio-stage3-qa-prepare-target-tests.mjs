@@ -59,6 +59,7 @@ function cluster(options = {}) {
       if (sql === extensionQueries.globalObjects) return { rows: [{ count: options.extraGlobal ? 1 : 0 }] };
       if (sql === catalogQueries.namespaces) return { rows: options.extraSchema ? [...namespaces, { nspname: 'extra', owner: 'neondb_owner' }] : namespaces };
       if (sql === catalogQueries.schemaGrants) return { rows: options.wideSchemaAcl ? [...schemaGrants, { ...schemaGrants[0], grantee: 'PUBLIC' }] : schemaGrants };
+      if (sql === catalogQueries.defaultGrants) return { rows: [] };
       if (/^(begin|rollback)\b/u.test(sql)) return { rows: [] };
       const mutations = [
         'create database "st1_stage3_management" with template "template0" owner "neondb_owner"',

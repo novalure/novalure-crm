@@ -11,6 +11,10 @@ const namespaces = [{ nspname: 'public', owner: 'neondb_owner' }];
 const schemaGrants = ['USAGE', 'CREATE'].map((privilege_type) => ({ nspname: 'public', owner: 'neondb_owner', grantee: 'neondb_owner', grantor: 'neondb_owner', privilege_type, is_grantable: false }));
 const members = [{ catalog: 'pg_proc', object_type: 'function', schema: 'public', name: 'digest', identity: 'public.digest(text, text)', definition: { owner: 'neondb_owner', definition: 'synthetic extension function' } }];
 const privileges = [{ catalog: 'pg_proc', identity: 'public.digest(text, text)', grantee: 'PUBLIC', grantor: 'neondb_owner', privilege_type: 'EXECUTE', is_grantable: false }];
+const providerDefaultGrants = [
+  ...['SELECT', 'UPDATE', 'USAGE'].map((privilege_type) => ({ owner: 'cloud_admin', schema: 'public', defaclobjtype: 'S', grantee: 'neon_superuser', grantor: 'cloud_admin', privilege_type, is_grantable: true })),
+  ...['DELETE', 'INSERT', 'MAINTAIN', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE'].map((privilege_type) => ({ owner: 'cloud_admin', schema: 'public', defaclobjtype: 'r', grantee: 'neon_superuser', grantor: 'cloud_admin', privilege_type, is_grantable: true }))
+];
 const sourceProfile = await captureExtensionMetadata({ query: async (sql) => ({ rows:
   sql === extensionQueries.server ? [{ version: '17.11', version_num: 170011 }] :
     sql === extensionQueries.installed ? installed : sql === extensionQueries.members ? members :
@@ -21,7 +25,7 @@ const fp = () => ({ databaseName: sourceTarget.databaseName, projectId: sourceTa
   executionReceipts: { sha256: 'c'.repeat(64), original061Verified: true },
   data: { sha256: 'd'.repeat(64), tables: 141, rows: 118 },
   classification: { markerChecks: 'PASS_NARROW_MARKER_CHECKS' } });
-function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false, preparedMembers = members, preparedPrivileges = privileges } = {}) {
+function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false, preparedMembers = members, preparedPrivileges = privileges, defaultGrants = [], preparedDefaultGrants } = {}) {
   const calls = []; let roleReads = 0, extensionCreates = 0, installedReads = 0;
   return { calls, async query(sql) {
     calls.push(sql);
@@ -38,6 +42,7 @@ function targetClient({ nonempty = false, badIdentity = false, existing = false,
     if (sql === extensionQueries.privileges) return { rows: extensionCreates === 2 ? preparedAclDrift && installedReads > 3 ? [...preparedPrivileges, { ...preparedPrivileges[0], grantee: 'novalure_app' }] : preparedPrivileges : [] };
     if (sql === catalogQueries.namespaces) return { rows: extraSchema ? [...namespaces, { nspname: 'unexpected', owner: 'neondb_owner' }] : namespaces };
     if (sql === catalogQueries.schemaGrants) return { rows: schemaGrants };
+    if (sql === catalogQueries.defaultGrants) return { rows: extensionCreates === 2 && preparedDefaultGrants ? preparedDefaultGrants : defaultGrants };
     if (sql === extensionQueries.available) return { rows: sourceExtensions.filter((row) => !unavailableVersion || row.name !== 'vector') };
     if (sql === extensionQueries.globalObjects) return { rows: [{ count: extraGlobal ? 1 : 0 }] };
     if (sql === extensionQueries.userObjects) return { rows: extensionCreates === 2
@@ -278,4 +283,32 @@ test('actual-shaped cloud_admin function/type rights require the exact per-objec
   }
   const changedOwner = runFixture({ preparedMembers: [{ ...realMembers[0], definition: { ...realMembers[0].definition, owner: 'neondb_owner' } }, realMembers[1]] });
   await assert.rejects(restoreSelectedQa(changedOwner.options), /TARGET_EXTENSION_STRUCTURE_MISMATCH/u);
+});
+test('the two actual provider default ACLs are preserved exactly before and after extension setup; all drift fails closed', async () => {
+  const profile = await captureExtensionMetadata({ query: async (sql) => ({ rows:
+    sql === extensionQueries.server ? [{ version: '17.11', version_num: 170011 }] :
+      sql === extensionQueries.installed ? installed : sql === extensionQueries.members ? members :
+        sql === extensionQueries.privileges ? privileges : sql === catalogQueries.namespaces ? namespaces :
+          sql === catalogQueries.schemaGrants ? schemaGrants : sql === catalogQueries.defaultGrants ? providerDefaultGrants : [] }) });
+  assert.equal(profile.defaultGrants.length, 11); assert.equal(profile.format, 'studio-stage3-source-extension-profile-v2');
+  const report = { ...fp(), extensionProfile: profile };
+  const fixture = (targetOptions = {}) => runOptions({ targetOptions: { defaultGrants: providerDefaultGrants, ...targetOptions },
+    options: { approvedSource: report, capture: async () => report } });
+  assert.equal((await restoreSelectedQa(fixture().options)).status, 'PASS');
+  const changedRows = [
+    providerDefaultGrants.slice(1),
+    [...providerDefaultGrants, { owner: 'cloud_admin', schema: 'pg_catalog', defaclobjtype: 'T', grantee: null, grantor: null, privilege_type: null, is_grantable: null }],
+    ...[{ owner: 'neondb_owner' }, { grantor: 'neondb_owner' }, { grantee: 'PUBLIC' }, { schema: 'ALL_SCHEMAS' },
+      { defaclobjtype: 'r' }, { privilege_type: 'INSERT' }, { is_grantable: false }].map((patch) => [{ ...providerDefaultGrants[0], ...patch }, ...providerDefaultGrants.slice(1)])
+  ];
+  for (const rows of changedRows) for (const stage of ['initial', 'prepared']) {
+    const run = fixture(stage === 'initial' ? { defaultGrants: rows } : { preparedDefaultGrants: rows });
+    await assert.rejects(restoreSelectedQa(run.options), /TARGET_DEFAULT_ACL_MISMATCH/u);
+    assert.ok(!run.nativeCalls.some(([, action]) => action === 'restore'));
+    if (stage === 'initial') assert.equal(run.passwords.length, 0);
+  }
+  const old = { ...report, extensionProfile: { ...profile, format: 'studio-stage3-source-extension-profile-v1', defaultGrants: undefined } };
+  const oldRun = fixture(); oldRun.options.approvedSource = old; oldRun.options.capture = async () => old;
+  await assert.rejects(restoreSelectedQa(oldRun.options), /SOURCE_EXTENSION_PROFILE_NOT_APPROVED/u);
+  assert.equal(oldRun.target.calls.length, 0);
 });
