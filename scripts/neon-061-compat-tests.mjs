@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import pg from 'pg';
 import { startLocalSalesDb } from './lib/local-sales-db.mjs';
-import { applyNeon061Compatibility, renderNeon061Compatibility, neon061SourceChecksum, neon061QaTarget } from './lib/neon-061-compat.mjs';
+import { applyNeon061Compatibility, renderNeon061Compatibility, neon061SourceChecksum, neon061QaTarget, neon061StudioQaTarget } from './lib/neon-061-compat.mjs';
 const source = await readFile(new URL('../migrations/061_validate_and_activate_tenant_rls_pilot.sql', import.meta.url), 'utf8');
 const preparation = await readFile(new URL('../migrations/060_tenant_rls_pilot_prepare.sql', import.meta.url), 'utf8');
 const sha = value => createHash('sha256').update(value.replace(/\r\n/g, '\n')).digest('hex');
@@ -109,4 +109,83 @@ test('G24 actual local PostgreSQL provider-edge emulation preserves every 061 in
    assert.equal((await client.query("select checksum from novalure_schema_migrations where version='061_validate_and_activate_tenant_rls_pilot'")).rows[0].checksum,neon061SourceChecksum);
   });
  }finally{await client?.end();await db.stop()}
+});
+
+
+test('Studio Stage3 exact target uses the unchanged real 061 validation path on a disposable Neon-shaped local catalog', {timeout:240000}, async t=>{
+ const db=await startLocalSalesDb();let client,admin;
+ try{
+  // PostgreSQL records superuser grants as the bootstrap superuser. Rename
+  // that local bootstrap identity from a separate disposable control session.
+  await db.admin.query("create role studio_fixture_control login superuser");
+  const bootstrap=new pg.Client({host:'127.0.0.1',port:db.port,user:'studio_fixture_control',database:'postgres'});
+  await bootstrap.connect();
+  try{await bootstrap.query("alter role qa_admin rename to cloud_admin");}finally{await bootstrap.end();}
+  admin=new pg.Pool({host:'127.0.0.1',port:db.port,user:'cloud_admin',database:'postgres',max:1});
+  await admin.query("create role neondb_owner login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls; create role novalure_tenant_app nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
+  await admin.query("create database neondb owner neondb_owner");
+  // These provider role names and custom Neon GUCs exist ONLY inside this
+  // disposable loopback fixture. No remote opt-in or local bypass is added.
+  const control=await admin.connect();
+  try{await control.query("set role cloud_admin; grant novalure_tenant_app to neondb_owner with admin true,inherit false,set false; reset role;");}
+  finally{control.release();}
+  await admin.query("alter role novalure_app login; grant novalure_tenant_app to novalure_app with admin false,inherit true,set false; comment on role novalure_tenant_app is 'novalure-tenant-cutover:synthetic-studio-stage3';");
+  client=new pg.Client({host:'127.0.0.1',port:db.port,user:'neondb_owner',database:'neondb'});await client.connect();
+  await client.query("select set_config('neon.project_id',$1,false),set_config('neon.branch_id',$2,false)",[neon061StudioQaTarget.projectId,neon061StudioQaTarget.branchId]);
+  await client.query(`
+   create table workspace_users(id uuid primary key,workspace_id uuid not null);
+   create table projects(id uuid primary key,workspace_id uuid not null);
+   create table organizations(id uuid primary key,workspace_id uuid not null);
+   create table contacts(id uuid primary key,workspace_id uuid not null,project_id uuid,organization_id uuid,owner_user_id uuid,archived_by_user_id uuid);
+   create table leads(id uuid primary key,workspace_id uuid not null,project_id uuid,contact_id uuid,assigned_to_user_id uuid);
+   create table deals(id uuid primary key,workspace_id uuid not null,project_id uuid,contact_id uuid,organization_id uuid,owner_user_id uuid,lead_id uuid);
+   create table audit_logs(id uuid primary key,workspace_id uuid not null,actor_user_id uuid,project_id uuid,deal_id uuid);
+   create table novalure_schema_migrations(version text primary key,name text not null,checksum text not null,applied_at timestamptz not null default now());
+  `);
+  await client.query(preparation);
+  await client.query("insert into novalure_schema_migrations(version,name,checksum) values('060_tenant_rls_pilot_prepare','060_tenant_rls_pilot_prepare.sql',$1)",[sha(preparation)]);
+  const apply=(overrides={})=>applyNeon061Compatibility({client,sql:source,target:neon061StudioQaTarget,executionProfile:'studio-stage3-qa',
+    executionContext:{headCommit:'c'.repeat(40),planDigest:'d'.repeat(64)},...overrides});
+  const rolledBack=async fn=>{await client.query('begin');try{return await fn();}finally{await client.query('rollback');}};
+  const deny=async(pattern,overrides={})=>rolledBack(()=>assert.rejects(apply(overrides),pattern));
+  await t.test('actual exact profile executes original fifteen FKs and five FORCE RLS changes with its honest scoped receipt',async()=>{
+    const roles=JSON.stringify((await admin.query('select * from pg_auth_members order by roleid,member,grantor')).rows);
+    await rolledBack(async()=>{
+      const receipt=await apply();
+      assert.equal(receipt.profileId,'studio-stage3-qa:neon-provider-creator-admin-only-061-v1');
+      assert.equal(receipt.sourceChecksum,neon061SourceChecksum);assert.equal(receipt.evidence.foreignKeysValidated.length,15);
+      assert.deepEqual(receipt.evidence.forcedRlsTables,pilot);
+      assert.equal(receipt.evidence.roles.runtimePrivilegedReachability,false);
+      assert.deepEqual(receipt.evidence.roles.ignoredCreatorEdge,{admin:true,inherit:false,set:false,effectiveUsage:false,effectiveSet:false});
+      const persisted=(await client.query('select target,profile_id,source_checksum,executed_sql_checksum from novalure_migration_execution_receipts')).rows[0];
+      assert.deepEqual(persisted.target,neon061StudioQaTarget);assert.equal(persisted.profile_id,receipt.profileId);
+      assert.equal(persisted.executed_sql_checksum,renderNeon061Compatibility(source).executedSqlChecksum);
+      assert.equal(persisted.source_checksum,neon061SourceChecksum);
+    });
+    assert.equal(JSON.stringify((await admin.query('select * from pg_auth_members order by roleid,member,grantor')).rows),roles);
+  });
+  await t.test('wrong target field or actual Neon fingerprint/session owner is never accepted by the new profile',async()=>{
+    for(const [key,value] of [['projectId','foreign-project'],['branchId','br-foreign'],['databaseName','other'],['runtimeRole','other_runtime']]){
+      await deny(/fingerprint|identity mismatch/,{target:{...neon061StudioQaTarget,[key]:value}});
+    }
+    await client.query("set neon.branch_id='br-foreign'");
+    try{await deny(/connected Neon fingerprint/);}finally{await client.query("select set_config('neon.branch_id',$1,false)",[neon061StudioQaTarget.branchId]);}
+    await deny(/pinned Neon QA/,{executionProfile:'qa'});
+    await deny(/local profile requires/,{localTest:{profile:'disposable-loopback-postgresql'}});
+  });
+  await t.test('unsafe creator options, unsafe runtime and actual owner mismatch retain the existing fail-closed guards',async()=>{
+    await admin.query("grant novalure_tenant_app to neondb_owner with set true granted by cloud_admin");
+    try{await deny(/creator edge/);}finally{await admin.query("grant novalure_tenant_app to neondb_owner with set false granted by cloud_admin");}
+    await admin.query("alter role novalure_app bypassrls");
+    try{await deny(/safe non-owner/);}finally{await admin.query("alter role novalure_app nobypassrls");}
+    const wrongSession=new pg.Client({host:'127.0.0.1',port:db.port,user:'studio_fixture_control',database:'neondb'});
+    await wrongSession.connect();
+    try{
+      await wrongSession.query('begin');
+      await wrongSession.query("set local role neondb_owner");
+      await wrongSession.query("select set_config('neon.project_id',$1,true),set_config('neon.branch_id',$2,true)",[neon061StudioQaTarget.projectId,neon061StudioQaTarget.branchId]);
+      await assert.rejects(apply({client:wrongSession}),/database or session identity mismatch/);
+    }finally{await wrongSession.query('rollback');await wrongSession.end();}
+  });
+ }finally{await client?.end();await admin?.end();await db.stop();}
 });

@@ -5,6 +5,7 @@ import path from 'node:path';
 export const neon061SourceChecksum = '0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23';
 export const neon061ProfileId = 'neon-provider-creator-admin-only-061-v1';
 export const neon061QaTarget = Object.freeze({ projectId: 'weathered-term-98273025', branchId: 'br-spring-snow-alupo8u4', databaseName: 'qa_g24_pr63_20260917_r3', runtimeRole: 'g24_qa_20260917_r3' });
+export const neon061StudioQaTarget = Object.freeze({ projectId: 'super-block-59791927', branchId: 'br-ancient-term-awip1q3q', databaseName: 'neondb', runtimeRole: 'novalure_app' });
 export const neon061ProductionTarget = Object.freeze({ projectId: 'misty-cloud-70835427', branchId: 'br-snowy-fog-aldx77v8', databaseName: 'neondb', runtimeRole: 'novalure_app' });
 const predecessorChecksum = 'b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf';
 const version = '061_validate_and_activate_tenant_rls_pilot';
@@ -54,6 +55,10 @@ async function attestTarget(client, target, localTest, evidence, executionProfil
     if (executionProfile === 'rehearsal') {
       if (target.projectId !== neon061ProductionTarget.projectId || target.branchId === neon061ProductionTarget.branchId || target.databaseName !== neon061ProductionTarget.databaseName || target.runtimeRole !== neon061ProductionTarget.runtimeRole) fail('pinned Neon Production-rehearsal fingerprint mismatch');
       return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'production-rehearsal:' + neon061ProfileId };
+    }
+    if (executionProfile === 'studio-stage3-qa') {
+      if (Object.keys(neon061StudioQaTarget).some(key => target[key] !== neon061StudioQaTarget[key])) fail('pinned Neon Studio Stage3 QA fingerprint mismatch');
+      return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: 'studio-stage3-qa:' + neon061ProfileId };
     }
     if (executionProfile !== 'qa' || Object.keys(neon061QaTarget).some(key => target[key] !== neon061QaTarget[key])) fail('pinned Neon QA fingerprint mismatch');
     return { ownerRole: 'neondb_owner', grantorRole: 'cloud_admin', profileId: neon061ProfileId };

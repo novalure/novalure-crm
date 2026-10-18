@@ -58,3 +58,30 @@ Before/after snapshots compare tables, columns, constraints/FKs, indexes, RLS, p
 5. Inspect sanitized `.npm-cache/qa/g24-r3/evidence.json`, both catalog snapshots and native restore results. Run `npm run test:neon:061`, all existing regression suites, browser E2E, typecheck, lint, build, dependency audit and secret scans. Independently review evidence before changing G24 status.
 
 Final result: **G24 CLOSED**. See [measured evidence](g24-neon-final-evidence.json): 83/83 forward migrations, 450/450 local tests, 46/46 remote security checks both before and after actual native restore, identical complete snapshots, independent DB/security review PASS. Two prior native-client invocation failures remain explicitly recorded as FAIL; the successful final run used new empty databases with no manual repair. G08 remains open.
+
+
+## Reviewed Studio Stage 3 fresh-QA target
+
+The separate direct-bootstrap profile studio-stage3-qa is pinned exclusively to
+project super-block-59791927, branch br-ancient-term-awip1q3q, database neondb
+and runtime role novalure_app, exported as neon061StudioQaTarget.
+It implements the new reviewed branch profile required by Reproduction step 2.
+It does not expand general db-migrate flags or the old G24, Production,
+Production-rehearsal or loopback profiles.
+
+The connected current/session owner must still be neondb_owner with the actual
+matching Neon project/branch/database. The existing provider-granted
+cloud_admin creator edge must actually exist with ADMIN=true, INHERIT=false,
+SET=false and no effective USAGE/SET. All existing runtime reachability,
+ownership, source/predecessor checksum, transaction, fifteen FK, five FORCE RLS,
+unchanged-role-catalog and immutable execution-receipt checks are retained.
+Neither provider roles nor historical SQL are changed. The only emitted receipt
+profile prefix is studio-stage3-qa:; it records an actual new execution, never
+copies an old G24 receipt or invents historical ledger rows.
+
+The new local regression emulates these provider names and Neon fingerprints
+only in a disposable loopback PostgreSQL cluster, executes the full existing
+renderer/attestation/activation/receipt path, and rejects wrong target fields,
+unsafe creator/runtime roles and owner mismatch. This is local synthetic
+evidence, not remote Studio QA execution proof. No remote execution is performed
+by adding this profile.
