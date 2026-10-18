@@ -37,7 +37,8 @@ export function validateLiveQaConfig(config) {
     typeof q.productionHost === "string" && q.productionHost.length > 0 &&
     /^[a-z0-9-]+-pooler\.[a-z0-9.-]+\.neon\.tech$/.test(q.host) &&
     decodeURIComponent(database.pathname.slice(1)) === q.databaseName && decodeURIComponent(database.username) === q.role &&
-    typeof q.projectId === "string" && q.projectId.length > 0 && typeof q.branchId === "string" && q.branchId.length > 0 &&
+    q.projectId === fixtureTarget.projectId && q.branchId === fixtureTarget.branchId &&
+    q.databaseName === fixtureTarget.databaseName && q.role === "novalure_app" &&
     (!database.port || database.port === '5432') && database.searchParams.get('sslmode') === 'verify-full' &&
     [...database.searchParams.keys()].every(key=>['sslmode','channel_binding'].includes(key)) &&
     (!database.searchParams.has('channel_binding') || database.searchParams.get('channel_binding') === 'require'), "invalid_qa_database");
@@ -45,12 +46,13 @@ export function validateLiveQaConfig(config) {
 }
 export function liveQaDatabaseOptions(config) {
   validateLiveQaConfig(config);
+  check(!process.env.PGOPTIONS && !process.env.PGREPLICATION, "ambient_pg_startup_options_forbidden");
   const uri=new URL(config.qa.databaseUrl);
   // Do not pass connectionString or free URI options to pg's compatibility parser.
   return {host:uri.hostname,port:5432,user:decodeURIComponent(uri.username),password:decodeURIComponent(uri.password),
     database:decodeURIComponent(uri.pathname.slice(1)),ssl:{rejectUnauthorized:true,
       ca:getCACertificates('default').concat(getCACertificates('system')).join('\n')},enableChannelBinding:true,
-    max:2,connectionTimeoutMillis:10000,statement_timeout:15000,query_timeout:20000};
+    max:2,connectionTimeoutMillis:10000,query_timeout:20000};
 }
 export function parseCurlResponse(bytes) {
   let offset = 0, status = 0, headers = new Map();
@@ -245,10 +247,12 @@ async function newState(config) {
     files, websites: [], syntheticTest: true };
   return { binding: config.crm, operationId: randomUUID(), revision: 1, payloadHash: hash(JSON.stringify(snapshot)), snapshot, payloads };
 }
-async function withReadOnly(pool, callback) {
+export async function withReadOnly(pool, callback) {
   const client = await pool.connect();
   try {
     await client.query("begin read only");
+    await client.query("set local statement_timeout = '15s'");
+    await client.query("set local lock_timeout = '5s'");
     await client.query("select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)", [workspaceId, actorId]);
     const result = await callback(client); await client.query("commit"); return result;
   } catch (error) { await client.query("rollback").catch(() => undefined); throw error; }
@@ -353,13 +357,13 @@ export async function runLiveQa(configFile) {
     check(versionBody.gitSha === config.crm.gitSha && versionBody.branch === branch &&
       (!versionBody.deploymentId || versionBody.deploymentId === config.crm.deploymentId), "runtime_revision_mismatch");
     pool = new pg.Pool(liveQaDatabaseOptions(config));
-    const actual = (await pool.query(`select current_setting('neon.project_id',true) as project,current_setting('neon.branch_id',true) as branch,
+    const actual = await withReadOnly(pool, async client => (await client.query(`select current_setting('neon.project_id',true) as project,current_setting('neon.branch_id',true) as branch,
       current_database() as name,current_user as role,(not r.rolsuper and not r.rolbypassrls and not r.rolcreatedb and not r.rolcreaterole
        and pg_has_role(r.oid,'novalure_tenant_app','USAGE') and not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
          where n.nspname='public' and c.relrowsecurity and c.relkind in ('r','p') and (c.relowner=r.oid or pg_has_role(r.oid,c.relowner,'MEMBER')))) as safe,
       (select count(*)=2 and bool_and(c.relrowsecurity and c.relforcerowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace
         where n.nspname='public' and c.relname in ('studio_enquiry_transfers','studio_enquiry_assets')) as migrated
-      from pg_roles r where r.rolname=current_user`)).rows[0];
+      from pg_roles r where r.rolname=current_user`)).rows[0]);
     check(actual?.project === config.qa.projectId && actual.branch === config.qa.branchId && actual.name === config.qa.databaseName &&
       actual.role === config.qa.role && actual.safe === true && actual.migrated === true, "actual_qa_database_mismatch");
     report.checks.target = "PASS_exact_preview_and_neon_identity";

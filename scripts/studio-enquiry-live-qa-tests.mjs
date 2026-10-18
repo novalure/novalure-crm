@@ -3,8 +3,9 @@ import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { parseStudioEnquiryRequest, verifyStudioEnquirySignature } from "../src/lib/studio-enquiry-contract.ts";
 import path from "node:path";
+import pg from "pg";
 import {readFile} from "node:fs/promises";
-import { validateLiveQaConfig, validateQaPut, parseCurlResponse, liveQaDatabaseOptions, isAllowedLiveQaHttpPath,buildPrivateCurlRequest,nativeCurlEnvironment,createSignedQaCaller,verifySignedPreReserveRejections,verifyMissingCopyRejection } from "./studio-enquiry-live-qa.mjs";
+import { validateLiveQaConfig, validateQaPut, parseCurlResponse, liveQaDatabaseOptions, isAllowedLiveQaHttpPath,buildPrivateCurlRequest,nativeCurlEnvironment,createSignedQaCaller,verifySignedPreReserveRejections,verifyMissingCopyRejection,withReadOnly } from "./studio-enquiry-live-qa.mjs";
 const operationId='4d1aac3d-d3dc-40f5-87c1-3664e1272da7', sourceId='e173fc56-165c-4920-aa9c-5c945ea6db8a', assetId='fe711063-f9a1-4289-8f70-2b7c96635018';
 const workspace='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101';
 const content={mime:'image/png',bytes:123,sha256:'a'.repeat(64)};
@@ -17,14 +18,17 @@ test('live harness grants reject foreign endpoint, scope, role, credential heade
   }
 });
 test('live harness requires exact isolated Preview and rejects Production DB identity before any request',()=>{
-  const config={runId:'GOLIVETEST_STUDIO_123456',approvalId:'synthetic',protectionTokenFile:path.resolve('synthetic-private-existing-protection.txt'),signingSecret:'a'.repeat(32),qaEmail:'synthetic@example.invalid',crm:{projectId:'prj_R32Okl6AHijTohvuKmryuTLjWMsk',branch:'codex/studio-preview-crm-handoff',deploymentId:'dpl_synthetic123',gitSha:'a'.repeat(40),origin:'https://crm-synthetic.vercel.app'},qa:{databaseUrl:'postgresql://app:synthetic@ep-qa-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full',host:'ep-qa-pooler.eu-west-2.aws.neon.tech',productionHost:'ep-prod-pooler.eu-west-2.aws.neon.tech',projectId:'syntheticProject',branchId:'syntheticBranch',databaseName:'neondb',role:'app'}};
+  const config={runId:'GOLIVETEST_STUDIO_123456',approvalId:'synthetic',protectionTokenFile:path.resolve('synthetic-private-existing-protection.txt'),signingSecret:'a'.repeat(32),qaEmail:'synthetic@example.invalid',crm:{projectId:'prj_R32Okl6AHijTohvuKmryuTLjWMsk',branch:'codex/studio-preview-crm-handoff',deploymentId:'dpl_synthetic123',gitSha:'a'.repeat(40),origin:'https://crm-synthetic.vercel.app'},qa:{databaseUrl:'postgresql://novalure_app:synthetic@ep-qa-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full',host:'ep-qa-pooler.eu-west-2.aws.neon.tech',productionHost:'ep-prod-pooler.eu-west-2.aws.neon.tech',projectId:'super-block-59791927',branchId:'br-ancient-term-awip1q3q',databaseName:'neondb',role:'novalure_app'}};
   assert.equal(validateLiveQaConfig(config),config);
   const options=liveQaDatabaseOptions(config);assert.equal(options.ssl.rejectUnauthorized,true);assert.ok(options.ssl.ca.length>0);
   assert.equal(options.host,config.qa.host);assert.equal(Object.hasOwn(options,'connectionString'),false);
+  const startup=new pg.Client(options).getStartupConf();
+  for(const key of ['statement_timeout','lock_timeout','options'])assert.equal(Object.hasOwn(startup,key),false);
+  assert.equal(options.query_timeout,20000);assert.equal(options.connectionTimeoutMillis,10000);
   for(const query of ['', '?sslmode=require', '?sslmode=require&uselibpqcompat=true', '?sslmode=verify-full&sslrootcert=system', '?sslmode=verify-full&options=-c%20ssl=off']){
     const unsafe=structuredClone(config);unsafe.qa.databaseUrl=config.qa.databaseUrl.split('?')[0]+query;assert.throws(()=>liveQaDatabaseOptions(unsafe),/invalid_qa_database/);
   }
-  for(const change of [c=>c.crm.projectId='foreign',c=>c.crm.branch='main',c=>c.crm.origin='https://novalure-crm.ie',c=>c.qa.productionHost=c.qa.host,c=>c.signingSecret='short']){const c=structuredClone(config);change(c);assert.throws(()=>validateLiveQaConfig(c));}
+  for(const change of [c=>c.crm.projectId='foreign',c=>c.crm.branch='main',c=>c.crm.origin='https://novalure-crm.ie',c=>c.qa.productionHost=c.qa.host,c=>c.signingSecret='short',c=>c.qa.projectId='foreign',c=>c.qa.branchId='foreign',c=>{c.qa.databaseName='foreign';c.qa.databaseUrl=c.qa.databaseUrl.replace('/neondb?','/foreign?');},c=>{c.qa.role='neondb_owner';c.qa.databaseUrl=c.qa.databaseUrl.replace('novalure_app:','neondb_owner:');}]){const c=structuredClone(config);change(c);assert.throws(()=>validateLiveQaConfig(c));}
 });
 test('CLI response parser preserves binary private media and separate cookies without exposing them',()=>{
   const bytes=Buffer.from([0,255,13,10,123,0]);
@@ -117,4 +121,17 @@ test('signed negative HTTP probes bypass only client validation and precede an e
     captureCounts:async()=>({...effects})}),/signed_negative_not_rejected/);
   await assert.rejects(verifyMissingCopyRejection({call:async()=>({data:{error:'wrong'}}),captureCounts:counts}),/missing_copy_error/);
   await assert.rejects(verifyMissingCopyRejection({call:async()=>{throw new Error('must_not_dispatch');},captureCounts:async()=>({...await counts(),assets:1})}),/precopy_state_not_empty/);
+});
+
+test('read-only pooled checks apply transaction-local timeouts before queries and always release',async()=>{
+  const seen=[],client={async query(sql){seen.push(sql);return {rows:[{actual:true}]};},release(){seen.push('release');}};
+  const pool={async connect(){return client;}};
+  const result=await withReadOnly(pool,async c=>{assert.equal(c,client);seen.push('metadata');return {actual:true};});
+  assert.deepEqual(result,{actual:true});
+  assert.deepEqual(seen.slice(0,3),['begin read only',"set local statement_timeout = '15s'","set local lock_timeout = '5s'"]);
+  assert.equal(seen[3].startsWith("select set_config('app.tenant_id'"),true);
+  assert.deepEqual(seen.slice(-3),['metadata','commit','release']);
+  seen.length=0;
+  await assert.rejects(withReadOnly(pool,async()=>{throw new Error('synthetic_failure');}),/synthetic_failure/);
+  assert.deepEqual(seen.slice(-2),['rollback','release']);
 });

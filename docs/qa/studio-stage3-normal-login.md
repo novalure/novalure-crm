@@ -73,3 +73,15 @@ before any file copy with the operation still reserved and no lead, submission,
 asset or link. Resumed operations with copied files explicitly leave that last
 fresh-only check unexecuted. Offline mocks validate the sequence and signatures;
 only actual execution can supply the HTTP integration evidence.
+
+## Pooled QA connection compatibility
+
+The live harness now pins the actual isolated fixture project/branch, neondb and
+novalure_app. Installed pg serializes top-level statement_timeout into its startup
+packet; Neon transaction pooling rejects that unsupported parameter. Startup
+statement/options timeouts are therefore absent. Each existing READ ONLY check
+sets statement_timeout=15s and lock_timeout=5s locally immediately after BEGIN;
+client connection/query deadlines and verified TLS remain enabled. The initial
+identity query uses that same read-only wrapper. Ambient PGOPTIONS/PGREPLICATION
+are refused. No direct-host fallback, runtime role change or SQL migration occurs.
+See [Neon's startup-parameter documentation](https://neon.com/docs/connect/connection-errors#unsupported-startup-parameter).
