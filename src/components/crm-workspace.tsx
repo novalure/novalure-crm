@@ -37,6 +37,7 @@ import { SystemReleasesPanel } from "@/components/admin/system-releases-panel";
 import { CalendarCommandCenter } from "@/components/calendar-command-center";
 import { CompanyProfileSettings } from "@/components/company-profile-settings";
 import { CrmAnalysisBot } from "@/components/crm-analysis-bot";
+import { isVisibleBusinessRecord, selectVisibleBusinessRecords } from "@/components/crm-business-visibility";
 import { ContactCommandCenter } from "@/components/contact-command-center";
 import { CustomerAccessCockpit } from "@/components/customer-access-cockpit";
 import { DailyQueueBoard } from "@/components/daily-queue-board";
@@ -781,28 +782,6 @@ const actionStatusStyles = {
   ready: "border-emerald-200 bg-emerald-50 text-emerald-900",
   warning: "border-amber-200 bg-amber-50 text-amber-900",
 } as const;
-
-const normalRoleHiddenRecordPatterns = [
-  /\bqa\b/i,
-  /qa crm audit/i,
-  /qa contact db first ui/i,
-  /qa date deal/i,
-  /qa public lead/i,
-  /example\.test/i,
-  /\bAUTO-[A-Z0-9-]+/i,
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i,
-  /\uFFFD/,
-  /\u00c3/,
-];
-
-function isVisibleBusinessRecord(values: Array<string | number | null | undefined>) {
-  const searchable = values
-    .filter((value) => value !== null && value !== undefined)
-    .map((value) => String(value))
-    .join(" ");
-
-  return !normalRoleHiddenRecordPatterns.some((pattern) => pattern.test(searchable));
-}
 
 function ModalShell({
   children,
@@ -3282,16 +3261,16 @@ export function CrmWorkspace({
     }
   }
 
-  const contacts = liveCoreData.contacts.filter((contact) =>
-    isVisibleBusinessRecord([contact.name, contact.email, contact.phone, contact.intent, contact.source]),
-  );
+  const { contacts, leads } = selectVisibleBusinessRecords({
+    contacts: liveCoreData.contacts,
+    leads: liveCoreData.leads,
+    projects: liveCoreData.projects,
+    workspaceId: activeWorkspace.id,
+  });
   const brokerMandates = liveCoreData.brokerMandates ?? [];
   const buyerSearchProfiles = liveCoreData.buyerSearchProfiles ?? [];
   const calendarEvents = liveCoreData.calendarEvents.filter((event) =>
     isVisibleBusinessRecord([event.title, event.outcomeGoal]),
-  );
-  const leads = liveCoreData.leads.filter((lead) =>
-    isVisibleBusinessRecord([lead.intent, lead.nextAction, lead.source, lead.status]),
   );
   const deals = liveCoreData.deals.filter((deal) =>
     isVisibleBusinessRecord([deal.name, deal.nextAction, deal.source]),

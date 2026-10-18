@@ -77,9 +77,9 @@ export async function seedLoginFixtures(client, credentials, {persistPrivateCred
       const account=credentials.logins[label];
       const hashed=await hashPassword(account.password);
       // The existing trigger alone creates/links the central auth identity.
-      await client.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status,password_hash) values($1::uuid,$2::uuid,$3,$4,'owner','customer_owner','active',$5)",
+      await client.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status,password_hash) values($1::uuid,$2::uuid,$3,$4,'owner','novalureAdmin','active',$5)",
         [account.userId,account.workspaceId,account.name,account.email,hashed]);
-      const verified=(await client.query("select u.role='owner' and u.product_role='customer_owner' and u.status='active' and a.normalized_email=$2 and a.password_hash=$3 and a.credential_state='active' and a.mfa_enabled_at is null and a.mfa_secret_ciphertext is null and (select count(*)=1 from workspace_users other where other.auth_identity_id=a.id) as verified from workspace_users u join auth_identities a on a.id=u.auth_identity_id where u.id=$1::uuid",
+      const verified=(await client.query("select u.role='owner' and u.product_role='novalureAdmin' and u.status='active' and a.normalized_email=$2 and a.password_hash=$3 and a.credential_state='active' and a.mfa_enabled_at is null and a.mfa_secret_ciphertext is null and (select count(*)=1 from workspace_users other where other.auth_identity_id=a.id) as verified from workspace_users u join auth_identities a on a.id=u.auth_identity_id where u.id=$1::uuid",
         [account.userId,account.email,hashed])).rows[0];
       check(verified?.verified===true,'NORMAL_LOGIN_IDENTITY_NOT_VERIFIED');
     }

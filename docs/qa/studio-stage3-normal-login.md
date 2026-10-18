@@ -4,7 +4,7 @@ Prepared tooling only. No account, database, HTTP or MFA operation was executed 
 
 The fixture is restricted to Neon project super-block-59791927, branch br-ancient-term-awip1q3q, database neondb. The actual current and session user and database owner must all be neondb_owner, with the exact existing provider administrator profile: SUPERUSER=false, BYPASSRLS=true, LOGIN=true, CREATEDB=true and CREATEROLE=true. Root's read-only provider-role-provenance.json confirmed that this profile is identical in the empty parent and the owned Stage3 branch. The fixture makes no role changes. This is a seed-only provider administrator; the application runtime novalure_app remains strictly non-owner/non-superuser/non-BYPASSRLS under its existing checks. Migration 098 must have its current committed LF-normalized checksum, using the same CRLF-to-LF rule as db-migrate, and the existing fixed Studio operator must remain active. The source QA database and other branches are not used.
 
-Direct writes are limited to one synthetic foreign workspace and two synthetic owner/customer_owner memberships. One membership belongs to Studio workspace 8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101; the other belongs to a deterministic separate synthetic workspace. Existing identity triggers create the two normal active password identities. No contact, lead, task, invitation, email, integration, role, grant, session or MFA state is seeded. Existing triggers and policies remain active. A conflicting identity, user or workspace stops the entire transaction; the script never adopts an existing identity or rotates a password.
+Direct writes are limited to one synthetic foreign workspace and two synthetic owner/novalureAdmin memberships. One membership belongs to Studio workspace 8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101; the other belongs to a deterministic separate synthetic workspace. Existing identity triggers create the two normal active password identities. No contact, lead, task, invitation, email, integration, role, grant, session or MFA state is seeded. Existing triggers and policies remain active. A conflicting identity, user or workspace stops the entire transaction; the script never adopts an existing identity or rotates a password.
 
 The ordinary login accounts are st1-studio-owner@example.invalid and st1-foreign-owner@example.invalid. Their deterministic user/workspace IDs are exported as loginPlan. These are login identities. The separate synthetic enquiry contact is st1-qa@example.invalid, optionally with +353000000000; the same values must be present in the dedicated Preview recipient allowlists. The live harness has no contradictory hardcoded contact. It reads qaEmail/qaPhone from its private configuration.
 
@@ -85,3 +85,14 @@ client connection/query deadlines and verified TLS remain enabled. The initial
 identity query uses that same read-only wrapper. Ambient PGOPTIONS/PGREPLICATION
 are refused. No direct-host fallback, runtime role change or SQL migration occurs.
 See [Neon's startup-parameter documentation](https://neon.com/docs/connect/connection-errors#unsupported-startup-parameter).
+
+
+The internal QA fixture uses the existing novalureAdmin product role, which maps
+to technical owner and permits internal data. customer_owner is a customer
+category and correctly cannot read novalure_internal through withCrmRead. The
+original e711 live handoff/login evidence remains valid; its first CRM read
+failed on that fixture mismatch. A separately reviewed ignored correction
+changes only the two exact synthetic memberships' product_role after a fresh
+read-only plan. It preserves passwords, identities, MFA, sessions and the
+accepted enquiry; it changes no PostgreSQL role, grant or isolation policy.
+Future fixture inserts use the corrected category without changing stable IDs.

@@ -2,6 +2,7 @@
   "runId": "GOLIVETEST_REPLACE_WITH_UNIQUE_RUN",
   "approvalId": "",
   "signingSecret": "",
+  "protectionTokenFile": "",
   "qaEmail": "",
   "qaPhone": "",
   "crm": {

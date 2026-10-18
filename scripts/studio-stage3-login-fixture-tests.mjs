@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import {hasProductCapability,mapProductRoleToTechnicalRole} from '../src/lib/product-model.ts';
 import { mkdir, mkdtemp, writeFile, realpath, chmod, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -168,4 +169,13 @@ test('migration checksum matches db-migrate LF normalization without ignoring re
   assert.equal(migrationChecksum(lf),migrationChecksum(lf.replaceAll('\n','\r\n')));
   assert.notEqual(migrationChecksum(lf),migrationChecksum(lf.replace('select 1','select 2')));
   assert.notEqual(migrationChecksum(lf),migrationChecksum(lf+' '));
+});
+
+test('internal fixture technical owners use existing novalureAdmin rather than a customer category',async()=>{
+  const db=database();await seedLoginFixtures(db,makeCredentials(),{persistPrivateCredentials:async()=>{}});
+  const inserts=db.calls.filter(c=>c.sql.startsWith('insert into workspace_users'));
+  assert.equal(inserts.length,2);assert.ok(inserts.every(c=>c.sql.includes("'owner','novalureAdmin','active'")));
+  assert.equal(hasProductCapability('novalureAdmin','novalure:internal'),true);
+  assert.equal(mapProductRoleToTechnicalRole('novalureAdmin'),'owner');
+  assert.equal(hasProductCapability('customer_owner','novalure:internal'),false);
 });

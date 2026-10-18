@@ -178,10 +178,15 @@ review gates pass, the root task can execute:
 node --conditions=react-server --import tsx scripts/studio-enquiry-live-qa.mjs .npm-cache/qa/<private-config>.json
 ```
 
-The script uses the existing Vercel CLI authentication and `vercel curl`; it
-does not disable protection, create keys or change access rules. Read-only
-deployment metadata and `/api/version` must match the exact Preview before any
-handoff. It then confirms actual Neon project/branch/database/non-owner runtime
+The script uses existing Vercel CLI authentication only for read-only deployment
+metadata. Actual HTTP uses native `C:\Windows\System32\curl.exe --disable --config -`
+with an existing authorized protection token from the mandatory ACL-private
+`protectionTokenFile`. All headers, cookies and signatures enter its configuration
+on stdin; request bodies and raw responses remain ACL-private. It uses normal TLS,
+the exact immutable origin, allowed paths, no redirects and bounded timeouts.
+It never uses `vercel curl`, provisions a token, disables protection or changes
+access rules. Read-only deployment metadata and `/api/version` must match the
+exact Preview before any handoff. It then confirms actual Neon project/branch/database/non-owner runtime
 role and FORCE RLS, with a distinct Production host. Database evidence queries
 run read-only in the fixed Studio tenant. Only the new signed enquiry route and
 its exact private PUT capabilities perform the authorized QA writes.
