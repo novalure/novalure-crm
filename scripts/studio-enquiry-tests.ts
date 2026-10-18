@@ -115,6 +115,41 @@ test("Production, wrong Preview project/branch and missing actual target identit
     VERCEL_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", STUDIO_ENQUIRY_QA_CRM_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
     VERCEL_GIT_COMMIT_REF: "another-branch", STUDIO_ENQUIRY_QA_ENABLED: "1", STUDIO_ENQUIRY_QA_APPROVAL_ID: "synthetic" }), false);
 });
+test("Preview readiness uses the fixed actor in a read-only transaction under actual FORCE RLS", async () => {
+  await closeLocalTestPool();
+  // The sales-only schema omits the separately activated launch registry policy.
+  // Install its tenant equality boundary only in this disposable local fixture.
+  await db.admin.query(`alter table public.workspace_users enable row level security;
+    alter table public.workspace_users force row level security;
+    create policy synthetic_readiness_tenant on public.workspace_users for select to novalure_tenant_app
+      using (workspace_id=nullif(current_setting('app.tenant_id',true),'')::uuid)`);
+  const policy = (await db.admin.query("select relrowsecurity and relforcerowsecurity as forced from pg_class where oid='public.workspace_users'::regclass")).rows[0];
+  assert.equal(policy.forced, true);
+  await db.admin.query('alter database postgres set "neon.project_id" = \'synthetic-studio-readiness\'');
+  await db.admin.query('alter database postgres set "neon.branch_id" = \'synthetic-studio-branch\'');
+  try {
+    const unscoped = await queryOne<{ count: number }>("select count(*)::int as count from workspace_users where id=$1::uuid", [websiteSalesActorId]);
+    assert.equal(unscoped?.count, 0, "the ordinary runtime cannot see this actor without tenant context");
+    const readOnly = await withPublicSubmissionTransaction(actor, () => queryOne<{ mode: string }>("select current_setting('transaction_read_only') as mode", []), { readOnly: true });
+    assert.equal(readOnly?.mode, "on");
+    const qaUrl = "postgresql://" + db.role + "@ep-synthetic-pooler.eu-west-2.aws.neon.tech/postgres?sslmode=verify-full";
+    const configured = { ...process.env, VERCEL: "1", VERCEL_ENV: "preview", VERCEL_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      VERCEL_GIT_COMMIT_REF: "codex/studio-preview-crm-handoff", STUDIO_ENQUIRY_QA_CRM_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      STUDIO_ENQUIRY_QA_ENABLED: "1", STUDIO_ENQUIRY_QA_APPROVAL_ID: "synthetic-local-readiness",
+      DATABASE_URL: qaUrl, NOVALURE_QA_DATABASE_URL: qaUrl, NOVALURE_QA_DATABASE_HOST: "ep-synthetic-pooler.eu-west-2.aws.neon.tech",
+      NOVALURE_PRODUCTION_DATABASE_HOST: "ep-different-production-pooler.eu-west-2.aws.neon.tech", NOVALURE_QA_PROJECT_ID: "synthetic-studio-readiness",
+      NOVALURE_QA_BRANCH_ID: "synthetic-studio-branch", NOVALURE_QA_DATABASE_NAME: "postgres", NOVALURE_QA_DATABASE_ROLE: db.role };
+    assert.equal(await studioEnquiryTargetVerified(configured), true);
+    assert.equal(await studioEnquiryTargetVerified({ ...configured, NOVALURE_QA_BRANCH_ID: "different-branch" }), false);
+    const after = await queryOne<{ count: number }>("select count(*)::int as count from workspace_users where id=$1::uuid", [websiteSalesActorId]);
+    assert.equal(after?.count, 0, "readiness does not leak its transaction-local tenant context");
+  } finally {
+    await closeLocalTestPool();
+    await db.admin.query('alter database postgres reset "neon.project_id"');
+    await db.admin.query('alter database postgres reset "neon.branch_id"');
+  }
+});
+
 test("HTTP rejects missing signature, stale key, oversized or invalid JSON before external effects", async () => {
   const r = request(), body = JSON.stringify(r), timestamp = String(Math.floor(Date.now()/1000));
   const http = (text: string, overrides: Record<string,string> = {}) => new Request("https://crm.example.invalid/api/public/website-sales/enquiry", {

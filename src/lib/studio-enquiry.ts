@@ -38,13 +38,13 @@ export async function studioEnquiryTargetVerified(env: NodeJS.ProcessEnv = proce
     const u = new URL(configured);
     if (!/^postgres(?:ql)?:$/.test(u.protocol) || u.hostname.toLowerCase() !== host || !host.includes("-pooler.") ||
         decodeURIComponent(u.pathname.slice(1)) !== name || decodeURIComponent(u.username) !== role) return false;
-    const actual = await queryOne<{ project: string; branch: string; name: string; role: string; ready: boolean }>(
+    const actual = await withPublicSubmissionTransaction(scope, () => queryOne<{ project: string; branch: string; name: string; role: string; ready: boolean }>(
       `select current_setting('neon.project_id',true) as project, current_setting('neon.branch_id',true) as branch,
         current_database() as name, current_user as role,
         (to_regclass('public.studio_enquiry_transfers') is not null and to_regclass('public.studio_enquiry_assets') is not null
          and exists(select 1 from workspace_users where id=$1::uuid and workspace_id=$2::uuid
            and status='active' and role='agent' and product_role='novalure_operator')) as ready`,
-      [websiteSalesActorId, websiteSalesWorkspaceId]);
+      [websiteSalesActorId, websiteSalesWorkspaceId]), { readOnly: true });
     return actual?.project === project && actual.branch === branch && actual.name === name && actual.role === role && actual.ready === true;
   } catch { return false; }
 }

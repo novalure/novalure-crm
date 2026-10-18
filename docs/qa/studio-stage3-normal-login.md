@@ -43,3 +43,33 @@ The private MFA file is adjacent to the already private live configuration, name
 The helper requires a verified ordinary cookie session with the exact synthetic owner/user/workspace and trustedAuthHeaders=false and demoAuth=false. Cookies, rendered secrets, recovery codes, raw HTML, passwords and database URLs are never logged. The returned cookie is a sensitive in-memory capability used only for the existing same-workspace lead/private-media reads and foreign-workspace denial checks. The signed handoff's transport and receipt checks remain unchanged.
 
 Deployment metadata, /api/version, actual database identity, private configuration, review and Preview activation gates precede normal authentication. The HTTP wrapper adds only the two exact same-origin MFA challenge page paths; arbitrary login URLs, origins and redirects remain rejected. No change to Vercel protection, MFA policy, authentication runtime, TLS configuration, EF1 or Production is made. This prepares API authentication evidence; visual lead acceptance still requires the actual protected CRM UI in the allowed external browser.
+
+
+## Protected HTTP transport contract
+
+The authoritative live harness checks the exact Preview deployment/project/branch/SHA
+through the normally authenticated Vercel CLI API. Actual HTTP uses the native
+Windows curl client with normal certificate verification, the already verified
+immutable HTTPS origin, allowed API paths and the two exact MFA pages, no redirects,
+and bounded timeouts. It does not use Vercel curl, which can provision a protection
+token and places that token in its child process arguments in CLI64.2.
+
+Private config must specify protectionTokenFile pointing to an existing,
+authorized ACL-private protection token file. No token is created or rotated.
+The token, cookies and HMAC headers enter native curl only in its configuration
+on stdin; private request bodies and raw responses have exclusive ACL-private
+files. Arguments contain only --disable --config -; the first option disables ambient curl configuration. Native child environment excludes
+ambient secrets, proxies and certificate overrides. No CLI shim, empty protection
+flag, auth/MFA bypass or change to deployment protection is used.
+
+Studio target readiness now runs in the existing fixed server tenant transaction
+with READ ONLY enabled before any query. This preserves FORCE RLS and the ordinary
+runtime role; no policy, owner, role grant, migration or database evidence is changed.
+
+The real transport run sends two validly signed, freshly rehashed invalid snapshots
+before reserve (foreign scope and mismatched file conversation), requires HTTP400
+and unchanged scoped aggregate CRM counts, then requires HTTP409 for finalize
+before any file copy with the operation still reserved and no lead, submission,
+asset or link. Resumed operations with copied files explicitly leave that last
+fresh-only check unexecuted. Offline mocks validate the sequence and signatures;
+only actual execution can supply the HTTP integration evidence.

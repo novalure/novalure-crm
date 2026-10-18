@@ -29,6 +29,7 @@ export function validateLiveQaConfig(config) {
     /^[a-f0-9]{40}$/.test(c.gitSha) && /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(c.origin), "invalid_crm_target");
   check(typeof config.approvalId === "string" && config.approvalId.trim() &&
     typeof config.signingSecret === "string" && Buffer.byteLength(config.signingSecret) >= 32, "missing_qa_authority");
+  check(typeof config.protectionTokenFile === "string" && path.isAbsolute(config.protectionTokenFile), "existing_protection_token_file_required");
   check(typeof config.qaEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.qaEmail), "missing_qa_contact");
   let database;
   try { database = new URL(q?.databaseUrl); } catch { throw new Error("invalid_qa_database"); }
@@ -94,9 +95,132 @@ export function validateQaPut(target, snapshot, operationId) {
 function executeCli(cli, args, input) {
   return new Promise((resolve, reject) => {
     const child = execFile(process.execPath, [cli, ...args], { cwd: repository, windowsHide: true, encoding: "buffer",
-      timeout: 60_000, maxBuffer: 12_000_000, env: { ...process.env, NODE_USE_SYSTEM_CA: "1" } },
+      timeout: 60_000, maxBuffer: 12_000_000, env: { ...process.env, NODE_USE_SYSTEM_CA: "1", NO_UPDATE_NOTIFIER: "1", VERCEL_TELEMETRY_DISABLED: "1" } },
     (error, stdout) => error ? reject(new Error("authorized_cli_request_failed")) : resolve(stdout));
     child.stdin?.end(input);
+  });
+}
+export function nativeCurlEnvironment(env = process.env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => /^(path|systemroot|windir|temp|tmp|userprofile|localappdata|appdata|home|lang)$/i.test(key)));
+}
+function curlQuote(value) {
+  return '"' + value.replaceAll('\\', '\\\\').replaceAll('"', '\\"') + '"';
+}
+export function buildPrivateCurlRequest({ origin, pathname, method = "GET", headers = {}, bodyFile, protectionToken }) {
+  check(/^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin) && isAllowedLiveQaHttpPath(pathname), "unexpected_http_target");
+  check(["GET", "POST"].includes(method), "unexpected_http_method");
+  check(typeof protectionToken === "string" && protectionToken.length >= 16 && protectionToken.length <= 4096 &&
+    !/[\x00-\x20\x7f]/.test(protectionToken), "existing_protection_token_required");
+  const target = new URL(pathname, origin);
+  check(target.origin === origin && target.href === origin + pathname, "unexpected_http_target");
+  const lines = ["silent", "show-error", "include", "globoff", 'proto = "=https"', 'proto-redir = "=https"',
+    "connect-timeout = 15", "max-time = 50", "max-redirs = 0", "url = " + curlQuote(target.href), "request = " + curlQuote(method),
+    "header = " + curlQuote("x-vercel-protection-bypass: " + protectionToken)];
+  const seen = new Set(["x-vercel-protection-bypass", "host"]);
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = key.toLowerCase();
+    check(/^[A-Za-z][A-Za-z0-9-]{0,80}$/.test(key) && !seen.has(lower) && typeof value === "string" &&
+      value.length <= 32768 && !/[\x00-\x1f\x7f]/.test(value), "invalid_private_http_header");
+    seen.add(lower); lines.push("header = " + curlQuote(key + ": " + value));
+  }
+  if (bodyFile !== undefined) {
+    check(typeof bodyFile === "string" && path.isAbsolute(bodyFile) && !/[\x00-\x1f\x7f]/.test(bodyFile), "private_body_file_required");
+    lines.push("data-binary = " + curlQuote("@" + bodyFile));
+  }
+  return { args: ["--disable", "--config", "-"], input: Buffer.from(lines.join("\n") + "\n") };
+}
+function executeNativeCurl(args, input) {
+  return new Promise(resolve => {
+    const executable = process.platform === "win32" ? "C:\\Windows\\System32\\curl.exe" : "curl";
+    const child = execFile(executable, args, { cwd: repository, windowsHide: true, encoding: "buffer",
+      timeout: 60_000, maxBuffer: 12_000_000, env: nativeCurlEnvironment() },
+    (error, stdout, stderr) => resolve({ failed: Boolean(error), stdout: stdout || Buffer.alloc(0), stderr: stderr || Buffer.alloc(0) }));
+    child.stdin?.on("error", () => undefined); child.stdin?.end(input);
+  });
+}
+export async function createNativeProtectedHttp(config, privateDirectory) {
+  await assertPrivateQaPath(privateDirectory, true);
+  const tokenFile = await assertPrivateQaPath(config.protectionTokenFile);
+  const protectionToken = (await readFile(tokenFile, "utf8")).trim();
+  buildPrivateCurlRequest({ origin: config.crm.origin, pathname: "/api/version", protectionToken });
+  const requestPrefix = config.runId + "-" + randomUUID();
+  let sequence = 0;
+  return async (pathname, { method = "GET", headers = {}, body } = {}) => {
+    check(isAllowedLiveQaHttpPath(pathname), "unexpected_http_path");
+    const prefix = path.join(privateDirectory, requestPrefix + "-" + (++sequence));
+    let bodyFile;
+    if (body !== undefined) {
+      check(typeof body === "string" || Buffer.isBuffer(body), "invalid_private_http_body");
+      bodyFile = prefix + ".body.private";
+      await writeFile(bodyFile, body, { flag: "wx", mode: 0o600 });
+      await assertPrivateQaPath(bodyFile);
+    }
+    const request = buildPrivateCurlRequest({ origin: config.crm.origin, pathname, method, headers, bodyFile, protectionToken });
+    const responseFile = prefix + ".response.private.bin", errorFile = prefix + ".stderr.private";
+    await writeFile(responseFile, "", { flag: "wx", mode: 0o600 });
+    await writeFile(errorFile, "", { flag: "wx", mode: 0o600 });
+    await assertPrivateQaPath(responseFile); await assertPrivateQaPath(errorFile);
+    const result = await executeNativeCurl(request.args, request.input);
+    await writeFile(responseFile, result.stdout, { mode: 0o600 });
+    await writeFile(errorFile, result.stderr, { mode: 0o600 });
+    check(!result.failed, "authorized_native_http_request_failed");
+    return parseCurlResponse(result.stdout);
+  };
+}
+async function signedQaRequest({ http, signingSecret }, payload) {
+  const body = JSON.stringify(payload), timestamp = String(Math.floor(Date.now() / 1000));
+  const response = await http("/api/public/website-sales/enquiry", { method: "POST", body, headers: {
+    "Content-Type": "application/json", "Idempotency-Key": payload.operationId,
+    "X-Novalure-Timestamp": timestamp, "X-Novalure-Signature": buildStudioEnquirySignature(body, timestamp, signingSecret) } });
+  return { response, data: JSON.parse(response.body.toString("utf8")) };
+}
+export function createSignedQaCaller({ state, http, signingSecret }) {
+  return async (action, expectedStatus) => {
+    const payload = parseStudioEnquiryRequest({ version: "studio-enquiry-v1", action, operationId: state.operationId,
+      revision: state.revision, payloadHash: state.payloadHash, snapshot: state.snapshot });
+    const result = await signedQaRequest({ http, signingSecret }, payload);
+    check(expectedStatus === undefined ? [200, 202].includes(result.response.status) : result.response.status === expectedStatus,
+      "signed_enquiry_request_not_accepted");
+    return result;
+  };
+}
+export async function verifySignedPreReserveRejections({ state, http, signingSecret, captureCounts }) {
+  const before = await captureCounts();
+  const changes = [
+    ["foreignScope", snapshot => { snapshot.workspaceId = randomUUID(); }],
+    ["foreignConversation", snapshot => { check(snapshot.files.length > 0, "negative_file_fixture_missing"); snapshot.files[0].conversationId = randomUUID(); }],
+  ];
+  const checks = {};
+  for (const [name, change] of changes) {
+    const snapshot = structuredClone(state.snapshot); change(snapshot);
+    // Intentionally bypass the local parser: the real authenticated endpoint
+    // must reject the invalid snapshot, despite its valid hash and signature.
+    const payload = { version: "studio-enquiry-v1", action: "reserve", operationId: state.operationId,
+      revision: state.revision, payloadHash: hash(JSON.stringify(snapshot)), snapshot };
+    const result = await signedQaRequest({ http, signingSecret }, payload);
+    check(result.response.status === 400 && result.data.error === "invalid_enquiry", "signed_negative_not_rejected");
+    assert.deepEqual(await captureCounts(), before, "A rejected snapshot changed scoped CRM records");
+    checks[name] = "PASS_signed_HTTP400_no_transfer_or_crm_effect";
+  }
+  return checks;
+}
+export async function verifyMissingCopyRejection({ call, captureCounts }) {
+  const before = await captureCounts();
+  check(before?.state === "reserved" && ["leads", "submissions", "assets", "links"].every(key => before[key] === 0),
+    "precopy_state_not_empty");
+  const result = await call("finalize", 409);
+  check(result.data.error === "files_not_copied", "missing_copy_error_not_verified");
+  assert.deepEqual(await captureCounts(), before, "A premature finalize changed scoped CRM records");
+  return "PASS_HTTP409_reserved_no_lead_submission_asset_or_link";
+}
+async function scopedEffectCounts(pool) {
+  return withReadOnly(pool, async client => {
+    const counts = {};
+    for (const table of ["studio_enquiry_transfers", "leads", "form_submissions", "media_assets", "studio_enquiry_assets"]) {
+      const column = table === "media_assets" || table === "studio_enquiry_assets" ? "$1::text" : "$1::uuid";
+      counts[table] = (await client.query("select count(*)::int as count from public." + table + " where workspace_id=" + column, [workspaceId])).rows[0].count;
+    }
+    return counts;
   });
 }
 async function newState(config) {
@@ -197,17 +321,23 @@ async function normalMediaAccess(config, http, receipt, privateAuthDirectory) {
 }
 
 export function isAllowedLiveQaHttpPath(pathname) {
-  if(typeof pathname!=="string"||pathname.includes("\\")||/[\r\n]/.test(pathname))return false;
-  return pathname.startsWith("/api/")||pathname==="/login?step=mfa_enrollment"||pathname==="/login?step=mfa_verification";
+  if (typeof pathname !== "string" || pathname.includes("\\") || /[\x00-\x20\x7f#]/.test(pathname)) return false;
+  if (pathname === "/login?step=mfa_enrollment" || pathname === "/login?step=mfa_verification") return true;
+  if (!pathname.startsWith("/api/")) return false;
+  try {
+    const parsed = new URL(pathname, "https://qa.example.invalid");
+    return parsed.origin === "https://qa.example.invalid" && parsed.pathname.startsWith("/api/") &&
+      parsed.pathname === pathname.split("?")[0];
+  } catch { return false; }
 }
 
 export async function runLiveQa(configFile) {
   const allowed = await realpath(path.join(repository, ".npm-cache", "qa"));
-  const filename = await realpath(path.resolve(configFile));
+  const filename = await assertPrivateQaPath(await realpath(path.resolve(configFile)));
   check(filename.startsWith(allowed + path.sep), "config_must_be_in_ignored_qa_directory");
   const config = validateLiveQaConfig(JSON.parse(await readFile(filename, "utf8")));
-  const statePath = path.join(allowed, `${config.runId}-studio-enquiry.private.json`);
-  const reportPath = path.join(allowed, `${config.runId}-studio-enquiry.receipt.json`);
+  const statePath = path.join(path.dirname(filename), `${config.runId}-studio-enquiry.private.json`);
+  const reportPath = path.join(path.dirname(filename), `${config.runId}-studio-enquiry.receipt.json`);
   const report = { schemaVersion: "studio-enquiry-live-qa-v1", status: "RUNNING", checks: {}, startedAt: new Date().toISOString() };
   let pool, stage = "preflight";
   try {
@@ -217,14 +347,7 @@ export async function runLiveQa(configFile) {
       metadata.readyState === "READY" && metadata.url === new URL(config.crm.origin).hostname &&
       (metadata.meta?.githubCommitSha || metadata.meta?.gitCommitSha || metadata.gitSource?.sha) === config.crm.gitSha &&
       (metadata.meta?.githubCommitRef || metadata.meta?.gitCommitRef || metadata.gitSource?.ref) === branch, "deployment_identity_mismatch");
-    const http = async (pathname, { method = "GET", headers = {}, body } = {}) => {
-      check(isAllowedLiveQaHttpPath(pathname), "unexpected_http_path");
-      const args = ["curl", config.crm.origin + pathname, "--scope", "novalure", "--non-interactive", "--deployment", config.crm.deploymentId,
-        "--", "--silent", "--show-error", "--include", "--request", method, "--max-time", "50", "--max-redirs", "0", "--proto", "=https"];
-      for (const [key, value] of Object.entries(headers)) args.push("--header", key + ": " + value);
-      if (body !== undefined) args.push("--data-binary", "@-");
-      return parseCurlResponse(await executeCli(cli, args, body));
-    };
+    const http = await createNativeProtectedHttp(config, path.dirname(filename));
     const version = await http("/api/version"); check(version.status === 200, "preview_version_unavailable");
     const versionBody = JSON.parse(version.body.toString("utf8"));
     check(versionBody.gitSha === config.crm.gitSha && versionBody.branch === branch &&
@@ -246,16 +369,10 @@ export async function runLiveQa(configFile) {
     try { state = JSON.parse(await readFile(statePath, "utf8")); }
     catch (error) { if (error.code !== "ENOENT") throw error; state = await newState(config); await writeFile(statePath, JSON.stringify(state), { flag: "wx", mode: 0o600 }); }
     assert.deepEqual(state.binding, config.crm); check(uuid.test(state.operationId), "invalid_saved_operation");
-    const call = async action => {
-      const payload = parseStudioEnquiryRequest({ version: "studio-enquiry-v1", action, operationId: state.operationId,
-        revision: state.revision, payloadHash: state.payloadHash, snapshot: state.snapshot });
-      const body = JSON.stringify(payload), timestamp = String(Math.floor(Date.now()/1000));
-      const response = await http("/api/public/website-sales/enquiry", { method: "POST", body, headers: { "Content-Type": "application/json",
-        "Idempotency-Key": state.operationId, "X-Novalure-Timestamp": timestamp,
-        "X-Novalure-Signature": buildStudioEnquirySignature(body,timestamp,config.signingSecret) } });
-      check(response.status === 200 || response.status === 202, "signed_enquiry_request_not_accepted");
-      return { response, data: JSON.parse(response.body.toString("utf8")) };
-    };
+    const call = createSignedQaCaller({ state, http, signingSecret: config.signingSecret });
+    stage = "signed_snapshot_rejections";
+    Object.assign(report.checks, await verifySignedPreReserveRejections({ state, http, signingSecret: config.signingSecret,
+      captureCounts: () => scopedEffectCounts(pool) }));
     report.operationId = state.operationId; report.payloadHash = state.payloadHash;
     stage = "reserve";
     const initial = await call("reserve");
@@ -265,6 +382,10 @@ export async function runLiveQa(configFile) {
       report.checks.reserve = "PASS_no_lead_or_asset_before_copy";
       const expectedRoles = new Set(state.snapshot.files.flatMap(f => [f.id + ":original", f.id + ":analysis"]));
       check(Array.isArray(initial.data.targets) && initial.data.targets.length === expectedRoles.size, "copy_roles_missing");
+      if (initial.data.targets.every(target => target.status === "upload_required")) {
+        stage = "premature_finalize";
+        report.checks.missingCopy = await verifyMissingCopyRejection({ call, captureCounts: () => scopedCounts(pool, state) });
+      } else report.checks.missingCopy = "NOT_RUN_resumed_operation_already_has_copied_files";
       const copied = new Set();
       stage = "copy";
       for (const target of initial.data.targets) {
@@ -282,7 +403,10 @@ export async function runLiveQa(configFile) {
       const discarded = await call("finalize"); check(discarded.response.status === 202,"finalize_not_acknowledged");
       // Deliberately discard this received result; subsequent success must come from status.
       report.checks.discardedResponse = "SIMULATED_client_loss_of_received_202_not_network_timeout";
-    } else report.checks.reserve = "RESUMED_previously_accepted_operation_no_new_transfer";
+    } else {
+      report.checks.reserve = "RESUMED_previously_accepted_operation_no_new_transfer";
+      report.checks.missingCopy = "NOT_RUN_resumed_previously_accepted_operation";
+    }
     stage = "status_and_parallel_replay";
     const status = (await call("status")).data; check(status.status === "transmitted" && status.receipt?.accepted === true,"durable_status_missing");
     const receipt = status.receipt;
