@@ -42,11 +42,12 @@ async function main() {
     try { await client.connect(); databases.push(await captureQaDatabase({ client, target, manifest, sql061 })); }
     finally { await client.end(); }
   }
-  await writeFile(outputPath, JSON.stringify({ format: 'studio-stage3-qa-readonly-inventory-v1',
+  await writeFile(outputPath, JSON.stringify({ format: 'studio-stage3-qa-readonly-inventory-v3',
     capturedAt: new Date().toISOString(), headCommit, productionAccess: 0, databaseWrites: 0, databases }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   console.log(JSON.stringify({ status: 'CAPTURED_READ_ONLY', databases: databases.map((item) => ({
     databaseName: item.databaseName, tables: item.data.tables, rows: item.data.rows, ledgerRows: item.ledger.rows,
-    through: item.ledger.through, markers: item.classification.markerChecks, original061Verified: item.executionReceipts.original061Verified
+    through: item.ledger.through, markers: item.classification.markerChecks, original061Verified: item.executionReceipts.original061Verified,
+    server: item.extensionProfile.server, extensions: item.extensionProfile.extensions
   })) }));
 }
 main().catch((error) => {

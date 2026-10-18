@@ -102,7 +102,8 @@ async function main() {
       capture: (client, selected) => captureQaDatabase({ client, target: selected, manifest, sql061 }), native,
       savePassword: (value) => writeFile(path.join(directory, 'runtime-private.json'), JSON.stringify(value), { flag: 'wx', mode: 0o600 }),
       saveEvidence: (value) => writeFile(path.join(directory, 'evidence.json'), JSON.stringify({ ...value, headCommit }, null, 2) + '\n', { mode: 0o600 }) });
-    console.log(JSON.stringify({ status: evidence.status, steps: evidence.steps.length, productionAccess: 0, sourceWrites: 0, ledgerRecreation: 0 }));
+    console.log(JSON.stringify({ status: evidence.status, steps: evidence.steps.length, productionAccess: 0, sourceWrites: 0, ledgerRecreation: 0,
+      crossVersionProfile: evidence.crossVersionProfile }));
   } finally { await Promise.allSettled([source.end(), target.end()]); }
 }
 main().catch((error) => {
