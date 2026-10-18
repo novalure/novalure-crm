@@ -12,11 +12,18 @@ const canonical = (value) => JSON.stringify(value && typeof value === 'object' &
 const hash = (value) => createHash('sha256').update(canonical(value)).digest('hex');
 const equal = (a, b) => canonical(a) === canonical(b);
 const initialNames = ['neondb', 'postgres', 'template0', 'template1'];
-const allowedRoles = ['cloud_admin', 'neon_superuser', 'neondb_owner'];
+// Verified PG18.6 provider inventory on this exact target and its parent.
+// These existing provider powers are observed, never granted or modified here.
+const allowedRoles = Object.freeze([
+  Object.freeze({ name: 'cloud_admin', login: true, superuser: true, bypassrls: true, create_database: true, create_role: true }),
+  Object.freeze({ name: 'neon_service', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true }),
+  Object.freeze({ name: 'neon_superuser', login: false, superuser: false, bypassrls: true, create_database: true, create_role: true }),
+  Object.freeze({ name: 'neondb_owner', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true })
+]);
 export const prepareTargetQueries = Object.freeze({
   identity: "select current_setting('neon.project_id',true) as project,current_setting('neon.branch_id',true) as branch,current_database() as database,current_user as role,session_user as session_role,pg_backend_pid() as pid,(select oid::int from pg_database where datname=current_database()) as database_oid,(select pg_get_userbyid(datdba) from pg_database where datname=current_database()) as database_owner,current_setting('server_version_num')::int as server_version_num,(select rolcreatedb from pg_roles where rolname=current_user) as can_create_database",
   databases: 'select datname as name,datistemplate as is_template,pg_get_userbyid(datdba) as owner from pg_database order by datname',
-  roles: "select rolname as name from pg_roles where rolname !~ '^pg_' order by rolname",
+  roles: "select rolname as name,rolcanlogin as login,rolsuper as superuser,rolbypassrls as bypassrls,rolcreatedb as create_database,rolcreaterole as create_role from pg_roles where rolname !~ '^pg_' order by rolname",
   sessions: "select pid,datname as database,usename as role from pg_stat_activity where backend_type='client backend' order by pid",
   prepared: 'select count(*)::int as count from pg_prepared_xacts'
 });
@@ -31,7 +38,8 @@ async function identity(client, database) {
 }
 async function assertNoAppRoles(client) {
   const roles = (await client.query(prepareTargetQueries.roles)).rows;
-  requireValue(roles.length === allowedRoles.length && equal(roles.map((row) => row.name), allowedRoles), 'PREPARE_TARGET_APPLICATION_OR_UNKNOWN_ROLE_EXISTS');
+  requireValue(roles.length === allowedRoles.length && equal(roles, allowedRoles), 'PREPARE_TARGET_APPLICATION_OR_UNKNOWN_ROLE_EXISTS');
+  return roles;
 }
 async function assertSessions(client, allowed) {
   const rows = (await client.query(prepareTargetQueries.sessions)).rows;
@@ -68,11 +76,11 @@ export async function capturePrepareTargetPreflight(client, sourceReport) {
   try {
     const selected = await identity(client, 'neondb');
     const databases = await assertNames(client, initialNames);
-    await assertNoAppRoles(client); await assertSessions(client, new Map([[selected.pid, 'neondb']]));
+    const providerRoles = await assertNoAppRoles(client); await assertSessions(client, new Map([[selected.pid, 'neondb']]));
     const database = await captureDatabaseMetadata(client); assertProviderBaseline(database, source);
     const extensionProfile = await emptyCatalog(client, sourceReport);
     const plan = { format: 'studio-stage3-prepare-target-preflight-v1', projectId: restoreProject, branchId: restoreBranch,
-      databaseName: 'neondb', databaseOid: selected.database_oid, database, extensionProfile, databases,
+      databaseName: 'neondb', databaseOid: selected.database_oid, database, extensionProfile, databases, providerRoles,
       managementDatabase, providerBaselineDatabase, sourceDatabaseSha256: source.sha256,
       sourceExtensionProfileSha256: sourceReport.extensionProfile.sha256,
       sourceGlobalRoleSettingsSha256: source.globalRoleSettings.sha256,

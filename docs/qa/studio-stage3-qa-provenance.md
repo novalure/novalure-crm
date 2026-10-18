@@ -57,6 +57,10 @@ source and target hashes need fresh evidence. No schema-only ledger recreation,
 local-loopback bootstrap on Neon, omitted ACL/owner restoration, or source/
 Production role mutation is allowed. The 061 receipt retains its actual
 original source target and SQL execution checksum after native restore.
+Source-before versus source-after checks additionally require unchanged
+clusterRolesSha256, including the separately hashed ALL_DATABASES role settings.
+That source drift check is deliberately separate from source-versus-target
+database equality; target runtime-role restrictions remain independently checked.
 
 Target global application roles require their own explicit reviewed setup;
 pg_dump does not include global roles. Database owner/ACL/RLS/ledger/receipt/
@@ -118,7 +122,11 @@ definitions, owners and versions may exist. Recursive dependency inventory also
 detects extra objects using those members. Public-schema owner/ACL baseline
 cannot drift. Effective pre-restore extension privileges are restricted to
 standard owner/PUBLIC EXECUTE or USAGE and must be a subset of the actual source
-privileges; native restore, not this setup, reapplies the source's later tenant
+privileges for the exact catalog/object/grantor/grantee/privilege/grant-option
+row. The only eligible grantors are the observed cloud_admin and neondb_owner;
+grantee must be PUBLIC or that same grantor, with no grant option. Extension
+ownership alone never authorizes a member privilege: source member definitions
+and owners still have their exact structure hash. Native restore, not this setup, reapplies the source's later tenant
 grants. The full final schema/ACL and extension-profile fingerprints must still
 equal source exactly. Unsupported members, unavailable versions, wider rights,
 catalog/version drift or cross-version catalog incompatibility stop safely;
@@ -146,8 +154,11 @@ neondb from the unmodified template0 with OWNER neondb_owner.
 
 Only super-block-59791927/br-ancient-term-awip1q3q and PostgreSQL18.6 are accepted.
 The initial database inventory must be exactly neondb, postgres, template0 and
-template1. Only the three known provider roles cloud_admin, neon_superuser and
-neondb_owner may exist. Both new names must be absent. The source must have no
+template1. Only the four known provider roles cloud_admin, neon_service,
+neon_superuser and neondb_owner may exist with the exact observed LOGIN/
+SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE attributes, verified unchanged against
+the target's parent. These existing attributes are observed, never granted or
+changed. Both new names must be absent. The source must have no
 CURRENT_DATABASE settings. Initial target properties/settings must equal source
 and its ACL must be exactly source plus those three observed provider rights.
 The same pristine catalog gate used by native restore checks absence of user

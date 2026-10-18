@@ -16,12 +16,12 @@ const sourceProfile = await captureExtensionMetadata({ query: async (sql) => ({ 
     sql === extensionQueries.installed ? installed : sql === extensionQueries.members ? members :
       sql === extensionQueries.privileges ? privileges : sql === catalogQueries.namespaces ? namespaces : sql === catalogQueries.schemaGrants ? schemaGrants : [] }) });
 const fp = () => ({ databaseName: sourceTarget.databaseName, projectId: sourceTarget.projectId, branchId: sourceTarget.branchId,
-  readOnlyTransaction: true, database: defaultDatabase, extensionProfile: sourceProfile, schema: { sha256: 'a'.repeat(64) },
+  readOnlyTransaction: true, database: defaultDatabase, extensionProfile: sourceProfile, schema: { sha256: 'a'.repeat(64), clusterRolesSha256: '9'.repeat(64) },
   ledger: { sha256: 'b'.repeat(64), rows: 42, through: 85, completeCanonicalCoverage: true, verifiedCommittedChecksums: true },
   executionReceipts: { sha256: 'c'.repeat(64), original061Verified: true },
   data: { sha256: 'd'.repeat(64), tables: 141, rows: 118 },
   classification: { markerChecks: 'PASS_NARROW_MARKER_CHECKS' } });
-function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false } = {}) {
+function targetClient({ nonempty = false, badIdentity = false, existing = false, unsafeMembership = false, creationFailure = false, databaseOverride = {}, badOwner = false, unavailableVersion = false, unknownExtension = false, extraSchema = false, extraGlobal = false, preparedExtraObject = false, preparedVersionDrift = false, preparedStructureDrift = false, preparedAclDrift = false, preparedMembers = members, preparedPrivileges = privileges } = {}) {
   const calls = []; let roleReads = 0, extensionCreates = 0, installedReads = 0;
   return { calls, async query(sql) {
     calls.push(sql);
@@ -34,14 +34,14 @@ function targetClient({ nonempty = false, badIdentity = false, existing = false,
       installedReads++;
       return { rows: extensionCreates === 2 ? installed.map((row) => preparedVersionDrift && row.name === 'vector' ? { ...row, version: '0.8.6' } : row) : unknownExtension ? [plpgsql, { name: 'unknown', version: '1', schema: 'public', owner: 'neondb_owner' }] : [plpgsql] };
     }
-    if (sql === extensionQueries.members) return { rows: extensionCreates === 2 ? preparedStructureDrift ? [{ ...members[0], definition: { changed: true } }] : members : [] };
-    if (sql === extensionQueries.privileges) return { rows: extensionCreates === 2 ? preparedAclDrift && installedReads > 3 ? [...privileges, { ...privileges[0], grantee: 'novalure_app' }] : privileges : [] };
+    if (sql === extensionQueries.members) return { rows: extensionCreates === 2 ? preparedStructureDrift ? [{ ...preparedMembers[0], definition: { changed: true } }] : preparedMembers : [] };
+    if (sql === extensionQueries.privileges) return { rows: extensionCreates === 2 ? preparedAclDrift && installedReads > 3 ? [...preparedPrivileges, { ...preparedPrivileges[0], grantee: 'novalure_app' }] : preparedPrivileges : [] };
     if (sql === catalogQueries.namespaces) return { rows: extraSchema ? [...namespaces, { nspname: 'unexpected', owner: 'neondb_owner' }] : namespaces };
     if (sql === catalogQueries.schemaGrants) return { rows: schemaGrants };
     if (sql === extensionQueries.available) return { rows: sourceExtensions.filter((row) => !unavailableVersion || row.name !== 'vector') };
     if (sql === extensionQueries.globalObjects) return { rows: [{ count: extraGlobal ? 1 : 0 }] };
     if (sql === extensionQueries.userObjects) return { rows: extensionCreates === 2
-      ? [...sourceExtensions.map((row) => ({ catalog: 'pg_extension', object_type: 'extension', schema: null, name: row.name, identity: row.name })), ...members,
+      ? [...sourceExtensions.map((row) => ({ catalog: 'pg_extension', object_type: 'extension', schema: null, name: row.name, identity: row.name })), ...preparedMembers,
         ...(preparedExtraObject ? [{ catalog: 'pg_proc', object_type: 'function', schema: 'public', name: 'extra', identity: 'public.extra()' }] : [])]
       : nonempty ? [{ catalog: 'pg_class', object_type: 'table', schema: 'public', name: 'extra', identity: 'public.extra' }] : [] };
     if (sql.startsWith('create extension')) extensionCreates++;
@@ -123,6 +123,17 @@ test('source drift after dump prevents any restore and preserves failure evidenc
   assert.equal(run.evidence.at(-1).status, 'FAIL');
   assert.ok(run.nativeCalls.some(([, action]) => action === 'dump'));
   assert.ok(!run.nativeCalls.some(([, action]) => action === 'restore'));
+});
+test('source global role/settings drift fails after dump and after restore even when every database fingerprint still matches', async () => {
+  for (const sourceReadToChange of [2, 3]) {
+    const run = runOptions(); let sourceReads = 0;
+    const changed = { ...fp(), schema: { ...fp().schema, clusterRolesSha256: 'f'.repeat(64) } };
+    assert.equal(compareDatabaseFingerprints(fp(), changed), true, 'Cross-target DB equality intentionally excludes global roles/settings');
+    run.options.capture = async (client) => client === run.options.source && ++sourceReads === sourceReadToChange ? changed : fp();
+    await assert.rejects(restoreSelectedQa(run.options), sourceReadToChange === 2 ? /SOURCE_DRIFT_DURING_DUMP/u : /SOURCE_CHANGED_DURING_RESTORE/u);
+    assert.equal(run.evidence.at(-1).status, 'FAIL');
+    assert.equal(run.nativeCalls.some(([, action]) => action === 'restore'), sourceReadToChange === 3);
+  }
 });
 test('native restore failure or DB signature mismatch cannot become PASS or invoke a repair', async () => {
   for (const mode of ['native-failure', 'signature-mismatch']) {
@@ -236,4 +247,35 @@ test('source tenant grants may be absent before restore but must all match in th
   await assert.rejects(restoreSelectedQa(run.options), /RESTORED_DATABASE_FINGERPRINT_MISMATCH/u);
   assert.ok(run.nativeCalls.some(([, action]) => action === 'restore'));
   assert.equal(run.evidence.at(-1).status, 'FAIL');
+});
+test('actual-shaped cloud_admin function/type rights require the exact per-object source grant and full unchanged structure', async () => {
+  const realMembers = [
+    { ...members[0], definition: { owner: 'cloud_admin', definition: 'synthetic provider-owned digest function' } },
+    { catalog: 'pg_type', object_type: 'type', schema: 'public', name: 'vector', identity: 'public.vector', definition: { owner: 'cloud_admin', length: -1, input: 'public.vector_in(cstring,oid,integer)' } }
+  ];
+  const realPrivileges = realMembers.flatMap((member) => ['PUBLIC', 'cloud_admin'].map((grantee) => ({ catalog: member.catalog,
+    identity: member.identity, grantee, grantor: 'cloud_admin', privilege_type: member.catalog === 'pg_proc' ? 'EXECUTE' : 'USAGE', is_grantable: false })));
+  const realProfile = await captureExtensionMetadata({ query: async (sql) => ({ rows:
+    sql === extensionQueries.server ? [{ version: '17.11', version_num: 170011 }] :
+      sql === extensionQueries.installed ? installed : sql === extensionQueries.members ? realMembers :
+        sql === extensionQueries.privileges ? realPrivileges : sql === catalogQueries.namespaces ? namespaces : sql === catalogQueries.schemaGrants ? schemaGrants : [] }) });
+  const report = { ...fp(), extensionProfile: realProfile };
+  const runFixture = (targetOptions = {}) => runOptions({ targetOptions: { preparedMembers: realMembers, preparedPrivileges: realPrivileges, ...targetOptions },
+    options: { approvedSource: report, capture: async () => report } });
+  const accepted = runFixture(); assert.equal((await restoreSelectedQa(accepted.options)).status, 'PASS');
+  for (const replacement of [
+    { ...realPrivileges[0], grantor: 'other_admin' },
+    { ...realPrivileges[0], grantor: 'neondb_owner' }, // A fixed role alone is insufficient: source row differs.
+    { ...realPrivileges[0], identity: 'public.other_function(text, text)' },
+    { ...realPrivileges[0], privilege_type: 'USAGE' },
+    { ...realPrivileges[0], is_grantable: true },
+    { ...realPrivileges[0], grantee: 'neondb_owner' },
+    { ...realPrivileges[0], grantee: 'novalure_app' }
+  ]) {
+    const rejected = runFixture({ preparedPrivileges: [replacement, ...realPrivileges.slice(1)] });
+    await assert.rejects(restoreSelectedQa(rejected.options), /TARGET_EXTENSION_ACL_EXCEEDS_SOURCE_OR_STANDARD/u);
+    assert.ok(!rejected.nativeCalls.some(([, action]) => action === 'restore'));
+  }
+  const changedOwner = runFixture({ preparedMembers: [{ ...realMembers[0], definition: { ...realMembers[0].definition, owner: 'neondb_owner' } }, realMembers[1]] });
+  await assert.rejects(restoreSelectedQa(changedOwner.options), /TARGET_EXTENSION_STRUCTURE_MISMATCH/u);
 });

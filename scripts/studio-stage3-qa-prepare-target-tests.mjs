@@ -10,6 +10,12 @@ const providerAcl = [...sourceAcl, ...sourceAcl.map((row) => ({ ...row, grantee:
 const namespaces = [{ nspname: 'public', owner: 'neondb_owner' }];
 const schemaGrants = ['CREATE', 'USAGE'].map((privilege_type) => ({ nspname: 'public', owner: 'neondb_owner', grantee: 'neondb_owner', grantor: 'neondb_owner', privilege_type, is_grantable: false }));
 const plpgsql = { name: 'plpgsql', version: '1.0', schema: 'pg_catalog', owner: 'cloud_admin' };
+const providerRolesFixture = [
+  { name: 'cloud_admin', login: true, superuser: true, bypassrls: true, create_database: true, create_role: true },
+  { name: 'neon_service', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true },
+  { name: 'neon_superuser', login: false, superuser: false, bypassrls: true, create_database: true, create_role: true },
+  { name: 'neondb_owner', login: true, superuser: false, bypassrls: true, create_database: true, create_role: true }
+];
 const sourceDatabase = await captureDatabaseMetadata({ query: async (sql) => ({ rows:
   sql === databaseQueries.properties ? [properties] : sql === databaseQueries.acl ? sourceAcl :
     sql === databaseQueries.globalRoleSettings ? [{ database_scope: 'ALL_DATABASES', role_name: 'novalure_app', setting: 'search_path=pg_catalog,public' }] : [] }) });
@@ -37,7 +43,7 @@ function cluster(options = {}) {
         role: options.badRole ? 'other' : 'neondb_owner', session_role: 'neondb_owner', pid, database_oid: entry.oid,
         database_owner: options.badOwner ? 'other_owner' : 'neondb_owner', server_version_num: options.badVersion ? 170011 : 180006, can_create_database: !options.noCreatedb }] };
       if (sql === prepareTargetQueries.databases) return { rows: [...databases.keys(), ...(options.existingName ? [options.existingName] : [])].sort().map((name) => ({ name, is_template: /^template[01]$/u.test(name), owner: ['postgres', 'template0', 'template1'].includes(name) ? 'cloud_admin' : 'neondb_owner' })) };
-      if (sql === prepareTargetQueries.roles) return { rows: ['cloud_admin', 'neon_superuser', 'neondb_owner', ...(options.appRole ? ['novalure_app'] : []), ...(options.unknownRole ? ['unknown_app'] : [])].sort().map((name) => ({ name })) };
+      if (sql === prepareTargetQueries.roles) return { rows: options.roleRows || [...providerRolesFixture, ...(options.appRole ? [{ name: 'novalure_app' }] : []), ...(options.unknownRole ? [{ name: 'unknown_app' }] : [])].sort((a, b) => a.name.localeCompare(b.name)) };
       if (sql === prepareTargetQueries.sessions) return { rows: [...clients.entries()].map(([id, name]) => ({ pid: id, database: name, role: 'neondb_owner' })).concat(options.foreignSession || (options.lateSession && writes.length) ? [{ pid: 999, database: 'neondb', role: 'neondb_owner' }] : []) };
       if (sql === prepareTargetQueries.prepared) return { rows: [{ count: options.preparedTransaction ? 1 : 0 }] };
       if (sql === databaseQueries.properties) return { rows: [{ ...properties, ...(options.propertyDrift && database === 'neondb' ? { ctype: 'different' } : {}) }] };
@@ -81,6 +87,7 @@ test('preflight is read-only and separates the source global role configuration 
   const run = cluster(); const plan = await preflight(run);
   assert.equal(plan.projectId, restoreProject); assert.equal(plan.branchId, restoreBranch);
   assert.equal(plan.databaseWrites, 0); assert.equal(run.writes.length, 0); assert.equal(run.clients.size, 0);
+  assert.deepEqual(plan.providerRoles, providerRolesFixture);
   assert.equal(plan.sourceGlobalRoleSettingsSha256, sourceDatabase.globalRoleSettings.sha256);
   assert.equal(plan.database.globalRoleSettings.count, 0); assert.notEqual(plan.database.sha256, sourceDatabase.sha256);
   assert.equal(run.calls[0].sql, 'begin isolation level repeatable read read only'); assert.equal(run.calls.at(-1).sql, 'rollback');
@@ -105,6 +112,18 @@ test('identity project branch owner runtime role server version and CREATEDB cap
 test('application roles, unknown roles, reused names, foreign sessions and prepared transactions prevent setup', async () => {
   for (const options of [{ appRole: true }, { unknownRole: true }, { existingName: managementDatabase }, { existingName: providerBaselineDatabase }, { existingName: 'unclassified_db' }, { foreignSession: true }, { preparedTransaction: true }]) {
     const run = cluster(options); await assert.rejects(preflight(run)); assert.equal(run.writes.length, 0);
+  }
+});
+test('the four verified provider roles are exact: missing names, an extra provider-looking name or any observed attribute drift fail', async () => {
+  const invalidRows = [providerRolesFixture.filter((row) => row.name !== 'neon_service'),
+    [...providerRolesFixture, { ...providerRolesFixture[1], name: 'neon_additional_service' }]];
+  for (const expected of providerRolesFixture) for (const attribute of ['login', 'superuser', 'bypassrls', 'create_database', 'create_role']) {
+    invalidRows.push(providerRolesFixture.map((row) => row.name === expected.name ? { ...row, [attribute]: !row[attribute] } : row));
+  }
+  for (const roleRows of invalidRows) {
+    const run = cluster({ roleRows });
+    await assert.rejects(preflight(run), /PREPARE_TARGET_APPLICATION_OR_UNKNOWN_ROLE_EXISTS/u);
+    assert.equal(run.writes.length, 0); assert.equal(run.clients.size, 0);
   }
 });
 test('extra tables schemas extensions global objects or wider schema ACL prevent setup', async () => {

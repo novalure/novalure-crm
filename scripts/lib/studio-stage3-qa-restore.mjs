@@ -17,6 +17,10 @@ const safeRole = (role, expected) => role.rolname === expected.name && role.rolc
 export function compareDatabaseFingerprints(a, b) {
   return ['database', 'schema', 'ledger', 'executionReceipts', 'data', 'extensionProfile'].every((key) => a[key]?.sha256 && a[key].sha256 === b[key]?.sha256);
 }
+function compareUnchangedSource(a, b) {
+  return compareDatabaseFingerprints(a, b) && /^[a-f0-9]{64}$/u.test(a.schema?.clusterRolesSha256 || '') &&
+    a.schema.clusterRolesSha256 === b.schema?.clusterRolesSha256;
+}
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const plpgsql = Object.freeze({ name: 'plpgsql', version: '1.0', schema: 'pg_catalog', owner: 'cloud_admin' });
 const installedProfile = Object.freeze([sourceExtensions[0], plpgsql, sourceExtensions[1]]);
@@ -81,8 +85,8 @@ export async function inspectRestoreCatalog(client, sourceProfile, prepared = fa
       'TARGET_EXTENSION_STRUCTURE_MISMATCH');
     // Native restore will reapply the source's later tenant grants. Before it, only
     // standard owner/PUBLIC privileges that are a subset of source rights are safe.
-    requireValue(actual.privileges.every((row) => row.is_grantable === false && row.grantor === 'neondb_owner' &&
-      ['PUBLIC', 'neondb_owner'].includes(row.grantee) &&
+    requireValue(actual.privileges.every((row) => row.is_grantable === false && ['cloud_admin', 'neondb_owner'].includes(row.grantor) &&
+      (row.grantee === 'PUBLIC' || row.grantee === row.grantor) &&
       ((row.catalog === 'pg_proc' && row.privilege_type === 'EXECUTE') || (row.catalog === 'pg_type' && row.privilege_type === 'USAGE'))) &&
       privilegesSubset(actual.privileges, sourceProfile.privileges), 'TARGET_EXTENSION_ACL_EXCEEDS_SOURCE_OR_STANDARD');
     requireValue(baseline && same(actual.schemaGrants, baseline.schemaGrants), 'TARGET_SCHEMA_ACL_DRIFT');
@@ -170,13 +174,13 @@ export async function restoreSelectedQa({ source, target, approvedSource, captur
       extensions: sourceExtensions, scope: 'Selected G24 QA only; PostgreSQL17.11 to18.6 with source extension versions. Not a general disaster-recovery proof.' };
     evidence.archive = await step('native_selected_database_dump', () => native('pg_dump', 'dump'));
     const unchanged = await step('source_unchanged_after_dump', () => capture(source, sourceTarget));
-    requireValue(compareDatabaseFingerprints(before, unchanged), 'SOURCE_DRIFT_DURING_DUMP');
+    requireValue(compareUnchangedSource(before, unchanged), 'SOURCE_DRIFT_DURING_DUMP');
     await step('target_extension_only_before_restore', () => assertPreparedRestoreTarget(target, before.database, before.extensionProfile, prepared));
     await step('native_restore_owner_acl', () => native('pg_restore', 'restore'));
     const after = await step('restore_readonly_fingerprint', () => capture(target, restoreTarget));
     requireValue(compareDatabaseFingerprints(before, after), 'RESTORED_DATABASE_FINGERPRINT_MISMATCH');
     const finalSource = await step('source_final_unchanged', () => capture(source, sourceTarget));
-    requireValue(compareDatabaseFingerprints(before, finalSource), 'SOURCE_CHANGED_DURING_RESTORE');
+    requireValue(compareUnchangedSource(before, finalSource), 'SOURCE_CHANGED_DURING_RESTORE');
     evidence.fingerprints = { source: before, restored: after };
     evidence.status = 'PASS'; await saveEvidence(evidence); return evidence;
   } catch (error) {
