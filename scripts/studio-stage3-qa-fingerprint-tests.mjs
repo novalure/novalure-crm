@@ -156,6 +156,19 @@ test('the current pinned database must actually be owned by neondb_owner', async
   await assert.rejects(captureQaDatabase({ client, target: source, manifest, sql061 }), /PINNED_DATABASE_OWNER_REQUIRED/u);
   assert.ok(!client.calls.includes(catalogQueries.tables));
 });
+test('ALL_DATABASES role settings are hashed separately while current-database role settings remain exact DB metadata', async () => {
+  const globalRoleSettings = [{ database_scope: 'ALL_DATABASES', role_name: 'novalure_app', setting: 'search_path=PRIVATE_GLOBAL_SETTING' }];
+  const plain = await captureQaDatabase({ client: fakeClient(), target: source, manifest, sql061 });
+  const global = await captureQaDatabase({ client: fakeClient({ databaseOverride: { globalRoleSettings } }), target: source, manifest, sql061 });
+  assert.equal(plain.database.sha256, global.database.sha256);
+  assert.notEqual(plain.database.globalRoleSettings.sha256, global.database.globalRoleSettings.sha256);
+  assert.notEqual(plain.schema.clusterRolesSha256, global.schema.clusterRolesSha256);
+  assert.equal(global.database.globalRoleSettings.settings[0].valueSha256, hash('PRIVATE_GLOBAL_SETTING'));
+  assert.ok(!JSON.stringify(global).includes('PRIVATE_GLOBAL_SETTING'));
+  const current = await captureDatabaseMetadata(fakeClient({ databaseOverride: { settings: [{ ...globalRoleSettings[0], database_scope: 'CURRENT_DATABASE' }] } }));
+  assert.notEqual(current.sha256, plain.database.sha256);
+  await assert.rejects(captureDatabaseMetadata(fakeClient({ databaseOverride: { settings: globalRoleSettings } })), /DATABASE_SETTING_METADATA_INVALID/u);
+});
 test('extension profile records actual server versions without hiding extension version structure or ACL drift', async () => {
   const before = await captureQaDatabase({ client: fakeClient(), target: source, manifest, sql061 });
   const after = await captureQaDatabase({ client: fakeClient({ target: restored }), target: restored, manifest, sql061 });

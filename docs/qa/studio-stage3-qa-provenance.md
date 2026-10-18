@@ -21,12 +21,19 @@ OID-free DDL/RLS/ACL categories. It includes enums/domains/schema metadata.
 Version2 additionally captures the actual current database owner, encoding and
 locale/collation properties, connection/template properties, effective database
 ACL (including PUBLIC defaults via acldefault/aclexplode with role names), and
-pg_db_role_setting entries applicable to this database. Database identity is
+pg_db_role_setting entries specific to this database. Database identity is
 normalized as CURRENT_DATABASE/ALL_DATABASES rather than its differing name;
 setting names/scopes are retained but every setting value is hashed. Database
 owner/ACL/properties/settings have their own fingerprint and do not disappear
 into the separately allowed cluster-role differences. Reports predating this
-metadata cannot authorize a restore.
+metadata cannot authorize a restore. Version4 separates setdatabase=0
+ALL_DATABASES role settings from this database fingerprint. Those global role
+settings retain role/name/scope and hashed values in database.globalRoleSettings,
+and participate in the separate clusterRolesSha256. CURRENT_DATABASE settings,
+including settings for a specific role on this database, remain mandatory exact
+database metadata. The source's historical global novalure_app.search_path is
+reported; it is not copied into a new role or required before that role exists.
+Any new runtime-role configuration requires its own explicit checked setup.
 Version3 also records the actual server version and the installed extension
 name/version/schema/owner. It hashes OID-free extension-member identities,
 definitions and owners, and records effective extension and public-schema ACLs
@@ -127,3 +134,60 @@ Raw native stderr stays in the ACL-private artifact directory, not the console.
 A failed run stays FAIL, keeps artifacts and never drops/repairs/resumes data or
 rotates an existing role. Host-side diagnosis and a new explicit plan are
 required. Later original migrations remain separately gated.
+
+## Prepared target database normalization (separate from native restore)
+
+Not executed by the implementing agent. The observed API-created target neondb
+has the same locale/properties/owner as source but three additional effective
+CONNECT/CREATE/TEMPORARY grants to neon_superuser, all non-grantable and granted
+by neondb_owner. The runner does not exempt, revoke or alter these ACLs. It keeps
+this database intact under st1_stage3_provider_baseline, then creates a separate
+neondb from the unmodified template0 with OWNER neondb_owner.
+
+Only super-block-59791927/br-ancient-term-awip1q3q and PostgreSQL18.6 are accepted.
+The initial database inventory must be exactly neondb, postgres, template0 and
+template1. Only the three known provider roles cloud_admin, neon_superuser and
+neondb_owner may exist. Both new names must be absent. The source must have no
+CURRENT_DATABASE settings. Initial target properties/settings must equal source
+and its ACL must be exactly source plus those three observed provider rights.
+The same pristine catalog gate used by native restore checks absence of user
+objects/extra schemas/global objects, standard public-schema ACLs and the sole
+initial plpgsql extension. No foreign client sessions or prepared transactions
+are allowed; none are terminated. Any unexpected metadata fails before setup.
+
+Use Node24 from a reviewed clean commit:
+
+```
+node scripts/studio-stage3-qa-prepare-target.mjs CONFIG NEW_PLAN --preflight
+node scripts/studio-stage3-qa-prepare-target.mjs CONFIG NEW_EVIDENCE --run-authorized-prepare
+```
+
+All files must be within ignored .npm-cache/qa. CONFIG contains targetUriFile,
+targetHost and approvedSourceReport; the mutable invocation additionally needs
+approvedPreflightFile. Only the exact direct target host/private owner URI is
+used, with explicit certificate verification/system CAs and fixed driver
+options. URI query options are never passed to the driver. Preflight is a real
+read-only transaction and writes only a new private plan file. Before the second
+command, independently inspect the exact code and this preflight. The second
+command requires that plan's same commit, an age of at most one hour, and a
+fresh identical target preflight; no failed attempt is automatically resumed.
+
+The three fixed target commands are CREATE DATABASE st1_stage3_management
+TEMPLATE template0 OWNER neondb_owner, ALTER DATABASE neondb RENAME TO
+st1_stage3_provider_baseline (after closing the original connection), and CREATE
+DATABASE neondb TEMPLATE template0 OWNER neondb_owner. The new management and
+restore databases must have the exact source database fingerprint. The renamed
+provider baseline must retain its original database OID, complete fingerprint
+and pristine catalog. A mismatch never causes GRANT/REVOKE, DROP, automatic
+rename-back, source write, role/credential change, extension install, migration
+or ledger creation. The runner does not connect to postgres or templates.
+
+CREATE DATABASE cannot run inside a transaction. A failed or uncertain command
+therefore leaves all databases intact, records the attempted phase as FAIL and
+requires host-side inspection and a separately reviewed plan. Success proves
+only this selected empty-target preparation; it does not prove native restore,
+tenant isolation, current migrations or application readiness. The subsequent
+original owner/ACL/RLS/data/ledger/061 native restore and all exact fingerprints
+remain required. PostgreSQL's template0/transaction restrictions are documented
+in [CREATE DATABASE](https://www.postgresql.org/docs/18/sql-createdatabase.html)
+and [ALTER DATABASE](https://www.postgresql.org/docs/18/sql-alterdatabase.html).

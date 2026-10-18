@@ -87,22 +87,25 @@ export function classifyQaRows(table, rows) {
 export const databaseQueries = Object.freeze({
   properties: "select owner.rolname as owner,pg_encoding_to_char(d.encoding) as encoding,d.datcollate as collation,d.datctype as ctype,d.datlocprovider as locale_provider,coalesce(to_jsonb(d)->>'datlocale',to_jsonb(d)->>'daticulocale') as locale,to_jsonb(d)->>'daticurules' as icu_rules,d.datcollversion as collation_version,d.datallowconn as allow_connections,d.datistemplate as is_template,d.datconnlimit as connection_limit from pg_database d join pg_roles owner on owner.oid=d.datdba where d.datname=current_database()",
   acl: "select case when a.grantee=0 then 'PUBLIC' else grantee.rolname end as grantee,grantor.rolname as grantor,a.privilege_type,a.is_grantable from pg_database d cross join lateral aclexplode(coalesce(d.datacl,acldefault('d',d.datdba))) a left join pg_roles grantee on grantee.oid=a.grantee join pg_roles grantor on grantor.oid=a.grantor where d.datname=current_database() order by grantee,grantor,a.privilege_type,a.is_grantable",
-  settings: "select case when s.setdatabase=0 then 'ALL_DATABASES' else 'CURRENT_DATABASE' end as database_scope,case when s.setrole=0 then 'ALL_ROLES' else role.rolname end as role_name,setting.value as setting from pg_db_role_setting s left join pg_roles role on role.oid=s.setrole cross join lateral unnest(s.setconfig) as setting(value) where s.setdatabase in (0,(select oid from pg_database where datname=current_database())) order by database_scope,role_name,setting.value"
+  settings: "select 'CURRENT_DATABASE' as database_scope,case when s.setrole=0 then 'ALL_ROLES' else role.rolname end as role_name,setting.value as setting from pg_db_role_setting s left join pg_roles role on role.oid=s.setrole cross join lateral unnest(s.setconfig) as setting(value) where s.setdatabase=(select oid from pg_database where datname=current_database()) order by database_scope,role_name,setting.value",
+  globalRoleSettings: "select 'ALL_DATABASES' as database_scope,case when s.setrole=0 then 'ALL_ROLES' else role.rolname end as role_name,setting.value as setting from pg_db_role_setting s left join pg_roles role on role.oid=s.setrole cross join lateral unnest(s.setconfig) as setting(value) where s.setdatabase=0 order by database_scope,role_name,setting.value"
 });
+const hashedSettings = (rows, scope) => rows.map((row) => {
+  const equal = typeof row.setting === 'string' ? row.setting.indexOf('=') : -1;
+  safe(equal > 0 && row.database_scope === scope, 'DATABASE_SETTING_METADATA_INVALID');
+  return { database_scope: row.database_scope, role_name: row.role_name,
+    name: row.setting.slice(0, equal), valueSha256: hash(row.setting.slice(equal + 1)) };
+}).sort((a, b) => canonical(a).localeCompare(canonical(b)));
 export async function captureDatabaseMetadata(client) {
   const properties = (await client.query(databaseQueries.properties)).rows;
   safe(properties.length === 1 && typeof properties[0].owner === 'string', 'DATABASE_OWNER_METADATA_MISSING');
   const acl = (await client.query(databaseQueries.acl)).rows;
   safe(acl.length > 0, 'EFFECTIVE_DATABASE_ACL_MISSING');
-  const rawSettings = (await client.query(databaseQueries.settings)).rows;
-  const settings = rawSettings.map((row) => {
-    const equal = typeof row.setting === 'string' ? row.setting.indexOf('=') : -1;
-    safe(equal > 0, 'DATABASE_SETTING_METADATA_INVALID');
-    return { database_scope: row.database_scope, role_name: row.role_name,
-      name: row.setting.slice(0, equal), valueSha256: hash(row.setting.slice(equal + 1)) };
-  }).sort((a, b) => canonical(a).localeCompare(canonical(b)));
+  const settings = hashedSettings((await client.query(databaseQueries.settings)).rows, 'CURRENT_DATABASE');
+  const globalSettings = hashedSettings((await client.query(databaseQueries.globalRoleSettings)).rows, 'ALL_DATABASES');
   const normalized = { properties: properties[0], acl, settings };
-  return { ...normalized, owner: properties[0].owner, sha256: hash(canonical(normalized)) };
+  return { format: 'studio-stage3-database-metadata-v2', ...normalized, owner: properties[0].owner, sha256: hash(canonical(normalized)),
+    globalRoleSettings: { count: globalSettings.length, settings: globalSettings, sha256: hash(canonical(globalSettings)) } };
 }
 export const catalogQueries = {
       namespaces: "select n.nspname,r.rolname as owner from pg_namespace n join pg_roles r on r.oid=n.nspowner where n.nspname !~ '^pg_' and n.nspname <> 'information_schema' order by n.nspname",
@@ -257,10 +260,10 @@ export async function captureQaDatabase({ client, target, manifest, sql061 }) {
     const unclassifiedTables = active.filter((row) => !row.knownSeedOrFixtureTable).map((row) => row.table);
     const unclassifiedSchemas = catalog.namespaces.filter((row) => row.nspname !== 'public').map((row) => row.nspname);
     const databaseCatalog = Object.fromEntries(Object.entries(catalog).filter(([name]) => !['roles', 'memberships'].includes(name)));
-    const report = { format: 'studio-stage3-qa-readonly-fingerprint-v3', databaseName: target.databaseName,
+    const report = { format: 'studio-stage3-qa-readonly-fingerprint-v4', databaseName: target.databaseName,
       projectId: target.projectId, branchId: target.branchId, readOnlyTransaction: true, database, extensionProfile,
       schema: { sha256: hash(canonical(databaseCatalog)), categories,
-        clusterRolesSha256: hash(canonical({ roles: catalog.roles, memberships: catalog.memberships })) },
+        clusterRolesSha256: hash(canonical({ roles: catalog.roles, memberships: catalog.memberships, globalRoleSettings: database.globalRoleSettings })) },
       ledger: { rows: ledger.length, through, sha256: hash(canonical(ledger)), verifiedCommittedChecksums: ledgerVerified, completeCanonicalCoverage: completeLedger },
       executionReceipts: { rows: receipts.length, sha256: hash(canonical(receipts)), original061Verified: receiptVerified },
       data: { tables: data.length, rows: totalRows, sha256: hash(canonical(data)), fingerprints: data },

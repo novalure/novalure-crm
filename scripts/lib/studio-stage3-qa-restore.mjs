@@ -32,6 +32,8 @@ export function verifyApprovedSource(report, approved) {
   requireValue(report.databaseName === sourceTarget.databaseName && report.projectId === qaProject &&
     report.branchId === sourceBranch && report.readOnlyTransaction === true, 'SOURCE_IDENTITY_NOT_APPROVED');
   requireValue(report.database?.owner === 'neondb_owner', 'SOURCE_DATABASE_OWNER_NOT_APPROVED');
+  requireValue(report.database.format === 'studio-stage3-database-metadata-v2' &&
+    /^[a-f0-9]{64}$/u.test(report.database.globalRoleSettings?.sha256 || ''), 'SOURCE_DATABASE_SETTINGS_SCOPE_PROFILE_REQUIRED');
   requireValue(report.ledger.rows === 42 && report.ledger.through === 85 && report.ledger.completeCanonicalCoverage &&
     report.ledger.verifiedCommittedChecksums && report.executionReceipts.original061Verified &&
     report.data.tables === 141 && report.data.rows === 118, 'SOURCE_HISTORICAL_PROVENANCE_MISMATCH');
@@ -52,7 +54,7 @@ async function assertDatabaseMetadataMatches(client, expected) {
   return actual;
 }
 const privilegesSubset = (actual, source) => actual.every((privilege) => source.some((expected) => same(privilege, expected)));
-async function inspectRestoreCatalog(client, sourceProfile, prepared = false, baseline) {
+export async function inspectRestoreCatalog(client, sourceProfile, prepared = false, baseline) {
   assertSourceExtensionProfile(sourceProfile);
   const actual = await captureExtensionMetadata(client);
   requireValue(actual.server.version_num === 180006, 'PINNED_TARGET_POSTGRESQL18_6_REQUIRED');
