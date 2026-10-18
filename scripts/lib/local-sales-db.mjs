@@ -103,7 +103,12 @@ export async function applySalesSchema(db, {
       name === "095_form_tenant_isolation.sql" ||
       // 096 depends on the manual 095 cutover. The dedicated gateway fixture
       // applies 095 and 096 in order after seeding its scoped form data.
-      name === "096_public_integration_gateway.sql"
+      name === "096_public_integration_gateway.sql" ||
+      // Studio cutovers require that real gateway predecessor. Dedicated
+      // Website Sales/Studio fixtures apply their original SQL after 094–096;
+      // this generic sales-only fixture must not invent predecessor ledger rows.
+      name === "097_studio_sales_calendar_bridge.sql" ||
+      name === "098_studio_enquiry_handoff.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;
