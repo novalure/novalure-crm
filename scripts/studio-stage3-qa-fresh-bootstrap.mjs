@@ -51,8 +51,12 @@ export function validateReviewedFreshPlan(reviewed, { headCommit, cutoverSourceS
 }
 
 function powershell(command, environment) {
+  const childEnvironment = { ...process.env, ...environment };
+  // PowerShell 7 module paths cannot be loaded by the Windows PowerShell 5 child.
+  // Let that child discover its own system modules; the ACL predicates stay intact.
+  for (const key of Object.keys(childEnvironment)) if (key.toLowerCase() === 'psmodulepath') delete childEnvironment[key];
   return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')],
-    { env: { ...process.env, ...environment }, windowsHide: true, timeout: 10000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    { env: childEnvironment, windowsHide: true, timeout: 10000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 
 async function assertPrivateAccess(filename, isDirectory) {
