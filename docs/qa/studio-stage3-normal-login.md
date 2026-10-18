@@ -18,6 +18,18 @@ Only after the exact-revision review and the root task's explicit fixture execut
 
 The script validates the private files' effective ACL (current Windows user and SYSTEM only; restrictive POSIX permissions elsewhere). It saves fresh random passwords with exclusive file creation before any mutation, then verifies the target again in the transaction. No existing credentials file is overwritten. Run only with:
 
+Before the first real fixture or normal-login harness execution, a local Medium
+finding was corrected in this ACL check. Windows PowerShell could previously
+continue after a nonterminating Get-Acl module error and return PRIVATE_OK without
+checking any entries. The child now loads its own native module paths, stops on
+all PowerShell errors, requires the current owner and both current-user/SYSTEM
+allow entries, and rejects every other allow principal. The original canonical
+ignored-path boundary remains. A real harmless local filesystem test accepts a
+restricted file, rejects an added Users reader, and rejects an absent file;
+POSIX runs exercise restrictive and wider file modes. No credential/MFA file
+was read using the defective guard. The prior zero-finding local review is
+superseded for this failure path; final exact-revision App review is separate.
+
     node --import tsx scripts/studio-stage3-login-fixture.mjs <ACL-private-config.json> --run-authorized-fixture
 
 A failure or uncertain commit requires read-only reconciliation by the root task. Do not rerun with new credentials, reset passwords or delete the private evidence to bypass an identity collision. The database fixture deliberately changes the post-restore data fingerprint; preserve the earlier authentic restore proof and record the separate synthetic fixture operation rather than claiming the restored data are still byte-identical.

@@ -1,7 +1,40 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdir, mkdtemp, writeFile, realpath, chmod, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createRecoveryCodes, createTotpSecret, verifyTotpCode } from '../src/lib/auth/mfa-core.ts';
-import { validateFixtureConfig, makeCredentials, loginPlan, fixtureTarget, seedLoginFixtures, parseEnrollmentHtml, normalQaLogin, providerAdminProfile, migrationChecksum } from './studio-stage3-login-fixture.mjs';
+import { validateFixtureConfig, makeCredentials, loginPlan, fixtureTarget, seedLoginFixtures, parseEnrollmentHtml, normalQaLogin, providerAdminProfile, migrationChecksum, assertPrivateQaPath } from './studio-stage3-login-fixture.mjs';
+
+test('actual private QA access accepts restricted files and rejects an additional reader',async()=>{
+  const repository=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+  const base=path.join(repository,'.npm-cache','qa');await mkdir(base,{recursive:true,mode:0o700});
+  const scratch=await mkdtemp(path.join(base,'synthetic-login-acl-'));
+  const narrow=path.join(scratch,'private.txt'),wide=path.join(scratch,'extra-reader.txt');
+  try {
+    if(process.platform==='win32') {
+      const env={...process.env,STUDIO_LOGIN_TEST_DIRECTORY:scratch};
+      for(const key of Object.keys(env))if(key.toLowerCase()==='psmodulepath')delete env[key];
+      const setup="$ErrorActionPreference='Stop';$p=$env:STUDIO_LOGIN_TEST_DIRECTORY;$s=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$a=New-Object System.Security.AccessControl.DirectorySecurity;$a.SetAccessRuleProtection($true,$false);$a.SetOwner($s);foreach($i in @($s,[System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){$a.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($i,'FullControl','ContainerInherit, ObjectInherit','None','Allow'))};Set-Acl -LiteralPath $p -AclObject $a";
+      execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(setup,'utf16le').toString('base64')],{env,windowsHide:true,stdio:'ignore'});
+    }
+    await writeFile(narrow,'synthetic non-secret',{mode:0o600});await writeFile(wide,'synthetic non-secret',{mode:0o600});
+    assert.equal(await assertPrivateQaPath(narrow),await realpath(narrow));
+    if(process.platform==='win32') {
+      const env={...process.env,STUDIO_LOGIN_TEST_FILE:wide};
+      for(const key of Object.keys(env))if(key.toLowerCase()==='psmodulepath')delete env[key];
+      const widen="$ErrorActionPreference='Stop';$p=$env:STUDIO_LOGIN_TEST_FILE;$a=Get-Acl -LiteralPath $p;$a.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'Read','Allow'));Set-Acl -LiteralPath $p -AclObject $a";
+      execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(widen,'utf16le').toString('base64')],{env,windowsHide:true,stdio:'ignore'});
+    } else await chmod(wide,0o644);
+    await assert.rejects(assertPrivateQaPath(wide));
+    await assert.rejects(assertPrivateQaPath(path.join(scratch,'does-not-exist')));
+  } finally {
+    const resolved=await realpath(scratch),relative=path.relative(await realpath(base),resolved);
+    assert.ok(relative&&!relative.startsWith('..')&&!path.isAbsolute(relative),'cleanup stays within the synthetic QA directory');
+    await rm(resolved,{recursive:true,force:true});
+  }
+});
 
 const config=()=>({approvalId:'SYNTHETIC_ST3_ONLY',target:{...fixtureTarget},adminUriFile:'private/admin.txt',credentialsFile:'private/new-logins.json'});
 test('every actual login-plan identifier is a 36-character UUIDv4 and stable across fresh module evaluation',async()=>{

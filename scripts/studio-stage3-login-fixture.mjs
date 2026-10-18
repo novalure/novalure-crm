@@ -145,9 +145,10 @@ export async function assertPrivateQaPath(filename,directory=false) {
   check(absolute.startsWith(base+path.sep),'IGNORED_QA_PRIVATE_PATH_REQUIRED');
   const info=await stat(absolute);check(directory?info.isDirectory():info.isFile(),'PRIVATE_PATH_TYPE_MISMATCH');
   if(process.platform==='win32') {
-    const quoted=absolute.replaceAll("'","''");
-    const code="$a=Get-Acl -LiteralPath '"+quoted+"';$s=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;foreach($r in $a.Access){if($r.AccessControlType -eq 'Allow'){$i=$r.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value;if($i -ne $s -and $i -ne 'S-1-5-18'){exit 1}}};'PRIVATE_OK'";
-    const result=await run('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{windowsHide:true,timeout:10000});
+    const code="$ErrorActionPreference='Stop';$a=Get-Acl -LiteralPath $env:STUDIO_LOGIN_PRIVATE_PATH;$s=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$o=$a.Owner;$owner=if($o -match '^S-1-'){([System.Security.Principal.SecurityIdentifier]::new($o)).Value}else{([System.Security.Principal.NTAccount]::new($o)).Translate([System.Security.Principal.SecurityIdentifier]).Value};if($owner -ne $s){exit 1};$seen=@{};foreach($r in $a.Access){if($r.AccessControlType -eq 'Allow'){$i=$r.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value;if($i -ne $s -and $i -ne 'S-1-5-18'){exit 1};$seen[$i]=$true}};if(-not $seen.ContainsKey($s) -or -not $seen.ContainsKey('S-1-5-18')){exit 1};'PRIVATE_OK'";
+    const env={...process.env,STUDIO_LOGIN_PRIVATE_PATH:absolute};
+    for(const key of Object.keys(env))if(key.toLowerCase()==='psmodulepath')delete env[key];
+    const result=await run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(code,'utf16le').toString('base64')],{env,windowsHide:true,timeout:10000});
     check(result.stdout.trim()==='PRIVATE_OK','PRIVATE_WINDOWS_ACL_REQUIRED');
   } else check((info.mode&0o077)===0,'PRIVATE_POSIX_MODE_REQUIRED');
   return absolute;
