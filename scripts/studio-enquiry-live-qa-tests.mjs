@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validateLiveQaConfig, validateQaPut, parseCurlResponse, liveQaDatabaseOptions } from "./studio-enquiry-live-qa.mjs";
+import { validateLiveQaConfig, validateQaPut, parseCurlResponse, liveQaDatabaseOptions, isAllowedLiveQaHttpPath } from "./studio-enquiry-live-qa.mjs";
 const operationId='4d1aac3d-d3dc-40f5-87c1-3664e1272da7', sourceId='e173fc56-165c-4920-aa9c-5c945ea6db8a', assetId='fe711063-f9a1-4289-8f70-2b7c96635018';
 const workspace='8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101';
 const content={mime:'image/png',bytes:123,sha256:'a'.repeat(64)};
@@ -27,4 +27,14 @@ test('CLI response parser preserves binary private media and separate cookies wi
   const response=parseCurlResponse(Buffer.concat([Buffer.from('HTTP/1.1 200 Connection established\r\n\r\nHTTP/2 200\r\nContent-Type: image/png\r\nSet-Cookie: one=synthetic; Secure\r\nSet-Cookie: two=synthetic; Secure\r\n\r\n'),bytes]));
   assert.equal(response.status,200);assert.ok(response.body.equals(bytes));assert.equal(response.headers.get('set-cookie').length,2);
   assert.throws(()=>parseCurlResponse(Buffer.from('not an HTTP response')),/invalid_http_response/);
+});
+
+test('normal MFA page access is limited to the two exact same-origin challenge paths',()=>{
+  for(const value of ['/login?step=mfa_enrollment','/login?step=mfa_verification','/api/auth/login','/api/auth/session']){
+    assert.equal(isAllowedLiveQaHttpPath(value),true);
+  }
+  for(const value of ['/login','/login?step=mfa_enrollment&returnTo=https://foreign.example','//foreign.example/login?step=mfa_enrollment',
+    'https://foreign.example/login?step=mfa_enrollment','/login?step=workspace_selection','/login?step=mfa_enrollment#secret','/api/auth/login\r\nAuthorization: secret','/api\\foreign']){
+    assert.equal(isAllowedLiveQaHttpPath(value),false);
+  }
 });

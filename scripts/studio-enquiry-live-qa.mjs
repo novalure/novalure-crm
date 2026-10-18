@@ -10,6 +10,7 @@ import pg from "pg";
 import { getCACertificates } from "node:tls";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
+import { normalQaLogin, fixtureTarget, assertPrivateQaPath } from "./studio-stage3-login-fixture.mjs";
 import { buildStudioEnquirySignature, parseStudioEnquiryRequest } from "../src/lib/studio-enquiry-contract.ts";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -146,21 +147,33 @@ async function scopedCounts(pool, state) {
       leadId: row.lead_id, submissionId: row.submission_id };
   });
 }
-async function normalMediaAccess(config, http, receipt) {
+async function normalMediaAccess(config, http, receipt, privateAuthDirectory) {
   const report = {};
   for (const label of ["sameWorkspace", "foreignWorkspace"]) {
     const fixture = config.logins?.[label];
     if (!fixture?.email || !fixture?.password || !fixture?.userId || !fixture?.workspaceId) { report[label] = "NOT_RUN_normal_login_fixture_missing"; continue; }
     check(label === "sameWorkspace" ? fixture.workspaceId === workspaceId : fixture.workspaceId !== workspaceId, "invalid_login_scope");
-    const form = new URLSearchParams({ email: fixture.email, password: fixture.password, returnTo: "/", language: "en" });
-    const login = await http("/api/auth/login", { method: "POST", body: form.toString(), headers: {
-      "Content-Type": "application/x-www-form-urlencoded", Origin: config.crm.origin, Referer: config.crm.origin + "/login", "Sec-Fetch-Site": "same-origin" } });
-    const cookie = (login.headers.get("set-cookie") || []).map(v => v.split(";")[0]).find(v => v.startsWith("novalure_session="));
-    if (!cookie) { report[label] = "NOT_VERIFIED_normal_login_or_MFA_required"; continue; }
-    const session = await http("/api/auth/session", { headers: { Cookie: cookie } });
-    check(session.status === 200, "normal_session_not_verified"); const data = JSON.parse(session.body.toString("utf8"));
-    check(data.authenticated === true && data.user?.id === fixture.userId && data.workspace?.id === fixture.workspaceId &&
-      data.source === "cookie" && data.trustedAuthHeaders === false && data.demoAuth === false, "normal_session_scope_mismatch");
+    check(config.qa.projectId===fixtureTarget.projectId&&config.qa.branchId===fixtureTarget.branchId&&
+      config.qa.databaseName===fixtureTarget.databaseName,"normal_login_fixture_database_mismatch");
+    await assertPrivateQaPath(privateAuthDirectory,true);
+    const mfaPath=path.join(privateAuthDirectory,config.runId+"-"+label+"-mfa.private.json");
+    let savedMfa;
+    try {
+      await assertPrivateQaPath(mfaPath);
+      savedMfa=JSON.parse(await readFile(mfaPath,"utf8"));
+      check(savedMfa.format==="studio-stage3-normal-mfa-v1"&&savedMfa.label===label&&
+        savedMfa.email===fixture.email&&savedMfa.userId===fixture.userId&&savedMfa.workspaceId===fixture.workspaceId&&
+        savedMfa.target?.projectId===fixtureTarget.projectId&&savedMfa.target?.branchId===fixtureTarget.branchId&&
+        savedMfa.target?.databaseName===fixtureTarget.databaseName,"saved_normal_mfa_binding_mismatch");
+    } catch(error) {if(error.code!=="ENOENT")throw error;}
+    const auth=await normalQaLogin({label,account:{...fixture,...(savedMfa?{mfa:savedMfa}:{})},origin:config.crm.origin,http,
+      savePrivateEnrollment:async(savedLabel,material)=>{
+        check(savedLabel===label,"normal_enrollment_label_mismatch");
+        // Exclusive creation: an uncertain prior enrollment is never overwritten.
+        await writeFile(mfaPath,JSON.stringify({format:"studio-stage3-normal-mfa-v1",label,target:fixtureTarget,...material},null,2),
+          {flag:"wx",mode:0o600});
+      }});
+    const cookie=auth.cookie;
     const detail=await http("/api/crm/leads?id="+encodeURIComponent(receipt.crmLeadId),{headers:{Cookie:cookie}});
     if(label==="sameWorkspace"){
       check(detail.status===200,"same_workspace_lead_details_not_readable");
@@ -183,6 +196,11 @@ async function normalMediaAccess(config, http, receipt) {
   return report;
 }
 
+export function isAllowedLiveQaHttpPath(pathname) {
+  if(typeof pathname!=="string"||pathname.includes("\\")||/[\r\n]/.test(pathname))return false;
+  return pathname.startsWith("/api/")||pathname==="/login?step=mfa_enrollment"||pathname==="/login?step=mfa_verification";
+}
+
 export async function runLiveQa(configFile) {
   const allowed = await realpath(path.join(repository, ".npm-cache", "qa"));
   const filename = await realpath(path.resolve(configFile));
@@ -200,7 +218,7 @@ export async function runLiveQa(configFile) {
       (metadata.meta?.githubCommitSha || metadata.meta?.gitCommitSha || metadata.gitSource?.sha) === config.crm.gitSha &&
       (metadata.meta?.githubCommitRef || metadata.meta?.gitCommitRef || metadata.gitSource?.ref) === branch, "deployment_identity_mismatch");
     const http = async (pathname, { method = "GET", headers = {}, body } = {}) => {
-      check(pathname.startsWith("/api/") && !pathname.includes("\\") && !pathname.includes("\r") && !pathname.includes("\n"), "unexpected_http_path");
+      check(isAllowedLiveQaHttpPath(pathname), "unexpected_http_path");
       const args = ["curl", config.crm.origin + pathname, "--scope", "novalure", "--non-interactive", "--deployment", config.crm.deploymentId,
         "--", "--silent", "--show-error", "--include", "--request", method, "--max-time", "50", "--max-redirs", "0", "--proto", "=https"];
       for (const [key, value] of Object.entries(headers)) args.push("--header", key + ": " + value);
@@ -279,7 +297,7 @@ export async function runLiveQa(configFile) {
     report.checks.replay = "PASS_same_receipt_after_discard_status_and_parallel_finalize"; report.counts = counts;
     report.receipt = receipt;
     stage = "normal_authenticated_media_access";
-    report.mediaAccess = await normalMediaAccess(config,http,receipt);
+    report.mediaAccess = await normalMediaAccess(config,http,receipt,path.dirname(filename));
     report.status = Object.values(report.mediaAccess).every(v=>v.startsWith("PASS")) ? "PASS" : "TRANSPORT_PASS_AUTHENTICATED_ACCESS_OPEN";
     report.finishedAt = new Date().toISOString();
     await writeFile(reportPath,JSON.stringify(report,null,2),{mode:0o600});
