@@ -70,6 +70,12 @@ jobs:
       - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
         run: npm run test:knowledge-center
 
+      - name: Knowledge publication, monitoring, scheduler and two-tenant acceptance
+        run: npm run test:knowledge-package3
+
+      - name: Combined package 4 migration ledger, runtime roles and rollback
+        run: npm run test:package4-migrations
+
       - name: Security and scope integration tests
         run: npm run test:integration
 
@@ -136,6 +142,9 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Integrated Design C and Knowledge customer acceptance on isolated PostgreSQL
+        run: npm run qa:package4:e2e
 
       - name: Reject whitespace errors
         shell: bash

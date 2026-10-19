@@ -34,6 +34,20 @@ async function step(name, callback) {
   results.push({ name, status: "PASS" });
   console.log("PASS " + name);
 }
+async function publishThroughUi(card, expectedContent) {
+  if (!await card.getByTestId("knowledge-lifecycle").count()) await card.getByRole("button", { name: "Inhalt prüfen", exact: true }).click();
+  const lifecycle = card.getByTestId("knowledge-lifecycle");
+  await expect(lifecycle).toBeVisible();
+  if (expectedContent) await expect(lifecycle).toContainText(expectedContent);
+  for (const action of ["submit", "review", "approve", "publish"]) {
+    const button = lifecycle.getByTestId("knowledge-" + action);
+    await expect(button).toBeVisible();
+    await lifecycle.locator("form textarea").first().fill("SYNTHETIC vollständig geprüfte Veröffentlichung");
+    if (action !== "submit") await lifecycle.getByRole("checkbox", { name: "Ich habe den Inhalt vollständig geprüft.", exact: true }).check();
+    await button.click();
+  }
+  await expect(lifecycle.getByTestId("knowledge-revoke")).toBeVisible();
+}
 async function api(path, body, method = "POST") {
   return page.evaluate(async ({ path, body, method }) => {
     const scopedPath = path + (path.includes("?") ? "&" : "?") + new URLSearchParams({ workspaceId: window.knowledgeWorkspace });
@@ -147,12 +161,8 @@ try {
       await form.getByLabel("Privates Dokument hochladen", { exact: true }).setInputFiles({ name: item.file, mimeType: item.mime, buffer: Buffer.from(item.bytes) });
       const card = page.locator("li").filter({ has: page.getByRole("heading", { name: item.name, exact: true }) });
       await expect(card.getByText("Inhalt erkannt · Bitte prüfen", { exact: true })).toBeVisible();
-      const review = card.getByRole("region", { name: "Erkannter Inhalt", exact: true });
-      await expect(review).toContainText(item.text);
-      await expect(review.getByRole("button", { name: "Diese Version freigeben", exact: true })).toBeDisabled();
-      await review.getByRole("checkbox").check();
-      await review.getByRole("button", { name: "Diese Version freigeben", exact: true }).click();
-      await expect(card.getByText("Freigegebene Version aktiv", { exact: true }).first()).toBeVisible();
+      await publishThroughUi(card, item.text);
+      await expect(card.getByText("Für Assistenten aktive Version", { exact: true }).first()).toBeVisible();
     }
   });
   await step("one approved document serves independently assigned webchat and voice; revocation is immediate", async () => {
@@ -182,6 +192,69 @@ try {
     const card = page.locator("li").filter({ has: page.getByRole("heading", { name: "SYNTHETIC Scan ohne Textebene", exact: true }) });
     await expect(card.getByText("Lesbare Textfassung erforderlich", { exact: true })).toBeVisible();
     await expect(card.getByRole("button", { name: "Diese Version freigeben", exact: true })).toHaveCount(0);
+  });
+  await step("reviewed draft publication and historical restoration work through the customer portal", async () => {
+    const card = page.locator("li").filter({ has: page.getByRole("heading", { name: "SYNTHETIC Öffnungszeiten", exact: true }) });
+    await publishThroughUi(card);
+    assert.match((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches[0].excerpt, /11:00/);
+    const lifecycle = card.getByTestId("knowledge-lifecycle");
+    const history = lifecycle.getByTestId("knowledge-version-history");
+    await history.locator("summary").click();
+    await history.getByRole("combobox").selectOption({ label: await history.getByRole("combobox").locator("option").last().innerText() });
+    await history.locator("textarea").fill("SYNTHETIC geprüfte Wiederherstellung");
+    await expect(history.getByTestId("knowledge-restore")).toBeDisabled();
+    await history.getByRole("checkbox", { name: /weiterhin aktuell/ }).check();
+    await history.getByRole("checkbox", { name: /rechtliche Angaben/ }).check();
+    await history.getByTestId("knowledge-restore").click();
+    await expect(lifecycle.getByTestId("knowledge-submit")).toBeVisible();
+    const source = (await readSnapshot()).sources.find(item => item.id === sourceId);
+    assert.equal(source.version.version, 3);
+    assert.match(source.version.content, /09:00/);
+    assert.match((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches[0].excerpt, /11:00/);
+    await lifecycle.locator("form textarea").first().fill("SYNTHETIC Veröffentlichung trotz neuem Entwurf zurückziehen");
+    await lifecycle.getByTestId("knowledge-revoke").click();
+    await expect.poll(async () => (await readSnapshot()).sources.find(item => item.id === sourceId).approvedVersionId).toBe(null);
+    assert.equal((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches.length, 0);
+  });
+  await step("website monitoring schedules are customer configurable and remain isolated from live publishing", async () => {
+    const snapshot = await readSnapshot();
+    await admin.query(`update knowledge_center_entitlements set features=features||'{"monitoring":true,"advancedMaintenance":true}'::jsonb,monitoring_intervals=array['manual','daily','weekly','monthly']::text[] where workspace_id=$1`, [fixture.workspaceId]);
+    const response = await api("/api/knowledge-center/sources", { areaId: snapshot.areas.find(item => item.name === "SYNTHETIC Firmenwissen").id, name: "SYNTHETIC Unternehmenswebsite", type: "url", url: "https://company.com", content: "SYNTHETIC website facts." });
+    assert.equal(response.status, 201);
+    await page.getByRole("region", { name: "Mein Unternehmenswissen", exact: true }).getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    const card = page.locator("li").filter({ has: page.getByRole("heading", { name: "SYNTHETIC Unternehmenswebsite", exact: true }) });
+    await card.getByRole("button", { name: "Websiteüberwachung", exact: true }).click();
+    const monitoring = card.getByTestId("knowledge-monitoring");
+    await monitoring.getByTestId("knowledge-monitoring-interval").selectOption("daily");
+    await monitoring.getByTestId("knowledge-monitoring-save").click();
+    await expect(monitoring.getByRole("status")).toHaveText("Änderung gespeichert.");
+    const stored = (await admin.query("select interval,enabled,next_due_at is not null as scheduled from knowledge_website_monitoring where source_id=$1", [response.body.source.id])).rows[0];
+    assert.deepEqual(stored, { interval: "daily", enabled: true, scheduled: true });
+    assert.equal((await admin.query("select count(*)::int as count from knowledge_website_scan_runs")).rows[0].count, 0);
+    await monitoring.getByTestId("knowledge-monitoring-interval").selectOption("manual");
+    await monitoring.getByTestId("knowledge-monitoring-save").click();
+    await expect(monitoring.getByRole("status")).toHaveText("Änderung gespeichert.");
+    await expect.poll(async () => (await admin.query("select enabled from knowledge_website_monitoring where source_id=$1", [response.body.source.id])).rows[0].enabled).toBe(false);
+  });
+  await step("maintenance analysis produces persistent customer-reviewable proposals without publishing", async () => {
+    await page.getByRole("button", { name: "Wissenspflege", exact: true }).click();
+    await page.getByRole("button", { name: "Wissen jetzt prüfen", exact: true }).click();
+    await expect(page.getByText("Prüfung abgeschlossen. Neue Hinweise stehen in den Prüfvorschlägen.", { exact: true })).toBeVisible();
+    const proposal = page.locator("article").filter({ hasText: "SYNTHETIC Unternehmenswebsite" }).first();
+    await proposal.getByRole("button", { name: "Vorschlag prüfen", exact: true }).click();
+    await proposal.getByRole("textbox", { name: /^Vorgeschlagener Inhalt/ }).fill("SYNTHETIC website: approved customer draft ALPHA.");
+    await proposal.getByRole("textbox", { name: /^Begründung für die Entscheidung/ }).fill("SYNTHETIC Information geprüft");
+    await proposal.getByRole("button", { name: "Vorschlag speichern", exact: true }).click();
+    await expect(page.getByText("Änderungen am Vorschlag gespeichert.", { exact: true })).toBeVisible();
+    await proposal.getByRole("textbox", { name: /^Begründung für die Entscheidung/ }).fill("SYNTHETIC als Entwurf übernehmen");
+    await proposal.getByRole("button", { name: "Annehmen und Entwurf erstellen", exact: true }).click();
+    await expect(page.getByText("Vorschlag angenommen. Der neue Entwurf muss noch separat geprüft, freigegeben und veröffentlicht werden.", { exact: true })).toBeVisible();
+    const source = (await readSnapshot()).sources.find(item => item.name === "SYNTHETIC Unternehmenswebsite");
+    assert.equal(source.version.version, 2);
+    assert.equal(source.approvedVersionId, null);
+    assert.match(source.version.content, /ALPHA/);
+    await page.getByRole("tab", { name: "Benachrichtigungen", exact: true }).click();
+    await expect(page.getByRole("tabpanel")).toContainText("SYNTHETIC Unternehmenswebsite");
   });
   await step("desktop and mobile views remain usable without horizontal overflow", async () => {
     await page.getByRole("button", { name: /^Wissensquellen \(/ }).click();

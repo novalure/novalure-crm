@@ -207,6 +207,11 @@
   font-weight: 550;
   letter-spacing: -0.025em;
 }
+.crm-app.design-c .evelyn-knowledge-section-maintenance [role="tab"][aria-selected="true"] {
+  border-color: var(--dc-info-border);
+  background: var(--dc-accent-soft);
+  color: var(--dc-accent-text);
+}
 .crm-app.design-c .evelyn-knowledge-actions {
   gap: 12px;
 }
