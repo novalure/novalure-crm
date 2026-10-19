@@ -1564,7 +1564,7 @@ function KnowledgeCenterContent({
                                         <p className="mt-1 text-xs text-stone-600">
                                           {dateLabel(version.createdAt)}
                                         </p>
-                                        <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-stone-700">
+                                        <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-stone-700" tabIndex={0}>
                                           {version.content ||
                                             version.url ||
                                             (source.type === "structured"

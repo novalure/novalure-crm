@@ -442,7 +442,7 @@ test("public gateway knowledge binds live integration, origin, session, tenant a
     await closeLocalTestPool();
     for (const key of envKeys) {
       if (prior[key] === undefined) delete process.env[key];
-      else process.env[key] = prior[key];
+      else Object.assign(process.env, { [key]: prior[key] });
     }
   }
 });
