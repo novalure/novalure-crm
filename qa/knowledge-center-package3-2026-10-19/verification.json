@@ -107,7 +107,7 @@
       "command": "NEXT_TELEMETRY_DISABLED=1 npm run build",
       "exitCode": 0,
       "log": "build.txt",
-      "sha256": "135593f1ef2b0fd82bb5777c0eca6a33a44ed30df5c4e9e07c2b0d3d90499dd5"
+      "sha256": "7fd9dac67e0acb3dd473399588a80fd39a32432fef02cd5620ac2d81e3b2703e"
     },
     {
       "command": "npm run security:production",
