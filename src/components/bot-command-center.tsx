@@ -22,6 +22,7 @@ import type { KnowledgeChannel, KnowledgeSource } from "@/lib/knowledge-center/t
 
 type BotCommandCenterProps = {
   workspaceId: string;
+  sessionWorkspaceId?: string;
   automations: Automation[];
   bots: CrmBot[];
   callInsights: BotCallInsight[];
@@ -511,12 +512,31 @@ function isBotReadPayload(kind: keyof BotReadResponses, value: unknown) {
     && ["limitBytes", "maxFileBytes", "remainingBytes", "usedBytes"].every((key) => typeof quota[key] === "number" && Number.isFinite(quota[key]) && quota[key] >= 0);
 }
 
+/** Legacy endpoints have no selected-workspace contract. Missing context stays read-only. */
+export function isHomeBotWorkspace(workspaceId: string, sessionWorkspaceId?: string) {
+  return Boolean(sessionWorkspaceId && workspaceId === sessionWorkspaceId);
+}
+
+export async function homeWorkspaceBotRequest(
+  workspaceId: string,
+  sessionWorkspaceId: string | undefined,
+  readOnlyMessage: string,
+  url: string,
+  init: RequestInit,
+  fetcher: (url: string, init?: RequestInit) => Promise<Response> = csrfFetch,
+) {
+  if (!isHomeBotWorkspace(workspaceId, sessionWorkspaceId)) throw new Error(readOnlyMessage);
+  return fetcher(url, init);
+}
+
 /** Each reader settles independently; a denied sibling cannot replace real data. */
 export async function readBotSource<K extends keyof BotReadResponses>(
   kind: K,
   workspaceId: string,
   fetcher: (url: string) => Promise<Response> = csrfFetch,
+  sessionWorkspaceId?: string,
 ): Promise<{ status: "ready"; data: BotReadResponses[K] } | { status: "error" }> {
+  if (kind === "documents" && !isHomeBotWorkspace(workspaceId, sessionWorkspaceId)) return { status: "error" };
   const paths = {
     chat: "/api/bots/chat?limit=12",
     channels: "/api/bots/channels",
@@ -568,6 +588,7 @@ export function botLivePresentation({
 
 export function BotCommandCenter({
   workspaceId,
+  sessionWorkspaceId,
   automations,
   bots,
   canManageBotSetup = true,
@@ -577,6 +598,11 @@ export function BotCommandCenter({
   workflows,
 }: BotCommandCenterProps) {
   const text = getBotCommandCenterCopy(language);
+  const isHomeWorkspace = isHomeBotWorkspace(workspaceId, sessionWorkspaceId);
+  const readOnlyMessage = language === "de"
+    ? "Die Kanal-, Freigabe- und Aktionshistorien sind hier nur lesbar. Änderungen an Freigaben, Aktionen oder der Bot-Einrichtung sowie Dokument-Uploads sind nur im angemeldeten Arbeitsbereich verfügbar."
+    : "Channel, approval and action histories are read-only here. Approval decisions, action changes, bot setup and document uploads are available only in your signed-in workspace.";
+  const legacyRequest = (url: string, init: RequestInit) => homeWorkspaceBotRequest(workspaceId, sessionWorkspaceId, readOnlyMessage, url, init);
   const [activeTab, setActiveTab] = useState<BotTab>("overview");
   const [approvalActionResult, setApprovalActionResult] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<BotApproval[]>([]);
@@ -668,7 +694,7 @@ export function BotCommandCenter({
     { done: evaluationReady, label: text.publishEvaluationReady },
     { done: approvalsReady, label: text.publishApprovalsReady },
   ];
-  const sendableDocumentAssets = documentAssets.filter(isSendableDocumentAsset);
+  const sendableDocumentAssets = isHomeWorkspace ? documentAssets.filter(isSendableDocumentAsset) : [];
   const endpointCards = [
     { id: "chat", method: text.methodPost, path: botWorkspaceUrl("/api/bots/chat", workspaceId) },
     { id: "agent", method: text.methodGetPost, path: botWorkspaceUrl("/api/bots/agent", workspaceId) },
@@ -809,7 +835,7 @@ export function BotCommandCenter({
           setMeetingBookings(result.status === "ready" ? result.data.meetingBookings ?? [] : []);
           setBotActionStatus(result.status);
         }),
-        readBotSource("documents", workspaceId).then((result) => {
+        readBotSource("documents", workspaceId, csrfFetch, sessionWorkspaceId).then((result) => {
           if (cancelled) return;
           setDocumentAssets(result.status === "ready" ? result.data.assets ?? [] : []);
           setDocumentQuota(result.status === "ready" ? result.data.quota ?? null : null);
@@ -828,12 +854,13 @@ export function BotCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, workspaceId]);
+  }, [activeTab, workspaceId, sessionWorkspaceId]);
 
   async function decideApproval(approvalId: string, decision: ApprovalDecision) {
+    if (!isHomeWorkspace) return;
     try {
       setApprovalUpdatingId(approvalId);
-      const response = await csrfFetch("/api/approvals", {
+      const response = await legacyRequest("/api/approvals", {
         body: JSON.stringify({ approvalId, decision }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -869,11 +896,12 @@ export function BotCommandCenter({
   }
 
   async function saveBotSetup(bot: CrmBot) {
+    if (!isHomeWorkspace) return;
     try {
       setBotSetupSaveMessage(null);
       setBotSetupSaveStatus("idle");
       setBotSetupSavingId(bot.id);
-      const response = await csrfFetch("/api/crm/bots", {
+      const response = await legacyRequest("/api/crm/bots", {
         body: JSON.stringify({ bot }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -898,10 +926,11 @@ export function BotCommandCenter({
     id: string;
     type: "document_send" | "meeting_booking";
   }) {
+    if (!isHomeWorkspace) return;
     try {
       setBotActionUpdatingId(input.id);
       setBotActionResult(null);
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await legacyRequest("/api/bots/actions", {
         body: JSON.stringify(input),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -938,6 +967,7 @@ export function BotCommandCenter({
   }
 
   async function attachDocumentAsset(documentSendId: string, mediaAssetId: string) {
+    if (!isHomeWorkspace) return false;
     try {
       setBotActionUpdatingId(documentSendId);
       setBotActionResult(null);
@@ -947,7 +977,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/bots/actions", {
+      const response = await legacyRequest("/api/bots/actions", {
         body: JSON.stringify({
           action: "attach_media_asset",
           id: documentSendId,
@@ -985,6 +1015,7 @@ export function BotCommandCenter({
   }
 
   async function uploadDocumentForAction(documentSend: BotActionDocumentSend, file: File) {
+    if (!isHomeWorkspace) return;
     const maxFileBytes = documentQuota?.maxFileBytes ?? 10 * 1024 * 1024;
 
     if (file.size > maxFileBytes) {
@@ -1009,7 +1040,7 @@ export function BotCommandCenter({
         return next;
       });
 
-      const response = await csrfFetch("/api/media", {
+      const response = await legacyRequest("/api/media", {
         body: formData,
         method: "POST",
       });
@@ -1051,6 +1082,8 @@ export function BotCommandCenter({
             {text.scope}: {projectLabel}
           </span>
         </div>
+
+        {!isHomeWorkspace ? <p className="mt-4 rounded-md bg-stone-50 p-3 text-sm text-stone-600" role="status">{readOnlyMessage}</p> : null}
 
         <nav aria-label={text.cleanTitle} className="evelyn-bot-tabs-scroll mt-5 overflow-x-auto">
           <div className="evelyn-bot-tabs flex min-w-max gap-2 rounded-lg bg-stone-100 p-1">
@@ -1422,7 +1455,7 @@ export function BotCommandCenter({
                     <div className="evelyn-bot-card-actions mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <button
                         className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "handoff")}
                         type="button"
                       >
@@ -1430,7 +1463,7 @@ export function BotCommandCenter({
                       </button>
                       <button
                         className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "denied")}
                         type="button"
                       >
@@ -1438,7 +1471,7 @@ export function BotCommandCenter({
                       </button>
                       <button
                         className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isUpdating}
+                        disabled={isUpdating || !isHomeWorkspace}
                         onClick={() => void decideApproval(approval.id, "approved")}
                         type="button"
                       >
@@ -1503,7 +1536,7 @@ export function BotCommandCenter({
                       {canManageBotSetup ? (
                         <button
                           className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={botSetupSavingId === bot.id}
+                          disabled={botSetupSavingId === bot.id || !isHomeWorkspace}
                           onClick={() => void saveBotSetup(bot)}
                           type="button"
                         >
@@ -1725,6 +1758,7 @@ export function BotCommandCenter({
                                   onChange={(event) => {
                                     if (event.target.value) void attachDocumentAsset(documentSend.id, event.target.value);
                                   }}
+                                  disabled={!isHomeWorkspace || isUpdating || isUploading}
                                   value={documentSend.mediaAssetId ?? ""}
                                 >
                                   <option value="">{text.selectDocumentPlaceholder}</option>
@@ -1739,7 +1773,7 @@ export function BotCommandCenter({
                                   <input
                                     accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
                                     className="sr-only"
-                                    disabled={isUploading || isUpdating}
+                                    disabled={isUploading || isUpdating || !isHomeWorkspace}
                                     onChange={(event) => {
                                       const file = event.target.files?.[0];
                                       if (file) void uploadDocumentForAction(documentSend, file);
@@ -1750,7 +1784,7 @@ export function BotCommandCenter({
                                 </label>
                               </div>
                               {!sendableDocumentAssets.length ? (
-                                <p className="text-xs text-stone-500">{documentStatus === "ready" ? text.noDocumentAssets : documentStatus === "loading" ? text.loadingLiveData : text.liveDataUnavailable}</p>
+                                <p className="text-xs text-stone-500">{!isHomeWorkspace ? readOnlyMessage : documentStatus === "ready" ? text.noDocumentAssets : documentStatus === "loading" ? text.loadingLiveData : text.liveDataUnavailable}</p>
                               ) : null}
                             </div>
                           ) : null}
@@ -1762,7 +1796,7 @@ export function BotCommandCenter({
                           {documentSend.status !== "sent" ? (
                             <button
                               className="mt-3 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={isUpdating || isUploading || !canSendDocument}
+                              disabled={isUpdating || isUploading || !canSendDocument || !isHomeWorkspace}
                               onClick={() => void runBotAction({ action: "mark_sent", id: documentSend.id, type: "document_send" })}
                               type="button"
                             >
@@ -1809,7 +1843,7 @@ export function BotCommandCenter({
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
                                 className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !isHomeWorkspace}
                                 onClick={() => void runBotAction({ action: "confirm", id: meetingBooking.id, type: "meeting_booking" })}
                                 type="button"
                               >
@@ -1817,7 +1851,7 @@ export function BotCommandCenter({
                               </button>
                               <button
                                 className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !isHomeWorkspace}
                                 onClick={() => void runBotAction({ action: "cancel", id: meetingBooking.id, type: "meeting_booking" })}
                                 type="button"
                               >

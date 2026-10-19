@@ -147,7 +147,15 @@ async function readerPanel(
   reader,
   workspaceId = accounts.operator.workspaceId,
 ) {
+  const previousUrl = page.url();
   await open(page, workspaceId, reader.id === "calendar" ? "calendar" : "bots");
+  // An identical URL containing a fragment can be a same-document navigation.
+  // Repeated checks need a fresh request after their interceptor is installed.
+  if (previousUrl === page.url()) {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("[data-crm-content]")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+  }
   if (reader.tab)
     await page
       .getByRole("navigation", { name: "Bot-Arbeitsbereich", exact: true })
@@ -165,8 +173,9 @@ async function readerPanel(
   );
 }
 
-async function verifyReaderUi(reader, failure) {
+async function verifyReaderUi(reader, failure, beforeAssertion) {
   const panel = await readerPanel(operatorPage, reader);
+  if (beforeAssertion) await beforeAssertion();
   if (failure) {
     await expect(panel).toContainText(reader.unavailable);
     for (const message of reader.empty)
@@ -284,17 +293,23 @@ async function verifyOperationalReaders() {
       await step(
         `${reader.id}: ${failure} becomes unavailable without an empty-success claim`,
         async () => {
+          let intercepted = 0;
           const handler = async (route) => {
+            intercepted++;
             if (failure === "network") return route.abort("failed");
             const response = await route.fetch();
             assert.equal(response.status(), 200);
             const payload = await response.json();
+            assert.equal(payload.source, "database");
             delete payload.source;
             await route.fulfill({ response, json: payload });
           };
           await operatorPage.route(`**${reader.path}**`, handler);
           try {
-            await verifyReaderUi(reader, true);
+            await verifyReaderUi(reader, true, async () => {
+              await expect.poll(() => intercepted).toBeGreaterThan(0);
+            });
+            return { interceptedRequests: intercepted };
           } finally {
             await operatorPage.unroute(`**${reader.path}**`, handler);
           }

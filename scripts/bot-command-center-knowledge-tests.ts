@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { crmBots, crmBotConversations } from "../src/lib/crm-data";
 import { getBotCommandCenterCopy } from "../src/lib/i18n";
-import { BotCommandCenter, botLivePresentation, readBotSource, botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
+import { BotCommandCenter, botLivePresentation, readBotSource, isHomeBotWorkspace, homeWorkspaceBotRequest, botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
 import type { CrmBotChannelConfig } from "../src/lib/crm-types";
 import type { KnowledgeSource } from "../src/lib/knowledge-center/types";
 
@@ -132,7 +132,7 @@ test("reader failures are isolated while workspace-scoped siblings retain actual
   const [chat, channels, approvals, actions, documents, knowledge] = await Promise.all([
     readBotSource("chat", "workspace-B", fetcher), readBotSource("channels", "workspace-B", fetcher),
     readBotSource("approvals", "workspace-B", fetcher), readBotSource("actions", "workspace-B", fetcher),
-    readBotSource("documents", "workspace-B", fetcher), readBotSource("knowledge", "workspace-B", fetcher),
+    readBotSource("documents", "workspace-B", fetcher, "workspace-B"), readBotSource("knowledge", "workspace-B", fetcher),
   ]);
   assert.equal(chat.status, "ready");
   if (chat.status === "ready") assert.equal(chat.data.conversations?.[0].title, "Real inbox");
@@ -149,13 +149,58 @@ test("reader failures are isolated while workspace-scoped siblings retain actual
 
 test("malformed or non-database reader responses stay unknown, while confirmed database empties are ready", async () => {
   for (const kind of ["chat", "channels", "approvals", "actions", "documents", "knowledge"] as const) {
-    assert.equal((await readBotSource(kind, "workspace-A", async () => Response.json({ source: "database" }))).status, "error", `${kind} requires its real response fields`);
-    assert.equal((await readBotSource(kind, "workspace-A", async () => new Response("not-json"))).status, "error");
-    assert.equal((await readBotSource(kind, "workspace-A", async () => { throw new Error("network unavailable"); })).status, "error");
+    assert.equal((await readBotSource(kind, "workspace-A", async () => Response.json({ source: "database" }), "workspace-A")).status, "error", `${kind} requires its real response fields`);
+    assert.equal((await readBotSource(kind, "workspace-A", async () => new Response("not-json"), "workspace-A")).status, "error");
+    assert.equal((await readBotSource(kind, "workspace-A", async () => { throw new Error("network unavailable"); }, "workspace-A")).status, "error");
   }
   assert.equal((await readBotSource("chat", "workspace-A", async () => Response.json({ source: "demo", conversations: [] }))).status, "error");
   assert.equal((await readBotSource("chat", "workspace-A", async () => Response.json({ source: "database", conversations: [{ id: "bad", title: "bad", status: "open", updatedAt: "now", latestMessageContent: {} }] }))).status, "error");
   assert.equal((await readBotSource("approvals", "workspace-A", async () => Response.json({ source: "database", approvals: [] }))).status, "ready");
   assert.equal((await readBotSource("actions", "workspace-A", async () => Response.json({ source: "database", documentSends: [], meetingBookings: [] }))).status, "ready");
   assert.equal((await readBotSource("knowledge", "workspace-A", async () => Response.json({ source: "database", available: false, sources: [] }))).status, "ready", "an explicitly disabled module is distinguished from an unavailable source");
+});
+
+
+test("foreign and unknown workspace contexts never read home document assets", async () => {
+  let requests = 0;
+  const fetcher = async () => {
+    requests += 1;
+    return Response.json({ assets: [], quota: { limitBytes: 1000, maxFileBytes: 100, remainingBytes: 1000, usedBytes: 0 } });
+  };
+  assert.equal((await readBotSource("documents", "selected-foreign", fetcher, "session-home")).status, "error");
+  assert.equal((await readBotSource("documents", "selected-foreign", fetcher)).status, "error");
+  assert.equal(requests, 0, "a foreign view must not issue the unsupported home-workspace request");
+  assert.equal((await readBotSource("documents", "session-home", fetcher, "session-home")).status, "ready");
+  assert.equal(requests, 1, "the unchanged document reader remains available in the home workspace");
+});
+
+test("legacy approval, action, setup and upload writes cannot reach transport from a foreign context", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const fetcher = async (url: string, init?: RequestInit) => {
+    requests.push({ url, init });
+    return Response.json({ status: "ok" });
+  };
+  assert.equal(isHomeBotWorkspace("home", "home"), true);
+  assert.equal(isHomeBotWorkspace("foreign", "home"), false);
+  assert.equal(isHomeBotWorkspace("home"), false);
+  const paths = ["/api/approvals", "/api/bots/actions", "/api/crm/bots", "/api/media"];
+  for (const path of paths) {
+    await assert.rejects(homeWorkspaceBotRequest("foreign", "home", "Read-only workspace", path, { method: "POST", body: "unchanged payload" }, fetcher), /Read-only workspace/);
+    await assert.rejects(homeWorkspaceBotRequest("home", undefined, "Read-only workspace", path, { method: "POST" }, fetcher), /Read-only workspace/);
+  }
+  assert.equal(requests.length, 0, "unsupported foreign writes are blocked before transport");
+  const init = { method: "POST", body: JSON.stringify({ action: "handoff", approvalId: "approval" }) };
+  assert.equal((await homeWorkspaceBotRequest("home", "home", "Read-only workspace", "/api/approvals", init, fetcher)).status, 200);
+  assert.deepEqual(requests, [{ url: "/api/approvals", init }], "home POST URL and payload remain unchanged");
+});
+
+test("foreign history rendering explains read-only actions without disabling scoped flows", () => {
+  for (const language of ["de", "en"] as const) {
+    const html = renderToStaticMarkup(createElement(BotCommandCenter, {
+      workspaceId: "selected-foreign", sessionWorkspaceId: "session-home", language, projectLabel: "Foreign project",
+      automations: [], bots: [], callInsights: [], conversations: [], knowledgeItems: [], tools: [], workflows: [],
+    }));
+    assert.ok(html.includes(language === "de" ? "angemeldeten Arbeitsbereich" : "signed-in workspace"));
+    assert.ok(html.includes(getBotCommandCenterCopy(language).loadingLiveData), "scoped history readers still load");
+  }
 });

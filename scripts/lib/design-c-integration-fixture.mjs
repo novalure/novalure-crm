@@ -430,7 +430,7 @@ export async function seedDesignCReaderRows({ admin, accounts }) {
         webhookId,
         workspaceId,
         accountId,
-        `synthetic-${webhookId.replaceAll("-", "")}`,
+        `evt_${createHash("sha256").update(webhookId).digest("hex")}`,
         JSON.stringify({ token: secret, headers: { authorization: secret } }),
         JSON.stringify({
           text: `${label} MESSAGE`,

@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { CalendarCommandCenter } from "../src/components/calendar-command-center.tsx";
+import { getCalendarCommandCenterCopy } from "../src/lib/i18n.ts";
 
 const source = await readFile(new URL("../src/components/calendar-command-center.tsx", import.meta.url), "utf8");
 const loaderSource = source.slice(source.indexOf("async function loadOAuthStatus()"), source.indexOf("    loadOAuthStatus();"));
@@ -52,30 +53,59 @@ test("managed workspace reads use the selected workspace and expose read-only co
   const html = renderToStaticMarkup(createElement(CalendarCommandCenter, {
     activeProjectId: null, contacts: [], events: [], language: "en", leads: [],
     projectLabel: "Managed workspace", projects: [], sessionUserId: "", sessionUserName: "", tasks: [], users: [],
-    workspaceId: "managed-workspace", sessionWorkspaceId: "home",
+    workspaceId: "managed-workspace", sessionWorkspaceId: "home", workspacePublicKey: "origin-public-key",
   }));
   assert.match(html, /Calendar connections are read-only here/);
   assert.doesNotMatch(html, /id="calendar-default-provider"/);
   assert.ok(!/<button[^>]*>Connect (?:Microsoft|Google)/.test(html), "managed context must hide OAuth start buttons");
   assert.match(html, /<button[^>]*disabled=""[^>]*>Sync with Microsoft/);
+  assert.match(html, /Bookings, notifications and sharing links are unavailable/);
+  assert.doesNotMatch(html, /origin-public-key|id="calendar-share-output"/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>Create appointment/);
+  const copy = getCalendarCommandCenterCopy("en");
+  assert.ok(!html.includes(copy.bookingOverview.noRequests));
+  assert.ok(!html.includes(copy.bookingOverview.noMessages));
+  const bookingTab = (html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? []).find(button => button.includes(copy.bookings));
+  assert.ok(bookingTab?.includes("–"), "foreign booking count must be unavailable rather than a confirmed zero");
 });
 
 test("managed workspace context cannot invoke origin-workspace connection or settings writers", async () => {
   const ast = ts.createSourceFile("calendar.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "syncLiveTeamsMeeting", "saveMeetingSettings", "sendMeetingTestNotification"]);
+  const names = new Set(["connectCalendarProvider", "connectMeetingProvider", "disconnectCalendarProvider", "syncLiveTeamsMeeting", "saveMeetingSettings", "sendMeetingTestNotification", "createCalendarEvent", "copyShareArtifact", "confirmBooking", "retryNotification"]);
   const functions = [];
   function visit(node) {
-    if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) functions.push(node.initializer.getText(ast));
+    if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) functions.push({ name: node.name.getText(ast), declaration: `const ${node.name.getText(ast)} = ${node.initializer.getText(ast)}` });
+    if (ts.isFunctionDeclaration(node) && node.name && names.has(node.name.getText(ast))) functions.push({ name: node.name.getText(ast), declaration: node.getText(ast) });
     ts.forEachChild(node, visit);
   }
   visit(ast);
   assert.equal(functions.length, names.size);
-  for (const initializer of functions) {
-    const compiled = ts.transpileModule(`const handler = ${initializer}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const handler = vm.runInNewContext(`${compiled}\nhandler`, { isHomeWorkspace: false });
+  for (const { name, declaration } of functions) {
+    const compiled = ts.transpileModule(declaration, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const handler = vm.runInNewContext(`${compiled}\n${name}`, { isHomeWorkspace: false });
     // No origin-only dependencies are provided: every writer must return first.
     await handler("google");
   }
+});
+
+test("managed workspace booking overview never fetches origin-workspace records", async () => {
+  const ast = ts.createSourceFile("calendar.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration;
+  function visit(node) {
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name?.getText(ast) === "loadMeetingBookingOverview") declaration = node.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(declaration);
+  let status;
+  const compiled = ts.transpileModule(declaration, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const loader = vm.runInNewContext(`${compiled}\nloadMeetingBookingOverview`, {
+    isHomeWorkspace: false,
+    setMeetingBookingOverviewStatus: value => { status = value; },
+    fetch: () => { throw new Error("Origin workspace read must not run"); },
+  });
+  await loader();
+  assert.equal(status, "unavailable");
 });
 
 test("a successful disconnected status remains a verified ready result", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, Contact, Lead, Project, Task, WorkspaceUser } from "@/lib/crm-types";
 import {
   getCalendarCommandCenterCopy,
@@ -718,6 +718,9 @@ export function CalendarCommandCenter({
   const connectionReadOnlyMessage = language === "de"
     ? "Kalenderverbindungen sind hier schreibgeschützt. Änderungen sind nur im Anmelde-Workspace möglich."
     : "Calendar connections are read-only here. Changes are available only in your sign-in workspace.";
+  const bookingReadOnlyMessage = language === "de"
+    ? "Buchungen, Benachrichtigungen und Freigabelinks sind für diesen Workspace hier nicht verfügbar."
+    : "Bookings, notifications and sharing links are unavailable for this workspace here.";
   const locale = getLocale(language);
   const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
   const assignableUsers = useMemo(
@@ -800,7 +803,7 @@ export function CalendarCommandCenter({
   const [meetingBookingOverview, setMeetingBookingOverview] =
     useState<MeetingBookingOverviewPayload>(emptyMeetingBookingOverview);
   const [meetingBookingOverviewStatus, setMeetingBookingOverviewStatus] =
-    useState<"idle" | "loading" | "loaded" | "error">("idle");
+    useState<"idle" | "loading" | "loaded" | "error" | "unavailable">(isHomeWorkspace ? "idle" : "unavailable");
   const [confirmingBookingId, setConfirmingBookingId] = useState("");
   const [bookingActionMessage, setBookingActionMessage] = useState("");
   const [notificationFilter, setNotificationFilter] = useState<NotificationFilter>("all");
@@ -810,7 +813,11 @@ export function CalendarCommandCenter({
     : projects;
 
 
-  async function loadMeetingBookingOverview() {
+  const loadMeetingBookingOverview = useCallback(async function loadMeetingBookingOverview() {
+    if (!isHomeWorkspace) {
+      setMeetingBookingOverviewStatus("unavailable");
+      return;
+    }
     setMeetingBookingOverviewStatus("loading");
 
     try {
@@ -827,9 +834,10 @@ export function CalendarCommandCenter({
     } catch {
       setMeetingBookingOverviewStatus("error");
     }
-  }
+  }, [isHomeWorkspace]);
 
   async function confirmBooking(bookingId: string) {
+    if (!isHomeWorkspace) return;
     setConfirmingBookingId(bookingId);
     setBookingActionMessage("");
 
@@ -879,6 +887,7 @@ export function CalendarCommandCenter({
   }
 
   async function retryNotification(notificationId: string) {
+    if (!isHomeWorkspace) return;
     setRetryingNotificationId(notificationId);
     setBookingActionMessage("");
 
@@ -1065,6 +1074,7 @@ export function CalendarCommandCenter({
   }, [sessionWorkspaceId, workspaceId]);
 
   useEffect(() => {
+    if (!isHomeWorkspace) return;
     let cancelled = false;
 
     async function loadInitialBookingOverview() {
@@ -1077,7 +1087,7 @@ export function CalendarCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isHomeWorkspace, loadMeetingBookingOverview]);
 
   const effectiveEvents = useMemo(() => {
     const overlayIds = new Set(eventOverlays.map((event) => event.id));
@@ -1140,13 +1150,13 @@ export function CalendarCommandCenter({
         (task) => task.contactId === selectedEvent.event.contactId && task.status === "open",
       )
     : [];
-  const views: Array<{ id: CalendarView; label: string; count: number }> = [
+  const views: Array<{ id: CalendarView; label: string; count: number | string }> = [
     { id: "today", label: text.today, count: todayEvents.length },
     { id: "upcoming", label: text.upcoming, count: decoratedEvents.length },
     { id: "prepare", label: text.prepare, count: prepareEvents.length },
     { id: "teams", label: text.teams, count: teamsEvents.length },
     { id: "followUp", label: text.followUp, count: followUpEvents.length },
-    { id: "bookings", label: text.bookings, count: meetingBookingOverview.metrics.totalBookings },
+    { id: "bookings", label: text.bookings, count: isHomeWorkspace ? meetingBookingOverview.metrics.totalBookings : "–" },
   ];
 
   const updateEventDraft = (field: keyof NewCalendarEventDraft, value: string) => {
@@ -1154,6 +1164,7 @@ export function CalendarCommandCenter({
   };
 
   const createCalendarEvent = async () => {
+    if (!isHomeWorkspace) return;
     if (!eventDraft.title.trim()) {
       setEventCreateNotice(text.eventTitleRequired);
       return;
@@ -1297,6 +1308,7 @@ export function CalendarCommandCenter({
   });
 
   const copyShareArtifact = async (label: string, value: string) => {
+    if (!isHomeWorkspace) return;
     try {
       await navigator.clipboard.writeText(value);
       setShareNotice(text.share.copied(label));
@@ -2410,6 +2422,7 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex justify-end">
           <button
             className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+            disabled={!isHomeWorkspace}
             onClick={() => {
               if (!isCreateEventOpen) {
                 setEventDraft(createDefaultCalendarEventDraft(
@@ -2983,7 +2996,7 @@ export function CalendarCommandCenter({
         </div>
       </article>
 
-      <article className="rounded-lg border border-slate-200 bg-white p-5">
+      {isHomeWorkspace ? <article className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -3221,7 +3234,7 @@ export function CalendarCommandCenter({
             ) : null}
           </div>
         </div>
-      </article>
+      </article> : <article className="rounded-lg border border-stone-200 bg-white p-5"><h4 className="text-lg font-semibold text-slate-950">{text.share.title}</h4><p className="mt-2 text-sm text-stone-600" role="status">{bookingReadOnlyMessage}</p></article>}
 
       <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-950">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -3273,7 +3286,9 @@ export function CalendarCommandCenter({
       </article>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        {activeView === "bookings" ? (
+        {activeView === "bookings" && !isHomeWorkspace ? (
+          <article className="rounded-lg border border-stone-200 bg-white p-4 xl:col-span-2"><h4 className="text-xl font-semibold text-slate-950">{text.bookingOverview.title}</h4><p className="mt-2 text-sm text-stone-600" role="status">{bookingReadOnlyMessage}</p></article>
+        ) : activeView === "bookings" ? (
           <article className="rounded-lg border border-stone-200 bg-white p-4 xl:col-span-2">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
@@ -3289,7 +3304,7 @@ export function CalendarCommandCenter({
               </div>
               <button
                 className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={meetingBookingOverviewStatus === "loading"}
+                disabled={!isHomeWorkspace || meetingBookingOverviewStatus === "loading"}
                 onClick={loadMeetingBookingOverview}
                 type="button"
               >
@@ -3387,7 +3402,7 @@ export function CalendarCommandCenter({
                         {booking.status !== "confirmed" && booking.status !== "cancelled" ? (
                           <button
                             className="mt-3 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-                            disabled={confirmingBookingId === booking.id}
+                            disabled={!isHomeWorkspace || confirmingBookingId === booking.id}
                             onClick={() => confirmBooking(booking.id)}
                             type="button"
                           >
@@ -3485,7 +3500,7 @@ export function CalendarCommandCenter({
                         {notification.status === "failed" ? (
                           <button
                             className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={retryingNotificationId === notification.id}
+                            disabled={!isHomeWorkspace || retryingNotificationId === notification.id}
                             onClick={() => retryNotification(notification.id)}
                             type="button"
                           >
