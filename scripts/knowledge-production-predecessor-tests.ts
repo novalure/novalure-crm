@@ -102,6 +102,17 @@ test("unchanged 101 upgrades the actual 091–096 → standalone100 predecessor 
       assert.equal(protectedRows.length,7);assert.ok(protectedRows.every(row=>row.relrowsecurity&&row.relforcerowsecurity));
       assert.equal((await runtime!.query("select count(*)::int as count from knowledge_sources")).rows[0].count,0);
     });
+    await apply("102_knowledge_document_processing.sql");
+    await apply("103_knowledge_assistant_service.sql");
+    await t.test("102–103 extend the actual predecessor without activating an assistant", async () => {
+      for (const filename of ["102_knowledge_document_processing.sql", "103_knowledge_assistant_service.sql"]) {
+        const row = (await admin!.query("select checksum from novalure_schema_migrations where version=$1", [filename.slice(0, -4)])).rows[0];
+        assert.equal(row.checksum, checksum(await readFile(`migrations/${filename}`, "utf8")));
+      }
+      assert.equal((await admin!.query("select count(*)::int as count from knowledge_assistant_service_bindings")).rows[0].count, 0);
+      assert.equal((await runtime!.query("select has_table_privilege(current_user,'public.knowledge_assistant_service_bindings','SELECT') as allowed")).rows[0].allowed, false);
+      assert.deepEqual((await admin!.query("select relrowsecurity,relforcerowsecurity from pg_class where oid='public.knowledge_assistant_service_bindings'::regclass")).rows[0], { relrowsecurity: true, relforcerowsecurity: true });
+    });
     await admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC predecessor owner',$3,'owner','novalureAdmin','active')",[ownerId,workspaceId,owner.email]);
     await t.test("real non-owner runtime cannot self-provision a contract",async()=>{
       assert.equal((await loadKnowledgeCenter(owner,options)).available,false);

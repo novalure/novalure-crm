@@ -150,6 +150,34 @@ function EmptyState({
   );
 }
 
+function KnowledgeIcon({
+  type,
+}: {
+  type: "file" | "url" | "manual" | "webchat" | "voice";
+}) {
+  const path = {
+    file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 15h8m-8 4h5",
+    url: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z",
+    manual: "M4 5h16M4 10h16M4 15h10M4 20h10",
+    webchat: "M21 11a8 8 0 0 1-8 8H6l-4 3V11a8 8 0 0 1 8-8h3a8 8 0 0 1 8 8ZM7 10h9M7 14h6",
+    voice: "M22 17v3a2 2 0 0 1-2 2C10 21 3 14 2 4a2 2 0 0 1 2-2h3l2 5-2 2a16 16 0 0 0 8 8l2-2 5 2Z",
+  }[type];
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-6 w-6 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.7"
+      viewBox="0 0 24 24"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
 function formatBytes(value: number, language: LanguageCode) {
   const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
   const unit =
@@ -215,6 +243,8 @@ function KnowledgeCenterContent({
   const [botId, setBotId] = useState("");
   const [channel, setChannel] = useState<KnowledgeChannel>("webchat");
   const [assignmentDraft, setAssignmentDraft] = useState<string[] | null>(null);
+  const [reviewSourceId, setReviewSourceId] = useState("");
+  const [reviewedVersionId, setReviewedVersionId] = useState("");
   const [history, setHistory] = useState<{
     sourceId: string;
     versions: KnowledgeVersion[];
@@ -345,6 +375,11 @@ function KnowledgeCenterContent({
       snapshot.entitlement.enabled &&
       snapshot.permissions.canAssign,
   );
+  const canPublish = Boolean(
+    snapshot?.available &&
+      snapshot.entitlement.enabled &&
+      snapshot.permissions.canPublish,
+  );
   const sourceLimitReached = Boolean(
     snapshot && snapshot.usage.sources >= snapshot.entitlement.maxSources,
   );
@@ -382,7 +417,10 @@ function KnowledgeCenterContent({
         }).format(date);
   };
 
-  function startSource(source?: KnowledgeSource) {
+  function startSource(
+    source?: KnowledgeSource,
+    type: KnowledgeSourceType = "manual",
+  ) {
     const version = source?.version;
     const faqData = version?.structuredData;
     setEditor(
@@ -410,7 +448,7 @@ function KnowledgeCenterContent({
             mediaAssetId: version?.mediaAssetId ?? "",
             documentName: version?.mediaAssetId ? source.name : "",
           }
-        : { ...emptyEditor, areaId: areaFilter || visibleAreas[0]?.id || "" },
+        : { ...emptyEditor, type, areaId: areaFilter || visibleAreas[0]?.id || "" },
     );
     setError("");
     setNotice("");
@@ -494,7 +532,12 @@ function KnowledgeCenterContent({
     });
   }
 
-  async function uploadDocument(file: File) {
+  async function uploadDocument(file: File, replacement?: KnowledgeSource) {
+    const areaId = replacement?.areaId || editor?.areaId;
+    if (!areaId) {
+      setError(text.requiredUploadArea);
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setError(text.tooLarge);
       return;
@@ -505,22 +548,63 @@ function KnowledgeCenterContent({
     try {
       const body = new FormData();
       body.append("file", file);
-      body.append("name", file.name);
+      body.append("name", replacement?.name || editor?.name.trim() || file.name);
+      body.append("areaId", areaId);
+      if (replacement) {
+        body.append("sourceId", replacement.id);
+        body.append("expectedVersion", String(replacement.revision));
+      }
       const response = await csrfFetch(
         scopedPath("/api/knowledge-center/documents"),
         { method: "POST", body },
       );
-      const { asset } = await readResponse<{
+      const { asset, source } = await readResponse<{
         asset: { id: string; name: string };
+        source: KnowledgeSource;
       }>(response, text.uploadError);
-      if (!asset?.id) throw new Error(text.uploadError);
-      updateEditor({ mediaAssetId: asset.id, documentName: asset.name });
+      if (!asset?.id || !source?.id) throw new Error(text.uploadError);
+      setSnapshot((current) => current ? {
+        ...current,
+        sources: [
+          source,
+          ...current.sources.filter((item) => item.id !== source.id),
+        ],
+      } : current);
+      setEditor(null);
+      setSearch("");
+      setAreaFilter(areaId);
+      setReviewSourceId(source.id);
+      setReviewedVersionId("");
+      setHistory(null);
       setNotice(text.uploadSuccess);
+      setSnapshot(await loadSnapshot());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : text.uploadError);
     } finally {
       setBusy("");
     }
+  }
+
+  function processingLabel(version: KnowledgeVersion) {
+    return version.processingStatus === "ready"
+      ? text.recognizedReady
+      : version.processingStatus === "needs_ocr"
+        ? text.needsReadableFile
+        : version.processingStatus === "failed"
+          ? text.importFailed
+          : text.manualContent;
+  }
+
+  function needsReadableFile(version: KnowledgeVersion) {
+    return (
+      version.processingStatus === "needs_ocr" ||
+      version.processingStatus === "failed"
+    );
+  }
+
+  function toggleReview(sourceId: string) {
+    setReviewSourceId((current) => current === sourceId ? "" : sourceId);
+    setReviewedVersionId("");
   }
 
   async function saveArea(event: FormEvent<HTMLFormElement>) {
@@ -830,7 +914,7 @@ function KnowledgeCenterContent({
             </select>
           </Field>
         </div>
-        <Field label={text.name}>
+        <Field label={editor.type === "file" && !editor.sourceId ? `${text.name} (${text.optional})` : text.name}>
           <input
             autoComplete="off"
             className={inputClass}
@@ -838,9 +922,12 @@ function KnowledgeCenterContent({
             id={`${formId}-source-name`}
             maxLength={200}
             onChange={(event) => updateEditor({ name: event.target.value })}
-            required
+            required={editor.type !== "file" || Boolean(editor.sourceId)}
             value={editor.name}
           />
+          {editor.type === "file" && !editor.sourceId ? (
+            <span className="text-xs font-normal text-stone-600">{text.fileNameHint}</span>
+          ) : null}
         </Field>
         {editor.type === "faq" ? (
           <div className="grid gap-4">
@@ -904,15 +991,16 @@ function KnowledgeCenterContent({
         ) : null}
         {editor.type === "file" ? (
           <div className="grid gap-3">
+            <p className="text-sm font-medium leading-6 text-emerald-950">{text.importFlow}</p>
             <Field label={busy === "upload" ? text.uploading : text.upload}>
               <input
                 accept=".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp"
                 aria-describedby={`${formId}-file-hint`}
                 className={`${inputClass} cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-1`}
-                disabled={disabled}
+                disabled={disabled || !editor.areaId || !canWrite}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) void uploadDocument(file);
+                  if (file) void uploadDocument(file, editor.sourceId ? snapshot?.sources.find((source) => source.id === editor.sourceId) : undefined);
                   event.target.value = "";
                 }}
                 type="file"
@@ -929,7 +1017,7 @@ function KnowledgeCenterContent({
                 {editor.documentName}
               </p>
             ) : null}
-            <Field label={`${text.content} (${text.optional})`}>
+            {editor.sourceId ? <Field label={text.recognizedContent}>
               <textarea
                 className={`${inputClass} min-h-24`}
                 disabled={disabled}
@@ -938,11 +1026,11 @@ function KnowledgeCenterContent({
                 }
                 value={editor.content}
               />
-            </Field>
+            </Field> : null}
           </div>
         ) : null}
         <p className="text-xs leading-5 text-stone-600">{text.draftHint}</p>
-        <div>
+        {editor.type !== "file" || editor.sourceId ? <div>
           <button
             className={primaryClass}
             disabled={
@@ -959,7 +1047,7 @@ function KnowledgeCenterContent({
                 ? text.newVersion
                 : text.save}
           </button>
-        </div>
+        </div> : null}
       </form>
     );
   }
@@ -1116,6 +1204,9 @@ function KnowledgeCenterContent({
                   {notice}
                 </p>
               ) : null}
+              {busy === "upload" ? (
+                <p aria-live="polite" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950" role="status">{text.uploading}</p>
+              ) : null}
               <div
                 className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5"
                 id={`${formId}-panel`}
@@ -1141,6 +1232,29 @@ function KnowledgeCenterContent({
                         </button>
                       ) : null}
                     </div>
+                    {canWrite && activeAreas.length ? (
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {([
+                          { type: "file", title: text.addDocument, hint: text.documentActionHint },
+                          { type: "url", title: text.addWebsite, hint: text.websiteActionHint },
+                          { type: "manual", title: text.addText, hint: text.textActionHint },
+                        ] as const).map((action) => (
+                          <button
+                            aria-controls={`${formId}-source-form`}
+                            aria-describedby={`${formId}-action-hint-${action.type}`}
+                            aria-label={action.title}
+                            className="flex min-h-28 min-w-0 gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 text-left transition hover:border-emerald-600 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={disabled || sourceLimitReached || (action.type === "url" && !snapshot.entitlement.features.websiteImport)}
+                            key={action.type}
+                            onClick={() => startSource(undefined, action.type)}
+                            type="button"
+                          >
+                            <span className="rounded-lg bg-white p-2 text-emerald-800"><KnowledgeIcon type={action.type} /></span>
+                            <span className="min-w-0"><span className="block font-semibold">{action.title}</span><span className="mt-1 block text-xs font-normal leading-5 text-stone-600" id={`${formId}-action-hint-${action.type}`}>{action.hint}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     {sourceLimitReached && canWrite ? (
                       <p className="text-sm text-amber-900">
                         {text.sourceLimit}
@@ -1267,12 +1381,27 @@ function KnowledgeCenterContent({
                                 )}
                               </p>
                             ) : null}
-                            {source.draftVersionId ? (
-                              <p className="mt-3 text-xs font-medium text-amber-900">
-                                {text.draft} · {text.adminReview}
-                              </p>
+                            {source.type === "file" && source.version ? (
+                              <div className={`mt-3 rounded-lg border p-3 text-sm ${needsReadableFile(source.version) ? "border-amber-200 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+                                <p className="font-medium">{processingLabel(source.version)}</p>
+                                {source.version.processingMessage ? <p className="mt-1 text-xs leading-5">{source.version.processingMessage}</p> : null}
+                                {needsReadableFile(source.version) ? <p className="mt-1 text-xs leading-5">{text.extractionHelp}</p> : null}
+                              </div>
                             ) : null}
+                            <p className={`mt-3 text-xs font-medium ${source.approvedVersionId ? "text-emerald-900" : "text-amber-900"}`}>
+                              {source.approvedVersionId
+                                ? source.draftVersionId ? text.approvedPrevious : text.approvedCurrent
+                                : text.notApproved}
+                            </p>
                             <div className="mt-4 flex flex-wrap gap-2">
+                              {source.version ? <button
+                                aria-controls={`${formId}-review-${source.id}`}
+                                aria-expanded={reviewSourceId === source.id}
+                                className={buttonClass}
+                                disabled={disabled}
+                                onClick={() => toggleReview(source.id)}
+                                type="button"
+                              >{reviewSourceId === source.id ? text.closeReview : text.reviewContent}</button> : null}
                               {canWrite ? (
                                 <button
                                   className={buttonClass}
@@ -1282,6 +1411,23 @@ function KnowledgeCenterContent({
                                 >
                                   {text.edit}
                                 </button>
+                              ) : null}
+                              {canWrite && source.type === "file" ? (
+                                <label className={`${buttonClass} inline-flex cursor-pointer items-center focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-700 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}>
+                                  {text.replaceFile}
+                                  <input
+                                    accept=".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp"
+                                    aria-label={`${text.replaceFile}: ${source.name}`}
+                                    className="sr-only"
+                                    disabled={disabled}
+                                    onChange={(event) => {
+                                      const file = event.target.files?.[0];
+                                      if (file) void uploadDocument(file, source);
+                                      event.target.value = "";
+                                    }}
+                                    type="file"
+                                  />
+                                </label>
                               ) : null}
                               <button
                                 aria-expanded={history?.sourceId === source.id}
@@ -1371,6 +1517,33 @@ function KnowledgeCenterContent({
                                 </details>
                               ) : null}
                             </div>
+                            {reviewSourceId === source.id && source.version ? (
+                              <section aria-labelledby={`${formId}-review-title-${source.id}`} className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-stone-50 p-4" id={`${formId}-review-${source.id}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h6 className="font-semibold" id={`${formId}-review-title-${source.id}`}>{text.recognizedContent}</h6>
+                                  <span className="text-xs text-stone-600">{text.version} {source.version.version} · {statusLabel(source.version.status)}</span>
+                                </div>
+                                <div className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-stone-200 bg-white p-4 text-sm leading-6 text-slate-800" tabIndex={0}>
+                                  {source.version.content || (source.type === "structured" ? structuredKnowledgeSummary(source.version.structuredData, language) : text.noRecognizedContent)}
+                                </div>
+                                {source.type === "file" ? <p className="text-xs leading-5 text-stone-600">{text.replaceHint}</p> : null}
+                                {source.draftVersionId && source.version.id === source.draftVersionId ? (
+                                  needsReadableFile(source.version) ? <p className="text-sm leading-6 text-amber-950">{text.extractionHelp}</p> : canPublish ? (
+                                    <>
+                                      <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-6">
+                                        <input checked={reviewedVersionId === source.version.id} className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-800" disabled={disabled} onChange={(event) => setReviewedVersionId(event.target.checked ? source.version!.id : "")} type="checkbox" />
+                                        <span>{text.reviewConfirm}</span>
+                                      </label>
+                                      <div><button className={primaryClass} disabled={disabled || reviewedVersionId !== source.version.id || (!source.version.content.trim() && !Object.keys(source.version.structuredData).length)} onClick={() => void runAction(`publish:${source.id}`, async () => {
+                                        await mutate("/api/knowledge-center/publish", { sourceId: source.id, versionId: source.version!.id, expectedVersion: source.revision });
+                                        setReviewedVersionId("");
+                                        setHistory(null);
+                                      }, text.versionApproved)} type="button">{busy === `publish:${source.id}` ? text.saving : text.approveVersion}</button></div>
+                                    </>
+                                  ) : <p className="text-xs leading-5 text-amber-900">{text.adminReview}</p>
+                                ) : <p className="text-sm font-medium text-emerald-900">{text.approvedCurrent}</p>}
+                              </section>
+                            ) : null}
                             {history?.sourceId === source.id ? (
                               <div className="mt-4 rounded-lg bg-stone-50 p-3">
                                 <p className="text-xs leading-5 text-stone-600">
@@ -1387,6 +1560,7 @@ function KnowledgeCenterContent({
                                           {text.version} {version.version} ·{" "}
                                           {statusLabel(version.status)}
                                         </p>
+                                        {version.id === source.approvedVersionId ? <p className="mt-1 text-xs font-semibold text-emerald-900">{text.approvedCurrent}</p> : null}
                                         <p className="mt-1 text-xs text-stone-600">
                                           {dateLabel(version.createdAt)}
                                         </p>
@@ -1646,6 +1820,26 @@ function KnowledgeCenterContent({
                     </div>
                     {snapshot.bots.length ? (
                       <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {(["webchat", "voice"] as const).map((value) => (
+                            <button
+                              aria-label={channelLabel(value)}
+                              aria-pressed={channel === value}
+                              className={`flex min-h-28 min-w-0 items-start gap-3 rounded-xl border p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${channel === value ? "border-emerald-800 bg-emerald-50" : "border-stone-200 bg-white hover:bg-stone-50"}`}
+                              disabled={disabled}
+                              key={value}
+                              onClick={() => { setChannel(value); setAssignmentDraft(null); }}
+                              type="button"
+                            >
+                              <span className="rounded-lg bg-stone-100 p-2 text-emerald-900"><KnowledgeIcon type={value} /></span>
+                              <span className="min-w-0">
+                                <span className="block font-semibold">{channelLabel(value)}</span>
+                                <span className="mt-1 block text-xs leading-5 text-stone-600">{text.channelIndependent}</span>
+                                {botId ? <span className="mt-2 block text-xs font-medium text-emerald-900">{snapshot.assignments.filter((item) => item.botId === botId && item.channel === value).length} {text.assignedAreas}</span> : null}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <Field label={text.assistant}>
                             <select
@@ -1691,7 +1885,7 @@ function KnowledgeCenterContent({
                             disabled={!canAssign || disabled}
                           >
                             <legend className="mb-3 text-sm font-semibold">
-                              {text.areas}
+                              {text.selectedChannel} {channelLabel(channel)}
                             </legend>
                             {eligibleAreas.length ? (
                               eligibleAreas.map((area) => (

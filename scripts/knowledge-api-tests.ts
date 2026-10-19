@@ -112,13 +112,16 @@ test("Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft pub
       const uploadPath = "/api/knowledge-center/documents";
       const form = new FormData();
       form.set("file", new File(["%PDF-1.7\nSYNTHETIC PRIVATE DOCUMENT\n%%EOF"], "synthetic.pdf", { type: "application/pdf" }));
+      form.set("areaId", areaId);
       const headers = new Headers(request(uploadPath, "POST").headers);
       headers.delete("content-type");
       const uploaded = await documents.POST(new Request(origin + uploadPath, { method: "POST", headers, body: form }));
       assert.equal(uploaded.status, 201, await uploaded.clone().text());
-      const asset = (await uploaded.json()).asset;
+      const importResult = await uploaded.json();
+      const asset = importResult.asset;
       assert.equal(asset.url, undefined);
-      const fileSource = (await execute(sources.POST, "/api/knowledge-center/sources", "POST", { areaId, name: "SYNTHETIC File", type: "file", mediaAssetId: asset.id }, 201)).source as KnowledgeSource;
+      const fileSource = importResult.source as KnowledgeSource;
+      assert.equal(fileSource.version?.processingStatus, "failed");
       const pathname = `/api/knowledge-center/sources/${fileSource.id}/document`;
       const delivered = await document.GET(request(pathname), { params: Promise.resolve({ sourceId: fileSource.id }) });
       assert.equal(delivered.status, 200, await delivered.clone().text());

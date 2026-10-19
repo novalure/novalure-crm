@@ -127,6 +127,7 @@ const libraryPath = path.join(mediaRoot, "library.json");
 // the source may deliberately be invisible to the current media-library user.
 export const knowledgeMediaFolderPrefix = "knowledge-private-";
 const authorizedKnowledgeReads = new WeakSet<MediaAsset>();
+const knowledgeUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
 const validMediaScopeId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const isKnowledgePrivateMedia = (asset: Pick<MediaAsset, "folder">) => asset.folder.toLowerCase().startsWith(knowledgeMediaFolderPrefix);
 const ordinaryMediaSql = (alias = "ma") => `left(lower(${alias}.folder), ${knowledgeMediaFolderPrefix.length}) <> '${knowledgeMediaFolderPrefix}'`;
@@ -230,7 +231,28 @@ export async function saveKnowledgeFile(input: {
       active?.scope.actorId !== input.actorId || active.scope.workspaceId !== input.workspaceId) {
     throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "An authorized Knowledge upload is required.");
   }
-  return saveMediaFile({ ...input, folder: `${knowledgeMediaFolderPrefix}${input.actorId.toLowerCase()}` }, true);
+  const asset = await saveMediaFile({ ...input, folder: `${knowledgeMediaFolderPrefix}${input.actorId.toLowerCase()}` }, true);
+  knowledgeUploadRollbacks.set(asset, { asset: Object.freeze({ ...asset }), actorId: input.actorId, transaction: active.transaction });
+  return asset;
+}
+
+/** Compensate only this process's failed upload after authoritative DB absence.
+ * Never delete a committed asset after an uncertain COMMIT acknowledgement.
+ * The opaque object and captured locator prevent arbitrary storage deletion.
+ */
+export async function discardUncommittedKnowledgeFile(asset: MediaAsset): Promise<boolean> {
+  const upload = knowledgeUploadRollbacks.get(asset);
+  const active = currentTenantTransaction();
+  if (!upload || !active || active.transaction === upload.transaction || active.scope.actorId !== upload.actorId ||
+      active.scope.workspaceId !== upload.asset.workspaceId) return false;
+  // The importing transaction held this same lock through COMMIT. Acquiring it
+  // waits for an in-flight ambiguous commit before testing metadata visibility.
+  await active.transaction.query(`select pg_advisory_xact_lock(hashtextextended($1,0))`, [`knowledge-center:${upload.asset.workspaceId}`]);
+  const confirmed = await active.transaction.queryOne<{ absent: boolean }>(`select knowledge_document_upload_absent($1::uuid) as absent`, [upload.asset.id]);
+  if (confirmed?.absent !== true) { knowledgeUploadRollbacks.delete(asset); return false; }
+  await deleteStoredFile(upload.asset);
+  knowledgeUploadRollbacks.delete(asset);
+  return true;
 }
 
 async function saveMediaFile(input: {

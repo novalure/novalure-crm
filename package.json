@@ -81,7 +81,7 @@
     "test:u1-c04:source-ingest": "node --test scripts/u1-c04-source-ingest-tests.mjs",
     "test:u1-c05:successor": "node --test scripts/u1-c05-successor-mount-tests.mjs",
     "test:studio-enquiry:production": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-production-tests.mjs",
-    "test:knowledge-center": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts",
+    "test:knowledge-center": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-document-extraction-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-timeout-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts",
     "qa:knowledge:browser": "node scripts/qa-knowledge-browser.mjs"
   },
   "dependencies": {
@@ -96,13 +96,16 @@
     "jspdf": "^4.2.1",
     "next": "16.4.0",
     "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
     "pdfkit": "0.20.2",
     "pg": "8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.3",
+    "saxes": "6.0.0",
     "server-only": "0.0.1",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

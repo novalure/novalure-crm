@@ -37,6 +37,7 @@ test("Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retain
       await migrationClient.query("begin");
       await migrationClient.query(`set local role ${migrationOwner}`);
       await migrationClient.query(sql);
+      await migrationClient.query(await readFile("migrations/102_knowledge_document_processing.sql", "utf8"));
       await migrationClient.query("commit");
     } catch (error) { await migrationClient.query("rollback"); throw error; } finally { migrationClient.release(); }
     await db.admin.query(`insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC Knowledge','managed_by_novalure'),($2,'SYNTHETIC other Knowledge','managed_by_novalure')`, [ids.tenant, ids.otherTenant]);
@@ -153,6 +154,11 @@ test("Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retain
       }
       await assert.rejects(withTenantTransaction({ actorId: ids.owner, workspaceId: ids.tenant }, tx => tx.execute("update media_assets set folder='media-uploads' where id=$1::uuid", [asset]), options), errorCode("42501"));
       await assert.rejects(withTenantTransaction({ actorId: ids.owner, workspaceId: ids.tenant }, tx => tx.execute("insert into media_asset_shares(asset_id,workspace_id,token_hash,expires_at) values($1::uuid,$2,$3,now()+interval '1 day')", [asset, ids.tenant, "a".repeat(64)]), options), errorCode("42501"));
+      await withTenantTransaction({ actorId: ids.staff, workspaceId: ids.tenant }, async tx => {
+        assert.equal((await tx.queryOne<{ absent: boolean }>("select knowledge_document_upload_absent($1::uuid) as absent", [asset]))?.absent, false);
+        assert.equal((await tx.queryOne<{ absent: boolean }>("select knowledge_document_upload_absent($1::uuid) as absent", [randomUUID()]))?.absent, true);
+      }, options);
+      await assert.rejects(withTenantTransaction({ actorId: ids.assistant, workspaceId: ids.tenant }, tx => tx.query("select knowledge_document_upload_absent($1::uuid)", [asset]), options), errorCode("42501"));
       await assert.rejects(createKnowledgeSource(owner, { areaId: company.id, name: "SYNTHETIC foreign document", type: "file", mediaAssetId: foreignAsset }, options), errorCode("DOCUMENT_UNAVAILABLE"));
       await assert.rejects(createKnowledgeSource(owner, { areaId: company.id, name: "SYNTHETIC ordinary document", type: "file", mediaAssetId: ordinary }, options), errorCode("DOCUMENT_UNAVAILABLE"));
       const document = await createKnowledgeSource(owner, { areaId: project.id, name: "SYNTHETIC private document", type: "file", mediaAssetId: asset, content: "SYNTHETIC reviewed document text" }, options);

@@ -6,10 +6,8 @@ import { recordSpeedToLeadEvent } from "@/lib/db/speed-to-lead-repositories";
 import type { FunnelBlueprint, FunnelSubmissionPayload } from "@/lib/funnel-schema";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secret-box";
 import { hasProductCapability } from "@/lib/product-model";
-import { queryKnowledgeCenter } from "@/lib/knowledge-center/repository";
-import { KnowledgeCenterError } from "@/lib/knowledge-center/policy";
+import { retrieveKnowledgeForSavedChannel } from "@/lib/knowledge-center/integrations";
 import type { KnowledgeChannel } from "@/lib/knowledge-center/types";
-import { requiresLivePropertyFacts } from "@/lib/bots/agent-tools";
 import { assertCrmUuid, assertProjectGrant, CrmCommandError, withCrmRead, type TenantTransactionOptions } from "@/lib/crm-command";
 
 type IdRow = { id: string };
@@ -882,26 +880,18 @@ export async function searchPersistedKnowledge(input: {
     !isUuid(input.botId) || !input.channel || !runtimeKnowledgeChannels.has(input.channel)
   ) return [];
 
-  try {
-    const result = await queryKnowledgeCenter(input.session, {
-      query: input.query,
-      botId: input.botId,
-      channel: input.channel as KnowledgeChannel,
-      limit: input.limit,
-    });
-    // Static sources cannot become authoritative current property inventory.
-    return result.matches.filter((match) => !requiresLivePropertyFacts(match.excerpt)).map((match) => ({
-      ...match,
-      // This compatibility shape contains only the engine's approved-version excerpt.
-      content: match.excerpt,
-      embeddingModel: null,
-    }));
-  } catch (error) {
-    // Disabled entitlement and exhausted quota keep conversations usable without
-    // legacy data; security and unexpected errors remain visible to the caller.
-    if (error instanceof KnowledgeCenterError && ["ENTITLEMENT_REQUIRED", "LIMIT_EXCEEDED"].includes(error.code)) return [];
-    throw error;
-  }
+  const result = await retrieveKnowledgeForSavedChannel(input.session, {
+    query: input.query,
+    assistantId: input.botId,
+    channel: input.channel as KnowledgeChannel,
+    maxResults: input.limit,
+  });
+  return result.matches.map((match) => ({
+    ...match,
+    // This compatibility shape contains only the engine's approved-version excerpt.
+    content: match.excerpt,
+    embeddingModel: null,
+  }));
 }
 
 export async function insertBotEvaluationRun(input: {
