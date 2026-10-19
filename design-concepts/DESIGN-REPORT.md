@@ -2,6 +2,8 @@
 
 Stand: 19. Oktober 2026. Diese Entscheidungsvorlage betrifft drei isolierte, interaktive Frontend-Demos mit synthetischen Daten. Sie ist keine Freigabe einer produktiven CRM-Umstellung und bestätigt keine Betriebsfähigkeit der dargestellten zukünftigen Module.
 
+**Festgehaltene Nutzerentscheidung:** C – Evelyn AI Command Center ist die gemeinsame Designrichtung für alle Bereiche, ausdrücklich einschließlich der Farben. Die bisherige Empfehlung einer Kombination aus A, B und C ist damit ersetzt. Die Vergleichsbewertungen bleiben als fachliche Analyse der drei Entwürfe erhalten.
+
 ## 1. Auftrag und untersuchte Ausgangslage
 
 Das Ziel ist eine visuelle Entscheidung über Navigation, Informationshierarchie, Bedienung und Gestaltung des zukünftigen Evelyn CRM. Alle Konzepte berücksichtigen dieselben fünf Arbeitsbereiche: Dashboard, Kunden und Mandanten, Novalure Studio, KI-Assistenten und Wissensverwaltung. Unterschiede sollen in der Struktur der Arbeitsoberfläche sichtbar werden.
@@ -98,7 +100,7 @@ Das spätere Kundenportal zeigt eine kleinere Auswahl eigener Arbeitsbereiche. I
 
 ## 5. Fachlicher Designvergleich
 
-**Die Bewertungen sind fachliche Einschätzungen auf einer Skala von 1 bis 10, keine Ergebnisse von Nutzertests, einer Accessibility-Zertifizierung oder produktiven Messungen.** Sie bewerten die jeweilige Designrichtung für den beschriebenen Evelyn-Anwendungsfall. Die finale Bewertung sollte nach gemeinsamer Sichtung der fertigen Preview bestätigt oder angepasst werden.
+**Die Bewertungen sind fachliche Einschätzungen auf einer Skala von 1 bis 10, keine Ergebnisse von Nutzertests, einer Accessibility-Zertifizierung oder produktiven Messungen.** Sie bewerten die jeweilige Designrichtung für den beschriebenen Evelyn-Anwendungsfall. Sie bleiben als vergleichende Analyse erhalten; die anschließende Nutzerentscheidung legt C als gemeinsame Designrichtung fest.
 
 | Kriterium | A – Executive | B – Friendly | C – Command Center |
 | --- | ---: | ---: | ---: |
@@ -113,15 +115,31 @@ Das spätere Kundenportal zeigt eine kleinere Auswahl eigener Arbeitsbereiche. I
 
 A bietet eine verlässliche Grundlage für viele Module und datenreiche Ansichten. Die großzügige Struktur benötigt auf kleinen Bildschirmen eine klare Priorisierung der wichtigsten Aktionen. B erleichtert Einstieg, Einrichtung und tägliche Arbeit; bei wachsender Modulzahl müssen Karten und horizontale Ziele konsequent gruppiert werden. C macht Evelyn und Automatisierungen am deutlichsten sichtbar; kompakte Systeminformationen benötigen besonders verständliche Begriffe und eine gute Priorisierung für neue Kunden.
 
-### Empfehlung
+### Gewählte Designrichtung: C für alle Bereiche
 
-**A als gemeinsame CRM-Grundlage, B für Kundeneinrichtung und Portal, C als internen Evelyn-Arbeitsbereich verwenden.** Die Kombination betrifft klar abgegrenzte Nutzungssituationen:
+**Der Nutzer hat C – Evelyn AI Command Center für das gesamte Design einschließlich der Farben gewählt.** Diese Entscheidung ersetzt die frühere Empfehlung einer Kombination aus A, B und C. Die gemeinsame C-Gestaltung gilt für:
 
-1. A liefert Hauptnavigation, Datenansichten, Abstände, Tabellen und die interne Unternehmensübersicht.
-2. B liefert die geführte Assistenteneinrichtung, verständliche Zustände, Projektkarten und vereinfachte Kundenwege.
-3. C liefert das interne Evelyn-Briefing, KI-Empfehlungen, Abteilungsstatus und Automatisierungsübersicht.
+1. Dashboard und Unternehmensübersicht.
+2. Kunden, Mandanten und ihre Profile, Projekte und Verträge.
+3. Novalure Studio.
+4. KI-Assistenten einschließlich Einrichtung, Gesprächen und Nutzung.
+5. Wissen einschließlich der drei Wissensebenen, Versionen und Freigaben.
 
-Ein gemeinsamer Token- und Komponentenvertrag sollte Schrift, Abstände, Formularbedienung, Fokus, Statusbegriffe und Mandantenanzeige vereinheitlichen. Drei dauerhaft getrennte Produktoberflächen würden den späteren Pflegeaufwand erhöhen. Die drei Demos bleiben als Entscheidungshilfe eigenständig.
+Auch vereinfachte Kundenportalansichten verwenden diese visuelle Grundlage; ihre Inhalte und Navigation richten sich nach dem jeweiligen Arbeitszweck. Die vorhandene C-Ansicht kombiniert eine dunkle Navigationsleiste mit hellen Arbeitsflächen. Der Dark Mode bleibt eine optionale Darstellung.
+
+Die vorhandenen C-Tokens in `app/globals.css` bilden den Ausgangspunkt:
+
+| Verwendung | Bestehende C-Farbe |
+| --- | --- |
+| Navigationsleiste | Dunkelblau `#171d30` |
+| Arbeitsfläche und Karten | `#f7f8fc` und Weiß `#ffffff` |
+| Text und Sekundärtext | `#252c40` und `#777e91` |
+| Akzent und dezente Akzentfläche | Violettblau `#666ad1` und `#eff0fc` |
+| Linien | `#e8eaf1` |
+| Evelyn-Briefing | Dunkelblau `#242a42` |
+| Optionaler Dark Mode | Hintergrund `#121827`, Karten `#1a2032`, Akzent `#9da6ff` |
+
+Ein gemeinsamer C-Token- und Komponentenvertrag soll Schrift, Abstände, Formularbedienung, Fokus, Statusbegriffe und Mandantenanzeige vereinheitlichen. Die Ausgestaltung muss besonders für neue Kunden verständliche Begriffe und klare Prioritäten bieten. A und B bleiben als Vergleichsstudien erhalten. Die Designwahl ist festgehalten; die produktive Umsetzung steht noch aus.
 
 ## 6. Isolation und technische Architektur
 
@@ -143,8 +161,8 @@ Die bestehende Root-`vercel.json` erhält genau einen zusätzlichen Eintrag: `gi
 
 ## 7. Späterer Integrationsplan
 
-1. **Designentscheidung festhalten:** Gewählte Navigation, Tokens, Kernkomponenten und Portalwege als begrenzten Designumfang bestätigen. Bestehende Studio-Arbeiten zuerst gegen den dann aktuellen CRM-Stand abgleichen.
-2. **Präsentationsschicht extrahieren:** Buttons, Karten, Tabellen, Statusanzeigen, Scope-Anzeige und Assistentenoberfläche als wiederverwendbare Komponenten vorbereiten. Fixture-Daten und Demoereignisse bleiben außerhalb der produktiven Integration.
+1. **Gewählte C-Richtung konkretisieren:** Navigation, Farben, Tokens und Kernkomponenten aus C für Dashboard, Kunden/Mandanten, Studio, Assistenten und Wissen als gemeinsame Grundlage beschreiben; die Portalwege für ihre Zielgruppe vereinfachen. Bestehende Studio-Arbeiten zuerst gegen den dann aktuellen CRM-Stand abgleichen.
+2. **C-Präsentationsschicht extrahieren:** Buttons, Karten, Tabellen, Statusanzeigen, Scope-Anzeige und Assistentenoberfläche als wiederverwendbare Komponenten vorbereiten. Fixture-Daten und Demoereignisse bleiben außerhalb der produktiven Integration.
 3. **Bestehende Datenadapter verwenden:** Vorhandene CRM-Contracts auf die neuen Präsentationsmodelle abbilden. Feldnamen oder Layoutanforderungen rechtfertigen keine Datenbankänderung. Geschäftsregeln und bestehende API-Verträge bleiben erhalten.
 4. **Serverseitige Zuständigkeit erhalten:** Authentifizierung, RBAC, Mandanten-/Projektprüfung, Audit, Modulrechte und Freigaben bleiben auf den bestehenden vertrauenswürdigen Serverpfaden. Eine UI-Auswahl oder ausgeblendete Navigation erteilt keine Berechtigung.
 5. **Schrittweise übernehmen:** Zuerst Shell und Dashboard, anschließend Kunden-/Projektansichten und Studio; danach Assistenten und Wissen. Pro Bereich bestehende Funktionen, Fehlerzustände und Rollen abgleichen. Laufende Studio-Funktionen werden nicht durch Demoimplementierungen ersetzt.
@@ -159,8 +177,8 @@ Der gemeinsame Evelyn-Masterplan und dessen Entwicklungsstatus werden durch dies
 
 | Vorschlag | Ergebnis und Abnahmekriterium | Abhängigkeit |
 | --- | --- | --- |
-| UX-01 – Designrichtung entscheiden | A/B/C anhand derselben fünf Ansichten vergleichen; gewählte Kombination und offene Entscheidungen dokumentieren. | Erreichbare isolierte Designpreview |
-| UX-02 – Gemeinsame UI-Grundlage | Tokens, Formulare, Tabellen, Karten, Statusbegriffe, Fokus und sichtbare Scope-Anzeige verbindlich beschreiben. | UX-01 |
+| UX-01 – Designrichtung festgehalten | Nutzerentscheidung dokumentiert: C einschließlich der Farben gilt für alle fünf Bereiche und die visuelle Grundlage des Kundenportals. | Nutzerentscheidung nach Sichtung der Designpreview |
+| UX-02 – Gemeinsame C-UI-Grundlage | C-Tokens, Formulare, Tabellen, Karten, Statusbegriffe, Fokus und sichtbare Scope-Anzeige verbindlich beschreiben. | UX-01 |
 | UX-03 – Interne Navigation | Geschäft, KI und Organisation gruppieren; Studio und Immobilien klar zuordnen; Mobilewege prüfen. | UX-02 und aktueller CRM-Funktionsstand |
 | UX-04 – Kundenportal vereinfachen | Nur eigene Projekte, Assistenten, Wissen, Gespräche/Anfragen, Team und Abrechnung im zulässigen Rollen-/Modulumfang zeigen. | MP1-Contracts und bestehende serverseitige Rechte |
 | UX-05 – Assistenteneinrichtung | Website, Unternehmensinformationen, Erscheinungsbild, Kanalverbindung und Test als verständlichen Ablauf gestalten. | MP1; echte Provider-/Installationszustände |
@@ -190,7 +208,7 @@ Dieser Abschnitt enthält die belegte Ausgangslage und die tatsächlich ausgefü
 
 Für die Designanalyse wurden Repositorydateien und öffentliche Referenzseiten gelesen sowie die drei Einzelreferenzen visuell betrachtet. In diesem Dokumentationsschritt wurden keine Tests ausgeführt. Der geforderte Abschlussumfang besteht aus Frontend-Build, Erreichbarkeit der drei Varianten, Demo-Navigation, responsiver Grunddarstellung und Prüfung der Datentrennung. Weitere Prüfungen sind nur bei einem konkreten Befund oder einem tatsächlich anwendbaren verpflichtenden Gate erforderlich.
 
-Offene fachliche Punkte bleiben die Designentscheidung, eine spätere Nutzerprüfung, die exakte Portalnavigation nach Rollen und Modulrechten sowie die Integration zukünftiger Fähigkeiten nach deren eigener Abnahme.
+Die Designentscheidung ist mit C einschließlich der Farben festgehalten. Offene fachliche Punkte bleiben die konkrete Ausarbeitung der gemeinsamen C-Komponenten, eine spätere Nutzerprüfung, die exakte Portalnavigation nach Rollen und Modulrechten sowie die Integration zukünftiger Fähigkeiten nach deren eigener Abnahme.
 
 ## 10. Nachweise der Designprüfung
 

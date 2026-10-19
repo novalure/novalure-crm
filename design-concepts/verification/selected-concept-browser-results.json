@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-19",
+  "selectedConcept": "c",
+  "defaultOnOpen": true,
+  "fileOpen": true,
+  "sandbox": "allow-scripts allow-downloads (opaque origin)",
+  "views": [
+    {
+      "view": "Übersicht",
+      "title": "Alles verbunden.\nDen nächsten Schritt im Blick."
+    },
+    {
+      "view": "Kunden",
+      "title": "Kunden & Mandanten"
+    },
+    {
+      "view": "Novalure Studio",
+      "title": "Novalure Studio"
+    },
+    {
+      "view": "KI-Assistenten",
+      "title": "Eine gute Antwort beginnt hier."
+    },
+    {
+      "view": "Wissen",
+      "title": "Wissen mit klarem Kontext."
+    }
+  ],
+  "errors": [],
+  "httpRequests": [],
+  "artifactSha256": "c3e29880422ff39dd58c4ecd6d332381ca0445976be98fcbcec3fea0b5db6e27"
+}

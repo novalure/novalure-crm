@@ -29,6 +29,8 @@ design-concepts/scripts/verify-browser.mjs
 design-concepts/tsconfig.json
 design-concepts/verification/browser-results.json
 design-concepts/verification/export-manifest.json
+design-concepts/verification/selected-concept-browser-results.json
+design-concepts/verification/selected-concept-build.json
 design-concepts/verification/shareable-browser-results.json
 design-concepts/verification/shareable-build.json
 design-concepts/verification/source-manifest.json

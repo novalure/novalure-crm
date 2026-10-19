@@ -24,7 +24,7 @@ declare global {
   }
 }
 
-const defaults: PreviewContext = { route: "home", view: "dashboard", tenant: "atelier" };
+const defaults: PreviewContext = { route: "c", view: "dashboard", tenant: "atelier" };
 const names = ["Modern Executive", "Friendly Smart Workspace", "Evelyn AI Command Center"];
 const safeJSON = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 

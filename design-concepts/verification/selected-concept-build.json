@@ -1,0 +1,12 @@
+{
+  "destination": "/workspace/attachments/evelyn-crm-interaktiv.html",
+  "bytes": 210506,
+  "limitBytes": 262144,
+  "javascriptBytes": 288950,
+  "cssBytes": 179383,
+  "gzipPayloadBytes": 156922,
+  "sha256": "c3e29880422ff39dd58c4ecd6d332381ca0445976be98fcbcec3fea0b5db6e27",
+  "externalRequests": false,
+  "font": "Inter Variable Latin, embedded",
+  "createdAt": "2026-10-19T19:31:02.980Z"
+}

@@ -4,6 +4,20 @@ Drei isolierte, interaktive Designstudien für ein späteres Evelyn CRM. Kunden,
 Umsätze, Projekte, Verträge, Gespräche und KI-Aktivitäten sind synthetisch.
 Dies ist keine funktionale CRM-Umstellung.
 
+## Gewählte Designrichtung
+
+Der Nutzer hat **C – Evelyn AI Command Center** als gemeinsame Designrichtung
+für alle Bereiche gewählt, ausdrücklich einschließlich der Farben. Dashboard,
+Kunden und Mandanten, Novalure Studio, KI-Assistenten und Wissen folgen daher
+künftig derselben C-Gestaltung; auch vereinfachte Kundenportalansichten verwenden
+diese gemeinsame visuelle Grundlage. A und B bleiben als Vergleichsstudien erhalten.
+
+Die C-Palette kombiniert die dunkelblaue Navigationsleiste `#171d30`, den
+hellen Hintergrund `#f7f8fc`, weiße Karten, Text in `#252c40` und den
+violettblauen Akzent `#666ad1`. Der vorhandene Dark Mode bleibt optional.
+Die Auswahl ersetzt die frühere Empfehlung, A, B und C je nach Bereich zu mischen.
+Sie legt die visuelle Richtung fest; die produktive Integration ist ein späterer Schritt.
+
 ## Direkt ansehen und herunterladen
 
 Die private Ergebnisseite enthält die interaktive Vorschau, die drei großen
