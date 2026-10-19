@@ -3,6 +3,7 @@ import { getBotPrompt, runBotChat } from "@/lib/bots/chat-runtime";
 import { listBotConversations, listBotMessages } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
 import { getModelProviderStatus } from "@/lib/integrations/model-provider";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
 
 export const maxDuration = 60;
 
@@ -22,31 +23,37 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const conversationId = url.searchParams.get("conversationId");
 
-  if (conversationId) {
-    const messages = await listBotMessages({
+  try {
+    if (conversationId) {
+      const messages = await listBotMessages({
+        session: auth.session,
+        conversationId,
+        botId: url.searchParams.get("botId"),
+        channel: url.searchParams.get("channel"),
+        limit: Number(url.searchParams.get("limit") ?? 50),
+      });
+
+      return Response.json({
+        conversationId,
+        messages,
+        provider: getModelProviderStatus(),
+        source: "database",
+      });
+    }
+
+    const conversations = await listBotConversations({
       session: auth.session,
-      conversationId,
-      limit: Number(url.searchParams.get("limit") ?? 50),
+      limit: Number(url.searchParams.get("limit") ?? 25),
     });
 
     return Response.json({
-      conversationId,
-      messages,
+      conversations,
       provider: getModelProviderStatus(),
       source: "database",
     });
+  } catch (error) {
+    return crmCommandErrorResponse(error);
   }
-
-  const conversations = await listBotConversations({
-    session: auth.session,
-    limit: Number(url.searchParams.get("limit") ?? 25),
-  });
-
-  return Response.json({
-    conversations,
-    provider: getModelProviderStatus(),
-    source: "database",
-  });
 }
 
 export async function POST(request: Request) {
@@ -68,12 +75,16 @@ export async function POST(request: Request) {
     return Response.json({ error: copy.promptRequired }, { status: 400 });
   }
 
-  const result = await runBotChat({
-    language,
-    payload,
-    requestUrl: request.url,
-    session: auth.session,
-  });
+  try {
+    const result = await runBotChat({
+      language,
+      payload,
+      requestUrl: request.url,
+      session: auth.session,
+    });
 
-  return Response.json(result);
+    return Response.json(result);
+  } catch (error) {
+    return crmCommandErrorResponse(error);
+  }
 }

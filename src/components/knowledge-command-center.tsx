@@ -1,495 +1,1963 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
-import { getKnowledgeCommandCenterCopy, type LanguageCode } from "@/lib/i18n";
+import type { LanguageCode } from "@/lib/i18n";
+import { getKnowledgeCenterCopy } from "@/lib/knowledge-center/copy";
+import {
+  addKnowledgeTemplateFields,
+  createStructuredKnowledgeRows,
+  knowledgeField,
+  knowledgeFieldLabel,
+  knowledgeLabel,
+  knowledgeTemplates,
+  serializeStructuredKnowledge,
+  structuredKnowledgeSummary,
+  type StructuredKnowledgeRow,
+} from "@/lib/knowledge-center/templates";
+import type {
+  KnowledgeArea,
+  KnowledgeAreaKind,
+  KnowledgeCenterSnapshot,
+  KnowledgeChannel,
+  KnowledgeSource,
+  KnowledgeSourceType,
+  KnowledgeVersion,
+} from "@/lib/knowledge-center/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
 
-type KnowledgeImportType = "text" | "faq" | "file" | "url" | "call" | "social";
-
-type PreparedKnowledgeSource = {
-  id: string;
-  type: KnowledgeImportType;
-  title: string;
-  location: string;
-  approval: "Zu prüfen" | "Freigegeben" | "Nur intern";
-  status: "Import bereit" | "Review offen" | "Vector bereit";
-  chunks: number;
-  embeddedChunks: number;
-  gaps: number;
+const inputClass =
+  "min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:bg-stone-100";
+const buttonClass =
+  "min-h-11 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryClass = `${buttonClass} border-emerald-800 bg-emerald-800 text-white hover:bg-emerald-900`;
+const sourceTypes: KnowledgeSourceType[] = [
+  "manual",
+  "faq",
+  "structured",
+  "url",
+  "file",
+];
+const channels: KnowledgeChannel[] = [
+  "webchat",
+  "whatsapp",
+  "instagram",
+  "messenger",
+  "email",
+  "internal",
+  "voice",
+];
+type Tab = "sources" | "areas" | "assistants" | "usage";
+type SourceEditor = {
+  sourceId: string;
+  revision: number;
+  areaId: string;
+  name: string;
+  type: KnowledgeSourceType;
+  content: string;
+  question: string;
+  answer: string;
+  structuredBase: Record<string, unknown>;
+  structuredRows: StructuredKnowledgeRow[];
+  structuredRemovedKeys: string[];
+  structuredTemplate: string;
+  url: string;
+  mediaAssetId: string;
+  documentName: string;
+};
+const emptyEditor: SourceEditor = {
+  sourceId: "",
+  revision: 0,
+  areaId: "",
+  name: "",
+  type: "manual",
+  content: "",
+  question: "",
+  answer: "",
+  structuredBase: {},
+  structuredRows: addKnowledgeTemplateFields([], {}, "company"),
+  structuredRemovedKeys: [],
+  structuredTemplate: "company",
+  url: "",
+  mediaAssetId: "",
+  documentName: "",
 };
 
-type PersistedKnowledgeSource = {
-  id: string;
-  sourceType: KnowledgeImportType;
-  title: string;
-  location: string | null;
-  status: string;
-  chunkCount: number;
-  embeddedChunkCount: number;
-};
-
-type KnowledgeCommandCenterText = ReturnType<typeof getKnowledgeCommandCenterCopy>;
-
-function buildImportTypes(text: KnowledgeCommandCenterText): Array<{
-  id: KnowledgeImportType;
-  label: string;
-  description: string;
-  badge: string;
-}> {
-  return (["text", "faq", "file", "url", "call", "social"] as const).map((id) => ({
-    id,
-    ...text.importTypes[id],
-  }));
+async function readResponse<T>(
+  response: Response,
+  fallback: string,
+): Promise<T> {
+  const payload = (await response.json().catch(() => null)) as
+    | (T & { error?: string })
+    | null;
+  if (!response.ok || !payload) throw new Error(payload?.error || fallback);
+  return payload;
 }
 
-function parseCoverage(value: string) {
-  return Number(value.replace("%", "")) || 0;
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  const generatedId = useId();
+  const childList = Children.toArray(children);
+  const controlIndex = childList.findIndex(
+    (child) =>
+      isValidElement(child) &&
+      typeof child.type === "string" &&
+      ["input", "select", "textarea"].includes(child.type),
+  );
+  const control = childList[controlIndex];
+  const controlId = isValidElement<{ id?: string }>(control)
+    ? control.props.id || generatedId
+    : generatedId;
+  const fields = childList.map((child, index) =>
+    index === controlIndex && isValidElement<{ id?: string }>(child)
+      ? cloneElement(child, { id: controlId })
+      : child,
+  );
+  return (
+    <div className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-800">
+      <label htmlFor={controlId || generatedId}>{label}</label>
+      {fields}
+    </div>
+  );
 }
 
-function estimateChunks(value: string) {
-  return Math.max(1, Math.ceil(value.length / 700));
-}
-
-function statusForApproval(approval: PreparedKnowledgeSource["approval"]) {
-  if (approval === "Freigegeben") return "Vector bereit";
-  if (approval === "Nur intern") return "Import bereit";
-  return "Review offen";
-}
-
-function sourceFromPersisted(source: PersistedKnowledgeSource): PreparedKnowledgeSource {
-  const embeddedChunks = Number(source.embeddedChunkCount) || 0;
-  const chunks = Math.max(1, Number(source.chunkCount) || embeddedChunks || 1);
-  const approved = embeddedChunks > 0 || source.status === "Vector bereit" || source.status === "vector_ready";
-
-  return {
-    id: source.id,
-    type: source.sourceType || "text",
-    title: source.title,
-    location: source.location ?? "",
-    approval: approved ? "Freigegeben" : "Zu prüfen",
-    status: approved ? "Vector bereit" : "Review offen",
-    chunks,
-    embeddedChunks,
-    gaps: approved ? 0 : 1,
-  };
-}
-
-export function KnowledgeCommandCenter({
-  items,
-  language,
-  projectLabel,
-  projects,
+function EmptyState({
+  title,
+  description,
 }: {
-  items: KnowledgeItem[];
-  language: LanguageCode;
-  projectLabel: string;
-  projects: Project[];
+  title: string;
+  description?: string;
 }) {
-  const text = getKnowledgeCommandCenterCopy(language);
-  const importTypes = useMemo(() => buildImportTypes(text), [text]);
-  const [selectedType, setSelectedType] = useState<KnowledgeImportType>("text");
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [approval, setApproval] = useState<PreparedKnowledgeSource["approval"]>("Zu prüfen");
-  const [context, setContext] = useState("");
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [persistedSources, setPersistedSources] = useState<PreparedKnowledgeSource[]>([]);
-  const [preparedSources, setPreparedSources] = useState<PreparedKnowledgeSource[]>([
-    {
-      id: "prepared_call",
-      type: "call",
-      title: text.preparedCallTitle,
-      location: text.preparedCallLocation,
-      approval: "Zu prüfen",
-      status: "Review offen",
-      chunks: 24,
-      embeddedChunks: 0,
-      gaps: 3,
-    },
-    {
-      id: "prepared_url",
-      type: "url",
-      title: text.preparedUrlTitle,
-      location: "https://novalure.eu/projekte",
-      approval: "Freigegeben",
-      status: "Vector bereit",
-      chunks: 38,
-      embeddedChunks: 38,
-      gaps: 1,
-    },
-  ]);
+  return (
+    <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
+      <p className="font-semibold text-slate-900">{title}</p>
+      {description ? (
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-stone-600">
+          {description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
-  const existingSources = useMemo(
-    () =>
-      items.map<PreparedKnowledgeSource>((item) => {
-        const chunks = Math.max(1, item.items * 3);
-        const approved = item.status === "approved";
+function formatBytes(value: number, language: LanguageCode) {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const unit =
+    safe >= 1024 ** 3
+      ? "GB"
+      : safe >= 1024 ** 2
+        ? "MB"
+        : safe >= 1024
+          ? "KB"
+          : "B";
+  const divisor =
+    unit === "GB"
+      ? 1024 ** 3
+      : unit === "MB"
+        ? 1024 ** 2
+        : unit === "KB"
+          ? 1024
+          : 1;
+  return `${new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(safe / divisor)} ${unit}`;
+}
 
-        return {
-          id: item.id,
-          type: item.name.toLowerCase().includes("expose") ? "file" : "faq",
-          title: item.name,
-          location: projects.find((project) => project.id === item.projectId)?.name ?? projectLabel,
-          approval: approved ? "Freigegeben" : "Zu prüfen",
-          status: approved ? "Vector bereit" : "Review offen",
-          chunks,
-          embeddedChunks: approved ? Math.round((chunks * parseCoverage(item.coverage)) / 100) : 0,
-          gaps: approved ? 0 : Math.max(1, Math.round((100 - parseCoverage(item.coverage)) / 8)),
-        };
-      }),
-    [items, projectLabel, projects],
+type KnowledgeCommandCenterProps = {
+  items?: KnowledgeItem[];
+  language: LanguageCode;
+  projectLabel?: string;
+  projects?: Project[];
+  workspaceId?: string;
+  workspaceName?: string;
+};
+
+export function KnowledgeCommandCenter(props: KnowledgeCommandCenterProps) {
+  return (
+    <KnowledgeCenterContent key={props.workspaceId ?? "session"} {...props} />
+  );
+}
+
+function KnowledgeCenterContent({
+  language,
+  workspaceId,
+  workspaceName,
+}: KnowledgeCommandCenterProps) {
+  const text = getKnowledgeCenterCopy(language);
+  const formId = useId();
+  const [snapshot, setSnapshot] = useState<KnowledgeCenterSnapshot | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState("");
+  const [tab, setTab] = useState<Tab>("sources");
+  const [projectId, setProjectId] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [editor, setEditor] = useState<SourceEditor | null>(null);
+  const [showAreaForm, setShowAreaForm] = useState(false);
+  const [editingAreaId, setEditingAreaId] = useState("");
+  const [areaName, setAreaName] = useState("");
+  const [areaKind, setAreaKind] = useState<KnowledgeAreaKind>("company");
+  const [areaProjectId, setAreaProjectId] = useState("");
+  const [areaDescription, setAreaDescription] = useState("");
+  const [botId, setBotId] = useState("");
+  const [channel, setChannel] = useState<KnowledgeChannel>("webchat");
+  const [assignmentDraft, setAssignmentDraft] = useState<string[] | null>(null);
+  const [history, setHistory] = useState<{
+    sourceId: string;
+    versions: KnowledgeVersion[];
+  } | null>(null);
+
+  const scopedPath = useCallback(
+    (path: string) => {
+      if (!workspaceId) return path;
+      const [pathname, query = ""] = path.split("?");
+      const params = new URLSearchParams(query);
+      params.set("workspaceId", workspaceId);
+      return `${pathname}?${params.toString()}`;
+    },
+    [workspaceId],
+  );
+
+  const loadSnapshot = useCallback(
+    async (signal?: AbortSignal) => {
+      const response = await csrfFetch(scopedPath("/api/knowledge-center"), {
+        cache: "no-store",
+        signal,
+      });
+      const payload = await readResponse<{ snapshot: KnowledgeCenterSnapshot }>(
+        response,
+        text.loadError,
+      );
+      if (
+        !payload.snapshot ||
+        !Array.isArray(payload.snapshot.sources) ||
+        !Array.isArray(payload.snapshot.areas)
+      )
+        throw new Error(text.loadError);
+      return payload.snapshot;
+    },
+    [scopedPath, text.loadError],
   );
 
   useEffect(() => {
-    let active = true;
-
-    async function loadPersistedSources() {
-      try {
-        const response = await csrfFetch("/api/bots/knowledge?limit=25");
-        if (!response.ok) return;
-
-        const data = (await response.json()) as { sources?: PersistedKnowledgeSource[] };
-        if (!active || !Array.isArray(data.sources)) return;
-
-        setPersistedSources(data.sources.map(sourceFromPersisted));
-      } catch {
-        // Keep the local planner usable if the live API is unavailable.
-      }
-    }
-
-    loadPersistedSources();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const sources = useMemo(
-    () => [...persistedSources, ...preparedSources, ...existingSources],
-    [existingSources, persistedSources, preparedSources],
-  );
-  const totals = useMemo(() => {
-    const chunks = sources.reduce((sum, source) => sum + source.chunks, 0);
-    const embedded = sources.reduce((sum, source) => sum + source.embeddedChunks, 0);
-    const reviews = sources.filter((source) => source.status === "Review offen").length;
-    const gaps = sources.reduce((sum, source) => sum + source.gaps, 0);
-
-    return {
-      chunks,
-      embedded,
-      reviews,
-      gaps,
-      coverage: chunks ? Math.round((embedded / chunks) * 100) : 0,
-    };
-  }, [sources]);
-
-  async function prepareSource() {
-    const sourceTitle = title.trim() || `${importTypes.find((item) => item.id === selectedType)?.label} ${text.fallbackSourceTitle}`;
-    const sourceContent = content.trim() || context.trim() || text.fallbackSourceContent;
-    const chunks = estimateChunks(sourceContent);
-    const status = statusForApproval(approval);
-    const fallbackSource: PreparedKnowledgeSource = {
-      id: `prepared_${new Date().getTime()}`,
-      type: selectedType,
-      title: sourceTitle,
-      location: context.trim() || sourceContent.slice(0, 90),
-      approval,
-      status,
-      chunks,
-      embeddedChunks: status === "Vector bereit" ? chunks : 0,
-      gaps: status === "Vector bereit" ? 0 : 1,
-    };
-
-    setIsSyncing(true);
-
-    try {
-      const response = await csrfFetch("/api/bots/knowledge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: sourceTitle,
-          contentOrLocation: sourceContent,
-          sourceType: selectedType,
-          approval,
-        }),
+    const controller = new AbortController();
+    loadSnapshot(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setSnapshot(data);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted)
+          setLoadError(cause instanceof Error ? cause.message : text.loadError);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
-      const result = (await response.json()) as {
-        sourceId?: string;
-        status?: string;
-        chunkCount?: number;
-        embeddedChunkCount?: number;
-      };
+    return () => controller.abort();
+  }, [loadSnapshot, text.loadError]);
 
-      if (!response.ok) {
-        throw new Error("Knowledge source import failed");
-      }
-
-      const savedSource: PreparedKnowledgeSource = {
-        ...fallbackSource,
-        id: result.sourceId ?? fallbackSource.id,
-        status: result.status === "synced" ? "Vector bereit" : fallbackSource.status,
-        chunks: result.chunkCount ?? fallbackSource.chunks,
-        embeddedChunks: result.embeddedChunkCount ?? fallbackSource.embeddedChunks,
-        gaps: result.status === "synced" ? 0 : fallbackSource.gaps,
-      };
-
-      setPersistedSources((current) => [
-        savedSource,
-        ...current.filter((source) => source.id !== savedSource.id),
-      ]);
-    } catch {
-      setPreparedSources((current) => [fallbackSource, ...current]);
+  async function refresh() {
+    setLoadError("");
+    setLoading(true);
+    try {
+      setSnapshot(await loadSnapshot());
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause.message : text.loadError);
     } finally {
-      setIsSyncing(false);
-      setTitle("");
-      setContent("");
-      setContext("");
+      setLoading(false);
     }
   }
 
-  function simulateIndexing() {
-    setPreparedSources((current) =>
-      current.map((source) =>
-        source.approval === "Freigegeben"
+  async function mutate(path: string, body: object, method = "POST") {
+    const response = await csrfFetch(scopedPath(path), {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return readResponse<Record<string, unknown>>(response, text.saveError);
+  }
+
+  async function runAction(
+    key: string,
+    action: () => Promise<void>,
+    success = text.saved,
+  ) {
+    setBusy(key);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      setSnapshot(await loadSnapshot());
+      setNotice(success);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : text.saveError);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const activeAreas = useMemo(
+    () => snapshot?.areas.filter((area) => !area.archivedAt) ?? [],
+    [snapshot],
+  );
+  const visibleAreas = activeAreas.filter(
+    (area) => !projectId || !area.projectId || area.projectId === projectId,
+  );
+  const visibleSources =
+    snapshot?.sources.filter(
+      (source) =>
+        !source.archivedAt &&
+        (!projectId || !source.projectId || source.projectId === projectId) &&
+        (!areaFilter || source.areaId === areaFilter) &&
+        source.name
+          .toLocaleLowerCase(language)
+          .includes(search.trim().toLocaleLowerCase(language)),
+    ) ?? [];
+  const selectedBot = snapshot?.bots.find((bot) => bot.id === botId);
+  const eligibleAreas = activeAreas.filter(
+    (area) => !area.projectId || area.projectId === selectedBot?.projectId,
+  );
+  const assignedAreaIds =
+    assignmentDraft ??
+    snapshot?.assignments
+      .filter((item) => item.botId === botId && item.channel === channel)
+      .map((item) => item.areaId) ??
+    [];
+  const canWrite = Boolean(
+    snapshot?.available &&
+      snapshot.entitlement.enabled &&
+      snapshot.permissions.canWrite,
+  );
+  const canAssign = Boolean(
+    snapshot?.available &&
+      snapshot.entitlement.enabled &&
+      snapshot.permissions.canAssign,
+  );
+  const sourceLimitReached = Boolean(
+    snapshot && snapshot.usage.sources >= snapshot.entitlement.maxSources,
+  );
+  const areaLimitReached = Boolean(
+    snapshot && activeAreas.length >= snapshot.entitlement.limits.maxAreas,
+  );
+  const disabled = Boolean(busy);
+  const areaTypeLabel = (kind: KnowledgeAreaKind) =>
+    kind === "company"
+      ? text.companyArea
+      : kind === "business"
+        ? text.businessArea
+        : text.projectArea;
+  const statusLabel = (status: string) =>
+    ({
+      draft: text.draft,
+      approved: text.approved,
+      published: text.published,
+      archived: text.archived,
+      pending: text.pending,
+      pending_review: text.pending,
+      active: text.active,
+      "needs-review": text.pending,
+      rejected: text.rejected,
+    })[status] ?? status;
+  const channelLabel = (value: KnowledgeChannel) =>
+    value === "telephone" ? text.voice : text[value];
+  const dateLabel = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "—"
+      : new Intl.DateTimeFormat(language, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(date);
+  };
+
+  function startSource(source?: KnowledgeSource) {
+    const version = source?.version;
+    const faqData = version?.structuredData;
+    setEditor(
+      source
+        ? {
+            sourceId: source.id,
+            revision: source.revision,
+            areaId: source.areaId,
+            name: source.name,
+            type: source.type,
+            content: version?.content ?? "",
+            question:
+              typeof faqData?.question === "string" ? faqData.question : "",
+            answer:
+              typeof faqData?.answer === "string"
+                ? faqData.answer
+                : (version?.content ?? ""),
+            structuredBase: version?.structuredData ?? {},
+            structuredRows: createStructuredKnowledgeRows(
+              version?.structuredData ?? {},
+            ),
+            structuredRemovedKeys: [],
+            structuredTemplate: "custom",
+            url: version?.url ?? "",
+            mediaAssetId: version?.mediaAssetId ?? "",
+            documentName: version?.mediaAssetId ? source.name : "",
+          }
+        : { ...emptyEditor, areaId: areaFilter || visibleAreas[0]?.id || "" },
+    );
+    setError("");
+    setNotice("");
+    window.requestAnimationFrame(() => {
+      const nameInput = document.getElementById(`${formId}-source-name`);
+      nameInput?.scrollIntoView({ block: "nearest" });
+      nameInput?.focus({ preventScroll: true });
+    });
+  }
+
+  function updateEditor(patch: Partial<SourceEditor>) {
+    setEditor((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  async function saveSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editor) return;
+    const current = editor;
+    let structuredData: Record<string, unknown> | undefined;
+    if (current.type === "structured") {
+      try {
+        structuredData = serializeStructuredKnowledge(
+          current.structuredBase,
+          current.structuredRows,
+          current.structuredRemovedKeys,
+        );
+      } catch {
+        setError(text.invalidField);
+        return;
+      }
+      if (!Object.keys(structuredData).length) {
+        setError(text.emptyStructured);
+        return;
+      }
+    }
+    if (current.type === "faq")
+      structuredData = {
+        question: current.question.trim(),
+        answer: current.answer.trim(),
+      };
+    const content =
+      current.type === "faq"
+        ? `${current.question.trim()}\n${current.answer.trim()}`
+        : current.content.trim();
+    const payload = {
+      name: current.name.trim(),
+      ...(current.type === "manual" ||
+      current.type === "faq" ||
+      (current.type === "file" && content)
+        ? { content }
+        : {}),
+      ...(structuredData ? { structuredData } : {}),
+      ...(current.type === "url" ? { url: current.url.trim() } : {}),
+      ...(current.type === "file"
+        ? { mediaAssetId: current.mediaAssetId }
+        : {}),
+    };
+    if (
+      !payload.name ||
+      !current.areaId ||
+      (current.type === "file" && !current.mediaAssetId)
+    ) {
+      setError(text.requiredFields);
+      return;
+    }
+    await runAction("source", async () => {
+      await mutate(
+        current.sourceId
+          ? "/api/knowledge-center/versions"
+          : "/api/knowledge-center/sources",
+        current.sourceId
           ? {
-              ...source,
-              status: "Vector bereit",
-              embeddedChunks: source.chunks,
-              gaps: Math.max(0, source.gaps - 1),
+              ...payload,
+              sourceId: current.sourceId,
+              expectedVersion: current.revision,
             }
-          : source,
+          : { ...payload, type: current.type, areaId: current.areaId },
+      );
+      setEditor(null);
+      setHistory(null);
+    });
+  }
+
+  async function uploadDocument(file: File) {
+    if (file.size > 10 * 1024 * 1024) {
+      setError(text.tooLarge);
+      return;
+    }
+    setBusy("upload");
+    setError("");
+    setNotice("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("name", file.name);
+      const response = await csrfFetch(
+        scopedPath("/api/knowledge-center/documents"),
+        { method: "POST", body },
+      );
+      const { asset } = await readResponse<{
+        asset: { id: string; name: string };
+      }>(response, text.uploadError);
+      if (!asset?.id) throw new Error(text.uploadError);
+      updateEditor({ mediaAssetId: asset.id, documentName: asset.name });
+      setNotice(text.uploadSuccess);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : text.uploadError);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function saveArea(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction("area", async () => {
+      const payload = {
+        name: areaName.trim(),
+        description: areaDescription.trim(),
+      };
+      await mutate(
+        editingAreaId
+          ? `/api/knowledge-center/areas/${encodeURIComponent(editingAreaId)}`
+          : "/api/knowledge-center/areas",
+        editingAreaId
+          ? { ...payload, action: "update" }
+          : {
+              ...payload,
+              kind: areaKind,
+              ...(areaKind === "project" ? { projectId: areaProjectId } : {}),
+            },
+        editingAreaId ? "PATCH" : "POST",
+      );
+      setAreaName("");
+      setAreaDescription("");
+      setEditingAreaId("");
+      setShowAreaForm(false);
+    });
+  }
+
+  function startArea(area?: KnowledgeArea) {
+    setEditingAreaId(area?.id ?? "");
+    setAreaName(area?.name ?? "");
+    setAreaDescription(area?.description ?? "");
+    setAreaKind(area?.kind ?? "company");
+    setAreaProjectId(area?.projectId ?? projectId);
+    setShowAreaForm(true);
+    setTab("areas");
+    setError("");
+    setNotice("");
+  }
+
+  async function loadHistory(sourceId: string) {
+    if (history?.sourceId === sourceId) {
+      setHistory(null);
+      return;
+    }
+    setBusy(`history:${sourceId}`);
+    setError("");
+    try {
+      const response = await csrfFetch(
+        scopedPath(
+          `/api/knowledge-center/versions?${new URLSearchParams({ sourceId })}`,
+        ),
+        { cache: "no-store" },
+      );
+      const payload = await readResponse<{ versions: KnowledgeVersion[] }>(
+        response,
+        text.loadError,
+      );
+      setHistory({ sourceId, versions: payload.versions });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : text.loadError);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function renderStructuredFields() {
+    if (!editor) return null;
+    const editableKeys = new Set(
+      createStructuredKnowledgeRows(editor.structuredBase).map(
+        (row) => row.key,
       ),
+    );
+    const preservedEntries = Object.entries(editor.structuredBase).filter(
+      ([key]) => !editableKeys.has(key),
+    );
+    const dynamicCrm =
+      knowledgeTemplates.find(
+        (template) => template.id === editor.structuredTemplate,
+      )?.dynamicCrm ||
+      editor.structuredRows.some((row) =>
+        /price|pricing|rental|availability/i.test(row.key),
+      );
+    const updateRow = (id: string, patch: Partial<StructuredKnowledgeRow>) =>
+      updateEditor({
+        structuredRows: editor.structuredRows.map((row) =>
+          row.id === id ? { ...row, ...patch } : row,
+        ),
+      });
+    return (
+      <div className="grid gap-4">
+        <Field label={text.template}>
+          <select
+            className={inputClass}
+            disabled={disabled}
+            onChange={(event) =>
+              updateEditor({
+                structuredTemplate: event.target.value,
+                structuredRows: addKnowledgeTemplateFields(
+                  editor.structuredRows,
+                  editor.structuredBase,
+                  event.target.value,
+                ),
+              })
+            }
+            value={editor.structuredTemplate}
+          >
+            <option value="custom">{text.customTemplate}</option>
+            {knowledgeTemplates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {knowledgeLabel(template.label, language)}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs font-normal leading-5 text-stone-600">
+            {text.structuredHint}
+          </span>
+        </Field>
+        <div className="grid gap-3">
+          {editor.structuredRows.map((row) => {
+            const field = row.custom ? undefined : knowledgeField(row.key);
+            return (
+              <div
+                className="grid items-start gap-3 rounded-lg border border-stone-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+                key={row.id}
+              >
+                <div className="grid gap-3">
+                  {!field ? (
+                    <Field label={text.fieldName}>
+                      <input
+                        className={inputClass}
+                        disabled={disabled}
+                        maxLength={160}
+                        onChange={(event) =>
+                          updateRow(row.id, { key: event.target.value })
+                        }
+                        value={row.key}
+                      />
+                    </Field>
+                  ) : null}
+                  <Field
+                    label={
+                      field
+                        ? knowledgeLabel(field.label, language)
+                        : text.fieldValue
+                    }
+                  >
+                    {field?.multiline ? (
+                      <textarea
+                        className={`${inputClass} min-h-24`}
+                        disabled={disabled}
+                        maxLength={10000}
+                        onChange={(event) =>
+                          updateRow(row.id, { value: event.target.value })
+                        }
+                        value={row.value}
+                      />
+                    ) : (
+                      <input
+                        className={inputClass}
+                        disabled={disabled}
+                        maxLength={10000}
+                        onChange={(event) =>
+                          updateRow(row.id, { value: event.target.value })
+                        }
+                        value={row.value}
+                      />
+                    )}
+                  </Field>
+                </div>
+                <button
+                  aria-label={`${text.removeField}${row.key ? `: ${knowledgeFieldLabel(row.key, language)}` : ""}`}
+                  className={buttonClass}
+                  disabled={disabled}
+                  onClick={() =>
+                    updateEditor({
+                      structuredRows: editor.structuredRows.filter(
+                        (item) => item.id !== row.id,
+                      ),
+                      structuredRemovedKeys: row.originalKey
+                        ? [...editor.structuredRemovedKeys, row.originalKey]
+                        : editor.structuredRemovedKeys,
+                    })
+                  }
+                  type="button"
+                >
+                  {text.removeField}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div>
+          <button
+            className={buttonClass}
+            disabled={disabled}
+            onClick={() =>
+              updateEditor({
+                structuredRows: [
+                  ...editor.structuredRows,
+                  { id: crypto.randomUUID(), key: "", value: "", custom: true },
+                ],
+              })
+            }
+            type="button"
+          >
+            {text.addField}
+          </button>
+        </div>
+        {preservedEntries.length ? (
+          <details className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <summary className="min-h-8 cursor-pointer text-sm font-medium">
+              {text.preservedDetails}
+            </summary>
+            <p className="mt-2 text-xs leading-5 text-stone-600">
+              {text.preservedHint}
+            </p>
+            <dl className="mt-3 grid gap-3">
+              {preservedEntries.map(([key, value]) => (
+                <div key={key}>
+                  <dt className="text-sm font-medium">
+                    {knowledgeFieldLabel(key, language)}
+                  </dt>
+                  <dd className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-600">
+                    {structuredKnowledgeSummary(value, language)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        ) : null}
+        {dynamicCrm ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+            {text.dynamicCrmHint}
+          </p>
+        ) : null}
+      </div>
     );
   }
 
+  function renderSourceForm() {
+    if (!editor) return null;
+    return (
+      <form
+        aria-labelledby={`${formId}-source-title`}
+        className="grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 sm:p-5"
+        id={`${formId}-source-form`}
+        onSubmit={(event) => void saveSource(event)}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4
+            className="font-semibold text-slate-950"
+            id={`${formId}-source-title`}
+          >
+            {editor.sourceId ? text.newVersion : text.newSource}
+          </h4>
+          <button
+            className={buttonClass}
+            disabled={disabled}
+            onClick={() => setEditor(null)}
+            type="button"
+          >
+            {text.cancel}
+          </button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={text.type}>
+            <select
+              className={inputClass}
+              disabled={disabled || Boolean(editor.sourceId)}
+              onChange={(event) =>
+                updateEditor({
+                  type: event.target.value as KnowledgeSourceType,
+                })
+              }
+              value={editor.type}
+            >
+              {sourceTypes.map((type) => (
+                <option
+                  disabled={
+                    type === "url" &&
+                    !snapshot?.entitlement.features.websiteImport
+                  }
+                  key={type}
+                  value={type}
+                >
+                  {text[type]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={text.area}>
+            <select
+              className={inputClass}
+              disabled={disabled || Boolean(editor.sourceId)}
+              onChange={(event) => updateEditor({ areaId: event.target.value })}
+              required
+              value={editor.areaId}
+            >
+              <option value="">{text.selectArea}</option>
+              {activeAreas.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label={text.name}>
+          <input
+            autoComplete="off"
+            className={inputClass}
+            disabled={disabled}
+            id={`${formId}-source-name`}
+            maxLength={200}
+            onChange={(event) => updateEditor({ name: event.target.value })}
+            required
+            value={editor.name}
+          />
+        </Field>
+        {editor.type === "faq" ? (
+          <div className="grid gap-4">
+            <Field label={text.question}>
+              <input
+                className={inputClass}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateEditor({ question: event.target.value })
+                }
+                required
+                value={editor.question}
+              />
+            </Field>
+            <Field label={text.answer}>
+              <textarea
+                className={`${inputClass} min-h-32`}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateEditor({ answer: event.target.value })
+                }
+                required
+                value={editor.answer}
+              />
+            </Field>
+          </div>
+        ) : null}
+        {editor.type === "manual" ? (
+          <Field label={text.content}>
+            <textarea
+              className={`${inputClass} min-h-44`}
+              disabled={disabled}
+              maxLength={100000}
+              onChange={(event) =>
+                updateEditor({ content: event.target.value })
+              }
+              required
+              value={editor.content}
+            />
+          </Field>
+        ) : null}
+        {editor.type === "structured" ? renderStructuredFields() : null}
+        {editor.type === "url" ? (
+          <Field label={text.website}>
+            <input
+              aria-describedby={`${formId}-website-hint`}
+              className={inputClass}
+              disabled={disabled}
+              onChange={(event) => updateEditor({ url: event.target.value })}
+              required
+              type="url"
+              value={editor.url}
+            />
+            <span
+              className="text-xs font-normal leading-5 text-stone-600"
+              id={`${formId}-website-hint`}
+            >
+              {text.websiteHint}
+            </span>
+          </Field>
+        ) : null}
+        {editor.type === "file" ? (
+          <div className="grid gap-3">
+            <Field label={busy === "upload" ? text.uploading : text.upload}>
+              <input
+                accept=".pdf,.docx,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp"
+                aria-describedby={`${formId}-file-hint`}
+                className={`${inputClass} cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-1`}
+                disabled={disabled}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadDocument(file);
+                  event.target.value = "";
+                }}
+                type="file"
+              />
+              <span
+                className="text-xs font-normal leading-5 text-stone-600"
+                id={`${formId}-file-hint`}
+              >
+                {text.documentHint}
+              </span>
+            </Field>
+            {editor.documentName ? (
+              <p className="break-words rounded-lg border border-emerald-200 bg-white p-3 text-sm font-medium text-emerald-900">
+                {editor.documentName}
+              </p>
+            ) : null}
+            <Field label={`${text.content} (${text.optional})`}>
+              <textarea
+                className={`${inputClass} min-h-24`}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateEditor({ content: event.target.value })
+                }
+                value={editor.content}
+              />
+            </Field>
+          </div>
+        ) : null}
+        <p className="text-xs leading-5 text-stone-600">{text.draftHint}</p>
+        <div>
+          <button
+            className={primaryClass}
+            disabled={
+              disabled ||
+              !canWrite ||
+              (!editor.sourceId && sourceLimitReached) ||
+              (editor.type === "file" && !editor.mediaAssetId)
+            }
+            type="submit"
+          >
+            {busy === "source"
+              ? text.saving
+              : editor.sourceId
+                ? text.newVersion
+                : text.save}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  const companyName = snapshot?.workspace.name || workspaceName || "—";
   return (
-    <section className="grid gap-4">
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <section
+      aria-labelledby={`${formId}-heading`}
+      className="grid min-w-0 gap-5 text-slate-950"
+    >
+      <header className="rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              {text.eyebrow}
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">
+              Evelyn
             </p>
-            <h3 className="mt-1 text-2xl font-semibold">{text.title}</h3>
-            <p className="mt-2 max-w-4xl break-words text-sm leading-6 text-stone-600">
+            <h3
+              className="mt-1 break-words text-xl font-semibold sm:text-2xl"
+              id={`${formId}-heading`}
+            >
+              {text.title}
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
               {text.description}
             </p>
           </div>
-          <div className="grid min-w-[320px] gap-2 sm:grid-cols-4 xl:max-w-xl">
-            {[
-              [text.metrics.sources, sources.length],
-              [text.metrics.chunks, totals.chunks],
-              [text.metrics.vector, `${totals.coverage}%`],
-              [text.metrics.review, totals.reviews],
-            ].map(([label, value]) => (
-              <div className="rounded-md border border-stone-200 bg-stone-50 p-3" key={label}>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  {label}
-                </p>
-                <p className="mt-1 text-xl font-semibold text-slate-950">{value}</p>
-              </div>
-            ))}
-          </div>
+          <button
+            aria-label={text.refresh}
+            className={buttonClass}
+            disabled={loading || disabled}
+            onClick={() => void refresh()}
+            type="button"
+          >
+            {text.refresh}
+          </button>
         </div>
-      </article>
-
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <article className="rounded-lg border border-stone-200 bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold">{text.importTitle}</h3>
-              <p className="mt-1 text-sm text-stone-600">
-                {text.importDescription}
-              </p>
-            </div>
-            <span className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
-              {importTypes.find((item) => item.id === selectedType)?.label}
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {importTypes.map((item) => (
-              <button
-                className={`rounded-lg border p-3 text-left transition ${
-                  selectedType === item.id
-                    ? "border-slate-950 bg-slate-950 text-white"
-                    : "border-stone-200 bg-stone-50 text-slate-950 hover:border-emerald-300 hover:bg-emerald-50"
-                }`}
-                key={item.id}
-                onClick={() => setSelectedType(item.id)}
-                type="button"
-              >
-                <span
-                  className={`grid h-11 w-11 place-items-center rounded-md text-xs font-black ${
-                    selectedType === item.id ? "bg-white text-slate-950" : "bg-slate-950 text-white"
-                  }`}
-                >
-                  {item.badge}
-                </span>
-                <span className="mt-3 block font-semibold">{item.label}</span>
-                <span
-                  className={`mt-1 block text-xs leading-5 ${
-                    selectedType === item.id ? "text-slate-300" : "text-stone-600"
-                  }`}
-                >
-                  {item.description}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-5 grid gap-3">
-            <label className="grid gap-1 text-sm font-semibold text-slate-900">
-              {text.titleLabel}
-              <input
-                className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder={text.titlePlaceholder}
-                value={title}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold text-slate-900">
-              {text.sourceLabel}
-              <textarea
-                className="min-h-28 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                onChange={(event) => setContent(event.target.value)}
-                placeholder={text.sourcePlaceholder}
-                value={content}
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="grid gap-1 text-sm font-semibold text-slate-900">
-                {text.approvalLabel}
-                <select
-                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                  onChange={(event) =>
-                    setApproval(event.target.value as PreparedKnowledgeSource["approval"])
-                  }
-                  value={approval}
-                >
-                  <option value="Zu prüfen">{text.approvals["Zu prüfen"]}</option>
-                  <option value="Freigegeben">{text.approvals.Freigegeben}</option>
-                  <option value="Nur intern">{text.approvals["Nur intern"]}</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-900">
-                {text.contextLabel}
-                <input
-                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
-                  onChange={(event) => setContext(event.target.value)}
-                  placeholder={text.contextPlaceholder}
-                  value={context}
-                />
-              </label>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                aria-busy={isSyncing}
-                className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isSyncing}
-                onClick={prepareSource}
-                type="button"
-              >
-                {text.prepare}
-              </button>
-              <button
-                className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
-                onClick={simulateIndexing}
-                type="button"
-              >
-                {text.simulateIndexing}
-              </button>
-            </div>
-          </div>
-        </article>
-
-        <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">{text.pipelineTitle}</h3>
-              <p className="mt-1 max-w-2xl text-sm text-slate-300">
-                {text.pipelineDescription}
-              </p>
-            </div>
-            <span className="rounded-md bg-white/10 px-3 py-2 text-xs font-semibold">
-              {totals.gaps} {text.knowledgeGaps}
-            </span>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-5">
-            {text.pipelineSteps.map((step, index) => (
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={step}>
-                <span className="grid h-8 w-8 place-items-center rounded-md bg-emerald-300 text-sm font-black text-slate-950">
-                  {index + 1}
-                </span>
-                <p className="mt-3 break-words text-sm font-semibold">{step}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {text.pipelineNotes.map((item) => (
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={item}>
-                <p className="break-words text-sm text-slate-100">{item}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <article className="rounded-lg border border-stone-200 bg-white p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">{text.sourcesTitle}</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              {text.sourcesDescription}
-            </p>
-          </div>
-          <span className="rounded-md bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-            {totals.embedded} {text.embeddedChunks}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-3">
-          {sources.map((source) => (
-            <div
-              className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 lg:grid-cols-[1fr_120px_120px_120px]"
-              key={source.id}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <Field label={text.company}>
+            <select
+              aria-readonly="true"
+              className={inputClass}
+              disabled
+              value={snapshot?.workspace.id || workspaceId || ""}
             >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white">
-                    {importTypes.find((item) => item.id === source.type)?.label}
-                  </span>
-                  <p className="break-words text-sm font-semibold text-slate-950">
-                    {source.title}
+              <option value={snapshot?.workspace.id || workspaceId || ""}>
+                {companyName}
+              </option>
+            </select>
+          </Field>
+          <Field label={text.project}>
+            <select
+              className={inputClass}
+              disabled={!snapshot || loading || disabled}
+              onChange={(event) => {
+                setProjectId(event.target.value);
+                setAreaFilter("");
+              }}
+              value={projectId}
+            >
+              <option value="">{text.allProjects}</option>
+              {snapshot?.projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </header>
+      {loading ? (
+        <p
+          aria-live="polite"
+          className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600"
+          role="status"
+        >
+          {text.loading}
+        </p>
+      ) : loadError ? (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 p-5"
+          role="alert"
+        >
+          <p className="text-sm font-medium text-red-900">{loadError}</p>
+          <button
+            className={`${buttonClass} mt-3`}
+            onClick={() => void refresh()}
+            type="button"
+          >
+            {text.retry}
+          </button>
+        </div>
+      ) : snapshot ? (
+        <>
+          {!snapshot.available && snapshot.entitlement.enabled ? (
+            <EmptyState
+              description={text.unavailableHint}
+              title={text.unavailable}
+            />
+          ) : (
+            <>
+              {!snapshot.entitlement.enabled ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="font-semibold text-amber-950">
+                    {text.disabled}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-amber-900">
+                    {text.disabledHint}
                   </p>
                 </div>
-                <p className="mt-1 break-words text-xs text-stone-500">{source.location}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  {text.status}
+              ) : !snapshot.permissions.canWrite ? (
+                <p className="rounded-lg bg-stone-100 p-3 text-sm text-stone-700">
+                  {text.readOnly}
                 </p>
-                <p className="mt-1 text-sm font-semibold">{text.statuses[source.status]}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  {text.metrics.chunks}
+              ) : null}
+              <nav aria-label={text.title} className="flex flex-wrap gap-2">
+                {(["sources", "areas", "assistants", "usage"] as const).map(
+                  (value) => (
+                    <button
+                      aria-controls={`${formId}-panel`}
+                      aria-pressed={tab === value}
+                      className={`${buttonClass} ${tab === value ? "border-emerald-800 bg-emerald-50 text-emerald-950" : ""}`}
+                      key={value}
+                      onClick={() => {
+                        setTab(value);
+                        setError("");
+                        setNotice("");
+                      }}
+                      type="button"
+                    >
+                      {text[value]}
+                      {value === "sources"
+                        ? ` (${snapshot.sources.filter((source) => !source.archivedAt).length})`
+                        : value === "areas"
+                          ? ` (${activeAreas.length})`
+                          : ""}
+                    </button>
+                  ),
+                )}
+              </nav>
+              {error ? (
+                <p
+                  className="break-words rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+                  role="alert"
+                >
+                  {error}
                 </p>
-                <p className="mt-1 text-sm font-semibold">
-                  {source.embeddedChunks}/{source.chunks}
+              ) : null}
+              {notice ? (
+                <p
+                  aria-live="polite"
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950"
+                  role="status"
+                >
+                  {notice}
                 </p>
+              ) : null}
+              <div
+                className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5"
+                id={`${formId}-panel`}
+              >
+                {tab === "sources" ? (
+                  <div className="grid gap-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-lg font-semibold">{text.sources}</h4>
+                      {canWrite ? (
+                        <button
+                          aria-controls={`${formId}-source-form`}
+                          aria-expanded={Boolean(editor)}
+                          className={primaryClass}
+                          disabled={
+                            disabled ||
+                            !activeAreas.length ||
+                            sourceLimitReached
+                          }
+                          onClick={() => startSource()}
+                          type="button"
+                        >
+                          {text.newSource}
+                        </button>
+                      ) : null}
+                    </div>
+                    {sourceLimitReached && canWrite ? (
+                      <p className="text-sm text-amber-900">
+                        {text.sourceLimit}
+                      </p>
+                    ) : null}
+                    {renderSourceForm()}
+                    {activeAreas.length ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label={text.area}>
+                          <select
+                            className={inputClass}
+                            onChange={(event) =>
+                              setAreaFilter(event.target.value)
+                            }
+                            value={areaFilter}
+                          >
+                            <option value="">{text.allAreas}</option>
+                            {visibleAreas.map((area) => (
+                              <option key={area.id} value={area.id}>
+                                {area.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label={text.search}>
+                          <input
+                            className={inputClass}
+                            onChange={(event) => setSearch(event.target.value)}
+                            type="search"
+                            value={search}
+                          />
+                        </Field>
+                      </div>
+                    ) : null}
+                    {!activeAreas.length ? (
+                      <div className="grid gap-3">
+                        <EmptyState
+                          description={text.noAreasHint}
+                          title={text.noAreas}
+                        />
+                        {canWrite ? (
+                          <div>
+                            <button
+                              className={primaryClass}
+                              disabled={disabled || areaLimitReached}
+                              onClick={() => startArea()}
+                              type="button"
+                            >
+                              {text.newArea}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : !visibleSources.length ? (
+                      <EmptyState
+                        description={
+                          snapshot.sources.length
+                            ? undefined
+                            : text.noSourcesHint
+                        }
+                        title={
+                          snapshot.sources.length
+                            ? text.noMatches
+                            : text.noSources
+                        }
+                      />
+                    ) : (
+                      <ul className="grid gap-3">
+                        {visibleSources.map((source) => (
+                          <li
+                            className="min-w-0 rounded-xl border border-stone-200 p-4"
+                            key={source.id}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-medium text-stone-700">
+                                    {text[source.type]}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-2 py-1 text-xs font-semibold ${source.status === "approved" || source.status === "published" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+                                  >
+                                    {statusLabel(source.status)}
+                                  </span>
+                                </div>
+                                <h5 className="mt-2 break-words font-semibold text-slate-950">
+                                  {source.name}
+                                </h5>
+                                <p className="mt-1 break-words text-xs text-stone-600">
+                                  {
+                                    activeAreas.find(
+                                      (area) => area.id === source.areaId,
+                                    )?.name
+                                  }
+                                </p>
+                              </div>
+                              <div className="text-xs leading-6 text-stone-600">
+                                <p>
+                                  {text.version}:{" "}
+                                  {source.version?.version ?? "—"}
+                                </p>
+                                {source.version?.createdAt ? (
+                                  <p>
+                                    {text.updated}:{" "}
+                                    {dateLabel(source.version.createdAt)}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                            {source.version?.content ? (
+                              <p className="mt-3 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-stone-600">
+                                {source.version.content}
+                              </p>
+                            ) : source.version?.url ? (
+                              <p className="mt-3 break-all text-sm text-stone-600">
+                                {source.version.url}
+                              </p>
+                            ) : source.type === "structured" &&
+                              source.version ? (
+                              <p className="mt-3 line-clamp-4 whitespace-pre-wrap break-words rounded-lg bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                                {structuredKnowledgeSummary(
+                                  source.version.structuredData,
+                                  language,
+                                )}
+                              </p>
+                            ) : null}
+                            {source.draftVersionId ? (
+                              <p className="mt-3 text-xs font-medium text-amber-900">
+                                {text.draft} · {text.adminReview}
+                              </p>
+                            ) : null}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {canWrite ? (
+                                <button
+                                  className={buttonClass}
+                                  disabled={disabled}
+                                  onClick={() => startSource(source)}
+                                  type="button"
+                                >
+                                  {text.edit}
+                                </button>
+                              ) : null}
+                              <button
+                                aria-expanded={history?.sourceId === source.id}
+                                className={buttonClass}
+                                disabled={disabled}
+                                onClick={() => void loadHistory(source.id)}
+                                type="button"
+                              >
+                                {text.versions}
+                              </button>
+                              {source.type === "file" &&
+                              source.version?.mediaAssetId ? (
+                                <a
+                                  className={`${buttonClass} inline-flex items-center`}
+                                  href={scopedPath(
+                                    `/api/knowledge-center/sources/${encodeURIComponent(source.id)}/document`,
+                                  )}
+                                  rel="noopener noreferrer"
+                                  target="_blank"
+                                >
+                                  {text.documentOpen}
+                                </a>
+                              ) : null}
+                              {canWrite &&
+                              snapshot.entitlement.features.websiteImport &&
+                              source.type === "url" ? (
+                                <button
+                                  className={buttonClass}
+                                  disabled={disabled}
+                                  onClick={() =>
+                                    void runAction(
+                                      `scan:${source.id}`,
+                                      async () => {
+                                        await mutate(
+                                          "/api/knowledge-center/scans",
+                                          {
+                                            sourceId: source.id,
+                                            expectedVersion: source.revision,
+                                          },
+                                        );
+                                      },
+                                      text.scanSaved,
+                                    )
+                                  }
+                                  type="button"
+                                >
+                                  {text.scan}
+                                </button>
+                              ) : null}
+                              {canWrite ? (
+                                <details className="group">
+                                  <summary
+                                    className={`${buttonClass} cursor-pointer list-none`}
+                                  >
+                                    {text.archive}
+                                  </summary>
+                                  <div className="mt-2 max-w-xs rounded-lg border border-stone-200 bg-stone-50 p-3">
+                                    <p className="text-xs leading-5 text-stone-600">
+                                      {text.archiveHint}
+                                    </p>
+                                    <button
+                                      className={`${buttonClass} mt-2 text-red-900`}
+                                      disabled={disabled}
+                                      onClick={() =>
+                                        void runAction(
+                                          `archive:${source.id}`,
+                                          async () => {
+                                            await mutate(
+                                              `/api/knowledge-center/sources/${encodeURIComponent(source.id)}`,
+                                              {
+                                                action: "archive",
+                                                expectedVersion:
+                                                  source.revision,
+                                              },
+                                              "PATCH",
+                                            );
+                                            if (editor?.sourceId === source.id)
+                                              setEditor(null);
+                                          },
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      {text.archive}
+                                    </button>
+                                  </div>
+                                </details>
+                              ) : null}
+                            </div>
+                            {history?.sourceId === source.id ? (
+                              <div className="mt-4 rounded-lg bg-stone-50 p-3">
+                                <p className="text-xs leading-5 text-stone-600">
+                                  {text.historyHint}
+                                </p>
+                                {history.versions.length ? (
+                                  <ol className="mt-3 grid gap-2">
+                                    {history.versions.map((version) => (
+                                      <li
+                                        className="rounded-lg border border-stone-200 bg-white p-3 text-sm"
+                                        key={version.id}
+                                      >
+                                        <p className="font-medium">
+                                          {text.version} {version.version} ·{" "}
+                                          {statusLabel(version.status)}
+                                        </p>
+                                        <p className="mt-1 text-xs text-stone-600">
+                                          {dateLabel(version.createdAt)}
+                                        </p>
+                                        <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-stone-700">
+                                          {version.content ||
+                                            version.url ||
+                                            (source.type === "structured"
+                                              ? structuredKnowledgeSummary(
+                                                  version.structuredData,
+                                                  language,
+                                                )
+                                              : version.name)}
+                                        </p>
+                                      </li>
+                                    ))}
+                                  </ol>
+                                ) : (
+                                  <p className="mt-2 text-sm text-stone-600">
+                                    {text.noVersions}
+                                  </p>
+                                )}
+                              </div>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+                {tab === "areas" ? (
+                  <div className="grid gap-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-lg font-semibold">{text.areas}</h4>
+                      {canWrite ? (
+                        <button
+                          aria-expanded={showAreaForm}
+                          className={primaryClass}
+                          disabled={
+                            disabled || (!showAreaForm && areaLimitReached)
+                          }
+                          onClick={() =>
+                            showAreaForm ? setShowAreaForm(false) : startArea()
+                          }
+                          type="button"
+                        >
+                          {showAreaForm ? text.cancel : text.newArea}
+                        </button>
+                      ) : null}
+                    </div>
+                    {areaLimitReached && canWrite ? (
+                      <p className="text-sm text-amber-900">{text.areaLimit}</p>
+                    ) : null}
+                    {showAreaForm && canWrite ? (
+                      <form
+                        className="grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4"
+                        onSubmit={(event) => void saveArea(event)}
+                      >
+                        <h5 className="font-semibold">
+                          {editingAreaId ? text.edit : text.newArea}
+                        </h5>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label={text.name}>
+                            <input
+                              className={inputClass}
+                              disabled={disabled}
+                              maxLength={160}
+                              onChange={(event) =>
+                                setAreaName(event.target.value)
+                              }
+                              required
+                              value={areaName}
+                            />
+                          </Field>
+                          <Field label={text.kind}>
+                            <select
+                              className={inputClass}
+                              disabled={disabled || Boolean(editingAreaId)}
+                              onChange={(event) =>
+                                setAreaKind(
+                                  event.target.value as KnowledgeAreaKind,
+                                )
+                              }
+                              value={areaKind}
+                            >
+                              {(
+                                ["company", "business", "project"] as const
+                              ).map((kind) => (
+                                <option key={kind} value={kind}>
+                                  {areaTypeLabel(kind)}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                        {areaKind === "project" ? (
+                          <Field label={text.project}>
+                            <select
+                              className={inputClass}
+                              disabled={disabled || Boolean(editingAreaId)}
+                              onChange={(event) =>
+                                setAreaProjectId(event.target.value)
+                              }
+                              required
+                              value={areaProjectId}
+                            >
+                              <option value="">{text.selectProject}</option>
+                              {snapshot.projects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        ) : null}
+                        <Field
+                          label={`${text.descriptionLabel} (${text.optional})`}
+                        >
+                          <textarea
+                            className={`${inputClass} min-h-24`}
+                            disabled={disabled}
+                            maxLength={2000}
+                            onChange={(event) =>
+                              setAreaDescription(event.target.value)
+                            }
+                            value={areaDescription}
+                          />
+                        </Field>
+                        <div>
+                          <button
+                            className={primaryClass}
+                            disabled={disabled}
+                            type="submit"
+                          >
+                            {busy === "area" ? text.saving : text.save}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                    {visibleAreas.length ? (
+                      <ul className="grid gap-3 md:grid-cols-2">
+                        {visibleAreas.map((area) => (
+                          <li
+                            className="min-w-0 rounded-xl border border-stone-200 p-4"
+                            key={area.id}
+                          >
+                            <p className="text-xs font-medium text-emerald-800">
+                              {areaTypeLabel(area.kind)}
+                            </p>
+                            <h5 className="mt-2 break-words font-semibold">
+                              {area.name}
+                            </h5>
+                            {area.projectId ? (
+                              <p className="mt-1 text-xs text-stone-600">
+                                {
+                                  snapshot.projects.find(
+                                    (project) => project.id === area.projectId,
+                                  )?.name
+                                }
+                              </p>
+                            ) : null}
+                            {area.description ? (
+                              <p className="mt-2 break-words text-sm leading-6 text-stone-600">
+                                {area.description}
+                              </p>
+                            ) : null}
+                            <p className="mt-3 text-xs text-stone-600">
+                              {
+                                snapshot.sources.filter(
+                                  (source) =>
+                                    source.areaId === area.id &&
+                                    !source.archivedAt,
+                                ).length
+                              }{" "}
+                              {text.sources}
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                className={buttonClass}
+                                onClick={() => {
+                                  setAreaFilter(area.id);
+                                  setTab("sources");
+                                }}
+                                type="button"
+                              >
+                                {text.sources}
+                              </button>
+                              {canWrite ? (
+                                <>
+                                  <button
+                                    className={buttonClass}
+                                    disabled={disabled}
+                                    onClick={() => startArea(area)}
+                                    type="button"
+                                  >
+                                    {text.edit}
+                                  </button>
+                                  <details>
+                                    <summary
+                                      className={`${buttonClass} cursor-pointer list-none`}
+                                    >
+                                      {text.archive}
+                                    </summary>
+                                    <div className="mt-2 max-w-xs rounded-lg border border-stone-200 bg-stone-50 p-3">
+                                      <p className="text-xs leading-5 text-stone-600">
+                                        {text.archiveAreaHint}
+                                      </p>
+                                      <button
+                                        className={`${buttonClass} mt-2 text-red-900`}
+                                        disabled={disabled}
+                                        onClick={() =>
+                                          void runAction(
+                                            `archive-area:${area.id}`,
+                                            async () => {
+                                              await mutate(
+                                                `/api/knowledge-center/areas/${encodeURIComponent(area.id)}`,
+                                                { action: "archive" },
+                                                "PATCH",
+                                              );
+                                              if (areaFilter === area.id)
+                                                setAreaFilter("");
+                                              if (editor?.areaId === area.id)
+                                                setEditor(null);
+                                              if (editingAreaId === area.id)
+                                                setShowAreaForm(false);
+                                            },
+                                          )
+                                        }
+                                        type="button"
+                                      >
+                                        {text.archive}
+                                      </button>
+                                    </div>
+                                  </details>
+                                </>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyState
+                        description={text.noAreasHint}
+                        title={text.noAreas}
+                      />
+                    )}
+                  </div>
+                ) : null}
+                {tab === "assistants" ? (
+                  <div className="grid gap-5">
+                    <div>
+                      <h4 className="text-lg font-semibold">
+                        {text.assistants}
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-stone-600">
+                        {text.assignmentHint}
+                      </p>
+                    </div>
+                    {snapshot.bots.length ? (
+                      <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label={text.assistant}>
+                            <select
+                              className={inputClass}
+                              disabled={disabled}
+                              onChange={(event) => {
+                                setBotId(event.target.value);
+                                setAssignmentDraft(null);
+                              }}
+                              value={botId}
+                            >
+                              <option value="">{text.selectAssistant}</option>
+                              {snapshot.bots.map((bot) => (
+                                <option key={bot.id} value={bot.id}>
+                                  {bot.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field label={text.channel}>
+                            <select
+                              className={inputClass}
+                              disabled={disabled}
+                              onChange={(event) => {
+                                setChannel(
+                                  event.target.value as KnowledgeChannel,
+                                );
+                                setAssignmentDraft(null);
+                              }}
+                              value={channel}
+                            >
+                              {channels.map((value) => (
+                                <option key={value} value={value}>
+                                  {channelLabel(value)}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                        {botId ? (
+                          <fieldset
+                            className="grid gap-3"
+                            disabled={!canAssign || disabled}
+                          >
+                            <legend className="mb-3 text-sm font-semibold">
+                              {text.areas}
+                            </legend>
+                            {eligibleAreas.length ? (
+                              eligibleAreas.map((area) => (
+                                <label
+                                  className="flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border border-stone-200 p-3 text-sm"
+                                  key={area.id}
+                                >
+                                  <input
+                                    checked={assignedAreaIds.includes(area.id)}
+                                    className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-800"
+                                    onChange={(event) =>
+                                      setAssignmentDraft(
+                                        event.target.checked
+                                          ? [...assignedAreaIds, area.id]
+                                          : assignedAreaIds.filter(
+                                              (id) => id !== area.id,
+                                            ),
+                                      )
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block break-words font-medium">
+                                      {area.name}
+                                    </span>
+                                    <span className="mt-1 block text-xs text-stone-600">
+                                      {areaTypeLabel(area.kind)}
+                                    </span>
+                                  </span>
+                                </label>
+                              ))
+                            ) : (
+                              <EmptyState title={text.noAreas} />
+                            )}
+                            <p className="text-xs leading-5 text-stone-600">
+                              {text.assignmentEmpty}
+                            </p>
+                            <div>
+                              <button
+                                className={primaryClass}
+                                disabled={!canAssign || disabled}
+                                onClick={() =>
+                                  void runAction(
+                                    "assignments",
+                                    async () => {
+                                      await mutate(
+                                        "/api/knowledge-center/assignments",
+                                        {
+                                          botId,
+                                          channel,
+                                          areaIds: assignedAreaIds,
+                                        },
+                                      );
+                                      setAssignmentDraft(null);
+                                    },
+                                    text.assignmentsSaved,
+                                  )
+                                }
+                                type="button"
+                              >
+                                {busy === "assignments"
+                                  ? text.saving
+                                  : text.saveAssignments}
+                              </button>
+                            </div>
+                          </fieldset>
+                        ) : null}
+                      </>
+                    ) : (
+                      <EmptyState title={text.noAssistants} />
+                    )}
+                    <p className="rounded-lg bg-stone-50 p-4 text-xs leading-5 text-stone-600">
+                      {text.phonePrepared}
+                    </p>
+                  </div>
+                ) : null}
+                {tab === "usage" ? (
+                  <div className="grid gap-5">
+                    <div>
+                      <h4 className="text-lg font-semibold">{text.usage}</h4>
+                      <p className="mt-2 text-sm leading-6 text-stone-600">
+                        {text.usageHint}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+                      <p className="font-medium">{text.module}</p>
+                      <span
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold ${snapshot.entitlement.enabled ? "bg-emerald-100 text-emerald-950" : "bg-amber-100 text-amber-950"}`}
+                      >
+                        {snapshot.entitlement.enabled
+                          ? text.enabled
+                          : text.notEnabled}
+                      </span>
+                    </div>
+                    {snapshot.entitlement.contractReference ? (
+                      <p className="break-words text-sm text-stone-600">
+                        {text.contract}:{" "}
+                        {snapshot.entitlement.contractReference}
+                      </p>
+                    ) : null}
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {[
+                        {
+                          label: text.sourceUsage,
+                          value: snapshot.usage.sources,
+                          limit: snapshot.entitlement.maxSources,
+                          bytes: false,
+                        },
+                        {
+                          label: text.storageUsage,
+                          value: snapshot.usage.storageBytes,
+                          limit: snapshot.entitlement.maxStorageBytes,
+                          bytes: true,
+                        },
+                        {
+                          label: text.queryUsage,
+                          value: snapshot.usage.queriesThisMonth,
+                          limit: snapshot.entitlement.maxQueriesPerMonth,
+                          bytes: false,
+                        },
+                      ].map((item) => (
+                        <div
+                          className="rounded-xl border border-stone-200 p-4"
+                          key={item.label}
+                        >
+                          <p className="text-sm font-medium text-stone-600">
+                            {item.label}
+                          </p>
+                          <p className="mt-3 text-xl font-semibold">
+                            {item.bytes
+                              ? formatBytes(item.value, language)
+                              : new Intl.NumberFormat(language).format(
+                                  item.value,
+                                )}
+                            <span className="text-sm font-normal text-stone-500">
+                              {" "}
+                              /{" "}
+                              {item.bytes
+                                ? formatBytes(item.limit, language)
+                                : new Intl.NumberFormat(language).format(
+                                    item.limit,
+                                  )}
+                            </span>
+                          </p>
+                          <progress
+                            aria-label={item.label}
+                            className="mt-4 h-2 w-full overflow-hidden rounded-full accent-emerald-800"
+                            max={Math.max(1, item.limit)}
+                            value={Math.min(
+                              item.value,
+                              Math.max(1, item.limit),
+                            )}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-stone-200 p-4">
+                        <h5 className="font-semibold">{text.module}</h5>
+                        <dl className="mt-3 grid gap-3">
+                          {[
+                            {
+                              label: text.websiteImport,
+                              enabled:
+                                snapshot.entitlement.features.websiteImport,
+                            },
+                            {
+                              label: text.monitoring,
+                              enabled: snapshot.entitlement.features.monitoring,
+                            },
+                            {
+                              label: text.advancedMaintenance,
+                              enabled:
+                                snapshot.entitlement.features
+                                  .advancedMaintenance,
+                            },
+                          ].map((item) => (
+                            <div
+                              className="flex flex-wrap justify-between gap-2 text-sm"
+                              key={item.label}
+                            >
+                              <dt className="text-stone-600">{item.label}</dt>
+                              <dd className="font-medium">
+                                {item.enabled ? text.enabled : text.notEnabled}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 p-4">
+                        <h5 className="font-semibold">{text.usage}</h5>
+                        <dl className="mt-3 grid gap-3">
+                          {[
+                            {
+                              label: text.areas,
+                              limit: snapshot.entitlement.limits.maxAreas,
+                            },
+                            {
+                              label: text.websiteLimit,
+                              limit: snapshot.entitlement.limits.maxWebsites,
+                            },
+                            {
+                              label: text.scanLimit,
+                              limit:
+                                snapshot.entitlement.limits.maxScansPerMonth,
+                            },
+                            {
+                              label: text.userLimit,
+                              limit: snapshot.entitlement.limits.maxUsers,
+                            },
+                            {
+                              label: text.assistantLimit,
+                              limit: snapshot.entitlement.limits.maxAssistants,
+                            },
+                          ].map((item) => (
+                            <div
+                              className="flex flex-wrap justify-between gap-2 text-sm"
+                              key={item.label}
+                            >
+                              <dt className="text-stone-600">{item.label}</dt>
+                              <dd className="font-medium">
+                                {new Intl.NumberFormat(language).format(
+                                  item.limit,
+                                )}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-stone-200 p-4">
+                      <h5 className="font-semibold">{text.permissions}</h5>
+                      <dl className="mt-3 grid gap-3">
+                        {[
+                          {
+                            label: text.write,
+                            allowed: snapshot.permissions.canWrite,
+                          },
+                          {
+                            label: text.assign,
+                            allowed: snapshot.permissions.canAssign,
+                          },
+                          {
+                            label: text.publish,
+                            allowed: snapshot.permissions.canPublish,
+                          },
+                        ].map((item) => (
+                          <div
+                            className="flex flex-wrap justify-between gap-2 text-sm"
+                            key={item.label}
+                          >
+                            <dt className="text-stone-600">{item.label}</dt>
+                            <dd className="font-medium">
+                              {item.allowed ? text.allowed : text.notAllowed}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  {text.review}
-                </p>
-                <p className="mt-1 text-sm font-semibold">{text.approvals[source.approval]}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </article>
+            </>
+          )}
+        </>
+      ) : null}
     </section>
   );
 }

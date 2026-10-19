@@ -5277,83 +5277,15 @@ export function CrmWorkspace({
             </section>
             ) : null}
 
-            {visibleActiveSection === "knowledge" && isStudioNavigation ? (
-              <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm" data-crm-studio-knowledge-ai>
-                <h2 className="text-xl font-semibold text-slate-950">{studioCopy.knowledgeTitle}</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{studioCopy.knowledgeDescription}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(["analysis", "bots"] as const).filter((entryId) => enabledNavigationEntryIds.includes(entryId)).map((entryId) => (
-                    <button
-                      className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100"
-                      key={entryId}
-                      onClick={() => handleNavigationChange(entryId)}
-                      type="button"
-                    >
-                      {navigationLabels[entryId]}
-                    </button>
-                  ))}
-                </div>
-                <h3 className="mt-6 text-base font-semibold text-slate-950">{studioCopy.followUpTitle}</h3>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-stone-600">
-                  {studioCopy.followUpItems.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              </section>
-            ) : null}
-
-            {visibleActiveSection === "knowledge" && !isStudioNavigation ? (
-            <>
+            {visibleActiveSection === "knowledge" ? (
               <KnowledgeCommandCenter
-                items={visibleKnowledgeBase}
+                key={activeWorkspace.id}
                 language={language}
                 projectLabel={projectScopeLabel}
                 projects={allProjects}
+                workspaceId={activeWorkspace.id}
+                workspaceName={activeWorkspace.name}
               />
-            <section className="hidden gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <article className="rounded-lg border border-stone-200 bg-white p-5">
-                <h3 className="text-lg font-semibold">{copy.panels.knowledge}</h3>
-                <p className="mt-1 break-words text-sm text-stone-600">
-                  {copy.panels.knowledgeDescription}
-                </p>
-                <div className="mt-4 space-y-3">
-                  {visibleKnowledgeBase.map((item) => (
-                    <div className="rounded-lg bg-stone-50 p-3" key={item.name}>
-                      <div className="flex min-w-0 items-center justify-between gap-3">
-                        <p className="min-w-0 break-words text-sm font-semibold">{item.name}</p>
-                        <span className="shrink-0 text-sm font-semibold text-emerald-700">
-                          {item.coverage}
-                        </span>
-                      </div>
-                      <div className="mt-3 h-2 rounded-full bg-stone-200">
-                        <div
-                          className="h-2 rounded-full bg-emerald-700"
-                          style={{ width: item.coverage }}
-                        />
-                      </div>
-                      <p className="mt-2 break-words text-xs text-stone-500">
-                        {item.items} {copy.panels.checkedEntries}
-                      </p>
-                    </div>
-                  ))}
-                  {visibleKnowledgeBase.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
-                      {copy.panels.noKnowledge}
-                    </div>
-                  ) : null}
-                </div>
-              </article>
-
-              <article className="rounded-lg border border-stone-200 bg-slate-950 p-5 text-white">
-                <h3 className="text-lg font-semibold">{copy.panels.technicalNext}</h3>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {copy.panels.technicalNextItems.map((item) => (
-                    <div className="rounded-lg border border-white/10 bg-white/5 p-3" key={item}>
-                      <p className="break-words text-sm font-medium text-slate-100">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            </section>
-            </>
             ) : null}
 
             {visibleActiveSection === "calendar" ? (

@@ -61,6 +61,9 @@ jobs:
       - name: Unit and component smoke tests
         run: npm run test:unit
 
+      - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
+        run: npm run test:knowledge-center
+
       - name: Security and scope integration tests
         run: npm run test:integration
 

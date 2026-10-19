@@ -18,6 +18,7 @@ import {
   type LanguageCode,
 } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import type { KnowledgeChannel, KnowledgeSource } from "@/lib/knowledge-center/types";
 
 type BotCommandCenterProps = {
   automations: Automation[];
@@ -179,22 +180,17 @@ type BotDocumentsApiResponse = {
 };
 
 type BotEvaluationsApiResponse = {
-  runs?: BotEvaluationRun[];
+  runs?: ChannelEvaluationRun[];
   source?: string;
 };
 
 type KnowledgeApiResponse = {
-  sources?: Array<{
-    chunkCount?: number;
-    embeddedChunkCount?: number;
-    id: string;
-    itemCount?: number;
-    projectId?: string | null;
-    status: string;
-    title: string;
-  }>;
+  available: boolean;
+  sources?: KnowledgeSource[];
   source?: string;
 };
+type ChannelEvaluationRun = BotEvaluationRun & { evaluationChannel?: KnowledgeChannel };
+type BotKnowledgeSummary = Pick<KnowledgeItem, "id" | "name" | "status"> & { published: boolean };
 
 type BotSetupMutationResponse = {
   blockers?: string[];
@@ -345,23 +341,33 @@ function getNumberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function knowledgeItemFromApi(source: NonNullable<KnowledgeApiResponse["sources"]>[number]): KnowledgeItem {
-  const chunks = Math.max(1, Number(source.chunkCount ?? source.itemCount ?? source.embeddedChunkCount ?? 1));
-  const embedded = Math.max(0, Number(source.embeddedChunkCount ?? 0));
-  const normalizedStatus = source.status.trim().toLowerCase();
-  const approved =
-    embedded > 0 ||
-    ["approved", "synced", "vector_ready", "vector bereit"].includes(normalizedStatus);
-
+export function knowledgeItemFromApi(source: KnowledgeSource): BotKnowledgeSummary {
+  const published = Boolean(source.approvedVersionId);
   return {
     id: source.id,
-    workspaceId: "",
-    projectId: source.projectId ?? "",
-    name: source.title,
-    items: chunks,
-    coverage: `${Math.min(100, Math.round((embedded / chunks) * 100))}%`,
-    status: approved ? "approved" : "needs-review",
+    name: source.name,
+    published,
+    status: published && !source.draftVersionId ? "approved" : "needs-review",
   };
+}
+
+export function knowledgeItemsFromSnapshot(snapshot: KnowledgeApiResponse | null): BotKnowledgeSummary[] {
+  return snapshot?.available === true ? (snapshot.sources ?? []).map(knowledgeItemFromApi) : [];
+}
+
+/** Only saved, active customer channels can be selected; no internal grant is
+ * inferred from API/Webhook or Slack/Teams connector labels. */
+export function configuredEvaluationChannels(bot: Pick<CrmBot, "channels">): Array<{ channel: KnowledgeChannel; label: string }> {
+  const names: Record<string, KnowledgeChannel> = { webchat: "webchat", "website bot": "webchat", whatsapp: "whatsapp",
+    instagram: "instagram", "facebook messenger": "messenger", messenger: "messenger", "e-mail": "email", email: "email",
+    telefon: "telephone", telephone: "telephone", voice: "voice" };
+  const seen = new Set<KnowledgeChannel>();
+  return bot.channels.flatMap(config => {
+    const channel = names[config.channel.trim().toLowerCase()];
+    if (!config.active || !channel || seen.has(channel)) return [];
+    seen.add(channel);
+    return [{ channel, label: config.channel }];
+  });
 }
 
 function getDocumentDeliveryError(documentSend: BotActionDocumentSend) {
@@ -464,7 +470,6 @@ export function BotCommandCenter({
   callInsights,
   canManageBotSetup = true,
   conversations,
-  knowledgeItems,
   language,
   projectLabel,
   testPanel,
@@ -488,25 +493,31 @@ export function BotCommandCenter({
   const [documentUploadErrors, setDocumentUploadErrors] = useState<Record<string, string>>({});
   const [documentUploadingId, setDocumentUploadingId] = useState<string | null>(null);
   const [documentSends, setDocumentSends] = useState<BotActionDocumentSend[]>([]);
-  const [evaluationRuns, setEvaluationRuns] = useState<BotEvaluationRun[]>([]);
+  const [evaluationRuns, setEvaluationRuns] = useState<ChannelEvaluationRun[]>([]);
+  const [evaluationChannels, setEvaluationChannels] = useState<Record<string, KnowledgeChannel>>({});
   const [evaluationStatus, setEvaluationStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [evaluationRunningId, setEvaluationRunningId] = useState<string | null>(null);
   const [evaluationResult, setEvaluationResult] = useState<string | null>(null);
   const [meetingBookings, setMeetingBookings] = useState<BotActionMeetingBooking[]>([]);
   const [liveConversations, setLiveConversations] = useState<LiveBotConversation[]>([]);
   const [liveWebhookEvents, setLiveWebhookEvents] = useState<ChannelApiResponse["recentWebhookEvents"]>([]);
-  const [liveKnowledgeItems, setLiveKnowledgeItems] = useState<KnowledgeItem[]>([]);
+  const [liveKnowledgeItems, setLiveKnowledgeItems] = useState<BotKnowledgeSummary[]>([]);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<"loading" | "ready" | "disabled" | "error">("loading");
   const [autonomyControls, setAutonomyControls] = useState<ChannelApiResponse["autonomyControls"] | null>(null);
   const [policyRules, setPolicyRules] = useState<NonNullable<ChannelApiResponse["policyRules"]>>([]);
   const [liveStatus, setLiveStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showAdvancedTechnology, setShowAdvancedTechnology] = useState(false);
-  const displayedKnowledgeItems = liveKnowledgeItems.length ? liveKnowledgeItems : knowledgeItems;
+  const displayedKnowledgeItems = liveKnowledgeItems;
+  const selectedEvaluationChannel = (bot: CrmBot) => {
+    const available = configuredEvaluationChannels(bot);
+    return available.find(option => option.channel === evaluationChannels[bot.id])?.channel ?? available[0]?.channel ?? "";
+  };
   const approvalTools = tools.filter((tool) => tool.requiresHumanApproval);
   const allChannels = bots.flatMap((bot) => bot.channels.map((channel) => ({ bot, channel })));
   const connectedChannels = allChannels.filter(({ channel }) => channel.active || channel.setupStatus === "connected");
   const setupItems = bots.flatMap((bot) => bot.setupChecklist ?? []);
   const doneSetupItems = setupItems.filter((item) => item.done);
-  const approvedKnowledgeItems = displayedKnowledgeItems.filter((item) => item.status === "approved");
+  const approvedKnowledgeItems = displayedKnowledgeItems.filter((item) => item.published);
   const actionPolicies = bots.flatMap((bot) =>
     (bot.actionPolicies ?? []).map((policy) => ({
       ...policy,
@@ -528,7 +539,7 @@ export function BotCommandCenter({
   const handoffReady = bots.some((bot) => bot.channels.some((channel) => channel.handoffRules.length > 0));
   const testReady = bots.some((bot) => bot.status === "test" || bot.status === "active");
   const evaluationReady = bots.length > 0 && bots.every((bot) =>
-    evaluationRuns.some((run) => run.botId === bot.id && isEvaluationRunReady(run)),
+    evaluationRuns.some((run) => run.botId === bot.id && run.evaluationChannel === selectedEvaluationChannel(bot) && isEvaluationRunReady(run)),
   );
   const readyToPublish = Boolean(channelsReady && knowledgeReady && handoffReady && testReady && evaluationReady && !pendingApprovalCount);
   const nextRecommendedStep = pendingApprovalCount
@@ -635,9 +646,11 @@ export function BotCommandCenter({
   async function runBotEvaluation(bot: CrmBot) {
     try {
       setEvaluationResult(null);
+      const channel = selectedEvaluationChannel(bot);
+      if (!channel) throw new Error("A configured evaluation channel is required");
       setEvaluationRunningId(bot.id);
       const response = await csrfFetch("/api/bots/evaluations", {
-        body: JSON.stringify({ botId: bot.id, projectId: bot.projectId }),
+        body: JSON.stringify({ botId: bot.id, channel, projectId: bot.projectId }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
@@ -646,13 +659,13 @@ export function BotCommandCenter({
         throw new Error("Bot evaluation failed");
       }
 
-      const data = (await response.json()) as { run?: BotEvaluationRun };
+      const data = (await response.json()) as { run?: ChannelEvaluationRun };
 
       if (!data.run) {
         throw new Error("Bot evaluation missing result");
       }
 
-      setEvaluationRuns((current) => [data.run as BotEvaluationRun, ...current.filter((run) => run.id !== data.run?.id)]);
+      setEvaluationRuns((current) => [data.run as ChannelEvaluationRun, ...current.filter((run) => run.id !== data.run?.id)]);
       setEvaluationStatus("ready");
       setEvaluationResult(text.evaluationRunSaved);
     } catch {
@@ -669,6 +682,8 @@ export function BotCommandCenter({
     async function loadLiveBotState() {
       try {
         setLiveStatus("loading");
+        setKnowledgeStatus("loading");
+        setLiveKnowledgeItems([]);
         setApprovalLoadStatus("loading");
         setBotActionStatus("loading");
         const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
@@ -722,9 +737,8 @@ export function BotCommandCenter({
         setDocumentQuota(documentData.quota ?? null);
         setDocumentSends(actionData.documentSends ?? []);
         setMeetingBookings(actionData.meetingBookings ?? []);
-        if (knowledgeData?.sources?.length) {
-          setLiveKnowledgeItems(knowledgeData.sources.map(knowledgeItemFromApi));
-        }
+        setLiveKnowledgeItems(knowledgeItemsFromSnapshot(knowledgeData));
+        setKnowledgeStatus(knowledgeData?.available === true ? "ready" : knowledgeData?.available === false ? "disabled" : "error");
         setApprovalLoadStatus("ready");
         setBotActionStatus("ready");
         setLiveStatus("ready");
@@ -733,6 +747,8 @@ export function BotCommandCenter({
           setApprovalLoadStatus("error");
           setBotActionStatus("error");
           setLiveStatus("error");
+          setLiveKnowledgeItems([]);
+          setKnowledgeStatus("error");
         }
       }
     }
@@ -1505,11 +1521,11 @@ export function BotCommandCenter({
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.knowledgeSources}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{displayedKnowledgeItems.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{knowledgeStatus === "ready" ? displayedKnowledgeItems.length : "—"}</p>
               </div>
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.approvedKnowledge}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{approvedKnowledgeItems.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{knowledgeStatus === "ready" ? approvedKnowledgeItems.length : "—"}</p>
               </div>
               <div className="rounded-lg bg-stone-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{text.strictKnowledge}</p>
@@ -1524,9 +1540,6 @@ export function BotCommandCenter({
                   <div className="flex items-center justify-between gap-3 rounded-md border border-stone-200 p-3" key={item.id}>
                     <div className="min-w-0">
                       <p className="break-words text-sm font-semibold text-slate-950">{item.name}</p>
-                      <p className="mt-1 text-xs text-stone-500">
-                        {item.items} {text.chunks} · {item.coverage}
-                      </p>
                     </div>
                     <Pill tone={item.status === "approved" ? "green" : "amber"}>
                       {getBotVisibleStatusLabel(item.status, text, language)}
@@ -1534,7 +1547,9 @@ export function BotCommandCenter({
                   </div>
                 ))
               ) : (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{text.noKnowledgeSources}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{
+                  knowledgeStatus === "loading" ? text.loadingLiveData : knowledgeStatus === "error" ? text.liveDataUnavailable : knowledgeStatus === "disabled" ? text.disabled : text.noKnowledgeSources
+                }</p>
               )}
             </div>
           </article>
@@ -1881,7 +1896,9 @@ export function BotCommandCenter({
             <div className="mt-5 space-y-3">
               {bots.length ? (
                 bots.map((bot) => {
-                  const latestRun = evaluationRuns.find((run) => run.botId === bot.id);
+                  const evaluationChannel = selectedEvaluationChannel(bot);
+                  const availableChannels = configuredEvaluationChannels(bot);
+                  const latestRun = evaluationRuns.find((run) => run.botId === bot.id && run.evaluationChannel === evaluationChannel);
                   const passed = isEvaluationRunReady(latestRun);
                   const failedCases = latestRun?.cases.filter((evaluationCase) => !evaluationCase.passed) ?? [];
                   const citationCases = latestRun?.cases.filter((evaluationCase) => evaluationCase.citationsRequired) ?? [];
@@ -1909,14 +1926,25 @@ export function BotCommandCenter({
                         <div className="flex flex-wrap items-center gap-2">
                           <Pill tone={passed ? "green" : "amber"}>{passed ? text.readyToPublish : text.notReadyToPublish}</Pill>
                           {canManageBotSetup ? (
+                            <>
+                            <label className="text-xs font-semibold text-slate-700">
+                              <span className="sr-only">{bot.name} · {text.channels}</span>
+                              <select className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={evaluationChannel}
+                                disabled={!availableChannels.length || evaluationRunningId === bot.id}
+                                onChange={event => setEvaluationChannels(current => ({...current,[bot.id]:event.target.value as KnowledgeChannel}))}>
+                                {!availableChannels.length ? <option value="">{text.nextStepConnectChannels}</option> : null}
+                                {availableChannels.map(option => <option key={option.channel} value={option.channel}>{option.label}</option>)}
+                              </select>
+                            </label>
                             <button
                               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={evaluationRunningId === bot.id}
+                              disabled={!evaluationChannel || evaluationRunningId === bot.id}
                               onClick={() => void runBotEvaluation(bot)}
                               type="button"
                             >
                               {evaluationRunningId === bot.id ? text.runningEvaluation : text.runEvaluation}
                             </button>
+                            </>
                           ) : null}
                         </div>
                       </div>

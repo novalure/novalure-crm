@@ -1273,6 +1273,7 @@ export type BotEvaluationCaseResult = {
 
 export type BotEvaluationRun = {
   id: ID;
+  evaluationChannel?: string;
   workspaceId: ID;
   projectId?: ID;
   botId?: ID;

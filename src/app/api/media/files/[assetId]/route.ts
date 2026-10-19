@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
+import { resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { withCrmRead } from "@/lib/crm-command";
 import { findWorkspaceMediaAsset, MediaStoreError, readMediaAssetContent } from "@/lib/media-store";
 import { safeMediaContentDisposition } from "@/lib/media-security";
@@ -17,7 +17,7 @@ const privateHeaders = {
 };
 
 export async function GET(request: Request, context: RouteContext) {
-  const auth = await requirePermission(request, "crm:read");
+  const auth = await resolveWorkspaceScopedSession(request, { permission: "crm:read" });
   if (!auth.ok) return auth.response;
 
   const { assetId } = await context.params;

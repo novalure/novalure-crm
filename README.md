@@ -4,6 +4,8 @@ Novalure CLG is a Next.js based real estate CRM workspace for buyer, seller and 
 
 Public customer sites use the server-side [External Integration Gateway](docs/security/external-integration-gateway.md). Customer websites never receive database credentials or per-site Postgres roles.
 
+The universal [Evelyn Knowledge Center, package 2](docs/knowledge-center-package2-2026-10-19.md) extends the existing CRM sources with tenant/project permissions, private documents, version foundations and explicit assistant assignments. Migration 101 is prepared for isolated validation; it is not a production activation. Run its focused security suite with `npm run test:knowledge-center`.
+
 ## Dashboard Features
 
 The central dashboard is implemented in `src/components/dashboard-overview.tsx` and uses the existing mock CRM data from `src/lib/crm-data.ts`.

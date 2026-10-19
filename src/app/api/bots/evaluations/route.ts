@@ -1,6 +1,8 @@
 import { requirePermission } from "@/lib/auth/session";
 import { runBotGovernanceEvaluation } from "@/lib/bots/evaluation";
 import { listBotEvaluationRuns } from "@/lib/db/runtime-repositories";
+import { crmCommandErrorResponse } from "@/lib/crm-command";
+import type { KnowledgeChannel } from "@/lib/knowledge-center/types";
 
 async function readJson(request: Request) {
   try {
@@ -40,11 +42,17 @@ export async function POST(request: Request) {
 
   const body = await readJson(request);
   const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
-  const result = await runBotGovernanceEvaluation({
-    botId: getString(input.botId),
-    projectId: getString(input.projectId),
-    session: auth.session,
-  });
-
-  return Response.json(result, { status: result.persisted ? 201 : 503 });
+  const channel = getString(input.channel);
+  if (!channel || !["webchat", "whatsapp", "instagram", "messenger", "email", "internal", "voice", "telephone"].includes(channel)) {
+    return Response.json({ code: "BOT_CHANNEL_REQUIRED", error: "Choose an explicit evaluation channel" }, { status: 400 });
+  }
+  try {
+    const result = await runBotGovernanceEvaluation({
+      botId: getString(input.botId),
+      channel: channel as KnowledgeChannel,
+      projectId: getString(input.projectId),
+      session: auth.session,
+    });
+    return Response.json(result, { status: result.persisted ? 201 : 503 });
+  } catch (error) { return crmCommandErrorResponse(error); }
 }

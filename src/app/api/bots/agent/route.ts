@@ -1,4 +1,4 @@
-import { listCrmBotTools, runCrmBotTool } from "@/lib/bots/agent-tools";
+import { listCrmBotTools, requiresLivePropertyFacts, runCrmBotTool } from "@/lib/bots/agent-tools";
 import { requirePermission } from "@/lib/auth/session";
 import {
   documentApprovedFromPayload,
@@ -8,8 +8,9 @@ import {
   type BotActionName,
   type BotActionRisk,
 } from "@/lib/bots/policy";
-import { createApprovalRequest, insertBotToolCall, writeAuditLog } from "@/lib/db/runtime-repositories";
+import { createApprovalRequest, insertBotToolCall, searchPersistedKnowledge, writeAuditLog } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
+import { withCrmRead } from "@/lib/crm-command";
 
 export const maxDuration = 60;
 
@@ -106,7 +107,27 @@ export async function POST(request: Request) {
         status: "blocked",
         tool: toolName,
       }
-    : runCrmBotTool(toolName, input);
+    : toolName === "search_approved_knowledge"
+      ? {
+          tool: "search_approved_knowledge",
+          query: getString(input.query) ?? prompt,
+          reason: requiresLivePropertyFacts(getString(input.query) ?? prompt) ? "crm_live_resolver_required" : null,
+          sources: requiresLivePropertyFacts(getString(input.query) ?? prompt) ? [] : (await searchPersistedKnowledge({
+            session: auth.session,
+            botId: getString(input.botId),
+            channel: getString(input.channel),
+            query: getString(input.query) ?? prompt,
+            limit: 5,
+          })).map((match) => ({
+            title: match.title,
+            url: match.citationUrl,
+            confidence: match.score,
+            sourceId: match.sourceId,
+            versionId: match.versionId,
+            chunkId: match.chunkId,
+          })),
+        }
+      : runCrmBotTool(toolName, input);
   const requiresApproval = pendingManualApproval;
   const status = blocked ? "failed" : requiresApproval ? "pending_approval" : "completed";
   const runId = await insertBotToolCall({
@@ -136,13 +157,13 @@ export async function POST(request: Request) {
       })
     : null;
 
-  await writeAuditLog({
+  await withCrmRead(auth.session, () => writeAuditLog({
     session: auth.session,
     action: `tool.${toolName}.${status}`,
     entityType: "bot_tool_call",
     entityId: runId,
     after: { decision, input, result, approvalId },
-  });
+  }));
 
   return Response.json({
     runId: runId ?? crypto.randomUUID(),
