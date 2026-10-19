@@ -59,6 +59,12 @@ import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour"
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 import {
+  getAuthorizedStudioProjectId,
+  getStudioNavigationPreferenceKey,
+  selectStudioWebsiteEnquiries,
+  STUDIO_WORKSPACE_ID,
+} from "@/lib/studio-navigation";
+import {
   createDefaultCrmScope,
   createSelectedCrmScope,
   resolveCrmScope,
@@ -186,6 +192,7 @@ type ManagedWorkspaceOption = {
 
 type NavigationPresetId =
   | "novalureInternal"
+  | "novalureStudio"
   | "realEstateBroker"
   | "completeBrokerage"
   | "propertyDeveloper"
@@ -247,6 +254,8 @@ type NavigationEntryId =
   | "settings"
   | "slaCockpit"
   | "systemReleases"
+  | "studioWebsiteEnquiries"
+  | "studioKnowledgeAi"
   | "tasks"
   | "ticketsSupport"
   | "units"
@@ -299,6 +308,7 @@ const navigationPresetOrder: NavigationPresetId[] = [
   "novalureGrowth",
   "novalureServiceOps",
   "novalureAdmin",
+  "novalureStudio",
 ];
 
 const teamNavigationPresetIds = new Set<NavigationPresetId>([
@@ -314,6 +324,7 @@ const teamNavigationPresetIds = new Set<NavigationPresetId>([
   "novalureGrowth",
   "novalureServiceOps",
   "novalureAdmin",
+  "novalureStudio",
 ]);
 
 type NavigationPresetGroupId = "standard" | "forTeams";
@@ -334,6 +345,26 @@ function getNavigationPresetOptionGroups(allowedPresetIds: NavigationPresetId[])
 }
 
 const navigationPresets: Record<NavigationPresetId, NavigationPreset> = {
+  novalureStudio: {
+    mobilePanels: ["hotLeads", "meetings", "tasks"],
+    navigationEntries: [
+      "dashboard",
+      "studioWebsiteEnquiries",
+      "contacts",
+      "pipelines",
+      "tasks",
+      "calendar",
+      "funnels",
+      "forms",
+      "newsletter",
+      "analysis",
+      "bots",
+      "studioKnowledgeAi",
+    ],
+    startSection: "dashboard",
+    startEntry: "dashboard",
+    quickActions: ["leadInbox", "pipeline", "tasks", "meetings", "forms"],
+  },
   novalureInternal: {
     mobilePanels: ["overdueSla", "hotLeads", "meetings", "tasks"],
     navigationEntries: [
@@ -669,6 +700,8 @@ const navigationEntries: Record<NavigationEntryId, NavigationEntry> = {
   settings: { id: "settings", section: "settings" },
   slaCockpit: { id: "slaCockpit", section: "leadInbox" },
   systemReleases: { id: "systemReleases", section: "settings" },
+  studioWebsiteEnquiries: { id: "studioWebsiteEnquiries", section: "leadInbox" },
+  studioKnowledgeAi: { id: "studioKnowledgeAi", section: "knowledge" },
   tasks: { id: "tasks", section: "tasks" },
   ticketsSupport: { id: "ticketsSupport", section: "customerSuccess" },
   units: { id: "units", section: "units" },
@@ -728,6 +761,13 @@ function getDefaultNavigationPresetId(context: WorkspaceProductContext): Navigat
 }
 
 function getAllowedNavigationPresetIds(context: WorkspaceProductContext): NavigationPresetId[] {
+  const presetIds = getRoleNavigationPresetIds(context).filter((presetId) => presetId !== "novalureStudio");
+  return context.workspaceId === STUDIO_WORKSPACE_ID
+    ? [...presetIds, "novalureStudio"]
+    : presetIds;
+}
+
+function getRoleNavigationPresetIds(context: WorkspaceProductContext): NavigationPresetId[] {
   if (context.productRole === "novalureGrowth") return ["novalureGrowth"];
   if (context.productRole === "novalureServiceOps") return ["novalureServiceOps"];
   if (hasProductCapability(context.productRole, "novalure:internal")) {
@@ -1176,12 +1216,17 @@ function isNavigationPresetId(value: unknown): value is NavigationPresetId {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(navigationPresets, value);
 }
 
-function readStoredPresetId(fallback: NavigationPresetId, allowedPresetIds: NavigationPresetId[]): NavigationPresetId {
+function readStoredPresetId(
+  fallback: NavigationPresetId,
+  allowedPresetIds: NavigationPresetId[],
+  preferenceKey = navigationPresetStorageKey,
+): NavigationPresetId {
   if (typeof window === "undefined") {
     return fallback;
   }
 
-  const storedPresetId = window.localStorage.getItem(navigationPresetStorageKey);
+  const storedPresetId = window.localStorage.getItem(preferenceKey) ??
+    window.localStorage.getItem(navigationPresetStorageKey);
   return isNavigationPresetId(storedPresetId) && allowedPresetIds.includes(storedPresetId)
     ? storedPresetId
     : fallback;
@@ -1203,6 +1248,8 @@ const navigationEntryHashes: Partial<Record<NavigationEntryId, string>> = {
   sellerLeads: "seller-leads",
   settings: "settings",
   systemReleases: "system-releases",
+  studioWebsiteEnquiries: "website-enquiries",
+  studioKnowledgeAi: "studio-knowledge-ai",
   workspaces: "workspaces",
 };
 
@@ -3016,8 +3063,6 @@ export function CrmWorkspace({
     workspacePlan: workspace.plan,
   });
   const initialPresetId = getDefaultNavigationPresetId(initialProductContext);
-  const initialAllowedPresetIds = getAllowedNavigationPresetIds(initialProductContext);
-  const initialAllowedPresetKey = initialAllowedPresetIds.join("|");
   const [crmScope, setCrmScope] = useState<CrmScope>(() =>
     createDefaultCrmScope(sessionWorkspace.id),
   );
@@ -3092,6 +3137,7 @@ export function CrmWorkspace({
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
   const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
+  const [showStudioTestEnquiries, setShowStudioTestEnquiries] = useState(false);
 
   const canUseWorkspaceSwitch =
     hasProductCapability(sessionProductRole, "managed-service:operate") &&
@@ -3317,10 +3363,17 @@ export function CrmWorkspace({
     workspacePlan: workspace.plan,
   });
   const allowedPresetIds = getAllowedNavigationPresetIds(workspaceContext);
+  const allowedPresetKey = allowedPresetIds.join("|");
+  const fallbackPresetId = getFallbackNavigationPresetId(workspaceContext, allowedPresetIds);
+  const navigationPreferenceKey = getStudioNavigationPreferenceKey(
+    navigationPresetStorageKey, sessionUserId, activeWorkspace.id,
+  );
   const normalizedActivePresetId = allowedPresetIds.includes(activePresetId)
     ? activePresetId
-    : getFallbackNavigationPresetId(workspaceContext, allowedPresetIds);
+    : fallbackPresetId;
   const normalizedActivePreset = navigationPresets[normalizedActivePresetId];
+  const isStudioNavigation = normalizedActivePresetId === "novalureStudio";
+  const studioCopy = copy.studioNavigation;
   const presetOptionGroups = getNavigationPresetOptionGroups(allowedPresetIds);
   const resolvedActiveProject = crmScope.projectId
     ? allProjects.find(
@@ -3350,8 +3403,21 @@ export function CrmWorkspace({
   const sidebarToggleLabel = sidebarCollapsed
     ? copy.shell.expandNavigation
     : copy.shell.collapseNavigation;
-  const navigationLabels = copy.navigation as Record<string, string>;
+  const navigationLabels: Record<string, string> = isStudioNavigation
+    ? { ...copy.navigation, ...studioCopy.navigation }
+    : copy.navigation;
   const enabledNavigationEntryIds = normalizedActivePreset.navigationEntries.filter((entryId) => {
+    if (isStudioNavigation) {
+      // This entry is a setup plan; it loads no knowledge or bot data.
+      if (entryId === "studioKnowledgeAi") return true;
+      if (entryId === "analysis" && (
+        !hasProductCapability(workspaceContext.productRole, "analytics:read") ||
+        !isWorkspaceModuleEnabled(workspaceContext.enabledModules, "analytics")
+      )) return false;
+      if (entryId === "bots" && !hasProductCapability(workspaceContext.productRole, "bots:publish")) {
+        return false;
+      }
+    }
     if (
       restrictedAdminNavigationEntries.has(entryId) &&
       !canAccessRestrictedAdminEntry(entryId, sessionProductRole)
@@ -3378,6 +3444,11 @@ export function CrmWorkspace({
     ? activeSection
     : visibleActiveNavigationEntry.section;
   const focusedNavigationItems = profileNavigationItems;
+  const visibleQuickActions = isStudioNavigation
+    ? normalizedActivePreset.quickActions.filter((actionId) => enabledNavigationEntryIds.some(
+        (entryId) => navigationEntries[entryId].section === quickActionSections[actionId],
+      ))
+    : normalizedActivePreset.quickActions;
   const activePresetProfile = copy.navigationPresets.profiles[normalizedActivePresetId];
   const activeAreaLabel =
     navigationLabels[visibleActiveNavigationEntry.id] ??
@@ -3395,9 +3466,11 @@ export function CrmWorkspace({
   }, [activeWorkspace.id, refreshCoreData, visibleActiveSection]);
   const visibleLeads = leads.filter((lead) => isProjectInActiveScope(lead.projectId));
   const activeLeadTypes = visibleActiveNavigationEntry.leadTypes;
-  const activeLeadInboxLeads = activeLeadTypes?.length
-    ? visibleLeads.filter((lead) => activeLeadTypes.includes(getCrmLeadTypeKey(lead.type)))
-    : visibleLeads;
+  const activeLeadInboxLeads = visibleActiveNavigationEntry.id === "studioWebsiteEnquiries"
+    ? selectStudioWebsiteEnquiries(visibleLeads, showStudioTestEnquiries)
+    : activeLeadTypes?.length
+      ? visibleLeads.filter((lead) => activeLeadTypes.includes(getCrmLeadTypeKey(lead.type)))
+      : visibleLeads;
   const visibleContacts = contacts.filter((contact) => isProjectInActiveScope(contact.projectId));
   const visibleOrganizations = organizations.filter(
     (organization) =>
@@ -3658,13 +3731,25 @@ export function CrmWorkspace({
     if (scopeInitializedWorkspaceRef.current === activeWorkspace.id) return;
 
     const frame = window.requestAnimationFrame(() => {
-      const nextScope = resolveCrmScope({
+      let nextScope = resolveCrmScope({
         projects: allProjects,
         search: window.location.search,
         storage: getBrowserCrmScopeStorage(),
         userId: sessionUserId,
         workspaceId: activeWorkspace.id,
       });
+      const storedPresetId = readStoredPresetId(
+        fallbackPresetId, allowedPresetKey.split("|") as NavigationPresetId[], navigationPreferenceKey,
+      );
+      const studioProjectId = getAuthorizedStudioProjectId(activeWorkspace.id, allProjects);
+      if (storedPresetId === "novalureStudio" && nextScope.source === "default" && studioProjectId) {
+        nextScope = createSelectedCrmScope({
+          projectId: studioProjectId,
+          projects: allProjects,
+          workspaceId: activeWorkspace.id,
+        });
+        writeCrmScopePreference(getBrowserCrmScopeStorage(), sessionUserId, nextScope);
+      }
 
       scopeInitializedWorkspaceRef.current = activeWorkspace.id;
       setCrmScope(nextScope);
@@ -3679,7 +3764,7 @@ export function CrmWorkspace({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeWorkspace.id, allProjects, sessionUserId]);
+  }, [activeWorkspace.id, allProjects, allowedPresetKey, fallbackPresetId, navigationPreferenceKey, sessionUserId]);
 
   useEffect(() => {
     const syncScopeFromHistory = () => {
@@ -3703,9 +3788,9 @@ export function CrmWorkspace({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const allowedPresetIds = initialAllowedPresetKey.split("|") as NavigationPresetId[];
-      const storedPresetId = readStoredPresetId(initialPresetId, allowedPresetIds);
-      const storedPreset = navigationPresets[storedPresetId] ?? navigationPresets[initialPresetId];
+      const allowedPresetIds = allowedPresetKey.split("|") as NavigationPresetId[];
+      const storedPresetId = readStoredPresetId(fallbackPresetId, allowedPresetIds, navigationPreferenceKey);
+      const storedPreset = navigationPresets[storedPresetId] ?? navigationPresets[fallbackPresetId];
       const requestedEntryId = readInitialNavigationEntry(storedPreset);
       const nextEntryId = restrictedAdminNavigationEntries.has(requestedEntryId) &&
         !canAccessRestrictedAdminEntry(requestedEntryId, sessionProductRole)
@@ -3720,7 +3805,7 @@ export function CrmWorkspace({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [initialAllowedPresetKey, initialPresetId, sessionProductRole]);
+  }, [allowedPresetKey, fallbackPresetId, navigationPreferenceKey, sessionProductRole]);
 
   useEffect(() => {
     const syncSectionFromHash = () => {
@@ -3749,7 +3834,9 @@ export function CrmWorkspace({
 
     const frame = window.requestAnimationFrame(() => {
       setActivePresetId(normalizedActivePresetId);
-      window.localStorage.setItem(navigationPresetStorageKey, normalizedActivePresetId);
+      if (activePresetId !== "novalureStudio") {
+        window.localStorage.setItem(navigationPreferenceKey, normalizedActivePresetId);
+      }
 
       if (!normalizedActivePreset.navigationEntries.includes(activeNavigationEntryId)) {
         const nextEntryId = normalizedActivePreset.startEntry;
@@ -3761,7 +3848,7 @@ export function CrmWorkspace({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNavigationEntryId, activePresetId, normalizedActivePreset, normalizedActivePresetId]);
+  }, [activeNavigationEntryId, activePresetId, navigationPreferenceKey, normalizedActivePreset, normalizedActivePresetId]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -4037,6 +4124,7 @@ export function CrmWorkspace({
     setMobileNavigationOpen(false);
     setUnitBoardFocusScope(null);
     setPropertyFocusAssetId(undefined);
+    setShowStudioTestEnquiries(false);
 
     if (nextScope.status === "valid") {
       writeCrmScopePreference(getBrowserCrmScopeStorage(), sessionUserId, nextScope);
@@ -4049,13 +4137,20 @@ export function CrmWorkspace({
   }
 
   function handlePresetChange(nextPresetId: NavigationPresetId) {
+    if (!allowedPresetIds.includes(nextPresetId)) return;
     const nextPreset = navigationPresets[nextPresetId];
 
     setActivePresetId(nextPresetId);
+    setShowStudioTestEnquiries(false);
 
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(navigationPresetStorageKey, nextPresetId);
+      window.localStorage.setItem(navigationPreferenceKey, nextPresetId);
     }
+
+    const studioProjectId = nextPresetId === "novalureStudio"
+      ? getAuthorizedStudioProjectId(activeWorkspace.id, allProjects)
+      : null;
+    if (studioProjectId) handleProjectScopeChange(studioProjectId);
 
     handleSectionChange(nextPreset.startSection, nextPreset.startEntry);
   }
@@ -4521,7 +4616,9 @@ export function CrmWorkspace({
                   ref={pageTitleRef}
                   tabIndex={-1}
                 >
-                  {activeProject
+                  {isStudioNavigation
+                    ? activeAreaLabel
+                    : activeProject
                     ? copy.header.projectHeadline(activeProject.type)
                     : copy.header.defaultHeadline}
                 </h1>
@@ -4628,14 +4725,16 @@ export function CrmWorkspace({
                   </select>
                 </label>
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  {normalizedActivePreset.quickActions.map((actionId) => (
+                  {visibleQuickActions.map((actionId) => (
                     <button
                       className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                       key={actionId}
                       onClick={() => handleQuickAction(actionId)}
                       type="button"
                     >
-                      {copy.navigationPresets.quickActions[actionId]}
+                      {isStudioNavigation && actionId === "leadInbox"
+                        ? studioCopy.navigation.studioWebsiteEnquiries
+                        : copy.navigationPresets.quickActions[actionId]}
                     </button>
                   ))}
                 </div>
@@ -4658,6 +4757,12 @@ export function CrmWorkspace({
               workspaceName={workspaceContext.workspaceName}
             />
 
+            {isStudioNavigation && !getAuthorizedStudioProjectId(activeWorkspace.id, allProjects) ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+                {studioCopy.projectUnavailable}
+              </p>
+            ) : null}
+
             {scopeHydrated && projectScopeInvalid ? (
               <div
                 className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950"
@@ -4677,6 +4782,26 @@ export function CrmWorkspace({
               </div>
             ) : null}
 
+            {visibleActiveSection === "dashboard" && isStudioNavigation ? (
+              <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm" data-crm-studio-overview>
+                <h2 className="text-lg font-semibold text-slate-950">{studioCopy.overviewTitle}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{studioCopy.overviewDescription}</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  {[
+                    [studioCopy.navigation.studioWebsiteEnquiries, visibleLeads.filter((lead) => lead.hasStudioEnquiry && isBusinessKpiRecord(lead)).length],
+                    [studioCopy.openDeals, visibleDeals.filter((deal) => isBusinessKpiRecord(deal) && !["Gewonnen", "Verloren", "Disqualifiziert", "Abschluss"].includes(deal.stage)).length],
+                    [copy.rolePriorities.metrics.openTasks, visibleTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
+                  ].map(([label, count]) => (
+                    <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={label}>
+                      <p className="text-xs font-semibold text-stone-500">{label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-slate-950">{count}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-sm leading-6 text-stone-600">{studioCopy.marketingDescription}</p>
+              </section>
+            ) : null}
+
             {visibleActiveSection === "dashboard" ? (
               <RolePriorityPanel
                 copy={copy}
@@ -4694,16 +4819,16 @@ export function CrmWorkspace({
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}
                 language={language}
-                leads={visibleLeads}
+                leads={isStudioNavigation ? visibleLeads.filter(isBusinessKpiRecord) : visibleLeads}
                 onOpenSection={handleSectionChange}
                 panels={normalizedActivePreset.mobilePanels}
                 projects={allProjects}
-                tasks={visibleTasks}
+                tasks={isStudioNavigation ? visibleTasks.filter(isBusinessKpiRecord) : visibleTasks}
                 users={users}
               />
             ) : null}
 
-            {visibleActiveSection === "dashboard" ? (
+            {visibleActiveSection === "dashboard" && !isStudioNavigation ? (
               <DashboardOverview
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
@@ -4944,7 +5069,30 @@ export function CrmWorkspace({
             ) : null}
 
             {visibleActiveSection === "leadInbox" ? (
+              <>
+              {visibleActiveNavigationEntry.id === "studioWebsiteEnquiries" ? (
+                <section className="rounded-lg border border-stone-200 bg-white p-4" data-crm-studio-enquiry-view>
+                  <h2 className="text-lg font-semibold text-slate-950">{studioCopy.navigation.studioWebsiteEnquiries}</h2>
+                  <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={studioCopy.enquiryViewLabel}>
+                    {[false, true].map((testView) => (
+                      <button
+                        aria-pressed={showStudioTestEnquiries === testView}
+                        className={`min-h-11 rounded-md border px-4 py-2.5 text-sm font-semibold ${showStudioTestEnquiries === testView ? "border-slate-950 bg-slate-950 text-white" : "border-stone-300 bg-white text-slate-800 hover:bg-stone-100"}`}
+                        key={String(testView)}
+                        onClick={() => setShowStudioTestEnquiries(testView)}
+                        type="button"
+                      >
+                        {testView ? studioCopy.testEnquiries : studioCopy.customerEnquiries}
+                      </button>
+                    ))}
+                  </div>
+                  {showStudioTestEnquiries ? (
+                    <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">{studioCopy.testEnquiriesNotice}</p>
+                  ) : null}
+                </section>
+              ) : null}
               <LeadInbox
+                key={visibleActiveNavigationEntry.id === "studioWebsiteEnquiries" ? `studio:${activeWorkspace.id}:${activeProjectId}:${showStudioTestEnquiries}` : "lead-inbox"}
                 activeProjectId={activeProject?.id ?? null}
                 brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
                 buyerSearchProfiles={buyerSearchProfiles.filter((profile) => isProjectInActiveScope(profile.projectId))}
@@ -4955,9 +5103,11 @@ export function CrmWorkspace({
                 language={language}
                 onLeadsChanged={refreshCoreData}
                 projects={draftScopeProjects}
+                showPropertySalesWorkflow={!isStudioNavigation}
                 users={users}
                 workspaceId={activeWorkspace.id}
               />
+              </>
             ) : null}
 
             {visibleActiveSection === "bots" ? (
@@ -5127,7 +5277,30 @@ export function CrmWorkspace({
             </section>
             ) : null}
 
-            {visibleActiveSection === "knowledge" ? (
+            {visibleActiveSection === "knowledge" && isStudioNavigation ? (
+              <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm" data-crm-studio-knowledge-ai>
+                <h2 className="text-xl font-semibold text-slate-950">{studioCopy.knowledgeTitle}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{studioCopy.knowledgeDescription}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {(["analysis", "bots"] as const).filter((entryId) => enabledNavigationEntryIds.includes(entryId)).map((entryId) => (
+                    <button
+                      className="min-h-11 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100"
+                      key={entryId}
+                      onClick={() => handleNavigationChange(entryId)}
+                      type="button"
+                    >
+                      {navigationLabels[entryId]}
+                    </button>
+                  ))}
+                </div>
+                <h3 className="mt-6 text-base font-semibold text-slate-950">{studioCopy.followUpTitle}</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-stone-600">
+                  {studioCopy.followUpItems.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </section>
+            ) : null}
+
+            {visibleActiveSection === "knowledge" && !isStudioNavigation ? (
             <>
               <KnowledgeCommandCenter
                 items={visibleKnowledgeBase}

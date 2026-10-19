@@ -51,6 +51,7 @@ type LeadInboxProps = {
   language: LanguageCode;
   onLeadsChanged?: () => Promise<boolean | void> | boolean | void;
   projects: Project[];
+  showPropertySalesWorkflow?: boolean;
   users: WorkspaceUser[];
   workspaceId: string;
 };
@@ -207,6 +208,7 @@ export function LeadInbox({
   language,
   onLeadsChanged,
   projects = [],
+  showPropertySalesWorkflow = true,
   users = [],
   workspaceId,
 }: LeadInboxProps) {
@@ -838,7 +840,7 @@ export function LeadInbox({
 
   return (
     <section className="grid min-w-0 max-w-full gap-4 overflow-hidden">
-      <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={activeProjectId} onChanged={refreshAfterPropertySales} />
+      {showPropertySalesWorkflow ? <PropertySalesWorkflow key={workspaceId} workspaceId={workspaceId} projects={projects} initialProjectId={activeProjectId} onChanged={refreshAfterPropertySales} /> : null}
       <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 md:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -1082,7 +1084,7 @@ export function LeadInbox({
                   ) : null}
                 </label>
               </div>
-              {leadDraft.type === "Verkäufer" || leadDraft.type === "Käufer" ? (
+              {showPropertySalesWorkflow && (leadDraft.type === "Verkäufer" || leadDraft.type === "Käufer") ? (
                 <details className="mt-3 rounded-md border border-emerald-200 bg-white p-3">
                   <summary className="cursor-pointer text-sm font-semibold text-slate-950">{text.advancedFieldsTitle}</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1428,7 +1430,7 @@ export function LeadInbox({
                 </div>
               </div>
 
-              {selected.brokerMandate || selected.buyerSearchProfile ? (
+              {showPropertySalesWorkflow && (selected.brokerMandate || selected.buyerSearchProfile) ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                   <p className="text-sm font-semibold text-slate-950">
                     {selected.brokerMandate ? text.mandateEntityTitle : text.searchProfileEntityTitle}
@@ -1548,6 +1550,7 @@ export function LeadInbox({
               </div>
 
               <div className="grid gap-2 sm:grid-cols-3 2xl:grid-cols-1">
+                {showPropertySalesWorkflow || (selected.lead.type !== "Käufer" && selected.lead.type !== "Investor") ? (
                 <button
                   className="rounded-md bg-violet-700 px-3 py-2 text-sm font-semibold text-white disabled:bg-violet-300"
                   disabled={selected.lead.status === "Übergabe"}
@@ -1558,6 +1561,7 @@ export function LeadInbox({
                 >
                   {selected.lead.status === "Übergabe" ? copy.acceptedButton : text.accept}
                 </button>
+                ) : null}
                 <button
                   className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                   disabled={selected.lead.status === "Archiviert" && !selectedLeadHasActiveAssignee}
