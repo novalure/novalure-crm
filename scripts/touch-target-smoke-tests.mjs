@@ -17,7 +17,7 @@ test("audited icon controls and Knowledge text controls preserve accessible touc
   assert.ok((sequences.match(/grid h-11 w-11/g)?.length ?? 0) >= 4);
   // Knowledge now uses labeled text buttons sharing a 44px minimum height.
   // Rendered target geometry is covered by the browser accessibility check.
-  assert.match(knowledge, /const buttonClass\s*=\s*"min-h-11\b/);
+  assert.match(knowledge, /const buttonClass\s*=\s*"[^"\n]*\bmin-h-11\b/);
   assert.match(knowledge, /const primaryClass = `\$\{buttonClass\}/);
   assert.match(knowledge, /<button[\s\S]*?className=\{buttonClass\}/);
   assert.doesNotMatch(knowledge, /<Icon\b/);

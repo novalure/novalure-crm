@@ -1,34 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import {
-  automations,
-  botCallInsights,
-  botLeadWorkflows,
-  botLanguageRules,
-  contactRelationships,
-  contactTimeline,
-  consents,
-  conversations,
-  crmBotConversations,
-  crmBotTools,
-  customerWorkspaceAccess,
-  funnels,
-  knowledgeBase,
-  leadSequenceEvents,
-  leadSequences,
-  newsletterAutomations,
-  newsletterDeliverability,
-  newsletterSuppressions,
-  newsletterTemplates,
-  organizations,
-  sellerListings as mockSellerListings,
-  pipeline,
-  users,
-  workspace,
-} from "@/lib/crm-source";
+import { selectAuthoritativeCrmPresentation, unavailableCrmRelatedData, unavailableCrmSectionCollections } from "@/lib/crm-presentation-data";
+import { Notice as CommandNotice } from "../../design-c/components/ui";
+import { getCrmSelfServiceEntries } from "@/lib/crm-self-service-navigation";
+import { CrmCommandSearch } from "@/components/crm-command-search";
+import { EvelynCommandCenter, type EvelynCommandSection } from "@/components/evelyn-command-center";
+const {
+  automations, botCallInsights, botLeadWorkflows, botLanguageRules,
+  contactRelationships, contactTimeline, consents, conversations,
+  crmBotConversations, crmBotTools, customerWorkspaceAccess, knowledgeBase,
+  leadSequenceEvents, leadSequences, newsletterAutomations, newsletterDeliverability,
+  newsletterSuppressions, newsletterTemplates, organizations, pipeline,
+} = unavailableCrmRelatedData;
 import { BotCommandCenter } from "@/components/bot-command-center";
 import { BotLanguageTester } from "@/components/bot-language-tester";
 import { AuditLogPanel } from "@/components/admin/audit-log-panel";
@@ -56,6 +41,7 @@ import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
+import { can as hasAppPermission } from "@/lib/auth/permissions";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 import {
@@ -1097,37 +1083,12 @@ function NavigationIcon({ section }: { section: DashboardSection }) {
   }
 }
 
-function NovalureGlyph() {
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-      <path d="M6 18V6l12 12V6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
-      <path d="M6 6h4M14 18h4" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
-    </svg>
-  );
-}
-
 function CrmBrand({ compact = false }: { compact?: boolean }) {
-  if (compact) {
-    return (
-      <span data-crm-brandmark>
-        <NovalureGlyph />
-      </span>
-    );
-  }
-
-  return (
-    <span data-crm-brand>
-      <Image
-        alt="NovaLure — we create success"
-        data-crm-logo
-        height={55}
-        src="/novalure-logo.svg"
-        unoptimized
-        width={150}
-      />
-      <span data-crm-badge>CRM</span>
-    </span>
-  );
+  return <span data-crm-evelyn-brand data-compact={compact ? "true" : "false"}>
+    <span data-crm-brandmark aria-hidden="true">e<small>✳</small></span>
+    {!compact ? <span data-crm-brand>evelyn<small>AI OPERATING SYSTEM</small></span> : null}
+    <span className="sr-only">Evelyn CRM</span>
+  </span>;
 }
 
 function MenuGlyph({ open = false }: { open?: boolean }) {
@@ -1331,15 +1292,16 @@ function readInitialSection(fallbackSection: DashboardSection = "dashboard"): Da
   return sections[hash] ?? fallbackSection;
 }
 
-function readInitialNavigationEntry(preset: NavigationPreset) {
+function readInitialNavigationEntry(preset: NavigationPreset, productRole: ProductRole) {
   if (typeof window === "undefined") return preset.startEntry;
 
   const hash = window.location.hash.replace("#", "").toLowerCase();
-  const exactEntry = preset.navigationEntries.find((entryId) => navigationEntryHashes[entryId] === hash);
+  const entries = getCrmSelfServiceEntries(preset.navigationEntries, productRole);
+  const exactEntry = entries.find((entryId) => navigationEntryHashes[entryId] === hash);
   if (exactEntry) return exactEntry;
 
   const section = readInitialSection(preset.startSection);
-  return preset.navigationEntries.find((entryId) => navigationEntries[entryId].section === section) ?? preset.startEntry;
+  return entries.find((entryId) => navigationEntries[entryId].section === section) ?? preset.startEntry;
 }
 
 function parseCrmMoney(value: string) {
@@ -2309,6 +2271,8 @@ function RolePriorityPanel({
 
 function WorkspaceSetupDetails({
   activeProjects,
+  metricsAvailable,
+  unavailableLabel,
   canSwitch,
   context,
   copy,
@@ -2322,7 +2286,9 @@ function WorkspaceSetupDetails({
   units,
   workspaces,
 }: {
-  activeProjects: number;
+  activeProjects: number | string;
+  metricsAvailable: boolean;
+  unavailableLabel: string;
   canSwitch: boolean;
   context: WorkspaceProductContext;
   copy: ReturnType<typeof getDashboardCopy>;
@@ -2374,13 +2340,13 @@ function WorkspaceSetupDetails({
           workspaces={workspaces}
         />
 
-        <WorkspaceModeKpis
+        {metricsAvailable ? <WorkspaceModeKpis
           context={context}
           copy={copy}
           leads={leads}
           tasks={tasks}
           units={units}
-        />
+        /> : <p role="status">{unavailableLabel}</p>}
       </div>
     </details>
   );
@@ -2553,7 +2519,7 @@ function WorkspaceScopePanel({
   switchState,
   workspaces,
 }: {
-  activeProjects: number;
+  activeProjects: number | string;
   canSwitch: boolean;
   context: WorkspaceProductContext;
   copy: ReturnType<typeof getDashboardCopy>;
@@ -2835,7 +2801,6 @@ function InternalWorkspaceView({
   const newLeads = metricLeads.filter((lead) => lead.status === "Neu");
   const overdueTasks = metricTasks.filter((task) => task.status === "open" && task.due && task.due < today);
   const meetingsToday = scopedEventsForView.filter((event) => event.startsAt.slice(0, 10) === today);
-  const openApprovals = scopedCustomers.filter((item) => item.health === "risk" || item.status === "onboarding");
   const selectedCustomerName = selectedManagedWorkspace?.name ?? scopedCustomers[0]?.customerName ?? context.workspaceName;
   const selectedProjectName = managedActiveProject?.name ?? (selectedManagedProjectId === "all" ? labels.allProjects : projectLabel);
   const nextActions = [
@@ -2844,18 +2809,19 @@ function InternalWorkspaceView({
     ...scopedCustomers.map((customer) => customer.nextOnboardingAction),
   ].filter(Boolean).slice(0, 5);
 
+  const customerDataUnavailable = language === "de" ? "Nicht verfügbar" : "Unavailable";
   const metrics =
     kind === "onboarding"
       ? [
-            [labels.customers, scopedCustomers.length],
-            [labels.blockedSetups, scopedCustomers.filter((item) => item.health === "risk").length],
+            [labels.customers, customerDataUnavailable],
+            [labels.blockedSetups, customerDataUnavailable],
             [labels.tasks, sourceTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
             [labels.project, sourceProjects.length],
           ]
       : kind === "customerSuccess"
         ? [
-            [labels.activeCustomers, scopedCustomers.filter((item) => item.status === "active").length],
-            [labels.riskCustomers, scopedCustomers.filter((item) => item.health === "risk" || item.status === "risk").length],
+            [labels.activeCustomers, customerDataUnavailable],
+            [labels.riskCustomers, customerDataUnavailable],
             [labels.tasks, sourceTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
             [labels.pipeline, sourceDeals.filter(isBusinessKpiRecord).length],
           ]
@@ -2863,7 +2829,7 @@ function InternalWorkspaceView({
             [labels.newLeads, newLeads.length],
             [labels.overdueFollowUps, overdueTasks.length],
             [labels.todaysMeetings, meetingsToday.length],
-            [labels.openApprovals, openApprovals.length],
+            [labels.openApprovals, customerDataUnavailable],
           ];
 
   return (
@@ -2960,7 +2926,7 @@ function InternalWorkspaceView({
                   >
                     <span className="block break-words font-semibold">{workspaceItem.name}</span>
                     <span className={`mt-1 block text-sm ${workspaceItem.id === selectedManagedWorkspaceId ? "text-slate-200" : "text-stone-600"}`}>
-                      {labels.workspaceStats(workspaceItem.activeProjects ?? sourceProjects.length, workspaceItem.activeUsers ?? 0)}
+                      {typeof workspaceItem.activeProjects === "number" && typeof workspaceItem.activeUsers === "number" ? labels.workspaceStats(workspaceItem.activeProjects, workspaceItem.activeUsers) : customerDataUnavailable}
                     </span>
                   </button>
                 ))
@@ -2982,7 +2948,7 @@ function InternalWorkspaceView({
                 ))}
             {kind !== "managedService" && scopedCustomers.length === 0 ? (
               <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">
-                {screen.empty}
+                {customerDataUnavailable}
               </p>
             ) : null}
           </div>
@@ -3023,7 +2989,7 @@ function InternalWorkspaceView({
 }
 
 export function CrmWorkspace({
-  coreData,
+  coreData: suppliedCoreData,
   initialLanguage = defaultLanguage,
   sessionProductRole,
   sessionRole,
@@ -3031,6 +2997,9 @@ export function CrmWorkspace({
   sessionUserName,
   sessionWorkspace,
 }: CrmWorkspaceProps) {
+  const coreData = useMemo(() => selectAuthoritativeCrmPresentation(suppliedCoreData), [suppliedCoreData]);
+  const workspace = { ...sessionWorkspace, plan: initialLanguage === "de" ? "Nicht verfügbar" : "Unavailable", activeProjects: coreData.projects.length, activeUsers: 1 };
+  const users: WorkspaceUser[] = [{ id: sessionUserId, workspaceId: sessionWorkspace.id, name: sessionUserName, email: "", role: sessionRole, productRole: sessionProductRole, status: "active" }];
   const router = useRouter();
   useEffect(() => {
     const controller = new AbortController();
@@ -3118,7 +3087,7 @@ export function CrmWorkspace({
     calendarProvider: workspaceSetup.activeCalendarProvider,
     customerType: workspaceSetup.customerType,
     division: "REAL_ESTATE_GROWTH",
-    funnelTemplateId: funnels[0]?.id ?? "",
+    funnelTemplateId: coreData.funnels[0]?.id ?? "",
     meetingProvider:
       workspaceSetup.activeCalendarProvider === "google"
         ? "google-meet"
@@ -3133,7 +3102,7 @@ export function CrmWorkspace({
     teamStructure: workspaceSetup.teamStructure,
     type: projectTypeOptions[0]?.id ?? "real_estate_project",
   }));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [unitBoardFocusScope, setUnitBoardFocusScope] = useState<PropertyUnitBoardScope | null>(null);
   const [propertyFocusAssetId, setPropertyFocusAssetId] = useState<string | undefined>(undefined);
@@ -3149,6 +3118,7 @@ export function CrmWorkspace({
   };
   const canCreateOrEditContacts = canWriteContacts(contactAccessActor);
   const canManageContactOwners = canAssignContactOwner(contactAccessActor);
+  const canCreateProject = hasAppPermission(sessionRole, "crm:write") && hasProductCapability(sessionProductRole, "settings:manage");
 
   const refreshCoreData = useCallback(async (workspaceId = activeWorkspace.id) => {
     setCoreDataStatus("loading");
@@ -3166,7 +3136,7 @@ export function CrmWorkspace({
       const payload = (await response.json()) as { data?: CoreCrmDataResult };
 
       if (payload.data) {
-        setLiveCoreData(payload.data);
+        setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
         setCoreDataStatus("fresh");
         return true;
       } else {
@@ -3273,7 +3243,7 @@ export function CrmWorkspace({
       if (!payload.data) throw new Error("CRM data refresh failed");
 
       const nextScope = resolveCrmScope({
-        projects: payload.data.projects,
+        projects: selectAuthoritativeCrmPresentation(payload.data).projects,
         search: "",
         storage: getBrowserCrmScopeStorage(),
         userId: sessionUserId,
@@ -3281,7 +3251,7 @@ export function CrmWorkspace({
       });
 
       scopeInitializedWorkspaceRef.current = nextWorkspace.id;
-      setLiveCoreData(payload.data);
+      setLiveCoreData(selectAuthoritativeCrmPresentation(payload.data));
       setCrmScope(nextScope);
       setUnitBoardFocusScope(null);
       setPropertyFocusAssetId(undefined);
@@ -3340,7 +3310,7 @@ export function CrmWorkspace({
   const propertyUnitRecords = liveCoreData.propertyUnits;
   const propertyReservationRecords = liveCoreData.propertyReservations;
   const propertyTextRecords = liveCoreData.propertyTextBlocks ?? [];
-  const sellerListingRecords = liveCoreData.sellerListings ?? mockSellerListings;
+  const sellerListingRecords = liveCoreData.sellerListings ?? [];
   const allProjects = useMemo(
     () => projectRecords.filter((project) => project.workspaceId === activeWorkspace.id),
     [activeWorkspace.id, projectRecords],
@@ -3406,7 +3376,7 @@ export function CrmWorkspace({
   const navigationLabels: Record<string, string> = isStudioNavigation
     ? { ...copy.navigation, ...studioCopy.navigation }
     : copy.navigation;
-  const enabledNavigationEntryIds = normalizedActivePreset.navigationEntries.filter((entryId) => {
+  const enabledNavigationEntryIds = getCrmSelfServiceEntries(normalizedActivePreset.navigationEntries, sessionProductRole).filter((entryId) => {
     if (isStudioNavigation) {
       // This entry is a setup plan; it loads no knowledge or bot data.
       if (entryId === "studioKnowledgeAi") return true;
@@ -3444,16 +3414,22 @@ export function CrmWorkspace({
     ? activeSection
     : visibleActiveNavigationEntry.section;
   const focusedNavigationItems = profileNavigationItems;
-  const visibleQuickActions = isStudioNavigation
-    ? normalizedActivePreset.quickActions.filter((actionId) => enabledNavigationEntryIds.some(
-        (entryId) => navigationEntries[entryId].section === quickActionSections[actionId],
-      ))
-    : normalizedActivePreset.quickActions;
+  const visibleQuickActions = normalizedActivePreset.quickActions.filter((actionId) =>
+    actionId === "newProject" ? canCreateProject : enabledNavigationEntryIds.some(
+      (entryId) => navigationEntries[entryId].section === quickActionSections[actionId],
+    ),
+  );
   const activePresetProfile = copy.navigationPresets.profiles[normalizedActivePresetId];
   const activeAreaLabel =
     navigationLabels[visibleActiveNavigationEntry.id] ??
     navigationLabels[visibleActiveNavigationEntry.section] ??
     activePresetProfile.label;
+  const unavailableSectionCollections = unavailableCrmSectionCollections(liveCoreData, visibleActiveSection);
+  const sectionScopeUnavailable = visibleActiveSection !== "dashboard" && (!scopeHydrated || projectScopeInvalid);
+  const projectCount = scopeHydrated && !projectScopeInvalid && liveCoreData.moduleSources.projects === "database" && !liveCoreData.moduleErrors?.projects ? allProjects.length : "—";
+  const relatedSectionUnavailable = ["analysis", "dataHygiene", "communication", "sequences"].includes(visibleActiveSection);
+  const sessionOnlySectionUnavailable = activeWorkspace.id !== sessionWorkspace.id && ["forms", "customerAccess"].includes(visibleActiveSection);
+
   useEffect(() => {
     if (visibleActiveSection !== "units") {
       lastUnitsRefreshKey.current = "";
@@ -3634,6 +3610,7 @@ export function CrmWorkspace({
   }
 
   function openProjectWizard() {
+    if (!canCreateProject) return;
     setProjectNotice("");
     setProjectNoticeTone("success");
     setActionModal("project");
@@ -3791,7 +3768,7 @@ export function CrmWorkspace({
       const allowedPresetIds = allowedPresetKey.split("|") as NavigationPresetId[];
       const storedPresetId = readStoredPresetId(fallbackPresetId, allowedPresetIds, navigationPreferenceKey);
       const storedPreset = navigationPresets[storedPresetId] ?? navigationPresets[fallbackPresetId];
-      const requestedEntryId = readInitialNavigationEntry(storedPreset);
+      const requestedEntryId = readInitialNavigationEntry(storedPreset, sessionProductRole);
       const nextEntryId = restrictedAdminNavigationEntries.has(requestedEntryId) &&
         !canAccessRestrictedAdminEntry(requestedEntryId, sessionProductRole)
         ? storedPreset.startEntry
@@ -3809,7 +3786,7 @@ export function CrmWorkspace({
 
   useEffect(() => {
     const syncSectionFromHash = () => {
-      const requestedEntryId = readInitialNavigationEntry(normalizedActivePreset);
+      const requestedEntryId = readInitialNavigationEntry(normalizedActivePreset, sessionProductRole);
       const nextEntryId = restrictedAdminNavigationEntries.has(requestedEntryId) &&
         !canAccessRestrictedAdminEntry(requestedEntryId, sessionProductRole)
         ? normalizedActivePreset.startEntry
@@ -3838,7 +3815,7 @@ export function CrmWorkspace({
         window.localStorage.setItem(navigationPreferenceKey, normalizedActivePresetId);
       }
 
-      if (!normalizedActivePreset.navigationEntries.includes(activeNavigationEntryId)) {
+      if (!getCrmSelfServiceEntries(normalizedActivePreset.navigationEntries, sessionProductRole).includes(activeNavigationEntryId)) {
         const nextEntryId = normalizedActivePreset.startEntry;
         const nextSection = navigationEntries[nextEntryId].section;
         setActiveNavigationEntryId(nextEntryId);
@@ -3848,7 +3825,7 @@ export function CrmWorkspace({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeNavigationEntryId, activePresetId, navigationPreferenceKey, normalizedActivePreset, normalizedActivePresetId]);
+  }, [activeNavigationEntryId, activePresetId, navigationPreferenceKey, normalizedActivePreset, normalizedActivePresetId, sessionProductRole]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -4025,7 +4002,7 @@ export function CrmWorkspace({
     setMobileNavigationOpen(false);
     const matchingEntry =
       preferredEntryId ??
-      normalizedActivePreset.navigationEntries.find(
+      enabledNavigationEntryIds.find(
         (entryId) => navigationEntries[entryId].section === nextSection,
       );
     if (matchingEntry) {
@@ -4186,7 +4163,7 @@ export function CrmWorkspace({
   }
 
   return (
-    <main className="crm-app min-h-screen max-w-full overflow-hidden bg-[#f4f6fa] text-slate-950" lang={language}>
+    <main className="crm-app design-c min-h-screen max-w-full bg-[#f4f6fa] text-slate-950" lang={language} data-design="c" data-crm-audience={hasProductCapability(sessionProductRole, "novalure:internal") ? "internal" : "customer"}>
       <div className="mx-auto flex min-h-screen w-full min-w-0 max-w-[1500px]" data-crm-shell>
         <aside
           aria-hidden={mobileNavigationOpen ? true : undefined}
@@ -4283,12 +4260,12 @@ export function CrmWorkspace({
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                   <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{allProjects.length}</p>
+                    <p className="font-semibold">{projectCount}</p>
                     <p className="break-words text-xs text-stone-500">{copy.sidebar.projects}</p>
                   </div>
                   <div className="rounded-md bg-white p-3">
-                    <p className="font-semibold">{users.length}</p>
-                    <p className="break-words text-xs text-stone-500">{copy.sidebar.users}</p>
+                    <p className="font-semibold">{sessionUserName}</p>
+                    <p className="break-words text-xs text-stone-500">{sessionProductRole}</p>
                   </div>
                 </div>
               </div>
@@ -4328,7 +4305,7 @@ export function CrmWorkspace({
                             : "bg-white text-stone-700"
                         }`}
                       >
-                        {allProjects.length}
+                        {projectCount}
                       </span>
                     </span>
                   </button>
@@ -4574,6 +4551,7 @@ export function CrmWorkspace({
                       </button>
                       <button
                         className="min-h-11 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
+                        disabled={!canCreateProject}
                         onClick={() => {
                           setMobileNavigationOpen(false);
                           openProjectWizard();
@@ -4616,14 +4594,12 @@ export function CrmWorkspace({
                   ref={pageTitleRef}
                   tabIndex={-1}
                 >
-                  {isStudioNavigation
-                    ? activeAreaLabel
-                    : activeProject
-                    ? copy.header.projectHeadline(activeProject.type)
-                    : copy.header.defaultHeadline}
+                  {activeAreaLabel}
                 </h1>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:justify-end" data-crm-header-actions>
+                <CrmCommandSearch key={`${activeWorkspace.id}-${activeProjectId}`} language={language} entries={focusedNavigationItems.map(item => ({ id: item.id, label: item.label, section: item.section }))} contacts={visibleContacts} leads={visibleLeads} projects={allProjects.filter(project => isProjectInActiveScope(project.id))} onNavigate={entry => handleNavigationChange(entry as NavigationEntryId)} />
+                <span data-crm-current-user>{sessionUserName}<small>{sessionProductRole}</small></span>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-stone-600">
                   {copy.language.systemLabel}
                   <select
@@ -4663,6 +4639,7 @@ export function CrmWorkspace({
                 <button
                   className="min-h-12 min-w-32 rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-semibold leading-5 text-white hover:bg-slate-800"
                   onClick={openProjectWizard}
+                  disabled={!canCreateProject}
                   type="button"
                 >
                   {copy.header.newProjectButton}
@@ -4730,6 +4707,7 @@ export function CrmWorkspace({
                       className="max-w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-stone-100"
                       key={actionId}
                       onClick={() => handleQuickAction(actionId)}
+                      disabled={actionId === "newProject" && !canCreateProject}
                       type="button"
                     >
                       {isStudioNavigation && actionId === "leadInbox"
@@ -4782,27 +4760,41 @@ export function CrmWorkspace({
               </div>
             ) : null}
 
-            {visibleActiveSection === "dashboard" && isStudioNavigation ? (
-              <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm" data-crm-studio-overview>
-                <h2 className="text-lg font-semibold text-slate-950">{studioCopy.overviewTitle}</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">{studioCopy.overviewDescription}</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  {[
-                    [studioCopy.navigation.studioWebsiteEnquiries, visibleLeads.filter((lead) => lead.hasStudioEnquiry && isBusinessKpiRecord(lead)).length],
-                    [studioCopy.openDeals, visibleDeals.filter((deal) => isBusinessKpiRecord(deal) && !["Gewonnen", "Verloren", "Disqualifiziert", "Abschluss"].includes(deal.stage)).length],
-                    [copy.rolePriorities.metrics.openTasks, visibleTasks.filter((task) => task.status === "open" && isBusinessKpiRecord(task)).length],
-                  ].map(([label, count]) => (
-                    <div className="rounded-md border border-stone-200 bg-stone-50 p-4" key={label}>
-                      <p className="text-xs font-semibold text-stone-500">{label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-slate-950">{count}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-4 text-sm leading-6 text-stone-600">{studioCopy.marketingDescription}</p>
+            {unavailableSectionCollections.length || sectionScopeUnavailable || relatedSectionUnavailable || sessionOnlySectionUnavailable ? (
+              <section className="dc-card rounded-xl border border-stone-200 bg-white" data-crm-source-unavailable role="status">
+                <h2>{language === "de" ? "Daten für diesen Bereich nicht verfügbar" : "Data for this section is unavailable"}</h2>
+                <p>{sessionOnlySectionUnavailable
+                  ? language === "de" ? "Dieser Bereich ist derzeit nur für den angemeldeten Workspace verfügbar. Melden Sie sich für die Bearbeitung direkt im gewünschten Workspace an." : "This section currently supports the signed-in workspace. Sign in directly to the desired workspace to manage it."
+                  : relatedSectionUnavailable
+                  ? language === "de" ? "Die benötigten Kommunikations-, Einwilligungs- oder Auswertungsdaten sind hier noch nicht angebunden. Ihre Kontakte, Anfragen und Aufgaben bleiben in den jeweiligen Bereichen erreichbar." : "The required communication, consent or reporting data is not connected here yet. Your contacts, enquiries and tasks remain available in their respective sections."
+                  : language === "de" ? "Die Datenquelle oder der gewählte Projektbereich konnte nicht zuverlässig geladen werden. Bitte versuchen Sie es erneut." : "The data source or selected project scope could not be loaded reliably. Please try again."}</p>
+                <button type="button" className="min-h-12 rounded-md border border-stone-300 bg-white px-4 py-2" onClick={() => void refreshCoreData()} disabled={coreDataStatus === "loading"}>{copy.header.refreshButton}</button>
               </section>
+            ) : <>
+            {visibleActiveSection === "dashboard" ? (
+              <EvelynCommandCenter
+                language={language}
+                userName={sessionUserName}
+                workspaceName={activeWorkspace.name}
+                projectLabel={projectScopeLabel}
+                leads={visibleLeads}
+                tasks={visibleTasks}
+                calendarEvents={visibleCalendarEvents}
+                projects={allProjects.filter(project => isProjectInActiveScope(project.id))}
+                moduleSources={liveCoreData.moduleSources}
+                moduleErrors={liveCoreData.moduleErrors}
+                collectionCompleteness={liveCoreData.collectionCompleteness}
+                scopeStatus={!scopeHydrated ? "loading" : projectScopeInvalid ? "invalid" : "ready"}
+                allowedSections={focusedNavigationItems.map(item => item.section).filter((section): section is EvelynCommandSection => ["leadInbox", "tasks", "calendar", "projects", "contacts", "pipelines", "knowledge", "bots", "customerAccess"].includes(section))}
+                onOpenSection={handleSectionChange}
+              />
             ) : null}
 
-            {visibleActiveSection === "dashboard" ? (
+            {visibleActiveSection !== "dashboard" && liveCoreData.source !== "database" ? (
+              <CommandNotice tone="warning">{language === "de" ? "CRM-Daten derzeit nicht verfügbar. Beispieldaten werden nicht als Geschäftsdaten angezeigt." : "CRM data is unavailable. Example records are not displayed as business data."}</CommandNotice>
+            ) : null}
+
+            {visibleActiveSection === "dashboard" && scopeHydrated && !projectScopeInvalid && ["leads", "tasks", "deals", "calendarEvents"].every(key => liveCoreData.moduleSources[key as keyof typeof liveCoreData.moduleSources] === "database" && !liveCoreData.moduleErrors?.[key as keyof typeof liveCoreData.moduleSources]) ? (
               <RolePriorityPanel
                 copy={copy}
                 deals={visibleDeals}
@@ -4814,7 +4806,7 @@ export function CrmWorkspace({
               />
             ) : null}
 
-            {visibleActiveSection === "dashboard" ? (
+            {visibleActiveSection === "dashboard" && scopeHydrated && !projectScopeInvalid && ["leads", "tasks", "calendarEvents"].every(key => liveCoreData.moduleSources[key as keyof typeof liveCoreData.moduleSources] === "database" && !liveCoreData.moduleErrors?.[key as keyof typeof liveCoreData.moduleSources]) ? (
               <MobileDailyWork
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}
@@ -4828,7 +4820,7 @@ export function CrmWorkspace({
               />
             ) : null}
 
-            {visibleActiveSection === "dashboard" && !isStudioNavigation ? (
+            {visibleActiveSection === "dashboard" && scopeHydrated && !projectScopeInvalid && !isStudioNavigation && !liveCoreData.collectionCompleteness && ["contacts", "leads", "tasks", "deals", "calendarEvents", "projects", "funnels", "sellerListings"].every(key => liveCoreData.moduleSources[key as keyof typeof liveCoreData.moduleSources] === "database" && !liveCoreData.moduleErrors?.[key as keyof typeof liveCoreData.moduleSources]) ? (
               <DashboardOverview
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
@@ -4977,6 +4969,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "customerAccess" ? (
               <CustomerAccessCockpit
+                key={activeWorkspace.id}
                 activeProjectId={activeProjectId}
                 customerAccess={visibleCustomerWorkspaceAccess}
                 language={language}
@@ -5092,6 +5085,7 @@ export function CrmWorkspace({
                 </section>
               ) : null}
               <LeadInbox
+                relatedDataAvailable={false}
                 key={visibleActiveNavigationEntry.id === "studioWebsiteEnquiries" ? `studio:${activeWorkspace.id}:${activeProjectId}:${showStudioTestEnquiries}` : "lead-inbox"}
                 activeProjectId={activeProject?.id ?? null}
                 brokerMandates={brokerMandates.filter((mandate) => isProjectInActiveScope(mandate.projectId))}
@@ -5114,6 +5108,7 @@ export function CrmWorkspace({
             <BotCommandCenter
               key={activeWorkspace.id}
               workspaceId={activeWorkspace.id}
+              sessionWorkspaceId={sessionWorkspace.id}
               automations={visibleAutomations}
               bots={visibleCrmBots}
               callInsights={visibleBotCallInsights}
@@ -5215,7 +5210,7 @@ export function CrmWorkspace({
             {visibleActiveSection === "dailyQueue" ? (
               <DailyQueueBoard
                 contacts={visibleContacts}
-                dailyQueue={liveCoreData.dailyQueue}
+                dailyQueue={!scopeHydrated || projectScopeInvalid || crmScope.projectId ? undefined : liveCoreData.dailyQueue}
                 events={visibleCalendarEvents}
                 language={language}
                 leads={visibleLeads}
@@ -5251,6 +5246,7 @@ export function CrmWorkspace({
                   activeProjectId={activeProject?.id ?? null}
                   canAssignOwner={canManageContactOwners}
                   canWriteContacts={canCreateOrEditContacts}
+                  relatedDataAvailable={false}
                   consents={visibleConsents}
                   contacts={visibleContacts}
                   currentUserId={sessionUserId}
@@ -5292,6 +5288,9 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "calendar" ? (
               <CalendarCommandCenter
+                key={activeWorkspace.id}
+                workspaceId={activeWorkspace.id}
+                sessionWorkspaceId={sessionWorkspace.id}
                 activeProjectId={activeProject?.id ?? null}
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}
@@ -5341,6 +5340,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "newsletter" ? (
               <NewsletterCommandCenter
+                relatedDataAvailable={false}
                 automations={visibleNewsletterAutomations}
                 campaigns={visibleNewsletterCampaigns}
                 consents={visibleConsents}
@@ -5372,8 +5372,12 @@ export function CrmWorkspace({
               />
             ) : null}
 
-            <WorkspaceSetupDetails
-              activeProjects={allProjects.length}
+            </>}
+
+            {hasProductCapability(sessionProductRole, "settings:manage") || canUseWorkspaceSwitch ? <WorkspaceSetupDetails
+              activeProjects={projectCount}
+              metricsAvailable={scopeHydrated && !projectScopeInvalid && !liveCoreData.collectionCompleteness && ["leads", "tasks", "propertyUnits"].every(key => liveCoreData.moduleSources[key as keyof typeof liveCoreData.moduleSources] === "database" && !liveCoreData.moduleErrors?.[key as keyof typeof liveCoreData.moduleSources])}
+              unavailableLabel={language === "de" ? "Diese Auswertung ist derzeit nicht verfügbar." : "This report is currently unavailable."}
               canSwitch={canUseWorkspaceSwitch}
               context={workspaceContext}
               copy={copy}
@@ -5388,7 +5392,7 @@ export function CrmWorkspace({
                 (unit) => isProjectInActiveScope(unit.projectId),
               )}
               workspaces={availableWorkspaces}
-            />
+            /> : null}
           </div>
         </section>
       </div>
@@ -5689,7 +5693,7 @@ export function CrmWorkspace({
                     }
                     value={projectDraft.funnelTemplateId}
                   >
-                    {funnels.map((funnel) => (
+                    {funnelRecords.map((funnel) => (
                       <option key={funnel.id} value={funnel.id}>
                         {funnel.name}
                       </option>

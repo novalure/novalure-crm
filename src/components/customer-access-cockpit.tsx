@@ -65,6 +65,15 @@ type InviteDraft = {
 };
 
 type SaveState = "idle" | "loading" | "saved" | "error";
+type LoadState = "loading" | "ready" | "error";
+
+/** The legacy API may return fixture-backed fallback data after a read failure. */
+export function isPersistedCustomerAccessPayload(value: unknown): value is CustomerAccessCockpitPayload {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return candidate.source === "database" &&
+    ["audits", "customerAccess", "grants", "projects", "users"].every((key) => Array.isArray(candidate[key]));
+}
 
 const accessLevels: CustomerAccessLevel[] = ["viewer", "editor", "admin"];
 const grantStatuses: CustomerAccessGrantStatus[] = ["active", "invited", "suspended"];
@@ -189,7 +198,11 @@ function getCustomerPriority(record: CustomerWorkspaceAccess) {
   return priority;
 }
 
-export function CustomerAccessCockpit({
+export function CustomerAccessCockpit(props: CustomerAccessCockpitProps) {
+  return <PersistedCustomerAccessCockpit key={props.activeProjectId ?? "all"} {...props} />;
+}
+
+function PersistedCustomerAccessCockpit({
   activeProjectId = "all",
   customerAccess,
   language,
@@ -211,9 +224,15 @@ export function CustomerAccessCockpit({
   const [inviteDraft, setInviteDraft] = useState<InviteDraft>(() => getInviteDefaults());
   const [inviteNotice, setInviteNotice] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [loadState, setLoadState] = useState<LoadState>("loading");
 
   const applyPayload = useCallback((nextPayload: CustomerAccessCockpitPayload) => {
+    if (!isPersistedCustomerAccessPayload(nextPayload)) {
+      setLoadState("error");
+      throw new Error("customer_access_source_unavailable");
+    }
     setPayload(nextPayload);
+    setLoadState("ready");
     setCustomerDrafts(getCustomerDrafts(nextPayload.customerAccess));
     setGrantDraft((current) => ({
       ...getGrantDefaults(nextPayload, activeProjectId),
@@ -241,19 +260,20 @@ export function CustomerAccessCockpit({
   }, [activeProjectId, setCustomerDrafts, setGrantDraft, setPayload, setUserDraft]);
 
   const loadCockpit = useCallback(async () => {
+    setLoadState("loading");
     const params = new URLSearchParams();
     if (activeProjectId && activeProjectId !== "all") params.set("projectId", activeProjectId);
 
     try {
       const response = await csrfFetch(`/api/crm/customer-access?${params.toString()}`, { cache: "no-store" });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("customer_access_load_failed");
 
       const nextPayload = (await response.json()) as CustomerAccessCockpitPayload;
       applyPayload(nextPayload);
     } catch {
-      applyPayload(initialPayload);
+      setLoadState("error");
     }
-  }, [activeProjectId, applyPayload, initialPayload]);
+  }, [activeProjectId, applyPayload]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -315,6 +335,7 @@ export function CustomerAccessCockpit({
   }, [payload.customerAccess, payload.grants]);
 
   async function persist(input: Record<string, unknown>) {
+    if (loadState !== "ready") return;
     setSaveState("loading");
 
     const params = new URLSearchParams();
@@ -352,6 +373,7 @@ export function CustomerAccessCockpit({
   }
 
   async function runRiskAutomation() {
+    if (loadState !== "ready") return;
     setSaveState("loading");
 
     try {
@@ -407,6 +429,18 @@ export function CustomerAccessCockpit({
       : saveState === "error"
         ? copy.notices.saveError
         : "";
+
+  if (loadState !== "ready") {
+    const unavailableText = language === "de"
+      ? "Die Kundendaten konnten nicht zuverlässig geladen werden. Es werden keine Beispieldaten oder unbekannten Nullbestände angezeigt."
+      : "Customer data could not be loaded reliably. No example data or unknown zero totals are displayed.";
+    const loadingText = language === "de" ? "Kundendaten werden geladen …" : "Loading customer data …";
+    return <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm" data-customer-access-state={loadState}>
+      <h2 className="text-2xl font-semibold text-slate-950">{copy.title}</h2>
+      <p className="mt-3 text-sm text-stone-600" role={loadState === "error" ? "alert" : "status"}>{loadState === "loading" ? loadingText : unavailableText}</p>
+      {loadState === "error" ? <button className="mt-4 rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-stone-100" onClick={() => void loadCockpit()} type="button">{copy.actions.refresh}</button> : null}
+    </section>;
+  }
 
   return (
     <section className="grid gap-5">

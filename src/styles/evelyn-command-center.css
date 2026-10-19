@@ -1,0 +1,43 @@
+/* Presentation only; all CRM authorization, queries and workflows stay upstream. */
+.crm-app.design-c .ec-command-center { margin-bottom: 2rem; min-width: 0; }
+.crm-app.design-c .ec-command-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 24px; align-items: start; }
+.crm-app.design-c .ec-command-main, .crm-app.design-c .ec-command-context { display: grid; align-content: start; gap: 24px; min-width: 0; }
+.crm-app.design-c .ec-intelligence { --dc-focus: var(--dc-rail-indicator); position: relative; isolation: isolate; overflow: hidden; padding: 30px; background: var(--dc-intelligence); color: var(--dc-intelligence-text); border: 1px solid var(--dc-intelligence-border); border-radius: var(--dc-radius-lg); }
+.crm-app.design-c .ec-intelligence::after { content: ""; position: absolute; z-index: -1; pointer-events: none; width: 310px; height: 310px; top: -155px; right: -180px; border: 1px solid var(--dc-intelligence-ring); box-shadow: 0 0 0 45px var(--dc-intelligence-ring-soft), 0 0 0 90px var(--dc-intelligence-ring-faint); border-radius: 50%; }
+.crm-app.design-c .ec-intelligence-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.crm-app.design-c .ec-orb { display: grid; place-items: center; height: 46px; width: 46px; flex: 0 0 auto; border-radius: 50%; color: var(--dc-intelligence-orb); background: var(--dc-intelligence-soft); border: 1px solid var(--dc-intelligence-border); }
+.crm-app.design-c .ec-intelligence-head > div { display: flex; flex: 1; flex-direction: column; min-width: 120px; gap: 2px; }
+.crm-app.design-c .ec-intelligence-head strong { color: var(--dc-intelligence-text); font-size: 17px; font-weight: 550; }
+.crm-app.design-c .ec-intelligence-head > div > span { color: var(--dc-intelligence-muted); font-size: 12px; }
+.crm-app.design-c .ec-intelligence h2 { margin: 26px 0 18px; font-size: clamp(1.5rem, 2.7vw, 2rem); font-weight: 550; line-height: 1.35; letter-spacing: -0.04em; color: var(--dc-intelligence-text); overflow-wrap: anywhere; }
+.crm-app.design-c .ec-scope { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 0 0 16px; font-size: 12px; color: var(--dc-intelligence-muted); }
+.crm-app.design-c .ec-scope strong { font-weight: 550; color: var(--dc-intelligence-text); }
+.crm-app.design-c .ec-summary { color: var(--dc-intelligence-text); font-size: 14px; line-height: 1.7; margin: 0 0 18px; }
+.crm-app.design-c .ec-intelligence-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.crm-app.design-c .ec-intelligence .dc-button[data-variant="secondary"] { background: var(--dc-intelligence-soft); color: var(--dc-intelligence-text); box-shadow: inset 0 0 0 1px var(--dc-intelligence-border); }
+.crm-app.design-c .ec-intelligence .dc-button[data-variant="secondary"]:hover:not(:disabled) { background: var(--dc-intelligence); color: var(--dc-intelligence-text); box-shadow: inset 0 0 0 1px var(--dc-rail-indicator); }
+.crm-app.design-c .ec-intelligence > small { display: block; color: var(--dc-intelligence-muted); font-size: 11px; line-height: 1.6; }
+.crm-app.design-c .ec-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; min-width: 0; }
+.crm-app.design-c .ec-metric-grid > * { min-width: 0; }
+.crm-app.design-c .ec-metric-grid .dc-metric strong { font-size: clamp(1.35rem, 2vw, 1.8rem); overflow-wrap: anywhere; }
+.crm-app.design-c .ec-metric-grid .dc-metric p { line-height: 1.65; }
+.crm-app.design-c .ec-metric-unavailable { display: block; color: var(--dc-muted); font-size: 14px; line-height: 1.5; letter-spacing: 0; font-weight: 500; }
+.crm-app.design-c .ec-actions-card > p, .crm-app.design-c .ec-context-description, .crm-app.design-c .ec-context-empty, .crm-app.design-c .ec-service-card > p { margin: 0 0 16px; color: var(--dc-muted); font-size: 12px; line-height: 1.7; }
+.crm-app.design-c .ec-section-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.crm-app.design-c .ec-section-actions > .dc-button { justify-content: space-between; text-align: left; white-space: normal; }
+.crm-app.design-c .ec-record-list, .crm-app.design-c .ec-appointment-list { list-style: none; margin: 0; padding: 0; }
+.crm-app.design-c .ec-record-list > li { display: flex; align-items: start; gap: 9px; padding: 15px 0; border-top: 1px solid var(--dc-line); }
+.crm-app.design-c .ec-record-icon { display: grid; place-items: center; flex: 0 0 auto; height: 32px; width: 32px; background: var(--dc-accent-soft); color: var(--dc-accent-text); border-radius: var(--dc-radius-sm); }
+.crm-app.design-c .ec-record-list > li > div { flex: 1; min-width: 0; }
+.crm-app.design-c .ec-record-list > li > div > span { color: var(--dc-muted); font-size: 10px; }
+.crm-app.design-c .ec-record-list strong, .crm-app.design-c .ec-appointment-list strong { display: block; color: var(--dc-text); font-size: 12px; font-weight: 550; line-height: 1.6; overflow-wrap: anywhere; }
+.crm-app.design-c .ec-record-list time, .crm-app.design-c .ec-appointment-list time { display: block; margin-top: 4px; color: var(--dc-muted); font-size: 11px; line-height: 1.5; }
+.crm-app.design-c .ec-record-list > li > .dc-button { flex: 0 0 auto; padding: 0; min-width: 44px; }
+.crm-app.design-c .ec-appointment-list > li { display: flex; gap: 10px; padding: 14px 0; border-top: 1px solid var(--dc-line); }
+.crm-app.design-c .ec-appointment-list > li > svg { margin-top: 3px; color: var(--dc-accent-text); }
+.crm-app.design-c .ec-service-card .dc-badge { white-space: normal; }
+.crm-app.design-c .ec-service-card > p { margin-top: 14px; }
+@media (max-width: 1250px) { .crm-app.design-c .ec-command-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; } .crm-app.design-c .ec-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .crm-app.design-c .ec-command-layout { grid-template-columns: minmax(0, 1fr); } .crm-app.design-c .ec-command-context { grid-template-columns: repeat(2, minmax(0, 1fr)); } .crm-app.design-c .ec-service-card { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .crm-app.design-c .ec-intelligence { padding: 22px 20px; } .crm-app.design-c .ec-command-context, .crm-app.design-c .ec-section-actions { grid-template-columns: minmax(0, 1fr); } .crm-app.design-c .ec-service-card { grid-column: auto; } .crm-app.design-c .ec-intelligence-actions > .dc-button { width: 100%; justify-content: space-between; white-space: normal; } }
+@media (max-width: 390px) { .crm-app.design-c .ec-metric-grid { grid-template-columns: minmax(0, 1fr); } }

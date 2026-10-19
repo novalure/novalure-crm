@@ -63,7 +63,7 @@ test("responsive premium shell prevents body overflow and exposes a real mobile 
   const globals = readText("src/app/globals.css");
   const theme = readText("src/styles/crm-theme.css");
 
-  assert.match(workspace, /<main className="crm-app min-h-screen max-w-full overflow-hidden/);
+  assert.match(workspace, /<main className="crm-app design-c min-h-screen max-w-full/);
   assert.match(workspace, /data-crm-shell/);
   assert.match(workspace, /data-crm-mobile-trigger/);
   assert.match(workspace, /data-crm-mobile-drawer/);

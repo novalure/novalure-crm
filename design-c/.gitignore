@@ -1,0 +1,7 @@
+.next/
+out/
+verification/*.png
+verification/*.zip
+verification/browser-results.json
+tsconfig.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,31 @@
+{
+  "selection": "C – Evelyn AI Command Center",
+  "page": "https://chatgpt.com/space/page_c4e8b4f5bddc81919c228c97c0f8ae80",
+  "page_html_sha256": "c3e29880422ff39dd58c4ecd6d332381ca0445976be98fcbcec3fea0b5db6e27",
+  "source_repository": "https://github.com/novalure/novalure-crm",
+  "source_revision": "02f90cae564fbff6f47ad186c7baeddac5196e36",
+  "source_files": [
+    "design-concepts/app/globals.css",
+    "design-concepts/components/command.tsx",
+    "design-concepts/components/ui.tsx"
+  ],
+  "implementation_baseline": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+  "observed_production_deployment": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+  "observed_production_state": "READY",
+  "observation_date": "2026-10-19",
+  "source_palette": {
+    "canvas": "#f7f8fc",
+    "surface": "#ffffff",
+    "text": "#252c40",
+    "accent": "#666ad1",
+    "accent_soft": "#eff0fc",
+    "line": "#e8eaf1",
+    "muted": "#777e91",
+    "rail": "#171d30",
+    "intelligence": "#242a42"
+  },
+  "accessibility_adjustments": "Muted text, field borders and semantic foreground colors adjusted for contrast; see styles/tokens.css.",
+  "live_data_connected": false,
+  "production_changed": false,
+  "source_css_sha256": "2f20dcd89f66c471e4ccd32ad634ea47c959b276b27e65a138d8164f53027a2f"
+}

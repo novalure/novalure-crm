@@ -60,7 +60,7 @@
     "qa:lead-idempotency": "node scripts/qa-lead-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
     "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs",
-    "test:sales": "node --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts",
+    "test:sales": "node --conditions=react-server --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts",
     "qa:sales:server": "node scripts/qa-sales-browser-server.mjs",
     "qa:sales:browser": "node scripts/qa-sales-browser.mjs",
     "qa:sales:e2e": "node scripts/qa-sales-e2e.mjs",
@@ -82,7 +82,15 @@
     "test:u1-c05:successor": "node --test scripts/u1-c05-successor-mount-tests.mjs",
     "test:studio-enquiry:production": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-production-tests.mjs",
     "test:knowledge-center": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-document-extraction-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-timeout-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts",
-    "qa:knowledge:browser": "node scripts/qa-knowledge-browser.mjs"
+    "qa:knowledge:browser": "node scripts/qa-knowledge-browser.mjs",
+    "design:c:dev": "next dev design-c --hostname 127.0.0.1 --port 3190",
+    "design:c:typecheck": "tsc -p design-c/tsconfig.json --noEmit",
+    "design:c:build": "next build design-c --webpack",
+    "design:c:preview": "node design-c/scripts/serve.mjs",
+    "design:c:browser": "node design-c/scripts/verify-browser.mjs",
+    "test:design-c-integration": "node --conditions=react-server --import tsx --test scripts/design-c-integration-tests.ts && node --import tsx --test scripts/customer-access-presentation-tests.ts scripts/form-command-center-source-tests.mjs scripts/newsletter-source-availability-tests.tsx scripts/lead-inbox-presentation-tests.ts",
+    "qa:design-c-integration": "node scripts/qa-design-c-integration.mjs",
+    "test:crm-operational-readers": "node --conditions=react-server --import tsx --test scripts/crm-operational-read-tests.ts && node --import tsx --test scripts/calendar-oauth-source-tests.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
