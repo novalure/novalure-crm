@@ -1,0 +1,20 @@
+Evidence copied from the completed tool output for exec session 66968.
+This file contains the exact command and final stdout summary, not the full raw test log.
+No tests were rerun to create this evidence file.
+
+Working directory: /workspace/novalure-crm
+
+Exact command:
+npx eslint src/lib/knowledge-center/repository.ts src/lib/knowledge-center/types.ts scripts/knowledge-center-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-api-tests.ts scripts/knowledge-document-pipeline-tests.ts --max-warnings=0 && LD_LIBRARY_PATH=/workspace/scratch/libicu60/usr/lib/x86_64-linux-gnu node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-center-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-api-tests.ts
+
+Final stdout summary:
+ℹ tests 54
+ℹ suites 0
+ℹ pass 54
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 104173.26466
+
+Process exit code: 0

@@ -30,6 +30,8 @@ export type TenantPool = Readonly<{
 export type TenantTransactionOptions = Readonly<{
   /** A transaction-capable pool override for isolated tests. */
   pool?: TenantPool;
+  /** Optional server-controlled statement/lock budget; cleared with the transaction. */
+  statementTimeoutMs?: number;
 }>;
 
 const uuidPattern =
@@ -143,6 +145,19 @@ async function assertSafeTenantDatabaseRole(client: PoolClient) {
   if (checked.rows[0]?.safe !== true) throw new Error("Tenant database role is unsafe: a non-owner, non-privileged tenant runtime role is required");
 }
 
+function assertStatementBudget(options: TenantTransactionOptions) {
+  if (options.statementTimeoutMs !== undefined &&
+    (!Number.isSafeInteger(options.statementTimeoutMs) || options.statementTimeoutMs < 100 || options.statementTimeoutMs > 30_000)) {
+    throw new Error("Tenant statement timeout must be an integer between 100 and 30000 milliseconds");
+  }
+}
+
+async function setStatementBudget(client: PoolClient, options: TenantTransactionOptions) {
+  if (options.statementTimeoutMs !== undefined) {
+    await client.query("select set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [String(options.statementTimeoutMs)]);
+  }
+}
+
 /**
  * Runs every callback query on one checked-out connection and one transaction.
  * PostgreSQL transaction-local settings are cleared by COMMIT/ROLLBACK before
@@ -154,6 +169,7 @@ export async function withTenantTransaction<Result>(
   options: TenantTransactionOptions = {},
 ) {
   assertTenantScope(scope);
+  assertStatementBudget(options);
   const pool = options.pool ?? await getTenantPool();
   const client = await pool.connect();
   let active = false;
@@ -202,6 +218,7 @@ export async function withTenantTransaction<Result>(
   try {
     await assertSafeTenantDatabaseRole(client);
     await client.query("begin");
+    await setStatementBudget(client, options);
     await setAndVerifyTenantContext(client, scope);
     active = true;
     const result = await callback(transaction);
@@ -246,6 +263,7 @@ export async function queryAuthenticationRows<Row extends QueryResultRow = Query
   query: string, params: readonly unknown[] = [], options: TenantTransactionOptions = {},
 ): Promise<Row[]> {
   assertTenantStatement(query);
+  assertStatementBudget(options);
   const pool = options.pool ?? await getTenantPool();
   const client = await pool.connect();
   let begun = false;
@@ -253,6 +271,7 @@ export async function queryAuthenticationRows<Row extends QueryResultRow = Query
   try {
     await assertSafeTenantDatabaseRole(client);
     await client.query("begin"); begun = true;
+    await setStatementBudget(client, options);
     await client.query("select set_config('app.tenant_id','',true),set_config('app.actor_id','',true)");
     const rows = (await client.query<Row>(query, [...params])).rows;
     await client.query("commit"); begun = false;

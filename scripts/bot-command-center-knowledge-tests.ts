@@ -8,7 +8,7 @@ import type { KnowledgeSource } from "../src/lib/knowledge-center/types";
 const source: KnowledgeSource = { id:"source",areaId:"area",projectId:null,name:"Approved company FAQ",type:"faq",
   status:"approved",revision:1,approvedVersionId:"published",draftVersionId:null,archivedAt:null,
   version:{id:"published",sourceId:"source",version:1,name:"Approved company FAQ",content:"Approved source content",
-    structuredData:{},url:null,mediaAssetId:null,status:"approved",createdAt:"2026-10-19T00:00:00Z",approvedAt:"2026-10-19T00:00:00Z"} };
+    structuredData:{},url:null,mediaAssetId:null,processingStatus:"manual",processingMessage:null,processingFormat:null,status:"approved",createdAt:"2026-10-19T00:00:00Z",approvedAt:"2026-10-19T00:00:00Z"} };
 const channel = (name: CrmBotChannelConfig["channel"],active = true): CrmBotChannelConfig => ({id:name,channel:name,active,
   greetingEn:"",greetingDe:"",handoffRules:[],businessHours:"",language:"auto",targetTeam:""});
 

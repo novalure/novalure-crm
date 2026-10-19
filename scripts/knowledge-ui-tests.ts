@@ -99,6 +99,18 @@ test("knowledge copy has complete German, English and Spanish customer-facing st
     "assignmentEmpty",
     "usageHint",
     "uploadError",
+    "addDocument",
+    "importFlow",
+    "recognizedContent",
+    "recognizedReady",
+    "needsReadableFile",
+    "importFailed",
+    "extractionHelp",
+    "replaceFile",
+    "reviewConfirm",
+    "approveVersion",
+    "approvedPrevious",
+    "channelIndependent",
   ] as const;
   for (const language of languages) {
     const copy = getKnowledgeCenterCopy(language);
@@ -110,6 +122,12 @@ test("knowledge copy has complete German, English and Spanish customer-facing st
       "product copy does not expose work-package implementation details",
     );
   }
+  assert.equal(getKnowledgeCenterCopy("de").title, "Mein Unternehmenswissen");
+  assert.doesNotMatch(
+    getKnowledgeCenterCopy("de").uploadSuccess,
+    /Speichern Sie nun/,
+    "an automatic import does not ask customers to create a second source",
+  );
 });
 
 test("blank industry templates preserve existing structured values, types and nested data across edits", async () => {

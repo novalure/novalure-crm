@@ -3,7 +3,8 @@
     "deploymentEnabled": {
       "main": false,
       "codex/studio-preview-crm-handoff": false,
-      "codex/knowledge-center-package2-20261019": false
+      "codex/knowledge-center-package2-20261019": false,
+      "codex/knowledge-center-completion-20261019": false
     }
   },
   "crons": [

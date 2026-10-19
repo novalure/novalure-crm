@@ -21,7 +21,7 @@ function source(index = 1, structuredData: Record<string, unknown> = {}): Knowle
       id: sourceId, areaId, projectId: null, name: "Synthetic source", type: "structured", status: "approved", revision: 3,
       approvedVersionId: versionId, draftVersionId: null, archivedAt: null,
       version: { id: versionId, sourceId, version: 2, name: "Synthetic source", content: "Original public company information", structuredData,
-        url: null, mediaAssetId: null, status: "approved", createdAt: "2026-10-01T12:00:00.000Z", approvedAt: "2026-10-02T12:00:00.000Z" },
+        url: null, mediaAssetId: null, processingStatus: "manual", processingMessage: null, processingFormat: null, status: "approved", createdAt: "2026-10-01T12:00:00.000Z", approvedAt: "2026-10-02T12:00:00.000Z" },
     },
     provenance: { origin: "manual", lastVerifiedAt: "2026-10-15T12:00:00.000Z" },
   };

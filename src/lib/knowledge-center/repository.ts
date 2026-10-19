@@ -1,9 +1,11 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
+import { discardUncommittedKnowledgeFile, saveKnowledgeFile, type MediaAsset } from "../media-store";
+import { extractKnowledgeDocument } from "./document-extraction";
 import type { AppSession } from "../auth/session";
 import { assertProjectGrant, withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
 import { KnowledgeCenterError, knowledgeId, knowledgePermissions, knowledgeRevision, knowledgeStructured, knowledgeText, knowledgeUrl, requireKnowledgePermission } from "./policy";
-import type { AssignKnowledgeAreasInput, CreateKnowledgeAreaInput, CreateKnowledgeSourceInput, KnowledgeArea, KnowledgeCenterSnapshot, KnowledgeChannel, KnowledgeDocument, KnowledgeEntitlement, KnowledgeQueryResult, KnowledgeSource, KnowledgeSourceType, KnowledgeUsage, KnowledgeVersion, QueryKnowledgeCenterInput, UpdateKnowledgeSourceInput } from "./types";
+import type { AssignKnowledgeAreasInput, CreateKnowledgeAreaInput, CreateKnowledgeSourceInput, KnowledgeArea, KnowledgeCenterSnapshot, KnowledgeChannel, KnowledgeDocument, KnowledgeDocumentFormat, KnowledgeDocumentProcessingStatus, KnowledgeEntitlement, KnowledgeQueryResult, KnowledgeSource, KnowledgeSourceType, KnowledgeUsage, KnowledgeVersion, QueryKnowledgeCenterInput, UpdateKnowledgeSourceInput } from "./types";
 
 export { KnowledgeCenterError } from "./policy";
 const channels: readonly string[] = ["webchat", "whatsapp", "instagram", "messenger", "email", "internal", "voice", "telephone"];
@@ -23,6 +25,12 @@ async function enabled(tx: TenantTransaction, session: AppSession) {
   if (!contract.enabled || !contract.contractReference?.trim()) fail("ENTITLEMENT_REQUIRED", "Knowledge Center requires an active trusted contract", 403);
   return contract;
 }
+async function assistantChannelEnabled(tx: TenantTransaction, session: AppSession, contract: KnowledgeEntitlement, targetChannel: KnowledgeChannel) {
+  const assistantModule = await tx.queryOne<{ enabled: boolean }>(`select enabled from workspace_module_settings where workspace_id=$1::uuid and module_key='bots'`, [session.workspaceId]);
+  if (assistantModule?.enabled === false) fail("ENTITLEMENT_REQUIRED", "KI-Assistenten sind für dieses Unternehmen deaktiviert. Bitte wenden Sie sich an Ihre Verwaltung.", 403);
+  const feature = targetChannel === "webchat" ? "webchatAccess" : ["voice", "telephone"].includes(targetChannel) ? "voiceAccess" : null;
+  if (feature && contract.features?.[feature] !== true) fail("ENTITLEMENT_REQUIRED", `Der Zugriff für ${feature === "webchatAccess" ? "Webchat" : "Telefonassistent"} ist in Ihrem Vertrag nicht freigeschaltet. Bitte wenden Sie sich an Ihre Verwaltung.`, 403);
+}
 async function usage(tx: TenantTransaction, session: AppSession): Promise<KnowledgeUsage> {
   const row = await tx.queryOne<KnowledgeUsage>(`select sources,storage_bytes::float8 as "storageBytes",queries_this_month as "queriesThisMonth" from knowledge_center_usage($1::uuid)`, [session.workspaceId]);
   return row ?? { sources: 0, storageBytes: 0, queriesThisMonth: 0 };
@@ -36,7 +44,7 @@ async function area(tx: TenantTransaction, session: AppSession, areaId: string, 
   if (row.projectId) await assertProjectGrant(tx, session, row.projectId, write);
   return row;
 }
-const versionJson = `jsonb_build_object('id',v.id,'sourceId',v.source_id,'version',v.version,'name',v.name,'content',v.content,'structuredData',v.structured_data,'url',v.source_url,'mediaAssetId',v.media_asset_id,'status',v.status,'createdAt',v.created_at,'approvedAt',v.approved_at)`;
+const versionJson = `jsonb_build_object('id',v.id,'sourceId',v.source_id,'version',v.version,'name',v.name,'content',v.content,'structuredData',v.structured_data,'url',v.source_url,'mediaAssetId',v.media_asset_id,'status',v.status,'createdAt',v.created_at,'approvedAt',v.approved_at,'processingStatus',coalesce(to_jsonb(v)->>'processing_status',case when v.media_asset_id is null then 'manual' else 'needs_ocr' end),'processingMessage',to_jsonb(v)->>'processing_message','processingFormat',to_jsonb(v)->>'processing_format')`;
 async function source(tx: TenantTransaction, session: AppSession, sourceId: string, write = false): Promise<KnowledgeSource> {
   const canWrite = knowledgePermissions(session).canWrite;
   const row = await tx.queryOne<KnowledgeSource>(`select s.id,s.knowledge_area_id as "areaId",s.project_id as "projectId",v.name,s.source_type as type,
@@ -76,9 +84,16 @@ async function content(tx: TenantTransaction, session: AppSession, type: Knowled
   }
   return { name, content: text, structuredData, url, mediaAssetId, documentSizeBytes };
 }
-async function insertVersion(tx: TenantTransaction, session: AppSession, sourceId: string, version: number, data: Awaited<ReturnType<typeof content>>) {
+type DocumentProcessing = { status: KnowledgeDocumentProcessingStatus; message: string | null; format: KnowledgeDocumentFormat | null; code?: string | null; hash?: string | null; importKey?: string | null };
+async function insertVersion(tx: TenantTransaction, session: AppSession, sourceId: string, version: number, data: Awaited<ReturnType<typeof content>>, processing?: DocumentProcessing) {
   const id = randomUUID();
-  await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId]);
+  // Processing evidence is an immutable part of the version. API content inputs
+  // never accept these fields; a new attachment cannot claim an old result.
+  if (processing) {
+    await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by,processing_status,processing_message,processing_format,processing_error_code,document_sha256,document_import_key) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid,$12,$13,$14,$15,$16,$17)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId, processing.status, processing.message, processing.format, processing.code ?? null, processing.hash ?? null, processing.importKey ?? null]);
+  } else {
+    await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId]);
+  }
   return id;
 }
 async function checkStorage(tx: TenantTransaction, session: AppSession, contract: KnowledgeEntitlement) {
@@ -144,7 +159,10 @@ export async function updateKnowledgeSource(session: AppSession, input: UpdateKn
     if (previous.revision !== expected) fail("VERSION_CONFLICT", "Knowledge source changed; reload before editing", 409);
     const old = previous.version!;
     const data = await content(tx, fresh, previous.type, { name: input.name ?? old.name, content: input.content ?? old.content, structuredData: input.structuredData ?? old.structuredData, url: input.url === undefined ? old.url : input.url, mediaAssetId: input.mediaAssetId === undefined ? old.mediaAssetId : input.mediaAssetId }, previous.id);
-    const versionId = await insertVersion(tx, fresh, previous.id, old.version + 1, data);
+    const evidence = previous.type === "file" && data.mediaAssetId === old.mediaAssetId
+      ? await tx.queryOne<{ hash: string | null; code: string | null }>(`select to_jsonb(v)->>'document_sha256' as hash,to_jsonb(v)->>'processing_error_code' as code from knowledge_source_versions v where id=$1::uuid and workspace_id=$2::uuid`, [old.id, fresh.workspaceId]) : null;
+    const processing = previous.type === "file" ? { status: data.mediaAssetId === old.mediaAssetId ? old.processingStatus : "needs_ocr" as const, message: data.mediaAssetId === old.mediaAssetId ? old.processingMessage : "Dieses Dokument muss über den Dateiimport verarbeitet werden.", format: data.mediaAssetId === old.mediaAssetId ? old.processingFormat : null, hash: evidence?.hash, code: evidence?.code } : undefined;
+    const versionId = await insertVersion(tx, fresh, previous.id, old.version + 1, data, processing);
     await tx.execute(`update knowledge_sources set draft_version_id=$1::uuid,kc_revision=kc_revision+1,status='needs-review',updated_at=now() where id=$2::uuid and workspace_id=$3::uuid and kc_revision=$4`, [versionId, previous.id, fresh.workspaceId, expected]);
     await checkStorage(tx, fresh, contract); await audit(tx, fresh, "knowledge.source.draft_created", previous.id, { versionId, previousRevision: expected });
     return source(tx, fresh, previous.id);
@@ -184,7 +202,9 @@ export async function assignKnowledgeAreas(session: AppSession, input: AssignKno
   if (!Array.isArray(input.areaIds) || input.areaIds.length > 100) fail("VALIDATION_ERROR", "At most 100 explicit areas may be assigned");
   const ids = [...new Set(input.areaIds.map(id => knowledgeId(id, "areaId")))];
   return withCrmRead(session, async (tx, fresh) => {
-    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh); await enabled(tx, fresh);
+    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh); const contract = await enabled(tx, fresh);
+    // Revoking a saved grant remains possible after its channel/module is disabled.
+    if (ids.length) await assistantChannelEnabled(tx, fresh, contract, targetChannel);
     const targetBot = await bot(tx, fresh, input.botId, true);
     for (const id of ids) {
       const targetArea = await area(tx, fresh, id, true);
@@ -198,7 +218,7 @@ export async function assignKnowledgeAreas(session: AppSession, input: AssignKno
 export async function listKnowledgeVersions(session: AppSession, input: { sourceId: string }, options: TenantTransactionOptions = {}): Promise<KnowledgeVersion[]> {
   return withCrmRead(session, async (tx, fresh) => {
     await enabled(tx, fresh); const row = await source(tx, fresh, input.sourceId);
-    return tx.query<KnowledgeVersion>(`select id,source_id as "sourceId",version,name,content,structured_data as "structuredData",source_url as url,media_asset_id as "mediaAssetId",status,created_at::text as "createdAt",approved_at::text as "approvedAt" from knowledge_source_versions where source_id=$1::uuid and workspace_id=$2::uuid and ($3::boolean or id=$4::uuid) order by version desc`, [row.id, fresh.workspaceId, knowledgePermissions(fresh).canWrite, row.approvedVersionId]);
+    return tx.query<KnowledgeVersion>(`select id,source_id as "sourceId",version,name,content,structured_data as "structuredData",source_url as url,media_asset_id as "mediaAssetId",status,created_at::text as "createdAt",approved_at::text as "approvedAt",coalesce(to_jsonb(knowledge_source_versions)->>'processing_status',case when media_asset_id is null then 'manual' else 'needs_ocr' end) as "processingStatus",to_jsonb(knowledge_source_versions)->>'processing_message' as "processingMessage",to_jsonb(knowledge_source_versions)->>'processing_format' as "processingFormat" from knowledge_source_versions where source_id=$1::uuid and workspace_id=$2::uuid and ($3::boolean or id=$4::uuid) order by version desc`, [row.id, fresh.workspaceId, knowledgePermissions(fresh).canWrite, row.approvedVersionId]);
   }, options);
 }
 export async function publishKnowledgeSource(session: AppSession, input: { sourceId: string; versionId: string; expectedVersion: number }, options: TenantTransactionOptions = {}) {
@@ -208,6 +228,7 @@ export async function publishKnowledgeSource(session: AppSession, input: { sourc
     const row = await source(tx, fresh, input.sourceId, true);
     if (row.revision !== expected || row.draftVersionId !== versionId) fail("VERSION_CONFLICT", "Only the current draft can be approved", 409);
     const version = row.version!;
+    if (["needs_ocr", "failed"].includes(version.processingStatus)) fail("DOCUMENT_NOT_READY", version.processingMessage ?? "Das Dokument konnte noch nicht verarbeitet werden.", 409);
     const text = [version.content, Object.keys(version.structuredData).length ? JSON.stringify(version.structuredData) : ""].filter(Boolean).join("\n");
     if (!text.trim()) fail("CONTENT_REQUIRED", "Extract and review document or website content before approval", 409);
     await tx.execute(`update knowledge_source_versions set status='approved',approved_at=now(),approved_by=$1::uuid where id=$2::uuid and source_id=$3::uuid and workspace_id=$4::uuid and status='draft'`, [fresh.userId, versionId, row.id, fresh.workspaceId]);
@@ -231,7 +252,7 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
   const areaIds = input.areaIds?.map(id => knowledgeId(id, "areaId")) ?? null;
   return withCrmRead(session, async (tx, fresh) => {
     await lock(tx, fresh); const contract = await enabled(tx, fresh);
-    if (input.botId) await bot(tx, fresh, input.botId, false);
+    if (input.botId) { await assistantChannelEnabled(tx, fresh, contract, targetChannel!); await bot(tx, fresh, input.botId, false); }
     for (const id of areaIds ?? []) await area(tx, fresh, id);
     const current = await usage(tx, fresh);
     if (current.queriesThisMonth >= contract.maxQueriesPerMonth) fail("LIMIT_EXCEEDED", "Monthly knowledge query limit reached", 409);
@@ -277,12 +298,96 @@ export async function getKnowledgeScanSource(session: AppSession, input: { sourc
     return { sourceId: row.id, type: row.type, url: row.version!.url!, revision: row.revision, contentHash: row.version!.content ? createHash("sha256").update(row.version!.content).digest("hex") : null };
   }, options);
 }
+export type ImportKnowledgeDocumentInput = { file: File; areaId: string; name?: string; alt?: string; sourceId?: string; expectedVersion?: number };
+type ImportedAsset = { id: string; name: string; originalName: string; mimeType: string; sizeBytes: number };
+export type ImportKnowledgeDocumentResult = { asset: ImportedAsset; source: KnowledgeSource; reused: boolean };
+
+/** Extract the exact uploaded bytes, then atomically attach a private draft.
+ * Neither a client-provided transcript nor a client processing flag is trusted.
+ * Expensive parsing happens outside a transaction; all authority is checked again.
+ */
+export async function importKnowledgeDocument(session: AppSession, input: ImportKnowledgeDocumentInput, options: TenantTransactionOptions = {}): Promise<ImportKnowledgeDocumentResult> {
+  const areaId = knowledgeId(input.areaId, "areaId");
+  const sourceId = input.sourceId ? knowledgeId(input.sourceId, "sourceId") : null;
+  const expected = sourceId ? knowledgeRevision(input.expectedVersion) : null;
+  if (!sourceId && input.expectedVersion !== undefined) fail("VALIDATION_ERROR", "expectedVersion requires a sourceId");
+  if (!(input.file instanceof File) || input.file.size <= 0 || input.file.size > 10 * 1024 * 1024) fail("VALIDATION_ERROR", "A document up to 10 MB is required");
+  const name = knowledgeText(input.name ?? input.file.name, "name", 200);
+  const alt = input.alt === undefined ? undefined : knowledgeText(input.alt, "alt", 1000, false);
+  // Authorize before reading/parsing bytes. The second check also catches quota,
+  // membership, area, entitlement and source revision changes during extraction.
+  await withCrmRead(session, async (tx, fresh) => {
+    requireKnowledgePermission(fresh, "canWrite"); await enabled(tx, fresh); await area(tx, fresh, areaId, true);
+    if (sourceId) { const row = await source(tx, fresh, sourceId, true); if (row.areaId !== areaId || row.type !== "file") fail("VALIDATION_ERROR", "The selected source must be a document in this area"); }
+  }, options);
+  const bytes = new Uint8Array(await input.file.arrayBuffer());
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const importKey = createHash("sha256").update(JSON.stringify([session.userId, areaId, sourceId, expected, hash, input.file.name, input.file.type, name])).digest("hex");
+  const existing = async (tx: TenantTransaction, fresh: AppSession): Promise<ImportKnowledgeDocumentResult | null> => {
+    const imported = await tx.queryOne<{ sourceId: string; versionId: string }>(`select source_id as "sourceId",id as "versionId" from knowledge_source_versions where workspace_id=$1::uuid and document_import_key=$2`, [fresh.workspaceId, importKey]);
+    if (!imported) return null;
+    const row = await source(tx, fresh, imported.sourceId, true);
+    if (row.areaId !== areaId || row.version?.id !== imported.versionId) fail("VERSION_CONFLICT", "Knowledge source changed; reload before importing", 409);
+    const asset = await tx.queryOne<ImportedAsset>(`select id,name,original_name as "originalName",mime_type as "mimeType",size_bytes::float8 as "sizeBytes" from media_assets where id=$1::uuid and workspace_id=$2 and storage_access='private' and not is_public and public_token is null`, [row.version.mediaAssetId, fresh.workspaceId]);
+    if (!asset) fail("DOCUMENT_UNAVAILABLE", "Private document is unavailable", 404);
+    return { asset, source: row, reused: true };
+  };
+  const validate = async (tx: TenantTransaction, fresh: AppSession) => {
+    requireKnowledgePermission(fresh, "canWrite"); await lock(tx, fresh); const contract = await enabled(tx, fresh);
+    const target = await area(tx, fresh, areaId, true);
+    const repeated = await existing(tx, fresh);
+    if (repeated) return { target, contract, previous: null, repeated };
+    const previous = sourceId ? await source(tx, fresh, sourceId, true) : null;
+    if (previous && (previous.areaId !== areaId || previous.type !== "file")) fail("VALIDATION_ERROR", "The selected source must be a document in this area");
+    if (previous && previous.revision !== expected) fail("VERSION_CONFLICT", "Knowledge source changed; reload before importing", 409);
+    const current = await usage(tx, fresh);
+    if ((!previous && current.sources >= contract.maxSources) || current.storageBytes + bytes.byteLength > contract.maxStorageBytes) fail("LIMIT_EXCEEDED", "Knowledge source or storage limit reached", 409);
+    return { target, contract, previous, repeated: null };
+  };
+  const reservation = await withCrmRead(session, validate, options);
+  if (reservation.repeated) return reservation.repeated;
+  let text = "";
+  let processing: DocumentProcessing;
+  try {
+    const extracted = await extractKnowledgeDocument({ bytes, fileName: input.file.name, mimeType: input.file.type });
+    text = extracted.content;
+    processing = { status: extracted.status, message: extracted.message, format: extracted.format, hash, importKey };
+  } catch (error) {
+    if (!(error instanceof KnowledgeCenterError)) throw error;
+    if (["UNSUPPORTED_DOCUMENT", "DOCUMENT_EXTRACTION_BUSY"].includes(error.code)) throw error;
+    // A valid private file remains available for review even when its parser
+    // rejects corrupt, encrypted, oversized-expanded or otherwise unreadable data.
+    processing = { status: "failed", message: error.message.slice(0, 1000), format: null, code: error.code, hash, importKey };
+  }
+  let uploaded: MediaAsset | null = null;
+  try { return await withCrmRead(session, async (tx, fresh) => {
+    const current = await validate(tx, fresh);
+    if (current.repeated) return current.repeated;
+    const totals = await usage(tx, fresh);
+    if (totals.storageBytes + bytes.byteLength + Buffer.byteLength(text, "utf8") + 2 > current.contract.maxStorageBytes) fail("LIMIT_EXCEEDED", "Knowledge storage limit reached", 409);
+    const asset = await saveKnowledgeFile({ actorId: fresh.userId, workspaceId: fresh.workspaceId, file: input.file, name, alt });
+    uploaded = asset;
+    const data = await content(tx, fresh, "file", { name, content: text, mediaAssetId: asset.id });
+    const id = current.previous?.id ?? randomUUID();
+    if (!current.previous) await tx.execute(`insert into knowledge_sources(id,workspace_id,project_id,knowledge_area_id,name,source_type,status,metadata) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,'file','needs-review','{"knowledgeCenter":true,"trust":"untrusted_source_data"}'::jsonb)`, [id, fresh.workspaceId, current.target.projectId, areaId, name]);
+    const versionId = await insertVersion(tx, fresh, id, (current.previous?.version?.version ?? 0) + 1, data, processing);
+    const changed = await tx.queryOne<{ id: string }>(`update knowledge_sources set draft_version_id=$1::uuid,kc_revision=kc_revision+$2,status='needs-review',updated_at=now() where id=$3::uuid and workspace_id=$4::uuid and kc_revision=$5 returning id`, [versionId, current.previous ? 1 : 0, id, fresh.workspaceId, current.previous?.revision ?? 1]);
+    if (!changed) fail("VERSION_CONFLICT", "Knowledge source changed; reload before importing", 409);
+    await checkStorage(tx, fresh, current.contract);
+    await audit(tx, fresh, "knowledge.document.imported", id, { versionId, assetId: asset.id, processingStatus: processing.status, errorCode: processing.code ?? null });
+    return { asset: { id: asset.id, name: asset.name, originalName: asset.originalName, mimeType: asset.mimeType, sizeBytes: asset.sizeBytes }, source: await source(tx, fresh, id, true), reused: false };
+  }, options); } catch (error) {
+    if (uploaded) await withCrmRead(session, () => discardUncommittedKnowledgeFile(uploaded!), options).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function assertKnowledgeUploadAllowed(session: AppSession, input: { sizeBytes: number }, options: TenantTransactionOptions = {}) {
   if (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0 || input.sizeBytes > 10 * 1024 * 1024) fail("VALIDATION_ERROR", "A document up to 10 MB is required");
   return withCrmRead(session, async (tx, fresh) => {
     requireKnowledgePermission(fresh, "canWrite"); await lock(tx, fresh); const contract = await enabled(tx, fresh);
     const current = await usage(tx, fresh);
-    if (current.sources >= contract.maxSources || current.storageBytes + input.sizeBytes > contract.maxStorageBytes) fail("LIMIT_EXCEEDED", "Knowledge source or storage limit reached", 409);
+    if ((input.sizeBytes > 0 && current.sources >= contract.maxSources) || current.storageBytes + input.sizeBytes > contract.maxStorageBytes) fail("LIMIT_EXCEEDED", "Knowledge source or storage limit reached", 409);
     return { allowed: true as const };
   }, options);
 }

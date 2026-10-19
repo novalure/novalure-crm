@@ -1,0 +1,19 @@
+✔ real PDF extraction preserves text and explicit page boundaries (2463.628155ms)
+✔ scanned PDF and validated raster images require OCR without invented text (1607.20666ms)
+✔ partially scanned or empty PDF pages preserve partial text and require OCR (692.414445ms)
+✔ DOCX extracts actual paragraph and table contents in document order (118.382228ms)
+✔ strict UTF-8 TXT, Markdown, CSV and JSON keep usable text (2.067344ms)
+✔ format spoofing, broken containers, corrupt raster and invalid UTF-8 fail visibly (664.146238ms)
+✔ DOCX denies external relationships, XML entities, macros and traversal paths (438.216912ms)
+✔ ZIP inflation, input, page count and extracted-text limits are enforced (1195.001453ms)
+✔ compressed PDF streams are bounded before text parsing (590.818024ms)
+✔ PDF row-predictor allocations cannot bypass stream inflation bounds (447.964983ms)
+✔ PDF decoder aliases cannot bypass filter or predictor preflight (1954.200012ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11821.365728

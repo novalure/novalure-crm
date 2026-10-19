@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "knowledge-center-completion-v1",
+  "createdAt": "2026-10-19T20:29:25.370012+00:00",
+  "repository": "novalure/novalure-crm",
+  "baseRevision": "a04273f37fb3417b180626bd878920ab89f73609",
+  "implementationRevision": "b908c0e445739e9665e4fb0912c101f1a575fa79",
+  "branch": "codex/knowledge-center-completion-20261019",
+  "testData": "synthetic_only",
+  "checks": [
+    {
+      "name": "knowledge-regression",
+      "command": "LD_LIBRARY_PATH=/workspace/scratch/libicu60/usr/lib/x86_64-linux-gnu npm run test:knowledge-center",
+      "passed": 125,
+      "log": "knowledge-regression.log",
+      "scope": "Complete regression before final channel-entitlement gates; subsequent changes covered by the focused checks below.",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "channel-entitlements",
+      "command": "node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-center-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-api-tests.ts",
+      "passed": 54,
+      "log": "channel-entitlements-summary.log",
+      "scope": "Final channel gates; retained exact command and original successful tool-output summary only; full raw stdout was not saved.",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "parser-security",
+      "command": "node --conditions=react-server --import tsx --test scripts/knowledge-document-extraction-tests.ts",
+      "passed": 11,
+      "log": "extraction-security.log",
+      "scope": "Final parser including PDF decoder alias guards.",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "crm-unit",
+      "command": "LD_LIBRARY_PATH=/workspace/scratch/libicu60/usr/lib/x86_64-linux-gnu npm run test:unit",
+      "passed": 240,
+      "log": "crm-unit.log",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "typecheck",
+      "command": "npm run typecheck",
+      "log": "typecheck.log",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "log": "lint.log",
+      "scope": "Full lint plus separately retained final parser, UI/service and browser-harness lint.",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "log": "build.log",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "production-dependency-audit",
+      "command": "npm run security:production",
+      "vulnerabilities": 0,
+      "log": "dependencies.log",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "relocated-traced-parsers",
+      "command": "node /workspace/scratch/check-knowledge-bundle.mjs",
+      "passed": 3,
+      "log": "bundle.log",
+      "result": "bundle.json",
+      "scope": "Only Next output-traced files copied outside the repository; clean worker environment; real PDF, DOCX and PNG. No provider access.",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "name": "browser",
+      "command": "npm run qa:knowledge:browser",
+      "serverCommand": "LD_LIBRARY_PATH=/workspace/scratch/libicu60/usr/lib/x86_64-linux-gnu npm run qa:sales:server -- --built",
+      "passed": 10,
+      "log": "browser.log",
+      "result": "browser.json",
+      "scope": "Optimized application assets with existing development-only loopback database transport, ordinary password/TOTP login, no injected sessions. This is not hosted/production evidence.",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "countsOverlap": true,
+  "independentReview": {
+    "reviewer": "control_plane_audit",
+    "exactRevision": "b908c0e445739e9665e4fb0912c101f1a575fa79",
+    "remainingActionableFindings": [],
+    "trustedGitHubAppAttestation": false,
+    "resolvedFindings": [
+      "Compensating cleanup after upload transaction failure",
+      "PDF decoder alias mismatch permitting unchecked predictor allocation"
+    ],
+    "scope": "Read-only source review, no remote CI or production/provider validation."
+  },
+  "migrationVerification": {
+    "prepared": [
+      "102_knowledge_document_processing.sql",
+      "103_knowledge_assistant_service.sql"
+    ],
+    "localActualPredecessor": "091-096 -> 100 -> 101 -> 102 -> 103",
+    "productionExecuted": false,
+    "limitations": [
+      "Portable local fixture replaces optional pgvector column/index",
+      "Historical manual migration 062 omitted",
+      "Not a production Neon clone"
+    ]
+  },
+  "productionChanges": {
+    "database": false,
+    "customerData": false,
+    "deployment": false,
+    "vapi": false,
+    "phoneNumber": false,
+    "stripe": false
+  },
+  "hostedPreview": {
+    "url": null,
+    "deploymentId": null,
+    "reason": "No isolated remote database/storage/identity bindings; production bindings not used."
+  },
+  "remainingGoLiveWork": [
+    "Isolated protected hosted preview and platform upload-limit validation",
+    "Approved external Studio client configuration",
+    "Approved customer Voice/Vapi identity and native provider/tool binding",
+    "OCR if required",
+    "Separate production release and contract/provisioning workflow"
+  ]
+}
