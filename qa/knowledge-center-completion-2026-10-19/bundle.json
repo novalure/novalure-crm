@@ -1,0 +1,23 @@
+{
+  "traceFileCount": 2652,
+  "relocatedOutsideRepository": true,
+  "onlyTracedFiles": true,
+  "inheritedEnvironment": false,
+  "results": [
+    {
+      "format": "pdf",
+      "status": "PASS",
+      "extractedText": true
+    },
+    {
+      "format": "docx",
+      "status": "PASS",
+      "extractedText": true
+    },
+    {
+      "format": "image",
+      "status": "PASS",
+      "extractedText": false
+    }
+  ]
+}

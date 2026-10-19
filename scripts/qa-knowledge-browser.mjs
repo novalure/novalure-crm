@@ -43,6 +43,16 @@ async function api(path, body, method = "POST") {
     return { status: response.status, body: await response.json() };
   }, { path, body, method });
 }
+async function readSnapshot() {
+  // Use the real browser cookie policy, including Secure cookies on loopback.
+  // The separate HTTP request client treats plain loopback differently.
+  const result = await page.evaluate(async () => {
+    const response = await fetch("/api/knowledge-center?" + new URLSearchParams({ workspaceId: window.knowledgeWorkspace }), { cache: "no-store" });
+    return { status: response.status, body: await response.json() };
+  });
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  return result.body.snapshot;
+}
 function totp(secret) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", bytes = [];
   let accumulator = 0, bits = 0;
@@ -99,9 +109,7 @@ try {
     await sourceForm.getByLabel("Inhalt", { exact: true }).fill("SYNTHETIC mango: geöffnet ab 09:00 Uhr.");
     await sourceForm.getByRole("button", { name: "Speichern", exact: true }).click();
     await expect(page.getByRole("heading", { name: "SYNTHETIC Öffnungszeiten", exact: true })).toBeVisible();
-    const response = await page.request.get(fixture.baseUrl + "/api/knowledge-center");
-    assert.equal(response.status(), 200);
-    const { snapshot } = await response.json(); sourceId = snapshot.sources[0].id;
+    const snapshot = await readSnapshot(); sourceId = snapshot.sources[0].id;
     assert.equal(snapshot.sources[0].version.status, "draft");
   });
   await step("explicit assistant assignment never activates an unpublished draft", async () => {
@@ -114,12 +122,12 @@ try {
     assert.equal(response.status, 200); assert.equal(response.body.matches.length, 0);
   });
   await step("admin publication uses an exact version and subsequent edits remain drafts", async () => {
-    let source = (await (await page.request.get(fixture.baseUrl + "/api/knowledge-center")).json()).snapshot.sources.find(item => item.id === sourceId);
+    let source = (await readSnapshot()).sources.find(item => item.id === sourceId);
     const publication = await api("/api/knowledge-center/publish", { sourceId,versionId:source.version.id,expectedVersion: source.revision });
     assert.equal(publication.status, 200);
     let query = await api("/api/knowledge-center/query", { query: "mango",botId,channel: "webchat" });
     assert.equal(query.status,200); assert.equal(query.body.matches.length,1);
-    source = (await (await page.request.get(fixture.baseUrl + "/api/knowledge-center")).json()).snapshot.sources.find(item => item.id === sourceId);
+    source = (await readSnapshot()).sources.find(item => item.id === sourceId);
     const edit = await api("/api/knowledge-center/versions", { sourceId,expectedVersion:source.revision,content:"SYNTHETIC mango: neuer Entwurf ab 11:00 Uhr." });
     assert.equal(edit.status,201);
     query = await api("/api/knowledge-center/query", { query:"mango",botId,channel:"webchat" });
@@ -135,7 +143,7 @@ try {
       await page.getByRole("button", { name: "Datei hochladen", exact: true }).click();
       const form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Wissen hinzufügen", exact: true }) });
       await form.getByLabel("Wissensbereich", { exact: true }).selectOption({ label: "SYNTHETIC Firmenwissen" });
-      await form.getByLabel("Name", { exact: true }).fill(item.name);
+      await form.getByLabel("Name (optional)", { exact: true }).fill(item.name);
       await form.getByLabel("Privates Dokument hochladen", { exact: true }).setInputFiles({ name: item.file, mimeType: item.mime, buffer: Buffer.from(item.bytes) });
       const card = page.locator("li").filter({ has: page.getByRole("heading", { name: item.name, exact: true }) });
       await expect(card.getByText("Inhalt erkannt · Bitte prüfen", { exact: true })).toBeVisible();
@@ -169,7 +177,7 @@ try {
     await page.getByRole("button", { name: "Datei hochladen", exact: true }).click();
     const form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Wissen hinzufügen", exact: true }) });
     await form.getByLabel("Wissensbereich", { exact: true }).selectOption({ label: "SYNTHETIC Firmenwissen" });
-    await form.getByLabel("Name", { exact: true }).fill("SYNTHETIC Scan ohne Textebene");
+    await form.getByLabel("Name (optional)", { exact: true }).fill("SYNTHETIC Scan ohne Textebene");
     await form.getByLabel("Privates Dokument hochladen", { exact: true }).setInputFiles({ name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from(await createScanPdf()) });
     const card = page.locator("li").filter({ has: page.getByRole("heading", { name: "SYNTHETIC Scan ohne Textebene", exact: true }) });
     await expect(card.getByText("Lesbare Textfassung erforderlich", { exact: true })).toBeVisible();
@@ -187,8 +195,15 @@ try {
     const controls = page.getByRole("region",{name:"Mein Unternehmenswissen",exact:true}).getByRole("button");
     for (const control of await controls.all()) {
       if (!await control.isVisible()) continue;
-      const box = await control.boundingBox();
-      assert.ok(box && box.width >= 44 && box.height >= 44,"Knowledge actions must retain 44px touch targets");
+      const box = await control.evaluate(element => {
+        // Replacement inputs are visually hidden inside their full-size label.
+        // Measure the actual associated touch target for those native controls.
+        const target = element.matches('input[type="file"].sr-only') ? element.closest("label") : element;
+        const rect = target?.getBoundingClientRect();
+        return rect ? { width: rect.width, height: rect.height } : null;
+      });
+      assert.ok(box && box.width >= 44 && box.height >= 44,
+        `Knowledge actions must retain 44px touch targets: ${await control.innerText()} ${JSON.stringify(box)}`);
     }
     await page.screenshot({path:".npm-cache/qa/knowledge/mobile.png",fullPage:true});
     assert.deepEqual(pageErrors,[]);

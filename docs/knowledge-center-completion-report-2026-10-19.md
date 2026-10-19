@@ -56,12 +56,18 @@ Webchat und Telefonie benötigen zusätzlich die ausdrücklich gesetzten Vertrag
 
 ## H. Tests
 
-Die finalen ausgeführten Kommandos, Ergebnisse und Grenzen werden in `qa/knowledge-center-completion-2026-10-19/verification.json` festgehalten. Nur tatsächlich bestandene Prüfungen werden dort als bestanden ausgewiesen.
+Bestanden: 125 Knowledge-/Integrationsprüfungen der vollständigen Regression, 54 gezielte Folgeprüfungen der getrennten Vertragsrechte, 11 abschließende Parserprüfungen und 240 CRM-Unit-Tests. Diese Zahlen überlappen und werden nicht als einzigartige Testfälle addiert. TypeScript, vollständiges ESLint mit gezielten Folgeprüfungen, Produktionsbuild und Produktionsabhängigkeits-Audit mit 0 Schwachstellen bestanden.
+
+Die Browserabnahme besteht mit 10/10 Abläufen und ohne Browserfehler: regulärer Passwort-/TOTP-Login, deaktiviertes Modul, Bereiche/Entwürfe, Freigabe, tatsächlicher PDF-/DOCX-Upload mit Inhaltsprüfung, unabhängige Webchat-/Voice-Zuordnung, sofortiger Widerruf, Scan-Hinweis sowie Desktop/Mobil ohne horizontalen Überlauf und mit mindestens 44-Pixel-Bedienflächen. Dabei wurden optimierte Build-Artefakte mit dem vorhandenen ausschließlich lokalen Entwicklungs-Datenbanktransport geprüft. Das ist keine gehostete oder produktive Abnahme.
+
+Zusätzlich wurden ausschließlich die von Next aufgeführten Laufzeitdateien außerhalb des Repositories rekonstruiert. PDF, DOCX und PNG funktionierten dort mit leerer Worker-Umgebung. Der unabhängige Review meldet keine offenen Befunde für die Implementierungsrevision; er ist keine GitHub-App-Attestation.
+
+Kommandos, Beleggrenzen und Ergebnisse: [Prüfbeleg](../qa/knowledge-center-completion-2026-10-19/verification.json). Bildschirmaufnahmen: [Desktop](../qa/knowledge-center-completion-2026-10-19/desktop.png), [Mobil](../qa/knowledge-center-completion-2026-10-19/mobile.png).
 
 ## I. Branch und Deployment
 
 - Branch: `codex/knowledge-center-completion-20261019`.
-- Implementierungsrevision: siehe Prüfbeleg.
+- Implementierungsrevision: `b908c0e445739e9665e4fb0912c101f1a575fa79`; danach folgen ausschließlich Prüfharness-/Berichtsnachweise.
 - Gehostete Preview-URL: nicht erstellt.
 - Deployment-ID: nicht vorhanden.
 

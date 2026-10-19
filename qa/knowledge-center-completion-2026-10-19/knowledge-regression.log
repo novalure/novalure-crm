@@ -1,0 +1,162 @@
+
+> novalure-crm@0.1.0 test:knowledge-center
+> node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/knowledge-api-tests.ts scripts/knowledge-document-extraction-tests.ts scripts/knowledge-document-pipeline-tests.ts scripts/knowledge-assistant-service-tests.ts scripts/knowledge-timeout-tests.ts scripts/knowledge-center-tests.ts scripts/knowledge-maintenance-tests.ts scripts/knowledge-media-tests.ts scripts/knowledge-production-predecessor-tests.ts scripts/knowledge-runtime-tests.ts scripts/knowledge-scanner-tests.ts && node --import tsx --test scripts/knowledge-ui-tests.ts scripts/bot-command-center-knowledge-tests.ts
+
+▶ Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft publication and private documents
+  ✔ no cookie, preview headers, duplicate cookies and missing CSRF cannot access handlers (136.171956ms)
+  ✔ contracts are disabled by default and runtime API cannot provision them (122.933831ms)
+  ✔ drafts are isolated from channel retrieval until current-version admin publication (897.736066ms)
+  ✔ streamed byte limits, malformed JSON and client-selected tenants fail without writes (178.312913ms)
+  ✔ workspace selection requires explicit membership and preserves the target role (84.725106ms)
+  ✔ documents use private upload and source authorization; generic media delivery denies (709.060019ms)
+  ✔ website URL comes from authorized source and unsafe hosts never become draft content (104.711091ms)
+  ✔ current role restricts publication and session revocation ends all knowledge access (63.45011ms)
+✔ Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft publication and private documents (28510.534484ms)
+✔ telephony retrieves exact voice assignment while webchat retains independent approved context (16337.965509ms)
+✔ drafts and unmatched queries return an explicit safe fallback without source content (272.129202ms)
+✔ voice grant revocation cannot fall back to telephone or webchat grants (135.16072ms)
+✔ archived sources and archived areas become unavailable immediately (523.720819ms)
+✔ persisted tenant identity excludes foreign assistants and forged session workspace (57.176701ms)
+✔ commercial entitlement, workspace module and monthly limit each block assistant context (66.050779ms)
+✔ voice results and excerpts remain bounded and invalid result limits are rejected (104.124262ms)
+✔ machine request derives assistant and tenant from exact persisted principal/channel binding (269.314723ms)
+✔ machine boundary rejects forged credentials, workload drift, cookies and unregistered binding (43.343642ms)
+✔ revoked machine principal, kill switch, expiration and inactive actor deny before retrieval (339.199509ms)
+✔ blocked machine binding obeys SQL deadline and returns no knowledge with a safe fallback (1528.368608ms)
+✔ service binding and Knowledge Center tables expose no rows without tenant context (93.06902ms)
+▶ public gateway knowledge binds live integration, origin, session, tenant and independent webchat assignment
+  ✔ verified visitor receives only saved webchat knowledge (226.802862ms)
+{"code":"invalid_request","correlationId":"7c5ef7ea-4176-4f92-b3a8-0bd6fd577da4","durationMs":0,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":400}
+  ✔ browser preflight and JSON POST use the same public site-key URL (101.999343ms)
+{"code":"session_denied","correlationId":"785a0441-e873-46c5-b619-79a274ace486","durationMs":30,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":403}
+{"code":"session_denied","correlationId":"ce1926f8-d67a-40c4-b4a1-78060a21d1c9","durationMs":23,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":403}
+{"code":"session_denied","correlationId":"3d41a7b2-d480-4e4b-a7af-034f5b7080da","durationMs":23,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":403}
+{"code":"integration_not_found","correlationId":"8bfb2b55-c2f0-4939-b81e-2d31fbb3f3d3","durationMs":2,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":404}
+{"code":"invalid_knowledge_request","correlationId":"849dae26-8db3-49c1-b4d2-c9003ae082cb","durationMs":6,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":400}
+{"code":"invalid_knowledge_request","correlationId":"31e09c9f-5263-4b28-b168-32f18e360300","durationMs":8,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":400}
+{"code":"invalid_knowledge_request","correlationId":"e18b0bd9-d3e9-4b76-bc9c-121306e95dee","durationMs":6,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":400}
+  ✔ forged visitor credentials, foreign sessions and tenant selectors fail closed (107.222112ms)
+  ✔ assignment revocation removes public context without granting voice access (228.081863ms)
+{"code":"session_denied","correlationId":"ccac3988-e033-4aa8-b605-48cb2e970d7e","durationMs":19,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":403}
+{"code":"integration_not_found","correlationId":"f7130b5b-fa4a-40e6-b043-09844d4830b2","durationMs":13,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":404}
+{"code":"integration_not_found","correlationId":"d3b3799d-e206-48e8-8425-af353c4770af","durationMs":3,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":404}
+  ✔ closed visitor sessions, disabled widget and revoked integration invalidate current credentials (69.451211ms)
+{"code":"assistant_not_configured","correlationId":"f3211515-39cd-44a9-ab4e-9f6b32fcae4e","durationMs":19,"event":"external_integration_request","operation":"chat.knowledge","outcome":"denied","status":403}
+  ✔ saved foreign assistant configuration cannot cross the integration tenant (46.445284ms)
+✔ public gateway knowledge binds live integration, origin, session, tenant and independent webchat assignment (1309.542245ms)
+▶ Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retained quotas and atomic audit
+  ✔ default commercial state is disabled and client role fields cannot enable it (50.801175ms)
+  ✔ staff draft foundation and inaccessible project/source/tenant denial (100.075635ms)
+  ✔ bot/channel grants are explicit and project grants remain required (208.830926ms)
+  ✔ chat history forces saved bot/project/channel scope for messages and tools (184.983069ms)
+  ✔ edits stay immutable drafts while previous approved content remains grounded (150.526946ms)
+  ✔ exact tenant quota includes hidden projects and permits only one concurrent last slot (256.374029ms)
+  ✔ unbound or public media is refused and reserved private documents stay tenant scoped (286.246882ms)
+  ✔ website scan quota reserves before network; module deactivation dominates contract (58.939886ms)
+  ✔ audit rejection rolls back source/version/usage; archive removes retrieval (137.206888ms)
+✔ Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retained quotas and atomic audit (14038.957078ms)
+✔ real PDF extraction preserves text and explicit page boundaries (3005.052374ms)
+✔ scanned PDF and validated raster images require OCR without invented text (2846.006989ms)
+✔ partially scanned or empty PDF pages preserve partial text and require OCR (585.08446ms)
+✔ DOCX extracts actual paragraph and table contents in document order (92.005692ms)
+✔ strict UTF-8 TXT, Markdown, CSV and JSON keep usable text (3.277876ms)
+✔ format spoofing, broken containers, corrupt raster and invalid UTF-8 fail visibly (1044.662059ms)
+✔ DOCX denies external relationships, XML entities, macros and traversal paths (967.542739ms)
+✔ ZIP inflation, input, page count and extracted-text limits are enforced (2051.553505ms)
+✔ compressed PDF streams are bounded before text parsing (429.425202ms)
+✔ PDF row-predictor allocations cannot bypass stream inflation bounds (264.561304ms)
+▶ private document pipeline: bytes, immutable results, replay, approval, replacement and changed authority
+  ✔ automatic extraction creates one private draft under concurrent retries (431.319589ms)
+  ✔ replacement works at source quota and retains only approved grounding until review (222.145363ms)
+  ✔ parse failures retain private bytes and cannot be approved or cleared by generic edits (860.458921ms)
+  ✔ a scanned PDF becomes an actionable OCR draft with no publishable content (2781.28359ms)
+  ✔ hidden areas and revoked membership during byte work cannot create assets or versions (54.625869ms)
+  ✔ audit rollback removes stored bytes after authoritative metadata absence (176.040553ms)
+  ✔ a committed upload survives discard attempts with its opaque capability (56.920936ms)
+  ✔ a lost COMMIT acknowledgement preserves committed bytes and replays the durable version (124.510674ms)
+✔ private document pipeline: bytes, immutable results, replay, approval, replacement and changed authority (20369.728477ms)
+✔ missing required fields produce version-bound review proposals; zero and false count as present (8.100696ms)
+✔ critical facts require administrator review even if a rule says general (15.165676ms)
+✔ missing verification metadata permits only an internal review marker, never public content (0.633898ms)
+✔ staleness and validity use the explicit clock and retain provenance basis (2.870598ms)
+✔ normalization ignores text presentation and equal decimal notation while retaining exact decimal differences (2.368864ms)
+✔ facts conflict only across explicitly visible sources for the same subject and project (0.855387ms)
+✔ cross-tenant, unconfirmed visibility, duplicate identity and mismatched versions fail closed (0.87705ms)
+✔ website proposals bind to the exact baseline version; unknown and critical changes require administrator review (2.775346ms)
+✔ unchanged website scans create no content proposal (2.870913ms)
+✔ analysis is deterministic, does not mutate its snapshot and omits raw values and personal details (2.089881ms)
+✔ archived and missing-version sources are explicitly skipped without invented version references (0.672469ms)
+✔ source data cannot grant permissions, invoke getters or configure review rules (1.021911ms)
+✔ generic lists and direct object lookup hide current and archived knowledge attachments (3899.430297ms)
+✔ generic publication, renewal and deletion cannot expose knowledge attachments (41.534051ms)
+✔ a stale public token cannot serve a marked knowledge attachment (35.836722ms)
+✔ only the authorized source path obtains an opaque private byte-read capability (17.214119ms)
+✔ generic uploads cannot forge a protected folder and Knowledge uploads bind the authenticated actor (14.933266ms)
+✔ Knowledge uploads support validated UTF-8 documents without broadening generic media uploads (34.436144ms)
+✔ the deletion protocol checks inaccessible historical Knowledge references before touching bytes (52.0298ms)
+✔ ordinary private media deletion remains usable with the additive Knowledge foreign key (33.344718ms)
+▶ unchanged 101 upgrades the actual 091–096 → standalone100 predecessor with rollback and media compatibility
+  ✔ actual identity guards and machine-chain verification passed without Preview097–099 (17.720204ms)
+  ✔ 101 DDL and checksum ledger roll back together on a failed transaction (212.698636ms)
+  ✔ 101 commits its exact normalized checksum while preserving both existing media contracts (25.447324ms)
+  ✔ 102–103 extend the actual predecessor without activating an assistant (14.48997ms)
+  ✔ real non-owner runtime cannot self-provision a contract (26.901427ms)
+  ✔ source binding and immutable private-media guards work after the real100 schema (123.939066ms)
+  ✔ ordinary private deletion still succeeds through actual100+101 definer counters (32.198602ms)
+  ✔ Studio-confirmed media retains its independent protection after101 (43.071305ms)
+✔ unchanged 101 upgrades the actual 091–096 → standalone100 predecessor with rollback and media compatibility (10442.93344ms)
+✔ runtime delegates to exact approved version and bot/channel assignment (17768.149547ms)
+✔ missing persisted bot, unknown channel and unauthenticated identity fail closed (38.73904ms)
+✔ legacy approved metadata never grants retrieval (63.702486ms)
+✔ disabled module and quota exhaustion yield no sources; security errors propagate (109.392123ms)
+✔ price and availability requests require current CRM truth across languages (3.627901ms)
+✔ current price requests hand off without model call even with strict knowledge disabled (138.75711ms)
+✔ disabled Knowledge module keeps an ordinary bot conversation in a safe handoff (80.274506ms)
+✔ saved conversation reuse rejects cross-bot, project, channel and forged project before runtime effects (51.756034ms)
+✔ conversation create and direct history read bind saved bot project instead of client project (56.644527ms)
+✔ revoked bot project grants deny history, listing and runtime before new messages (23.684296ms)
+✔ prior assistant knowledge is omitted from provider payload after assignment revoke or module disable (290.116633ms)
+✔ evaluation uses explicit webchat or saved active channel and persists its channel identity (607.071803ms)
+✔ real cookie bot handlers bind transactions and reauthorize selected workspace membership and role (3262.020939ms)
+✔ public address policy rejects IPv4 and IPv6 private, mapped, transition and reserved forms (20.060622ms)
+✔ URL policy blocks schemes, credentials, alternate ports, local aliases and obfuscated loopback (6.0309ms)
+✔ mixed public/private DNS answers fail before any connection (5.602314ms)
+✔ request receives the validated address and never resolves the hostname a second time (8.873536ms)
+✔ redirects validate both URLs and fresh DNS on every hop (7.832489ms)
+✔ relative redirects are supported while redirect loops remain bounded (4.860303ms)
+✔ same-host DNS rebinding after a redirect is rejected before the second connection (4.256594ms)
+✔ DNS stalls and body stalls share a hard deadline and abort their port (66.643766ms)
+✔ content types, encodings, status, byte and text limits fail closed (8.901103ms)
+✔ HTML extraction is inert, excludes executable regions and handles malformed markup linearly (9.310066ms)
+✔ change detection yields approval proposals and never changes a published source (1.053449ms)
+✔ network failures expose only a safe error code (2.446992ms)
+✔ Stripe signature requires the raw bytes, valid HMAC and a bounded timestamp (5.058128ms)
+✔ verified billing adapter maps the tenant from stored customer identity and delegates atomic idempotency (8.241454ms)
+✔ knowledge database budgets cancel slow work and clear on rollback/commit (16294.813076ms)
+ℹ tests 114
+ℹ suites 0
+ℹ pass 114
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 192692.734678
+✔ Knowledge Center response names and publication references replace removed legacy chunk fields (2.673014ms)
+✔ a pending draft is labelled for review while the existing published source remains counted (0.495548ms)
+✔ empty, disabled and unavailable persisted knowledge snapshots remain empty (1.989558ms)
+✔ evaluation channel selection uses active saved channels and never invents an internal grant (1.027311ms)
+✔ workspace-scoped bot URLs carry the selected workspace for new knowledge, evaluation and history (0.288751ms)
+✔ changing selected workspace remounts the bot center with fresh local state (24.627266ms)
+✔ Knowledge Center initial rendering waits for authorized data and never shows legacy source fixtures (33.343129ms)
+✔ the loading view provides a named section, visible context labels and announced status in both supported CRM languages (7.586182ms)
+✔ knowledge copy has complete German, English and Spanish customer-facing states (1.084835ms)
+✔ blank industry templates preserve existing structured values, types and nested data across edits (11.249373ms)
+✔ structured edits require explicit removal and reject collisions with preserved values or unsafe keys (3.225958ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2308.556311
