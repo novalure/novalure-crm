@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-10-19T21:42:31.474565+00:00",
+  "generatedAt": "2026-10-19T21:45:05.751676+00:00",
   "status": "DESIGN_C_DEVELOPMENT_READERS_ACCEPTED",
   "branch": "codex/evelyn-crm-design-c-integration",
   "baseCommit": "aa6b329942ab19c165bc610822f03ed5874af189",
   "originalDesignCommit": "37338cba018ab7b5a00cc59edb746de8796ee724",
   "controlledDesignImport": "b7a1ab62f7aa1f8d7ae98da7ae1a18847dfbd4c0",
-  "integrationSourceFingerprint": "22b6279d5cd44561eafa716713c83aef04b1d9f07e2c324c0518238fcab61da0",
+  "integrationSourceFingerprint": "11a93afa7f30be479c4d99e74b2dc08ca87e8a86d12a311046e4fe7af9859541",
   "fingerprintedFiles": [
     ".github/workflows/livegang-e2e.yml",
     ".gitignore",
@@ -23,6 +23,7 @@
     "scripts/lead-inbox-presentation-tests.ts",
     "scripts/lib/design-c-integration-fixture.mjs",
     "scripts/newsletter-source-availability-tests.tsx",
+    "scripts/phase6-bot-grounding-smoke-tests.mjs",
     "scripts/phase7-mobile-smoke-tests.mjs",
     "scripts/qa-design-c-integration.mjs",
     "scripts/qa-sales-browser-server.mjs",
@@ -63,7 +64,8 @@
     "botCalendarAndAccessibility": "26/26 combined PASS atcb2b1ec (14bot+7calendar+5existing calendar accessibility); final8608e72 calendar changes rechecked12/12 (7calendar+5accessibility), bot source unchanged",
     "designCCompatibility": "27/27 PASS (13 integration data/navigation +14 existing source/SSR); these areas unchanged by final workspace guards",
     "existingConsentShareContactOAuth": "19/19 PASS; final calendar accessibility subset rechecked separately",
-    "machineAuthChronology": "5/5 PASS after historical fixture stops at90 before unchanged092/093"
+    "machineAuthChronology": "5/5 PASS after historical fixture stops at90 before unchanged092/093",
+    "legacyBotGroundingSmoke": "5/5 PASS after updating stale literal-fetch structural assertion to the actual workspace-scoped reader; application source unchanged"
   },
   "wholeBrowserRun": {
     "summary": {
@@ -612,12 +614,25 @@
   },
   "githubCi": {
     "snapshotTiming": "Evidence generated before the final evidence commit is pushed; current-head CI outcome is recorded in PR91 description/checks after execution",
-    "currentHeadStatusAtEvidenceCreation": "NOT_YET_RUN",
+    "currentHeadStatusAtEvidenceCreation": "PENDING_NEW_HEAD_AFTER_LEGACY_SMOKE_FIX",
     "checksUrl": "https://github.com/novalure/novalure-crm/pull/91/checks",
     "baselineHead": "485575a1fd6e8be92b1e4446c4e9b414858fdd85",
     "baselineQuality": "FAILURE",
     "baselineRun": "https://github.com/novalure/novalure-crm/actions/runs/39326450441",
     "baselineCause": "Machine auth test replayed unchanged092 after additive Knowledge migrations; required68/68 forced-RLS relations, observed79/79",
-    "correction": "Dedicated historical machine fixture caps baseline at90 before unchanged092/093; no guard/grant change; focused5/5PASS"
+    "correction": "Dedicated historical machine fixture caps baseline at90 before unchanged092/093; no guard/grant change; focused5/5PASS",
+    "observedPostImplementationRun": {
+      "head": "fcc3db55292fe0b68f49dd07ab836cf707021320",
+      "run": "https://github.com/novalure/novalure-crm/actions/runs/39329604294",
+      "quality": "FAILURE",
+      "passedSteps": [
+        "lint",
+        "typecheck"
+      ],
+      "unit": "242PASS/1FAIL; stale phase6 literal-fetch assertion",
+      "secretScan": "SUCCESS",
+      "dependencyAuditAndSbom": "SUCCESS",
+      "correction": "Existing phase6 smoke now checks persisted knowledge path, reader call and scoped URL; focused5/5PASS. No application code/build/browser result changed."
+    }
   }
 }
