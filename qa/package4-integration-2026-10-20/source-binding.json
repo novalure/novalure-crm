@@ -1,0 +1,13 @@
+{
+  "commit": "d85ec0629c57dbd5e82ddb3a4c7828bf5873d879",
+  "trees": {
+    "src": "9961fe69517d2879413b43fb6e4322ded34e2cb9",
+    "migrations": "9221b7e098c28d158e9f97b92e90ddd80ff9da6a",
+    "design-c": "76100f8ea94b8c45028a94f4807697e9597c9d6d"
+  },
+  "buildId": "build-TfctsWXpff2fKS",
+  "buildSourceCommit": "d3c1cbe625db61742ab08b07123aeff1e592bb77",
+  "node": "v24.19.0",
+  "npm": "11.9.0",
+  "pinnedCiNode": "24.14.0"
+}

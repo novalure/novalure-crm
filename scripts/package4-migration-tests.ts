@@ -23,7 +23,7 @@ const files = [
 const manual = new Set([91, 92, 93, 95, 96, 100]);
 const digest = (sql: string) => createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex");
 const code = (...codes: string[]) => (error: unknown) => codes.includes(String((error as { code?: string }).code));
-const evidencePath = path.resolve("qa/package4-integration-2026-10-20/migrations.json");
+const evidencePath = path.resolve(".npm-cache/qa/package4-migrations.json");
 
 async function catalog(pool: InstanceType<typeof LocalSalesPool>) {
   const parts = [];

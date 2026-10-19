@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "observedAtUtc": "2026-10-19 22:23:26 UTC",
+  "scope": "Read-only connected metadata inventory for CRM package4; no deployment, DB connection, credential retrieval, or external mutation.",
+  "conclusion": {
+    "isolatedPreviewReady": false,
+    "reason": "No suitable synthetic-only CRM Neon branch or exact integration-branch secret binding could be verified with the available connector scope and runtime.",
+    "safeNextStep": "Continue local synthetic validation and draft PR. A protected remote preview needs a separately verified synthetic-only CRM database, restricted runtime role, exact branch-specific bindings, separate auth secrets, and disabled/sandboxed outbound integrations before deployment."
+  },
+  "runtime": {
+    "observationsCurrent": true,
+    "phase": "running",
+    "connectivity": "connected",
+    "networkPolicy": {
+      "desiredMode": "unrestricted",
+      "observedState": "unknown",
+      "executorStartupMode": "unrestricted",
+      "vpnConfigured": false,
+      "tcpDomains": [],
+      "tcpIpRanges": []
+    },
+    "secretBindings": [],
+    "runtimeVariables": [],
+    "outboundIdentities": [],
+    "cliAvailability": {
+      "neon": false,
+      "vercel": false
+    }
+  },
+  "neon": {
+    "accessibleProjects": [
+      {
+        "id": "rapid-bird-77154745",
+        "name": "evelyn-teams-qa",
+        "region": "aws-eu-central-1",
+        "pgVersion": 18,
+        "subscription": "free_v3",
+        "effectivePermission": "ADMIN"
+      }
+    ],
+    "branches": [
+      {
+        "projectId": "rapid-bird-77154745",
+        "id": "br-sweet-leaf-ba0livva",
+        "name": "production",
+        "default": true,
+        "primary": true,
+        "protected": false,
+        "state": "ready",
+        "initSource": "parent-data"
+      }
+    ],
+    "verifiedSyntheticOnlyCrmEnvironment": false,
+    "notes": [
+      "The accessible project is named for Teams QA, not CRM. Its only branch is the default production branch; its name does not prove real production data, and synthetic-only CRM provenance is unverified.",
+      "No database/schema contents were queried and no connection string was requested.",
+      "Other CRM Neon projects mentioned in repository documentation are not visible through this connector scope."
+    ]
+  },
+  "vercel": {
+    "team": {
+      "id": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "slug": "novalure"
+    },
+    "project": {
+      "id": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+      "name": "novalure-crm",
+      "liveField": false,
+      "pausedState": "not exposed by inspected project/deployment tool responses",
+      "ssoProtectionDeploymentType": "all_except_custom_domains",
+      "passwordProtectionDeploymentType": null,
+      "trustedIpsEnabled": false
+    },
+    "customEnvironments": [],
+    "latestDeployment": {
+      "id": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ",
+      "url": "https://novalure-6oufpyn2r-novalure.vercel.app",
+      "state": "READY",
+      "target": null,
+      "branch": "codex/evelyn-crm-mfa-update",
+      "sha": "3a80db40602827138b1dc34dfd3ae9f8ab876077"
+    },
+    "targetIntegrationBranch": "codex/evelyn-crm-package4-integration",
+    "exactBranchDeployments": 0,
+    "exactHeadDeployments": {
+      "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e": 0,
+      "b019a16811bd1d0d7c180ff013b76cea34c6e5bf": 0
+    },
+    "exactBranchSpecificEnvBindings": [],
+    "envMetadataComplete": false,
+    "envMetadataCaveat": "Unfiltered env metadata is server-truncated. All calls specified decrypt=false. Existence and metadata of a binding do not prove safe values or DB isolation.",
+    "otherBranchPreviewMetadata": [
+      {
+        "key": "NOVALURE_PRODUCTION_DATABASE_HOST",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_DATABASE_ROLE",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_DATABASE_NAME",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_BRANCH_ID",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_PROJECT_ID",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_DATABASE_HOST",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_QA_DATABASE_URL",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "DATABASE_URL",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_BOOKING_QA_RECIPIENTS_JSON",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_BOOKING_REAL_MODE",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_TRUST_AUTH_HEADERS",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_DEMO_AUTH_ENABLED",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_AUTH_STRICT",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_QA_PHONES_JSON",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_QA_EMAILS_JSON",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_QA_APPROVAL_ID",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_QA_CRM_PROJECT_ID",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_QA_ENABLED",
+        "type": "encrypted",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "NOVALURE_SESSION_SECRET",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      },
+      {
+        "key": "STUDIO_ENQUIRY_SIGNING_SECRET",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ],
+        "gitBranch": "codex/studio-preview-crm-handoff"
+      }
+    ],
+    "generalPreviewMetadata": [
+      {
+        "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+        "type": "plain",
+        "target": [
+          "preview"
+        ]
+      },
+      {
+        "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+        "type": "plain",
+        "target": [
+          "preview"
+        ]
+      },
+      {
+        "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+        "type": "sensitive",
+        "target": [
+          "preview"
+        ]
+      }
+    ],
+    "notes": [
+      "Vercel SSO protection covers all deployments except custom domains. No protection was changed or bypass created.",
+      "Existing Studio handoff bindings are tied to a different branch and guarded contract; reusing them for package4 has not been established as safe or authorized.",
+      "The project live=false field was observed, but no explicit paused flag is exposed by these connector responses; no pause/unpause action occurred."
+    ]
+  },
+  "constraintsRespected": [
+    "No production DB access",
+    "No secret values emitted or decrypted",
+    "No connection strings requested",
+    "No provisioning or paid service creation",
+    "No config mutation",
+    "No deployment or promotion",
+    "No protection changes"
+  ]
+}

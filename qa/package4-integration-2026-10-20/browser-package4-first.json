@@ -1,0 +1,53 @@
+{
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "ordinaryPasswordAndMfa": true,
+  "sessionInjected": false,
+  "websiteScanBoundary": "Real scanner and persistence; DNS and HTTP are explicit synthetic service ports, not the browser scan endpoint or an external website",
+  "providerConnections": 0,
+  "results": [
+    {
+      "name": "Combined unchanged predecessor migrations include Knowledge workflow, monitoring and CRM readers",
+      "status": "PASS",
+      "detail": {
+        "migrations": [
+          "091_production_runtime_forced_rls_cutover",
+          "101_knowledge_center",
+          "102_knowledge_document_processing",
+          "103_knowledge_assistant_service",
+          "104_knowledge_publication_workflow",
+          "105_knowledge_website_monitoring",
+          "106_crm_operational_readers"
+        ],
+        "runtime": {
+          "role": "sales_qa_f4b631efaf3e",
+          "rolsuper": false,
+          "rolbypassrls": false
+        }
+      }
+    },
+    {
+      "name": "A fresh Design C customer obtains its session with ordinary password and real TOTP",
+      "status": "PASS",
+      "detail": {
+        "ordinaryPassword": true,
+        "totpFromEnrollmentUi": true,
+        "sessionInjected": false
+      }
+    },
+    {
+      "name": "Customer creates a company knowledge area through the real portal",
+      "status": "PASS"
+    },
+    {
+      "name": "Real PDF parsing remains a draft until customer review, approval and publication",
+      "status": "FAIL",
+      "error": "The input did not match the regular expression /09:00/. Input:\n\n'--- Seite 1 ---\\nSYNTHETIC packagefourdocument: Company consu'\n"
+    }
+  ],
+  "pageErrors": [],
+  "serverErrors": [],
+  "outbound": [],
+  "scanRequests": [],
+  "passed": false
+}

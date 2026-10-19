@@ -91,10 +91,15 @@ async function openKnowledge() {
   const url = new URL("/", base);
   url.search = new URLSearchParams({ lang: "de", workspaceId: accounts.customer.workspaceId, projectId: "all" }).toString();
   url.hash = "knowledge";
+  const previousUrl = page.url();
   await page.goto(url.href, { waitUntil: "domcontentloaded" });
+  // An identical fragment URL is a same-document navigation. A new HTTP-created
+  // source requires a refreshed snapshot and the sources tab for this helper.
+  if (previousUrl === page.url()) await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.locator(".crm-app.design-c")).toBeVisible();
   await expect(page.locator(".crm-app")).toHaveAttribute("data-crm-audience", "customer");
   await expect(page.getByRole("button", { name: /^Wissensquellen \(/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Wissensquellen \(/ }).click();
 }
 function card(name) { return page.locator("li").filter({ has: page.getByRole("heading", { name, exact: true }) }); }
 async function lifecycle(name) {
@@ -227,10 +232,12 @@ try {
     await form.getByLabel("Wissensbereich", { exact: true }).selectOption(areaId);
     await form.getByLabel("Name (optional)", { exact: true }).fill(documentName);
     await form.getByLabel("Privates Dokument hochladen", { exact: true }).setInputFiles({ name: "synthetic-package4.pdf", mimeType: "application/pdf",
-      buffer: Buffer.from(await createTextPdf(["SYNTHETIC packagefourdocument: Company consultations begin at 09:00."])) });
+      buffer: Buffer.from(await createTextPdf(["SYNTHETIC packagefourdocument: 09:00."])) });
     await expect(card(documentName).getByText("Inhalt erkannt · Bitte prüfen", { exact: true })).toBeVisible();
     documentId = (await snapshot()).sources.find(row => row.name === documentName).id;
-    assert.equal((await source(documentId)).approvedVersionId, null);
+    const parsed = await source(documentId);
+    assert.equal(parsed.approvedVersionId, null);
+    assert.match(parsed.version.content, /packagefourdocument: 09:00/);
     assert.deepEqual(await query("webchat", "packagefourdocument"), []);
     assert.deepEqual(await query("voice", "packagefourdocument"), []);
     await publish(documentName, "packagefourdocument");

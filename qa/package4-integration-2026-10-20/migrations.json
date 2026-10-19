@@ -1,0 +1,267 @@
+{
+  "status": "PASS",
+  "syntheticOnly": true,
+  "remoteDatabaseAccess": 0,
+  "productionAccess": 0,
+  "mode": "disposable loopback PostgreSQL; not a Neon clone or deployment proof",
+  "limitations": [
+    "Historical 001 vector column/index substitution; manual 062 omitted by the existing shared fixture.",
+    "Local identity names satisfy actual 091 guards; no Neon branch, cloud grants, customer data, Preview or Production was inspected.",
+    "Rollback checks below are uncommitted transactional failure drills. No post-commit down-migration or production restore is claimed."
+  ],
+  "baseline": {
+    "maxMigrationNumber": 90,
+    "appliedFiles": 88,
+    "preview097Through099Excluded": true
+  },
+  "serverVersion": "18.4",
+  "combined104105106Rollback": true,
+  "transactionalFailureRollback": [
+    "091_production_runtime_forced_rls_cutover.sql",
+    "092_crm_production_machine_identity.sql",
+    "093_crm_machine_internal_context.sql",
+    "094_website_sales_ingestion.sql",
+    "095_form_tenant_isolation.sql",
+    "096_public_integration_gateway.sql",
+    "100_studio_enquiry_production.sql",
+    "101_knowledge_center.sql",
+    "102_knowledge_document_processing.sql",
+    "103_knowledge_assistant_service.sql",
+    "104_knowledge_publication_workflow.sql",
+    "105_knowledge_website_monitoring.sql",
+    "106_crm_operational_readers.sql"
+  ],
+  "applied": [
+    {
+      "file": "091_production_runtime_forced_rls_cutover.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155"
+    },
+    {
+      "file": "092_crm_production_machine_identity.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104"
+    },
+    {
+      "file": "093_crm_machine_internal_context.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a"
+    },
+    {
+      "file": "094_website_sales_ingestion.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac"
+    },
+    {
+      "file": "095_form_tenant_isolation.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219"
+    },
+    {
+      "file": "096_public_integration_gateway.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000"
+    },
+    {
+      "file": "100_studio_enquiry_production.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778"
+    },
+    {
+      "file": "101_knowledge_center.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e"
+    },
+    {
+      "file": "102_knowledge_document_processing.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd"
+    },
+    {
+      "file": "103_knowledge_assistant_service.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98"
+    },
+    {
+      "file": "104_knowledge_publication_workflow.sql",
+      "sourceCommit": "b019a16811bd1d0d7c180ff013b76cea34c6e5bf",
+      "normalizedSha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+    },
+    {
+      "file": "105_knowledge_website_monitoring.sql",
+      "sourceCommit": "b019a16811bd1d0d7c180ff013b76cea34c6e5bf",
+      "normalizedSha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+    },
+    {
+      "file": "106_crm_operational_readers.sql",
+      "sourceCommit": "ee26bbdec11f7bd7c340f3b3020512dd3ee8642e",
+      "normalizedSha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+    }
+  ],
+  "runner": {
+    "checksummedReplaySkipsAll": true,
+    "missing105Planned": true,
+    "tampered104Rejected": true,
+    "missing090Rejected": true,
+    "manual100Before096Rejected": true,
+    "explicitManualCutoverRequired": true,
+    "uniqueForwardMigrationNumbersFrom091": true,
+    "unchangedHistoricalNumber013Collision": [
+      "013_analysis_bot_70_sprint.sql",
+      "013_newsletter_suppressions.sql"
+    ]
+  },
+  "directReplay": {
+    "explicitFailure": true,
+    "catalogAndLedgerUnchanged": true
+  },
+  "roles": [
+    {
+      "rolname": "neondb_owner",
+      "rolsuper": false,
+      "rolbypassrls": true,
+      "rolcreatedb": true,
+      "rolcreaterole": true,
+      "rolreplication": false
+    },
+    {
+      "rolname": "novalure_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false
+    },
+    {
+      "rolname": "novalure_tenant_app",
+      "rolsuper": false,
+      "rolbypassrls": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false
+    }
+  ],
+  "forcedRls": [
+    {
+      "relname": "company_profile_versions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "company_profiles",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_area_grants",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_areas",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_assistant_service_bindings",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_center_entitlements",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_change_proposals",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_chunks",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_maintenance_configurations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_publication_workflows",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_query_usage",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_source_versions",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_sources",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_website_monitoring",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_website_scan_runs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    },
+    {
+      "relname": "knowledge_workflow_events",
+      "relrowsecurity": true,
+      "relforcerowsecurity": true,
+      "owner": "neondb_owner"
+    }
+  ],
+  "permissions": {
+    "runtimeOwnsNoPublicRelation": true,
+    "missingContextSeesNoKnowledge": true,
+    "providerCredentialsAndServicePrincipalsPrivate": true,
+    "runtimeCannotProvisionEntitlement": true,
+    "operationalPrivateHelpersDenied": true,
+    "operationalReadRequiresValidContext": true
+  },
+  "defaultActivation": {
+    "enabledEntitlements": 0,
+    "enabledMonitoring": 0,
+    "assistantBindings": 0,
+    "workflowEvents": 0
+  },
+  "savedCombinedRecords": {
+    "separateCommittedTransactions": true,
+    "tenantCount": 2,
+    "monitoringAndInternalEventsIsolated": true,
+    "operationalReadersAvailableOnSameSchema": true,
+    "foreignOperationalCallDenied": true,
+    "foreignEventWriteDenied": true,
+    "eventsAppendOnly": true,
+    "monitoringActivationWithoutContractDenied": true,
+    "contextClearedAfterCommit": true
+  }
+}

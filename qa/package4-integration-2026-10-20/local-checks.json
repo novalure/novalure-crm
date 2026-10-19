@@ -1,0 +1,235 @@
+{
+  "scope": "Local synthetic checks; counts are per command/subcommand, may overlap; no sum implied",
+  "checks": [
+    {
+      "id": "knowledge",
+      "passed": [
+        121,
+        19
+      ],
+      "failed": [
+        0,
+        0
+      ],
+      "artifact": "knowledge.txt",
+      "rawLogSha256": "9543636e1e11aeb04dd36f3284b53c146138cb89961379ee241db1cc5eb6751b",
+      "artifactSha256": "9543636e1e11aeb04dd36f3284b53c146138cb89961379ee241db1cc5eb6751b"
+    },
+    {
+      "id": "package3-final",
+      "passed": [
+        43,
+        5
+      ],
+      "failed": [
+        0,
+        0
+      ],
+      "artifact": "package3-final.txt",
+      "rawLogSha256": "09219bcd81df4bd1c68ae3388d03ef66e02a8f3efa6f82583f4054151c346dcc",
+      "artifactSha256": "09219bcd81df4bd1c68ae3388d03ef66e02a8f3efa6f82583f4054151c346dcc"
+    },
+    {
+      "id": "unit",
+      "passed": [
+        243
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "unit.txt",
+      "rawLogSha256": "5755eab07d294b713182eb0f128066b994a3cc3f9a70cfdf87c4f54768faf6fc",
+      "artifactSha256": "5755eab07d294b713182eb0f128066b994a3cc3f9a70cfdf87c4f54768faf6fc"
+    },
+    {
+      "id": "sales",
+      "passed": [
+        93
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "sales.txt",
+      "rawLogSha256": "c42d4a17d15b9a9a42a4c525c20032dc1e038edd42de3f90f3cde2a599f164ed",
+      "artifactSha256": "c42d4a17d15b9a9a42a4c525c20032dc1e038edd42de3f90f3cde2a599f164ed"
+    },
+    {
+      "id": "sales-final",
+      "passed": [
+        55
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "sales-final.txt",
+      "rawLogSha256": "ea6fad83d0830e704de3494611b7227fdea83d10022d67f334e14aa2c564374d",
+      "artifactSha256": "ea6fad83d0830e704de3494611b7227fdea83d10022d67f334e14aa2c564374d"
+    },
+    {
+      "id": "g08",
+      "passed": [
+        54
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "g08.txt",
+      "rawLogSha256": "647529fe48f192c69f1272e074514910f769616aa9845627b16f6e30ba4dbf7e",
+      "artifactSha256": "647529fe48f192c69f1272e074514910f769616aa9845627b16f6e30ba4dbf7e"
+    },
+    {
+      "id": "integration",
+      "passed": [
+        17
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "integration.txt",
+      "rawLogSha256": "3ea01945cb82846ebdec150df22ced9747bb8b551a2abcfbbec82c9631ed5926",
+      "artifactSha256": "3ea01945cb82846ebdec150df22ced9747bb8b551a2abcfbbec82c9631ed5926"
+    },
+    {
+      "id": "operational-readers",
+      "passed": [
+        12,
+        7
+      ],
+      "failed": [
+        0,
+        0
+      ],
+      "artifact": "operational-readers.txt",
+      "rawLogSha256": "cb15171ffb3511cc73c7c25031d85f63e2ea34e3eee18f60a50ce9399d92085c",
+      "artifactSha256": "cb15171ffb3511cc73c7c25031d85f63e2ea34e3eee18f60a50ce9399d92085c"
+    },
+    {
+      "id": "studio-enquiry-view",
+      "passed": [
+        11
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "studio-enquiry-view.txt",
+      "rawLogSha256": "7a2093124d594d070c0cf19a2118372390df944de5a6708f83a4433440cb6c48",
+      "artifactSha256": "7a2093124d594d070c0cf19a2118372390df944de5a6708f83a4433440cb6c48"
+    },
+    {
+      "id": "design-c",
+      "passed": [
+        13,
+        14
+      ],
+      "failed": [
+        0,
+        0
+      ],
+      "artifact": "design-c.txt",
+      "rawLogSha256": "ef4dbdff2dca4ea9f271ef4a833f3fa7afff617ebf0ae74acc9cea921d4722b0",
+      "artifactSha256": "ef4dbdff2dca4ea9f271ef4a833f3fa7afff617ebf0ae74acc9cea921d4722b0"
+    },
+    {
+      "id": "studio",
+      "passed": [
+        128
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "studio.txt",
+      "rawLogSha256": "776ef17d1a6bf7f2ae09c4965a55cc23ffdeb17b02520b6777dd89acd6dd823d",
+      "artifactSha256": "776ef17d1a6bf7f2ae09c4965a55cc23ffdeb17b02520b6777dd89acd6dd823d"
+    },
+    {
+      "id": "migrations-final",
+      "passed": [
+        20
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "migrations-final.txt",
+      "rawLogSha256": "3086324b17d7630fe0199629698d0f58880a53621e72c6eef6f7f9695e75d14c",
+      "artifactSha256": "3086324b17d7630fe0199629698d0f58880a53621e72c6eef6f7f9695e75d14c"
+    },
+    {
+      "id": "security-final",
+      "passed": [
+        17
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "security-final.txt",
+      "rawLogSha256": "9db2e07dde78fcdf652911bfce270942c56eb686275452aedd8e455649c01956",
+      "artifactSha256": "9db2e07dde78fcdf652911bfce270942c56eb686275452aedd8e455649c01956"
+    },
+    {
+      "id": "protected-preview",
+      "passed": [
+        17
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "protected-preview.txt",
+      "rawLogSha256": "8e6048e41b3280cb8d33e0e01e13a3cebae819045765df264ab6dc263759314d",
+      "artifactSha256": "8e6048e41b3280cb8d33e0e01e13a3cebae819045765df264ab6dc263759314d"
+    },
+    {
+      "id": "gateway",
+      "passed": [
+        10
+      ],
+      "failed": [
+        0
+      ],
+      "artifact": "gateway.txt",
+      "rawLogSha256": "53988c3305e1fffdba236940f2a7a1159eb580fc4f5c2e41ceb7cd7ba45ea3fd",
+      "artifactSha256": "53988c3305e1fffdba236940f2a7a1159eb580fc4f5c2e41ceb7cd7ba45ea3fd"
+    },
+    {
+      "id": "typecheck",
+      "passed": [],
+      "failed": [],
+      "artifact": "typecheck.txt",
+      "rawLogSha256": "ca4007e6ca8e9132c68fb196ac6e7f8be61d94e2987e9b464c8c895d1aea2603",
+      "artifactSha256": "78b3395e7b9e5263b968c019a932702e74f3c4174cfe03ce68bcdd0a501bf197"
+    },
+    {
+      "id": "lint",
+      "passed": [],
+      "failed": [],
+      "artifact": "lint.txt",
+      "rawLogSha256": "0a655bc9181b646d57f081b6a0c3f2d23e521f445bc7c59e0ad7f405d1f56f07",
+      "artifactSha256": "8d64093a7856e856ee5b645a83767520b5d1ddf43dd43a501351a4fa2a747b8a"
+    },
+    {
+      "id": "build-final",
+      "passed": [],
+      "failed": [],
+      "artifact": "build-final.txt",
+      "rawLogSha256": "b2b0f6c039f7076fb352c648413211690ac2115c6aadd0272d2503eab38c2fb3",
+      "artifactSha256": "8e14036f74675b952798ee1ef8d1cd7d15f5e7e482b4f567bc8618b5ef0b16d0"
+    },
+    {
+      "id": "audit",
+      "passed": [],
+      "failed": [],
+      "artifact": "audit.txt",
+      "rawLogSha256": "ea1f32ffa99510dc0cebe61ef2913fb7ff4d634afdbe1de35adfe0c7496d47b1",
+      "artifactSha256": "ea1f32ffa99510dc0cebe61ef2913fb7ff4d634afdbe1de35adfe0c7496d47b1"
+    }
+  ],
+  "environment": {
+    "node": "v24.19.0",
+    "npm": "11.9.0",
+    "ciNodePinned": "24.14.0",
+    "database": "disposable loopback PostgreSQL 18.4"
+  },
+  "firstSalesFailure": {
+    "reason": "Missing default Chrome executable; rerun with installed Chromium matching CI succeeded",
+    "originalLogSha256": "a136bf61ee2800705650b318f351f931816b8565cd87b7ba90e92111b6e4c06d"
+  }
+}

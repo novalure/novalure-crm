@@ -146,6 +146,21 @@ jobs:
       - name: Integrated Design C and Knowledge customer acceptance on isolated PostgreSQL
         run: npm run qa:package4:e2e
 
+      - name: Retain bounded synthetic integration results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crm-package4-synthetic-results
+          # Exact result-file allowlist; never upload fixture-private/context files.
+          include-hidden-files: true
+          path: |
+            .npm-cache/qa/package4-migrations.json
+            .npm-cache/qa/package4-e2e-result.json
+            .npm-cache/qa/design-c-integration/result.json
+            .npm-cache/qa/knowledge-browser-result.json
+            .npm-cache/qa/package4-integration/result.json
+          if-no-files-found: warn
+
       - name: Reject whitespace errors
         shell: bash
         env:

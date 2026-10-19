@@ -1,0 +1,47 @@
+
+> novalure-crm@0.1.0 test:design-c-integration
+> node --conditions=react-server --import tsx --test scripts/design-c-integration-tests.ts && node --import tsx --test scripts/customer-access-presentation-tests.ts scripts/form-command-center-source-tests.mjs scripts/newsletter-source-availability-tests.tsx scripts/lead-inbox-presentation-tests.ts
+
+✔ customer presets retain read-only Knowledge while management requires existing capabilities (1.846888ms)
+✔ internal department presets keep their existing navigation contract (0.729405ms)
+✔ non-database modules cannot leak fixture collections into the integrated CRM (0.504531ms)
+✔ absent module provenance fails closed while error and completeness metadata survive (0.595186ms)
+✔ an unreliable daily queue does not survive an unavailable tasks module (0.237874ms)
+✔ verified empty database collections count as zero; unavailable sources never do (1.066798ms)
+✔ source errors suppress stale numerical values (0.330151ms)
+✔ loading and invalid project scopes expose no counts, activity or appointments (0.817076ms)
+✔ unavailable or forbidden sections cannot contribute hidden metrics or activities (0.513324ms)
+✔ customers and offers are never guessed from contacts or pipeline figures (0.501427ms)
+✔ synthetic lead relations do not become business tasks or appointments (0.362629ms)
+✔ mixed module failures remain unavailable sections rather than empty successes (0.286807ms)
+✔ daily queue provenance covers contacts, deals and failed modules (1.602325ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 329.211349
+✔ fixture fallback, absent provenance and malformed customer responses cannot become loaded data (1.373394ms)
+✔ an explicitly empty database response remains an authoritative empty collection (0.215411ms)
+✔ initial customer rendering waits for the API without showing passed fixture names, metrics or actions (22.367281ms)
+✔ mounted forms start with no business records and templates require explicit creation (1.345351ms)
+✔ a verified empty database response clears forms and selection (6.581453ms)
+✔ real persisted forms and submissions retain the existing normalization flow (1.18974ms)
+✔ HTTP, network and repository fallback failures stay unavailable instead of confirmed empty (10.097304ms)
+✔ responses after unmount never mutate form state (1.036853ms)
+✔ missing related adapters label consent and history unknown while preserving real lead work (83.024093ms)
+✔ an explicitly available related adapter keeps the existing consent and history presentation (9.127772ms)
+✔ unconnected newsletter auxiliary data preserves campaigns and labels unknown counts without enabling sends (128.508364ms)
+✔ unavailable newsletter data is localized in English (10.286045ms)
+✔ callers with verified related data retain the existing newsletter recipient flow by default (11.856892ms)
+✔ missing open-rate measurements in persisted sent campaigns remain unknown (3.260181ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1830.080634

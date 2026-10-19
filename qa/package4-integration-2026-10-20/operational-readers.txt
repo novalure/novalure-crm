@@ -1,0 +1,40 @@
+
+> novalure-crm@0.1.0 test:crm-operational-readers
+> node --conditions=react-server --import tsx --test scripts/crm-operational-read-tests.ts && node --import tsx --test scripts/calendar-oauth-source-tests.mjs
+
+▶ operational read DTOs use actual forced-RLS predecessors and an unprivileged runtime
+  ✔ runtime identity remains non-owner, non-superuser and non-BYPASSRLS (3.72832ms)
+  ✔ saved nonempty history returns scoped DTOs and excludes configuration/payload secrets (62.81172ms)
+  ✔ authorized empty project is database-backed empty; bot scope omits unbound meetings (28.846996ms)
+  ✔ original technical RBAC is preserved, including project-granted viewer reads (71.146257ms)
+  ✔ mixed-tenant and conflicting saved relationships are omitted, not repaired from metadata (52.611775ms)
+  ✔ foreign, ungranted, malformed and conflicting project/bot scopes cannot become workspace reads (63.084396ms)
+  ✔ fresh membership defeats stale client roles and inactive/service actors (26.924803ms)
+  ✔ raw tables remain inaccessible and no write privileges are added (53.439576ms)
+  ✔ SQL entry points independently reject unset or mismatched context (79.082253ms)
+  ✔ a missing reader function remains a failed source and transactional rollback restores it (43.642086ms)
+  ✔ call-insight and workflow approvals preserve valid models and reject foreign or mismatched links (77.429993ms)
+✔ operational read DTOs use actual forced-RLS predecessors and an unprivileged runtime (5760.054165ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6294.071464
+✔ calendar initially renders an unknown connection state in both languages (23.544391ms)
+✔ managed workspace reads use the selected workspace and expose read-only connections (4.879924ms)
+✔ managed workspace context cannot invoke origin-workspace connection or settings writers (135.705504ms)
+✔ managed workspace booking overview never fetches origin-workspace records (47.541773ms)
+✔ a successful disconnected status remains a verified ready result (1.026628ms)
+✔ failed or malformed OAuth sources remain unavailable without replacing connection state (4.867837ms)
+✔ OAuth responses after unmount do not mutate connection state (0.925307ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1326.830811

@@ -1,0 +1,164 @@
+
+> novalure-crm@0.1.0 build
+> next build
+
+▲ Next.js 16.4.0 (Turbopack)
+✓ Running next.config.ts took 25ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1588ms
+  Running TypeScript ...
+  Finished TypeScript in 2.9s ...
+  Collecting page data using 4 workers ...
+  Generating static pages using 4 workers (0/106) ...
+  Generating static pages using 4 workers (26/106)
+  Generating static pages using 4 workers (52/106)
+  Generating static pages using 4 workers (79/106)
+✓ Generating static pages using 4 workers (106/106) in 324ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /api/admin/audit-logs
+├ ƒ /api/approvals
+├ ƒ /api/auth/csrf
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/onboarding
+├ ƒ /api/auth/password-reset/confirm
+├ ƒ /api/auth/password-reset/exchange
+├ ƒ /api/auth/password-reset/request
+├ ƒ /api/auth/session
+├ ƒ /api/bots/actions
+├ ƒ /api/bots/agent
+├ ƒ /api/bots/calls
+├ ƒ /api/bots/channels
+├ ƒ /api/bots/channels/webhook
+├ ƒ /api/bots/chat
+├ ƒ /api/bots/documents
+├ ƒ /api/bots/evaluations
+├ ƒ /api/bots/knowledge
+├ ƒ /api/bots/leads
+├ ƒ /api/bots/meetings
+├ ƒ /api/calendar/google
+├ ƒ /api/calendar/microsoft
+├ ƒ /api/crm/analytics-events
+├ ƒ /api/crm/bots
+├ ƒ /api/crm/broker/mandates
+├ ƒ /api/crm/broker/search-profiles
+├ ƒ /api/crm/calendar-events
+├ ƒ /api/crm/commands/reconcile
+├ ƒ /api/crm/contacts
+├ ƒ /api/crm/contract/v1
+├ ƒ /api/crm/core
+├ ƒ /api/crm/customer-access
+├ ƒ /api/crm/dashboard-views
+├ ƒ /api/crm/data-quality
+├ ƒ /api/crm/deals
+├ ƒ /api/crm/deals/[dealId]/stage
+├ ƒ /api/crm/deals/[dealId]/stage-history
+├ ƒ /api/crm/editor-preflight
+├ ƒ /api/crm/evelyn-contracts
+├ ƒ /api/crm/funnels
+├ ƒ /api/crm/google-notifications
+├ ƒ /api/crm/google-notifications/[notificationId]/retry
+├ ƒ /api/crm/leads
+├ ƒ /api/crm/notes
+├ ƒ /api/crm/offers
+├ ƒ /api/crm/projects
+├ ƒ /api/crm/properties
+├ ƒ /api/crm/properties/expose
+├ ƒ /api/crm/properties/expose/[documentId]
+├ ƒ /api/crm/property-sales
+├ ƒ /api/crm/recommendation-runtime
+├ ƒ /api/crm/reservations
+├ ƒ /api/crm/tasks
+├ ƒ /api/crm/teams-notifications
+├ ƒ /api/crm/teams-notifications/[notificationId]/retry
+├ ƒ /api/crm/units
+├ ƒ /api/cron/google-alerts
+├ ƒ /api/cron/meeting-reminders
+├ ƒ /api/cron/property-reservations
+├ ƒ /api/cron/teams-alerts
+├ ƒ /api/forms
+├ ƒ /api/forms/submissions
+├ ƒ /api/funnels/[funnelId]/blueprint
+├ ƒ /api/funnels/[funnelId]/submissions
+├ ƒ /api/health
+├ ƒ /api/integrations/knowledge/voice
+├ ƒ /api/integrations/knowledge/webchat
+├ ƒ /api/integrations/websites
+├ ƒ /api/knowledge-center
+├ ƒ /api/knowledge-center/areas
+├ ƒ /api/knowledge-center/areas/[areaId]
+├ ƒ /api/knowledge-center/assignments
+├ ƒ /api/knowledge-center/documents
+├ ƒ /api/knowledge-center/monitoring
+├ ƒ /api/knowledge-center/publish
+├ ƒ /api/knowledge-center/query
+├ ƒ /api/knowledge-center/scans
+├ ƒ /api/knowledge-center/sources
+├ ƒ /api/knowledge-center/sources/[sourceId]
+├ ƒ /api/knowledge-center/sources/[sourceId]/document
+├ ƒ /api/knowledge-center/versions
+├ ƒ /api/knowledge-center/workflow
+├ ƒ /api/media
+├ ƒ /api/media/[assetId]
+├ ƒ /api/media/files/[assetId]
+├ ƒ /api/media/public/[token]
+├ ƒ /api/meetings/availability
+├ ƒ /api/meetings/bookings
+├ ƒ /api/meetings/bookings/[bookingId]/cancel
+├ ƒ /api/meetings/bookings/[bookingId]/confirm
+├ ƒ /api/meetings/bookings/[bookingId]/reschedule
+├ ƒ /api/meetings/notifications
+├ ƒ /api/meetings/notifications/[notificationId]/retry
+├ ƒ /api/meetings/oauth/[provider]/callback
+├ ƒ /api/meetings/oauth/[provider]/disconnect
+├ ƒ /api/meetings/oauth/[provider]/start
+├ ƒ /api/meetings/oauth/status
+├ ƒ /api/meetings/settings
+├ ƒ /api/newsletter/send
+├ ƒ /api/public/integrations/chat/knowledge
+├ ƒ /api/public/integrations/chat/messages
+├ ƒ /api/public/integrations/chat/sessions
+├ ƒ /api/public/integrations/forms
+├ ƒ /api/public/integrations/forms/submissions
+├ ƒ /api/public/website-sales
+├ ƒ /api/public/website-sales/booking
+├ ƒ /api/public/website-sales/enquiry
+├ ƒ /api/settings/access/password
+├ ƒ /api/settings/access/users
+├ ƒ /api/settings/company-profile
+├ ƒ /api/system/database
+├ ƒ /api/version
+├ ƒ /api/workspaces
+├ ƒ /book/[slug]
+├ ƒ /book/[slug]/[meetingSlug]
+├ ƒ /cookies
+├ ƒ /data-deletion
+├ ƒ /datadeletion
+├ ƒ /forms/[slug]
+├ ƒ /forms/[slug]/[formSlug]
+├ ƒ /forms/embed
+├ ○ /icon.svg
+├ ƒ /imprint
+├ ƒ /login
+├ ƒ /login/forgot-password
+├ ƒ /login/reset-password
+├ ƒ /m/[slug]
+├ ƒ /m/[slug]/[meetingSlug]
+├ ƒ /meta
+├ ƒ /preview/[funnelId]
+├ ƒ /privacy
+├ ƒ /terms
+├ ƒ /unsubscribe
+├ ƒ /visual-qa/crm
+└ ƒ /visual-qa/crm/content
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

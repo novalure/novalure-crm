@@ -1,0 +1,69 @@
+
+> novalure-crm@0.1.0 test:g08
+> node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts
+
+✔ Evelyn contract golden: hashes and route JTIs match exact pinned Evelyn implementation (1.735845ms)
+✔ Evelyn client registers 20,370 EUR as two-step pending with separate request/protection credentials (16.34298ms)
+✔ C-03: a standard accepted contract below EUR 5,000 still requires A3 (2.014939ms)
+✔ Evelyn Verify sends exactly eight fields and returns only a strictly bound VALID response (0.900501ms)
+✔ Evelyn fail closed: INVALID never authorizes execution (0.94696ms)
+✔ Evelyn fail closed: PENDING never authorizes execution (0.498552ms)
+✔ Evelyn fail closed: EXPIRED never authorizes execution (0.387908ms)
+✔ Evelyn fail closed: REJECTED never authorizes execution (0.442399ms)
+✔ Evelyn fail closed: VERSION_MISMATCH never authorizes execution (0.420446ms)
+✔ Evelyn fail closed: ACTION_MISMATCH never authorizes execution (0.889284ms)
+✔ Evelyn fail closed: TENANT_MISMATCH never authorizes execution (5.484265ms)
+✔ Evelyn fail closed: HTTP 400 rejects even a VALID-looking body (0.418613ms)
+✔ Evelyn fail closed: HTTP 401 rejects even a VALID-looking body (0.265996ms)
+✔ Evelyn fail closed: HTTP 403 rejects even a VALID-looking body (0.254649ms)
+✔ Evelyn fail closed: HTTP 409 rejects even a VALID-looking body (0.274348ms)
+✔ Evelyn fail closed: HTTP 429 rejects even a VALID-looking body (0.231395ms)
+✔ Evelyn fail closed: HTTP 500 rejects even a VALID-looking body (0.24898ms)
+✔ Evelyn fail closed: HTTP 502 rejects even a VALID-looking body (0.395449ms)
+✔ Evelyn fail closed: HTTP 503 rejects even a VALID-looking body (0.240919ms)
+✔ Evelyn fail closed: unreachable, token failure, body failure and timeout expose no credential detail (56.005567ms)
+✔ Evelyn fail closed: invalid JSON, HTML/protection response and oversized response (2.137442ms)
+✔ Evelyn fail closed: response schema and authority bindings cannot be widened (3.995678ms)
+✔ Evelyn VALID requires exact Owner A3 authority without transmitting an Owner identity (2.421866ms)
+✔ Evelyn fail closed: malformed request and wrong tenant are denied before identity/network calls (0.464892ms)
+✔ Evelyn action integrity: price, recipient, content, tenant, resource and versions change the hash (0.578562ms)
+✔ Evelyn retries keep business identity/body and mint distinct route-bound transport nonces (1.090774ms)
+✔ Evelyn request is immutable while asynchronous identity acquisition runs (0.343402ms)
+✔ Evelyn production factory refuses local, production, wrong-project and custom environments (0.451432ms)
+▶ G08 durable Preview contract boundary against real isolated PostgreSQL
+  ✔ registered synthetic target, identical tenant and approved acceptance source are mandatory (213.387882ms)
+  ✔ one source offer has one action lineage across same-key replay and parallel different keys (393.32461ms)
+  ✔ 20370 EUR derives from accepted source and duplicated requests persist a single reference (215.248106ms)
+  ✔ actual dispatcher records the server operation and refuses an ungranted same-tenant actor (166.759986ms)
+  ✔ Sales, Finance and Admin without Owner grant cannot request, verify or execute contract send (194.084074ms)
+  ✔ pending cannot execute; fresh repeated verification and concurrent retry commit exactly once (410.81232ms)
+  ✔ same idempotency identity with different approval payload is rejected before remote verify (288.6722ms)
+  ✔ changing amount creates immutable revision and old approval cannot verify or execute (432.746704ms)
+  ✔ revision during the external verify call blocks the final transactional effect (299.753548ms)
+  ✔ source offer mutation during external verify blocks final effect and preserves source binding (199.217657ms)
+  ✔ audit failure rolls back execution; immutable audit records and default RLS deny tampering (198.957054ms)
+  ✔ revoked allowlist and production test overrides fail closed (128.370058ms)
+✔ G08 durable Preview contract boundary against real isolated PostgreSQL (5669.270975ms)
+▶ G08 route rejects service bearer and forged Owner headers in every runtime scope
+  ✔ local identity, including spoofed HTTP headers (18.372822ms)
+  ✔ Production runtime (0.818699ms)
+  ✔ foreign Preview project (0.722666ms)
+  ✔ Production target despite Preview ENV (0.498582ms)
+✔ G08 route rejects service bearer and forged Owner headers in every runtime scope (21.774536ms)
+▶ Preview MFA session, challenge and reset cookies use HTTPS without changing localhost behavior
+  ✔ actual Vercel Preview (0.381398ms)
+  ✔ Vercel Production (0.16145ms)
+  ✔ Vercel development (0.188892ms)
+  ✔ localhost development (0.194219ms)
+  ✔ standalone Production (0.198335ms)
+  ✔ local Preview-shaped browser harness (0.1279ms)
+  ✔ trimmed Vercel Preview (0.10711ms)
+✔ Preview MFA session, challenge and reset cookies use HTTPS without changing localhost behavior (2.479101ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 54
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6215.08048

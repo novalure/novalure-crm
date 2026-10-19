@@ -1,0 +1,5 @@
+
+> novalure-crm@0.1.0 security:production
+> npm audit --omit=dev --audit-level=moderate
+
+found 0 vulnerabilities

@@ -1,0 +1,178 @@
+{
+  "recordedAtUtc": "2026-10-19T22:31:25.832Z",
+  "scope": "Package 4 local development acceptance; final remote CI and exact-head independent review are reported in the Draft PR after push",
+  "status": "LOCAL_ACCEPTANCE_PASS_REMOTE_RELEASE_BLOCKED",
+  "sourceTrees": {
+    "src": "9961fe69517d2879413b43fb6e4322ded34e2cb9",
+    "migrations": "9221b7e098c28d158e9f97b92e90ddd80ff9da6a",
+    "design-c": "76100f8ea94b8c45028a94f4807697e9597c9d6d"
+  },
+  "buildSourceCommit": "d3c1cbe625db61742ab08b07123aeff1e592bb77",
+  "localBrowser": {
+    "designC": 50,
+    "knowledge": 13,
+    "integratedPackage4": 13,
+    "failed": 0,
+    "ordinaryPasswordAndTotp": true,
+    "externalWebsiteProviderTested": false,
+    "syntheticScannerRequests": 1,
+    "limitation": "50 and 13 existing suites passed on the combined built fixture; the additional 13 passed after focused harness corrections on a fresh combined fixture. Final CI reruns the complete wrapper on one fresh fixture."
+  },
+  "gates": {
+    "A": "PASS",
+    "B": "NOT TESTED",
+    "C": "PASS",
+    "D": "PASS",
+    "E": "PASS",
+    "F": "BLOCKED",
+    "G": "BLOCKED"
+  },
+  "blockers": [
+    "No verified isolated synthetic-only Neon CRM test binding; portable PostgreSQL is not a Neon clone",
+    "No exact-branch private file/auth/runtime secret bindings for a hosted protected Preview",
+    "Final exact-head GitHub CI and independent review to be confirmed after push",
+    "No Production authorization; external Studio webchat, voice provider and trusted scheduler actor are separate activations"
+  ],
+  "artifacts": [
+    {
+      "file": "audit.txt",
+      "sha256": "ea1f32ffa99510dc0cebe61ef2913fb7ff4d634afdbe1de35adfe0c7496d47b1"
+    },
+    {
+      "file": "browser-design-c.json",
+      "sha256": "933ef335f4e480f22544ba68de09a4a151b64e3ce8a0c28e2e6dd403f205fd65"
+    },
+    {
+      "file": "browser-first-design-c.json",
+      "sha256": "b82c768b76fd70283b6ab0c2ce713058e3097f033054c5cef677d224247a637a"
+    },
+    {
+      "file": "browser-first-run.json",
+      "sha256": "65464ef815f77eaadab9285d5d18d1f70f4d0d36412a772f90573c6ed8776b73"
+    },
+    {
+      "file": "browser-knowledge.json",
+      "sha256": "211a572776b1e4c6b25368eabfbd668611d415f60bc5d2dc51e3b61a11ab7d2e"
+    },
+    {
+      "file": "browser-package4-first.json",
+      "sha256": "ab4417ecc170fce9aab400056f686c88515345d3ab3c02dd01c38fc96076d3f6"
+    },
+    {
+      "file": "browser-package4-second.json",
+      "sha256": "c6b4ef1aca659868a4ed781407bfd28c6b60486968babb01ce85515d1d11d45e"
+    },
+    {
+      "file": "browser-package4.json",
+      "sha256": "99780b18339922f16a99c009f94e6b643dab7b2937c4b3aba21c05870ea5cb8f"
+    },
+    {
+      "file": "browser-package4.txt",
+      "sha256": "79d1450d1ad30b44f1bf73bda7a0f436ac3f1c2706a01d4d8f44b86c47740214"
+    },
+    {
+      "file": "browser-second-run.json",
+      "sha256": "7cb9db8c1bd42499fe5272905f0eaf5d3cf9df816af85832b0677fee05fca3b4"
+    },
+    {
+      "file": "build-final.txt",
+      "sha256": "8e14036f74675b952798ee1ef8d1cd7d15f5e7e482b4f567bc8618b5ef0b16d0"
+    },
+    {
+      "file": "design-c.txt",
+      "sha256": "ef4dbdff2dca4ea9f271ef4a833f3fa7afff617ebf0ae74acc9cea921d4722b0"
+    },
+    {
+      "file": "desktop.png",
+      "sha256": "99db2f035cdaed723efcd482835a4c68eac1b62073b93a3c87fea70cd79b4c70"
+    },
+    {
+      "file": "g08.txt",
+      "sha256": "647529fe48f192c69f1272e074514910f769616aa9845627b16f6e30ba4dbf7e"
+    },
+    {
+      "file": "gateway.txt",
+      "sha256": "53988c3305e1fffdba236940f2a7a1159eb580fc4f5c2e41ceb7cd7ba45ea3fd"
+    },
+    {
+      "file": "git-inputs.json",
+      "sha256": "bb77e9afb721f24daf6c7d2a3ac1766ada7cb35e685da8b28edfb6217f894d65"
+    },
+    {
+      "file": "infrastructure.json",
+      "sha256": "3a06958958eb1bb7e8f4bf2c7fea5ea68280719912eda57b773da66066fdff65"
+    },
+    {
+      "file": "integration.txt",
+      "sha256": "3ea01945cb82846ebdec150df22ced9747bb8b551a2abcfbbec82c9631ed5926"
+    },
+    {
+      "file": "knowledge.txt",
+      "sha256": "9543636e1e11aeb04dd36f3284b53c146138cb89961379ee241db1cc5eb6751b"
+    },
+    {
+      "file": "lint.txt",
+      "sha256": "8d64093a7856e856ee5b645a83767520b5d1ddf43dd43a501351a4fa2a747b8a"
+    },
+    {
+      "file": "local-checks.json",
+      "sha256": "baaa49148dea9bd02372f7acc06c71b34a6bccef11dfcf44ab29b86039d69d47"
+    },
+    {
+      "file": "migrations-final.txt",
+      "sha256": "3086324b17d7630fe0199629698d0f58880a53621e72c6eef6f7f9695e75d14c"
+    },
+    {
+      "file": "migrations.json",
+      "sha256": "bb607766f7feb30f109e065360be099422f0b481bda943dd122d1c2c915780c2"
+    },
+    {
+      "file": "mobile.png",
+      "sha256": "9d70a058427018f639fd3974749dfa8639e9b3f1439e1c8ddee2abc877af0c7a"
+    },
+    {
+      "file": "operational-readers.txt",
+      "sha256": "cb15171ffb3511cc73c7c25031d85f63e2ea34e3eee18f60a50ce9399d92085c"
+    },
+    {
+      "file": "package3-final.txt",
+      "sha256": "09219bcd81df4bd1c68ae3388d03ef66e02a8f3efa6f82583f4054151c346dcc"
+    },
+    {
+      "file": "protected-preview.txt",
+      "sha256": "8e6048e41b3280cb8d33e0e01e13a3cebae819045765df264ab6dc263759314d"
+    },
+    {
+      "file": "sales-final.txt",
+      "sha256": "ea6fad83d0830e704de3494611b7227fdea83d10022d67f334e14aa2c564374d"
+    },
+    {
+      "file": "sales.txt",
+      "sha256": "c42d4a17d15b9a9a42a4c525c20032dc1e038edd42de3f90f3cde2a599f164ed"
+    },
+    {
+      "file": "security-final.txt",
+      "sha256": "9db2e07dde78fcdf652911bfce270942c56eb686275452aedd8e455649c01956"
+    },
+    {
+      "file": "source-binding.json",
+      "sha256": "bd6e41e300b5b278db749569b12b4a2f49daf2d45e4abd09c5f84058a2570d43"
+    },
+    {
+      "file": "studio-enquiry-view.txt",
+      "sha256": "7a2093124d594d070c0cf19a2118372390df944de5a6708f83a4433440cb6c48"
+    },
+    {
+      "file": "studio.txt",
+      "sha256": "776ef17d1a6bf7f2ae09c4965a55cc23ffdeb17b02520b6777dd89acd6dd823d"
+    },
+    {
+      "file": "typecheck.txt",
+      "sha256": "78b3395e7b9e5263b968c019a932702e74f3c4174cfe03ce68bcdd0a501bf197"
+    },
+    {
+      "file": "unit.txt",
+      "sha256": "5755eab07d294b713182eb0f128066b994a3cc3f9a70cfdf87c4f54768faf6fc"
+    }
+  ]
+}

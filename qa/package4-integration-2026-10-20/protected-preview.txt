@@ -1,0 +1,29 @@
+
+> novalure-crm@0.1.0 test:protected-preview-access
+> node --test scripts/protected-preview-access-tests.mjs
+
+✔ protected workflow cleanup accepts only known single-link evidence and subject snapshots (1.588884ms)
+✔ two-tenant preflight derives the business-session scope without the reset actor (0.603678ms)
+✔ protected two-tenant preflight accepts zero business sessions and exactly one reset session (0.204494ms)
+✔ protected two-tenant preflight rejects an active business-actor session (0.117945ms)
+✔ protected two-tenant preflight rejects missing or duplicate reset-actor sessions (0.187469ms)
+✔ standalone two-tenant preflight requires zero reset-actor sessions (0.122413ms)
+✔ automation bypass accepts only the exact Preview host, root and single query (16.555243ms)
+✔ automation bypass rejects production, origin drift and ambiguous URL shapes without disclosing the token (0.608245ms)
+✔ protected workflow contract accepts only the exact automation-bypass form (2.719947ms)
+✔ protected Public input and workflow require deployment-bound automation access (2.037412ms)
+✔ protected Public evidence rejects a STANDARD access result before staging (0.741594ms)
+✔ two-tenant bootstrap sends the bypass only as a header on a query-free direct HTML request (4.323312ms)
+✔ two-tenant automation bootstrap fails closed on redirects, network errors and non-HTML responses (0.90083ms)
+✔ two-tenant CSRF and anonymous runtime requests retain the exact-origin bypass header (1.615203ms)
+✔ public runtime parser and bootstrap keep the bypass secret non-enumerable and use a direct header (1.584367ms)
+✔ public runtime read-only requests reach the intended semantic guards (0.496619ms)
+✔ public runtime automation bootstrap fails closed on redirects, network errors and non-HTML responses (0.937194ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 117.409257

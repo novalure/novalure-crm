@@ -1,0 +1,23 @@
+
+> novalure-crm@0.1.0 test:studio-enquiry-view
+> node --import tsx --test scripts/studio-enquiry-view-tests.ts
+
+✔ CRM read projection preserves complete long confirmed text and binds both roles to private asset IDs (2.84292ms)
+✔ real Production enquiries use the same complete private projection without a synthetic marker (0.178426ms)
+✔ CRM source projection rejects oversize, malformed role mapping and unsafe website URLs (0.382659ms)
+✔ CRM rendering escapes customer markup, shows limitations and deduplicates identical PDF links (8.431716ms)
+✔ confirmed Studio leads and their exact linked contacts survive QA and UUID content filtering (0.948341ms)
+✔ content alone, syntheticTest or a non-boolean Studio flag cannot bypass the legacy filter (0.418613ms)
+✔ Studio content exemption requires the active workspace and an available project in that workspace (0.244594ms)
+✔ linked-contact exemption cannot spread to another contact, project or workspace (0.137975ms)
+✔ unrelated business records retain the existing legacy content-filter behavior (0.408868ms)
+✔ ordinary business content cannot admit another workspace or an unavailable project (0.269701ms)
+✔ available second-project business rows remain for the caller's selected-project filter (0.17529ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 296.190923

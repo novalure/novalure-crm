@@ -1,0 +1,34 @@
+
+> novalure-crm@0.1.0 test:package4-migrations
+> node --conditions=react-server --import tsx --test scripts/package4-migration-tests.ts
+
+▶ Package 4 unchanged 091–096 → 100–106 combined migration acceptance
+  ✔ 091_production_runtime_forced_rls_cutover.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (201.380115ms)
+  ✔ 092_crm_production_machine_identity.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (158.712079ms)
+  ✔ 093_crm_machine_internal_context.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (183.34427ms)
+  ✔ 094_website_sales_ingestion.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (124.46509ms)
+  ✔ 095_form_tenant_isolation.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (118.883609ms)
+  ✔ 096_public_integration_gateway.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (157.122795ms)
+  ✔ 100_studio_enquiry_production.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (161.691027ms)
+  ✔ 101_knowledge_center.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (196.666526ms)
+  ✔ 102_knowledge_document_processing.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (145.246972ms)
+  ✔ 103_knowledge_assistant_service.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (215.564793ms)
+  ✔ 104/105/106 coexist and roll back their schema and ledger as one failed unit (198.359239ms)
+  ✔ 104_knowledge_publication_workflow.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (234.350274ms)
+  ✔ 105_knowledge_website_monitoring.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (198.546813ms)
+  ✔ 106_crm_operational_readers.sql: injected failure leaves no schema/ledger drift; unchanged SQL commits (139.420692ms)
+  ✔ runner validates checksums, manual order, predecessor ledger and safe replay (36.67696ms)
+  ✔ direct 104/105/106 replays fail atomically and preserve all committed state (312.24868ms)
+  ✔ runtime is a non-owner NOBYPASSRLS role and the combined protected tables keep FORCE RLS (43.333246ms)
+  ✔ combined install activates no contracts, monitoring, assistant bindings or external delivery (2.575883ms)
+  ✔ saved Package 3 records and Design C readers keep tenant boundaries on the same combined schema (66.286868ms)
+✔ Package 4 unchanged 091–096 → 100–106 combined migration acceptance (6250.697701ms)
+ℹ Evidence: /workspace/novalure-crm/qa/package4-integration-2026-10-20/migrations.json; authoritative verdict: node:test exit code and summary
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6407.379048

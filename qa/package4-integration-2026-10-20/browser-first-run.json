@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "status": "FAIL",
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "startedAt": "2026-10-19T22:26:05.021Z",
+  "fixture": {
+    "fresh": true,
+    "built": true,
+    "mode": "design-c-actual-predecessors",
+    "baseUrl": "http://127.0.0.1:38433",
+    "readyAt": "2026-10-19T22:26:09.082Z"
+  },
+  "suites": [
+    {
+      "id": "design-c-integration",
+      "script": "scripts/qa-design-c-integration.mjs",
+      "nodeArgs": [],
+      "invoked": true,
+      "status": "FAIL",
+      "startedAt": "2026-10-19T22:26:09.083Z",
+      "exitCode": 1,
+      "signal": null,
+      "error": "design-c-integration failed (1)",
+      "finishedAt": "2026-10-19T22:27:13.202Z"
+    },
+    {
+      "id": "knowledge-browser",
+      "script": "scripts/qa-knowledge-browser.mjs",
+      "nodeArgs": [],
+      "invoked": false,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "package4-integration",
+      "script": "scripts/qa-package4-integration.mjs",
+      "nodeArgs": [
+        "--conditions=react-server",
+        "--import",
+        "tsx"
+      ],
+      "invoked": false,
+      "status": "NOT_RUN"
+    }
+  ],
+  "errors": [
+    "design-c-integration failed (1)"
+  ],
+  "finishedAt": "2026-10-19T22:27:13.838Z"
+}

@@ -44,7 +44,7 @@ const output = path.resolve(".npm-cache/qa/design-c-integration");
 assert.equal(
   fixture.fixtureMode,
   "design-c-actual-predecessors",
-  "Start qa:sales:server with --built --design-c to preserve the actual 091–103 predecessor contracts",
+  "Start qa:sales:server with --built --design-c to preserve the actual 091–106 predecessor contracts",
 );
 assert.equal(fixture.database.database, "neondb");
 await mkdir(output, { recursive: true });
@@ -1684,6 +1684,7 @@ async function runIntegration() {
     async () => {
       const handler = (route) => route.abort("failed");
       await customerPage.route("**/api/approvals**", handler);
+      await customerPage.route("**/api/bots/chat**", handler);
       try {
         await open(customerPage, accounts.customer.workspaceId, "bots");
         for (const label of ["Policy-Ausnahmen", "Offene Gespräche"]) {
@@ -1696,6 +1697,7 @@ async function runIntegration() {
         }
       } finally {
         await customerPage.unroute("**/api/approvals**", handler);
+        await customerPage.unroute("**/api/bots/chat**", handler);
         await open(customerPage, accounts.customer.workspaceId, "knowledge");
       }
     },
@@ -1894,23 +1896,29 @@ async function runIntegration() {
       await expect(
         card.getByText("Inhalt erkannt · Bitte prüfen", { exact: true }),
       ).toBeVisible();
-      const review = card.getByRole("region", {
-        name: "Erkannter Inhalt",
-        exact: true,
-      });
+      const review = card.getByTestId("knowledge-lifecycle");
+      await expect(review).toBeVisible();
       await expect(review).toContainText("designcprivatepdf");
+      await expect(review.getByTestId("knowledge-submit")).toBeDisabled();
+      for (const action of ["submit", "review", "approve", "publish"]) {
+        const button = review.getByTestId(`knowledge-${action}`);
+        await expect(button).toBeVisible();
+        await review.locator("form textarea").first().fill(
+          "SYNTHETIC Design C: extracted private document fully reviewed",
+        );
+        if (action !== "submit") {
+          await expect(button).toBeDisabled();
+          await review.getByRole("checkbox", {
+            name: "Ich habe den Inhalt vollständig geprüft.",
+            exact: true,
+          }).check();
+        }
+        await expect(button).toBeEnabled();
+        await button.click();
+        await expect(button).toHaveCount(0);
+      }
       await expect(
-        review.getByRole("button", {
-          name: "Diese Version freigeben",
-          exact: true,
-        }),
-      ).toBeDisabled();
-      await review.getByRole("checkbox").check();
-      await review
-        .getByRole("button", { name: "Diese Version freigeben", exact: true })
-        .click();
-      await expect(
-        card.getByText("Freigegebene Version aktiv", { exact: true }).first(),
+        card.getByText("Für Assistenten aktive Version", { exact: true }).first(),
       ).toBeVisible();
     },
   );
@@ -2200,7 +2208,7 @@ try {
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
-      "The isolated fixture applies unchanged pinned 091–096, 100–103 and additive 106; optional pgvector, historical manual media migration 062, preview migrations 097–099 and package-3 migrations 104–105 remain excluded. This is not a full production migration proof.",
+      "The isolated fixture applies unchanged pinned 091–096 and 100–106, including package-3 workflow/monitoring and operational readers; optional pgvector, historical manual media migration 062 and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
       "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
     ],
   };
