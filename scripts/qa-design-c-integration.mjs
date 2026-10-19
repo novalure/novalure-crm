@@ -862,7 +862,7 @@ async function login(page, account, negatives = false) {
   }
   if (negatives) {
     await password(account.password + "-invalid");
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator('p[role="alert"]')).toBeVisible();
     assert.equal((await api(page, "/api/crm/core")).status, 401);
     assert(
       !(await page.context().cookies()).some(
@@ -908,7 +908,7 @@ async function login(page, account, negatives = false) {
           .getByRole("button", { name: "Sicher bestätigen", exact: true })
           .click(),
       ]);
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator('p[role="alert"]')).toBeVisible();
       assert.equal((await api(page, "/api/crm/core")).status, 401);
       await page.locator("input[name=recoveryCodesSaved]").check();
     }
