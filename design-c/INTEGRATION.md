@@ -1,5 +1,7 @@
 # Integration von Evelyn Design C
 
+**Historischer Übergabeplan:** Die folgende Beschreibung stammt aus der isolierten Designphase. Der tatsächlich umgesetzte CRM-Anschluss auf Paket 2.1, seine Prüfungen und noch offenen Punkte stehen in [docs/design-c-integration.md](../docs/design-c-integration.md). Die synthetischen Domänenkompositionen bleiben als Referenz erhalten; das integrierte CRM nutzt die bestehenden Fachcontroller und Datenverträge.
+
 Design C wird als isolierte, statisch exportierbare Next.js-Präsentationsapp unter `design-c/` entwickelt. Sie verwendet die vorhandenen Root-Abhängigkeiten, lokale synthetische Daten und eigenen UI-Zustand. Authentifizierung, APIs, Datenbank, RLS, Migrationen und fachliche Geschäftslogik bleiben bei den bestehenden und parallelen Implementierungen. Der aktuelle Produktivstand und die Quellgrenzen sind in [ANALYSIS.md](./ANALYSIS.md) dokumentiert.
 
 ## Gemeinsame Präsentationsschnittstelle

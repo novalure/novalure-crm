@@ -28,6 +28,7 @@ type NewsletterCommandCenterProps = {
   leads: Lead[];
   projectLabel: string;
   projects: Project[];
+  relatedDataAvailable?: boolean;
   segments: NewsletterSegment[];
   suppressions: NewsletterSuppression[];
   templates: NewsletterTemplate[];
@@ -429,6 +430,7 @@ export function NewsletterCommandCenter({
   leads,
   projectLabel,
   projects,
+  relatedDataAvailable = true,
   segments,
   suppressions,
   templates,
@@ -436,6 +438,17 @@ export function NewsletterCommandCenter({
 }: NewsletterCommandCenterProps) {
   const text = getNewsletterCommandCenterCopy(language);
   const locale = getLocale(language);
+  const relatedDataText = language === "de"
+    ? {
+        unavailable: "Nicht verfügbar",
+        detail: "Einwilligungen, Sperrlisten, Vorlagen, Automationen und Zustellbarkeit sind nicht angebunden. Kampagnen und Segmente stammen aus dem CRM. Der Versand bleibt gesperrt, bis Einwilligungen und Sperrlisten verifiziert verfügbar sind.",
+        recipients: "— verifizierte Empfänger · Einwilligungen und Sperrlisten nicht verfügbar.",
+      }
+    : {
+        unavailable: "Unavailable",
+        detail: "Consents, suppression lists, templates, automations and deliverability are not connected. Campaigns and segments come from the CRM. Sending remains disabled until verified consent and suppression data are available.",
+        recipients: "— verified recipients · Consent and suppression data unavailable.",
+      };
   const [activeArea, setActiveArea] = useState<NewsletterArea>("campaigns");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns[0]?.id ?? "");
@@ -449,18 +462,22 @@ export function NewsletterCommandCenter({
     () =>
       campaigns.map((campaign) => {
         const segment = segments.find((item) => item.id === campaign.segmentId);
-        const template = templates.find((item) => item.id === campaign.templateId);
+        const template = relatedDataAvailable
+          ? templates.find((item) => item.id === campaign.templateId)
+          : undefined;
         const project = campaign.projectId
           ? projects.find((item) => item.id === campaign.projectId)
           : undefined;
         const owner = campaign.ownerUserId
           ? users.find((item) => item.id === campaign.ownerUserId)
           : undefined;
-        const sender = deliverability.find((item) => item.fromEmail === campaign.fromEmail);
+        const sender = relatedDataAvailable
+          ? deliverability.find((item) => item.fromEmail === campaign.fromEmail)
+          : undefined;
 
         return { campaign, owner, project, segment, sender, template };
       }),
-    [campaigns, deliverability, projects, segments, templates, users],
+    [campaigns, deliverability, projects, relatedDataAvailable, segments, templates, users],
   );
 
   const filteredCampaigns = decoratedCampaigns.filter((item) => {
@@ -495,7 +512,7 @@ export function NewsletterCommandCenter({
   const selectedCampaignProjectId =
     selectedCampaign?.campaign.projectId ?? selectedCampaign?.segment?.projectId;
   const campaignRecipientEmails = (() => {
-    if (!hasSelectedCampaign) {
+    if (!relatedDataAvailable || !hasSelectedCampaign) {
       return [];
     }
 
@@ -534,13 +551,14 @@ export function NewsletterCommandCenter({
   const totalOptIns = segments.reduce((sum, segment) => sum + segment.optIns, 0);
   const sentCampaigns = campaigns.filter((campaign) => campaign.status === "gesendet");
   const avgOpenRate =
-    sentCampaigns.length > 0
+    sentCampaigns.length > 0 &&
+    sentCampaigns.every((campaign) => typeof campaign.openRate === "number" && Number.isFinite(campaign.openRate))
       ? sentCampaigns.reduce((sum, campaign) => sum + (campaign.openRate ?? 0), 0) /
         sentCampaigns.length
       : undefined;
-  const newsletterOptIns = consents.filter(
+  const newsletterOptIns = relatedDataAvailable ? consents.filter(
     (consent) => consent.channel === "Newsletter" && consent.status === "Opt-in",
-  );
+  ) : [];
   const unsubscribePreviewParams = new URLSearchParams({
     email: text.sampleRecipient,
     lang: language,
@@ -555,11 +573,14 @@ export function NewsletterCommandCenter({
   }
 
   const unsubscribePreviewHref = `/unsubscribe?${unsubscribePreviewParams.toString()}`;
-  const currentSender = deliverability.find((item) => item.fromEmail === selectedDraft.fromEmail);
+  const currentSender = relatedDataAvailable
+    ? deliverability.find((item) => item.fromEmail === selectedDraft.fromEmail)
+    : undefined;
   const checklist = [
     {
       label: text.consentSafe,
-      ready: Boolean(selectedCampaign?.segment && selectedCampaign.segment.optIns > 0),
+      ready: relatedDataAvailable && Boolean(selectedCampaign?.segment && selectedCampaign.segment.optIns > 0),
+      unavailable: !relatedDataAvailable,
     },
     {
       label: text.unsubscribeSafe,
@@ -568,6 +589,7 @@ export function NewsletterCommandCenter({
     {
       label: text.domainSafe,
       ready: currentSender?.status === "bereit",
+      unavailable: !relatedDataAvailable,
     },
     {
       label: text.contentSafe,
@@ -592,16 +614,17 @@ export function NewsletterCommandCenter({
       ready: true,
     },
   ];
-  const areas: Array<{ id: NewsletterArea; label: string; count: number }> = [
+  const areas: Array<{ id: NewsletterArea; label: string; count: number | string }> = [
     { id: "campaigns", label: text.campaigns, count: campaigns.length },
     { id: "builder", label: text.builder, count: selectedDraft.contentBlocks.length },
     { id: "segments", label: text.segments, count: segments.length },
-    { id: "automations", label: text.automations, count: automations.length },
+    { id: "automations", label: text.automations, count: relatedDataAvailable ? automations.length : "—" },
     { id: "analytics", label: text.analytics, count: sentCampaigns.length },
-    { id: "deliverability", label: text.deliverability, count: deliverability.length },
+    { id: "deliverability", label: text.deliverability, count: relatedDataAvailable ? deliverability.length : "—" },
   ];
-const liveNewsletterMessage =
-    liveNewsletterAction.detail ??
+  const liveNewsletterMessage = !relatedDataAvailable
+    ? relatedDataText.detail
+    : liveNewsletterAction.detail ??
     (liveNewsletterAction.status === "success"
       ? text.liveSendSuccess
       : liveNewsletterAction.status === "error"
@@ -742,6 +765,10 @@ const liveNewsletterMessage =
     setLiveNewsletterAction({ status: "running" });
 
     try {
+      if (!relatedDataAvailable) {
+        throw new Error(relatedDataText.detail);
+      }
+
       if (!selectedCampaign) {
         throw new Error(text.noCampaigns);
       }
@@ -1396,7 +1423,7 @@ const liveNewsletterMessage =
                 }`}
                 key={item.label}
               >
-                {item.ready ? text.ready : text.review} · {item.label}
+                {item.unavailable ? relatedDataText.unavailable : item.ready ? text.ready : text.review} · {item.label}
               </div>
             ))}
           </div>
@@ -1447,6 +1474,7 @@ const liveNewsletterMessage =
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
                 disabled={
+                  !relatedDataAvailable ||
                   liveNewsletterAction.status === "running" ||
                   !selectedCampaign ||
                   !campaignRecipientEmails.length
@@ -1665,7 +1693,7 @@ const liveNewsletterMessage =
               { label: text.recipients, value: formatNumber(totalRecipients, language) },
               { label: text.optIns, value: formatNumber(totalOptIns, language) },
               { label: text.avgOpenRate, value: formatPercent(avgOpenRate, language, "-") },
-              { label: text.suppressions, value: suppressions.length },
+              { label: text.suppressions, value: relatedDataAvailable ? suppressions.length : "—" },
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 p-3" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
@@ -1713,13 +1741,13 @@ const liveNewsletterMessage =
             </p>
             <h4 className="mt-1 break-words text-lg font-semibold">{text.liveIntegrationTitle}</h4>
             <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
-              {text.liveIntegrationDescription}
+              {relatedDataAvailable ? text.liveIntegrationDescription : relatedDataText.detail}
             </p>
             <p className="mt-2 break-words text-xs font-semibold text-emerald-900">
-              {text.liveSendRecipients.replace(
+              {relatedDataAvailable ? text.liveSendRecipients.replace(
                 "{{count}}",
                 formatNumber(campaignRecipientEmails.length, language),
-              )}
+              ) : relatedDataText.recipients}
             </p>
             <p
               className={`mt-3 break-words rounded-md border px-3 py-2 text-sm font-semibold ${
@@ -1738,6 +1766,7 @@ const liveNewsletterMessage =
           <button
             className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
             disabled={
+              !relatedDataAvailable ||
               liveNewsletterAction.status === "running" ||
               !selectedCampaign ||
               !campaignRecipientEmails.length
@@ -1824,7 +1853,7 @@ const liveNewsletterMessage =
                             isSelected ? "bg-white/10 text-white" : "bg-white text-stone-700"
                           }`}
                         >
-                          {item.template?.name ?? text.template}
+                          {relatedDataAvailable ? item.template?.name ?? text.template : relatedDataText.unavailable}
                         </span>
                       </span>
                     </button>
@@ -1849,7 +1878,7 @@ const liveNewsletterMessage =
               {[
                 [text.project, selectedCampaign?.project?.name ?? projectLabel],
                 [text.segment, selectedCampaign?.segment?.name ?? text.noSegment],
-                [text.template, selectedCampaign?.template?.name],
+                [text.template, relatedDataAvailable ? selectedCampaign?.template?.name : relatedDataText.unavailable],
                 [text.campaignGoal, selectedCampaign?.campaign.goal],
                 [text.owner, selectedCampaign?.owner?.name],
                 [text.status, selectedCampaign ? getNewsletterStatusLabel(text, selectedCampaign.campaign.status) : undefined],
@@ -2634,7 +2663,7 @@ const liveNewsletterMessage =
                     }`}
                     key={item.label}
                   >
-                    {item.ready ? text.ready : text.review} · {item.label}
+                    {item.unavailable ? relatedDataText.unavailable : item.ready ? text.ready : text.review} · {item.label}
                   </div>
                 ))}
               </div>
@@ -2680,7 +2709,7 @@ const liveNewsletterMessage =
         </section>
       ) : null}
 
-      {activeArea === "automations" ? (
+      {activeArea === "automations" && relatedDataAvailable ? (
         <section className="grid gap-3 lg:grid-cols-2">
           {automations.map((automation) => {
             const segment = segments.find((item) => item.id === automation.segmentId);
@@ -2752,20 +2781,20 @@ const liveNewsletterMessage =
           <article className="rounded-lg border border-stone-200 bg-white p-5">
             <h4 className="text-lg font-semibold">{text.suppressions}</h4>
             <div className="mt-4 grid gap-2">
-              {suppressions.map((item) => (
+              {relatedDataAvailable ? suppressions.map((item) => (
                 <div className="rounded-md border border-stone-200 p-3 text-sm" key={item.id}>
                   <p className="break-words font-semibold">{item.email}</p>
                   <p className="mt-1 text-xs text-stone-500">
                     {item.reason} · {item.source}
                   </p>
                 </div>
-              ))}
+              )) : <p className="text-sm text-stone-600">{relatedDataText.unavailable} · {relatedDataText.detail}</p>}
             </div>
           </article>
         </section>
       ) : null}
 
-      {activeArea === "deliverability" ? (
+      {activeArea === "deliverability" && relatedDataAvailable ? (
         <section className="grid gap-3 lg:grid-cols-2">
           {deliverability.map((sender) => (
             <article className="rounded-lg border border-stone-200 bg-white p-5" key={sender.id}>
@@ -2818,9 +2847,16 @@ const liveNewsletterMessage =
         </section>
       ) : null}
 
+      {!relatedDataAvailable && (activeArea === "automations" || activeArea === "deliverability") ? (
+        <article className="rounded-lg border border-stone-200 bg-white p-5">
+          <h4 className="font-semibold">{relatedDataText.unavailable}</h4>
+          <p className="mt-2 text-sm text-stone-600">{relatedDataText.detail}</p>
+        </article>
+      ) : null}
+
       <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-950">
-        <span className="font-semibold">{text.consentSafe}:</span> {newsletterOptIns.length}{" "}
-        Newsletter Opt-ins im aktuellen Projektfilter.
+        {relatedDataAvailable ? <><span className="font-semibold">{text.consentSafe}:</span> {newsletterOptIns.length}{" "}
+          {language === "de" ? "Newsletter Opt-ins im aktuellen Projektfilter." : "newsletter opt-ins in the current project filter."}</> : relatedDataText.detail}
       </article>
     </section>
   );

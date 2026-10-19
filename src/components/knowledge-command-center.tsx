@@ -38,10 +38,10 @@ import type {
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 const inputClass =
-  "min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:bg-stone-100";
+  "evelyn-domain-input min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:bg-stone-100";
 const buttonClass =
-  "min-h-11 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50";
-const primaryClass = `${buttonClass} border-emerald-800 bg-emerald-800 text-white hover:bg-emerald-900`;
+  "evelyn-domain-button min-h-11 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50";
+const primaryClass = `${buttonClass} evelyn-domain-button-primary border-emerald-800 bg-emerald-800 text-white hover:bg-emerald-900`;
 const sourceTypes: KnowledgeSourceType[] = [
   "manual",
   "faq",
@@ -124,7 +124,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       : child,
   );
   return (
-    <div className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-800">
+    <div className="evelyn-domain-field grid min-w-0 gap-1.5 text-sm font-medium text-slate-800">
       <label htmlFor={controlId || generatedId}>{label}</label>
       {fields}
     </div>
@@ -139,7 +139,7 @@ function EmptyState({
   description?: string;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
+    <div className="evelyn-domain-empty rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-10 text-center">
       <p className="font-semibold text-slate-900">{title}</p>
       {description ? (
         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-stone-600">
@@ -851,7 +851,7 @@ function KnowledgeCenterContent({
     return (
       <form
         aria-labelledby={`${formId}-source-title`}
-        className="grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 sm:p-5"
+        className="evelyn-knowledge-editor grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 sm:p-5"
         id={`${formId}-source-form`}
         onSubmit={(event) => void saveSource(event)}
       >
@@ -1056,16 +1056,17 @@ function KnowledgeCenterContent({
   return (
     <section
       aria-labelledby={`${formId}-heading`}
-      className="grid min-w-0 gap-5 text-slate-950"
+      className="evelyn-knowledge-center grid min-w-0 gap-5 text-slate-950"
+      data-knowledge-center="true"
     >
-      <header className="rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
+      <header className="evelyn-domain-hero evelyn-knowledge-hero rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">
+            <p className="evelyn-domain-eyebrow text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">
               Evelyn
             </p>
             <h3
-              className="mt-1 break-words text-xl font-semibold sm:text-2xl"
+              className="evelyn-domain-title mt-1 break-words text-xl font-semibold sm:text-2xl"
               id={`${formId}-heading`}
             >
               {text.title}
@@ -1084,7 +1085,7 @@ function KnowledgeCenterContent({
             {text.refresh}
           </button>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="evelyn-knowledge-context mt-5 grid gap-3 sm:grid-cols-2">
           <Field label={text.company}>
             <select
               aria-readonly="true"
@@ -1116,6 +1117,13 @@ function KnowledgeCenterContent({
             </select>
           </Field>
         </div>
+        {snapshot?.available ? (
+          <dl className="evelyn-knowledge-summary">
+            <div><dt>{text.sources}</dt><dd>{visibleSources.length}</dd></div>
+            <div><dt>{text.approved}</dt><dd>{visibleSources.filter((source) => Boolean(source.approvedVersionId)).length}</dd></div>
+            <div><dt>{text.draft}</dt><dd>{visibleSources.filter((source) => Boolean(source.draftVersionId)).length}</dd></div>
+          </dl>
+        ) : null}
       </header>
       {loading ? (
         <p
@@ -1162,13 +1170,14 @@ function KnowledgeCenterContent({
                   {text.readOnly}
                 </p>
               ) : null}
-              <nav aria-label={text.title} className="flex flex-wrap gap-2">
+              <div className="evelyn-knowledge-workspace">
+              <nav aria-label={text.title} className="evelyn-knowledge-nav flex flex-wrap gap-2">
                 {(["sources", "areas", "assistants", "usage"] as const).map(
                   (value) => (
                     <button
                       aria-controls={`${formId}-panel`}
                       aria-pressed={tab === value}
-                      className={`${buttonClass} ${tab === value ? "border-emerald-800 bg-emerald-50 text-emerald-950" : ""}`}
+                      className={`${buttonClass} evelyn-knowledge-nav-item ${tab === value ? "border-emerald-800 bg-emerald-50 text-emerald-950" : ""}`}
                       key={value}
                       onClick={() => {
                         setTab(value);
@@ -1187,6 +1196,7 @@ function KnowledgeCenterContent({
                   ),
                 )}
               </nav>
+              <div className="evelyn-knowledge-main">
               {error ? (
                 <p
                   className="break-words rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"
@@ -1208,16 +1218,16 @@ function KnowledgeCenterContent({
                 <p aria-live="polite" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950" role="status">{text.uploading}</p>
               ) : null}
               <div
-                className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5"
+                className="evelyn-knowledge-panel min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5"
                 id={`${formId}-panel`}
               >
                 {tab === "sources" ? (
-                  <div className="grid gap-5">
+                  <div className="evelyn-knowledge-section evelyn-knowledge-section-sources grid gap-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h4 className="text-lg font-semibold">{text.sources}</h4>
                       {canWrite ? (
                         <button
-                          aria-controls={`${formId}-source-form`}
+                          aria-controls={editor ? `${formId}-source-form` : undefined}
                           aria-expanded={Boolean(editor)}
                           className={primaryClass}
                           disabled={
@@ -1233,17 +1243,17 @@ function KnowledgeCenterContent({
                       ) : null}
                     </div>
                     {canWrite && activeAreas.length ? (
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <div className="evelyn-knowledge-actions grid gap-3 md:grid-cols-3">
                         {([
                           { type: "file", title: text.addDocument, hint: text.documentActionHint },
                           { type: "url", title: text.addWebsite, hint: text.websiteActionHint },
                           { type: "manual", title: text.addText, hint: text.textActionHint },
                         ] as const).map((action) => (
                           <button
-                            aria-controls={`${formId}-source-form`}
+                            aria-controls={editor ? `${formId}-source-form` : undefined}
                             aria-describedby={`${formId}-action-hint-${action.type}`}
                             aria-label={action.title}
-                            className="flex min-h-28 min-w-0 gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 text-left transition hover:border-emerald-600 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="evelyn-knowledge-add-source flex min-h-28 min-w-0 gap-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 text-left transition hover:border-emerald-600 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                             disabled={disabled || sourceLimitReached || (action.type === "url" && !snapshot.entitlement.features.websiteImport)}
                             key={action.type}
                             onClick={() => startSource(undefined, action.type)}
@@ -1262,7 +1272,7 @@ function KnowledgeCenterContent({
                     ) : null}
                     {renderSourceForm()}
                     {activeAreas.length ? (
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="evelyn-knowledge-filters grid gap-3 sm:grid-cols-2">
                         <Field label={text.area}>
                           <select
                             className={inputClass}
@@ -1322,20 +1332,24 @@ function KnowledgeCenterContent({
                         }
                       />
                     ) : (
-                      <ul className="grid gap-3">
+                      <ul className="evelyn-knowledge-sources grid gap-3">
                         {visibleSources.map((source) => (
                           <li
-                            className="min-w-0 rounded-xl border border-stone-200 p-4"
+                            className="evelyn-knowledge-source min-w-0 rounded-xl border border-stone-200 p-4"
+                            data-knowledge-source-id={source.id}
+                            data-source-status={source.status}
+                            data-has-draft={Boolean(source.draftVersionId)}
                             key={source.id}
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
+                            <div className="evelyn-knowledge-source-header flex flex-wrap items-start justify-between gap-3">
+                              <span className="evelyn-knowledge-source-icon"><KnowledgeIcon type={source.type === "file" ? "file" : source.type === "url" ? "url" : "manual"} /></span>
+                              <div className="evelyn-knowledge-source-title min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-medium text-stone-700">
                                     {text[source.type]}
                                   </span>
                                   <span
-                                    className={`rounded-md px-2 py-1 text-xs font-semibold ${source.status === "approved" || source.status === "published" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+                                    className={`evelyn-domain-source-status rounded-md px-2 py-1 text-xs font-semibold ${source.status === "approved" || source.status === "published" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
                                   >
                                     {statusLabel(source.status)}
                                   </span>
@@ -1351,7 +1365,7 @@ function KnowledgeCenterContent({
                                   }
                                 </p>
                               </div>
-                              <div className="text-xs leading-6 text-stone-600">
+                              <div className="evelyn-knowledge-source-version text-xs leading-6 text-stone-600">
                                 <p>
                                   {text.version}:{" "}
                                   {source.version?.version ?? "—"}
@@ -1388,14 +1402,14 @@ function KnowledgeCenterContent({
                                 {needsReadableFile(source.version) ? <p className="mt-1 text-xs leading-5">{text.extractionHelp}</p> : null}
                               </div>
                             ) : null}
-                            <p className={`mt-3 text-xs font-medium ${source.approvedVersionId ? "text-emerald-900" : "text-amber-900"}`}>
+                            <p className={`evelyn-knowledge-publication-state mt-3 text-xs font-medium ${source.approvedVersionId ? "text-emerald-900" : "text-amber-900"}`}>
                               {source.approvedVersionId
                                 ? source.draftVersionId ? text.approvedPrevious : text.approvedCurrent
                                 : text.notApproved}
                             </p>
-                            <div className="mt-4 flex flex-wrap gap-2">
+                            <div className="evelyn-domain-actions mt-4 flex flex-wrap gap-2">
                               {source.version ? <button
-                                aria-controls={`${formId}-review-${source.id}`}
+                                aria-controls={reviewSourceId === source.id ? `${formId}-review-${source.id}` : undefined}
                                 aria-expanded={reviewSourceId === source.id}
                                 className={buttonClass}
                                 disabled={disabled}
@@ -1518,7 +1532,7 @@ function KnowledgeCenterContent({
                               ) : null}
                             </div>
                             {reviewSourceId === source.id && source.version ? (
-                              <section aria-labelledby={`${formId}-review-title-${source.id}`} className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-stone-50 p-4" id={`${formId}-review-${source.id}`}>
+                              <section aria-labelledby={`${formId}-review-title-${source.id}`} className="evelyn-knowledge-review mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-stone-50 p-4" id={`${formId}-review-${source.id}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <h6 className="font-semibold" id={`${formId}-review-title-${source.id}`}>{text.recognizedContent}</h6>
                                   <span className="text-xs text-stone-600">{text.version} {source.version.version} · {statusLabel(source.version.status)}</span>
@@ -1545,7 +1559,7 @@ function KnowledgeCenterContent({
                               </section>
                             ) : null}
                             {history?.sourceId === source.id ? (
-                              <div className="mt-4 rounded-lg bg-stone-50 p-3">
+                              <div className="evelyn-knowledge-history mt-4 rounded-lg bg-stone-50 p-3">
                                 <p className="text-xs leading-5 text-stone-600">
                                   {text.historyHint}
                                 </p>
@@ -1553,7 +1567,7 @@ function KnowledgeCenterContent({
                                   <ol className="mt-3 grid gap-2">
                                     {history.versions.map((version) => (
                                       <li
-                                        className="rounded-lg border border-stone-200 bg-white p-3 text-sm"
+                                        className="evelyn-knowledge-version rounded-lg border border-stone-200 bg-white p-3 text-sm"
                                         key={version.id}
                                       >
                                         <p className="font-medium">
@@ -1591,7 +1605,7 @@ function KnowledgeCenterContent({
                   </div>
                 ) : null}
                 {tab === "areas" ? (
-                  <div className="grid gap-5">
+                  <div className="evelyn-knowledge-section evelyn-knowledge-section-areas grid gap-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h4 className="text-lg font-semibold">{text.areas}</h4>
                       {canWrite ? (
@@ -1615,7 +1629,7 @@ function KnowledgeCenterContent({
                     ) : null}
                     {showAreaForm && canWrite ? (
                       <form
-                        className="grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4"
+                        className="evelyn-knowledge-editor grid gap-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4"
                         onSubmit={(event) => void saveArea(event)}
                       >
                         <h5 className="font-semibold">
@@ -1700,10 +1714,10 @@ function KnowledgeCenterContent({
                       </form>
                     ) : null}
                     {visibleAreas.length ? (
-                      <ul className="grid gap-3 md:grid-cols-2">
+                      <ul className="evelyn-knowledge-area-list grid gap-3 md:grid-cols-2">
                         {visibleAreas.map((area) => (
                           <li
-                            className="min-w-0 rounded-xl border border-stone-200 p-4"
+                            className="evelyn-knowledge-area min-w-0 rounded-xl border border-stone-200 p-4"
                             key={area.id}
                           >
                             <p className="text-xs font-medium text-emerald-800">
@@ -1809,7 +1823,7 @@ function KnowledgeCenterContent({
                   </div>
                 ) : null}
                 {tab === "assistants" ? (
-                  <div className="grid gap-5">
+                  <div className="evelyn-knowledge-section evelyn-knowledge-section-assistants grid gap-5">
                     <div>
                       <h4 className="text-lg font-semibold">
                         {text.assistants}
@@ -1820,12 +1834,12 @@ function KnowledgeCenterContent({
                     </div>
                     {snapshot.bots.length ? (
                       <>
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="evelyn-knowledge-channels grid gap-3 sm:grid-cols-2">
                           {(["webchat", "voice"] as const).map((value) => (
                             <button
                               aria-label={channelLabel(value)}
                               aria-pressed={channel === value}
-                              className={`flex min-h-28 min-w-0 items-start gap-3 rounded-xl border p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${channel === value ? "border-emerald-800 bg-emerald-50" : "border-stone-200 bg-white hover:bg-stone-50"}`}
+                              className={`evelyn-knowledge-channel flex min-h-28 min-w-0 items-start gap-3 rounded-xl border p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${channel === value ? "border-emerald-800 bg-emerald-50" : "border-stone-200 bg-white hover:bg-stone-50"}`}
                               disabled={disabled}
                               key={value}
                               onClick={() => { setChannel(value); setAssignmentDraft(null); }}
@@ -1881,7 +1895,7 @@ function KnowledgeCenterContent({
                         </div>
                         {botId ? (
                           <fieldset
-                            className="grid gap-3"
+                            className="evelyn-knowledge-grants grid gap-3"
                             disabled={!canAssign || disabled}
                           >
                             <legend className="mb-3 text-sm font-semibold">
@@ -1890,7 +1904,7 @@ function KnowledgeCenterContent({
                             {eligibleAreas.length ? (
                               eligibleAreas.map((area) => (
                                 <label
-                                  className="flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border border-stone-200 p-3 text-sm"
+                                  className="evelyn-knowledge-grant flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border border-stone-200 p-3 text-sm"
                                   key={area.id}
                                 >
                                   <input
@@ -1963,7 +1977,7 @@ function KnowledgeCenterContent({
                   </div>
                 ) : null}
                 {tab === "usage" ? (
-                  <div className="grid gap-5">
+                  <div className="evelyn-knowledge-section evelyn-knowledge-section-usage grid gap-5">
                     <div>
                       <h4 className="text-lg font-semibold">{text.usage}</h4>
                       <p className="mt-2 text-sm leading-6 text-stone-600">
@@ -1986,7 +2000,7 @@ function KnowledgeCenterContent({
                         {snapshot.entitlement.contractReference}
                       </p>
                     ) : null}
-                    <div className="grid gap-3 lg:grid-cols-3">
+                    <div className="evelyn-knowledge-usage grid gap-3 lg:grid-cols-3">
                       {[
                         {
                           label: text.sourceUsage,
@@ -2008,7 +2022,7 @@ function KnowledgeCenterContent({
                         },
                       ].map((item) => (
                         <div
-                          className="rounded-xl border border-stone-200 p-4"
+                          className="evelyn-knowledge-usage-card rounded-xl border border-stone-200 p-4"
                           key={item.label}
                         >
                           <p className="text-sm font-medium text-stone-600">
@@ -2147,6 +2161,8 @@ function KnowledgeCenterContent({
                     </div>
                   </div>
                 ) : null}
+              </div>
+              </div>
               </div>
             </>
           )}

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { crmBots, crmBotConversations } from "../src/lib/crm-data";
+import { getBotCommandCenterCopy } from "../src/lib/i18n";
+import { BotCommandCenter, botLivePresentation, botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
 import type { CrmBotChannelConfig } from "../src/lib/crm-types";
 import type { KnowledgeSource } from "../src/lib/knowledge-center/types";
 
@@ -55,4 +59,56 @@ test("workspace-scoped bot URLs carry the selected workspace for new knowledge, 
 test("changing selected workspace remounts the bot center with fresh local state",()=>{
   const workspace = readFileSync(new URL("../src/components/crm-workspace.tsx", import.meta.url), "utf8");
   assert.match(workspace, /<BotCommandCenter\s+key=\{activeWorkspace.id\}\s+workspaceId=\{activeWorkspace.id\}/);
+});
+
+
+test("unloaded or failed bot sources never report zero queues, cleared approvals or stale conversations", () => {
+  const persisted = {
+    liveConversations: [{ id: "live", title: "Actual conversation", status: "open", updatedAt: "2026-10-19T00:00:00Z", source: "live" as const }],
+    approvals: [{ id: "approval", entityType: "bot", action: "send_document", summary: "Needs review", status: "pending", createdAt: "2026-10-19T00:00:00Z" }],
+    documentSends: [{ id: "document", channel: "webchat", createdAt: "2026-10-19T00:00:00Z", documentName: "Document", status: "queued" }],
+    meetingBookings: [],
+  };
+  for (const status of ["loading", "error"] as const) {
+    const result = botLivePresentation({ ...persisted, liveStatus: status, approvalLoadStatus: status, botActionStatus: status });
+    assert.deepEqual(result.displayConversations, [], "previously loaded rows are not presented as current data");
+    assert.equal(result.pendingApprovalCount, null);
+    assert.equal(result.openConversationCount, null);
+    assert.equal(result.openBotActionCount, null);
+    assert.equal(result.approvalsReady, false, "an unknown approval queue cannot clear publication readiness");
+  }
+  const loaded = botLivePresentation({ ...persisted, liveStatus: "ready", approvalLoadStatus: "ready", botActionStatus: "ready" });
+  assert.equal(loaded.pendingApprovalCount, 1);
+  assert.equal(loaded.openConversationCount, 1);
+  assert.equal(loaded.openBotActionCount, 1);
+  assert.equal(loaded.approvalsReady, false);
+});
+
+test("a confirmed empty API result stays empty and only its approval queue is cleared", () => {
+  const result = botLivePresentation({ liveStatus: "ready", approvalLoadStatus: "ready", botActionStatus: "ready",
+    liveConversations: [{ id: "legacy", title: "Legacy fixture", status: "open", updatedAt: "2026-10-19T00:00:00Z", source: "demo" }],
+    approvals: [], documentSends: [], meetingBookings: [] });
+  assert.deepEqual(result.displayConversations, []);
+  assert.equal(result.pendingApprovalCount, 0);
+  assert.equal(result.openConversationCount, 0);
+  assert.equal(result.openBotActionCount, 0);
+  assert.equal(result.approvalsReady, true);
+});
+
+test("initial bot rendering keeps loading states honest and ignores compatible legacy conversation props", () => {
+  for (const language of ["de", "en"] as const) {
+    const text = getBotCommandCenterCopy(language);
+    const html = renderToStaticMarkup(createElement(BotCommandCenter, {
+      workspaceId: "selected-workspace", language, projectLabel: "Selected project", canManageBotSetup: false,
+      automations: [], bots: [{ ...crmBots[0], status: "active" }], callInsights: [],
+      conversations: crmBotConversations, knowledgeItems: [], tools: [], workflows: [],
+    }));
+    assert.ok(html.includes(text.loadingLiveData));
+    assert.ok(html.includes(text.loadingApprovals));
+    assert.ok(!html.includes(text.demoData), "loading must not be labelled as demo fallback");
+    for (const conversation of crmBotConversations) assert.ok(!html.includes(conversation.title));
+    assert.match(html, new RegExp(`${text.approvals}</p><p[^>]*>—</p>`));
+    assert.match(html, new RegExp(`${text.openConversations}</p><p[^>]*>—</p>`));
+    assert.ok(!html.includes(text.noConversations), "unknown source is not a confirmed empty inbox");
+  }
 });

@@ -1,5 +1,7 @@
 # Evelyn AI Command Center — Design C
 
+**Einordnung:** Diese Datei beschreibt die historische synthetische Designvorschau. Die aktuelle Integration in das bestehende authentifizierte CRM ist separat in [docs/design-c-integration.md](../docs/design-c-integration.md) dokumentiert. Die Aussage zu Beispieldaten unten gilt für die eigenständige App in diesem Ordner; das integrierte CRM verwendet seine autorisierten Datenadapter.
+
 Isolierte, lokal ausführbare Implementierung der verbindlich ausgewählten Gestaltung C. Alle Zahlen, Kunden, Projekte, Wissensstände und KI-Aktivitäten sind synthetische Beispiele. **Keine Ansicht verwendet echte CRM-Daten.** Alle Aktionsdialoge erklären die fehlende Anbindung; es gibt keine Speicherung, Veröffentlichung, Buchung, Zahlung oder KI-Ausführung.
 
 ## Start

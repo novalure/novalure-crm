@@ -41,8 +41,8 @@
 
 .buttonPrimary {
   background: var(--nl-blue);
-  box-shadow: 0 14px 32px rgb(255 212 59 / 22%);
-  color: #211800;
+  box-shadow: var(--nl-button-primary-shadow, 0 14px 32px rgb(255 212 59 / 22%));
+  color: var(--nl-button-primary-text, #211800);
 }
 
 .buttonPrimary:hover:not(:disabled) {
@@ -76,7 +76,7 @@
 }
 
 .buttonDanger:hover:not(:disabled) {
-  background: #72271f;
+  background: var(--nl-danger-hover, #72271f);
 }
 
 .buttonImportant {
@@ -279,7 +279,7 @@
 
 .statusInfo {
   background: var(--nl-blue-tint);
-  border-color: #ead36a;
+  border-color: var(--nl-info-border, #ead36a);
   color: var(--nl-gold-text);
 }
 
@@ -344,7 +344,7 @@
 
 .noticeInfo {
   background: var(--nl-blue-tint);
-  border-color: #ead36a;
+  border-color: var(--nl-info-border, #ead36a);
   color: var(--nl-gold-text);
 }
 

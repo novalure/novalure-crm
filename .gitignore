@@ -50,6 +50,8 @@ next-env.d.ts
 
 # local npm cache used by Codex installs
 .npm-cache/
+# Private local uploads from the CRM and isolated browser QA.
+.data/media/
 .localappdata/
 .xdg-data/
 .codex-deploy.index

@@ -427,101 +427,6 @@ function createTemplateParts(
   };
 }
 
-function createInitialForms(
-  users: WorkspaceUser[],
-  funnels: Funnel[],
-  copy: FormCommandCenterCopy,
-): WebsiteForm[] {
-  const ownerId = users[0]?.id ?? "";
-  const primaryFunnelId = funnels[0]?.id ?? "";
-  const consultation = createTemplateParts("consultation", copy);
-  const newsletter = createTemplateParts("newsletter", copy);
-  const support = createTemplateParts("support", copy);
-
-  const initialForms: WebsiteForm[] = [
-    {
-      actions: consultation.actions,
-      campaign: "Wohnpark Graz Launch",
-      conversionRate: 4.8,
-      crmTarget: consultation.crmTarget,
-      doubleOptIn: consultation.doubleOptIn,
-      fields: consultation.fields,
-      funnelId: primaryFunnelId,
-      id: "form_beratung_wohnpark",
-      lastSubmission: "2026-05-13T17:12:00+02:00",
-      name: "Wohnpark Graz Beratung",
-      ownerMode: "roundRobin",
-      ownerUserId: ownerId,
-      pipelineStage: "Lead Inbox",
-      progressMode: consultation.progressMode,
-      spamProtection: true,
-      status: "eingebaut",
-      steps: consultation.steps,
-      submissions: 42,
-      slug: "wohnpark-graz-beratung",
-      tags: "wohnpark, website, beratung",
-      template: consultation.template,
-      utmCapture: true,
-      variant: "embed",
-      visits: 875,
-    },
-    {
-      actions: newsletter.actions,
-      campaign: "Novalure Newsletter",
-      conversionRate: 7.2,
-      crmTarget: newsletter.crmTarget,
-      doubleOptIn: newsletter.doubleOptIn,
-      fields: newsletter.fields,
-      funnelId: funnels.find((funnel) => funnel.entryChannel === "Newsletter")?.id ?? primaryFunnelId,
-      id: "form_newsletter_optin",
-      lastSubmission: "2026-05-13T15:44:00+02:00",
-      name: "Newsletter Opt-in Website",
-      ownerMode: "user",
-      ownerUserId: ownerId,
-      pipelineStage: "Newsletter Segment",
-      progressMode: newsletter.progressMode,
-      spamProtection: true,
-      status: "aktiv",
-      steps: newsletter.steps,
-      submissions: 118,
-      slug: "newsletter-opt-in-website",
-      tags: "newsletter, optin",
-      template: newsletter.template,
-      utmCapture: true,
-      variant: "stickyBottom",
-      visits: 1638,
-    },
-    {
-      actions: support.actions,
-      campaign: "Support Anfrage",
-      conversionRate: 0,
-      crmTarget: support.crmTarget,
-      doubleOptIn: support.doubleOptIn,
-      fields: support.fields,
-      funnelId: primaryFunnelId,
-      id: "form_support_ticket",
-      lastSubmission: "",
-      name: "Support Ticket Formular",
-      ownerMode: "user",
-      ownerUserId: ownerId,
-      pipelineStage: "Support neu",
-      progressMode: support.progressMode,
-      spamProtection: false,
-      status: "entwurf",
-      steps: support.steps,
-      submissions: 0,
-      slug: "support-ticket-formular",
-      tags: "support, ticket",
-      template: support.template,
-      utmCapture: false,
-      variant: "standalone",
-      visits: 0,
-    },
-  ];
-
-  return initialForms.map((form) => ensureFormStructure(form, copy));
-}
-
 function createNewForm(
   users: WorkspaceUser[],
   funnels: Funnel[],
@@ -529,20 +434,29 @@ function createNewForm(
 ): WebsiteForm {
   const parts = createTemplateParts("consultation", copy);
   return {
-    ...createInitialForms(users, funnels, copy)[0],
     actions: parts.actions,
     campaign: copy.defaults.campaignNew,
     conversionRate: 0,
+    crmTarget: parts.crmTarget,
+    doubleOptIn: parts.doubleOptIn,
     fields: parts.fields,
+    funnelId: funnels[0]?.id ?? "",
     id: `form_new_${new Date().getTime()}`,
     lastSubmission: "",
     name: copy.defaults.newForm,
+    ownerMode: "roundRobin",
+    ownerUserId: users[0]?.id ?? "",
+    pipelineStage: "Lead Inbox",
     progressMode: parts.progressMode,
+    spamProtection: true,
     status: "entwurf",
     steps: parts.steps,
     submissions: 0,
+    slug: "",
     tags: copy.defaults.tagsNew,
     template: parts.template,
+    utmCapture: true,
+    variant: "embed",
     visits: 0,
   };
 }
@@ -593,13 +507,14 @@ export function FormCommandCenter({
   const targetLabels = copy.targets;
   const fieldTypes = fieldTypeIds.map((id) => ({ id, label: copy.fieldTypes[id] }));
   const platformInstructions = copy.platformInstructions;
-  const [forms, setForms] = useState<WebsiteForm[]>(() => createInitialForms(users, funnels, copy));
-  const [selectedFormId, setSelectedFormId] = useState("form_beratung_wohnpark");
+  const [forms, setForms] = useState<WebsiteForm[]>([]);
+  const [selectedFormId, setSelectedFormId] = useState("");
   const [activeTab, setActiveTab] = useState<FormTab>("overview");
   const [platform, setPlatform] = useState<Platform>("wordpress");
   const [installStatus, setInstallStatus] = useState<"idle" | "detected" | "missing">("idle");
   const [submissionRows, setSubmissionRows] = useState<FormSubmissionSummary[]>([]);
-  const [persistenceSource, setPersistenceSource] = useState<"local" | "database" | "fallback">("local");
+  const [persistenceSource, setPersistenceSource] = useState<"loading" | "local" | "database" | "fallback">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedFieldId, setSelectedFieldId] = useState("");
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
@@ -656,6 +571,7 @@ export function FormCommandCenter({
     async function loadPersistedForms() {
       try {
         const response = await csrfFetch("/api/forms", { cache: "no-store" });
+        if (cancelled) return;
         if (!response.ok) {
           setPersistenceSource("fallback");
           return;
@@ -663,15 +579,16 @@ export function FormCommandCenter({
 
         const payload = (await response.json()) as FormsRuntimePayload;
         if (cancelled) return;
+        if (payload.source !== "database" || payload.error || !Array.isArray(payload.forms)) {
+          setPersistenceSource("fallback");
+          return;
+        }
 
         setSubmissionRows(payload.submissions ?? []);
         setPersistenceSource(payload.source);
-
-        if (payload.forms.length) {
-          const normalizedForms = payload.forms.map((form) => ensureFormStructure(form, copy));
-          setForms(normalizedForms);
-          setSelectedFormId(normalizedForms[0].id);
-        }
+        const normalizedForms = payload.forms.map((form) => ensureFormStructure(form, copy));
+        setForms(normalizedForms);
+        setSelectedFormId(normalizedForms[0]?.id ?? "");
       } catch {
         if (!cancelled) setPersistenceSource("fallback");
       }
@@ -682,7 +599,7 @@ export function FormCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [copy]);
+  }, [copy, loadAttempt]);
 
   useEffect(() => {
     if (!isFormEditorMode) return;
@@ -795,7 +712,17 @@ export function FormCommandCenter({
   if (!selectedForm) {
     return (
       <section className="rounded-lg border border-stone-200 bg-white p-5 text-sm text-stone-600">
-        {copy.empty}
+        <p role={persistenceSource === "fallback" ? "alert" : "status"}>
+          {persistenceSource === "loading"
+            ? language === "de" ? "Formulare werden geladen …" : "Loading forms …"
+            : persistenceSource === "fallback"
+              ? language === "de" ? "Gespeicherte Formulare sind derzeit nicht verfügbar." : "Saved forms are currently unavailable."
+              : copy.empty}
+        </p>
+        {persistenceSource !== "loading" && <div className="mt-4 flex flex-wrap gap-2">
+          <button className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white" onClick={addForm} type="button">{copy.overview.newForm}</button>
+          {persistenceSource === "fallback" && <button className="rounded-md border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800" onClick={() => { setPersistenceSource("loading"); setLoadAttempt(current => current + 1); }} type="button">{language === "de" ? "Erneut versuchen" : "Try again"}</button>}
+        </div>}
       </section>
     );
   }
@@ -1291,7 +1218,7 @@ export function FormCommandCenter({
                 ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                 : "border-amber-200 bg-amber-50 text-amber-900"
             }`}>
-              {persistenceSource === "database" ? copy.overview.databaseActive : copy.overview.localPreview}
+              {persistenceSource === "database" ? copy.overview.databaseActive : persistenceSource === "fallback" ? language === "de" ? "Gespeicherte Formulare derzeit nicht verfügbar" : "Saved forms currently unavailable" : copy.overview.localPreview}
             </span>
             <button
               className="rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white"

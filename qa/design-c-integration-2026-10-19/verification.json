@@ -1,0 +1,372 @@
+{
+  "generatedAt": "2026-10-19T21:15:35.539099+00:00",
+  "status": "UI_INTEGRATED_ACCEPTANCE_BLOCKED_BY_EXISTING_RUNTIME_READERS",
+  "branch": "codex/evelyn-crm-design-c-integration",
+  "baseCommit": "aa6b329942ab19c165bc610822f03ed5874af189",
+  "originalDesignCommit": "37338cba018ab7b5a00cc59edb746de8796ee724",
+  "controlledDesignImport": "b7a1ab62f7aa1f8d7ae98da7ae1a18847dfbd4c0",
+  "integrationSourceFingerprint": "df84e42897c7ace1cafbdfda084bb5a7d8ca68f2035f7b62e1495bade9834176",
+  "fingerprintedFiles": [
+    ".github/workflows/livegang-e2e.yml",
+    ".gitignore",
+    "package.json",
+    "scripts/admin-navigation-smoke-tests.mjs",
+    "scripts/bot-command-center-knowledge-tests.ts",
+    "scripts/customer-access-presentation-tests.ts",
+    "scripts/design-c-integration-tests.ts",
+    "scripts/design-foundations-smoke-tests.mjs",
+    "scripts/form-command-center-source-tests.mjs",
+    "scripts/lead-inbox-presentation-tests.ts",
+    "scripts/lib/design-c-integration-fixture.mjs",
+    "scripts/newsletter-source-availability-tests.tsx",
+    "scripts/phase7-mobile-smoke-tests.mjs",
+    "scripts/qa-design-c-integration.mjs",
+    "scripts/qa-sales-browser-server.mjs",
+    "scripts/touch-target-smoke-tests.mjs",
+    "src/app/globals.css",
+    "src/components/bot-command-center.tsx",
+    "src/components/company-profile-settings.tsx",
+    "src/components/contact-command-center.tsx",
+    "src/components/crm-command-search.tsx",
+    "src/components/crm-workspace.tsx",
+    "src/components/customer-access-cockpit.tsx",
+    "src/components/evelyn-command-center.tsx",
+    "src/components/form-command-center.tsx",
+    "src/components/knowledge-command-center.tsx",
+    "src/components/lead-inbox.tsx",
+    "src/components/newsletter-command-center.tsx",
+    "src/components/ui/foundations.module.css",
+    "src/lib/crm-presentation-data.ts",
+    "src/lib/crm-self-service-navigation.ts",
+    "src/lib/evelyn-command-center.ts",
+    "src/styles/evelyn-command-center.css",
+    "src/styles/evelyn-design-c.css",
+    "src/styles/evelyn-domain-panels.css",
+    "vercel.json"
+  ],
+  "nextBuildId": "Ktx3cDdTse8xTQdUpytKZ",
+  "localChecks": {
+    "typecheck": "PASS (also part of final full build)",
+    "build": "PASS, 104 generated pages",
+    "lint": "PASS full repository plus final targeted navigation and harness lint",
+    "unit": "243 PASS; affected navigation checks rechecked after final hash correction",
+    "designCIntegration": "13 pure + 14 loader/SSR PASS",
+    "knowledge": "118 engine PASS; final 14 UI PASS",
+    "sales": "92/93 initial; isolated missing-browser-channel print case subsequently PASS with chromium; no aggregate single-run93/93 claim",
+    "adminStudioNavigation": "11 PASS after final hash correction"
+  },
+  "wholeBrowserRun": {
+    "summary": {
+      "passed": 48,
+      "failed": 2,
+      "axeScans": 4
+    },
+    "checks": [
+      {
+        "name": "Anonymous CRM and Knowledge APIs deny access",
+        "status": "PASS"
+      },
+      {
+        "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Operator chooses its existing authorized internal navigation profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Authorized database API supplies the dashboard without synthetic preview fallbacks",
+        "status": "PASS"
+      },
+      {
+        "name": "Every visible operator navigation entry retains the live Design C shell",
+        "status": "PASS"
+      },
+      {
+        "name": "Authorized search uses a native modal and never reveals another tenant",
+        "status": "PASS"
+      },
+      {
+        "name": "A real empty Forms response never creates prepared business forms",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer access fallback state exposes no sample records or unknown zero counts",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer access network state exposes no sample records or unknown zero counts",
+        "status": "PASS"
+      },
+      {
+        "name": "Unlicensed Knowledge uses its actual entitlement state and rejects writes",
+        "status": "PASS"
+      },
+      {
+        "name": "Untrusted fallback response cannot populate contacts or manufacture dashboard zeros",
+        "status": "PASS"
+      },
+      {
+        "name": "Project scope switch clears another project's contact records",
+        "status": "PASS"
+      },
+      {
+        "name": "Explicit operator membership authorizes customer and canonical Studio workspaces only",
+        "status": "FAIL"
+      },
+      {
+        "name": "Customer owner signs in through separate password and real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer chooses its existing authorized real-estate workspace profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer workspace cannot read operator, foreign contacts, projects or Knowledge",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer property and assistant views show actual scoped database records",
+        "status": "PASS"
+      },
+      {
+        "name": "Unknown assistant approval and conversation data remains unavailable rather than zero",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer Knowledge area and draft are saved by the real self-service forms",
+        "status": "PASS"
+      },
+      {
+        "name": "Knowledge assignment and explicit publication gate real webchat retrieval",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer PDF upload extracts private text and requires explicit review",
+        "status": "PASS"
+      },
+      {
+        "name": "Read-only customer authenticates normally and cannot escalate Knowledge rights",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 1440px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 768px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 390px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer dashboard: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer contacts: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer properties: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer bots: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer knowledge: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer settings: live theme and responsive layout at 360px",
+        "status": "PASS"
+      },
+      {
+        "name": "Customer mobile navigation traps focus, closes with Escape and restores trigger",
+        "status": "PASS"
+      },
+      {
+        "name": "Reduced motion preference disables integration shell movement",
+        "status": "PASS"
+      },
+      {
+        "name": "RLS remains forced and runtime role cannot bypass row security",
+        "status": "PASS"
+      },
+      {
+        "name": "No browser exceptions, server failures, browser outbound requests or preview UI",
+        "status": "FAIL"
+      }
+    ],
+    "axe": [
+      {
+        "name": "dashboard-1440",
+        "violations": 0
+      },
+      {
+        "name": "knowledge-1440",
+        "violations": 0
+      },
+      {
+        "name": "settings-1440",
+        "violations": 0
+      },
+      {
+        "name": "customer-mobile-dashboard",
+        "violations": 0
+      }
+    ],
+    "browserExceptions": 0,
+    "browserOutboundRequests": 0,
+    "observedForeignLeaks": 0,
+    "http500Endpoints": [
+      "/api/approvals",
+      "/api/bots/actions",
+      "/api/bots/channels",
+      "/api/meetings/oauth/status"
+    ]
+  },
+  "focusedWorkspaceStudioRun": {
+    "summary": {
+      "passed": 4,
+      "failed": 0,
+      "axeScans": 0
+    },
+    "checks": [
+      {
+        "name": "Anonymous CRM and Knowledge APIs deny access",
+        "status": "PASS"
+      },
+      {
+        "name": "Regular operator login rejects bad password/TOTP and completes real MFA",
+        "status": "PASS"
+      },
+      {
+        "name": "Operator chooses its existing authorized internal navigation profile",
+        "status": "PASS"
+      },
+      {
+        "name": "Explicit operator membership authorizes customer and canonical Studio workspaces only",
+        "status": "PASS"
+      }
+    ],
+    "axe": [],
+    "browserExceptions": 0,
+    "browserOutboundRequests": 0,
+    "observedForeignLeaks": 0,
+    "http500Endpoints": []
+  },
+  "browserEvidenceNote": "Whole 48/50 run is preserved. Its workspace case passed in a separate 4/4 focused run after removing UUIDs from synthetic contact email fields rejected by the existing business presentation filter. No500 remains FAIL; no complete green browser run is claimed.",
+  "runtime": {
+    "syntheticOnly": true,
+    "productionWrites": 0,
+    "sessionInjection": false,
+    "normalPasswordAndMfa": true,
+    "testDatabase": "disposable loopback neondb",
+    "runtimeRole": "generated sales_qa_* inheriting novalure_app; NOSUPERUSER NOBYPASSRLS",
+    "unchangedPinnedPredecessors": [
+      "091",
+      "092",
+      "093",
+      "094",
+      "095",
+      "096",
+      "100",
+      "101",
+      "102",
+      "103"
+    ],
+    "excludedHistoricalFeatures": [
+      "optional pgvector column/index",
+      "manual062",
+      "preview097–099"
+    ]
+  },
+  "production": {
+    "observedCommit": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "observedDeployment": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "newDeployment": null,
+    "integrationBranchAutoDeploy": false,
+    "hostedPreview": null
+  },
+  "blockedReadContracts": {
+    "/api/bots/channels": "bot_channel_webhooks",
+    "/api/approvals": "approval_requests",
+    "/api/bots/actions": "bot_document_sends",
+    "/api/meetings/oauth/status": "provider_connections"
+  },
+  "limitations": [
+    "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
+    "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
+    "The isolated fixture applies unchanged pinned 091–096 and 100–103; optional pgvector, historical manual media migration 062, and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+    "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
+    "No API/auth/database migration changes in this integration against aa6b329; no ad hoc grants added.",
+    "Passive inspection of navigation-aborted response bodies is incomplete; explicit API and SQL isolation checks are separate evidence.",
+    "No production-derived Neon branch, external provider activation or full WCAG certification is claimed."
+  ]
+}

@@ -51,6 +51,8 @@ type LeadInboxProps = {
   language: LanguageCode;
   onLeadsChanged?: () => Promise<boolean | void> | boolean | void;
   projects: Project[];
+  /** False until persisted consent and conversation adapters are available. */
+  relatedDataAvailable?: boolean;
   showPropertySalesWorkflow?: boolean;
   users: WorkspaceUser[];
   workspaceId: string;
@@ -208,12 +210,17 @@ export function LeadInbox({
   language,
   onLeadsChanged,
   projects = [],
+  relatedDataAvailable = true,
   showPropertySalesWorkflow = true,
   users = [],
   workspaceId,
 }: LeadInboxProps) {
   const copy = getDashboardCopy(language).leadInbox;
   const text = getLeadInboxCommandCopy(language);
+  const relatedUnavailableText = language === "de"
+    ? "Gesprächsverlauf und Einwilligungen sind derzeit nicht verfügbar."
+    : "Conversation history and consent data are currently unavailable.";
+  const unavailableLabel = language === "de" ? "Nicht verfügbar" : "Unavailable";
   const locale = getLocale(language);
   const [sessionLeads, setSessionLeads] = useState<LocalLead[]>([]);
   const [leadOverrides, setLeadOverrides] = useState<Record<string, Partial<LocalLead>>>({});
@@ -281,15 +288,15 @@ export function LeadInbox({
         const contact = contacts.find((item) => item.id === lead.contactId);
         const project = projects.find((item) => item.id === lead.projectId);
         const owner = users.find((item) => item.id === lead.assignedToUserId);
-        const leadConsents = consents.filter((consent) => consent.contactId === lead.contactId);
-        const leadConversations = conversations.filter(
+        const leadConsents = relatedDataAvailable ? consents.filter((consent) => consent.contactId === lead.contactId) : [];
+        const leadConversations = relatedDataAvailable ? conversations.filter(
           (conversation) => conversation.leadId === lead.id || conversation.contactId === lead.contactId,
-        );
+        ) : [];
         const leadActivities = activities.filter((activity) => activity.leadId === lead.id);
         const brokerMandate = brokerMandates.find((mandate) => mandate.sellerLeadId === lead.id);
         const buyerSearchProfile = buyerSearchProfiles.find((profile) => profile.buyerLeadId === lead.id);
         const hasContactData = Boolean(contact?.email || contact?.phone);
-        const hasConsent = leadConsents.some((consent) => consent.status === "Opt-in" || consent.status === "Nur CRM");
+        const hasConsent = relatedDataAvailable ? leadConsents.some((consent) => consent.status === "Opt-in" || consent.status === "Nur CRM") : null;
         const hasAction = lead.nextAction.trim().length > 0;
         const hasQualification = lead.score >= 75 && lead.intent.trim().length > 0;
         const leadIntentLabel = getCrmSystemTextLabel(lead.intent, language);
@@ -314,7 +321,7 @@ export function LeadInbox({
           slaMinutes: minutesUntil(lead.slaDueAt),
         };
       }),
-    [activities, brokerMandates, buyerSearchProfiles, consents, contacts, conversations, effectiveLeads, language, projects, users],
+    [activities, brokerMandates, buyerSearchProfiles, consents, contacts, conversations, effectiveLeads, language, projects, relatedDataAvailable, users],
   );
 
   const filteredLeads = useMemo(() => {
@@ -1627,7 +1634,7 @@ export function LeadInbox({
                     <div className="flex items-center justify-between gap-3 rounded-md bg-white/10 px-2 py-1" key={String(label)}>
                       <span>{label}</span>
                       <span className={done ? "font-semibold text-emerald-200" : "font-semibold text-amber-200"}>
-                        {done ? text.fulfilled : text.open}
+                        {done === null ? unavailableLabel : done ? text.fulfilled : text.open}
                       </span>
                     </div>
                   ))}
@@ -1636,6 +1643,7 @@ export function LeadInbox({
 
               <div>
                 <p className="text-sm font-semibold">{copy.timeline}</p>
+                {!relatedDataAvailable ? <p className="mt-2 text-sm text-stone-600" role="status">{relatedUnavailableText}</p> : null}
                 <div className="mt-2 space-y-2">
                   {selected.activities.map((activity) => (
                     <div
@@ -1675,7 +1683,7 @@ export function LeadInbox({
                       </p>
                     </div>
                   ))}
-                  {selected.activities.length === 0 && selected.conversations.length === 0 ? (
+                  {relatedDataAvailable && selected.activities.length === 0 && selected.conversations.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
                       {text.noTimeline}
                     </div>

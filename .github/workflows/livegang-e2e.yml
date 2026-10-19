@@ -61,6 +61,9 @@ jobs:
       - name: Unit and component smoke tests
         run: npm run test:unit
 
+      - name: Design C data provenance and customer self-service regression
+        run: npm run test:design-c-integration
+
       - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
         run: npm run test:knowledge-center
 
