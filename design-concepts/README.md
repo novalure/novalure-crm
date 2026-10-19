@@ -4,6 +4,23 @@ Drei isolierte, interaktive Designstudien für ein späteres Evelyn CRM. Kunden,
 Umsätze, Projekte, Verträge, Gespräche und KI-Aktivitäten sind synthetisch.
 Dies ist keine funktionale CRM-Umstellung.
 
+## Direkt ansehen und herunterladen
+
+Die private Ergebnisseite enthält die interaktive Vorschau, die drei großen
+Designansichten und bestätigte Dateianhänge:
+
+https://chatgpt.com/space/page_c4e8b4f5bddc81919c228c97c0f8ae80
+
+Die einzelne Datei `evelyn-crm-interaktiv.html` funktioniert nach dem Download
+per Doppelklick im aktuellen Browser. Keine Installation und kein Server nötig.
+Sie enthält dieselben 15 Ansichten, Demo-Interaktionen und den Variantenvergleich.
+
+Die portable HTML-Datei lässt sich mit den bestehenden Projektabhängigkeiten erzeugen:
+
+```sh
+node scripts/build-shareable-preview.cjs /absoluter/pfad/evelyn-crm-interaktiv.html
+```
+
 ## Lokal öffnen
 
 ```sh

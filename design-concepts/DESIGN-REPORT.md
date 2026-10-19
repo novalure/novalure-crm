@@ -180,7 +180,7 @@ Dieser Abschnitt enthält die belegte Ausgangslage und die tatsächlich ausgefü
 | Aktuelles CRM-Production-Deployment | `dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk` auf obiger Ausgangsrevision; nur lesend verifiziert |
 | Ergebnis-Commit | Implementierung `43247d29cb292aa7511d0884f9b97743cf5b1b11`; Nachweise und Abschlussbericht im nachfolgenden Dokumentationscommit desselben Branches |
 | Design-Preview-Projekt/-Deployment | **BLOCKIERT** – Erstdeployments wurden trotz Preview-Auftrag automatisch Production zugeordnet; beide neuen Demoprojekte sind pausiert (Abschnitt 11) |
-| Öffentliche Design-Preview-URL | Keine freigegebene Online-Preview. Vollständige lokale Vorschau: portables ZIP mit `run-preview.py`, URL nach Start `http://127.0.0.1:4173/` |
+| Design-Preview-URL | Private, zugängliche Ergebnisseite mit interaktiver Sandbox-Vorschau: https://chatgpt.com/space/page_c4e8b4f5bddc81919c228c97c0f8ae80 . Die Vercel-Preview bleibt separat blockiert. |
 | Frontend-Build | **PASS** – `npm run build`, statischer Export; `npm run typecheck` ebenfalls bestanden |
 | Drei Varianten erreichbar | **PASS lokal** – Auswahl, A/B/C sowie Vergleich; keine erfolgreiche Online-Preview-Abnahme |
 | Demo-Navigation | **PASS** – 15 Ansichten über Navigation, Varianten-/Vergleichswechsel mit Kontext, sechs Einrichtungsschritte, Tabs und lokale Freigabe |
@@ -212,3 +212,13 @@ Das produktive CRM wurde zum Abschluss erneut gelesen: unverändert `dpl_GmsvmFH
 - `evelyn-crm-design-preview` / `prj_M9TqVYIDHvU2e2yatO8caEilA1qA`
 
 Die aktuell verfügbaren Vercel-Werkzeuge bieten keine Projekt-/Deployment-Löschung. Ein angemeldeter CLI- oder Browserzugang steht in dieser Cloud-Sitzung ebenfalls nicht zur Verfügung. Die Bereinigung ist deshalb offen, nicht als erledigt markiert. Das portable Vorschaupaket stellt sämtliche interaktiven Ansichten ohne Node-Installation bereit; Python 3 genügt. Eine spätere Onlinebereitstellung benötigt einen nachgewiesenen Preview-Zielpfad, der die automatische Erst-Promotion verhindert.
+
+## 12. Zugängliche Übergabe vom 19. Oktober 2026
+
+Die ursprünglich angegebenen Cloud-Dateipfade waren für den Nutzer nicht als Downloads beziehungsweise Bilder zugänglich. Die Übergabe wurde deshalb in eine private Page verlegt: https://chatgpt.com/space/page_c4e8b4f5bddc81919c228c97c0f8ae80 . Diese enthält die drei großen Dashboardbilder, den Vergleich, eine eingebettete interaktive Vorschau sowie echte Library-Dateianhänge mit bestätigtem Benutzerzugriff.
+
+Zusätzlich liegt `evelyn-crm-interaktiv.html` als einzelne portable Datei vor. Sie enthält die bestehenden UI-Komponenten, React, ReactDOM, Inter, Styles und Lizenzen eingebettet und benötigt keine Installation und keine Netzwerkanfragen. Lokale Kopien der Präsentationskomponenten erhalten einen Speicher-Router und `srcDoc`-Frames; die ursprüngliche Next-Anwendung bleibt unverändert. Der Builder benutzt die bereits vorhandenen Next/SWC/Webpack-Abhängigkeiten.
+
+Die neue Vorschau wurde als `file://` und in einer isolierten Browser-Sandbox mit undurchsichtiger Herkunft (`allow-scripts`, ohne `allow-same-origin`) geprüft. Alle 15 Ansichten und die sechs Einrichtungsschritte bestanden; JavaScriptfehler und HTTP-Anfragen jeweils 0. Variantenwechsel erhalten Ansicht und Demo-Mandant; Mobile-/Vergleichsframes sowie Dark Mode wurden geprüft. Der Quelltext dieses Übergabeadapters und die Beobachtungen stehen unter `scripts/build-shareable-preview.cjs`, `scripts/shareable-entry.tsx` und `verification/shareable-browser-results.json`.
+
+Die automatische Production-Zuordnung bei neuen Vercel-Projekten ist offiziell beschrieben: https://vercel.com/docs/deployments/environments#first-deployment . Die zwei pausierten Demoprojekte werden nicht reaktiviert. Es wurde kein weiterer Vercel-Deploymentversuch unternommen.

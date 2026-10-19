@@ -1,5 +1,6 @@
 design-concepts/.gitignore
 design-concepts/CHANGED-FILES.txt
+design-concepts/DELIVERY.md
 design-concepts/DESIGN-REPORT.md
 design-concepts/README.md
 design-concepts/app/[concept]/page.tsx
@@ -21,11 +22,15 @@ design-concepts/next.config.ts
 design-concepts/package-lock.json
 design-concepts/package.json
 design-concepts/postcss.config.mjs
+design-concepts/scripts/build-shareable-preview.cjs
 design-concepts/scripts/run-static-preview.py
+design-concepts/scripts/shareable-entry.tsx
 design-concepts/scripts/verify-browser.mjs
 design-concepts/tsconfig.json
 design-concepts/verification/browser-results.json
 design-concepts/verification/export-manifest.json
+design-concepts/verification/shareable-browser-results.json
+design-concepts/verification/shareable-build.json
 design-concepts/verification/source-manifest.json
 design-concepts/verification/summary.json
 vercel.json

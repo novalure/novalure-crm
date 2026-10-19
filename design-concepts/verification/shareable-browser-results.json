@@ -1,0 +1,86 @@
+{
+  "date": "2026-10-19",
+  "artifact": "evelyn-crm-interaktiv.html",
+  "sandbox": "allow-scripts allow-downloads (opaque origin)",
+  "views": [
+    {
+      "variant": "a",
+      "view": "Übersicht",
+      "title": "Guten Morgen, Alex ✳"
+    },
+    {
+      "variant": "a",
+      "view": "Kunden",
+      "title": "Kunden & Mandanten"
+    },
+    {
+      "variant": "a",
+      "view": "Novalure Studio",
+      "title": "Novalure Studio"
+    },
+    {
+      "variant": "a",
+      "view": "KI-Assistenten",
+      "title": "Eine gute Antwort beginnt hier."
+    },
+    {
+      "variant": "a",
+      "view": "Wissen",
+      "title": "Wissen mit klarem Kontext."
+    },
+    {
+      "variant": "b",
+      "view": "Übersicht",
+      "title": "Schön, dass du da bist\n✳"
+    },
+    {
+      "variant": "b",
+      "view": "Kunden",
+      "title": "Gute Beziehungen beginnen hier."
+    },
+    {
+      "variant": "b",
+      "view": "Novalure Studio",
+      "title": "Raum für Ihre nächsten Ideen."
+    },
+    {
+      "variant": "b",
+      "view": "KI-Assistenten",
+      "title": "Eine gute Antwort beginnt hier."
+    },
+    {
+      "variant": "b",
+      "view": "Wissen",
+      "title": "Wissen mit klarem Kontext."
+    },
+    {
+      "variant": "c",
+      "view": "Übersicht",
+      "title": "Alles verbunden.\nDen nächsten Schritt im Blick."
+    },
+    {
+      "variant": "c",
+      "view": "Kunden",
+      "title": "Kunden & Mandanten"
+    },
+    {
+      "variant": "c",
+      "view": "Novalure Studio",
+      "title": "Novalure Studio"
+    },
+    {
+      "variant": "c",
+      "view": "KI-Assistenten",
+      "title": "Eine gute Antwort beginnt hier."
+    },
+    {
+      "variant": "c",
+      "view": "Wissen",
+      "title": "Wissen mit klarem Kontext."
+    }
+  ],
+  "wizard": "Demo-Einrichtung abgeschlossen. Kein echter Assistent wurde aktiviert.",
+  "errors": [],
+  "httpRequests": [],
+  "artifactSha256": "c52fd64cb8788a9a95595cb3edf07971537d8a2adaff0006e9c8e597426f9a9c"
+}
