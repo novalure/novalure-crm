@@ -113,6 +113,31 @@ test("unchanged 101 upgrades the actual 091–096 → standalone100 predecessor 
       assert.equal((await runtime!.query("select has_table_privilege(current_user,'public.knowledge_assistant_service_bindings','SELECT') as allowed")).rows[0].allowed, false);
       assert.deepEqual((await admin!.query("select relrowsecurity,relforcerowsecurity from pg_class where oid='public.knowledge_assistant_service_bindings'::regclass")).rows[0], { relrowsecurity: true, relforcerowsecurity: true });
     });
+    const package3Migrations = ["104_knowledge_publication_workflow.sql", "105_knowledge_website_monitoring.sql"];
+    await t.test("104–105 roll back atomically before their isolated predecessor upgrade", async () => {
+      const connection = await admin!.connect();
+      try {
+        await connection.query("begin");
+        for (const filename of package3Migrations) await connection.query(await readFile(`migrations/${filename}`, "utf8"));
+        await assert.rejects(connection.query("select 1/0"), sqlCode("22012"));
+        await connection.query("rollback");
+      } finally { connection.release(); }
+      assert.equal((await admin!.query("select to_regclass('public.knowledge_publication_workflows') is null as absent")).rows[0].absent, true);
+      assert.equal((await admin!.query("select to_regclass('public.knowledge_website_scan_runs') is null as absent")).rows[0].absent, true);
+    });
+    for (const filename of package3Migrations) await apply(filename);
+    await t.test("104–105 preserve exact checksums, FORCE RLS and an inactive scheduler", async () => {
+      for (const filename of package3Migrations) {
+        assert.equal((await admin!.query("select checksum from novalure_schema_migrations where version=$1", [filename.slice(0, -4)])).rows[0].checksum,
+          checksum(await readFile(`migrations/${filename}`, "utf8")));
+      }
+      const tables = ["knowledge_publication_workflows", "knowledge_change_proposals", "knowledge_workflow_events", "knowledge_maintenance_configurations", "knowledge_website_monitoring", "knowledge_website_scan_runs"];
+      const protections = (await admin!.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relname=any($1::text[])", [tables])).rows;
+      assert.equal(protections.length, tables.length);
+      assert.ok(protections.every(row => row.relrowsecurity && row.relforcerowsecurity));
+      assert.equal((await admin!.query("select count(*)::int as count from knowledge_website_monitoring where enabled")).rows[0].count, 0);
+      assert.equal((await runtime!.query("select count(*)::int as count from knowledge_change_proposals")).rows[0].count, 0);
+    });
     await admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC predecessor owner',$3,'owner','novalureAdmin','active')",[ownerId,workspaceId,owner.email]);
     await t.test("real non-owner runtime cannot self-provision a contract",async()=>{
       assert.equal((await loadKnowledgeCenter(owner,options)).available,false);

@@ -15,6 +15,10 @@ import {
 import type { KnowledgeItem, Project } from "@/lib/crm-types";
 import type { LanguageCode } from "@/lib/i18n";
 import { getKnowledgeCenterCopy } from "@/lib/knowledge-center/copy";
+import { getKnowledgeLifecycleCopy } from "@/lib/knowledge-center/lifecycle-copy";
+import { KnowledgeLifecyclePanel } from "@/components/knowledge-lifecycle-panel";
+import { KnowledgeMonitoringPanel } from "@/components/knowledge-monitoring-panel";
+import { KnowledgeMaintenancePanel } from "@/components/knowledge-maintenance-panel";
 import {
   addKnowledgeTemplateFields,
   createStructuredKnowledgeRows,
@@ -58,7 +62,7 @@ const channels: KnowledgeChannel[] = [
   "internal",
   "voice",
 ];
-type Tab = "sources" | "areas" | "assistants" | "usage";
+type Tab = "sources" | "areas" | "assistants" | "maintenance" | "usage";
 type SourceEditor = {
   sourceId: string;
   revision: number;
@@ -220,6 +224,7 @@ function KnowledgeCenterContent({
   workspaceName,
 }: KnowledgeCommandCenterProps) {
   const text = getKnowledgeCenterCopy(language);
+  const lifecycleText = getKnowledgeLifecycleCopy(language);
   const formId = useId();
   const [snapshot, setSnapshot] = useState<KnowledgeCenterSnapshot | null>(
     null,
@@ -233,6 +238,7 @@ function KnowledgeCenterContent({
   const [projectId, setProjectId] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [editor, setEditor] = useState<SourceEditor | null>(null);
   const [showAreaForm, setShowAreaForm] = useState(false);
   const [editingAreaId, setEditingAreaId] = useState("");
@@ -244,11 +250,8 @@ function KnowledgeCenterContent({
   const [channel, setChannel] = useState<KnowledgeChannel>("webchat");
   const [assignmentDraft, setAssignmentDraft] = useState<string[] | null>(null);
   const [reviewSourceId, setReviewSourceId] = useState("");
-  const [reviewedVersionId, setReviewedVersionId] = useState("");
-  const [history, setHistory] = useState<{
-    sourceId: string;
-    versions: KnowledgeVersion[];
-  } | null>(null);
+  const [historySourceId, setHistorySourceId] = useState("");
+  const [monitoringSourceId, setMonitoringSourceId] = useState("");
 
   const scopedPath = useCallback(
     (path: string) => {
@@ -348,7 +351,7 @@ function KnowledgeCenterContent({
   const visibleSources =
     snapshot?.sources.filter(
       (source) =>
-        !source.archivedAt &&
+        (statusFilter === "all" || (statusFilter === "active" ? !source.archivedAt : effectiveSourceState(source) === statusFilter)) &&
         (!projectId || !source.projectId || source.projectId === projectId) &&
         (!areaFilter || source.areaId === areaFilter) &&
         source.name
@@ -375,11 +378,6 @@ function KnowledgeCenterContent({
       snapshot.entitlement.enabled &&
       snapshot.permissions.canAssign,
   );
-  const canPublish = Boolean(
-    snapshot?.available &&
-      snapshot.entitlement.enabled &&
-      snapshot.permissions.canPublish,
-  );
   const sourceLimitReached = Boolean(
     snapshot && snapshot.usage.sources >= snapshot.entitlement.maxSources,
   );
@@ -393,8 +391,20 @@ function KnowledgeCenterContent({
       : kind === "business"
         ? text.businessArea
         : text.projectArea;
+  function effectiveSourceState(source: KnowledgeSource) {
+    if (source.archivedAt) return "archived";
+    if (source.version?.processingStatus === "failed" || source.version?.processingStatus === "needs_ocr") return "error";
+    const workflowState = (source as KnowledgeSource & { workflowState?: string }).workflowState;
+    if (workflowState) return workflowState;
+    if (source.approvedVersionId && !source.draftVersionId) return "published";
+    return source.status === "needs-review" || source.status === "pending_review" ? "draft" : source.status;
+  }
   const statusLabel = (status: string) =>
     ({
+      submitted: lifecycleText.submitted,
+      reviewed: lifecycleText.reviewed,
+      revoked: lifecycleText.revoked,
+      error: lifecycleText.error,
       draft: text.draft,
       approved: text.approved,
       published: text.published,
@@ -528,7 +538,7 @@ function KnowledgeCenterContent({
           : { ...payload, type: current.type, areaId: current.areaId },
       );
       setEditor(null);
-      setHistory(null);
+      setHistorySourceId("");
     });
   }
 
@@ -574,8 +584,7 @@ function KnowledgeCenterContent({
       setSearch("");
       setAreaFilter(areaId);
       setReviewSourceId(source.id);
-      setReviewedVersionId("");
-      setHistory(null);
+      setHistorySourceId("");
       setNotice(text.uploadSuccess);
       setSnapshot(await loadSnapshot());
     } catch (cause) {
@@ -604,7 +613,6 @@ function KnowledgeCenterContent({
 
   function toggleReview(sourceId: string) {
     setReviewSourceId((current) => current === sourceId ? "" : sourceId);
-    setReviewedVersionId("");
   }
 
   async function saveArea(event: FormEvent<HTMLFormElement>) {
@@ -646,30 +654,12 @@ function KnowledgeCenterContent({
     setNotice("");
   }
 
-  async function loadHistory(sourceId: string) {
-    if (history?.sourceId === sourceId) {
-      setHistory(null);
-      return;
-    }
-    setBusy(`history:${sourceId}`);
-    setError("");
-    try {
-      const response = await csrfFetch(
-        scopedPath(
-          `/api/knowledge-center/versions?${new URLSearchParams({ sourceId })}`,
-        ),
-        { cache: "no-store" },
-      );
-      const payload = await readResponse<{ versions: KnowledgeVersion[] }>(
-        response,
-        text.loadError,
-      );
-      setHistory({ sourceId, versions: payload.versions });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : text.loadError);
-    } finally {
-      setBusy("");
-    }
+  function loadHistory(sourceId: string) {
+    setHistorySourceId((current) => current === sourceId ? "" : sourceId);
+  }
+
+  async function reloadSnapshot() {
+    setSnapshot(await loadSnapshot());
   }
 
   function renderStructuredFields() {
@@ -1163,7 +1153,7 @@ function KnowledgeCenterContent({
                 </p>
               ) : null}
               <nav aria-label={text.title} className="flex flex-wrap gap-2">
-                {(["sources", "areas", "assistants", "usage"] as const).map(
+                {(["sources", "areas", "assistants", "maintenance", "usage"] as const).filter((value) => value !== "maintenance" || snapshot.permissions.canWrite).map(
                   (value) => (
                     <button
                       aria-controls={`${formId}-panel`}
@@ -1177,7 +1167,7 @@ function KnowledgeCenterContent({
                       }}
                       type="button"
                     >
-                      {text[value]}
+                      {value === "maintenance" ? lifecycleText.maintenance : text[value]}
                       {value === "sources"
                         ? ` (${snapshot.sources.filter((source) => !source.archivedAt).length})`
                         : value === "areas"
@@ -1279,6 +1269,13 @@ function KnowledgeCenterContent({
                             ))}
                           </select>
                         </Field>
+                        <Field label={lifecycleText.state}>
+                          <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                            <option value="active">{lifecycleText.activeStates}</option>
+                            <option value="all">{lifecycleText.allStates}</option>
+                            {(["draft", "submitted", "reviewed", "approved", "published", "error"] as const).map((value) => <option key={value} value={value}>{lifecycleText[value]}</option>)}
+                          </select>
+                        </Field>
                         <Field label={text.search}>
                           <input
                             className={inputClass}
@@ -1335,9 +1332,9 @@ function KnowledgeCenterContent({
                                     {text[source.type]}
                                   </span>
                                   <span
-                                    className={`rounded-md px-2 py-1 text-xs font-semibold ${source.status === "approved" || source.status === "published" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+                                    className={`rounded-md px-2 py-1 text-xs font-semibold ${effectiveSourceState(source) === "approved" || effectiveSourceState(source) === "published" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
                                   >
-                                    {statusLabel(source.status)}
+                                    {statusLabel(effectiveSourceState(source))}
                                   </span>
                                 </div>
                                 <h5 className="mt-2 break-words font-semibold text-slate-950">
@@ -1402,7 +1399,7 @@ function KnowledgeCenterContent({
                                 onClick={() => toggleReview(source.id)}
                                 type="button"
                               >{reviewSourceId === source.id ? text.closeReview : text.reviewContent}</button> : null}
-                              {canWrite ? (
+                              {canWrite && !source.archivedAt ? (
                                 <button
                                   className={buttonClass}
                                   disabled={disabled}
@@ -1412,7 +1409,7 @@ function KnowledgeCenterContent({
                                   {text.edit}
                                 </button>
                               ) : null}
-                              {canWrite && source.type === "file" ? (
+                              {canWrite && !source.archivedAt && source.type === "file" ? (
                                 <label className={`${buttonClass} inline-flex cursor-pointer items-center focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-700 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}>
                                   {text.replaceFile}
                                   <input
@@ -1430,7 +1427,7 @@ function KnowledgeCenterContent({
                                 </label>
                               ) : null}
                               <button
-                                aria-expanded={history?.sourceId === source.id}
+                                aria-expanded={historySourceId === source.id}
                                 className={buttonClass}
                                 disabled={disabled}
                                 onClick={() => void loadHistory(source.id)}
@@ -1451,33 +1448,10 @@ function KnowledgeCenterContent({
                                   {text.documentOpen}
                                 </a>
                               ) : null}
-                              {canWrite &&
-                              snapshot.entitlement.features.websiteImport &&
-                              source.type === "url" ? (
-                                <button
-                                  className={buttonClass}
-                                  disabled={disabled}
-                                  onClick={() =>
-                                    void runAction(
-                                      `scan:${source.id}`,
-                                      async () => {
-                                        await mutate(
-                                          "/api/knowledge-center/scans",
-                                          {
-                                            sourceId: source.id,
-                                            expectedVersion: source.revision,
-                                          },
-                                        );
-                                      },
-                                      text.scanSaved,
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  {text.scan}
-                                </button>
+                              {canWrite && !source.archivedAt && source.type === "url" && snapshot.entitlement.features.websiteImport ? (
+                                <button className={buttonClass} type="button" aria-expanded={monitoringSourceId === source.id} disabled={disabled} onClick={() => setMonitoringSourceId((current) => current === source.id ? "" : source.id)}>{lifecycleText.monitoring}</button>
                               ) : null}
-                              {canWrite ? (
+                              {canWrite && !source.archivedAt ? (
                                 <details className="group">
                                   <summary
                                     className={`${buttonClass} cursor-pointer list-none`}
@@ -1517,73 +1491,12 @@ function KnowledgeCenterContent({
                                 </details>
                               ) : null}
                             </div>
-                            {reviewSourceId === source.id && source.version ? (
-                              <section aria-labelledby={`${formId}-review-title-${source.id}`} className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-stone-50 p-4" id={`${formId}-review-${source.id}`}>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <h6 className="font-semibold" id={`${formId}-review-title-${source.id}`}>{text.recognizedContent}</h6>
-                                  <span className="text-xs text-stone-600">{text.version} {source.version.version} · {statusLabel(source.version.status)}</span>
-                                </div>
-                                <div className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-stone-200 bg-white p-4 text-sm leading-6 text-slate-800" tabIndex={0}>
-                                  {source.version.content || (source.type === "structured" ? structuredKnowledgeSummary(source.version.structuredData, language) : text.noRecognizedContent)}
-                                </div>
-                                {source.type === "file" ? <p className="text-xs leading-5 text-stone-600">{text.replaceHint}</p> : null}
-                                {source.draftVersionId && source.version.id === source.draftVersionId ? (
-                                  needsReadableFile(source.version) ? <p className="text-sm leading-6 text-amber-950">{text.extractionHelp}</p> : canPublish ? (
-                                    <>
-                                      <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm leading-6">
-                                        <input checked={reviewedVersionId === source.version.id} className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-800" disabled={disabled} onChange={(event) => setReviewedVersionId(event.target.checked ? source.version!.id : "")} type="checkbox" />
-                                        <span>{text.reviewConfirm}</span>
-                                      </label>
-                                      <div><button className={primaryClass} disabled={disabled || reviewedVersionId !== source.version.id || (!source.version.content.trim() && !Object.keys(source.version.structuredData).length)} onClick={() => void runAction(`publish:${source.id}`, async () => {
-                                        await mutate("/api/knowledge-center/publish", { sourceId: source.id, versionId: source.version!.id, expectedVersion: source.revision });
-                                        setReviewedVersionId("");
-                                        setHistory(null);
-                                      }, text.versionApproved)} type="button">{busy === `publish:${source.id}` ? text.saving : text.approveVersion}</button></div>
-                                    </>
-                                  ) : <p className="text-xs leading-5 text-amber-900">{text.adminReview}</p>
-                                ) : <p className="text-sm font-medium text-emerald-900">{text.approvedCurrent}</p>}
-                              </section>
-                            ) : null}
-                            {history?.sourceId === source.id ? (
-                              <div className="mt-4 rounded-lg bg-stone-50 p-3">
-                                <p className="text-xs leading-5 text-stone-600">
-                                  {text.historyHint}
-                                </p>
-                                {history.versions.length ? (
-                                  <ol className="mt-3 grid gap-2">
-                                    {history.versions.map((version) => (
-                                      <li
-                                        className="rounded-lg border border-stone-200 bg-white p-3 text-sm"
-                                        key={version.id}
-                                      >
-                                        <p className="font-medium">
-                                          {text.version} {version.version} ·{" "}
-                                          {statusLabel(version.status)}
-                                        </p>
-                                        {version.id === source.approvedVersionId ? <p className="mt-1 text-xs font-semibold text-emerald-900">{text.approvedCurrent}</p> : null}
-                                        <p className="mt-1 text-xs text-stone-600">
-                                          {dateLabel(version.createdAt)}
-                                        </p>
-                                        <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-stone-700" tabIndex={0}>
-                                          {version.content ||
-                                            version.url ||
-                                            (source.type === "structured"
-                                              ? structuredKnowledgeSummary(
-                                                  version.structuredData,
-                                                  language,
-                                                )
-                                              : version.name)}
-                                        </p>
-                                      </li>
-                                    ))}
-                                  </ol>
-                                ) : (
-                                  <p className="mt-2 text-sm text-stone-600">
-                                    {text.noVersions}
-                                  </p>
-                                )}
+                            {(reviewSourceId === source.id || historySourceId === source.id) && source.version ? (
+                              <div id={`${formId}-review-${source.id}`}>
+                                <KnowledgeLifecyclePanel source={source} snapshot={snapshot} language={language} scopedPath={scopedPath} onChanged={reloadSnapshot} showHistory={historySourceId === source.id} />
                               </div>
                             ) : null}
+                            {monitoringSourceId === source.id ? <KnowledgeMonitoringPanel source={source} snapshot={snapshot} language={language} scopedPath={scopedPath} onChanged={reloadSnapshot} /> : null}
                           </li>
                         ))}
                       </ul>
@@ -1962,6 +1875,7 @@ function KnowledgeCenterContent({
                     </p>
                   </div>
                 ) : null}
+                {tab === "maintenance" ? <KnowledgeMaintenancePanel snapshot={snapshot} language={language} scopedPath={scopedPath} onChanged={reloadSnapshot} /> : null}
                 {tab === "usage" ? (
                   <div className="grid gap-5">
                     <div>

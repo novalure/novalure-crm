@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "timezone": "Europe/Vienna",
+  "repository": "novalure/novalure-crm",
+  "branch": "codex/knowledge-center-package3-20261019",
+  "implementationRevision": "ef86c66ae274a62081aa1e836abfec23b47b02d4",
+  "baseline": {
+    "pr": 88,
+    "head": "aa6b329942ab19c165bc610822f03ed5874af189",
+    "implementation": "b908c0e445739e9665e4fb0912c101f1a575fa79",
+    "base": "a04273f37fb3417b180626bd878920ab89f73609",
+    "ciInitiallyFailed": true
+  },
+  "pullRequest": "https://github.com/novalure/novalure-crm/pull/89",
+  "previewUrl": null,
+  "deploymentId": null,
+  "independentReview": {
+    "revision": "ef86c66ae274a62081aa1e836abfec23b47b02d4",
+    "reviewer": "independent_review (separate local AI agent)",
+    "openActionableFindings": 0,
+    "githubAppAttestation": false,
+    "method": "Actual commit diff review plus isolated PostgreSQL reproduction of the write-scope finding; subsequent exact-commit delta review"
+  },
+  "tests": [
+    {
+      "command": "npm run test:knowledge-center",
+      "exitCode": 0,
+      "countsByRunner": [
+        121,
+        11
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "knowledge.txt",
+      "sha256": "bbeec79f20fc83b3e9da60198b20b7f940a0a8012049883675179d1c53b0a559"
+    },
+    {
+      "command": "npm run test:knowledge-package3",
+      "exitCode": 0,
+      "countsByRunner": [
+        43,
+        3
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "package3.txt",
+      "sha256": "342b331b59006a45a60245b48c8c9497d45b3e55a9894a94ea0119fd1dc25799"
+    },
+    {
+      "command": "npm run test:unit",
+      "exitCode": 0,
+      "countsByRunner": [
+        240
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "unit.txt",
+      "sha256": "8a79054ec2bae0aa09c611ed228cc227141a603b0c85133955acec17eef6760c"
+    },
+    {
+      "command": "CRM_QA_CHROMIUM_PATH=/usr/bin/chromium npm run test:sales",
+      "exitCode": 0,
+      "countsByRunner": [
+        93
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "sales.txt",
+      "sha256": "aee401a7c8738f9c383a2853490f7a582139af8859965c66170a45a9627b4ea3"
+    },
+    {
+      "command": "npm run test:sales:final",
+      "exitCode": 0,
+      "countsByRunner": [
+        55
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "sales-final.txt",
+      "sha256": "f61212ffd2d69d5fc2b1be6f74dd680c339033630609d69b004e7d449f25c7a1"
+    },
+    {
+      "command": "npm run test:integration",
+      "exitCode": 0,
+      "countsByRunner": [
+        17
+      ],
+      "failed": 0,
+      "skipped": 0,
+      "log": "integration.txt",
+      "sha256": "829ab0c50154857eb66c7da0900c0fc82745e9fc093a5e5fc68244f202f92757"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "typecheck.txt",
+      "sha256": "ca4007e6ca8e9132c68fb196ac6e7f8be61d94e2987e9b464c8c895d1aea2603"
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "log": "lint.txt",
+      "sha256": "0a655bc9181b646d57f081b6a0c3f2d23e521f445bc7c59e0ad7f405d1f56f07"
+    },
+    {
+      "command": "NEXT_TELEMETRY_DISABLED=1 npm run build",
+      "exitCode": 0,
+      "log": "build.txt",
+      "sha256": "7fd9dac67e0acb3dd473399588a80fd39a32432fef02cd5620ac2d81e3b2703e"
+    },
+    {
+      "command": "npm run security:production",
+      "exitCode": 0,
+      "log": "audit.txt",
+      "sha256": "ea1f32ffa99510dc0cebe61ef2913fb7ff4d634afdbe1de35adfe0c7496d47b1"
+    }
+  ],
+  "browser": {
+    "command": "npm run qa:knowledge:browser",
+    "passed": 13,
+    "failed": 0,
+    "consolePageErrors": 0,
+    "ordinaryPasswordAndMfa": true,
+    "syntheticOnly": true,
+    "productionAccess": 0,
+    "details": "browser-result.json"
+  },
+  "testReuse": "Unit/sales/audit and unmodified Knowledge regression evidence reused where the relevant source paths/dependencies were unchanged. Final package3, workflow, build, browser, typecheck/lint and sales-final include corrective changes. Counts across commands overlap and must not be summed as unique tests.",
+  "migrations": [
+    {
+      "name": "104_knowledge_publication_workflow.sql",
+      "sha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610"
+    },
+    {
+      "name": "105_knowledge_website_monitoring.sql",
+      "sha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30"
+    }
+  ],
+  "boundaries": {
+    "database": "Disposable loopback PostgreSQL18 only; non-BYPASSRLS migration owner/runtime and FORCE RLS tested. Historical optional pgvector substitution and manual062 omission retained. Actual091–096→100→101–105 predecessor chain, transactional rollback and checksum ledger tested. Not a Neon production clone.",
+    "browser": "Optimized Next build via existing loopback-only development database transport with ordinary password/TOTP. Not a hosted production runtime.",
+    "scheduler": "Actual scoped adapters tested; no production cron installed or enabled. Remote host must rehydrate persisted tenant actors.",
+    "models": "Deterministic analysis; no model calls or paid services.",
+    "activation": "No production migration/customer mutation/deployment/phone call/payment/external message."
+  },
+  "initialIssuesCorrected": [
+    "test:sales lacked react-server condition",
+    "Machine-auth fixture applied Knowledge tables before exact68-table migration092; now pinned90 before092/093",
+    "Independent review UI findings and Analyze-All read-only project failure fixed",
+    "Browser assertions adapted to separate publication terminology and accessible control names"
+  ],
+  "remoteCi": "Read current GitHub checks on the PR; local evidence is not a remote-CI or production PASS."
+}

@@ -151,6 +151,32 @@ test("Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft pub
       await execute(scans.POST, "/api/knowledge-center/scans", "POST", { sourceId: urlSource.id, expectedVersion: urlSource.revision }, 422);
       assert.equal(Number((await db.admin.query("select count(*) from knowledge_source_versions where source_id=$1", [urlSource.id])).rows[0].count), 1);
     });
+    await t.test("workflow HTTP requires cookie, CSRF and scoped membership before exact-version review and publication", async () => {
+      const workflow = await import("../src/app/api/knowledge-center/workflow/route");
+      const monitoring = await import("../src/app/api/knowledge-center/monitoring/route");
+      for (const handler of [workflow.GET, monitoring.GET]) {
+        assert.equal((await handler(new Request(origin + "/api/knowledge-center/workflow"))).status, 401);
+      }
+      assert.equal((await workflow.POST(request("/api/knowledge-center/workflow", "POST", { action: "analyze" }, { "x-novalure-csrf-token": "" }))).status, 403);
+      await execute(workflow.GET, "/api/knowledge-center/workflow?workspaceId=" + foreign.workspaceId, "GET", undefined, 403);
+      await execute(workflow.POST, "/api/knowledge-center/workflow", "POST", { action: "submit", sourceId: source.id, workspaceId: foreign.workspaceId }, 400);
+      for (const action of ["submit", "review", "approve", "publish"]) {
+        const current = (await execute(workflow.GET, "/api/knowledge-center/workflow?sourceId=" + source.id, "GET")).source as KnowledgeSource;
+        const body = { action, sourceId: current.id, versionId: current.draftVersionId, expectedVersion: current.revision, reason: "SYNTHETIC reviewed HTTP publication" };
+        if (action === "submit") {
+          await execute(workflow.POST, "/api/knowledge-center/workflow", "POST", { ...body, expectedVersion: current.revision + 1 }, 409);
+        }
+        await execute(workflow.POST, "/api/knowledge-center/workflow", "POST", body);
+        if (action === "submit") {
+          const bypass = await publish.POST(request("/api/knowledge-center/publish", "POST", { sourceId: current.id, versionId: current.draftVersionId, expectedVersion: current.revision }));
+          assert.notEqual(bypass.status, 200, "legacy endpoint cannot bypass a submitted review");
+        }
+      }
+      const published = await execute(workflow.GET, "/api/knowledge-center/workflow?sourceId=" + source.id, "GET");
+      assert.equal(published.workflow.state, "published");
+      assert.equal(published.versions.length, 2);
+      assert.equal((await execute(query.POST, "/api/knowledge-center/query", "POST", { query: "Thursday", botId, channel: "webchat" })).grounded, true);
+    });
     await t.test("current role restricts publication and session revocation ends all knowledge access", async () => {
       await db.admin.query("update workspace_users set role='agent',product_role='novalure_operator' where id=$1", [owner.userId]);
       await execute(publish.POST, "/api/knowledge-center/publish", "POST", { sourceId: source.id, versionId: source.draftVersionId, expectedVersion: source.revision }, 403);
