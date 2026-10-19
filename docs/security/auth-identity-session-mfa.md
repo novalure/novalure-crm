@@ -109,10 +109,16 @@ password change refreshes only the retained current session's version before its
 normal rotation. Enrolling MFA revokes existing unverified sessions and cancels
 other pending enrollments.
 
-The existing enrollment UI provides a manual TOTP key and provisioning URI, not
-a QR renderer. Its existing components now distinguish the six-digit setup
-confirmation from later TOTP/recovery-code login and expose linked input help.
-No external QR service receives provisioning secrets.
+The enrollment UI displays a locally generated QR code for the existing TOTP
+provisioning URI by default. The server-only QR encoder returns an inline PNG
+with a four-module quiet zone, standard black/white contrast and medium error
+correction. No external QR or image service receives provisioning secrets.
+The manual key remains available behind the translated setup-key disclosure,
+with a clipboard button and selectable fallback when clipboard access fails.
+QR generation failure opens manual setup automatically. Both paths use the same
+six-digit confirmation and existing MFA security checks. The shared enrollment
+component is intended for reuse by the future tenant customer portal under the
+[binding CRM authentication masterplan](../masterplan/crm-authentication.md).
 
 The deliberately unresolved product gate is recovery administration: there is
 no specification yet for support-assisted factor reset, re-enrollment approval,
@@ -163,6 +169,16 @@ Changed files for this bounded update:
 | Additive schema | `migrations/106_auth_mfa_hardening.sql` |
 | Synthetic regressions and MFA QA compatibility | `scripts/mfa-security-tests.ts`, `scripts/auth-security-tests.mjs`, `scripts/qa-sales-browser.mjs`, `scripts/qa-livegang-api.mjs` |
 | Test invocation, CI and documentation | `package.json`, `.github/workflows/livegang-e2e.yml`, `docs/security/auth-identity-session-mfa.md` |
+
+The QR follow-up in the same PR additionally changes the dependency lockfile,
+`src/lib/i18n.ts`, `src/components/mfa-enrollment-setup.tsx`,
+`src/lib/auth/mfa-qr.ts`, `scripts/mfa-qr-tests.ts`,
+`scripts/mfa-qr-browser-tests.mjs`, the CRM masterplan supplement and its README
+link. `npm run test:mfa` includes independent PNG decoding of the exact existing
+URI and retains all MFA security regressions. `npm run test:mfa:qr:browser`
+exercises native browser enrollment through QR and manual keys, translations,
+responsive display and clipboard handling with synthetic local accounts. This
+does not claim a physical Microsoft/Google Authenticator device scan.
 
 Lost-device support when both authenticator and recovery codes are unavailable,
 support-assisted factor reset, disable and re-enrollment still need the approved

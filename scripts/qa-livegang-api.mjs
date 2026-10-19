@@ -212,7 +212,7 @@ function createClient(email) {
         assert(Boolean(workspaceUserId), `${email} workspace selection exposes a membership`);
         challengeBody.set("workspaceUserId", workspaceUserId);
       } else if (challengeKind === "mfa_enrollment") {
-        enrolledMfaSecret = challengePage.text.match(/<code>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
+        enrolledMfaSecret = challengePage.text.match(/<code\b[^>]*>([A-Z2-7]{32})<\/code>/)?.[1] ?? null;
         unusedMfaRecoveryCodes = Array.from(
           challengePage.text.matchAll(/<code>([A-Z2-7]{4}(?:-[A-Z2-7]{4}){3})<\/code>/g),
           (match) => match[1],

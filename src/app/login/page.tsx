@@ -5,11 +5,13 @@ import { redirect } from "next/navigation";
 import { CookieConsentButton } from "@/components/cookie-consent-button";
 import { LoginEmailAutofocus } from "@/components/login-email-autofocus";
 import { LoginUrlHygiene } from "@/components/login-url-hygiene";
+import { MfaEnrollmentSetup } from "@/components/mfa-enrollment-setup";
 import { PasswordVisibilityInput } from "@/components/password-visibility-input";
 import subpageStyles from "@/components/public-subpage.module.css";
 import { PublicSiteShell } from "@/components/public-site-shell";
 import { SubmitOnceForm } from "@/components/submit-once-form";
 import { getTrustedAppOrigin } from "@/lib/auth/app-origin";
+import { createMfaQrCodeDataUrl } from "@/lib/auth/mfa-qr";
 import {
   getLoginChallengeView,
   getSessionFromHeaders,
@@ -180,6 +182,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const landingCopy = getCrmLandingPageCopy(language);
   const configured = isLoginConfigured();
   const loginChallenge = configured ? await getLoginChallengeView(requestHeaders) : null;
+  const enrollmentQrCode = loginChallenge?.kind === "mfa_enrollment"
+    ? await createMfaQrCodeDataUrl(loginChallenge.provisioningUri)
+    : null;
   const errorText = getErrorText(getQueryValue(query.error), loginCopy, language);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
@@ -290,19 +295,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
                       {loginChallenge.kind === "mfa_enrollment" ? (
                         <div className={subpageStyles.noticeStack}>
-                          <p className={subpageStyles.notice}>
-                            {language === "de"
-                              ? "Richten Sie den Schlüssel in einer TOTP-App ein und bewahren Sie die einmaligen Wiederherstellungscodes sicher auf."
-                              : "Add this key to a TOTP app and store the one-time recovery codes securely."}
-                          </p>
-                          <p className={subpageStyles.fieldHelp}>
-                            <strong>{language === "de" ? "TOTP-Schlüssel:" : "TOTP key:"}</strong>{" "}
-                            <code>{loginChallenge.secret}</code>
-                          </p>
-                          <p className={subpageStyles.fieldHelp}>
-                            <strong>{language === "de" ? "Provisioning-URI:" : "Provisioning URI:"}</strong>{" "}
-                            <code>{loginChallenge.provisioningUri}</code>
-                          </p>
+                          <MfaEnrollmentSetup
+                            copy={loginCopy.mfaSetup}
+                            qrCodeDataUrl={enrollmentQrCode}
+                            secret={loginChallenge.secret}
+                          />
                           <p className={subpageStyles.fieldHelp}>
                             <strong>{language === "de" ? "Wiederherstellungscodes:" : "Recovery codes:"}</strong>
                           </p>

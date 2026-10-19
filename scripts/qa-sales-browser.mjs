@@ -87,7 +87,10 @@ try{
  await step('correct password requires real TOTP enrollment before CRM access',async()=>{
   await passwordLogin(fixture.password);
   await expect(page.locator('#login-mfa-code')).toBeVisible();
-  const key = page.locator('p').filter({has:page.locator('strong', {hasText:'TOTP-Schlüssel:'})}).locator('code');
+  const manualSetup = page.locator('details').filter({has:page.getByText('QR-Code kann nicht gescannt werden? Einrichtungsschlüssel anzeigen.', {exact:true})});
+  await page.waitForLoadState('networkidle');
+  await manualSetup.locator('summary').click();
+  const key = manualSetup.locator('code');
   await expect(key).toBeVisible();
   totpSecret = (await key.innerText()).trim();
   assert.ok(/^[A-Z2-7]{16,}$/.test(totpSecret), 'Login UI must provide a valid enrollment key');
