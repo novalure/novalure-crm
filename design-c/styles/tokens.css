@@ -1,0 +1,209 @@
+/*
+ * Design C source: evelyn-design-preview globals.css, `.theme-c` and `.command`.
+ * Preserved: canvas #f7f8fc, surface #fff, text #252c40, accent #666ad1,
+ * accent-soft #eff0fc, line #e8eaf1, rail #171d30, intelligence #242a42.
+ * Contrast adjustments: source muted #777e91 -> #636b80 for AA normal text;
+ * source rail text #929cb4 -> #a1abc0. Control borders are #858ca0 so empty
+ * fields have a 3:1 boundary. Primary hover #565ac0 retains white text AA.
+ * Status foregrounds use darker source-family colors for AA on soft fills.
+ * Light is the default. The optional [data-theme="dark"] mirrors source
+ * `.is-dark` tokens; it is a presentation preference, never an auth boundary.
+ * All Design C color literals live here, including production UI overrides.
+ */
+.design-c {
+  color-scheme: light;
+  --dc-canvas: #f7f8fc;
+  --dc-surface: #ffffff;
+  --dc-surface-soft: #f1f3fa;
+  --dc-text: #252c40;
+  --dc-muted: #636b80;
+  --dc-line: #e8eaf1;
+  --dc-border: #858ca0;
+  --dc-accent: #666ad1;
+  --dc-accent-hover: #565ac0;
+  --dc-accent-soft: #eff0fc;
+  --dc-accent-text: #5357b4;
+  --dc-on-accent: #ffffff;
+  --dc-focus: #5954bc;
+  --dc-focus-shadow: #666ad126;
+  --dc-rail: #171d30;
+  --dc-rail-text: #a1abc0;
+  --dc-rail-active: #323953;
+  --dc-rail-strong: #dce0ff;
+  --dc-rail-indicator: #a6adff;
+  --dc-intelligence: #242a42;
+  --dc-intelligence-text: #f0f1ff;
+  --dc-intelligence-muted: #b7bdd2;
+  --dc-intelligence-border: #626a8a;
+  --dc-intelligence-soft: #343b58;
+  --dc-intelligence-orb: #c3c4fa;
+  --dc-intelligence-ring: #7681a519;
+  --dc-intelligence-ring-soft: #7681a509;
+  --dc-intelligence-ring-faint: #7681a506;
+  --dc-prompt-bg: #ffffff08;
+  --dc-prompt-border: #a0a6cf6b;
+  --dc-prompt-text: #e9ebff;
+  --dc-prompt-placeholder: #b1b8d3;
+  --dc-prompt-button: #bec2fd;
+  --dc-prompt-button-text: #30364f;
+  --dc-neutral-bg: #eff0f5;
+  --dc-neutral-text: #535d72;
+  --dc-info-bg: #eff0fc;
+  --dc-info-text: #5357b4;
+  --dc-info-border: #cbd0ee;
+  --dc-success-bg: #edf5ef;
+  --dc-success-text: #3c6d4b;
+  --dc-success-border: #b5d4be;
+  --dc-warning-bg: #fbf3e4;
+  --dc-warning-text: #80601c;
+  --dc-warning-border: #dfcea6;
+  --dc-danger-bg: #fceeed;
+  --dc-danger-text: #a33c38;
+  --dc-danger-border: #e6bab7;
+  --dc-danger-hover: #862f2c;
+  --dc-violet-bg: #eeebff;
+  --dc-violet-text: #6556a3;
+  --dc-violet-border: #d3c9ee;
+  --dc-success: var(--dc-success-text);
+  --dc-warning: var(--dc-warning-text);
+  --dc-danger: var(--dc-danger-text);
+  --dc-violet: var(--dc-violet-text);
+  --dc-overlay: #171d3080;
+  --dc-shadow: 0 2px 5px #25342b03;
+  --dc-shadow-raised: 0 16px 48px #17203020;
+  --dc-radius: 12px;
+  --dc-radius-sm: 8px;
+  --dc-radius-lg: 16px;
+  --dc-font: "Inter Variable", Inter, Arial, sans-serif;
+  /* Presentation artwork colors, isolated from interactive UI semantics. */
+  --dc-art-sky-start: #dce7e4;
+  --dc-art-sky-alt: #d5dbe8;
+  --dc-art-sky-end: #f4eee2;
+  --dc-art-sun: #fff8df;
+  --dc-art-land-back: #9aa99d;
+  --dc-art-land-front: #6e8274;
+  --dc-art-wall-start: #eee9df;
+  --dc-art-wall-end: #c9c7be;
+  --dc-art-wall-light: #f8f7ee;
+  --dc-art-wall-side: #b4b7af;
+  --dc-art-glass: #536a70;
+  --dc-art-glass-side: #6a7d7e;
+  --dc-art-frame: #d5d4c8;
+  --dc-art-balcony: #f5f3e9;
+  --dc-art-corner: #f1eee4;
+  --dc-art-tree: #506b59;
+  --dc-art-path: #b4b6a6;
+  --dc-art-ground: #d8d7c4;
+  --dc-art-ink: #31473c;
+  --dc-art-muted: #55685c;
+  --dc-art-site-start: #d4dbd0;
+  --dc-art-site-end: #eef0e6;
+  --dc-art-site-wall-start: #b4beb0;
+  --dc-art-site-wall-end: #607763;
+  --dc-art-site-light: #f4f2e6;
+  --dc-art-site-grid: #d8ddd1;
+  --dc-art-site-glass: #496356;
+  --dc-art-site-frame: #b7c0b0;
+  --dc-art-site-accent: #61765c;
+  --dc-art-light: #f4f6ef;
+  --dc-art-shadow: #122c1b80;
+  --dc-type-xs: 0.6875rem;
+  --dc-type-sm: 0.75rem;
+  --dc-type-body-sm: 0.8125rem;
+  --dc-type-body: 0.875rem;
+  --dc-type-heading-sm: 1rem;
+  --dc-type-heading: 1.125rem;
+  --dc-type-display: clamp(1.6rem, 2.6vw, 2rem);
+  --dc-control-height: 46px;
+  --dc-control-height-compact: 44px;
+  --dc-table-min-width: 560px;
+  --dc-table-header-height: 44px;
+  --dc-navigation-rail-width: 80px;
+  --dc-navigation-item-height: 60px;
+  --dc-navigation-tab-height: 48px;
+  --dc-duration-fast: 160ms;
+  --dc-duration-standard: 240ms;
+  --dc-easing: ease;
+  /* CSS custom properties cannot be used in media queries: foundations and
+   * shell use the matching literal widths documented by these tokens. */
+  --dc-breakpoint-mobile: 720px;
+  --dc-breakpoint-tablet: 1100px;
+  --dc-breakpoint-compact: 390px;
+  --dc-space-1: 0.25rem;
+  --dc-space-2: 0.5rem;
+  --dc-space-3: 0.75rem;
+  --dc-space-4: 1rem;
+  --dc-space-5: 1.5rem;
+  --dc-space-6: 2rem;
+  --dc-space-7: 3rem;
+
+  /* Scoped adapter for the existing production UI primitives. */
+  --nl-blue: var(--dc-accent);
+  --nl-blue-dark: var(--dc-accent-text);
+  --nl-blue-tint: var(--dc-accent-soft);
+  --nl-gold-hover: var(--dc-accent-hover);
+  --nl-gold-text: var(--dc-accent-text);
+  --nl-ink: var(--dc-text);
+  --nl-muted: var(--dc-muted);
+  --nl-disabled: var(--dc-muted);
+  --nl-surface: var(--dc-surface);
+  --nl-surface-soft: var(--dc-surface-soft);
+  --nl-neutral: var(--dc-neutral-bg);
+  --nl-neutral-bg: var(--dc-neutral-bg);
+  --nl-border: var(--dc-border);
+  --nl-divider: var(--dc-line);
+  --nl-radius-button: var(--dc-radius-sm);
+  --nl-radius-input: var(--dc-radius-sm);
+  --nl-radius-surface: var(--dc-radius);
+  --nl-radius-pill: 999px;
+  --nl-control-height: var(--dc-control-height);
+  --nl-control-height-compact: var(--dc-control-height-compact);
+  --nl-shadow-card: var(--dc-shadow);
+  --nl-shadow-raised: var(--dc-shadow-raised);
+  --nl-focus-ring: 0 0 0 4px var(--dc-focus-shadow);
+  --nl-success-bg: var(--dc-success-bg);
+  --nl-success-text: var(--dc-success-text);
+  --nl-success-border: var(--dc-success-border);
+  --nl-warning-bg: var(--dc-warning-bg);
+  --nl-warning-text: var(--dc-warning-text);
+  --nl-warning-border: var(--dc-warning-border);
+  --nl-danger-bg: var(--dc-danger-bg);
+  --nl-danger-text: var(--dc-danger-text);
+  --nl-danger-border: var(--dc-danger-border);
+}
+
+.design-c[data-theme="dark"] {
+  color-scheme: dark;
+  --dc-canvas: #121827;
+  --dc-surface: #1a2032;
+  --dc-surface-soft: #232b40;
+  --dc-text: #e1e5f1;
+  --dc-muted: #aab3ca;
+  --dc-line: #3c465f;
+  --dc-border: #7b86a2;
+  --dc-accent: #9da6ff;
+  --dc-accent-hover: #b7beff;
+  --dc-accent-soft: #2a3051;
+  --dc-accent-text: #bac1ff;
+  --dc-on-accent: #14192a;
+  --dc-focus: #c3c4fa;
+  --dc-focus-shadow: #a6adff38;
+  --dc-neutral-bg: #2d3446;
+  --dc-neutral-text: #c2cadd;
+  --dc-info-bg: #2a3051;
+  --dc-info-text: #c3c9ff;
+  --dc-info-border: #626caa;
+  --dc-success-bg: #253d36;
+  --dc-success-text: #9ed5b4;
+  --dc-success-border: #577e67;
+  --dc-warning-bg: #3d3529;
+  --dc-warning-text: #e8cb8e;
+  --dc-warning-border: #8b7952;
+  --dc-danger-bg: #482e36;
+  --dc-danger-text: #ffb8b4;
+  --dc-danger-border: #a46e73;
+  --dc-danger-hover: #ffc9c6;
+  --dc-violet-bg: #342e4f;
+  --dc-violet-text: #d0bffa;
+  --dc-violet-border: #8b77ac;
+}

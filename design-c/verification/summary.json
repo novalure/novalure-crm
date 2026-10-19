@@ -1,0 +1,150 @@
+{
+  "testedAt": "2026-10-19T19:53:26.936Z",
+  "scope": "local static export and synthetic fixtures only",
+  "source_manifest_sha256": "0c322ce18e4adda810efe714973c0e4c45690aa8b17ed6896838f90fe7cb9230",
+  "browser": "Chromium",
+  "passed": 80,
+  "failed": 0,
+  "axeScans": 13,
+  "axe": [
+    {
+      "name": "dashboard-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 7
+        }
+      ]
+    },
+    {
+      "name": "customers-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "tenants-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "studio-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        }
+      ]
+    },
+    {
+      "name": "properties-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 6
+        }
+      ]
+    },
+    {
+      "name": "assistants-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "knowledge-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "activity-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "components-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 3
+        }
+      ]
+    },
+    {
+      "name": "settings-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "dashboard-390",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 7
+        }
+      ]
+    },
+    {
+      "name": "knowledge-390",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "settings-dark-1440",
+      "violationCount": 0,
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        }
+      ]
+    }
+  ],
+  "existing_targeted_tests": {
+    "passed": 20,
+    "failed": 0
+  },
+  "typecheck": "PASS: complete CRM and separate Design C",
+  "lint": "PASS: Design C sources/scripts and modified lint configuration",
+  "build": "PASS: Next 16.4.0 static export",
+  "production_changes": false,
+  "online_preview": false
+}
