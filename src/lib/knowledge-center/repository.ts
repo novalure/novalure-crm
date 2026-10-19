@@ -17,7 +17,7 @@ async function lock(tx: TenantTransaction, session: AppSession) {
   await tx.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`knowledge-center:${session.workspaceId}`]);
 }
 async function entitlement(tx: TenantTransaction, session: AppSession): Promise<KnowledgeEntitlement> {
-  const row = await tx.queryOne<KnowledgeEntitlement>(`select e.enabled and coalesce(m.enabled,true) as enabled,e.max_sources as "maxSources",e.max_storage_bytes::float8 as "maxStorageBytes",e.max_queries_per_month as "maxQueriesPerMonth",e.contract_reference as "contractReference",e.features,e.limits from knowledge_center_entitlements e left join workspace_module_settings m on m.workspace_id=e.workspace_id and m.module_key='knowledge' where e.workspace_id=$1::uuid`, [session.workspaceId]);
+  const row = await tx.queryOne<KnowledgeEntitlement>(`select e.enabled and coalesce(m.enabled,true) as enabled,e.max_sources as "maxSources",e.max_storage_bytes::float8 as "maxStorageBytes",e.max_queries_per_month as "maxQueriesPerMonth",e.contract_reference as "contractReference",e.features,e.limits,coalesce(to_jsonb(e)->'monitoring_intervals','["manual"]'::jsonb) as "allowedMonitoringIntervals" from knowledge_center_entitlements e left join workspace_module_settings m on m.workspace_id=e.workspace_id and m.module_key='knowledge' where e.workspace_id=$1::uuid`, [session.workspaceId]);
   return row ?? { enabled: false, maxSources: 0, maxStorageBytes: 0, maxQueriesPerMonth: 0, contractReference: null, features: { websiteImport: false, monitoring: false, advancedMaintenance: false }, limits: { maxAreas: 0, maxWebsites: 0, maxScansPerMonth: 0, maxUsers: 0, maxAssistants: 0 } };
 }
 async function enabled(tx: TenantTransaction, session: AppSession) {
@@ -44,7 +44,7 @@ async function area(tx: TenantTransaction, session: AppSession, areaId: string, 
   if (row.projectId) await assertProjectGrant(tx, session, row.projectId, write);
   return row;
 }
-const versionJson = `jsonb_build_object('id',v.id,'sourceId',v.source_id,'version',v.version,'name',v.name,'content',v.content,'structuredData',v.structured_data,'url',v.source_url,'mediaAssetId',v.media_asset_id,'status',v.status,'createdAt',v.created_at,'approvedAt',v.approved_at,'processingStatus',coalesce(to_jsonb(v)->>'processing_status',case when v.media_asset_id is null then 'manual' else 'needs_ocr' end),'processingMessage',to_jsonb(v)->>'processing_message','processingFormat',to_jsonb(v)->>'processing_format')`;
+const versionJson = `jsonb_build_object('id',v.id,'sourceId',v.source_id,'version',v.version,'name',v.name,'content',v.content,'structuredData',v.structured_data,'url',v.source_url,'mediaAssetId',v.media_asset_id,'status',v.status,'createdAt',v.created_at,'approvedAt',v.approved_at,'processingStatus',coalesce(to_jsonb(v)->>'processing_status',case when v.media_asset_id is null then 'manual' else 'needs_ocr' end),'processingMessage',to_jsonb(v)->>'processing_message','processingFormat',to_jsonb(v)->>'processing_format','createdBy',v.created_by,'approvedBy',v.approved_by,'createdByName',(select u.name from workspace_users u where u.id=v.created_by and u.workspace_id=v.workspace_id),'approvedByName',(select u.name from workspace_users u where u.id=v.approved_by and u.workspace_id=v.workspace_id),'changeReason',coalesce(to_jsonb(v)->>'change_reason','Draft created'),'provenance',coalesce(to_jsonb(v)->'provenance','{}'::jsonb))`;
 async function source(tx: TenantTransaction, session: AppSession, sourceId: string, write = false): Promise<KnowledgeSource> {
   const canWrite = knowledgePermissions(session).canWrite;
   const row = await tx.queryOne<KnowledgeSource>(`select s.id,s.knowledge_area_id as "areaId",s.project_id as "projectId",v.name,s.source_type as type,
@@ -85,11 +85,13 @@ async function content(tx: TenantTransaction, session: AppSession, type: Knowled
   return { name, content: text, structuredData, url, mediaAssetId, documentSizeBytes };
 }
 type DocumentProcessing = { status: KnowledgeDocumentProcessingStatus; message: string | null; format: KnowledgeDocumentFormat | null; code?: string | null; hash?: string | null; importKey?: string | null };
-async function insertVersion(tx: TenantTransaction, session: AppSession, sourceId: string, version: number, data: Awaited<ReturnType<typeof content>>, processing?: DocumentProcessing) {
+async function insertVersion(tx: TenantTransaction, session: AppSession, sourceId: string, version: number, data: Awaited<ReturnType<typeof content>>, processing?: DocumentProcessing, governance?: { reason: string; provenance: Record<string, unknown> }) {
   const id = randomUUID();
   // Processing evidence is an immutable part of the version. API content inputs
   // never accept these fields; a new attachment cannot claim an old result.
-  if (processing) {
+  if (governance) {
+    await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by,processing_status,processing_message,processing_format,processing_error_code,document_sha256,change_reason,provenance) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid,$12,$13,$14,$15,$16,$17,$18::jsonb)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId, processing?.status ?? "manual", processing?.message ?? null, processing?.format ?? null, processing?.code ?? null, processing?.hash ?? null, governance.reason, JSON.stringify(governance.provenance)]);
+  } else if (processing) {
     await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by,processing_status,processing_message,processing_format,processing_error_code,document_sha256,document_import_key) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid,$12,$13,$14,$15,$16,$17)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId, processing.status, processing.message, processing.format, processing.code ?? null, processing.hash ?? null, processing.importKey ?? null]);
   } else {
     await tx.execute(`insert into knowledge_source_versions(id,workspace_id,source_id,version,name,content,structured_data,source_url,media_asset_id,document_size_bytes,created_by) values($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7::jsonb,$8,$9::uuid,$10,$11::uuid)`, [id, session.workspaceId, sourceId, version, data.name, data.content, JSON.stringify(data.structuredData), data.url, data.mediaAssetId, data.documentSizeBytes, session.userId]);
@@ -111,6 +113,11 @@ export async function loadKnowledgeCenter(session: AppSession, options: TenantTr
     const ids = await tx.query<{ id: string }>(`select s.id from knowledge_sources s join knowledge_areas a on a.id=s.knowledge_area_id and a.workspace_id=s.workspace_id where s.workspace_id=$1::uuid and s.archived_at is null and a.archived_at is null and ($2::boolean or s.approved_version_id is not null) order by s.updated_at desc limit 500`, [fresh.workspaceId, permissions.canWrite]);
     const sources: KnowledgeSource[] = [];
     for (const row of ids) sources.push(await source(tx, fresh, row.id));
+    const workflowInstalled = await tx.queryOne<{ installed: boolean }>("select to_regclass('public.knowledge_publication_workflows') is not null as installed");
+    if (permissions.canWrite && workflowInstalled?.installed) {
+      const states = await tx.query<{ sourceId: string; state: NonNullable<KnowledgeSource["workflowState"]> }>(`select w.source_id as "sourceId",w.state from knowledge_publication_workflows w join knowledge_sources s on s.id=w.source_id and s.workspace_id=w.workspace_id where w.workspace_id=$1::uuid and w.version_id=coalesce(s.draft_version_id,s.approved_version_id)`, [fresh.workspaceId]);
+      for (const item of sources) item.workflowState = states.find(value => value.sourceId === item.id)?.state ?? (item.draftVersionId ? item.version?.provenance?.kind === "revocation" ? "revoked" : "draft" : "published");
+    }
     const projects = await tx.query<{ id: string; name: string }>(`select id,name from projects where workspace_id=$1::uuid and crm_project_access(workspace_id,id,false) order by name`, [fresh.workspaceId]);
     const bots = await tx.query<{ id: string; name: string; projectId: string | null }>(`select id,name,project_id as "projectId" from bots where workspace_id=$1::uuid and (project_id is null or crm_project_access(workspace_id,project_id,false)) order by name`, [fresh.workspaceId]);
     const assignments = await tx.query<{ botId: string; channel: KnowledgeChannel; areaId: string }>(`select g.bot_id as "botId",g.channel,g.area_id as "areaId" from knowledge_area_grants g join knowledge_areas a on a.id=g.area_id and a.workspace_id=g.workspace_id join bots b on b.id=g.bot_id and b.workspace_id=g.workspace_id where g.workspace_id=$1::uuid and a.archived_at is null and (b.project_id is null or crm_project_access(b.workspace_id,b.project_id,false))`, [fresh.workspaceId]);
@@ -218,7 +225,7 @@ export async function assignKnowledgeAreas(session: AppSession, input: AssignKno
 export async function listKnowledgeVersions(session: AppSession, input: { sourceId: string }, options: TenantTransactionOptions = {}): Promise<KnowledgeVersion[]> {
   return withCrmRead(session, async (tx, fresh) => {
     await enabled(tx, fresh); const row = await source(tx, fresh, input.sourceId);
-    return tx.query<KnowledgeVersion>(`select id,source_id as "sourceId",version,name,content,structured_data as "structuredData",source_url as url,media_asset_id as "mediaAssetId",status,created_at::text as "createdAt",approved_at::text as "approvedAt",coalesce(to_jsonb(knowledge_source_versions)->>'processing_status',case when media_asset_id is null then 'manual' else 'needs_ocr' end) as "processingStatus",to_jsonb(knowledge_source_versions)->>'processing_message' as "processingMessage",to_jsonb(knowledge_source_versions)->>'processing_format' as "processingFormat" from knowledge_source_versions where source_id=$1::uuid and workspace_id=$2::uuid and ($3::boolean or id=$4::uuid) order by version desc`, [row.id, fresh.workspaceId, knowledgePermissions(fresh).canWrite, row.approvedVersionId]);
+    return tx.query<KnowledgeVersion>(`select id,source_id as "sourceId",version,name,content,structured_data as "structuredData",source_url as url,media_asset_id as "mediaAssetId",status,created_at::text as "createdAt",approved_at::text as "approvedAt",coalesce(to_jsonb(knowledge_source_versions)->>'processing_status',case when media_asset_id is null then 'manual' else 'needs_ocr' end) as "processingStatus",to_jsonb(knowledge_source_versions)->>'processing_message' as "processingMessage",to_jsonb(knowledge_source_versions)->>'processing_format' as "processingFormat",created_by as "createdBy",approved_by as "approvedBy",(select u.name from workspace_users u where u.id=knowledge_source_versions.created_by and u.workspace_id=knowledge_source_versions.workspace_id) as "createdByName",(select u.name from workspace_users u where u.id=knowledge_source_versions.approved_by and u.workspace_id=knowledge_source_versions.workspace_id) as "approvedByName",coalesce(to_jsonb(knowledge_source_versions)->>'change_reason','Draft created') as "changeReason",coalesce(to_jsonb(knowledge_source_versions)->'provenance','{}'::jsonb) as provenance from knowledge_source_versions where source_id=$1::uuid and workspace_id=$2::uuid and ($3::boolean or id=$4::uuid) order by version desc`, [row.id, fresh.workspaceId, knowledgePermissions(fresh).canWrite, row.approvedVersionId]);
   }, options);
 }
 export async function publishKnowledgeSource(session: AppSession, input: { sourceId: string; versionId: string; expectedVersion: number }, options: TenantTransactionOptions = {}) {
@@ -227,19 +234,16 @@ export async function publishKnowledgeSource(session: AppSession, input: { sourc
     requireKnowledgePermission(fresh, "canPublish"); await lock(tx, fresh); await enabled(tx, fresh);
     const row = await source(tx, fresh, input.sourceId, true);
     if (row.revision !== expected || row.draftVersionId !== versionId) fail("VERSION_CONFLICT", "Only the current draft can be approved", 409);
-    const version = row.version!;
-    if (["needs_ocr", "failed"].includes(version.processingStatus)) fail("DOCUMENT_NOT_READY", version.processingMessage ?? "Das Dokument konnte noch nicht verarbeitet werden.", 409);
-    const text = [version.content, Object.keys(version.structuredData).length ? JSON.stringify(version.structuredData) : ""].filter(Boolean).join("\n");
-    if (!text.trim()) fail("CONTENT_REQUIRED", "Extract and review document or website content before approval", 409);
-    await tx.execute(`update knowledge_source_versions set status='approved',approved_at=now(),approved_by=$1::uuid where id=$2::uuid and source_id=$3::uuid and workspace_id=$4::uuid and status='draft'`, [fresh.userId, versionId, row.id, fresh.workspaceId]);
-    await tx.execute(`update knowledge_sources set approved_version_id=$1::uuid,draft_version_id=null,name=$2,status='approved',kc_revision=kc_revision+1,updated_at=now() where id=$3::uuid and workspace_id=$4::uuid`, [versionId, version.name, row.id, fresh.workspaceId]);
-    await tx.execute(`delete from knowledge_chunks where source_id=$1::uuid`, [row.id]);
-    let index = 0;
-    for (let start = 0; start < text.length; start += 1600) {
-      await tx.execute(`insert into knowledge_chunks(source_id,knowledge_version_id,chunk_index,content,citation_title,citation_url,metadata) values($1::uuid,$2::uuid,$3,$4,$5,$6,'{"trust":"untrusted_source_data","approved":true}'::jsonb)`, [row.id, versionId, index++, text.slice(start, start + 1600), version.name, version.url]);
+    const published = await publishInTransaction(tx, fresh, row, versionId);
+    const workflowInstalled = await tx.queryOne<{ installed: boolean }>("select to_regclass('public.knowledge_publication_workflows') is not null as installed");
+    if (workflowInstalled?.installed) {
+      // The legacy administrator endpoint shares publication semantics with
+      // the explicit workflow endpoint, including its durable internal event.
+      await tx.execute(`update knowledge_publication_workflows set state='published',published_by=$1::uuid where workspace_id=$2::uuid and version_id=$3::uuid and state='approved'`, [fresh.userId, fresh.workspaceId, versionId]);
+      const { recordKnowledgeWorkflowEventInTransaction } = await import("./workflow");
+      await recordKnowledgeWorkflowEventInTransaction(tx, fresh, "knowledge.publication.published", row, versionId, { reason: "Administrator publication", publicationMode: "legacy_administrator" });
     }
-    await tx.execute(`update knowledge_sources set item_count=$1 where id=$2::uuid and workspace_id=$3::uuid`, [index, row.id, fresh.workspaceId]);
-    await audit(tx, fresh, "knowledge.source.approved", row.id, { versionId, chunks: index }); return source(tx, fresh, row.id);
+    return published;
   }, options);
 }
 export async function queryKnowledgeCenter(session: AppSession, input: QueryKnowledgeCenterInput, options: TenantTransactionOptions = {}): Promise<KnowledgeQueryResult> {
@@ -402,3 +406,21 @@ export async function revalidateKnowledgeScanSource(session: AppSession, input: 
     return { sourceId: row.id, revision: row.revision };
   }, options);
 }
+
+async function publishInTransaction(tx: TenantTransaction, fresh: AppSession, row: KnowledgeSource, versionId: string) {
+    const version = row.version!;
+    if (["needs_ocr", "failed"].includes(version.processingStatus)) fail("DOCUMENT_NOT_READY", version.processingMessage ?? "Das Dokument konnte noch nicht verarbeitet werden.", 409);
+    const text = [version.content, Object.keys(version.structuredData).length ? JSON.stringify(version.structuredData) : ""].filter(Boolean).join("\n");
+    if (!text.trim()) fail("CONTENT_REQUIRED", "Extract and review document or website content before approval", 409);
+    await tx.execute(`update knowledge_source_versions set status='approved',approved_at=now(),approved_by=$1::uuid where id=$2::uuid and source_id=$3::uuid and workspace_id=$4::uuid and status='draft'`, [fresh.userId, versionId, row.id, fresh.workspaceId]);
+    await tx.execute(`update knowledge_sources set approved_version_id=$1::uuid,draft_version_id=null,name=$2,status='approved',kc_revision=kc_revision+1,updated_at=now() where id=$3::uuid and workspace_id=$4::uuid`, [versionId, version.name, row.id, fresh.workspaceId]);
+    await tx.execute(`delete from knowledge_chunks where source_id=$1::uuid`, [row.id]);
+    let index = 0;
+    for (let start = 0; start < text.length; start += 1600) {
+      await tx.execute(`insert into knowledge_chunks(source_id,knowledge_version_id,chunk_index,content,citation_title,citation_url,metadata) values($1::uuid,$2::uuid,$3,$4,$5,$6,'{"trust":"untrusted_source_data","approved":true}'::jsonb)`, [row.id, versionId, index++, text.slice(start, start + 1600), version.name, version.url]);
+    }
+    await tx.execute(`update knowledge_sources set item_count=$1 where id=$2::uuid and workspace_id=$3::uuid`, [index, row.id, fresh.workspaceId]);
+    await audit(tx, fresh, "knowledge.source.approved", row.id, { versionId, chunks: index }); return source(tx, fresh, row.id);
+}
+
+export const knowledgeInternals = { lock, enabled, entitlement, source, area, audit, usage, content, insertVersion, checkStorage, publishInTransaction };
