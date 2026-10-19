@@ -1,0 +1,72 @@
+
+> novalure-crm@0.1.0 test:sales:final
+> node --conditions=react-server --import tsx --test --test-concurrency=1 scripts/crm-service-contract-tests.ts scripts/crm-machine-auth-tests.ts scripts/approval-reference-tests.ts scripts/sales-client-recovery-tests.ts scripts/sales-http-receipt-tests.ts scripts/sales-route-integration-tests.ts scripts/sales-final-negative-tests.ts
+
+✔ G08 threshold and independent cryptographic channel evidence bind every scope field (16.90305ms)
+▶ G08 persistent local synthetic two-step approval gates a real DB probe, never delivery
+  ✔ missing and same-channel second steps cannot execute; signed independent steps can (98.310273ms)
+  ✔ different execution keys still cannot double-consume one approval (62.728474ms)
+  ✔ revoke versus consume is serialized and never reports two effects (49.345254ms)
+  ✔ rejected proof and changed target cannot produce any synthetic effect (68.736328ms)
+  ✔ scope/evidence are immutable and simulation cannot activate on production/Vercel (42.027205ms)
+✔ G08 persistent local synthetic two-step approval gates a real DB probe, never delivery (2861.363971ms)
+✔ machine token pins Vercel issuer, audience, JWKS verifier, algorithm and exact workload (1819.791018ms)
+✔ machine token rejects malformed, signature failure, claim drift, expiry and unsupported algorithm (1.288453ms)
+✔ machine HTTP denies missing auth, cookies, wrong tenant/resource/action and unregistered workload (35.102424ms)
+✔ machine read/write/read-after-write preserves audit, receipts and idempotency (67.865778ms)
+✔ JTI replay, identity kill switch and revocation all deny before effect (36.021588ms)
+✔ HTTP: authenticated narrow read returns selected fields and produces no business write (2602.342226ms)
+✔ HTTP: missing/forged bearer, cookie and browser Origin cannot impersonate service (34.570886ms)
+✔ HTTP: tenant and agent must match credential; native UUIDs cannot replace aliases (18.896695ms)
+✔ HTTP: additional fields, version downgrade, live mode and invalid patch fail closed (28.831991ms)
+✔ HTTP: same-tenant hidden project, private and unknown classes are inaccessible (27.902672ms)
+✔ HTTP: unregistered or mismatched audit reference cannot authorize a read (17.288658ms)
+✔ HTTP: scope removal is effective before access (7.880949ms)
+✔ HTTP: revocation, expiry, inactive actor, owner promotion and non-QA workspace all block authentication (25.127053ms)
+✔ HTTP: contact update is CAS-bound, immutable-receipted, replayable and reconcilable (51.464065ms)
+✔ HTTP: stale and parallel versions allow exactly one effect (27.644926ms)
+✔ HTTP: project name and task title are the only additional write fields (42.955897ms)
+✔ DB: runtime cannot read credential hashes or mint/alter service bindings (13.096659ms)
+✔ contract: sensitive commands remain unsupported and cannot borrow a generic write scope (28.191455ms)
+✔ HTTP: every one of the twelve v1 read projections executes against PostgreSQL (134.427881ms)
+✔ HTTP: semantic-gap entities and unclassified legacy communication remain closed (32.051967ms)
+Legacy CRM HTTP boundary checked methods: 67
+✔ HTTP: every legacy CRM method rejects service bearer plus forged owner headers (91.769716ms)
+✔ contract: pinned synthetic-text safety refinement rejects credential markers (0.717817ms)
+✔ HTTP: immutable resource context, sensitivity, domain and purpose are independently enforced (73.344348ms)
+✔ DB: conversation helper requires credential and matching actor/project; generic read has no grant (22.367432ms)
+✔ HTTP: unsafe source text and malformed buyer profile cannot escape a valid grant (23.317769ms)
+✔ contract: pinned Evelyn request parity vectors remain accepted or rejected identically (2.235474ms)
+✔ G06 client reconciles a lost success using the original metadata without another write (21.563101ms)
+✔ G06 missing receipt stays unknown and blocks changed requests; retry is lookup only (1.26ms)
+✔ G06 explicit validation rejection permits corrected intent and does not reconcile (0.723416ms)
+✔ G06 offer retry uses original envelope even when UI creates fresh metadata (0.967992ms)
+▶ final Flow B priorities, tenant negatives and parallel status changes on real PostgreSQL
+  ✔ high qualification persists actor, source, version and an audited handover (74.97104ms)
+  ✔ medium qualification persists actor, source, version and an audited handover (70.372279ms)
+  ✔ low qualification persists actor, source, version and an audited handover (51.645706ms)
+  ✔ cross-tenant qualification and handover cannot change source data or leave receipts (40.465997ms)
+  ✔ parallel distinct reservation requests commit exactly one request and keep unit available (37.949954ms)
+  ✔ parallel reservation confirmations commit exactly one status event and version (26.892889ms)
+  ✔ parallel sale confirmations commit exactly one sale and never release a sold unit (77.590578ms)
+✔ final Flow B priorities, tenant negatives and parallel status changes on real PostgreSQL (3572.531408ms)
+▶ G06 HTTP receipts: real local PostgreSQL effects survive lost commit responses without replay
+  ✔ parallel duplicate contact creation persists one domain effect and durable receipt (100.627082ms)
+  ✔ contact task and project updates replay exact prior result without a second version bump (167.429844ms)
+  ✔ server commits then loses COMMIT acknowledgement: authorized lookup proves one effect (22.518709ms)
+  ✔ not-found lookup creates nothing, different tenant and revoked membership receive no result (13.827534ms)
+✔ G06 HTTP receipts: real local PostgreSQL effects survive lost commit responses without replay (3339.154497ms)
+▶ G06 actual cookie/CSRF routes: six areas, exact replay, current authority and tenant isolation
+  ✔ one CSRF consumption permits contact create; nonce replay denies; fresh nonce command retry replays (156.341485ms)
+  ✔ task/project/lead/deal creates and stage change each return one durable result (347.087673ms)
+  ✔ CAS updates replay without version increment; stale intent cannot overwrite (267.880125ms)
+  ✔ current role, revoked session and foreign tenant deny both writes and receipt reads (109.356574ms)
+✔ G06 actual cookie/CSRF routes: six areas, exact replay, current authority and tenant isolation (3986.499779ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 55
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22069.133021
