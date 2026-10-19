@@ -31,8 +31,9 @@ type BusinessContact = Pick<
   "id" | "workspaceId" | "projectId" | "name" | "email" | "phone" | "intent" | "source"
 >;
 
-// This is a presentation filter over server-authorized data. The caller still
-// applies its selected-project scope after this content-only filtering.
+// This presentation filter accepts only rows in the active workspace and its
+// available projects. Server authorization and RLS remain authoritative; the
+// caller still applies the narrower selected-project scope after this filter.
 export function selectVisibleBusinessRecords<L extends BusinessLead, C extends BusinessContact>({
   leads,
   contacts,
@@ -62,15 +63,17 @@ export function selectVisibleBusinessRecords<L extends BusinessLead, C extends B
   return {
     leads: leads.filter(
       (lead) =>
-        studioLeads.has(lead) ||
-        isVisibleBusinessRecord([lead.intent, lead.nextAction, lead.source, lead.status]),
+        lead.workspaceId === workspaceId &&
+        projectIds.has(lead.projectId) &&
+        (studioLeads.has(lead) ||
+          isVisibleBusinessRecord([lead.intent, lead.nextAction, lead.source, lead.status])),
     ),
     contacts: contacts.filter(
       (contact) =>
-        (contact.workspaceId === workspaceId &&
-          projectIds.has(contact.projectId) &&
-          studioContactKeys.has(JSON.stringify([contact.projectId, contact.id]))) ||
-        isVisibleBusinessRecord([contact.name, contact.email, contact.phone, contact.intent, contact.source]),
+        contact.workspaceId === workspaceId &&
+        projectIds.has(contact.projectId) &&
+        (studioContactKeys.has(JSON.stringify([contact.projectId, contact.id])) ||
+          isVisibleBusinessRecord([contact.name, contact.email, contact.phone, contact.intent, contact.source])),
     ),
   };
 }

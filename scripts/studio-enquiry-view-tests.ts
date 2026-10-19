@@ -135,3 +135,36 @@ test("unrelated business records retain the existing legacy content-filter behav
     assert.equal(isVisibleBusinessRecord([text]), false);
   }
 });
+
+test("ordinary business content cannot admit another workspace or an unavailable project", () => {
+  const lead = { ...visibilityLead(), hasStudioEnquiry: false, intent: "A new company website" };
+  const contact = { ...visibilityContact(), name: "Company owner", email: "owner@example.org", intent: "New company website" };
+  for (const scope of [
+    { workspaceId: "workspace-foreign" },
+    { projectId: "project-foreign" },
+    { projectId: "project-unavailable" },
+    { projectId: "" },
+  ]) {
+    const result = selectVisibleBusinessRecords({
+      ...visibilityInput(),
+      leads: [{ ...lead, ...scope }],
+      contacts: [{ ...contact, ...scope }],
+    });
+    assert.deepEqual(result, { leads: [], contacts: [] });
+  }
+  assert.deepEqual(
+    selectVisibleBusinessRecords({ ...visibilityInput(), projects: [], leads: [lead], contacts: [contact] }),
+    { leads: [], contacts: [] },
+  );
+});
+
+test("available second-project business rows remain for the caller's selected-project filter", () => {
+  const lead = { ...visibilityLead(), projectId: "project-other", hasStudioEnquiry: false, intent: "A new company website" };
+  const contact = { ...visibilityContact(), projectId: "project-other", name: "Company owner", email: "owner@example.org", intent: "New company website" };
+  const input = { ...visibilityInput(), leads: [lead], contacts: [contact] };
+  const result = selectVisibleBusinessRecords(input);
+  assert.deepEqual(result.leads, [lead]);
+  assert.deepEqual(result.contacts, [contact]);
+  assert.equal(result.leads[0], lead);
+  assert.equal(result.contacts[0], contact);
+});
