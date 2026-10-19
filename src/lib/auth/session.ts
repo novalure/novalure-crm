@@ -60,6 +60,7 @@ export type AppSession = {
   authSessionId?: string;
   mfaEnabledAt?: string | Date | null;
   mfaVerifiedAt?: string | Date | null;
+  passwordVersion?: string | null;
   sessionCreatedAt?: string | Date;
   sessionExpiresAt?: string | Date;
   sessionRotationDue?: boolean;
@@ -756,6 +757,7 @@ function toAppSession(
     email: membership.email,
     mfaEnabledAt: membership.mfaEnabledAt,
     mfaVerifiedAt: input.mfaVerifiedAt ?? null,
+    passwordVersion: membership.passwordVersion,
     name: membership.name,
     permissions: getSessionPermissions(membership.role, productRole),
     productPermissions: getProductRoleCapabilities(productRole),
@@ -865,6 +867,7 @@ export async function createSessionCookie(session: AppSession, request: Request)
     email: session.email,
     id: session.userId,
     mfaEnabledAt: session.mfaEnabledAt ?? null,
+    passwordVersion: session.passwordVersion,
     name: session.name,
     productRole: session.productRole,
     role: session.role,

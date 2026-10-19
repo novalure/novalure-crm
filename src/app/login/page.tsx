@@ -50,13 +50,19 @@ function getQueryValue(value: string | string[] | undefined, fallback = "") {
   return value ?? fallback;
 }
 
-function getErrorText(error: string, text: ReturnType<typeof getLoginPageCopy>) {
+function getErrorText(error: string, text: ReturnType<typeof getLoginPageCopy>, language: LanguageCode) {
   if (error === "login_not_configured") {
     return text.errors.login_not_configured;
   }
 
   if (error === "database_unavailable") {
     return text.errors.database_unavailable;
+  }
+
+  if (error === "invalid_mfa") {
+    return language === "de"
+      ? "Der Code ist ungültig, bereits verwendet oder vorübergehend gesperrt. Verwenden Sie einen neuen Code oder versuchen Sie es nach kurzer Wartezeit erneut. Starten Sie die Anmeldung bei Bedarf neu."
+      : "The code is invalid, has already been used or is temporarily blocked. Use a new code or try again after a short wait. Restart sign-in if needed.";
   }
 
   if (error) return text.errors.invalid;
@@ -174,7 +180,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const landingCopy = getCrmLandingPageCopy(language);
   const configured = isLoginConfigured();
   const loginChallenge = configured ? await getLoginChallengeView(requestHeaders) : null;
-  const errorText = getErrorText(getQueryValue(query.error), loginCopy);
+  const errorText = getErrorText(getQueryValue(query.error), loginCopy, language);
   const statusText = getStatusText(getQueryValue(query.reset), loginCopy);
   const hasLoginNotice = !configured || Boolean(errorText) || Boolean(statusText);
   const auditHref = resolveAuditHref(country, language);
@@ -278,8 +284,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                     <>
                       <p className={subpageStyles.fieldHelp}>
                         {language === "de"
-                          ? `Zusätzliche Bestätigung für den privilegierten Zugang zu ${loginChallenge.workspaceName}.`
-                          : `Additional verification for privileged access to ${loginChallenge.workspaceName}.`}
+                          ? `Zusätzliche Bestätigung für den Zugang zu ${loginChallenge.workspaceName}.`
+                          : `Additional verification for access to ${loginChallenge.workspaceName}.`}
                       </p>
 
                       {loginChallenge.kind === "mfa_enrollment" ? (
@@ -313,19 +319,38 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                       ) : null}
 
                       <label className={subpageStyles.field} htmlFor="login-mfa-code">
-                        {language === "de"
-                          ? "Code aus der Authenticator-App oder Wiederherstellungscode"
-                          : "Authenticator or recovery code"}
+                        {loginChallenge.kind === "mfa_enrollment"
+                          ? language === "de"
+                            ? "Sechsstelliger Code aus der Authenticator-App"
+                            : "Six-digit authenticator code"
+                          : language === "de"
+                            ? "Code aus der Authenticator-App oder Wiederherstellungscode"
+                            : "Authenticator or recovery code"}
                         <input
+                          aria-describedby="login-mfa-help"
+                          autoCapitalize="none"
                           autoComplete="one-time-code"
                           autoFocus
                           className={subpageStyles.input}
                           id="login-mfa-code"
+                          inputMode={loginChallenge.kind === "mfa_enrollment" ? "numeric" : "text"}
+                          maxLength={loginChallenge.kind === "mfa_enrollment" ? 6 : 19}
                           name="code"
+                          pattern={loginChallenge.kind === "mfa_enrollment" ? "[0-9]{6}" : undefined}
                           required
+                          spellCheck={false}
                           type="text"
                         />
                       </label>
+                      <p className={subpageStyles.fieldHelp} id="login-mfa-help">
+                        {loginChallenge.kind === "mfa_enrollment"
+                          ? language === "de"
+                            ? "Bestätigen Sie die Einrichtung mit dem aktuellen sechsstelligen Code. Wiederherstellungscodes können Sie erst bei einer späteren Anmeldung verwenden."
+                            : "Confirm setup with the current six-digit code. Recovery codes can be used for a later sign-in."
+                          : language === "de"
+                            ? "Geben Sie den aktuellen sechsstelligen Code oder einen unbenutzten Wiederherstellungscode ein. Ein bereits verwendeter Code ist nicht erneut gültig; warten Sie auf den nächsten Code."
+                            : "Enter the current six-digit code or an unused recovery code. A used code cannot be reused; wait for the next code."}
+                      </p>
                       <button className={subpageStyles.submitButton} type="submit">
                         <span>{language === "de" ? "Sicher bestätigen" : "Verify securely"}</span>
                         <ArrowRightIcon />

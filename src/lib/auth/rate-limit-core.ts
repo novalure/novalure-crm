@@ -1,7 +1,8 @@
-export type AuthRateLimitKind = "login" | "reset";
+export type AuthRateLimitKind = "login" | "reset" | "mfa";
 
 export const authRateLimitPolicy = {
   login: { capSeconds: 3_600, threshold: 5, windowSeconds: 3_600 },
+  mfa: { capSeconds: 3_600, threshold: 5, windowSeconds: 3_600 },
   reset: { capSeconds: 21_600, threshold: 3, windowSeconds: 21_600 },
 } as const;
 

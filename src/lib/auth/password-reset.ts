@@ -496,6 +496,13 @@ export async function confirmPasswordReset(input: {
           where session.auth_identity_id = credential_updated.id
             and session.revoked_at is null
           returning session.id
+        ), challenges_invalidated as (
+          update auth_login_challenges challenge
+          set used_at = now(), payload_ciphertext = null
+          from credential_updated
+          where challenge.auth_identity_id = credential_updated.id
+            and challenge.used_at is null
+          returning challenge.id
         ), audited as (
           insert into auth_audit_events (
             event_type,
@@ -513,6 +520,7 @@ export async function confirmPasswordReset(input: {
             $4,
             jsonb_build_object(
               'revokedSessionCount', (select count(*) from sessions_revoked),
+              'invalidatedChallengeCount', (select count(*) from challenges_invalidated),
               'updatedMembershipCount', (select count(*) from password_mirrored)
             )
           from credential_updated

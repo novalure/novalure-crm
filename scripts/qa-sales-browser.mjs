@@ -72,7 +72,7 @@ async function assertProtectedDenied() {
  assert.ok([401,403].includes(response.status()), 'Incomplete authentication must not access CRM');
  assert.ok(!(await context.cookies()).some(cookie=>cookie.name==='novalure_session'),'Incomplete authentication must not issue a session');
 }
-let totpSecret,firstSession;
+let totpSecret,firstSession,unusedRecoveryCode;
 let enrollmentVerified=false,loginCredentialExchangeVerified=false;
 
 let contact,lead,deal,buyer,buyerLead,unit;
@@ -93,6 +93,7 @@ try{
   assert.ok(/^[A-Z2-7]{16,}$/.test(totpSecret), 'Login UI must provide a valid enrollment key');
   const recoveryCodes = await page.locator('form:has(#login-mfa-code) li code').allTextContents();
   assert.ok(recoveryCodes.length > 0, 'Enrollment UI must provide recovery codes');
+  unusedRecoveryCode = recoveryCodes[0];
   // Synthetic codes are saved only in the ignored fixture before the UI acknowledgment.
   await writeFile('.npm-cache/qa/sales-browser-context.json',JSON.stringify({...fixture,totpSecret,recoveryCodes},null,2));
   await assertProtectedDenied();
@@ -144,8 +145,9 @@ try{
   await expect(page.getByRole('alert')).toBeVisible();
   await assertProtectedDenied();
  });
- await step('mobile password and TOTP login creates a fresh session through the actual UI',async()=>{
-  await submitMfa(authenticatorCode(totpSecret));
+ await step('mobile password and recovery code login creates a fresh session through the actual UI',async()=>{
+  // The enrollment TOTP may still be in the same time step and cannot be replayed.
+  await submitMfa(unusedRecoveryCode);
   await expect(page).not.toHaveURL(/\/login/,{timeout:30000});
   const session = (await context.cookies()).find(cookie=>cookie.name==='novalure_session');
   assert.ok(session?.httpOnly && session.value!==firstSession, 'Reauthentication must create a fresh session');
