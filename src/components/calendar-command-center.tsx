@@ -27,6 +27,8 @@ type CalendarCommandCenterProps = {
   sessionUserName: string;
   tasks: Task[];
   users: WorkspaceUser[];
+  workspaceId: string;
+  sessionWorkspaceId: string;
   workspacePublicKey?: string;
 };
 
@@ -707,9 +709,15 @@ export function CalendarCommandCenter({
   sessionUserName,
   tasks,
   users,
+  workspaceId,
+  sessionWorkspaceId,
   workspacePublicKey,
 }: CalendarCommandCenterProps) {
   const text = getCalendarCommandCenterCopy(language);
+  const isHomeWorkspace = workspaceId === sessionWorkspaceId;
+  const connectionReadOnlyMessage = language === "de"
+    ? "Kalenderverbindungen sind hier schreibgeschützt. Änderungen sind nur im Anmelde-Workspace möglich."
+    : "Calendar connections are read-only here. Changes are available only in your sign-in workspace.";
   const locale = getLocale(language);
   const selfOwnerName = sessionUserName || users[0]?.name || sessionUserId;
   const assignableUsers = useMemo(
@@ -754,6 +762,7 @@ export function CalendarCommandCenter({
       connectedProvider,
     );
   });
+  const [oauthStatus, setOAuthStatus] = useState<"loading" | "ready" | "error">("loading");
   const [shareConfig, setShareConfig] = useState<MeetingShareConfig>(defaultShareConfig);
   const [shareMode, setShareMode] = useState<MeetingShareMode>("link");
   const [shareNotice, setShareNotice] = useState("");
@@ -915,6 +924,7 @@ export function CalendarCommandCenter({
   }, [meetingBuilderOpen]);
 
   useEffect(() => {
+    if (!isHomeWorkspace) return;
     let cancelled = false;
     const cacheKey = `novalure.meeting.${defaultShareConfig.slug}`;
 
@@ -998,7 +1008,7 @@ export function CalendarCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [defaultShareConfig.slug, text.messages.localSettingsLoaded, text.messages.savedSettingsLoaded]);
+  }, [defaultShareConfig.slug, isHomeWorkspace, text.messages.localSettingsLoaded, text.messages.savedSettingsLoaded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1007,15 +1017,29 @@ export function CalendarCommandCenter({
       const connectedProvider = getCalendarProviderFromSearchParam("calendar_connected");
 
       try {
-        const response = await fetch("/api/meetings/oauth/status", { cache: "no-store" });
+        const workspaceQuery = workspaceId !== sessionWorkspaceId
+          ? `?workspaceId=${encodeURIComponent(workspaceId)}`
+          : "";
+        const response = await fetch(`/api/meetings/oauth/status${workspaceQuery}`, { cache: "no-store" });
         const payload = (await response.json().catch(() => null)) as
           | {
               google?: CalendarOAuthConnectionPayload;
               microsoft?: CalendarOAuthConnectionPayload;
+              source?: string;
             }
           | null;
 
-        if (!response.ok || !payload || cancelled) return;
+        if (cancelled) return;
+        if (
+          !response.ok ||
+          !payload ||
+          payload.source !== "database" ||
+          typeof payload.google?.connected !== "boolean" ||
+          typeof payload.microsoft?.connected !== "boolean"
+        ) {
+          setOAuthStatus("error");
+          return;
+        }
 
         setCalendarIntegrations((current) =>
           normalizeCalendarIntegrationSelection(
@@ -1027,8 +1051,9 @@ export function CalendarCommandCenter({
             connectedProvider,
           ),
         );
+        setOAuthStatus("ready");
       } catch {
-        // OAuth status is optional for local previews.
+        if (!cancelled) setOAuthStatus("error");
       }
     }
 
@@ -1037,7 +1062,7 @@ export function CalendarCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionWorkspaceId, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1192,7 +1217,11 @@ export function CalendarCommandCenter({
     text,
   );
   const hasConnectedCalendarProvider =
-    calendarIntegrations.microsoft.connected || calendarIntegrations.google.connected;
+    oauthStatus === "ready" &&
+    (calendarIntegrations.microsoft.connected || calendarIntegrations.google.connected);
+  const oauthStatusMessage = oauthStatus === "loading"
+    ? language === "de" ? "Verbindungsstatus wird geladen …" : "Loading connection status …"
+    : language === "de" ? "Verbindungsstatus derzeit nicht verfügbar." : "Connection status is currently unavailable.";
   const selectedEventProvider = getEventCalendarProvider(
     selectedEvent?.event,
     calendarIntegrations.defaultProvider,
@@ -1286,6 +1315,7 @@ export function CalendarCommandCenter({
   });
 
   const saveMeetingSettings = async (closeAfterSave = false) => {
+    if (!isHomeWorkspace) return;
     const page = getMeetingSettingsPayload();
     const cacheKey = `novalure.meeting.${page.slug}`;
 
@@ -1325,6 +1355,7 @@ export function CalendarCommandCenter({
   };
 
   const sendMeetingTestNotification = async () => {
+    if (!isHomeWorkspace) return;
     const to = selectedEvent?.contact?.email ?? users[0]?.email ?? "";
 
     if (!to) {
@@ -1482,6 +1513,7 @@ export function CalendarCommandCenter({
     field: keyof CalendarConnectionConfig,
     value: string | boolean,
   ) => {
+    if (!isHomeWorkspace) return;
     setCalendarIntegrations((current) => ({
       ...current,
       [provider]: {
@@ -1492,6 +1524,7 @@ export function CalendarCommandCenter({
   };
 
   const connectCalendarProvider = (provider: CalendarProvider) => {
+    if (!isHomeWorkspace) return;
     const option = calendarProviderOptions.find((item) => item.id === provider);
 
     setCalendarIntegrations((current) => ({
@@ -1517,6 +1550,7 @@ export function CalendarCommandCenter({
   };
 
   const connectMeetingProvider = (provider: CalendarProvider) => {
+    if (!isHomeWorkspace) return;
     const meetingProvider =
       provider === "google" ? ("google-meet" as const) : ("microsoft-teams" as const);
 
@@ -1543,6 +1577,7 @@ export function CalendarCommandCenter({
   };
 
   const disconnectCalendarProvider = async (provider: CalendarProvider) => {
+    if (!isHomeWorkspace) return;
     const providerLabel = getCalendarProviderLabel(provider, text);
 
     setLiveCalendarAction({
@@ -1586,7 +1621,7 @@ export function CalendarCommandCenter({
   };
 
   const liveCalendarMessage =
-    liveCalendarAction.detail ??
+    oauthStatus !== "ready" ? oauthStatusMessage : !isHomeWorkspace ? connectionReadOnlyMessage : liveCalendarAction.detail ??
     (liveCalendarAction.status === "success"
       ? text.liveSyncSuccess
       : liveCalendarAction.status === "error"
@@ -1598,6 +1633,7 @@ export function CalendarCommandCenter({
             : text.calendarSetup.missingConnection);
 
   const syncLiveTeamsMeeting = async () => {
+    if (!isHomeWorkspace) return;
     setLiveCalendarAction({ status: "running" });
 
     try {
@@ -1605,8 +1641,8 @@ export function CalendarCommandCenter({
         throw new Error(text.noEvents);
       }
 
-      if (!selectedProviderConfig.connected) {
-        throw new Error(text.calendarSetup.missingConnection);
+      if (oauthStatus !== "ready" || !selectedProviderConfig.connected) {
+        throw new Error(oauthStatus !== "ready" ? oauthStatusMessage : text.calendarSetup.missingConnection);
       }
 
       const body = [
@@ -2626,6 +2662,7 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            disabled={!isHomeWorkspace}
             onClick={() => setMeetingBuilderOpen(true)}
             type="button"
           >
@@ -2633,6 +2670,7 @@ export function CalendarCommandCenter({
           </button>
           <button
             className="rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-950 hover:bg-blue-100"
+            disabled={!isHomeWorkspace}
             onClick={() => {
               setAutomationStep("reminders");
               setMeetingBuilderOpen(true);
@@ -2643,7 +2681,7 @@ export function CalendarCommandCenter({
           </button>
           <button
             className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={meetingSettingsStatus === "saving"}
+            disabled={!isHomeWorkspace || meetingSettingsStatus === "saving"}
             onClick={() => saveMeetingSettings(false)}
             type="button"
           >
@@ -2686,7 +2724,7 @@ export function CalendarCommandCenter({
               {text.calendarSetup.description}
             </p>
           </div>
-          <div className="grid w-full min-w-0 gap-3 text-sm md:grid-cols-3 2xl:max-w-2xl">
+          {isHomeWorkspace && <div className="grid w-full min-w-0 gap-3 text-sm md:grid-cols-3 2xl:max-w-2xl">
             <label
               className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500"
               htmlFor="calendar-default-provider"
@@ -2763,10 +2801,15 @@ export function CalendarCommandCenter({
                 ))}
               </select>
             </label>
-          </div>
+          </div>}
         </div>
 
-        {!hasConnectedCalendarProvider ? (
+        {!isHomeWorkspace && <p className="mt-4 text-sm text-stone-600" role="note">{connectionReadOnlyMessage}</p>}
+        {oauthStatus !== "ready" ? (
+          <p className="mt-5 rounded-lg border border-dashed border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" role={oauthStatus === "error" ? "alert" : "status"}>
+            {oauthStatusMessage}
+          </p>
+        ) : !hasConnectedCalendarProvider ? (
           <div className="mt-5 rounded-lg border border-dashed border-blue-200 bg-blue-50 p-4 text-blue-950">
             <p className="text-sm font-semibold">{text.calendarSetup.neutralQuestion}</p>
             <p className="mt-1 text-sm text-blue-900">{text.calendarSetup.neutralDescription}</p>
@@ -2779,13 +2822,13 @@ export function CalendarCommandCenter({
             const isSelectedForPage = calendarIntegrations.defaultProvider === option.id;
             const meetingIsSelectedForPage =
               calendarIntegrations.defaultMeetingProvider === option.meetingProvider;
-            const calendarStatusLabel = getProviderSelectionStatusLabel(
-              isSelectedForPage,
+            const calendarStatusLabel = oauthStatus !== "ready" ? oauthStatusMessage : getProviderSelectionStatusLabel(
+              isHomeWorkspace && isSelectedForPage,
               config.connected,
               text,
             );
-            const meetingStatusLabel = getProviderSelectionStatusLabel(
-              meetingIsSelectedForPage,
+            const meetingStatusLabel = oauthStatus !== "ready" ? oauthStatusMessage : getProviderSelectionStatusLabel(
+              isHomeWorkspace && meetingIsSelectedForPage,
               config.meetingConnected,
               text,
             );
@@ -2813,7 +2856,9 @@ export function CalendarCommandCenter({
                   </div>
                   <span
                     className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
-                      !config.connected
+                      oauthStatus !== "ready"
+                        ? "bg-stone-100 text-stone-700"
+                        : !config.connected
                         ? "bg-amber-100 text-amber-800"
                         : isSelectedForPage
                           ? "bg-blue-100 text-blue-800"
@@ -2824,7 +2869,8 @@ export function CalendarCommandCenter({
                   </span>
                 </div>
 
-                <div className="mt-4 grid gap-3">
+                {!isHomeWorkspace && oauthStatus === "ready" && config.accountEmail && <p className="mt-4 break-words text-sm text-stone-600">{text.calendarSetup.accountEmail}: {config.accountEmail}</p>}
+                {isHomeWorkspace && <><div className="mt-4 grid gap-3">
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.calendarSetup.accountEmail}
                     <input
@@ -2883,7 +2929,7 @@ export function CalendarCommandCenter({
                   >
                     {text.calendarSetup.connect(option.meetingTitle)}
                   </button>
-                  {config.connected && !isSelectedForPage ? (
+                  {oauthStatus === "ready" && config.connected && !isSelectedForPage ? (
                     <button
                       className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                       onClick={() =>
@@ -2903,7 +2949,7 @@ export function CalendarCommandCenter({
                       {text.calendarSetup.selectForPage}
                     </button>
                   ) : null}
-                  {config.connected ? (
+                  {oauthStatus === "ready" && config.connected ? (
                     <button
                       className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-100"
                       onClick={() => void disconnectCalendarProvider(option.id)}
@@ -2912,7 +2958,7 @@ export function CalendarCommandCenter({
                       {text.calendarSetup.disconnect}
                     </button>
                   ) : null}
-                </div>
+                </div></>}
 
                 <div className="mt-4 grid gap-2 text-xs text-stone-600 sm:grid-cols-2">
                   <span className="rounded-md bg-white px-2 py-1">
@@ -2928,8 +2974,8 @@ export function CalendarCommandCenter({
         </div>
 
         <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-950">
-          {text.calendarSetup.selectedSummary(selectedProviderLabel, selectedMeetingProviderLabel)}{" "}
-          {selectedProviderConfig.connected
+          {isHomeWorkspace && text.calendarSetup.selectedSummary(selectedProviderLabel, selectedMeetingProviderLabel)}{" "}
+          {oauthStatus !== "ready" ? oauthStatusMessage : !isHomeWorkspace ? connectionReadOnlyMessage : selectedProviderConfig.connected
             ? selectedProviderConfig.accountEmail
               ? text.calendarSetup.connectedWith(selectedProviderConfig.accountEmail)
               : text.calendarSetup.connectedWithCustomerAccount
@@ -3204,7 +3250,7 @@ export function CalendarCommandCenter({
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
             <button
               className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-              disabled={liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
+              disabled={!isHomeWorkspace || oauthStatus !== "ready" || liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
               onClick={syncLiveTeamsMeeting}
               type="button"
             >

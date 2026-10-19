@@ -5287,6 +5287,9 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "calendar" ? (
               <CalendarCommandCenter
+                key={activeWorkspace.id}
+                workspaceId={activeWorkspace.id}
+                sessionWorkspaceId={sessionWorkspace.id}
                 activeProjectId={activeProject?.id ?? null}
                 contacts={visibleContacts}
                 events={visibleCalendarEvents}

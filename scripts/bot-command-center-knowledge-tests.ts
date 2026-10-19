@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { crmBots, crmBotConversations } from "../src/lib/crm-data";
 import { getBotCommandCenterCopy } from "../src/lib/i18n";
-import { BotCommandCenter, botLivePresentation, botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
+import { BotCommandCenter, botLivePresentation, readBotSource, botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
 import type { CrmBotChannelConfig } from "../src/lib/crm-types";
 import type { KnowledgeSource } from "../src/lib/knowledge-center/types";
 
@@ -111,4 +111,51 @@ test("initial bot rendering keeps loading states honest and ignores compatible l
     assert.match(html, new RegExp(`${text.openConversations}</p><p[^>]*>—</p>`));
     assert.ok(!html.includes(text.noConversations), "unknown source is not a confirmed empty inbox");
   }
+});
+
+
+test("reader failures are isolated while workspace-scoped siblings retain actual database data", async () => {
+  const urls: string[] = [];
+  const payloads: Record<string, unknown> = {
+    "/api/bots/chat": { source: "database", conversations: [{ id: "live", title: "Real inbox", status: "open", updatedAt: "2026-10-19T00:00:00Z" }] },
+    "/api/bots/channels": { source: "database", recentWebhookEvents: [], policyRules: [], autonomyControls: { killSwitch: false, requireHumanApproval: true, strictKnowledge: true, testMode: false } },
+    "/api/bots/actions": { source: "database", documentSends: [], meetingBookings: [] },
+    "/api/bots/knowledge": { source: "database", available: true, sources: [source] },
+  };
+  const fetcher = async (url: string) => {
+    urls.push(url);
+    const path = new URL(url, "http://localhost").pathname;
+    return path === "/api/approvals" || path === "/api/bots/documents"
+      ? Response.json({ error: "Forbidden" }, { status: 403 })
+      : Response.json(payloads[path]);
+  };
+  const [chat, channels, approvals, actions, documents, knowledge] = await Promise.all([
+    readBotSource("chat", "workspace-B", fetcher), readBotSource("channels", "workspace-B", fetcher),
+    readBotSource("approvals", "workspace-B", fetcher), readBotSource("actions", "workspace-B", fetcher),
+    readBotSource("documents", "workspace-B", fetcher), readBotSource("knowledge", "workspace-B", fetcher),
+  ]);
+  assert.equal(chat.status, "ready");
+  if (chat.status === "ready") assert.equal(chat.data.conversations?.[0].title, "Real inbox");
+  assert.equal(channels.status, "ready");
+  assert.equal(actions.status, "ready");
+  assert.equal(knowledge.status, "ready");
+  assert.equal(approvals.status, "error");
+  assert.equal(documents.status, "error");
+  for (const url of urls.filter((value) => !value.startsWith("/api/bots/documents"))) {
+    assert.equal(new URL(url, "http://localhost").searchParams.get("workspaceId"), "workspace-B");
+  }
+  assert.ok(urls.includes("/api/bots/documents"), "the unrelated legacy document contract is unchanged");
+});
+
+test("malformed or non-database reader responses stay unknown, while confirmed database empties are ready", async () => {
+  for (const kind of ["chat", "channels", "approvals", "actions", "documents", "knowledge"] as const) {
+    assert.equal((await readBotSource(kind, "workspace-A", async () => Response.json({ source: "database" }))).status, "error", `${kind} requires its real response fields`);
+    assert.equal((await readBotSource(kind, "workspace-A", async () => new Response("not-json"))).status, "error");
+    assert.equal((await readBotSource(kind, "workspace-A", async () => { throw new Error("network unavailable"); })).status, "error");
+  }
+  assert.equal((await readBotSource("chat", "workspace-A", async () => Response.json({ source: "demo", conversations: [] }))).status, "error");
+  assert.equal((await readBotSource("chat", "workspace-A", async () => Response.json({ source: "database", conversations: [{ id: "bad", title: "bad", status: "open", updatedAt: "now", latestMessageContent: {} }] }))).status, "error");
+  assert.equal((await readBotSource("approvals", "workspace-A", async () => Response.json({ source: "database", approvals: [] }))).status, "ready");
+  assert.equal((await readBotSource("actions", "workspace-A", async () => Response.json({ source: "database", documentSends: [], meetingBookings: [] }))).status, "ready");
+  assert.equal((await readBotSource("knowledge", "workspace-A", async () => Response.json({ source: "database", available: false, sources: [] }))).status, "ready", "an explicitly disabled module is distinguished from an unavailable source");
 });

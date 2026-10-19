@@ -1,4 +1,4 @@
-import { requirePermission, type AppSession } from "@/lib/auth/session";
+import { requirePermission, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import { queryOne, queryRows } from "@/lib/db/client";
 import {
   canPersist,
@@ -8,6 +8,8 @@ import {
   writeAuditLog,
 } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
+import { readApprovalHistory } from "@/lib/db/crm-operational-readers";
+import { operationalReadErrorResponse, operationalReadJson, parseOperationalReadQuery } from "@/lib/operational-read-http";
 
 type ApprovalRow = {
   id: string;
@@ -268,41 +270,19 @@ async function executeApprovedBotActions(input: {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "bots:approve");
-
-  if (!auth.ok) return auth.response;
-
-  if (!canPersist() || !isUuid(auth.session.workspaceId)) {
-    return Response.json({ approvals: [], source: "demo" });
+  try {
+    const scope = parseOperationalReadQuery(request, "approval");
+    const auth = await resolveWorkspaceScopedSession(request, { permission: "bots:approve" });
+    if (!auth.ok) {
+      auth.response.headers.set("cache-control", "private, no-store");
+      auth.response.headers.set("x-content-type-options", "nosniff");
+      auth.response.headers.set("referrer-policy", "no-referrer");
+      return auth.response;
+    }
+    return operationalReadJson(await readApprovalHistory(auth.session, scope, scope.status));
+  } catch (error) {
+    return operationalReadErrorResponse(error);
   }
-
-  const url = new URL(request.url);
-  const statusParam = url.searchParams.get("status");
-  const status =
-    statusParam === "approved" || statusParam === "denied" || statusParam === "expired"
-      ? statusParam
-      : "pending";
-
-  const approvals = await queryRows<ApprovalRow>(
-    `
-      select
-        id,
-        entity_type as "entityType",
-        entity_id as "entityId",
-        action,
-        summary,
-        status,
-        payload,
-        created_at as "createdAt"
-      from approval_requests
-      where workspace_id = $1 and status = $2
-      order by created_at desc
-      limit 100
-    `,
-    [auth.session.workspaceId, status],
-  );
-
-  return Response.json({ approvals, status, source: "database" });
 }
 
 export async function POST(request: Request) {

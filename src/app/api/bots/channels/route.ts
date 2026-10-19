@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth/session";
+import { requirePermission, resolveWorkspaceScopedSession } from "@/lib/auth/session";
 import { botChannelConnectors, botSelfServeSetup } from "@/lib/bots/omnichannel";
 import { getBotPolicyRules, getBotRuntimeControls } from "@/lib/bots/policy";
 import {
-  listBotChannelAccounts,
-  listBotChannelWebhookEvents,
   upsertBotChannelAccount,
   writeAuditLog,
 } from "@/lib/db/runtime-repositories";
+import { readBotChannelHistory } from "@/lib/db/crm-operational-readers";
+import { operationalReadErrorResponse, operationalReadJson, parseOperationalReadQuery } from "@/lib/operational-read-http";
 
 export const maxDuration = 30;
 
@@ -20,26 +20,29 @@ async function readJson(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "bots:run");
-  if (!auth.ok) return auth.response;
-
-  const recentWebhookEvents = await listBotChannelWebhookEvents({
-    session: auth.session,
-    limit: 12,
-  });
-  const channelAccounts = await listBotChannelAccounts({
-    session: auth.session,
-  });
-
-  return NextResponse.json({
-    autonomyControls: getBotRuntimeControls(),
-    channelAccounts,
-    connectors: botChannelConnectors,
-    policyRules: getBotPolicyRules(),
-    recentWebhookEvents,
-    selfServeSetup: botSelfServeSetup,
-    webhookSecretHeader: "x-novalure-webhook-secret",
-  });
+  try {
+    const scope = parseOperationalReadQuery(request, "bot");
+    const auth = await resolveWorkspaceScopedSession(request, { permission: "bots:run" });
+    if (!auth.ok) {
+      auth.response.headers.set("cache-control", "private, no-store");
+      auth.response.headers.set("x-content-type-options", "nosniff");
+      auth.response.headers.set("referrer-policy", "no-referrer");
+      return auth.response;
+    }
+    const { channelAccounts, recentWebhookEvents } = await readBotChannelHistory(auth.session, scope);
+    return operationalReadJson({
+      autonomyControls: getBotRuntimeControls(),
+      channelAccounts,
+      connectors: botChannelConnectors,
+      policyRules: getBotPolicyRules(),
+      recentWebhookEvents,
+      selfServeSetup: botSelfServeSetup,
+      webhookSecretHeader: "x-novalure-webhook-secret",
+      source: "database",
+    });
+  } catch (error) {
+    return operationalReadErrorResponse(error);
+  }
 }
 
 export async function POST(request: Request) {

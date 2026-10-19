@@ -101,7 +101,9 @@ async function call(body: Record<string, unknown>, machineAuth = authOptions()) 
 
 before(async () => {
   db = await startLocalSalesDb();
-  await applySalesSchema(db);
+  // Historical 092/093 pin exactly 68 forced-RLS relations. Apply their unchanged
+  // SQL before later additive Knowledge migrations expand that inventory.
+  await applySalesSchema(db, { maxMigrationNumber: 90 });
   await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC: Evelyn machine workspace','novalure_internal','novalure_internal','{}') on conflict(id) do update set operating_model='novalure_internal',customer_type='novalure_internal'", [CRM_MACHINE_WORKSPACE_ID]);
   await db.admin.query("alter table company_profiles enable row level security; alter table company_profiles force row level security; alter table company_profile_versions enable row level security; alter table company_profile_versions force row level security");
   await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");

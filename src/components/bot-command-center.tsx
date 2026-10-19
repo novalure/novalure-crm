@@ -205,6 +205,7 @@ type BotActionMutationResponse = {
 };
 
 type ChannelApiResponse = {
+  source?: string;
   autonomyControls?: {
     disabledReason?: string | null;
     killSwitch: boolean;
@@ -470,6 +471,70 @@ export function botWorkspaceUrl(path: string, workspaceId: string) {
   return `${path}${path.includes("?") ? "&" : "?"}workspaceId=${encodeURIComponent(workspaceId)}`;
 }
 
+type BotReadResponses = {
+  chat: LiveChatApiResponse;
+  channels: ChannelApiResponse;
+  approvals: ApprovalsApiResponse;
+  actions: BotActionsApiResponse;
+  documents: BotDocumentsApiResponse;
+  knowledge: KnowledgeApiResponse;
+};
+
+function hasRecordRows(value: unknown, keys: readonly string[], optionalStrings: readonly string[] = []) {
+  return Array.isArray(value) && value.every((row) => isRecord(row)
+    && keys.every((key) => typeof row[key] === "string")
+    && optionalStrings.every((key) => row[key] == null || typeof row[key] === "string"));
+}
+
+function isBotReadPayload(kind: keyof BotReadResponses, value: unknown) {
+  if (!isRecord(value) || (kind !== "documents" && value.source !== "database")) return false;
+  if (kind === "chat") return hasRecordRows(value.conversations, ["id", "title", "status", "updatedAt"], ["latestMessageContent", "latestMessageRole", "latestMessageCreatedAt"]);
+  if (kind === "approvals") return hasRecordRows(value.approvals, ["id", "entityType", "action", "summary", "status", "createdAt"]);
+  if (kind === "actions") return hasRecordRows(value.documentSends, ["id", "channel", "createdAt", "documentName", "status"])
+    && hasRecordRows(value.meetingBookings, ["id", "contactEmail", "contactName", "createdAt", "endsAt", "slug", "startsAt", "status", "title"]);
+  if (kind === "channels") {
+    const controls = value.autonomyControls;
+    return hasRecordRows(value.recentWebhookEvents, ["id", "channel", "eventType", "status", "receivedAt"])
+      && (value.recentWebhookEvents as Record<string, unknown>[]).every((event) => event.normalizedMessage == null
+        || (isRecord(event.normalizedMessage) && (event.normalizedMessage.text == null || typeof event.normalizedMessage.text === "string")))
+      && hasRecordRows(value.policyRules, ["id", "label", "effect"])
+      && (value.policyRules as Record<string, unknown>[]).every((rule) => ["allow", "block", "test"].includes(String(rule.effect)))
+      && isRecord(controls)
+      && ["killSwitch", "requireHumanApproval", "strictKnowledge", "testMode"].every((key) => typeof controls[key] === "boolean");
+  }
+  if (kind === "knowledge") return typeof value.available === "boolean" && hasRecordRows(value.sources, ["id", "name", "status"])
+    && (value.sources as Record<string, unknown>[]).every((source) => ["approvedVersionId", "draftVersionId"].every((key) => source[key] === null || typeof source[key] === "string"));
+  const quota = value.quota;
+  return hasRecordRows(value.assets, ["id", "name", "folder", "mimeType", "url"])
+    && (value.assets as Record<string, unknown>[]).every((asset) => typeof asset.sizeBytes === "number" && Number.isFinite(asset.sizeBytes) && asset.sizeBytes >= 0)
+    && isRecord(quota)
+    && ["limitBytes", "maxFileBytes", "remainingBytes", "usedBytes"].every((key) => typeof quota[key] === "number" && Number.isFinite(quota[key]) && quota[key] >= 0);
+}
+
+/** Each reader settles independently; a denied sibling cannot replace real data. */
+export async function readBotSource<K extends keyof BotReadResponses>(
+  kind: K,
+  workspaceId: string,
+  fetcher: (url: string) => Promise<Response> = csrfFetch,
+): Promise<{ status: "ready"; data: BotReadResponses[K] } | { status: "error" }> {
+  const paths = {
+    chat: "/api/bots/chat?limit=12",
+    channels: "/api/bots/channels",
+    approvals: "/api/approvals?status=pending",
+    actions: "/api/bots/actions",
+    documents: "/api/bots/documents",
+    knowledge: "/api/bots/knowledge?limit=50",
+  };
+  try {
+    const response = await fetcher(kind === "documents" ? paths[kind] : botWorkspaceUrl(paths[kind], workspaceId));
+    if (!response.ok) return { status: "error" };
+    const data: unknown = await response.json();
+    return isBotReadPayload(kind, data) ? { status: "ready", data: data as BotReadResponses[K] } : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
 /** Counts are known only after their actual endpoint group loaded successfully. */
 export function botLivePresentation({
   liveStatus, approvalLoadStatus, botActionStatus, liveConversations, approvals,
@@ -541,6 +606,8 @@ export function BotCommandCenter({
   const [autonomyControls, setAutonomyControls] = useState<ChannelApiResponse["autonomyControls"] | null>(null);
   const [policyRules, setPolicyRules] = useState<NonNullable<ChannelApiResponse["policyRules"]>>([]);
   const [liveStatus, setLiveStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [channelStatus, setChannelStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [documentStatus, setDocumentStatus] = useState<"loading" | "ready" | "error">("loading");
   const [showAdvancedTechnology, setShowAdvancedTechnology] = useState(false);
   const displayedKnowledgeItems = liveKnowledgeItems;
   const selectedEvaluationChannel = (bot: CrmBot) => {
@@ -564,8 +631,9 @@ export function BotCommandCenter({
   });
   const unknownCountLabel = (status: "loading" | "ready" | "error") => status === "error" ? text.liveDataUnavailable : "—";
   const liveSourceLabel = liveStatus === "loading" ? text.loadingLiveData : liveStatus === "error" ? text.liveDataUnavailable : text.liveData;
+  const channelSourceLabel = channelStatus === "loading" ? text.loadingLiveData : channelStatus === "error" ? text.liveDataUnavailable : text.liveData;
   const conversationEmptyLabel = liveStatus === "ready" ? text.noConversations : liveSourceLabel;
-  const autonomyKnown = liveStatus === "ready" && autonomyControls !== null;
+  const autonomyKnown = channelStatus === "ready" && autonomyControls !== null;
   const incompleteSetupItem = setupItems.find((item) => !item.done);
   const knowledgeReady = knowledgeStatus === "ready" && approvedKnowledgeItems.length > 0 && bots.some((bot) => bot.strictKnowledge);
   const channelsReady = connectedChannels.length > 0;
@@ -694,77 +762,65 @@ export function BotCommandCenter({
     let cancelled = false;
 
     async function loadLiveBotState() {
-      try {
-        setLiveStatus("loading");
-        setKnowledgeStatus("loading");
-        setLiveKnowledgeItems([]);
-        setApprovalLoadStatus("loading");
-        setBotActionStatus("loading");
-        const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
-          csrfFetch(botWorkspaceUrl("/api/bots/chat?limit=12", workspaceId)),
-          csrfFetch("/api/bots/channels"),
-          csrfFetch("/api/approvals?status=pending"),
-          csrfFetch("/api/bots/actions"),
-          csrfFetch("/api/bots/documents"),
-          csrfFetch(botWorkspaceUrl("/api/bots/knowledge?limit=50", workspaceId)),
-        ]);
-
-        if (!chatResponse.ok || !channelResponse.ok || !approvalResponse.ok || !actionResponse.ok || !documentResponse.ok) {
-          throw new Error("Bot live state unavailable");
-        }
-
-        const chatData = (await chatResponse.json()) as LiveChatApiResponse;
-        const channelData = (await channelResponse.json()) as ChannelApiResponse;
-        const approvalData = (await approvalResponse.json()) as ApprovalsApiResponse;
-        const actionData = (await actionResponse.json()) as BotActionsApiResponse;
-        const documentData = (await documentResponse.json()) as BotDocumentsApiResponse;
-        const knowledgeData = knowledgeResponse.ok ? (await knowledgeResponse.json()) as KnowledgeApiResponse : null;
-
-        if (cancelled) return;
-
-        setLiveConversations(
-          (chatData.conversations ?? []).map((conversation) => ({
+      setLiveStatus("loading");
+      setChannelStatus("loading");
+      setKnowledgeStatus("loading");
+      setLiveKnowledgeItems([]);
+      setApprovalLoadStatus("loading");
+      setBotActionStatus("loading");
+      setDocumentStatus("loading");
+      await Promise.all([
+        readBotSource("chat", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveConversations(result.status === "ready" ? (result.data.conversations ?? []).map((conversation) => ({
             botId: conversation.botId,
             contactId: conversation.contactId,
             id: conversation.id,
-            latestMessage: conversation.latestMessageContent
-              ? {
-                  content: conversation.latestMessageContent,
-                  createdAt: conversation.latestMessageCreatedAt ?? null,
-                  metadata: conversation.latestMessageMetadata,
-                  role: conversation.latestMessageRole ?? "user",
-                }
-              : null,
+            latestMessage: conversation.latestMessageContent ? {
+              content: conversation.latestMessageContent,
+              createdAt: conversation.latestMessageCreatedAt ?? null,
+              metadata: conversation.latestMessageMetadata,
+              role: conversation.latestMessageRole ?? "user",
+            } : null,
             leadId: conversation.leadId,
             projectId: conversation.projectId,
             source: "live",
             status: conversation.status,
             title: conversation.title,
             updatedAt: conversation.updatedAt,
-          })),
-        );
-        setLiveWebhookEvents(channelData.recentWebhookEvents ?? []);
-        setAutonomyControls(channelData.autonomyControls ?? null);
-        setPolicyRules(channelData.policyRules ?? []);
-        setApprovals(approvalData.approvals ?? []);
-        setDocumentAssets(documentData.assets ?? []);
-        setDocumentQuota(documentData.quota ?? null);
-        setDocumentSends(actionData.documentSends ?? []);
-        setMeetingBookings(actionData.meetingBookings ?? []);
-        setLiveKnowledgeItems(knowledgeItemsFromSnapshot(knowledgeData));
-        setKnowledgeStatus(knowledgeData?.available === true ? "ready" : knowledgeData?.available === false ? "disabled" : "error");
-        setApprovalLoadStatus("ready");
-        setBotActionStatus("ready");
-        setLiveStatus("ready");
-      } catch {
-        if (!cancelled) {
-          setApprovalLoadStatus("error");
-          setBotActionStatus("error");
-          setLiveStatus("error");
-          setLiveKnowledgeItems([]);
-          setKnowledgeStatus("error");
-        }
-      }
+          })) : []);
+          setLiveStatus(result.status);
+        }),
+        readBotSource("channels", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveWebhookEvents(result.status === "ready" ? result.data.recentWebhookEvents ?? [] : []);
+          setAutonomyControls(result.status === "ready" ? result.data.autonomyControls ?? null : null);
+          setPolicyRules(result.status === "ready" ? result.data.policyRules ?? [] : []);
+          setChannelStatus(result.status);
+        }),
+        readBotSource("approvals", workspaceId).then((result) => {
+          if (cancelled) return;
+          setApprovals(result.status === "ready" ? result.data.approvals ?? [] : []);
+          setApprovalLoadStatus(result.status);
+        }),
+        readBotSource("actions", workspaceId).then((result) => {
+          if (cancelled) return;
+          setDocumentSends(result.status === "ready" ? result.data.documentSends ?? [] : []);
+          setMeetingBookings(result.status === "ready" ? result.data.meetingBookings ?? [] : []);
+          setBotActionStatus(result.status);
+        }),
+        readBotSource("documents", workspaceId).then((result) => {
+          if (cancelled) return;
+          setDocumentAssets(result.status === "ready" ? result.data.assets ?? [] : []);
+          setDocumentQuota(result.status === "ready" ? result.data.quota ?? null : null);
+          setDocumentStatus(result.status);
+        }),
+        readBotSource("knowledge", workspaceId).then((result) => {
+          if (cancelled) return;
+          setLiveKnowledgeItems(knowledgeItemsFromSnapshot(result.status === "ready" ? result.data : null));
+          setKnowledgeStatus(result.status === "error" ? "error" : result.data.available ? "ready" : "disabled");
+        }),
+      ]);
     }
 
     void loadLiveBotState();
@@ -799,12 +855,10 @@ export function BotCommandCenter({
           .replace("{{count}}", formatNumber(typeof result.updatedToolCalls === "number" ? result.updatedToolCalls : 0, language))
           .replace("{{actions}}", formatNumber(actionCount, language)),
       );
-      const actionResponse = await csrfFetch("/api/bots/actions");
-      if (actionResponse.ok) {
-        const actionData = (await actionResponse.json()) as BotActionsApiResponse;
-        setDocumentSends(actionData.documentSends ?? []);
-        setMeetingBookings(actionData.meetingBookings ?? []);
-      }
+      const actionRead = await readBotSource("actions", workspaceId);
+      setDocumentSends(actionRead.status === "ready" ? actionRead.data.documentSends ?? [] : []);
+      setMeetingBookings(actionRead.status === "ready" ? actionRead.data.meetingBookings ?? [] : []);
+      setBotActionStatus(actionRead.status);
       setApprovalLoadStatus("ready");
     } catch {
       setApprovalActionResult(null);
@@ -1191,7 +1245,7 @@ export function BotCommandCenter({
             <h3 className="evelyn-bot-panel-title text-lg font-semibold text-slate-950">{text.webhookInboxTitle}</h3>
             <p className="mt-1 text-sm text-stone-600">{text.webhookInboxDescription}</p>
             <div className="mt-4 space-y-3">
-              {liveStatus === "ready" && liveWebhookEvents?.length ? (
+              {channelStatus === "ready" && liveWebhookEvents?.length ? (
                 liveWebhookEvents.map((event) => (
                   <div className="evelyn-bot-card rounded-lg border border-stone-200 p-4" key={event.id}>
                     <div className="flex items-start justify-between gap-3">
@@ -1209,7 +1263,7 @@ export function BotCommandCenter({
                   </div>
                 ))
               ) : (
-                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{liveStatus === "ready" ? text.noWebhookEvents : liveSourceLabel}</p>
+                <p className="rounded-md bg-stone-50 p-3 text-sm text-stone-600">{channelStatus === "ready" ? text.noWebhookEvents : channelSourceLabel}</p>
               )}
             </div>
           </article>
@@ -1254,7 +1308,7 @@ export function BotCommandCenter({
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-4" key={item.label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">{item.label}</p>
                 <p className="mt-2">
-                  <Pill tone={autonomyKnown ? item.tone : "slate"}>{autonomyKnown ? item.value : unknownCountLabel(liveStatus)}</Pill>
+                  <Pill tone={autonomyKnown ? item.tone : "slate"}>{autonomyKnown ? item.value : unknownCountLabel(channelStatus)}</Pill>
                 </p>
               </div>
             ))}
@@ -1696,7 +1750,7 @@ export function BotCommandCenter({
                                 </label>
                               </div>
                               {!sendableDocumentAssets.length ? (
-                                <p className="text-xs text-stone-500">{text.noDocumentAssets}</p>
+                                <p className="text-xs text-stone-500">{documentStatus === "ready" ? text.noDocumentAssets : documentStatus === "loading" ? text.loadingLiveData : text.liveDataUnavailable}</p>
                               ) : null}
                             </div>
                           ) : null}

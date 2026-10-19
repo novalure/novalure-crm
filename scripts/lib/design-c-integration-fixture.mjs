@@ -65,6 +65,7 @@ export async function startDesignCIntegrationDatabase() {
       "101_knowledge_center.sql",
       "102_knowledge_document_processing.sql",
       "103_knowledge_assistant_service.sql",
+      "106_crm_operational_readers.sql",
     ]) {
       const sql = await readFile(path.resolve("migrations", filename), "utf8");
       const client = await owner.connect();
@@ -302,9 +303,184 @@ export async function seedDesignCIntegration({ admin, role }) {
       projectId: foreign.projectId,
       contactId: foreign.contactId,
       unitId: foreign.unitId,
+      botId: foreign.botId,
     },
     viewer,
     secondProjectId,
     studio: { workspaceId: STUDIO_WORKSPACE_ID, projectId: STUDIO_PROJECT_ID },
   };
+}
+
+/** Representative records for the four read contracts; no provider is invoked. */
+export async function seedDesignCReaderRows({ admin, accounts }) {
+  const identity = await admin.query(
+    "select current_database() as database,current_user as role",
+  );
+  assert.deepEqual(identity.rows[0], { database: "neondb", role: "qa_admin" });
+  const secret = "SYNTHETIC_READER_SECRET_DO_NOT_RETURN";
+  const groups = {};
+  for (const [key, workspaceId, projectId, contactId, existingBotId] of [
+    [
+      "alpha",
+      accounts.operator.workspaceId,
+      accounts.operator.projectId,
+      accounts.operator.developerContactId,
+    ],
+    ["beta", accounts.operator.workspaceId, accounts.secondProjectId],
+    [
+      "customer",
+      accounts.customer.workspaceId,
+      accounts.customer.projectId,
+      accounts.customer.contactId,
+      accounts.customer.botId,
+    ],
+    [
+      "foreign",
+      accounts.foreign.workspaceId,
+      accounts.foreign.projectId,
+      accounts.foreign.contactId,
+      accounts.foreign.botId,
+    ],
+  ]) {
+    const botId = existingBotId || randomUUID();
+    const label =
+      key === "foreign"
+        ? "SYNTHETIC FOREIGN PRIVATE SENTINEL"
+        : `SYNTHETIC READER ${key.toUpperCase()}`;
+    if (!existingBotId)
+      await admin.query(
+        "insert into bots(id,workspace_id,project_id,name,role,status) values($1,$2,$3,$4,'assistant','Entwurf')",
+        [botId, workspaceId, projectId, `${label} BOT`],
+      );
+    const conversationId = randomUUID(),
+      approvalId = randomUUID(),
+      accountId = randomUUID(),
+      webhookId = randomUUID(),
+      documentId = randomUUID();
+    // The unchanged Knowledge history trigger requires an actual saved actor
+    // context and canonical lower-case channel even for synthetic provisioning.
+    const actor = await admin.query(
+      "select id from workspace_users where workspace_id=$1 and status='active' and role='owner' order by id limit 1",
+      [workspaceId],
+    );
+    assert.equal(actor.rows.length, 1);
+    const client = await admin.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select set_config('app.tenant_id',$1,true),set_config('app.actor_id',$2,true)",
+        [workspaceId, actor.rows[0].id],
+      );
+      await client.query(
+        "insert into bot_conversations(id,workspace_id,project_id,bot_id,contact_id,title,metadata) values($1,$2,$3,$4,$5,$6,$7::jsonb)",
+        [
+          conversationId,
+          workspaceId,
+          projectId,
+          botId,
+          contactId || null,
+          `${label} CONVERSATION`,
+          JSON.stringify({ channel: "webchat" }),
+        ],
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    await admin.query(
+      "insert into approval_requests(id,workspace_id,project_id,entity_type,entity_id,action,summary,payload,status) values($1,$2,$3,'bot_conversation',$4,'send_document',$5,$6::jsonb,'pending')",
+      [
+        approvalId,
+        workspaceId,
+        projectId,
+        conversationId,
+        `${label} APPROVAL`,
+        JSON.stringify({
+          botName: `${label} BOT`,
+          channel: "Webchat",
+          prompt: `${label} MESSAGE`,
+          qualification: { score: 42, stage: "new" },
+          requestedActions: { document: true, meeting: false },
+          credentials: { accessToken: secret },
+          rawProviderResponse: { token: secret },
+        }),
+      ],
+    );
+    await admin.query(
+      "insert into bot_channel_accounts(id,workspace_id,bot_id,channel,provider,account_label,external_account_id,active,setup_status,credentials_ref,metadata) values($1,$2,$3,'Webchat','synthetic-local',$4,$5,true,'connected',$6,$7::jsonb)",
+      [
+        accountId,
+        workspaceId,
+        botId,
+        `${label} ACCOUNT`,
+        `synthetic-${accountId.replaceAll("-", "")}`,
+        secret,
+        JSON.stringify({
+          credentials: { accessToken: secret },
+          privateToken: secret,
+        }),
+      ],
+    );
+    await admin.query(
+      "insert into bot_channel_webhooks(id,workspace_id,channel_account_id,channel,external_message_id,event_type,payload,normalized_message,status) values($1,$2,$3,'Webchat',$4,'message',$5::jsonb,$6::jsonb,'received')",
+      [
+        webhookId,
+        workspaceId,
+        accountId,
+        `synthetic-${webhookId.replaceAll("-", "")}`,
+        JSON.stringify({ token: secret, headers: { authorization: secret } }),
+        JSON.stringify({
+          text: `${label} MESSAGE`,
+          senderName: "Synthetic reader",
+          credentials: { accessToken: secret },
+          rawProviderResponse: { token: secret },
+        }),
+      ],
+    );
+    await admin.query(
+      "insert into bot_document_sends(id,workspace_id,bot_id,conversation_id,contact_id,channel,document_name,status,approval_request_id,metadata) values($1,$2,$3,$4,$5,'Webchat',$6,'approval_required',$7,$8::jsonb)",
+      [
+        documentId,
+        workspaceId,
+        botId,
+        conversationId,
+        contactId || null,
+        `${label} DOCUMENT`,
+        approvalId,
+        JSON.stringify({
+          documentUrl: `https://private.invalid/${secret}`,
+          asset: { token: secret },
+          providerResponse: { accessToken: secret },
+          customerData: { name: "Synthetic reader" },
+        }),
+      ],
+    );
+    groups[key] = {
+      workspaceId,
+      projectId,
+      botId,
+      conversationId,
+      approvalId,
+      accountId,
+      webhookId,
+      documentId,
+      label,
+    };
+  }
+  await admin.query(
+    "insert into provider_connections(workspace_id,provider,status,account_label,scopes,config) values($1,'google-calendar','connected','SYNTHETIC READER CUSTOMER CALENDAR',ARRAY['calendar.read'],$2::jsonb)",
+    [
+      accounts.customer.workspaceId,
+      JSON.stringify({
+        accessTokenEncrypted: secret,
+        refreshTokenEncrypted: secret,
+        clientSecret: secret,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      }),
+    ],
+  );
+  return { groups, secret };
 }

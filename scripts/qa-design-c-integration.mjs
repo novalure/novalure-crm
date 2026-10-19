@@ -9,7 +9,10 @@ import path from "node:path";
 import pg from "pg";
 import { chromium, expect as baseExpect } from "@playwright/test";
 import { createTextPdf } from "./lib/knowledge-document-fixtures.ts";
-import { seedDesignCIntegration } from "./lib/design-c-integration-fixture.mjs";
+import {
+  seedDesignCIntegration,
+  seedDesignCReaderRows,
+} from "./lib/design-c-integration-fixture.mjs";
 
 const fixture = JSON.parse(
   await readFile(".npm-cache/qa/sales-browser-context.json", "utf8"),
@@ -23,11 +26,20 @@ assert(
   "Requires the disposable loopback sales QA server",
 );
 const workspaceOnly = process.argv.includes("--workspace-only");
+const readersOnly = process.argv.includes("--readers-only");
 assert(
-  process.argv.slice(2).every((arg) => arg === "--workspace-only"),
+  process.argv
+    .slice(2)
+    .every((arg) => ["--workspace-only", "--readers-only"].includes(arg)) &&
+    !(workspaceOnly && readersOnly),
   "Unknown browser QA argument",
 );
-const reportFile = workspaceOnly ? "result-workspace.json" : "result.json";
+const reportFile = readersOnly
+  ? "result-readers.json"
+  : workspaceOnly
+    ? "result-workspace.json"
+    : "result.json";
+const artifactPrefix = readersOnly ? "readers-" : "";
 const output = path.resolve(".npm-cache/qa/design-c-integration");
 assert.equal(
   fixture.fixtureMode,
@@ -36,7 +48,7 @@ assert.equal(
 );
 assert.equal(fixture.database.database, "neondb");
 await mkdir(output, { recursive: true });
-for (const file of workspaceOnly ? [] : await readdir(output)) {
+for (const file of workspaceOnly || readersOnly ? [] : await readdir(output)) {
   if (/^failure-\d+-\d+\.png$/.test(file)) await rm(path.join(output, file));
 }
 const expect = baseExpect.configure({ timeout: 15000 });
@@ -51,9 +63,535 @@ const results = [],
   privateLeaks = [],
   responseInspectionErrors = [],
   responseChecks = [],
+  readerMutations = [],
   authenticationProofs = [];
 const contexts = [];
 let browser, accounts, operatorPage, customerPage, viewerPage, areaId, sourceId;
+const operationalReaders = [
+  {
+    id: "channels",
+    path: "/api/bots/channels",
+    tab: "Gespräche",
+    heading: "Webhook-Eingang",
+    empty: ["Noch keine Webhook-Events gespeichert."],
+    unavailable: "Live-Daten nicht erreichbar",
+  },
+  {
+    id: "approvals",
+    path: "/api/approvals",
+    tab: "Automationen",
+    heading: "Autonomie-Kontrolle",
+    empty: ["Keine manuellen Ausnahmefälle."],
+    unavailable:
+      "Bot-Kontrolldaten konnten nicht geladen oder aktualisiert werden.",
+  },
+  {
+    id: "actions",
+    path: "/api/bots/actions",
+    tab: "Automationen",
+    heading: "Bot-Aktionsmonitor",
+    empty: [
+      "Keine wartenden Dokumentversande.",
+      "Keine wartenden Terminvorschläge.",
+    ],
+    unavailable: "Bot-Aktionen konnten nicht geladen oder aktualisiert werden.",
+  },
+  {
+    id: "calendar",
+    path: "/api/meetings/oauth/status",
+    heading: "Kalender verbinden",
+    empty: ["Welchen Kalender möchten Sie verbinden?"],
+    unavailable: "Verbindungsstatus derzeit nicht verfügbar.",
+  },
+];
+
+function scopedReaderPath(reader, scope = {}) {
+  const query = new URLSearchParams(scope).toString();
+  return reader.path + (query ? `?${query}` : "");
+}
+
+function assertDatabaseReader(response) {
+  assert.equal(response.status, 200);
+  assert.equal(response.body?.source, "database");
+  assert.match(response.cacheControl || "", /private/);
+  assert.match(response.cacheControl || "", /no-store/);
+}
+
+function assertEmptyReader(reader, response) {
+  assertDatabaseReader(response);
+  if (reader.id === "channels") {
+    assert.deepEqual(response.body.channelAccounts, []);
+    assert.deepEqual(response.body.recentWebhookEvents, []);
+  } else if (reader.id === "approvals") {
+    assert.deepEqual(response.body.approvals, []);
+    assert.equal(response.body.status, "pending");
+  } else if (reader.id === "actions") {
+    assert.deepEqual(response.body.documentSends, []);
+    assert.deepEqual(response.body.meetingBookings, []);
+    assert.deepEqual(response.body.metrics, {
+      openDocuments: 0,
+      openMeetings: 0,
+    });
+  } else {
+    for (const provider of ["google", "microsoft"]) {
+      assert.equal(response.body[provider].provider, provider);
+      assert.equal(response.body[provider].connected, false);
+      assert.equal(response.body[provider].accountLabel, null);
+      assert.deepEqual(response.body[provider].scopes, []);
+    }
+  }
+}
+
+async function readerPanel(
+  page,
+  reader,
+  workspaceId = accounts.operator.workspaceId,
+) {
+  await open(page, workspaceId, reader.id === "calendar" ? "calendar" : "bots");
+  if (reader.tab)
+    await page
+      .getByRole("navigation", { name: "Bot-Arbeitsbereich", exact: true })
+      .getByRole("button", { name: reader.tab, exact: true })
+      .click();
+  const heading = page.getByRole("heading", {
+    name: reader.heading,
+    exact: true,
+  });
+  await expect(heading).toBeVisible();
+  return heading.locator(
+    reader.id === "approvals"
+      ? "xpath=ancestor::section[1]"
+      : "xpath=ancestor::article[1]",
+  );
+}
+
+async function verifyReaderUi(reader, failure) {
+  const panel = await readerPanel(operatorPage, reader);
+  if (failure) {
+    await expect(panel).toContainText(reader.unavailable);
+    for (const message of reader.empty)
+      await expect(panel).not.toContainText(message);
+    if (reader.id === "calendar")
+      await expect(panel).not.toContainText("Noch nicht verbunden");
+  } else {
+    for (const message of reader.empty)
+      await expect(panel).toContainText(message);
+    await expect(panel).not.toContainText(reader.unavailable);
+    await themeAndLayout(operatorPage);
+  }
+  return panel;
+}
+
+function assertPublicReaderRows(reader, response, group, seeded) {
+  assertDatabaseReader(response);
+  const body = response.body;
+  const json = JSON.stringify(body);
+  assert(
+    !json.includes(seeded.secret),
+    "Private provider/metadata credential material reached a read response",
+  );
+  assert(
+    !json.includes("SYNTHETIC FOREIGN PRIVATE SENTINEL"),
+    "A foreign operational record reached a read response",
+  );
+  if (reader.id === "channels") {
+    assert(body.channelAccounts.some((row) => row.id === group.accountId));
+    assert(body.recentWebhookEvents.some((row) => row.id === group.webhookId));
+    assert(json.includes(`${group.label} MESSAGE`));
+    assert(
+      !body.channelAccounts.some(
+        (row) => "credentialsRef" in row || "metadata" in row,
+      ),
+    );
+    assert(!body.recentWebhookEvents.some((row) => "payload" in row));
+  } else if (reader.id === "approvals") {
+    assert(body.approvals.some((row) => row.id === group.approvalId));
+    assert(json.includes(`${group.label} APPROVAL`));
+  } else if (reader.id === "actions") {
+    assert(body.documentSends.some((row) => row.id === group.documentId));
+    assert(json.includes(`${group.label} DOCUMENT`));
+    assert(!json.includes("https://private.invalid/"));
+  } else {
+    assert.equal(body.google.connected, true);
+    assert.equal(
+      body.google.accountLabel,
+      "SYNTHETIC READER CUSTOMER CALENDAR",
+    );
+    assert(!("config" in body.google));
+  }
+}
+
+async function verifyOperationalReaders() {
+  const applied = await admin.query(
+    "select version from novalure_schema_migrations where version='106_crm_operational_readers'",
+  );
+  assert.equal(
+    applied.rows.length,
+    1,
+    "The unchanged additive 106 read migration must be provisioned locally",
+  );
+  await step(
+    "Scoped reader functions leave raw table privileges and runtime identity restricted",
+    async () => {
+      const runtime = new pg.Pool(fixture.database);
+      try {
+        const identity = await runtime.query(
+          "select current_user as role,rolsuper,rolbypassrls from pg_roles where rolname=current_user",
+        );
+        assert.equal(identity.rows[0].role, fixture.database.user);
+        assert.equal(identity.rows[0].rolsuper, false);
+        assert.equal(identity.rows[0].rolbypassrls, false);
+        for (const table of [
+          "approval_requests",
+          "bot_channel_webhooks",
+          "bot_document_sends",
+          "provider_connections",
+        ]) {
+          const privileges = await runtime.query(
+            "select has_table_privilege(current_user,$1,'SELECT') as read,has_table_privilege(current_user,$1,'INSERT') as insert,has_table_privilege(current_user,$1,'UPDATE') as update,has_table_privilege(current_user,$1,'DELETE') as delete",
+            [`public.${table}`],
+          );
+          assert.deepEqual(privileges.rows[0], {
+            read: false,
+            insert: false,
+            update: false,
+            delete: false,
+          });
+        }
+      } finally {
+        await runtime.end();
+      }
+    },
+  );
+  for (const reader of operationalReaders) {
+    await step(
+      `${reader.id}: real runtime returns a verified empty database result`,
+      async () => {
+        assertEmptyReader(reader, await api(operatorPage, reader.path));
+      },
+    );
+    await step(
+      `${reader.id}: actual read panel distinguishes verified empty data`,
+      async () => {
+        await verifyReaderUi(reader, false);
+        await operatorPage.screenshot({
+          path: path.join(output, `readers-${reader.id}-empty-1440.png`),
+          fullPage: true,
+        });
+      },
+    );
+    for (const failure of ["missing-source", "network"])
+      await step(
+        `${reader.id}: ${failure} becomes unavailable without an empty-success claim`,
+        async () => {
+          const handler = async (route) => {
+            if (failure === "network") return route.abort("failed");
+            const response = await route.fetch();
+            assert.equal(response.status(), 200);
+            const payload = await response.json();
+            delete payload.source;
+            await route.fulfill({ response, json: payload });
+          };
+          await operatorPage.route(`**${reader.path}**`, handler);
+          try {
+            await verifyReaderUi(reader, true);
+          } finally {
+            await operatorPage.unroute(`**${reader.path}**`, handler);
+          }
+        },
+      );
+  }
+  const seeded = await seedDesignCReaderRows({ admin, accounts });
+  const { alpha, beta, customer, foreign } = seeded.groups;
+  await step(
+    "Nonempty operational reads preserve safe records while excluding raw private payloads",
+    async () => {
+      for (const reader of operationalReaders.filter(
+        (reader) => reader.id !== "calendar",
+      )) {
+        const response = await api(operatorPage, reader.path);
+        assertPublicReaderRows(reader, response, alpha, seeded);
+        assertPublicReaderRows(reader, response, beta, seeded);
+      }
+    },
+  );
+  await step(
+    "Real project and bot filters exclude another authorized project",
+    async () => {
+      for (const reader of operationalReaders.filter(
+        (reader) => reader.id !== "calendar",
+      )) {
+        for (const scope of [
+          { projectId: alpha.projectId },
+          { botId: alpha.botId },
+          { projectId: alpha.projectId, botId: alpha.botId },
+        ]) {
+          const response = await api(
+            operatorPage,
+            scopedReaderPath(reader, scope),
+          );
+          assertPublicReaderRows(reader, response, alpha, seeded);
+          assert(!JSON.stringify(response.body).includes(beta.label));
+        }
+      }
+    },
+  );
+  await step(
+    "Malformed, ambiguous and unsupported read scopes are rejected",
+    async () => {
+      const cases = [
+        [
+          "/api/bots/channels?workspaceId=" +
+            alpha.workspaceId +
+            "&workspaceId=" +
+            alpha.workspaceId,
+          400,
+        ],
+        ["/api/approvals?unexpected=true", 400],
+        ["/api/bots/actions?botId=invalid", 400],
+        ["/api/meetings/oauth/status?projectId=" + alpha.projectId, 400],
+        ["/api/bots/actions?projectId=" + foreign.projectId, 403],
+        ["/api/approvals?botId=" + foreign.botId, 403],
+        [
+          "/api/bots/channels?projectId=" +
+            alpha.projectId +
+            "&botId=" +
+            beta.botId,
+          403,
+        ],
+      ];
+      for (const [request, status] of cases)
+        assert.equal(
+          (await api(operatorPage, request)).status,
+          status,
+          request,
+        );
+      for (const reader of operationalReaders)
+        assert.equal(
+          (await api(operatorPage, reader.path, foreign.workspaceId)).status,
+          403,
+        );
+    },
+  );
+  await step(
+    "Managed workspace selection uses the target membership's operational rows",
+    async () => {
+      await open(operatorPage, accounts.operator.workspaceId, "contacts");
+      const workspaceSwitch = operatorPage.getByLabel("Workspace wechseln");
+      const details = workspaceSwitch.locator("xpath=ancestor::details[1]");
+      if (!(await workspaceSwitch.isVisible()))
+        await details.locator("summary").first().click();
+      await workspaceSwitch.selectOption(customer.workspaceId);
+      await expect(workspaceSwitch).toHaveValue(customer.workspaceId);
+      const responses = [];
+      const listener = (response) => {
+        const url = new URL(response.url());
+        if (operationalReaders.some((reader) => reader.path === url.pathname))
+          responses.push(url);
+      };
+      operatorPage.on("response", listener);
+      try {
+        await operatorPage
+          .locator(
+            "[data-crm-sidebar] [data-crm-nav-item][aria-label='KI-Bots']",
+          )
+          .click();
+        await expect(
+          operatorPage.getByRole("navigation", {
+            name: "Bot-Arbeitsbereich",
+            exact: true,
+          }),
+        ).toBeVisible();
+        for (const reader of operationalReaders.filter(
+          (reader) => reader.id !== "calendar",
+        )) {
+          await expect
+            .poll(() =>
+              responses.some(
+                (url) =>
+                  url.pathname === reader.path &&
+                  url.searchParams.get("workspaceId") === customer.workspaceId,
+              ),
+            )
+            .toBe(true);
+        }
+        for (const reader of operationalReaders.filter(
+          (reader) => reader.id !== "calendar",
+        )) {
+          const response = await api(
+            operatorPage,
+            reader.path,
+            customer.workspaceId,
+          );
+          assertPublicReaderRows(reader, response, customer, seeded);
+          assert(!JSON.stringify(response.body).includes(alpha.label));
+        }
+        const botNavigation = operatorPage.getByRole("navigation", {
+          name: "Bot-Arbeitsbereich",
+          exact: true,
+        });
+        await botNavigation
+          .getByRole("button", { name: "Gespräche", exact: true })
+          .click();
+        await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+          `${customer.label} MESSAGE`,
+        );
+        await expect(
+          operatorPage.locator("[data-crm-content]"),
+        ).not.toContainText(alpha.label);
+        await botNavigation
+          .getByRole("button", { name: "Automationen", exact: true })
+          .click();
+        await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+          `${customer.label} APPROVAL`,
+        );
+        await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+          `${customer.label} DOCUMENT`,
+        );
+        await expect(
+          operatorPage.locator("[data-crm-content]"),
+        ).not.toContainText(seeded.secret);
+        await operatorPage.screenshot({
+          path: path.join(output, "readers-managed-nonempty-bots-1440.png"),
+          fullPage: true,
+        });
+        await operatorPage
+          .locator(
+            "[data-crm-sidebar] [data-crm-nav-item][aria-label='Termine']",
+          )
+          .click();
+        await expect
+          .poll(() =>
+            responses.some(
+              (url) =>
+                url.pathname === "/api/meetings/oauth/status" &&
+                url.searchParams.get("workspaceId") === customer.workspaceId,
+            ),
+          )
+          .toBe(true);
+        const calendarPanel = operatorPage
+          .getByRole("heading", { name: "Kalender verbinden", exact: true })
+          .locator("xpath=ancestor::article[1]");
+        await expect(calendarPanel).toContainText(
+          "SYNTHETIC READER CUSTOMER CALENDAR",
+        );
+        await expect(calendarPanel.locator('input[type="email"]')).toHaveCount(
+          0,
+        );
+        await expect(calendarPanel).not.toContainText(
+          "Verbindungsstatus derzeit nicht verfügbar.",
+        );
+        await expect(calendarPanel).not.toContainText(seeded.secret);
+        await operatorPage.screenshot({
+          path: path.join(output, "readers-managed-nonempty-calendar-1440.png"),
+          fullPage: true,
+        });
+      } finally {
+        operatorPage.off("response", listener);
+      }
+    },
+  );
+  customerPage = await newPage("reader_customer_owner");
+  await step(
+    "Reader customer owner uses ordinary password and TOTP",
+    () => login(customerPage, accounts.customer),
+    true,
+  );
+  await step(
+    "Customer reads own operational records and cannot select another tenant",
+    async () => {
+      for (const reader of operationalReaders) {
+        assertPublicReaderRows(
+          reader,
+          await api(customerPage, reader.path),
+          customer,
+          seeded,
+        );
+        assert.equal(
+          (await api(customerPage, reader.path, foreign.workspaceId)).status,
+          403,
+        );
+        assert.equal(
+          (await api(customerPage, reader.path, alpha.workspaceId)).status,
+          403,
+        );
+      }
+    },
+  );
+  viewerPage = await newPage("reader_viewer");
+  await step(
+    "Reader viewer signs in normally with existing role-based MFA policy",
+    () => login(viewerPage, accounts.viewer),
+    true,
+  );
+  await step(
+    "Viewer read permissions and tenant boundaries remain enforced",
+    async () => {
+      for (const reader of operationalReaders) {
+        const response = await api(viewerPage, reader.path);
+        if (["approvals", "calendar"].includes(reader.id))
+          assert.equal(response.status, 403);
+        else {
+          assertEmptyReader(reader, response);
+          assert(!JSON.stringify(response.body).includes(alpha.label));
+          assert(!JSON.stringify(response.body).includes(foreign.label));
+          assert(!JSON.stringify(response.body).includes(seeded.secret));
+          assert.equal(
+            (
+              await api(
+                viewerPage,
+                scopedReaderPath(reader, { projectId: customer.projectId }),
+              )
+            ).status,
+            403,
+            "An ungranted viewer project must not become a workspace-wide read",
+          );
+        }
+        assert.equal(
+          (await api(viewerPage, reader.path, foreign.workspaceId)).status,
+          403,
+        );
+      }
+    },
+  );
+  await step(
+    "Existing owner cookie cannot retain privileges after a real membership downgrade",
+    async () => {
+      await admin.query(
+        "update workspace_users set role='assistant',product_role='viewer' where id=$1",
+        [accounts.customer.userId],
+      );
+      try {
+        for (const reader of operationalReaders.filter((reader) =>
+          ["approvals", "calendar"].includes(reader.id),
+        ))
+          assert.equal((await api(customerPage, reader.path)).status, 403);
+      } finally {
+        await admin.query(
+          "update workspace_users set role='owner',product_role='customer_owner' where id=$1",
+          [accounts.customer.userId],
+        );
+      }
+    },
+  );
+  await step(
+    "Targeted reader traffic has no HTTP500, browser exception, mutation or observed foreign leak",
+    async () => {
+      await Promise.all(responseChecks);
+      assert.deepEqual(serverErrors, []);
+      assert.deepEqual(errors, []);
+      assert.deepEqual(outbound, []);
+      assert.deepEqual(readerMutations, []);
+      assert.deepEqual(privateLeaks, []);
+      return {
+        serverErrors: 0,
+        uncaughtErrors: 0,
+        browserOutboundRequests: 0,
+        operationalMutations: 0,
+      };
+    },
+  );
+}
 
 async function step(name, run, fatal = false) {
   try {
@@ -76,7 +614,10 @@ async function step(name, run, fatal = false) {
       if (page && !page.isClosed())
         await page
           .screenshot({
-            path: path.join(output, `failure-${results.length}-${index}.png`),
+            path: path.join(
+              output,
+              `${artifactPrefix}failure-${results.length}-${index}.png`,
+            ),
             fullPage: true,
           })
           .catch(() => {});
@@ -133,6 +674,16 @@ async function newPage(label) {
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(90000);
+  if (readersOnly)
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (
+        url.origin === base.origin &&
+        operationalReaders.some((reader) => reader.path === url.pathname) &&
+        request.method() !== "GET"
+      )
+        readerMutations.push({ path: url.pathname, method: request.method() });
+    });
   page.on("pageerror", (error) =>
     errors.push({ role: label, message: error.message }),
   );
@@ -218,6 +769,7 @@ async function api(
       return {
         status: response.status,
         body: await response.json().catch(() => null),
+        cacheControl: response.headers.get("cache-control"),
       };
     },
     { pathname, workspaceId, body, method },
@@ -550,7 +1102,11 @@ async function runIntegration() {
   await writeFile(
     path.join(
       output,
-      workspaceOnly ? "fixture-private-workspace.json" : "fixture-private.json",
+      readersOnly
+        ? "fixture-private-readers.json"
+        : workspaceOnly
+          ? "fixture-private-workspace.json"
+          : "fixture-private.json",
     ),
     JSON.stringify(accounts, null, 2),
   );
@@ -563,13 +1119,16 @@ async function runIntegration() {
   });
   operatorPage = await newPage("operator");
   await step(
-    "Anonymous CRM and Knowledge APIs deny access",
+    readersOnly
+      ? "Anonymous operational readers deny access"
+      : "Anonymous CRM and Knowledge APIs deny access",
     async () => {
       await operatorPage.goto(new URL("/login?lang=de", base).href);
       for (const endpoint of [
         "/api/crm/core",
         "/api/knowledge-center",
         "/api/workspaces",
+        ...(readersOnly ? operationalReaders.map((reader) => reader.path) : []),
       ])
         assert.equal((await api(operatorPage, endpoint)).status, 401);
     },
@@ -590,6 +1149,10 @@ async function runIntegration() {
       "Explicit operator membership authorizes customer and canonical Studio workspaces only",
       verifyWorkspaceSwitch,
     );
+    return;
+  }
+  if (readersOnly) {
+    await verifyOperationalReaders();
     return;
   }
 
@@ -1543,7 +2106,11 @@ try {
     ordinaryPasswordAndMfa: workspaceOnly
       ? false
       : authenticationProofs.length === 3,
-    scope: workspaceOnly ? "focused-workspace-studio" : "whole-integration",
+    scope: readersOnly
+      ? "focused-operational-readers"
+      : workspaceOnly
+        ? "focused-workspace-studio"
+        : "whole-integration",
     authenticationProofs,
     generatedAt: new Date().toISOString(),
     baseUrl: base.href,
@@ -1558,12 +2125,13 @@ try {
     serverErrors,
     outbound,
     privateLeaks,
+    ...(readersOnly ? { readerMutations } : {}),
     responseInspectionErrors,
     consoleErrors,
     limitations: [
       "Production target isolation relies on the required qa:sales:server disposable loopback database and environment allowlist; browser routing observes browser outbound traffic, not server-side provider IO.",
       "Passive browser body inspection records stale/cancelled or unavailable bodies separately. Explicit role and tenant checks inspect consumed API JSON; passive inspection alone is not proof of every response body.",
-      "The isolated fixture applies unchanged pinned 091–096 and 100–103; optional pgvector, historical manual media migration 062, and preview migrations 097–099 remain excluded. This is not a full production migration proof.",
+      "The isolated fixture applies unchanged pinned 091–096, 100–103 and additive 106; optional pgvector, historical manual media migration 062, preview migrations 097–099 and package-3 migrations 104–105 remain excluded. This is not a full production migration proof.",
       "axe incomplete findings remain manual-review items; automated checks are not a full WCAG certification.",
     ],
   };

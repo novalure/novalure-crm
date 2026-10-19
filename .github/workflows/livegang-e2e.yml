@@ -64,6 +64,9 @@ jobs:
       - name: Design C data provenance and customer self-service regression
         run: npm run test:design-c-integration
 
+      - name: Design C operational reader permissions and source availability
+        run: npm run test:crm-operational-readers
+
       - name: Knowledge Center tenant, role, document, entitlement and scanner isolation
         run: npm run test:knowledge-center
 
