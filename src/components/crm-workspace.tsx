@@ -5112,6 +5112,8 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "bots" ? (
             <BotCommandCenter
+              key={activeWorkspace.id}
+              workspaceId={activeWorkspace.id}
               automations={visibleAutomations}
               bots={visibleCrmBots}
               callInsights={visibleBotCallInsights}

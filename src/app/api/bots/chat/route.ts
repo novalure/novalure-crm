@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth/session";
+import { requireKnowledgeBotSession } from "@/lib/knowledge-center/http";
 import { getBotPrompt, runBotChat } from "@/lib/bots/chat-runtime";
 import { listBotConversations, listBotMessages } from "@/lib/db/runtime-repositories";
 import { getApiSystemCopy, resolveRequestLanguage } from "@/lib/i18n";
@@ -16,7 +16,7 @@ async function readJson(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "bots:run");
+  const auth = await requireKnowledgeBotSession(request, "bots:run");
 
   if (!auth.ok) return auth.response;
 
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const language = resolveRequestLanguage(request);
   const copy = getApiSystemCopy(language);
-  const auth = await requirePermission(request, "bots:run");
+  const auth = await requireKnowledgeBotSession(request, "bots:run");
 
   if (!auth.ok) return auth.response;
 

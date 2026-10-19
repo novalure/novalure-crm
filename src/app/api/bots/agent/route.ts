@@ -1,5 +1,5 @@
 import { listCrmBotTools, requiresLivePropertyFacts, runCrmBotTool } from "@/lib/bots/agent-tools";
-import { requirePermission } from "@/lib/auth/session";
+import { requireKnowledgeBotSession } from "@/lib/knowledge-center/http";
 import {
   documentApprovedFromPayload,
   evaluateBotAction,
@@ -38,7 +38,7 @@ function policyActionForTool(toolName: string): BotActionName {
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission(request, "bots:run");
+  const auth = await requireKnowledgeBotSession(request, "bots:run");
 
   if (!auth.ok) return auth.response;
 
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const language = resolveRequestLanguage(request);
   const copy = getApiSystemCopy(language);
-  const auth = await requirePermission(request, "bots:run");
+  const auth = await requireKnowledgeBotSession(request, "bots:run");
 
   if (!auth.ok) return auth.response;
 

@@ -1,5 +1,6 @@
 import { getRequestSession, resolveWorkspaceScopedSession, type AppSession } from "@/lib/auth/session";
 import { CrmCommandError } from "@/lib/crm-command";
+import type { AppPermission } from "@/lib/auth/permissions";
 import { KnowledgeCenterError, knowledgeId, knowledgeRevision, knowledgeStructured, knowledgeText, knowledgeUrl } from "./policy";
 import type { AssignKnowledgeAreasInput, CreateKnowledgeAreaInput, CreateKnowledgeSourceInput, KnowledgeChannel, KnowledgeContentInput, KnowledgeSourceType, QueryKnowledgeCenterInput, UpdateKnowledgeSourceInput } from "./types";
 
@@ -83,10 +84,31 @@ export async function readKnowledgeJson(request: Request, fields: readonly strin
   return body;
 }
 
+function hasDuplicateSessionCookie(request: Request) {
+  return (request.headers.get("cookie") ?? "").split(";")
+    .filter((part) => part.trim().split("=", 1)[0] === "novalure_session").length > 1;
+}
+
+/** HTTP bot ports require a durable cookie; preview/demo identities are never authority. */
+export async function requireKnowledgeBotSession(request: Request, permission: AppPermission) {
+  if (hasDuplicateSessionCookie(request)) {
+    return { ok: false as const, response: knowledgeJson({ error: "An unambiguous workspace session is required.", code: "UNAUTHENTICATED" }, 401) };
+  }
+  const originSession = await getRequestSession(request);
+  if (!originSession?.authenticated || originSession.source !== "cookie" || !originSession.authSessionId || !originSession.authIdentityId) {
+    return { ok: false as const, response: knowledgeJson({ error: "An authenticated workspace session is required.", code: "UNAUTHENTICATED" }, 401) };
+  }
+  if (new URL(request.url).searchParams.getAll("workspaceId").length > 1) {
+    return { ok: false as const, response: knowledgeJson({ error: "A single workspace selector is required.", code: "INVALID_TENANT" }, 400) };
+  }
+  const auth = await resolveWorkspaceScopedSession(request, { permission });
+  if (!auth.ok) for (const [key, value] of Object.entries(knowledgePrivateHeaders)) auth.response.headers.set(key, value);
+  return auth;
+}
+
 export async function withKnowledgeRequest(request: Request, callback: (session: AppSession) => Promise<Response>) {
   try {
-    const cookies = (request.headers.get("cookie") ?? "").split(";").map((part) => part.trim().split("=", 1)[0]);
-    if (cookies.filter((name) => name === "novalure_session").length > 1) return knowledgeJson({ error: "An unambiguous workspace session is required.", code: "UNAUTHENTICATED" }, 401);
+    if (hasDuplicateSessionCookie(request)) return knowledgeJson({ error: "An unambiguous workspace session is required.", code: "UNAUTHENTICATED" }, 401);
     const originSession = await getRequestSession(request);
     // Knowledge never accepts preview identities or caller-selected identity headers.
     if (!originSession?.authenticated || originSession.source !== "cookie" || !originSession.authSessionId || !originSession.authIdentityId) {

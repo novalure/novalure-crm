@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
+import { botWorkspaceUrl, configuredEvaluationChannels, knowledgeItemFromApi, knowledgeItemsFromSnapshot } from "../src/components/bot-command-center";
 import type { CrmBotChannelConfig } from "../src/lib/crm-types";
 import type { KnowledgeSource } from "../src/lib/knowledge-center/types";
 
@@ -40,4 +41,18 @@ test("evaluation channel selection uses active saved channels and never invents 
   assert.equal(configured[0].label,"Website Bot");
   assert.deepEqual(configuredEvaluationChannels({channels:[]}),[]);
   assert.deepEqual(configuredEvaluationChannels({channels:[channel("API/Webhook"),channel("Webchat",false)]}),[]);
+});
+
+
+test("workspace-scoped bot URLs carry the selected workspace for new knowledge, evaluation and history",()=>{
+  assert.equal(botWorkspaceUrl("/api/bots/knowledge?limit=50","workspace-B"),"/api/bots/knowledge?limit=50&workspaceId=workspace-B");
+  assert.equal(botWorkspaceUrl("/api/bots/evaluations","workspace-B"),"/api/bots/evaluations?workspaceId=workspace-B");
+  assert.equal(botWorkspaceUrl("/api/bots/chat?limit=12","workspace-A"),"/api/bots/chat?limit=12&workspaceId=workspace-A");
+  assert.equal(botWorkspaceUrl("/api/bots/agent","workspace-B"),"/api/bots/agent?workspaceId=workspace-B");
+});
+
+
+test("changing selected workspace remounts the bot center with fresh local state",()=>{
+  const workspace = readFileSync(new URL("../src/components/crm-workspace.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /<BotCommandCenter\s+key=\{activeWorkspace.id\}\s+workspaceId=\{activeWorkspace.id\}/);
 });

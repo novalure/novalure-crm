@@ -1015,46 +1015,52 @@ export async function listBotEvaluationRuns(input: {
 }): Promise<BotEvaluationRun[]> {
   if (!canPersist() || !isUuid(input.session.workspaceId)) return [];
 
-  const botId = isUuid(input.botId) ? input.botId : null;
-  const projectId = isUuid(input.projectId) ? input.projectId : null;
+  return withCrmRead(input.session, async (tx, fresh) => {
+    const botId = isUuid(input.botId) ? input.botId : null;
+    const projectId = isUuid(input.projectId) ? input.projectId : null;
 
-  const rows = await queryRows<{
-    botId: string | null;
-    createdAt: string | Date;
-    hallucinationFailures: number;
-    handoffFailures: number;
-    id: string;
-    projectId: string | null;
-    redTeamFailures: number;
-    result: unknown;
-    score: number;
-    sourceCoverage: number | string;
-    workspaceId: string;
-  }>(
-    `
-      select
-        id,
-        workspace_id as "workspaceId",
-        project_id as "projectId",
-        bot_id as "botId",
-        score,
-        source_coverage as "sourceCoverage",
-        hallucination_failures as "hallucinationFailures",
-        handoff_failures as "handoffFailures",
-        red_team_failures as "redTeamFailures",
-        result,
-        created_at as "createdAt"
-      from bot_evaluation_runs
-      where workspace_id = $1
-        and ($2::uuid is null or bot_id = $2::uuid)
-        and ($3::uuid is null or project_id = $3::uuid)
-      order by created_at desc
-      limit $4
-    `,
-    [input.session.workspaceId, botId, projectId, input.limit ?? 20],
-  );
+    const rows = await tx.query<{
+      botId: string | null;
+      createdAt: string | Date;
+      hallucinationFailures: number;
+      handoffFailures: number;
+      id: string;
+      projectId: string | null;
+      redTeamFailures: number;
+      result: unknown;
+      score: number;
+      sourceCoverage: number | string;
+      workspaceId: string;
+    }>(
+      `
+        select
+          id,
+          workspace_id as "workspaceId",
+          project_id as "projectId",
+          bot_id as "botId",
+          score,
+          source_coverage as "sourceCoverage",
+          hallucination_failures as "hallucinationFailures",
+          handoff_failures as "handoffFailures",
+          red_team_failures as "redTeamFailures",
+          result,
+          created_at as "createdAt"
+        from bot_evaluation_runs
+        where workspace_id = $1
+          and ($2::uuid is null or bot_id = $2::uuid)
+          and ($3::uuid is null or project_id = $3::uuid)
+          and (project_id is null or crm_project_access(workspace_id,project_id,false))
+          and (bot_id is null or exists(select 1 from bots b where b.id=bot_evaluation_runs.bot_id
+            and b.workspace_id=bot_evaluation_runs.workspace_id
+            and b.project_id is not distinct from bot_evaluation_runs.project_id))
+        order by created_at desc
+        limit $4
+      `,
+      [fresh.workspaceId, botId, projectId, input.limit ?? 20],
+    );
 
-  return rows.map(toBotEvaluationRun);
+    return rows.map(toBotEvaluationRun);
+  });
 }
 
 const botConversationChannels = ["webchat", "whatsapp", "instagram", "messenger", "email", "internal", "voice", "telephone", "api", "admin", "test"];

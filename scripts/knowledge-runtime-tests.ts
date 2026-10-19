@@ -240,11 +240,11 @@ test("evaluation uses explicit webchat or saved active channel and persists its 
 });
 
 
-test("real cookie chat handlers bind their own tenant transactions without ambient scope", async () => {
+test("real cookie bot handlers bind transactions and reauthorize selected workspace membership and role", async () => {
   const owner = await seedSalesBrowser(db);
   const liveBot = randomUUID(), otherBot = randomUUID();
   await db.admin.query("insert into bots(id,workspace_id,project_id,name,role) values($1,$3,$4,'HTTP saved bot','sales'),($2,$3,$4,'HTTP other bot','sales')", [liveBot, otherBot, owner.workspaceId, owner.projectId]);
-  const keys = ["DATABASE_URL", "NODE_ENV", "CRM_LOCAL_TEST_DATABASE", "NOVALURE_SESSION_SECRET", "NOVALURE_APP_ORIGIN", "NOVALURE_AUTH_STRICT", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET", "NOVALURE_DEMO_AUTH_ENABLED", "NOVALURE_TRUST_AUTH_HEADERS", "VERCEL", "VERCEL_ENV", "VERCEL_URL"];
+  const keys = ["DATABASE_URL", "NODE_ENV", "CRM_LOCAL_TEST_DATABASE", "NOVALURE_SESSION_SECRET", "NOVALURE_APP_ORIGIN", "NOVALURE_AUTH_STRICT", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET", "NOVALURE_DEMO_AUTH_ENABLED", "NOVALURE_DEMO_USER_EMAIL", "NOVALURE_DEMO_USER_ROLE", "NOVALURE_TRUST_AUTH_HEADERS", "VERCEL", "VERCEL_ENV", "VERCEL_URL"];
   const prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   const origin = "http://127.0.0.1:3000", secret = randomBytes(48).toString("base64url");
   const cookie = "v2." + randomBytes(32).toString("base64url"), sessionId = randomUUID();
@@ -253,7 +253,33 @@ test("real cookie chat handlers bind their own tenant transactions without ambie
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, NODE_ENV: "test", CRM_LOCAL_TEST_DATABASE: "1", NOVALURE_SESSION_SECRET: secret, NOVALURE_APP_ORIGIN: origin, NOVALURE_AUTH_STRICT: "1", NOVALURE_AUTH_ENCRYPTION_KEY: randomBytes(40).toString("hex"), NOVALURE_AUTH_RATE_LIMIT_SECRET: randomBytes(40).toString("hex") });
     await db.admin.query("insert into auth_sessions(id,token_hash,auth_identity_id,workspace_user_id,workspace_id,mfa_verified_at,expires_at) values($1,$2,$3,$4,$5,now(),now()+interval '1 hour')", [sessionId, createHash("sha256").update(cookie).digest("hex"), owner.authIdentityId, owner.userId, owner.workspaceId]);
     const chat = await import("../src/app/api/bots/chat/route");
-    const request = (pathname: string, method = "GET", body?: unknown) => new Request(origin + pathname, { method, headers: { cookie: "novalure_session=" + cookie, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(method === "GET" ? {} : { origin, "sec-fetch-site": "same-origin", "x-novalure-csrf-token": createCsrfToken({ method, pathname, secret, sessionCookie: cookie })!.token }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const request = (pathname: string, method = "GET", body?: unknown) => new Request(origin + pathname, { method, headers: { cookie: "novalure_session=" + cookie, ...(body === undefined ? {} : { "content-type": "application/json" }), ...(method === "GET" ? {} : { origin, "sec-fetch-site": "same-origin", "x-novalure-csrf-token": createCsrfToken({ method, pathname: pathname.split("?")[0], secret, sessionCookie: cookie })!.token }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const evaluationsForAuth = await import("../src/app/api/bots/evaluations/route");
+    const agentForAuth = await import("../src/app/api/bots/agent/route");
+    const botRoutes = [[chat, "/api/bots/chat"], [evaluationsForAuth, "/api/bots/evaluations"], [agentForAuth, "/api/bots/agent"]] as const;
+    for (const mode of ["trusted_headers", "configured_demo"] as const) {
+      if (mode === "trusted_headers") process.env.NOVALURE_TRUST_AUTH_HEADERS = "1";
+      else {
+        delete process.env.NOVALURE_TRUST_AUTH_HEADERS;
+        process.env.NOVALURE_DEMO_AUTH_ENABLED = "1";
+        process.env.NOVALURE_DEMO_USER_EMAIL = owner.email;
+        process.env.NOVALURE_DEMO_USER_ROLE = "owner";
+      }
+      for (const [route, pathname] of botRoutes) for (const method of ["GET", "POST"] as const) {
+        const headers: Record<string, string> = mode === "trusted_headers" ? { "x-novalure-workspace-id": owner.workspaceId, "x-novalure-user-id": owner.userId, "x-novalure-user-email": owner.email, "x-novalure-role": "owner", "x-novalure-product-role": "novalureAdmin" } : {};
+        const attacker = new Request(origin + pathname, { method, headers: { ...headers, "content-type": "application/json" }, ...(method === "POST" ? { body: JSON.stringify({ botId: liveBot, channel: "webchat", prompt: "approved source", testMode: true }) } : {}) });
+        assert.equal((await route[method](attacker)).status, 401, `${pathname} ${method} rejects ${mode} without a durable cookie`);
+      }
+    }
+    delete process.env.NOVALURE_TRUST_AUTH_HEADERS;
+    delete process.env.NOVALURE_DEMO_AUTH_ENABLED;
+    delete process.env.NOVALURE_DEMO_USER_EMAIL;
+    delete process.env.NOVALURE_DEMO_USER_ROLE;
+    for (const [route, pathname] of botRoutes) {
+      const duplicate = request(pathname);
+      duplicate.headers.set("cookie", `novalure_session=${cookie}; novalure_session=${cookie}`);
+      assert.equal((await route.GET(duplicate)).status, 401);
+    }
     const valid = await chat.POST(request("/api/bots/chat", "POST", { botId: liveBot, channel: "webchat", prompt: "Was kostet die Wohnung?", testMode: true, strictKnowledge: false }));
     assert.equal(valid.status, 200, await valid.clone().text());
     const result = await valid.json();
@@ -268,6 +294,70 @@ test("real cookie chat handlers bind their own tenant transactions without ambie
     const list = await chat.GET(request("/api/bots/chat"));
     assert.equal(list.status, 200, await list.clone().text());
     assert.equal((await list.json()).conversations.length, 1);
+
+    // Origin A's privileged cookie selects B only through B's active membership.
+    const target = await seedSalesBrowser(db), targetMemberId = randomUUID(), targetBotId = randomUUID();
+    const targetSelector = "?workspaceId=" + target.workspaceId;
+    const evaluations = await import("../src/app/api/bots/evaluations/route");
+    const agent = await import("../src/app/api/bots/agent/route");
+    const legacy = await import("../src/app/api/bots/knowledge/route");
+    const evaluationBody = { botId: targetBotId, projectId: target.projectId, channel: "webchat" };
+    const targetChatBody = { ...evaluationBody, prompt: "Was kostet die Wohnung?", testMode: true, strictKnowledge: false };
+    await db.admin.query("insert into bots(id,workspace_id,project_id,name,role,config) values($1,$2,$3,'Target B bot','sales','{\"channels\":[{\"channel\":\"Webchat\",\"active\":true}]}')", [targetBotId, target.workspaceId, target.projectId]);
+    assert.equal((await evaluations.POST(request("/api/bots/evaluations" + targetSelector, "POST", evaluationBody))).status, 403);
+    assert.equal((await chat.POST(request("/api/bots/chat" + targetSelector, "POST", targetChatBody))).status, 403);
+    await db.admin.query("insert into workspace_users(id,workspace_id,auth_identity_id,name,email,role,product_role,status) values($1,$2,$3,'Origin identity in target B',$4,'admin','novalureAdmin','active')", [targetMemberId, target.workspaceId, owner.authIdentityId, owner.email]);
+    await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,limits) values($1,true,20,1000000,100,'SYNTHETIC-TARGET-B','{\"maxAreas\":5,\"maxWebsites\":5,\"maxScansPerMonth\":5,\"maxUsers\":5,\"maxAssistants\":5}')", [target.workspaceId]);
+    const targetSession: AppSession = { ...session, workspaceId: target.workspaceId, userId: targetMemberId, role: "admin", productRole: "novalureAdmin", authIdentityId: owner.authIdentityId };
+    const targetArea = await createKnowledgeArea(targetSession, { name: "Target B knowledge", kind: "company" }, options);
+    const targetSource = await createKnowledgeSource(targetSession, { areaId: targetArea.id, type: "manual", name: "Target B approved source", content: "Welche freigegebenen Projektdetails darf ich einem Interessenten nennen? TARGET_B_KNOWLEDGE" }, options);
+    await publishKnowledgeSource(targetSession, { sourceId: targetSource.id, versionId: targetSource.draftVersionId!, expectedVersion: targetSource.revision }, options);
+    await assignKnowledgeAreas(targetSession, { botId: targetBotId, channel: "webchat", areaIds: [targetArea.id] }, options);
+    const targetKnowledge = await legacy.GET(request("/api/bots/knowledge?limit=50&workspaceId=" + target.workspaceId));
+    assert.equal(targetKnowledge.status, 200, await targetKnowledge.clone().text());
+    assert.deepEqual((await targetKnowledge.json()).sources.map((source: { id: string }) => source.id), [targetSource.id]);
+    const targetEvaluation = await evaluations.POST(request("/api/bots/evaluations" + targetSelector, "POST", evaluationBody));
+    assert.equal(targetEvaluation.status, 201, await targetEvaluation.clone().text());
+    const targetRun = (await targetEvaluation.json()).run;
+    assert.equal(targetRun.workspaceId, target.workspaceId);
+    assert.equal(targetRun.sourceCoverage, 100);
+    const targetRuns = await evaluations.GET(request("/api/bots/evaluations" + targetSelector));
+    assert.equal(targetRuns.status, 200, await targetRuns.clone().text());
+    assert.equal((await targetRuns.json()).runs[0].workspaceId, target.workspaceId);
+    const targetChat = await chat.POST(request("/api/bots/chat" + targetSelector, "POST", targetChatBody));
+    assert.equal(targetChat.status, 200, await targetChat.clone().text());
+    const targetConversationId = (await targetChat.json()).conversationId;
+    const targetMessages = await chat.GET(request("/api/bots/chat" + targetSelector + "&conversationId=" + targetConversationId));
+    assert.equal(targetMessages.status, 200, await targetMessages.clone().text());
+    assert.equal((await targetMessages.json()).messages.length, 2);
+    const targetAgent = await agent.POST(request("/api/bots/agent" + targetSelector, "POST", { prompt: "TARGET_B_KNOWLEDGE", tool: "search_approved_knowledge", input: { botId: targetBotId, channel: "webchat", query: "TARGET_B_KNOWLEDGE" } }));
+    assert.equal(targetAgent.status, 200, await targetAgent.clone().text());
+    assert.equal((await targetAgent.json()).result.sources[0].sourceId, targetSource.id);
+    const visibleProjectId = randomUUID(), visibleBotId = randomUUID(), visibleRunId = randomUUID();
+    await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'Granted target project','Bauträger')", [visibleProjectId, target.workspaceId]);
+    await db.admin.query("insert into bots(id,workspace_id,project_id,name,role) values($1,$2,$3,'Granted target bot','sales')", [visibleBotId, target.workspaceId, visibleProjectId]);
+    await db.admin.query("insert into bot_evaluation_runs(id,workspace_id,project_id,bot_id,result) values($1,$2,$3,$4,'{\"evaluationChannel\":\"webchat\"}')", [visibleRunId, target.workspaceId, visibleProjectId, visibleBotId]);
+    await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,true)", [target.workspaceId, visibleProjectId, targetMemberId]);
+    await db.admin.query("update workspace_users set role='agent',product_role='novalureServiceOps' where id=$1", [targetMemberId]);
+    const restrictedRuns = await evaluations.GET(request("/api/bots/evaluations" + targetSelector));
+    assert.equal(restrictedRuns.status, 200, await restrictedRuns.clone().text());
+    const restrictedData = (await restrictedRuns.json()).runs;
+    assert.deepEqual(restrictedData.map((run: { id: string }) => run.id), [visibleRunId]);
+    assert.doesNotMatch(JSON.stringify(restrictedData), new RegExp(targetRun.id + "|" + targetBotId + "|" + target.projectId));
+    assert.equal((await evaluations.POST(request("/api/bots/evaluations" + targetSelector, "POST", evaluationBody))).status, 403, "origin A approval privilege must not replace B's downgraded role");
+    await db.admin.query("update workspace_users set status='invited' where id=$1", [targetMemberId]);
+    for (const [handler, pathname, body] of [
+      [chat.POST, "/api/bots/chat", targetChatBody],
+      [evaluations.POST, "/api/bots/evaluations", evaluationBody],
+      [agent.POST, "/api/bots/agent", { prompt: "TARGET_B_KNOWLEDGE", input: { botId: targetBotId, channel: "webchat" } }],
+    ] as const) {
+      assert.equal((await handler(request(pathname + targetSelector, "POST", body))).status, 403);
+    }
+    assert.equal((await chat.GET(request("/api/bots/chat" + targetSelector))).status, 403);
+    assert.equal((await evaluations.GET(request("/api/bots/evaluations" + targetSelector))).status, 403);
+    const stored = (await db.admin.query("select workspace_id,actor_user_id from audit_logs where workspace_id=$1 and action='workspace.cross_workspace_view'", [target.workspaceId])).rows;
+    assert.ok(stored.length > 0);
+    assert.ok(stored.every((row) => row.actor_user_id === targetMemberId));
   } finally {
     await closeLocalTestPool();
     for (const key of keys) { if (prior[key] === undefined) delete process.env[key]; else process.env[key] = prior[key]; }

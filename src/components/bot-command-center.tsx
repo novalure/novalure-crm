@@ -21,6 +21,7 @@ import { csrfFetch } from "@/lib/security/csrf-client";
 import type { KnowledgeChannel, KnowledgeSource } from "@/lib/knowledge-center/types";
 
 type BotCommandCenterProps = {
+  workspaceId: string;
   automations: Automation[];
   bots: CrmBot[];
   callInsights: BotCallInsight[];
@@ -464,7 +465,13 @@ function ConversationActionSummary({
   );
 }
 
+/** Only endpoints whose handlers reauthorize the selected workspace use this URL. */
+export function botWorkspaceUrl(path: string, workspaceId: string) {
+  return `${path}${path.includes("?") ? "&" : "?"}workspaceId=${encodeURIComponent(workspaceId)}`;
+}
+
 export function BotCommandCenter({
+  workspaceId,
   automations,
   bots,
   callInsights,
@@ -588,16 +595,16 @@ export function BotCommandCenter({
   const sendableDocumentAssets = documentAssets.filter(isSendableDocumentAsset);
   const openConversationCount = displayConversations.filter((conversation) => conversation.status !== "resolved").length;
   const endpointCards = [
-    { id: "chat", method: text.methodPost, path: "/api/bots/chat" },
-    { id: "agent", method: text.methodGetPost, path: "/api/bots/agent" },
+    { id: "chat", method: text.methodPost, path: botWorkspaceUrl("/api/bots/chat", workspaceId) },
+    { id: "agent", method: text.methodGetPost, path: botWorkspaceUrl("/api/bots/agent", workspaceId) },
     { id: "channels", method: text.methodGetPost, path: "/api/bots/channels" },
     { id: "channelWebhook", method: text.methodGetPost, path: "/api/bots/channels/webhook" },
     { id: "actions", method: text.methodGetPost, path: "/api/bots/actions" },
     { id: "leads", method: text.methodPost, path: "/api/bots/leads" },
     { id: "documents", method: text.methodGetPost, path: "/api/bots/documents" },
     { id: "meetings", method: text.methodGetPost, path: "/api/bots/meetings" },
-    { id: "knowledge", method: text.methodPost, path: "/api/bots/knowledge" },
-    { id: "evaluations", method: text.methodGetPost, path: "/api/bots/evaluations" },
+    { id: "knowledge", method: text.methodPost, path: botWorkspaceUrl("/api/bots/knowledge", workspaceId) },
+    { id: "evaluations", method: text.methodGetPost, path: botWorkspaceUrl("/api/bots/evaluations", workspaceId) },
     { id: "calls", method: text.methodPost, path: "/api/bots/calls" },
   ] as const;
   const tabs: Array<{ id: BotTab; label: string }> = [
@@ -615,7 +622,7 @@ export function BotCommandCenter({
     async function loadEvaluationRuns() {
       try {
         setEvaluationStatus("loading");
-        const response = await csrfFetch("/api/bots/evaluations?limit=20");
+        const response = await csrfFetch(botWorkspaceUrl("/api/bots/evaluations?limit=20", workspaceId));
 
         if (!response.ok) {
           throw new Error("Bot evaluations unavailable");
@@ -641,7 +648,7 @@ export function BotCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, workspaceId]);
 
   async function runBotEvaluation(bot: CrmBot) {
     try {
@@ -649,7 +656,7 @@ export function BotCommandCenter({
       const channel = selectedEvaluationChannel(bot);
       if (!channel) throw new Error("A configured evaluation channel is required");
       setEvaluationRunningId(bot.id);
-      const response = await csrfFetch("/api/bots/evaluations", {
+      const response = await csrfFetch(botWorkspaceUrl("/api/bots/evaluations", workspaceId), {
         body: JSON.stringify({ botId: bot.id, channel, projectId: bot.projectId }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -687,12 +694,12 @@ export function BotCommandCenter({
         setApprovalLoadStatus("loading");
         setBotActionStatus("loading");
         const [chatResponse, channelResponse, approvalResponse, actionResponse, documentResponse, knowledgeResponse] = await Promise.all([
-          csrfFetch("/api/bots/chat?limit=12"),
+          csrfFetch(botWorkspaceUrl("/api/bots/chat?limit=12", workspaceId)),
           csrfFetch("/api/bots/channels"),
           csrfFetch("/api/approvals?status=pending"),
           csrfFetch("/api/bots/actions"),
           csrfFetch("/api/bots/documents"),
-          csrfFetch("/api/bots/knowledge?limit=50"),
+          csrfFetch(botWorkspaceUrl("/api/bots/knowledge?limit=50", workspaceId)),
         ]);
 
         if (!chatResponse.ok || !channelResponse.ok || !approvalResponse.ok || !actionResponse.ok || !documentResponse.ok) {
@@ -758,7 +765,7 @@ export function BotCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [activeTab]);
+  }, [activeTab, workspaceId]);
 
   async function decideApproval(approvalId: string, decision: ApprovalDecision) {
     try {
