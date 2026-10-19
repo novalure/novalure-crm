@@ -14,6 +14,12 @@ test("CRM read projection preserves complete long confirmed text and binds both 
   assert.equal(view.files[0].analysisAssetId,assetId);assert.equal(view.files[0].analysis.limitations[0],"Some pages were unclear.");
   assert.doesNotMatch(JSON.stringify(view),/relativePath|blob\.vercel|token|storageProvider/);
 });
+test("real Production enquiries use the same complete private projection without a synthetic marker",()=>{
+  const m=metadata();const real={...m,snapshot:{...m.snapshot,syntheticTest:false,consent:{...m.snapshot.consent,policyVersion:"studio-enquiry-2026-10-19"}}};
+  const view=parseStudioEnquiryView(real);assert.ok(view);assert.equal(view.summary,m.snapshot.brief.summary);
+  assert.equal(view.files[0].originalAssetId,assetId);
+  assert.equal(parseStudioEnquiryView({...m,snapshot:{...m.snapshot,syntheticTest:"false"}}),null);
+});
 test("CRM source projection rejects oversize, malformed role mapping and unsafe website URLs",()=>{
   const changes:Array<(m:ReturnType<typeof metadata>)=>void>=[m=>{m.snapshot.brief.summary="a".repeat(10001);},m=>{m.attachments[0].assetId="https://foreign.example/file";},m=>{m.attachments[0].sha256="0".repeat(64);},m=>{m.snapshot.files[0].analysis.extractedText="a".repeat(6001);}];
   for(const change of changes){

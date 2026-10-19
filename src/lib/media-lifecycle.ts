@@ -70,7 +70,7 @@ const referenceCatalogSql = `select n.nspname as schema_name,t.relname as table_
     join pg_attribute a on a.attrelid=c.confrelid and a.attnum=key.attnum order by key.position) as target_columns
   from pg_constraint c join pg_class t on t.oid=c.conrelid join pg_namespace n on n.oid=t.relnamespace
   where c.contype='f' and c.confrelid='public.media_assets'::regclass`;
-const referenceCountsSql = `select * from public.crm_media_reference_counts($1::uuid)`;
+const referenceCountsSql = `select * from public.crm_studio_media_reference_counts($1::uuid)`;
 
 /**
  * The parent lock serializes normal gallery and deletion writes for the same property.

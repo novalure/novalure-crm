@@ -108,7 +108,9 @@ export async function applySalesSchema(db, {
       // Website Sales/Studio fixtures apply their original SQL after 094–096;
       // this generic sales-only fixture must not invent predecessor ledger rows.
       name === "097_studio_sales_calendar_bridge.sql" ||
-      name === "098_studio_enquiry_handoff.sql"
+      name === "098_studio_enquiry_handoff.sql" ||
+      name === "099_studio_enquiry_public_launch.sql" ||
+      name === "100_studio_enquiry_production.sql"
     ) continue;
     const number = Number(name.slice(0, 3));
     if (!includeSales && number >= 80) continue;

@@ -6,6 +6,7 @@ import { hasExpectedMediaMagicBytes } from "@/lib/media-security";
 import { workspaceImageQuotaBytes } from "@/lib/media-store";
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { StudioEnquiryError, studioEnquiryBranch, studioEnquiryHash, studioEnquiryProject,
+  studioEnquiryProductionOrigin, studioEnquiryStudioOrigin, studioEnquiryStudioProject, studioEnquiryCrmProject,
   type StudioEnquiryFile, type StudioEnquiryRequest, type StudioEnquirySnapshot } from "@/lib/studio-enquiry-contract";
 
 export type EnquiryTarget = { sourceId: string; variant: "original" | "analysis"; assetId: string; sha256: string; pathname: string; mime: string; bytes: number; name: string };
@@ -21,8 +22,55 @@ const scope = { workspaceId: websiteSalesWorkspaceId, actorId: websiteSalesActor
 const selection = `operation_id as "operationId", revision, payload_hash as "payloadHash", snapshot_text as "snapshotText",
   targets, state, reference, lead_id as "leadId", submission_id as "submissionId"`;
 
-/** Every live request must match the approved Preview and actual isolated DB. */
+/** Trusted operator configuration, never a request-selected database or tenant. */
+export function studioEnquiryProductionBinding(env: NodeJS.ProcessEnv = process.env) {
+  if (env.VERCEL !== "1" || env.VERCEL_ENV !== "production" || env.VERCEL_PROJECT_ID !== studioEnquiryProject ||
+      env.STUDIO_PUBLIC_ENQUIRY_ENABLED !== "1" || !env.STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID?.trim() ||
+      env.STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID !== studioEnquiryProject ||
+      env.STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN !== studioEnquiryProductionOrigin ||
+      env.STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID !== studioEnquiryStudioProject ||
+      env.STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN !== studioEnquiryStudioOrigin ||
+      !/^[a-f0-9]{40}$/.test(env.STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA || "") ||
+      env.STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA !== env.VERCEL_GIT_COMMIT_SHA ||
+      !env.STUDIO_ENQUIRY_SIGNING_SECRET || Buffer.byteLength(env.STUDIO_ENQUIRY_SIGNING_SECRET) < 32) return null;
+  const host = env.STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST?.trim().toLowerCase();
+  const name = env.STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME?.trim(), role = env.STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE?.trim();
+  const project = env.STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID?.trim(), branch = env.STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID?.trim();
+  const store = env.STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID?.trim();
+  const credential = privateTokenOrEmpty(env);
+  if (!env.DATABASE_URL || !host || !host.includes("-pooler.") || !name || !role || !project || !branch ||
+      !store || !/^store_[A-Za-z0-9]+$/.test(store) || store !== env.NOVALURE_PRIVATE_BLOB_STORE_ID?.trim() ||
+      !credential.startsWith("vercel_blob_rw_") || credential.split("_")[3] !== store.slice(6)) return null;
+  try {
+    const url = new URL(resolveDatabaseUrl(env));
+    if (!/^postgres(?:ql)?:$/.test(url.protocol) || url.hostname.toLowerCase() !== host ||
+        (url.port && url.port !== "5432") || [...url.searchParams.keys()].some(key =>
+          ["host", "hostaddr", "port", "user", "dbname", "database"].includes(key.toLowerCase())) ||
+        decodeURIComponent(url.pathname.slice(1)) !== name || decodeURIComponent(url.username) !== role) return null;
+  } catch { return null; }
+  return { host, name, role, project, branch, store };
+}
+async function studioEnquiryProductionTargetVerified(env: NodeJS.ProcessEnv) {
+  const binding = studioEnquiryProductionBinding(env); if (!binding) return false;
+  try {
+    const actual = await withPublicSubmissionTransaction(scope, () => queryOne<{ project: string; branch: string; name: string; role: string; ready: boolean }>(
+      `select current_setting('neon.project_id',true) as project, current_setting('neon.branch_id',true) as branch,
+        current_database() as name, current_user as role,
+        (exists(select 1 from pg_constraint where conrelid=to_regclass('public.studio_enquiry_transfers')
+          and conname='studio_enquiry_snapshot_synthetic_marker_boolean' and convalidated)
+         and (select count(*)=2 from pg_class where oid in (to_regclass('public.studio_enquiry_transfers'),to_regclass('public.studio_enquiry_assets'))
+           and relrowsecurity and relforcerowsecurity)
+         and exists(select 1 from workspace_users where id=$1::uuid and workspace_id=$2::uuid
+           and status='active' and role='agent' and product_role='novalure_operator')
+         and exists(select 1 from forms where id=$3::uuid and workspace_id=$2::uuid and project_id=$4::uuid and status='aktiv')) as ready`,
+      [websiteSalesActorId, websiteSalesWorkspaceId, websiteSalesFormId, studioEnquiryCrmProject]), { readOnly: true });
+    return actual?.project === binding.project && actual.branch === binding.branch && actual.name === binding.name &&
+      actual.role === binding.role && actual.ready === true;
+  } catch { return false; }
+}
+/** Preview retains its original isolated target guard; Production has a separate exact binding. */
 export async function studioEnquiryTargetVerified(env: NodeJS.ProcessEnv = process.env) {
+  if (env.VERCEL_ENV === "production") return studioEnquiryProductionTargetVerified(env);
   if (env.VERCEL !== "1" || env.VERCEL_ENV !== "preview" || env.VERCEL_PROJECT_ID !== studioEnquiryProject ||
       env.STUDIO_ENQUIRY_QA_CRM_PROJECT_ID !== studioEnquiryProject || env.VERCEL_GIT_COMMIT_REF !== studioEnquiryBranch ||
       env.STUDIO_ENQUIRY_QA_ENABLED !== "1" || !env.STUDIO_ENQUIRY_QA_APPROVAL_ID?.trim()) return false;
@@ -64,8 +112,11 @@ export function studioEnquiryTargets(request: StudioEnquiryRequest): EnquiryTarg
       pathname: `${websiteSalesWorkspaceId}/studio-enquiries/${request.operationId.toLowerCase()}/${assetId}${extensions[content.mime]}` };
   }));
 }
+function privateTokenOrEmpty(env: NodeJS.ProcessEnv) {
+  return env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() || env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() || "";
+}
 function privateToken(env: NodeJS.ProcessEnv) {
-  const token = env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() || env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim();
+  const token = privateTokenOrEmpty(env);
   if (!token) throw new StudioEnquiryError("private_storage_unavailable", 503);
   return token;
 }
@@ -157,7 +208,7 @@ function formInput(snapshot: StudioEnquirySnapshot) {
   const values = snapshot.brief.values, form = new FormData();
   const fields: Record<string, string> = { name: values.name || "", email: values.email || "", phone: values.phone || "",
     company: values.company || "", message: snapshot.brief.summary, package_interest: "UNDECIDED",
-    current_website_url: values.existingUrl || "", privacy: "true", synthetic_test: "true" };
+    current_website_url: values.existingUrl || "", privacy: "true", synthetic_test: String(snapshot.syntheticTest) };
   for (const [key, value] of Object.entries(fields)) form.set(key, value);
   return form;
 }
@@ -208,7 +259,8 @@ export async function executeStudioEnquiry(request: StudioEnquiryRequest, { stor
         throw new StudioEnquiryError("workspace_storage_limit", 409);
       }
       const persisted = await persistWebsiteFormSubmission({ actorUserId: websiteSalesActorId, formKey: websiteSalesFormId,
-        formData: formInput(request.snapshot), requestUrl: "https://novalurestudio.ie/", preserveProvidedIdentity: true });
+        formData: formInput(request.snapshot), requestUrl: "https://novalurestudio.ie/", preserveProvidedIdentity: true,
+        studioSyntheticTest: request.snapshot.syntheticTest });
       if (!persisted.persisted || !persisted.ids?.leadId || !persisted.ids.submissionId) throw new StudioEnquiryError("crm_persistence_unconfirmed", 503);
       const stored = new Set<string>();
       for (const target of current.targets) {

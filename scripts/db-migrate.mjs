@@ -49,6 +49,10 @@ const manualCutoverVersions = new Set([
   "093_crm_machine_internal_context",
   "095_form_tenant_isolation",
   "096_public_integration_gateway",
+  "097_studio_sales_calendar_bridge",
+  "098_studio_enquiry_handoff",
+  "099_studio_enquiry_public_launch",
+  "100_studio_enquiry_production",
 ]);
 const migrationDependencies = new Map([
   ["052_validate_property_inventory_tenant_guards", "049_property_inventory_tenant_guards"],
@@ -64,6 +68,9 @@ const migrationDependencies = new Map([
   ["095_form_tenant_isolation", "094_website_sales_ingestion"],
   ["096_public_integration_gateway", "095_form_tenant_isolation"],
   ["097_studio_sales_calendar_bridge", "096_public_integration_gateway"],
+  ["098_studio_enquiry_handoff", "097_studio_sales_calendar_bridge"],
+  ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
+  ["100_studio_enquiry_production", "096_public_integration_gateway"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

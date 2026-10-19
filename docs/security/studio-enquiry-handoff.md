@@ -1,5 +1,11 @@
 # Studio enquiry handoff: isolated Preview
 
+The original Preview contract below remains applicable to that isolated scope.
+The explicit Production counterpart is documented in
+[ST1 public launch](../go-live/studio-enquiry-public-launch.md); its separate
+target/credential guards and standalone migration100 on096 do not broaden
+Preview access or apply its calendar migration097 to Production.
+
 This change implements the server-to-server `studio-enquiry-v1` contract at
 `POST /api/public/website-sales/enquiry`. It does not activate Production,
 calendar access, invitations, marketing, notifications or the legacy signed

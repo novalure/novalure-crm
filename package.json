@@ -70,7 +70,7 @@
     "test:neon:061": "node --test scripts/neon-061-compat-tests.mjs",
     "test:g08": "node --conditions=react-server --import tsx --test scripts/evelyn-approval-client-tests.ts scripts/evelyn-contract-db-tests.ts scripts/evelyn-route-boundary-tests.ts",
     "test:website-sales-ingestion": "node --conditions=react-server --import tsx --test scripts/website-sales-ingestion-tests.ts scripts/website-sales-transaction-tests.ts",
-    "test:studio-enquiry": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-tests.ts scripts/studio-enquiry-live-qa-tests.mjs scripts/studio-stage3-login-fixture-tests.mjs scripts/studio-stage3-qa-fingerprint-tests.mjs scripts/studio-stage3-qa-restore-tests.mjs scripts/studio-stage3-qa-prepare-target-tests.mjs scripts/studio-stage3-qa-fresh-bootstrap-tests.mjs",
+    "test:studio-enquiry": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-tests.ts scripts/studio-enquiry-production-tests.mjs scripts/studio-enquiry-live-qa-tests.mjs scripts/studio-stage3-login-fixture-tests.mjs scripts/studio-stage3-qa-fingerprint-tests.mjs scripts/studio-stage3-qa-restore-tests.mjs scripts/studio-stage3-qa-prepare-target-tests.mjs scripts/studio-stage3-qa-fresh-bootstrap-tests.mjs",
     "test:studio-enquiry-view": "node --import tsx --test scripts/studio-enquiry-view-tests.ts",
     "test:form-isolation": "node --test scripts/form-tenant-isolation-tests.mjs",
     "test:external-integration-gateway": "node --conditions=react-server --import tsx --test scripts/external-integration-gateway-tests.ts",
@@ -79,7 +79,8 @@
     "test:build-metadata": "node --conditions=react-server --import tsx --test scripts/build-metadata-tests.ts",
     "test:u1-c03:manifests": "node --test scripts/u1-c03-manifest-tests.mjs",
     "test:u1-c04:source-ingest": "node --test scripts/u1-c04-source-ingest-tests.mjs",
-    "test:u1-c05:successor": "node --test scripts/u1-c05-successor-mount-tests.mjs"
+    "test:u1-c05:successor": "node --test scripts/u1-c05-successor-mount-tests.mjs",
+    "test:studio-enquiry:production": "node --conditions=react-server --import tsx --test scripts/studio-enquiry-production-tests.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",

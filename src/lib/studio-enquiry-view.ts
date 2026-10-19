@@ -26,9 +26,9 @@ export function parseStudioEnquiryView(value: unknown): StudioEnquiryView | null
   if (!record(value) || !text(value.operationId,36) || !uuid.test(value.operationId) || !Number.isSafeInteger(value.revision) || Number(value.revision)<1 ||
       !text(value.payloadHash,64) || !digest.test(value.payloadHash) || !record(value.snapshot) || !Array.isArray(value.attachments)) return null;
   const s=value.snapshot;
-  if (s.schemaVersion!=="studio-enquiry-snapshot-v1" || s.syntheticTest!==true || !text(s.conversationId,36) || !uuid.test(s.conversationId) ||
+  if (s.schemaVersion!=="studio-enquiry-snapshot-v1" || typeof s.syntheticTest!=="boolean" || !text(s.conversationId,36) || !uuid.test(s.conversationId) ||
       !text(s.confirmedAt,32) || !Number.isFinite(Date.parse(s.confirmedAt)) || !record(s.consent) || s.consent.privacy!==true ||
-      s.consent.policyVersion!=="studio-enquiry-2026-10-18" || !record(s.brief) || !record(s.brief.values) ||
+      !["studio-enquiry-2026-10-18","studio-enquiry-2026-10-19"].includes(String(s.consent.policyVersion)) || !record(s.brief) || !record(s.brief.values) ||
       !text(s.brief.summary,10000) || !list(s.brief.openQuestions,8,500) || !Array.isArray(s.files) || s.files.length>3 ||
       !Array.isArray(s.websites) || s.websites.length>2 || value.attachments.length!==s.files.length*2) return null;
   const values: Record<string,string>={};

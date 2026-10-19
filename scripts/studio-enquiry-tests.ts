@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { PDFDocument } from "pdf-lib";
@@ -9,8 +9,9 @@ import { closeLocalTestPool } from "../src/lib/db/local-test-transport";
 import { queryOne, queryRows, withPublicSubmissionTransaction } from "../src/lib/db/client";
 import { websiteSalesActorId, websiteSalesWorkspaceId } from "../src/lib/website-sales-ingestion";
 import { buildStudioEnquirySignature, parseStudioEnquiryRequest, studioEnquiryHash, studioEnquiryRecipientsAllowed,
-  verifyStudioEnquirySignature, type StudioEnquiryRequest, type StudioEnquirySnapshot } from "../src/lib/studio-enquiry-contract";
-import { executeStudioEnquiry, studioEnquiryPrivateStore, studioEnquiryTargetVerified, studioEnquiryTargets,
+  verifyStudioEnquirySignature, verifyStudioSyntheticTestProof, studioEnquiryRequestOriginAllowed,
+  type StudioEnquiryRequest, type StudioEnquirySnapshot } from "../src/lib/studio-enquiry-contract";
+import { executeStudioEnquiry, studioEnquiryPrivateStore, studioEnquiryTargetVerified, studioEnquiryTargets, studioEnquiryProductionBinding,
   verifyStudioCopiedFile, type EnquiryPrivateStore, type EnquiryTarget } from "../src/lib/studio-enquiry";
 import { deleteDatabaseMedia, hasCompleteMediaReferenceVisibility } from "../src/lib/media-lifecycle";
 import { findWorkspaceMediaAsset, type MediaAsset } from "../src/lib/media-store";
@@ -24,6 +25,8 @@ const originalEnv = { ...process.env };
 const secret = "synthetic-stage-three-only-signing-secret";
 const qaEmail = "studio-stage-three@example.invalid";
 const qaPhone = "+353 1 234 5678";
+const productionSchema = process.env.STUDIO_ENQUIRY_TEST_SCHEMA === "production";
+let previousMediaFunctionResult: string;
 const objects = new Map<string, { data: Buffer; contentType: string }>();
 let grants: EnquiryTarget[] = [];
 const store: EnquiryPrivateStore = {
@@ -70,7 +73,10 @@ before(async () => {
   await db.admin.query("grant select, insert, update on forms, form_submissions, tasks, consent_records, contact_timeline_items, analytics_events, speed_to_lead_events to novalure_app; grant select on funnels to novalure_app");
   await db.admin.query("insert into workspaces(id,name,operating_model) values($1,'SYNTHETIC ST3','novalure_internal') on conflict(id) do nothing", [websiteSalesWorkspaceId]);
   await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC operator','studio-operator@example.invalid','agent','novalure_operator','active') on conflict(id) do nothing", [websiteSalesActorId, websiteSalesWorkspaceId]);
-  for (const filename of ["094_website_sales_ingestion.sql", "095_form_tenant_isolation.sql", "096_public_integration_gateway.sql", "097_studio_sales_calendar_bridge.sql", "098_studio_enquiry_handoff.sql"]) {
+  previousMediaFunctionResult=(await db.admin.query("select pg_get_function_result('public.crm_media_reference_counts(uuid)'::regprocedure) as result")).rows[0].result;
+  const schemaMigrations=["094_website_sales_ingestion.sql", "095_form_tenant_isolation.sql", "096_public_integration_gateway.sql",
+    ...(productionSchema ? ["100_studio_enquiry_production.sql"] : ["097_studio_sales_calendar_bridge.sql", "098_studio_enquiry_handoff.sql", "099_studio_enquiry_public_launch.sql"])];
+  for (const filename of schemaMigrations) {
     await db.admin.query(await readFile(new URL("../migrations/" + filename, import.meta.url), "utf8"));
     await db.admin.query("insert into novalure_schema_migrations(version,name,checksum) values($1,$2,'synthetic-stage-three')", [filename.slice(0,-4), filename]);
   }
@@ -79,6 +85,19 @@ before(async () => {
     STUDIO_ENQUIRY_QA_EMAILS_JSON: JSON.stringify([qaEmail]), STUDIO_ENQUIRY_QA_PHONES_JSON: JSON.stringify([qaPhone]) });
   delete process.env.VERCEL; delete process.env.VERCEL_ENV;
   const p = await PDFDocument.create(); p.addPage(); pdf = Buffer.from(await p.save());
+});
+
+test("selected migration path is genuine and standalone Production preserves the legacy media counter without booking tables",async()=>{
+  const schema=(await db.admin.query(`select to_regclass('public.studio_sales_handoffs') is null and to_regclass('public.studio_sales_bookings') is null as no_bookings,
+    pg_get_function_result('public.crm_media_reference_counts(uuid)'::regprocedure) as legacy_result,
+    pg_get_function_result('public.crm_studio_media_reference_counts(uuid)'::regprocedure) as studio_result`)).rows[0];
+  assert.match(schema.studio_result,/studio_count integer/);
+  if(productionSchema){
+    assert.equal(schema.no_bookings,true);assert.equal(schema.legacy_result,previousMediaFunctionResult);
+    const fabricated=await db.admin.query("select version from novalure_schema_migrations where version in ('097_studio_sales_calendar_bridge','098_studio_enquiry_handoff','099_studio_enquiry_public_launch')");
+    assert.equal(fabricated.rowCount,0,"Standalone Production does not attest Preview/calendar migrations");
+    assert.match(schema.legacy_result,/share_count integer/);assert.doesNotMatch(schema.legacy_result,/studio_count/);
+  } else { assert.equal(schema.no_bookings,false);assert.match(schema.legacy_result,/studio_count integer/); }
 });
 after(async () => {
   await closeLocalTestPool(); if (db) await db.stop();
@@ -115,6 +134,68 @@ test("Production, wrong Preview project/branch and missing actual target identit
     VERCEL_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", STUDIO_ENQUIRY_QA_CRM_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
     VERCEL_GIT_COMMIT_REF: "another-branch", STUDIO_ENQUIRY_QA_ENABLED: "1", STUDIO_ENQUIRY_QA_APPROVAL_ID: "synthetic" }), false);
 });
+
+function productionConfiguration() {
+  return { ...process.env, VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    VERCEL_GIT_COMMIT_SHA: "a".repeat(40), STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA: "a".repeat(40),
+    STUDIO_PUBLIC_ENQUIRY_ENABLED: "1", STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID: "synthetic-local-public-launch",
+    STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID: "prj_R32Okl6AHijTohvuKmryuTLjWMsk", STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN: "https://www.novalure-crm.app",
+    STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID: "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp", STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN: "https://novalurestudio.ie",
+    DATABASE_URL: `postgresql://${db.role}@ep-synthetic-pooler.eu-west-2.aws.neon.tech/postgres?sslmode=verify-full`,
+    STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST: "ep-synthetic-pooler.eu-west-2.aws.neon.tech", STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME: "postgres",
+    STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE: db.role, STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID: "synthetic-studio-readiness",
+    STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID: "synthetic-studio-branch", STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID: "store_publicqa",
+    NOVALURE_PRIVATE_BLOB_STORE_ID: "store_publicqa", NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_publicqa_synthetic-only" };
+}
+
+test("Production binding pins release, projects, public origins, actual database coordinates, signing secret and private store", () => {
+  const env = productionConfiguration(); assert.ok(studioEnquiryProductionBinding(env));
+  const protectedFields = ["VERCEL", "VERCEL_ENV", "VERCEL_PROJECT_ID", "VERCEL_GIT_COMMIT_SHA", "STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA",
+    "STUDIO_PUBLIC_ENQUIRY_ENABLED", "STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID", "STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID", "STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN",
+    "STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID", "STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN", "DATABASE_URL", "STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST",
+    "STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME", "STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE", "STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID",
+    "STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID", "STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID", "NOVALURE_PRIVATE_BLOB_STORE_ID", "STUDIO_ENQUIRY_SIGNING_SECRET"];
+  for (const key of protectedFields) assert.equal(studioEnquiryProductionBinding({ ...env, [key]: "" }), null, key);
+  for (const [key,value] of Object.entries({ VERCEL_ENV: "preview", STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA: "b".repeat(40),
+    STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN: "https://foreign.invalid", STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN: "https://foreign.invalid",
+    STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST: "foreign-pooler.example.invalid", STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME: "foreign",
+    STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE: "foreign", STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID: "store_foreign",
+    NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_foreign_wrong-store" })) {
+    assert.equal(studioEnquiryProductionBinding({ ...env, [key]: value }), null, key);
+  }
+});
+
+test("real snapshots cannot use Preview allowlists; Production synthetic proof is exact-operation, email, time and credential bound", () => {
+  const r = request(snapshot(false)), timestamp = String(Math.floor(Date.now()/1000));
+  const proof = (id: string, email = qaEmail, time = timestamp) => time + "." + createHmac("sha256", secret)
+    .update(`novalure-studio-synthetic-test-v1.${time}.${id}.${email.toLowerCase()}`, "utf8").digest("base64url");
+  const env = { ...process.env, NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL: qaEmail };
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(r.operationId), env), true);
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(randomUUID()), env), false);
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(r.operationId, "other@example.invalid"), env), false);
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(r.operationId, qaEmail, "1000000000"), env), false);
+  assert.equal(verifyStudioSyntheticTestProof(r, null, env), false);
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(r.operationId), { ...env, STUDIO_ENQUIRY_SIGNING_SECRET: "other-synthetic-signing-secret-123456789" }), false);
+  r.snapshot.syntheticTest = false; r.payloadHash = studioEnquiryHash(JSON.stringify(r.snapshot));
+  assert.equal(parseStudioEnquiryRequest(r).snapshot.syntheticTest, false);
+  assert.equal(studioEnquiryRecipientsAllowed(r.snapshot), false);
+  assert.equal(verifyStudioSyntheticTestProof(r, proof(r.operationId), env), false);
+});
+
+test("private Production canary origin is only the exact platform deployment host with a separate secret", () => {
+  const env={ NODE_ENV:"test" as const, VERCEL_URL:"novalure-crm-immutable-novalure.vercel.app",STUDIO_PUBLIC_CANARY_SECRET:"synthetic-private-canary-authorization-12345" };
+  const request=(origin: string,secret?:string)=>new Request(origin+"/api/public/website-sales/enquiry",{
+    headers:secret?{"x-studio-canary-authorization":secret}:{} });
+  assert.equal(studioEnquiryRequestOriginAllowed(request("https://www.novalure-crm.app"),{NODE_ENV:"test"}),true);
+  const origin="https://"+env.VERCEL_URL;
+  assert.equal(studioEnquiryRequestOriginAllowed(request(origin,env.STUDIO_PUBLIC_CANARY_SECRET),env),true);
+  assert.equal(studioEnquiryRequestOriginAllowed(request(origin),env),false);
+  assert.equal(studioEnquiryRequestOriginAllowed(request(origin,"wrong-secret"),env),false);
+  assert.equal(studioEnquiryRequestOriginAllowed(request("https://another-novalure.vercel.app",env.STUDIO_PUBLIC_CANARY_SECRET),env),false);
+  assert.equal(studioEnquiryRequestOriginAllowed(request("http://"+env.VERCEL_URL,env.STUDIO_PUBLIC_CANARY_SECRET),env),false);
+  assert.equal(studioEnquiryRequestOriginAllowed(request(origin,env.STUDIO_PUBLIC_CANARY_SECRET),{...env,STUDIO_PUBLIC_CANARY_SECRET:"short"}),false);
+  assert.equal(studioEnquiryRequestOriginAllowed(request(origin,env.STUDIO_PUBLIC_CANARY_SECRET),{...env,VERCEL_URL:"https://"+env.VERCEL_URL}),false);
+});
 test("Preview readiness uses the fixed actor in a read-only transaction under actual FORCE RLS", async () => {
   await closeLocalTestPool();
   // The sales-only schema omits the separately activated launch registry policy.
@@ -141,6 +222,13 @@ test("Preview readiness uses the fixed actor in a read-only transaction under ac
       NOVALURE_QA_BRANCH_ID: "synthetic-studio-branch", NOVALURE_QA_DATABASE_NAME: "postgres", NOVALURE_QA_DATABASE_ROLE: db.role };
     assert.equal(await studioEnquiryTargetVerified(configured), true);
     assert.equal(await studioEnquiryTargetVerified({ ...configured, NOVALURE_QA_BRANCH_ID: "different-branch" }), false);
+    const production = productionConfiguration();
+    assert.equal(await studioEnquiryTargetVerified(production), true, "Production identity comes from the actual local database, fixed actor, form and FORCE RLS");
+    assert.equal(await studioEnquiryTargetVerified({ ...production, STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID: "foreign-branch" }), false);
+    assert.equal(await studioEnquiryTargetVerified({ ...production, STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID: "foreign-project" }), false);
+    await db.admin.query("update forms set project_id=null where id=$1", ["0f98b9fd-d300-4a34-a14c-54a1a61b2415"]);
+    assert.equal(await studioEnquiryTargetVerified(production), false, "A moved/unbound form cannot route a Production enquiry");
+    await db.admin.query("update forms set project_id='f7d83c6b-d08d-4d73-b822-1f1c0b4733d2' where id=$1", ["0f98b9fd-d300-4a34-a14c-54a1a61b2415"]);
     const after = await queryOne<{ count: number }>("select count(*)::int as count from workspace_users where id=$1::uuid", [websiteSalesActorId]);
     assert.equal(after?.count, 0, "readiness does not leak its transaction-local tenant context");
   } finally {
@@ -160,6 +248,77 @@ test("HTTP rejects missing signature, stale key, oversized or invalid JSON befor
   assert.equal((await enquiryPost(http("{"))).status, 400);
   assert.equal((await enquiryPost(http(body))).status, 503, "local tests cannot accidentally activate Preview operations");
   assert.equal((await enquiryPost(http(body, { "idempotency-key": randomUUID() }))).status, 400);
+});
+
+test("Production HTTP rejects foreign origins and unauthenticated synthetic markers before target or storage work", async () => {
+  const oldEnvironment = process.env.VERCEL_ENV;
+  const oldTestEmail = process.env.NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL;
+  const oldHost=process.env.VERCEL_URL, oldCanarySecret=process.env.STUDIO_PUBLIC_CANARY_SECRET;
+  process.env.VERCEL_ENV = "production";
+  process.env.NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL = qaEmail;
+  try {
+    const r = request(snapshot(false)); r.snapshot.consent.policyVersion="studio-enquiry-2026-10-19";
+    r.payloadHash=studioEnquiryHash(JSON.stringify(r.snapshot));
+    const body = JSON.stringify(r), timestamp = String(Math.floor(Date.now()/1000));
+    const headers = { "content-type": "application/json", "idempotency-key": r.operationId, "x-novalure-timestamp": timestamp,
+      "x-novalure-signature": buildStudioEnquirySignature(body,timestamp,secret),
+      "x-studio-origin": "https://novalurestudio.ie", "x-studio-project-id": "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp" };
+    const send = (origin: string, extra = {}) => enquiryPost(new Request(origin+"/api/public/website-sales/enquiry", { method: "POST", body, headers: { ...headers, ...extra } }));
+    assert.equal((await send("https://foreign.invalid")).status,403);
+    assert.equal((await send("https://www.novalure-crm.app", { "x-studio-origin":"https://foreign.invalid" })).status,403);
+    assert.equal((await send("https://www.novalure-crm.app")).status,403,"A signed true flag still requires the separate owner-test proof");
+    const proof = timestamp + "." + createHmac("sha256",secret)
+      .update(`novalure-studio-synthetic-test-v1.${timestamp}.${r.operationId}.${qaEmail}`,"utf8").digest("base64url");
+    assert.equal((await send("https://www.novalure-crm.app", { "x-studio-synthetic-test-proof":proof })).status,503,
+      "An exact owner proof passes marker authorization, but cannot bypass absent Production database binding");
+    process.env.VERCEL_URL="novalure-crm-immutable-novalure.vercel.app";
+    process.env.STUDIO_PUBLIC_CANARY_SECRET="synthetic-private-canary-authorization-12345";
+    const canaryOrigin="https://"+process.env.VERCEL_URL;
+    assert.equal((await send(canaryOrigin,{"x-studio-synthetic-test-proof":proof})).status,403);
+    assert.equal((await send(canaryOrigin,{"x-studio-synthetic-test-proof":proof,
+      "x-studio-canary-authorization":process.env.STUDIO_PUBLIC_CANARY_SECRET})).status,503,
+      "The separately authorized own-host canary still cannot bypass Production database/release readiness");
+    const real = structuredClone(r); real.snapshot.syntheticTest=false; real.payloadHash=studioEnquiryHash(JSON.stringify(real.snapshot));
+    const realBody=JSON.stringify(real);
+    const realResult=await enquiryPost(new Request("https://www.novalure-crm.app/api/public/website-sales/enquiry",{
+      method:"POST",body:realBody,headers:{...headers,"x-novalure-signature":buildStudioEnquirySignature(realBody,timestamp,secret)}}));
+    assert.equal(realResult.status,503,"An ordinary false marker does not require a synthetic proof and still cannot bypass target readiness");
+    const obsolete=structuredClone(real);obsolete.snapshot.consent.policyVersion="studio-enquiry-2026-10-18";
+    obsolete.payloadHash=studioEnquiryHash(JSON.stringify(obsolete.snapshot));const obsoleteBody=JSON.stringify(obsolete);
+    assert.equal((await enquiryPost(new Request("https://www.novalure-crm.app/api/public/website-sales/enquiry",{method:"POST",body:obsoleteBody,
+      headers:{...headers,"x-novalure-signature":buildStudioEnquirySignature(obsoleteBody,timestamp,secret)}}))).status,400,
+      "Production requires the current public privacy version; historical Preview agreement cannot activate it");
+  } finally {
+    if (oldEnvironment === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = oldEnvironment;
+    if (oldTestEmail === undefined) delete process.env.NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL; else process.env.NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL=oldTestEmail;
+    if (oldHost===undefined) delete process.env.VERCEL_URL; else process.env.VERCEL_URL=oldHost;
+    if (oldCanarySecret===undefined) delete process.env.STUDIO_PUBLIC_CANARY_SECRET; else process.env.STUDIO_PUBLIC_CANARY_SECRET=oldCanarySecret;
+  }
+});
+
+test("additive public-launch migration accepts real snapshots and persists actual enquiry identity without synthetic KPI masking or outbound actions", async () => {
+  const r = request(); r.snapshot.syntheticTest = false; r.snapshot.brief.values.email = "real-customer@example.invalid";
+  r.snapshot.consent.policyVersion="studio-enquiry-2026-10-19";
+  r.payloadHash = studioEnquiryHash(JSON.stringify(r.snapshot)); parseStudioEnquiryRequest(r);
+  const beforeCounts = await counts();
+  await executeStudioEnquiry(r,{store}); await copy(r);
+  const finalized = await executeStudioEnquiry(withAction(r,"finalize"),{store});
+  const replay = await executeStudioEnquiry(withAction(r,"finalize"),{store});
+  assert.deepEqual(accepted(finalized),accepted(replay));
+  const actual = (await db.admin.query(`select l.metadata,fs.mode,fs.answers,
+    (select submissions_count from forms where id=fs.form_id) as form_count
+    from leads l join form_submissions fs on fs.lead_id=l.id where l.id=$1`,[accepted(finalized).crmLeadId])).rows[0];
+  assert.equal(actual.metadata.websiteSales.syntheticTest,false);
+  assert.equal(actual.metadata.studioEnquiry.snapshot.syntheticTest,false);
+  assert.equal(actual.mode,"live"); assert.equal(actual.answers.synthetic_test,"false");
+  assert.ok(actual.form_count>0,"A real enquiry contributes to the ordinary business form count");
+  const afterCounts = await counts();
+  assert.equal(afterCounts.leads,beforeCounts.leads+1); assert.equal(afterCounts.form_submissions,beforeCounts.form_submissions+1);
+  assert.equal(afterCounts.media_assets,beforeCounts.media_assets+1); assert.equal(accepted(finalized).attachments.length,2);
+  assert.equal(afterCounts.tasks,beforeCounts.tasks); assert.equal(afterCounts.deals,beforeCounts.deals);
+  const malformed = request(snapshot(false)); const snapshotText = JSON.stringify({ ...malformed.snapshot, syntheticTest:"false" });
+  await assert.rejects(db.admin.query(`insert into studio_enquiry_transfers(operation_id,workspace_id,revision,payload_hash,snapshot_text,targets,reference)
+    values($1,$2,1,$3,$4,'[]',$5)`,[malformed.operationId,websiteSalesWorkspaceId,studioEnquiryHash(snapshotText),snapshotText,"NL-"+randomUUID().replaceAll("-","").slice(0,8).toUpperCase()]));
 });
 test("reserve creates no lead; missing/mismatched copy fails; one immutable correct copy finalizes once", async () => {
   const r = request(), beforeCounts = await counts(); grants = [];
@@ -334,7 +493,8 @@ test("ordinary SECURITY DEFINER owners cannot hide linked Studio references behi
     await connection.query("grant select on media_assets,workspace_users,property_media,property_documents,bot_document_sends,media_asset_shares to " + ordinaryOwner);
     await connection.query("alter table public.studio_enquiry_assets owner to " + ordinaryOwner);
     await connection.query("alter function public.studio_enquiry_protect_asset() owner to " + ordinaryOwner);
-    await connection.query("alter function public.crm_media_reference_counts(uuid) owner to " + ordinaryOwner);
+    await connection.query("alter function public.crm_studio_media_reference_counts(uuid) owner to " + ordinaryOwner);
+    if (!productionSchema) await connection.query("alter function public.crm_media_reference_counts(uuid) owner to " + ordinaryOwner);
     await connection.query("insert into workspace_users(id,workspace_id,name,email,role,product_role,status) values($1,$2,'SYNTHETIC other owner','ordinary-owner-stage3@example.invalid','owner','novalure_operator','active')",
       [otherActor, websiteSalesWorkspaceId]);
     await connection.query("insert into workspaces(id,name) values($1,'SYNTHETIC ordinary guard foreign')", [foreignWorkspace]);
@@ -370,7 +530,7 @@ test("ordinary SECURITY DEFINER owners cannot hide linked Studio references behi
       await connection.query("savepoint synthetic_guard_count");
       try {
         const references = await connection.query<{ studio_count: number }>(
-          "select * from public.crm_media_reference_counts($1::uuid)", [assetId]);
+          "select * from public.crm_studio_media_reference_counts($1::uuid)", [assetId]);
         if (workspace === websiteSalesWorkspaceId && references.rows.length !== 0 &&
             references.rows[0].studio_count < 1) {
           failures.push(label + ": reference counter returned a false zero in-use indicator");

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { executeStudioEnquiry, studioEnquiryTargetVerified } from "@/lib/studio-enquiry";
 import { StudioEnquiryError, parseStudioEnquiryRequest, studioEnquiryMaxBodyBytes,
-  studioEnquiryRecipientsAllowed, verifyStudioEnquirySignature } from "@/lib/studio-enquiry-contract";
+  studioEnquiryRecipientsAllowed, verifyStudioEnquirySignature, verifyStudioSyntheticTestProof,
+  studioEnquiryRequestOriginAllowed, studioEnquiryStudioOrigin, studioEnquiryStudioProject,
+  studioEnquiryPolicy, studioEnquiryPublicPolicy } from "@/lib/studio-enquiry-contract";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -33,7 +35,16 @@ export async function POST(request: Request) {
     let parsed: unknown; try { parsed = JSON.parse(raw); } catch { return failure(400, "invalid_enquiry"); }
     const payload = parseStudioEnquiryRequest(parsed);
     if (request.headers.get("idempotency-key") !== payload.operationId) return failure(400, "invalid_idempotency_key");
-    if (!studioEnquiryRecipientsAllowed(payload.snapshot)) return failure(403, "qa_recipient_not_allowed");
+    if (payload.snapshot.consent.policyVersion !== (process.env.VERCEL_ENV === "production" ? studioEnquiryPublicPolicy : studioEnquiryPolicy)) {
+      return failure(400,"privacy_policy_not_current");
+    }
+    if (process.env.VERCEL_ENV === "production") {
+      if (!studioEnquiryRequestOriginAllowed(request) ||
+          request.headers.get("x-studio-origin") !== studioEnquiryStudioOrigin ||
+          request.headers.get("x-studio-project-id") !== studioEnquiryStudioProject) return failure(403, "studio_origin_not_allowed");
+      if (payload.snapshot.syntheticTest && !verifyStudioSyntheticTestProof(payload,
+        request.headers.get("x-studio-synthetic-test-proof"))) return failure(403, "synthetic_test_not_authorized");
+    } else if (!studioEnquiryRecipientsAllowed(payload.snapshot)) return failure(403, "qa_recipient_not_allowed");
     if (!await studioEnquiryTargetVerified()) return failure(503, "studio_qa_target_unverified");
     const result = await executeStudioEnquiry(payload);
     return NextResponse.json(result, { headers, status: result.status === "transmitted" ? 202 : 200 });

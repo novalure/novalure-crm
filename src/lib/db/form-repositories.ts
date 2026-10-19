@@ -563,6 +563,8 @@ export async function persistWebsiteFormSubmission(input: {
   requestUrl: string;
   /** Server-only Studio enquiry mode; never supplied by a public form field. */
   preserveProvidedIdentity?: boolean;
+  /** Validated server snapshot marker; public form fields never select this authority. */
+  studioSyntheticTest?: boolean;
 }): Promise<PersistenceResult & { form?: WebsiteForm; redirectUrl?: string }> {
   if (!hasDatabaseUrl()) {
     return { persisted: false, reason: "DATABASE_URL is not configured" };
@@ -594,7 +596,8 @@ export async function persistWebsiteFormSubmission(input: {
   if (enquiry) {
     // Confirmation grants storage/follow-up only; it never grants marketing.
     consent.marketing = false;
-    if (answers.synthetic_test !== "true" || !consent.privacy) return { persisted: false, reason: "studio_confirmation_required" };
+    if (typeof input.studioSyntheticTest !== "boolean" || answers.synthetic_test !== String(input.studioSyntheticTest) ||
+        !consent.privacy) return { persisted: false, reason: "studio_confirmation_required" };
   }
 
   if (form.fields.some((field) => field.type === "consent" && field.required) && !consent.privacy) {

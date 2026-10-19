@@ -3,10 +3,30 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 export const studioEnquiryVersion = "studio-enquiry-v1";
 export const studioSnapshotVersion = "studio-enquiry-snapshot-v1";
 export const studioEnquiryPolicy = "studio-enquiry-2026-10-18";
+export const studioEnquiryPublicPolicy = "studio-enquiry-2026-10-19";
 export const studioEnquiryMaxBodyBytes = 256_000;
 export const studioEnquiryMaxFileBytes = 10_000_000;
 export const studioEnquiryProject = "prj_R32Okl6AHijTohvuKmryuTLjWMsk";
 export const studioEnquiryBranch = "codex/studio-preview-crm-handoff";
+export const studioEnquiryProductionOrigin = "https://www.novalure-crm.app";
+export const studioEnquiryStudioOrigin = "https://novalurestudio.ie";
+export const studioEnquiryStudioProject = "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp";
+export const studioEnquiryCrmProject = "f7d83c6b-d08d-4d73-b822-1f1c0b4733d2";
+
+/** A private candidate may use only this deployment's own platform-issued host. */
+export function studioEnquiryRequestOriginAllowed(request: Pick<Request,"url"|"headers">,
+  env: NodeJS.ProcessEnv = process.env) {
+  let origin: string;
+  try { origin=new URL(request.url).origin; } catch { return false; }
+  if (origin===studioEnquiryProductionOrigin) return true;
+  const host=env.VERCEL_URL, secret=env.STUDIO_PUBLIC_CANARY_SECRET;
+  if (!host || !/^[a-z0-9][a-z0-9.-]*\.vercel\.app$/.test(host) || origin!==`https://${host}` ||
+      !secret || Buffer.byteLength(secret)<32) return false;
+  const supplied=request.headers.get("x-studio-canary-authorization");
+  if (!supplied || supplied.length>1024) return false;
+  const expected=Buffer.from(secret),actual=Buffer.from(supplied);
+  return expected.length===actual.length && timingSafeEqual(expected,actual);
+}
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const hash = /^[a-f0-9]{64}$/;
 const limits: Record<string, number> = {
@@ -29,9 +49,9 @@ export type StudioEnquiryWebsite = StudioAnalysis & {
 };
 export type StudioEnquirySnapshot = {
   schemaVersion: typeof studioSnapshotVersion; conversationId: string; confirmedAt: string;
-  consent: { privacy: true; policyVersion: typeof studioEnquiryPolicy };
+  consent: { privacy: true; policyVersion: typeof studioEnquiryPolicy | typeof studioEnquiryPublicPolicy };
   brief: { values: Record<string, string>; summary: string; openQuestions: string[] };
-  files: StudioEnquiryFile[]; websites: StudioEnquiryWebsite[]; syntheticTest: true;
+  files: StudioEnquiryFile[]; websites: StudioEnquiryWebsite[]; syntheticTest: boolean;
 };
 export type StudioEnquiryRequest = {
   version: typeof studioEnquiryVersion; action: "reserve" | "status" | "finalize";
@@ -73,8 +93,8 @@ export function parseStudioEnquiryRequest(v: unknown): StudioEnquiryRequest {
       s.schemaVersion !== studioSnapshotVersion || typeof s.conversationId !== "string" || !uuid.test(s.conversationId) ||
       typeof s.confirmedAt !== "string" || !Number.isFinite(Date.parse(s.confirmedAt)) ||
       new Date(s.confirmedAt).toISOString() !== s.confirmedAt || Date.parse(s.confirmedAt) > Date.now() + 5000 ||
-      s.syntheticTest !== true || !object(s.consent) || !keys(s.consent, ["privacy", "policyVersion"]) ||
-      s.consent.privacy !== true || s.consent.policyVersion !== studioEnquiryPolicy || !object(s.brief)) return fail();
+      typeof s.syntheticTest !== "boolean" || !object(s.consent) || !keys(s.consent, ["privacy", "policyVersion"]) ||
+      s.consent.privacy !== true || ![studioEnquiryPolicy,studioEnquiryPublicPolicy].includes(String(s.consent.policyVersion)) || !object(s.brief)) return fail();
   const b = s.brief;
   if (!keys(b, ["values", "summary", "openQuestions"]) || !object(b.values) || !text(b.summary, 10_000) ||
       !strings(b.openQuestions, 8, 500) || Object.entries(b.values).some(([k, value]) =>
@@ -126,6 +146,22 @@ export function studioEnquiryRecipientsAllowed(snapshot: StudioEnquirySnapshot, 
   };
   const emails = parse("STUDIO_ENQUIRY_QA_EMAILS_JSON"), phones = parse("STUDIO_ENQUIRY_QA_PHONES_JSON");
   const values = snapshot.brief.values;
-  return emails !== null && phones !== null && (!values.email || emails.includes(values.email.toLowerCase())) &&
+  return snapshot.syntheticTest === true && emails !== null && phones !== null && (!values.email || emails.includes(values.email.toLowerCase())) &&
     (!values.phone || phones.includes(values.phone));
+}
+
+/** Same existing Studio proof contract; a public snapshot flag is never test authority. */
+export function verifyStudioSyntheticTestProof(request: StudioEnquiryRequest, proof: string | null,
+  env: NodeJS.ProcessEnv = process.env) {
+  const email = request.snapshot.brief.values.email?.trim().toLowerCase();
+  const testEmail = env.NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL?.trim().toLowerCase();
+  const secret = env.STUDIO_ENQUIRY_SIGNING_SECRET;
+  if (!request.snapshot.syntheticTest || !email || email !== testEmail || !secret || Buffer.byteLength(secret) < 32 || !proof) return false;
+  const match = /^([0-9]{10,11})\.([A-Za-z0-9_-]{43})$/.exec(proof);
+  if (!match || Math.abs(Math.floor(Date.now() / 1000) - Number(match[1])) > 300) return false;
+  const signature = createHmac("sha256", secret)
+    .update(`novalure-studio-synthetic-test-v1.${match[1]}.${request.operationId}.${email.trim().toLowerCase()}`, "utf8")
+    .digest("base64url");
+  const expected = Buffer.from(`${match[1]}.${signature}`), actual = Buffer.from(proof);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
