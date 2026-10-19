@@ -1273,7 +1273,7 @@ function KnowledgeCenterContent({
                           <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                             <option value="active">{lifecycleText.activeStates}</option>
                             <option value="all">{lifecycleText.allStates}</option>
-                            {(["draft", "submitted", "reviewed", "approved", "published", "archived", "error"] as const).map((value) => <option key={value} value={value}>{lifecycleText[value]}</option>)}
+                            {(["draft", "submitted", "reviewed", "approved", "published", "error"] as const).map((value) => <option key={value} value={value}>{lifecycleText[value]}</option>)}
                           </select>
                         </Field>
                         <Field label={text.search}>

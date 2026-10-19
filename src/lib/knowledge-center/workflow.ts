@@ -134,7 +134,7 @@ function validatedFields(value: unknown): KnowledgeMaintenanceField[] {
 
 async function analyze(tx: TenantTransaction, session: AppSession, areaId?: string, at?: string) {
   if (areaId) await area(tx, session, areaId, true);
-  const ids = await tx.query<{ id: string; areaId: string }>(`select id,knowledge_area_id as "areaId" from knowledge_sources where workspace_id=$1::uuid and knowledge_area_id is not null and archived_at is null and ($2::uuid is null or knowledge_area_id=$2::uuid) order by id limit 500`, [session.workspaceId, areaId ?? null]);
+  const ids = await tx.query<{ id: string; areaId: string }>(`select id,knowledge_area_id as "areaId" from knowledge_sources where workspace_id=$1::uuid and knowledge_area_id is not null and archived_at is null and (project_id is null or crm_project_access(workspace_id,project_id,true)) and ($2::uuid is null or knowledge_area_id=$2::uuid) order by id limit 500`, [session.workspaceId, areaId ?? null]);
   const groups = new Map<string, KnowledgeSource[]>();
   for (const item of ids) { const row = await source(tx, session, item.id, true); groups.set(row.areaId, [...groups.get(row.areaId) ?? [], row]); }
   const proposals: KnowledgeChangeProposal[] = [];

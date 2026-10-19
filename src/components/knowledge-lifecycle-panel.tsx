@@ -70,7 +70,7 @@ export function KnowledgeLifecyclePanel({ source, snapshot, language, scopedPath
     { action: "review", label: text.review, allowed: canPublish && state === "submitted" },
     { action: "approve", label: text.approve, allowed: canPublish && state === "reviewed" },
     { action: "publish", label: text.publish, allowed: canPublish && state === "approved" },
-    { action: "revoke", label: text.revoke, allowed: canPublish && state === "published" },
+    { action: "revoke", label: text.revoke, allowed: canPublish && Boolean(source.approvedVersionId) },
   ];
   async function mutate(action: string, targetVersion = version?.id) {
     setBusy(action); setError(""); setNotice("");
@@ -78,7 +78,7 @@ export function KnowledgeLifecyclePanel({ source, snapshot, language, scopedPath
       const restore = action === "restore";
       const response = await csrfFetch(scopedPath("/api/knowledge-center/workflow"), {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, sourceId: source.id, versionId: targetVersion, expectedVersion: source.revision, reason: restore ? restoreReason.trim() : reason.trim(), ...(restore ? { confirmCurrentness: currentConfirmed, confirmLegal: legalConfirmed } : {}) }),
+        body: JSON.stringify({ action, sourceId: source.id, versionId: action === "revoke" ? source.approvedVersionId : targetVersion, expectedVersion: source.revision, reason: restore ? restoreReason.trim() : reason.trim(), ...(restore ? { confirmCurrentness: currentConfirmed, confirmLegal: legalConfirmed } : {}) }),
       });
       await readResponse(response, text.saveError);
       await onChanged();
@@ -104,7 +104,7 @@ export function KnowledgeLifecyclePanel({ source, snapshot, language, scopedPath
     <details open={showHistory || undefined} className="min-w-0 rounded-lg border border-stone-200 bg-white p-3" data-testid="knowledge-version-history">
       <summary className="min-h-8 cursor-pointer font-semibold text-slate-950">{text.history}</summary>
       {details?.versions.length ? <div className="mt-3 grid min-w-0 gap-4">
-        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${id}-version`}>{text.version}<select className={inputClass} id={`${id}-version`} value={selected?.id ?? ""} onChange={(event) => { setSelectedId(event.target.value); setCurrentConfirmed(false); setLegalConfirmed(false); setRestoreReason(""); }}>{details.versions.map((item) => <option key={item.id} value={item.id}>{text.version} {item.version} · {date(item.createdAt)}{item.id === source.approvedVersionId ? ` · ${text.currentUse}` : ""}</option>)}</select></label>
+        <label className="grid gap-1.5 text-sm font-medium" htmlFor={`${id}-version`}>{text.version}<select className={inputClass} id={`${id}-version`} value={selected?.id ?? ""} onChange={(event) => { setSelectedId(event.target.value); setCurrentConfirmed(false); setLegalConfirmed(false); setRestoreReason(""); }}>{details.versions.map((item) => <option key={item.id} value={item.id}>{text.version} {item.version} · {date(item.createdAt)}{item.id === source.approvedVersionId ? ` · ${text.currentUse}` : item.id !== source.draftVersionId ? ` · ${text.archived}` : ""}</option>)}</select></label>
         {selected ? <><dl className="grid gap-2 text-xs text-stone-600 sm:grid-cols-2"><div><dt className="font-semibold">{text.date}</dt><dd>{date(selected.createdAt)}</dd></div><div><dt className="font-semibold">{text.origin}</dt><dd>{originLabel(selected)}</dd></div>{selected.createdBy ? <div><dt className="font-semibold">{text.actor}</dt><dd className="break-words">{selected.createdByName ?? selected.createdBy}</dd></div> : null}{selected.changeReason ? <div><dt className="font-semibold">{text.changeReason}</dt><dd className="break-words">{selected.changeReason}</dd></div> : null}</dl>
           <h6 className="text-sm font-semibold">{text.comparison}</h6>
           {differences.length ? <div className="min-w-0 overflow-x-auto" tabIndex={0}><table className="w-full table-fixed border-collapse text-left text-sm"><caption className="sr-only">{text.comparison}</caption><thead><tr><th className="w-1/5 border-b border-stone-200 p-2">{text.field}</th><th className="w-2/5 border-b border-stone-200 p-2">{text.before}</th><th className="w-2/5 border-b border-stone-200 p-2">{text.after}</th></tr></thead><tbody>{differences.map((difference) => <tr key={difference.field}><th scope="row" className="break-words border-b border-stone-200 p-2 align-top font-medium">{fieldLabel(difference.field)}</th><td className="whitespace-pre-wrap break-words border-b border-stone-200 bg-amber-50/60 p-2 align-top"><div className="max-h-64 overflow-y-auto">{difference.before || text.none}</div></td><td className="whitespace-pre-wrap break-words border-b border-stone-200 bg-emerald-50/60 p-2 align-top"><div className="max-h-64 overflow-y-auto">{difference.after || text.none}</div></td></tr>)}</tbody></table></div> : <p className="text-sm text-stone-600">{text.noDifferences}</p>}

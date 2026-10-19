@@ -162,7 +162,7 @@ try {
       const card = page.locator("li").filter({ has: page.getByRole("heading", { name: item.name, exact: true }) });
       await expect(card.getByText("Inhalt erkannt · Bitte prüfen", { exact: true })).toBeVisible();
       await publishThroughUi(card, item.text);
-      await expect(card.getByText("Freigegebene Version aktiv", { exact: true }).first()).toBeVisible();
+      await expect(card.getByText("Für Assistenten aktive Version", { exact: true }).first()).toBeVisible();
     }
   });
   await step("one approved document serves independently assigned webchat and voice; revocation is immediate", async () => {
@@ -211,6 +211,10 @@ try {
     assert.equal(source.version.version, 3);
     assert.match(source.version.content, /09:00/);
     assert.match((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches[0].excerpt, /11:00/);
+    await lifecycle.locator("form textarea").first().fill("SYNTHETIC Veröffentlichung trotz neuem Entwurf zurückziehen");
+    await lifecycle.getByTestId("knowledge-revoke").click();
+    await expect.poll(async () => (await readSnapshot()).sources.find(item => item.id === sourceId).approvedVersionId).toBe(null);
+    assert.equal((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches.length, 0);
   });
   await step("website monitoring schedules are customer configurable and remain isolated from live publishing", async () => {
     const snapshot = await readSnapshot();
@@ -238,11 +242,11 @@ try {
     await expect(page.getByText("Prüfung abgeschlossen. Neue Hinweise stehen in den Prüfvorschlägen.", { exact: true })).toBeVisible();
     const proposal = page.locator("article").filter({ hasText: "SYNTHETIC Unternehmenswebsite" }).first();
     await proposal.getByRole("button", { name: "Vorschlag prüfen", exact: true }).click();
-    await proposal.getByLabel("Vorgeschlagener Inhalt", { exact: true }).fill("SYNTHETIC website: approved customer draft ALPHA.");
-    await proposal.getByLabel("Begründung für die Entscheidung", { exact: true }).fill("SYNTHETIC Information geprüft");
+    await proposal.getByRole("textbox", { name: /^Vorgeschlagener Inhalt/ }).fill("SYNTHETIC website: approved customer draft ALPHA.");
+    await proposal.getByRole("textbox", { name: /^Begründung für die Entscheidung/ }).fill("SYNTHETIC Information geprüft");
     await proposal.getByRole("button", { name: "Vorschlag speichern", exact: true }).click();
     await expect(page.getByText("Änderungen am Vorschlag gespeichert.", { exact: true })).toBeVisible();
-    await proposal.getByLabel("Begründung für die Entscheidung", { exact: true }).fill("SYNTHETIC als Entwurf übernehmen");
+    await proposal.getByRole("textbox", { name: /^Begründung für die Entscheidung/ }).fill("SYNTHETIC als Entwurf übernehmen");
     await proposal.getByRole("button", { name: "Annehmen und Entwurf erstellen", exact: true }).click();
     await expect(page.getByText("Vorschlag angenommen. Der neue Entwurf muss noch separat geprüft und freigegeben werden.", { exact: true })).toBeVisible();
     const source = (await readSnapshot()).sources.find(item => item.name === "SYNTHETIC Unternehmenswebsite");

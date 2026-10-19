@@ -317,6 +317,26 @@ test("Knowledge workflow PostgreSQL: publication, restored drafts, revoked retri
       assert.equal((await db.admin.query("select status from knowledge_change_proposals where id=$1", [proposal.id])).rows[0].status, "open");
     });
 
+    await t.test("analyze all skips readable projects without edit permission and still processes editable sources", async () => {
+      const readOnlyProjectId = randomUUID();
+      await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC Read-only project','Bauträger')", [readOnlyProjectId, ids.tenant]);
+      await db.admin.query("insert into project_pipeline_permissions(workspace_id,project_id,user_id,can_read,can_edit_deals) values($1,$2,$3,true,false)", [ids.tenant, readOnlyProjectId, ids.staff]);
+      const readOnlyArea = await createKnowledgeArea(owner, { name: "SYNTHETIC Read-only knowledge", kind: "project", projectId: readOnlyProjectId }, options);
+      const readOnlySource = await createKnowledgeSource(owner, { areaId: readOnlyArea.id, name: "SYNTHETIC Read-only property", type: "structured", structuredData: { projectName: "SYNTHETIC Read-only property" } }, options);
+      assert.ok((await loadKnowledgeCenter(staff, options)).sources.some(item => item.id === readOnlySource.id), "the staff member can read the other project's source");
+      const before = (await db.admin.query("select id from knowledge_change_proposals where workspace_id=$1", [ids.tenant])).rows.map(row => row.id as string);
+      await executeKnowledgeWorkflow(staff, { action: "analyze" }, options);
+      const added = (await db.admin.query("select source_id,project_id from knowledge_change_proposals where workspace_id=$1 and not(id=any($2::uuid[]))", [ids.tenant, before])).rows;
+      assert.ok(added.length > 0, "editable sources still produce persistent review proposals");
+      assert.ok(added.every(row => row.project_id === null || row.project_id === ids.project));
+      assert.equal((await db.admin.query("select count(*)::integer as count from knowledge_change_proposals where source_id=$1", [readOnlySource.id])).rows[0].count, 0);
+      const unchanged = await current(readOnlySource.id);
+      assert.equal(unchanged.revision, readOnlySource.revision);
+      assert.equal(unchanged.draftVersionId, readOnlySource.draftVersionId);
+      assert.deepEqual(unchanged.version?.structuredData, readOnlySource.version?.structuredData);
+      await assert.rejects(executeKnowledgeWorkflow(staff, { action: "analyze", areaId: readOnlyArea.id }, options));
+    });
+
     await t.test("configured maintenance persists review proposals without changing content and respects the feature gate", async () => {
       const incomplete = await createKnowledgeSource(staff, { areaId: visibleArea.id, name: "SYNTHETIC Structured property", type: "structured", structuredData: { projectName: "SYNTHETIC project" } }, options);
       const configuration = { action: "configure", areaId: visibleArea.id, fields: [{ fieldPath: "description", required: true, sourceTypes: ["structured" as const] }], staleAfterDays: 30, reason: "SYNTHETIC trusted review configuration" };

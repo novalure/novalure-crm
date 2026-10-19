@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type { LanguageCode } from "@/lib/i18n";
 import { getKnowledgeMaintenanceCopy } from "@/lib/knowledge-center/maintenance-copy";
+import { compareKnowledgeVersions } from "@/lib/knowledge-center/version-comparison";
 import { createStructuredKnowledgeRows, knowledgeFieldLabel, serializeStructuredKnowledge, structuredKnowledgeSummary, type StructuredKnowledgeRow } from "@/lib/knowledge-center/templates";
 import type { KnowledgeArea, KnowledgeCenterSnapshot, KnowledgeChangeProposal, KnowledgeMaintenanceConfiguration, KnowledgeSource, KnowledgeSourceType, KnowledgeWorkflowEvent } from "@/lib/knowledge-center/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
@@ -39,7 +40,7 @@ function proposalTitle(kind: string, text: Copy): string {
     missing_verification_metadata: text.missing_verification_metadata,
     missing_required_field: text.missing_required_field, expired: text.expired,
     not_yet_valid: text.not_yet_valid, conflicting_fact: text.conflicting_fact,
-    website_changed: text.website_changed,
+    website_changed: text.website_changed, website_change: text.website_changed,
   };
   return titles[kind] ?? text.otherKind;
 }
@@ -101,7 +102,7 @@ function evidenceFields(proposal: Proposal): string[] {
 function ProposalEvidence({ proposal, text, language }: { proposal: Proposal; text: Copy; language: LanguageCode }) {
   const evidence = proposal.evidence ?? {};
   const fields = evidenceFields(proposal);
-  const summary = evidence.basis === "last_verified" ? text.basisVerified : evidence.basis === "approved_at" ? text.basisApproved : evidence.basis === "created_at" ? text.basisCreated : proposal.kind === "website_changed" ? text.websiteChangeEvidence : text.evidenceFallback;
+  const summary = evidence.basis === "last_verified" ? text.basisVerified : evidence.basis === "approved_at" ? text.basisApproved : evidence.basis === "created_at" ? text.basisCreated : (proposal.kind === "website_changed" || proposal.kind === "website_change") ? text.websiteChangeEvidence : text.evidenceFallback;
   return <div className="rounded-lg bg-stone-50 p-3 text-sm leading-6 text-stone-700"><p className="font-semibold text-slate-900">{text.evidence}</p><p>{summary}</p>{fields.length ? <p className="mt-1"><span className="font-medium">{text.affectedFields}: </span>{fields.map((field) => knowledgeFieldLabel(field, language)).join(" · ")}</p> : null}{typeof evidence.distinctValues === "number" ? <p>{text.distinctValues}: {evidence.distinctValues}</p> : null}{typeof evidence.validAt === "string" ? <p>{text.validAt}: {formatDate(evidence.validAt, language)}</p> : null}</div>;
 }
 
@@ -122,6 +123,8 @@ function ProposalEditor({ proposal, source, text, language, disabled, stale, onA
   try { structuredData = serializeStructuredKnowledge(base, rows, removedKeys); } catch { valid = false; }
   const dirty = name !== initialName || content !== initialContent || JSON.stringify(structuredData) !== JSON.stringify(base) || !valid;
   const active = proposal.status === "open" || proposal.status === "deferred";
+  const differences = !stale && source?.version ? compareKnowledgeVersions(source.version, { ...source.version, name, content, structuredData }) : [];
+  const comparisonField = (field: string) => field === "name" ? text.name : field === "content" ? text.comparisonContent : knowledgeFieldLabel(field.replace(/^structured\./, ""), language);
 
   if (!active) return <div className="mt-4 space-y-3 border-t border-stone-200 pt-4">{proposal.changes.name ? <p className="text-sm text-slate-900">{text.name}: {proposal.changes.name}</p> : null}{proposal.changes.content ? <div><p className="text-sm font-semibold text-slate-900">{text.content}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-700">{proposal.changes.content}</p></div> : null}{proposal.changes.structuredData && Object.keys(proposal.changes.structuredData).length ? <p className="text-sm leading-6 text-stone-700">{structuredKnowledgeSummary(proposal.changes.structuredData, language)}</p> : null}</div>;
 
@@ -134,6 +137,10 @@ function ProposalEditor({ proposal, source, text, language, disabled, stale, onA
 
   return <div className="mt-4 space-y-4 border-t border-stone-200 pt-4">
     <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-950">{text.draftHint}</p>
+    {!stale && source?.version ? <section aria-labelledby={`${fieldId}-comparison`} className="min-w-0 space-y-3" data-testid="knowledge-proposal-comparison">
+      <h4 className="text-sm font-semibold text-slate-900" id={`${fieldId}-comparison`}>{text.comparison}</h4>
+      {differences.length ? <div className="max-w-full overflow-x-auto rounded-lg border border-stone-200" tabIndex={0}><table className="w-full table-fixed border-collapse text-left text-sm"><caption className="sr-only">{text.comparison}</caption><thead><tr><th className="w-1/5 border-b border-stone-200 p-2">{text.field}</th><th className="w-2/5 border-b border-stone-200 p-2">{text.currentContent}</th><th className="w-2/5 border-b border-stone-200 p-2">{text.proposedContent}</th></tr></thead><tbody>{differences.map((difference) => <tr key={difference.field}><th scope="row" className="break-words border-b border-stone-200 p-2 align-top font-medium">{comparisonField(difference.field)}</th><td className="border-b border-stone-200 bg-amber-50/60 p-2 align-top"><div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words" tabIndex={0}>{difference.before || "—"}</div></td><td className="border-b border-stone-200 bg-emerald-50/60 p-2 align-top"><div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words" tabIndex={0}>{difference.after || "—"}</div></td></tr>)}</tbody></table></div> : <p className="text-sm text-stone-600">{text.noDifferences}</p>}
+    </section> : null}
     <fieldset className="space-y-4" disabled={disabled || !active}>
       <Field label={text.name}><input className={inputClass} disabled={stale} maxLength={200} onChange={(event) => setName(event.target.value)} value={name} /></Field>
       <Field label={text.content}><textarea className={inputClass} disabled={stale} maxLength={150000} onChange={(event) => setContent(event.target.value)} rows={7} value={content} /></Field>
