@@ -54,7 +54,7 @@ test("Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retain
       await assert.rejects(createKnowledgeArea(owner, { name: "SYNTHETIC unavailable", kind: "company" }, options), errorCode("ENTITLEMENT_REQUIRED"));
       await assert.rejects(db.pool.query(`insert into knowledge_center_entitlements(workspace_id,enabled) values($1,false)`, [ids.tenant]), errorCode("42501"));
     });
-    for (const workspace of [ids.tenant, ids.otherTenant]) await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,100,20000000,100,'SYNTHETIC-CONTRACT-NOT-COMMERCIAL','{"websiteImport":true}'::jsonb,'{"maxAreas":100,"maxWebsites":10,"maxScansPerMonth":5,"maxUsers":10,"maxAssistants":10}'::jsonb)`, [workspace]);
+    for (const workspace of [ids.tenant, ids.otherTenant]) await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,100,20000000,100,'SYNTHETIC-CONTRACT-NOT-COMMERCIAL','{"websiteImport":true,"webchatAccess":true,"voiceAccess":true}'::jsonb,'{"maxAreas":100,"maxWebsites":10,"maxScansPerMonth":5,"maxUsers":10,"maxAssistants":10}'::jsonb)`, [workspace]);
     const company = await createKnowledgeArea(owner, { name: "SYNTHETIC company", kind: "company" }, options);
     const project = await createKnowledgeArea(owner, { name: "SYNTHETIC project", kind: "project", projectId: ids.project }, options);
     const hidden = await createKnowledgeArea(owner, { name: "SYNTHETIC hidden project", kind: "project", projectId: ids.hiddenProject }, options);
@@ -87,6 +87,31 @@ test("Knowledge Center real PostgreSQL: forced RLS, approved-only grants, retain
       assert.equal(noContext.rows[0].count, 0);
       const forced = await db.admin.query("select relname,relrowsecurity,relforcerowsecurity from pg_class where relname in('knowledge_sources','knowledge_chunks','knowledge_areas','knowledge_source_versions')");
       assert.equal(forced.rows.length, 4); assert.ok(forced.rows.every(row => row.relrowsecurity && row.relforcerowsecurity));
+    });
+    await t.test("webchat and voice plans are independent, missing flags deny and disabled assistants still permit revocation", async () => {
+      try {
+        await db.admin.query(`update knowledge_center_entitlements set features=features||'{"voiceAccess":false}'::jsonb where workspace_id=$1`, [ids.tenant]);
+        assert.equal((await queryKnowledgeCenter(assistant, { query: "mango", botId: ids.bot, channel: "webchat" }, options)).matches.length, 2);
+        for (const target of ["voice", "telephone"] as const) {
+          await assert.rejects(queryKnowledgeCenter(owner, { query: "mango", botId: ids.bot, channel: target }, options), errorCode("ENTITLEMENT_REQUIRED"));
+          await assert.rejects(assignKnowledgeAreas(owner, { botId: ids.bot, channel: target, areaIds: [company.id] }, options), errorCode("ENTITLEMENT_REQUIRED"));
+          assert.deepEqual((await assignKnowledgeAreas(owner, { botId: ids.bot, channel: target, areaIds: [] }, options)).areaIds, []);
+        }
+        await db.admin.query("update knowledge_center_entitlements set features=features-'webchatAccess'-'voiceAccess' where workspace_id=$1", [ids.tenant]);
+        await assert.rejects(queryKnowledgeCenter(owner, { query: "mango", botId: ids.bot, channel: "webchat" }, options), errorCode("ENTITLEMENT_REQUIRED"));
+        assert.equal((await queryKnowledgeCenter(owner, { query: "mango", botId: ids.bot, channel: "email" }, options)).matches.length, 0);
+        assert.equal((await queryKnowledgeCenter(owner, { query: "mango" }, options)).grounded, true);
+        await db.admin.query(`update knowledge_center_entitlements set features=features||'{"webchatAccess":true,"voiceAccess":true}'::jsonb where workspace_id=$1`, [ids.tenant]);
+        await db.admin.query("insert into workspace_module_settings(workspace_id,module_key,enabled) values($1,'bots',false)", [ids.tenant]);
+        for (const target of ["webchat", "voice", "email"] as const) await assert.rejects(queryKnowledgeCenter(owner, { query: "mango", botId: ids.bot, channel: target }, options), errorCode("ENTITLEMENT_REQUIRED"));
+        await assert.rejects(assignKnowledgeAreas(owner, { botId: ids.bot, channel: "webchat", areaIds: [company.id] }, options), errorCode("ENTITLEMENT_REQUIRED"));
+        assert.deepEqual((await assignKnowledgeAreas(owner, { botId: ids.bot, channel: "webchat", areaIds: [] }, options)).areaIds, []);
+        assert.equal((await queryKnowledgeCenter(owner, { query: "mango" }, options)).grounded, true);
+      } finally {
+        await db.admin.query(`update knowledge_center_entitlements set features=features||'{"webchatAccess":true,"voiceAccess":true}'::jsonb where workspace_id=$1`, [ids.tenant]);
+        await db.admin.query("update workspace_module_settings set enabled=true where workspace_id=$1 and module_key='bots'", [ids.tenant]);
+        await assignKnowledgeAreas(owner, { botId: ids.bot, channel: "webchat", areaIds: [company.id, project.id] }, options);
+      }
     });
     await t.test("chat history forces saved bot/project/channel scope for messages and tools", async () => {
       const hiddenBot = randomUUID(), visibleConversation = randomUUID(), hiddenConversation = randomUUID(), foreignConversation = randomUUID();

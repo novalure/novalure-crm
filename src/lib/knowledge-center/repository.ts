@@ -25,6 +25,12 @@ async function enabled(tx: TenantTransaction, session: AppSession) {
   if (!contract.enabled || !contract.contractReference?.trim()) fail("ENTITLEMENT_REQUIRED", "Knowledge Center requires an active trusted contract", 403);
   return contract;
 }
+async function assistantChannelEnabled(tx: TenantTransaction, session: AppSession, contract: KnowledgeEntitlement, targetChannel: KnowledgeChannel) {
+  const assistantModule = await tx.queryOne<{ enabled: boolean }>(`select enabled from workspace_module_settings where workspace_id=$1::uuid and module_key='bots'`, [session.workspaceId]);
+  if (assistantModule?.enabled === false) fail("ENTITLEMENT_REQUIRED", "KI-Assistenten sind für dieses Unternehmen deaktiviert. Bitte wenden Sie sich an Ihre Verwaltung.", 403);
+  const feature = targetChannel === "webchat" ? "webchatAccess" : ["voice", "telephone"].includes(targetChannel) ? "voiceAccess" : null;
+  if (feature && contract.features?.[feature] !== true) fail("ENTITLEMENT_REQUIRED", `Der Zugriff für ${feature === "webchatAccess" ? "Webchat" : "Telefonassistent"} ist in Ihrem Vertrag nicht freigeschaltet. Bitte wenden Sie sich an Ihre Verwaltung.`, 403);
+}
 async function usage(tx: TenantTransaction, session: AppSession): Promise<KnowledgeUsage> {
   const row = await tx.queryOne<KnowledgeUsage>(`select sources,storage_bytes::float8 as "storageBytes",queries_this_month as "queriesThisMonth" from knowledge_center_usage($1::uuid)`, [session.workspaceId]);
   return row ?? { sources: 0, storageBytes: 0, queriesThisMonth: 0 };
@@ -196,7 +202,9 @@ export async function assignKnowledgeAreas(session: AppSession, input: AssignKno
   if (!Array.isArray(input.areaIds) || input.areaIds.length > 100) fail("VALIDATION_ERROR", "At most 100 explicit areas may be assigned");
   const ids = [...new Set(input.areaIds.map(id => knowledgeId(id, "areaId")))];
   return withCrmRead(session, async (tx, fresh) => {
-    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh); await enabled(tx, fresh);
+    requireKnowledgePermission(fresh, "canAssign"); await lock(tx, fresh); const contract = await enabled(tx, fresh);
+    // Revoking a saved grant remains possible after its channel/module is disabled.
+    if (ids.length) await assistantChannelEnabled(tx, fresh, contract, targetChannel);
     const targetBot = await bot(tx, fresh, input.botId, true);
     for (const id of ids) {
       const targetArea = await area(tx, fresh, id, true);
@@ -244,7 +252,7 @@ export async function queryKnowledgeCenter(session: AppSession, input: QueryKnow
   const areaIds = input.areaIds?.map(id => knowledgeId(id, "areaId")) ?? null;
   return withCrmRead(session, async (tx, fresh) => {
     await lock(tx, fresh); const contract = await enabled(tx, fresh);
-    if (input.botId) await bot(tx, fresh, input.botId, false);
+    if (input.botId) { await assistantChannelEnabled(tx, fresh, contract, targetChannel!); await bot(tx, fresh, input.botId, false); }
     for (const id of areaIds ?? []) await area(tx, fresh, id);
     const current = await usage(tx, fresh);
     if (current.queriesThisMonth >= contract.maxQueriesPerMonth) fail("LIMIT_EXCEEDED", "Monthly knowledge query limit reached", 409);

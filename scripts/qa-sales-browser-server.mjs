@@ -14,6 +14,7 @@ let log;
 let readyForStop = false;
 let stopRequested = false;
 let cleanup;
+const serveBuiltApplication = process.argv.includes("--built");
 
 async function waitForExit(completion, durationMs) {
   let timer;
@@ -87,9 +88,11 @@ try {
   const baseUrl = `http://127.0.0.1:${port}`;
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(path|home|systemroot|windir|temp|tmp|tmpdir|userprofile|localappdata|appdata|programfiles|programfiles\(x86\)|comspec|pathext|number_of_processors|lang|lc_all)$/i.test(key)));
   Object.assign(env, { NODE_ENV: "development", NEXT_TELEMETRY_DISABLED: "1", CRM_LOCAL_TEST_DATABASE: "1", DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, NOVALURE_APP_ORIGIN: baseUrl, NEXT_PUBLIC_APP_URL: baseUrl });
-  for (const name of ["NOVALURE_SESSION_SECRET", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET"]) env[name] = randomBytes(40).toString("hex");
+  for (const name of ["NOVALURE_SESSION_SECRET", "NOVALURE_AUTH_ENCRYPTION_KEY", "NOVALURE_AUTH_RATE_LIMIT_SECRET", "OAUTH_STATE_SECRET", "NOVALURE_ABUSE_SECRET"]) env[name] = randomBytes(40).toString("hex");
   log = createWriteStream(".npm-cache/qa/sales-browser-server.log");
-  server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--webpack", "--hostname", "127.0.0.1", "--port", String(port)], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  // Keep the existing loopback-only development database transport and normal
+  // login/MFA policy, while optionally checking optimized assets without HMR.
+  server = spawn(process.execPath, ["node_modules/next/dist/bin/next", serveBuiltApplication ? "start" : "dev", ...(serveBuiltApplication ? [] : ["--webpack"]), "--hostname", "127.0.0.1", "--port", String(port)], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   serverCompletion = new Promise(resolve => {
     server.once("exit", (code, signal) => resolve({ code, signal }));
     server.once("error", error => resolve({ error }));

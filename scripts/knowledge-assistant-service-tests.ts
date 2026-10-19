@@ -117,8 +117,8 @@ before(async () => {
   }
   await db.admin.query("insert into bots(id,workspace_id,name,role) values($1,$2,'SYNTHETIC knowledge bot','advisor'),($3,$4,'SYNTHETIC foreign knowledge bot','advisor'),($5,$6,'SYNTHETIC machine knowledge bot','advisor')", [ids.bot, ids.workspace, ids.foreignBot, ids.foreignWorkspace, ids.machineBot, CRM_MACHINE_WORKSPACE_ID]);
   for (const workspace of [ids.workspace, ids.foreignWorkspace, CRM_MACHINE_WORKSPACE_ID]) {
-    await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,limits)
-      values($1,true,100,20000000,1000,'SYNTHETIC-ASSISTANT-NOT-COMMERCIAL','{"maxAreas":100,"maxWebsites":10,"maxScansPerMonth":10,"maxUsers":20,"maxAssistants":20}')`, [workspace]);
+    await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits)
+      values($1,true,100,20000000,1000,'SYNTHETIC-ASSISTANT-NOT-COMMERCIAL','{"webchatAccess":true,"voiceAccess":true}','{"maxAreas":100,"maxWebsites":10,"maxScansPerMonth":10,"maxUsers":20,"maxAssistants":20}')`, [workspace]);
   }
   voiceArea = (await createKnowledgeArea(session(), { name: "SYNTHETIC voice", kind: "company" }, options)).id;
   webArea = (await createKnowledgeArea(session(), { name: "SYNTHETIC webchat", kind: "company" }, options)).id;
@@ -216,6 +216,23 @@ test("commercial entitlement, workspace module and monthly limit each block assi
   await db.admin.query("update knowledge_center_entitlements set max_queries_per_month=1 where workspace_id=$1", [ids.workspace]);
   try { assertEmpty(await retrieve("telephony")); } finally {
     await db.admin.query("update knowledge_center_entitlements set max_queries_per_month=1000 where workspace_id=$1", [ids.workspace]);
+  }
+});
+
+test("voice subscription denial leaves webchat available and disabled assistant module returns safe context", async () => {
+  try {
+    await db.admin.query(`update knowledge_center_entitlements set features=features||'{"voiceAccess":false}'::jsonb where workspace_id=$1`, [ids.workspace]);
+    assertEmpty(await retrieve("telephony"));
+    assert.equal((await retrieve("webchat")).answerStatus, "grounded");
+    await assert.rejects(assignKnowledgeAreas(session(), { botId: ids.bot, channel: "voice", areaIds: [voiceArea] }, options), error => (error as { code?: string }).code === "ENTITLEMENT_REQUIRED");
+    await db.admin.query("insert into workspace_module_settings(workspace_id,module_key,enabled) values($1,'bots',false)", [ids.workspace]);
+    assertEmpty(await retrieve("webchat"));
+    assertEmpty(await retrieve("telephony"));
+    await assignKnowledgeAreas(session(), { botId: ids.bot, channel: "voice", areaIds: [] }, options);
+  } finally {
+    await db.admin.query(`update knowledge_center_entitlements set features=features||'{"webchatAccess":true,"voiceAccess":true}'::jsonb where workspace_id=$1`, [ids.workspace]);
+    await db.admin.query("update workspace_module_settings set enabled=true where workspace_id=$1 and module_key='bots'", [ids.workspace]);
+    await assignKnowledgeAreas(session(), { botId: ids.bot, channel: "voice", areaIds: [voiceArea] }, options);
   }
 });
 

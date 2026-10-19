@@ -5,6 +5,14 @@ currently published version in explicitly assigned areas is retrieved. Each
 request refreshes membership, project access, module entitlement and channel
 grants. Draft edits never replace published answers. No retrieval cache is used.
 
+The existing trusted entitlement JSON must explicitly contain
+`features.webchatAccess: true` for webchat or `features.voiceAccess: true` for
+voice/telephone. Missing flags deny that channel. A disabled workspace `bots`
+module also denies assistant access. These commercial gates never replace
+tenant membership, project permission or exact channel grants. Empty assignment
+updates can revoke grants while the channel feature is disabled. Neither the
+customer API nor these migrations provision contracts or subscriptions.
+
 `POST /api/integrations/knowledge/voice` and
 `POST /api/integrations/knowledge/webchat` accept JSON
 `{"query":"Öffnungszeiten","maxResults":3}`. They require the existing verified

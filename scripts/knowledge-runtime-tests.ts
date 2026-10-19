@@ -50,7 +50,7 @@ before(async () => {
     }, options);
   }
   await db.admin.query("insert into bots(id,workspace_id,name,role) values($1,$2,'Synthetic grounded bot','sales')", [botId, workspaceId]);
-  await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,limits) values($1,true,20,1000000,100,'synthetic-runtime-contract','{\"maxAreas\":10,\"maxWebsites\":10,\"maxScansPerMonth\":10,\"maxUsers\":10,\"maxAssistants\":10}')", [workspaceId]);
+  await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,20,1000000,100,'synthetic-runtime-contract','{\"webchatAccess\":true,\"voiceAccess\":true}','{\"maxAreas\":10,\"maxWebsites\":10,\"maxScansPerMonth\":10,\"maxUsers\":10,\"maxAssistants\":10}')", [workspaceId]);
   const area = await createKnowledgeArea(session, { name: "Synthetic approved area", kind: "company" }, options);
   const source = await createKnowledgeSource(session, { areaId: area.id, type: "manual", name: "Synthetic approved source", content: "syntheticstone approved reference" }, options);
   sourceId = source.id;
@@ -307,7 +307,7 @@ test("real cookie bot handlers bind transactions and reauthorize selected worksp
     assert.equal((await evaluations.POST(request("/api/bots/evaluations" + targetSelector, "POST", evaluationBody))).status, 403);
     assert.equal((await chat.POST(request("/api/bots/chat" + targetSelector, "POST", targetChatBody))).status, 403);
     await db.admin.query("insert into workspace_users(id,workspace_id,auth_identity_id,name,email,role,product_role,status) values($1,$2,$3,'Origin identity in target B',$4,'admin','novalureAdmin','active')", [targetMemberId, target.workspaceId, owner.authIdentityId, owner.email]);
-    await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,limits) values($1,true,20,1000000,100,'SYNTHETIC-TARGET-B','{\"maxAreas\":5,\"maxWebsites\":5,\"maxScansPerMonth\":5,\"maxUsers\":5,\"maxAssistants\":5}')", [target.workspaceId]);
+    await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,20,1000000,100,'SYNTHETIC-TARGET-B','{\"webchatAccess\":true,\"voiceAccess\":true}','{\"maxAreas\":5,\"maxWebsites\":5,\"maxScansPerMonth\":5,\"maxUsers\":5,\"maxAssistants\":5}')", [target.workspaceId]);
     const targetSession: AppSession = { ...session, workspaceId: target.workspaceId, userId: targetMemberId, role: "admin", productRole: "novalureAdmin", authIdentityId: owner.authIdentityId };
     const targetArea = await createKnowledgeArea(targetSession, { name: "Target B knowledge", kind: "company" }, options);
     const targetSource = await createKnowledgeSource(targetSession, { areaId: targetArea.id, type: "manual", name: "Target B approved source", content: "Welche freigegebenen Projektdetails darf ich einem Interessenten nennen? TARGET_B_KNOWLEDGE" }, options);

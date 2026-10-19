@@ -52,7 +52,7 @@ test("Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft pub
       assert.equal((await execute(snapshot.GET, "/api/knowledge-center", "GET")).snapshot.available, false);
       await execute(areas.POST, "/api/knowledge-center/areas", "POST", { name: "Disabled", kind: "company" }, 403);
       await execute(areas.POST, "/api/knowledge-center/areas", "POST", { name: "Denied", kind: "company", workspaceId: foreign.workspaceId }, 400);
-      await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,20,20000000,100,'SYNTHETIC-KNOWLEDGE-HTTP','{\"websiteImport\":true}', '{\"maxAreas\":10,\"maxWebsites\":5,\"maxScansPerMonth\":5,\"maxUsers\":20,\"maxAssistants\":20}')", [owner.workspaceId]);
+      await db.admin.query("insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,20,20000000,100,'SYNTHETIC-KNOWLEDGE-HTTP','{\"websiteImport\":true,\"webchatAccess\":true,\"voiceAccess\":true}', '{\"maxAreas\":10,\"maxWebsites\":5,\"maxScansPerMonth\":5,\"maxUsers\":20,\"maxAssistants\":20}')", [owner.workspaceId]);
     });
     let areaId: string, source: KnowledgeSource;
     const botId = randomUUID();
@@ -76,6 +76,17 @@ test("Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft pub
       assert.equal((await execute(versions.GET, "/api/knowledge-center/versions?sourceId=" + source.id, "GET")).versions.length, 2);
       await execute(versions.POST, "/api/knowledge-center/versions", "POST", { sourceId: source.id, expectedVersion: source.revision, content: "Stale" }, 409);
       source = draft;
+    });
+    await t.test("HTTP channel gates deny voice independently while webchat remains grounded", async () => {
+      await db.admin.query(`update knowledge_center_entitlements set features=features||'{"voiceAccess":false}'::jsonb where workspace_id=$1`, [owner.workspaceId]);
+      try {
+        const denied = await execute(query.POST, "/api/knowledge-center/query", "POST", { query: "Tuesday", botId, channel: "voice" }, 403);
+        assert.equal(denied.code, "ENTITLEMENT_REQUIRED");
+        assert.match(denied.error, /Telefonassistent/);
+        assert.equal((await execute(query.POST, "/api/knowledge-center/query", "POST", { query: "Tuesday", botId, channel: "webchat" })).grounded, true);
+        await execute(assignments.POST, "/api/knowledge-center/assignments", "POST", { botId, channel: "voice", areaIds: [areaId] }, 403);
+        await execute(assignments.POST, "/api/knowledge-center/assignments", "POST", { botId, channel: "voice", areaIds: [] });
+      } finally { await db.admin.query(`update knowledge_center_entitlements set features=features||'{"voiceAccess":true}'::jsonb where workspace_id=$1`, [owner.workspaceId]); }
     });
     await t.test("streamed byte limits, malformed JSON and client-selected tenants fail without writes", async () => {
       const pathname = "/api/knowledge-center/sources";

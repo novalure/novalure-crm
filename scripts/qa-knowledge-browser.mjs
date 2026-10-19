@@ -62,11 +62,11 @@ try {
     await page.goto(fixture.baseUrl + "/login?lang=de");
     await page.locator("#login-email").fill(fixture.email);
     await page.locator("#login-password").fill(fixture.password);
-    await Promise.all([page.waitForNavigation(), page.locator("form:has(#login-password) button[type=submit]").click()]);
+    await Promise.all([page.waitForNavigation(), page.locator("form:has(#login-password) button[type=submit]").click({ timeout: 120000 })]);
     const secret = (await page.locator("p").filter({ has: page.locator("strong", { hasText: "TOTP-Schlüssel:" }) }).locator("code").innerText()).trim();
     await page.locator("input[name=recoveryCodesSaved]").check();
     await page.locator("#login-mfa-code").fill(totp(secret));
-    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: "Sicher bestätigen", exact: true }).click()]);
+    await Promise.all([page.waitForNavigation(), page.getByRole("button", { name: "Sicher bestätigen", exact: true }).click({ timeout: 120000 })]);
     await expect(page).not.toHaveURL(/\/login/);
     assert.ok((await context.cookies()).some(cookie => cookie.name === "novalure_session" && cookie.httpOnly && cookie.value.startsWith("v2.")));
   });
@@ -80,7 +80,7 @@ try {
   // Only this isolated synthetic database is provisioned. This is not a Stripe
   // checkout, real customer subscription or production module activation.
   await admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits)
-    values($1,true,20,10485760,50,'SYNTHETIC-BROWSER-ONLY','{"websiteImport":true}'::jsonb,'{"maxAreas":10,"maxWebsites":3,"maxScansPerMonth":3,"maxUsers":5,"maxAssistants":5}'::jsonb)`, [fixture.workspaceId]);
+    values($1,true,20,10485760,50,'SYNTHETIC-BROWSER-ONLY','{"websiteImport":true,"webchatAccess":true,"voiceAccess":true}'::jsonb,'{"maxAreas":10,"maxWebsites":3,"maxScansPerMonth":3,"maxUsers":5,"maxAssistants":5}'::jsonb)`, [fixture.workspaceId]);
   await admin.query("insert into bots(id,workspace_id,project_id,name,role) values($1,$2,$3,'SYNTHETIC Knowledge Bot','advisor')", [botId,fixture.workspaceId,fixture.projectId]);
   await page.reload();
   await page.evaluate(workspace => { window.knowledgeWorkspace = workspace; }, fixture.workspaceId);

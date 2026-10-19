@@ -52,6 +52,8 @@ Die tatsächliche Vorgängerkette `091–096 → 100 → 101 → 102 → 103` wu
 
 Geprüft werden Mandanten-/Projektgrenzen, gespeicherte Bot-/Kanalzuordnungen, Rollenwiderruf, Entitlements, Mengenlimits, unveröffentlichte Versionen, archivierte Quellen, private Dateizugriffe, direkte SQL-Freigabeversuche, OIDC-/Principalbindung und Gateway-Sitzungen. Quellinhalte bleiben nicht vertrauenswürdige Daten und erhalten keine Systemprompt-Rechte. Unabhängiger Review und genaue Revision stehen im Prüfbeleg.
 
+Webchat und Telefonie benötigen zusätzlich die ausdrücklich gesetzten Vertragsmerkmale `webchatAccess` beziehungsweise `voiceAccess` im vorhandenen Entitlement. Fehlende Merkmale gewähren keinen Kanalzugriff. Ein deaktiviertes Bot-Modul sperrt Assistentenzugriffe ebenfalls. Eine entzogene Telefonieberechtigung lässt Webchat-Berechtigungen unverändert; Zuordnungen können weiterhin widerrufen werden. Das provisioniert weder Verträge noch Stripe-Abonnements.
+
 ## H. Tests
 
 Die finalen ausgeführten Kommandos, Ergebnisse und Grenzen werden in `qa/knowledge-center-completion-2026-10-19/verification.json` festgehalten. Nur tatsächlich bestandene Prüfungen werden dort als bestanden ausgewiesen.
@@ -71,4 +73,4 @@ Für eine gehostete geschützte Preview fehlen isolierte entfernte Datenbank-/Sp
 2. Den externen Studio-Client an seine freigegebene Gateway-Konfiguration und den gespeicherten Wissensassistenten anbinden.
 3. Für Vapi eine ausdrücklich freigegebene technische Identität und native Provider-/Toolbindung provisionieren; zunächst ohne produktive Rufnummer testen.
 4. OCR bei Bedarf als gesondert freigegebene Verarbeitung ergänzen. Produktive Leistungsabnahme und betriebliche Überwachung der Importfehler/Verbindungslaufzeiten durchführen.
-5. Erst im gesonderten Releaseprozess die produktive Migration, Verträge und Assistentenaktivierung durchführen. Paket 3 erweitert Veröffentlichungsverwaltung und regelmäßige Pflege; Stripe bleibt eine eigene Integration.
+5. Erst im gesonderten Releaseprozess die produktive Migration, Verträge und Assistentenaktivierung durchführen. Die allgemeine Benutzer-/Assistenten-Provisionierung samt ihren globalen Limits und Stripe bleiben eigene Integrationen. Quellen-, Speicher-, Bereichs-, Abfrage- und Scanlimits werden bereits serverseitig durchgesetzt. Paket 3 erweitert Veröffentlichungsverwaltung und regelmäßige Pflege.
