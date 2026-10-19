@@ -1,0 +1,27 @@
+{
+  "algorithm": "SHA-256",
+  "implementationCommit": "43247d29cb292aa7511d0884f9b97743cf5b1b11",
+  "files": {
+    "app/[concept]/page.tsx": "9896587896eb3eec3cba49638f57c91afc1807c19556ec1f3b37f6feeb8f6ae8",
+    "app/compare/page.tsx": "6deef7fca07d74f3d7e8bd6cab2a88f7b122eabef6a24110c32ea31f328850e9",
+    "app/globals.css": "2f20dcd89f66c471e4ccd32ad634ea47c959b276b27e65a138d8164f53027a2f",
+    "app/layout.tsx": "160b6fdfad7414c2b731635dbd8945e634975cfa47554642399dd53376e7c69e",
+    "app/page.tsx": "9c23645f54e4f4880da2f21d64b7b0baa6f573429884763724a4e25cf932edb5",
+    "components/command.tsx": "751c86496746f63a6748494e697630ecf8ccc856e2238a751745e972c3095b23",
+    "components/demo.tsx": "8e12116313b473cf6050793e5279b04d4bd20b44be575741f18da20b67daec3e",
+    "components/executive.css": "1d8778cf5409f63d66ee44adef4181a90e99c36b12fd4eec33c5e61e10f2b0ea",
+    "components/executive.tsx": "d6adacfc55cb92e47816b552935ff815d9e6473169482f889fdb3b8975a0aca3",
+    "components/friendly.css": "6f1e5c50407d3e4915709decf18bf4ca36c8a1bd34604983ab2ed0dfc0671b68",
+    "components/friendly.tsx": "199f70cefd2cd89ea3d8864a480647ea953a2c6ae6c04abe6d1a5980d6a78b05",
+    "components/types.ts": "01105378d4dcd24f685560e359a85455288cbbcee73bf129c93a1497d45f03a0",
+    "components/ui.tsx": "f9146b3c6b1113cf1dee54370f1888ef840282115f0789748d223c2b074b37b5",
+    "components/views.tsx": "755d0cd71b812463339b818fe1524f38b5fb7652e3b6c9ef26dfa72c4795ebea",
+    "deployment-config.json": "60c08d8d281449f4ec1ee352ffc7ce4d3105ad14b97c67100f16b492da164143",
+    "next.config.ts": "fed93adaff7d34c51495941397a7d41fd50aa28b98cdad1f86a4cacedf74ec60",
+    "package-lock.json": "840579c5d008959b156c281d77d9f4e4c63a32d9fbc7e7a703e89011af8097d2",
+    "package.json": "efb1717bdcc1cbdf0344a8be2dcd3a324745af4beda8b5926310b6bb396079c9",
+    "postcss.config.mjs": "9d05ce0397083a4f3af10ba63b5b536013064bb1f9db25b1301f7c4d1b689c20",
+    "tsconfig.json": "fc667bb79ffd49fd38ccd3e3ea9ba1f4a617fb6157a545bcf89600efdb2ac8eb"
+  },
+  "sourceDigest": "2afa9dc853a7252381ec10a88c9070b969517bfe79eae365d9ce3a3995ff9d64"
+}

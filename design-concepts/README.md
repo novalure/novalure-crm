@@ -13,7 +13,7 @@ npm run build
 python -m http.server 4173 --directory out
 ```
 
-Danach `http://localhost:4173/` öffnen. Die Demos benutzen dieselben Versionen
+Danach `http://localhost:4173/` öffnen. Alternativ nach dem Build `python scripts/run-static-preview.py` verwenden. Die Demos benutzen dieselben Versionen
 von Next.js, React und Inter wie das untersuchte CRM, ohne dessen produktive
 Komponenten oder API-Clients zu importieren. Keine neuen Bibliotheken wurden
 dem bestehenden CRM-Paket hinzugefügt.
@@ -45,12 +45,16 @@ sie simuliert keine produktiven Rollen oder Rechte.
 ## Statische Veröffentlichung
 
 Nur Dateien aus `out/` plus `deployment-config.json` als `vercel.json` werden
-in das eigenständige Projekt `evelyn-crm-design-concepts` hochgeladen. Das
-Deploymentziel ist **Preview**. Es werden keine CRM-Quellen, `.env`-Dateien,
+in ein eigenständiges Vercel-Projekt hochgeladen. Das autorisierte
+Deploymentziel ist ausschließlich **Preview**. Der tatsächliche Onlineversuch ist
+blockiert: Vercel ordnete die Erstdeployments der neuen Projekte automatisch
+Production zu. Beide Projekte wurden pausiert und werden nicht als Preview
+übergeben; Details stehen im Abschlussbericht. Es werden keine CRM-Quellen, `.env`-Dateien,
 Serverfunktionen, Datenbanken, Providerverbindungen oder Cronjobs veröffentlicht.
 Die CSP sperrt Verbindungen und native Formularübermittlung zusätzlich.
-Vercels bestehender Zugangsschutz bleibt bestehen. Keine Production-Bereitstellung
-und keine Domainänderung.
+Vercels bestehender Zugangsschutz bleibt bestehen. Die produktive CRM-Version
+und deren Domains wurden nicht verändert. Die automatisch erzeugten
+Production-Zuordnungen der isolierten Demoprojekte sind als Abweichung dokumentiert.
 
 Die einzige Änderung außerhalb dieses Verzeichnisses ist ein Eintrag in der
 bestehenden `vercel.json`: automatische Deployments des vollständigen CRM sind
@@ -59,3 +63,12 @@ Produktionskonfigurationen werden dadurch nicht verändert.
 
 Analyse, Referenzen, fachlicher Designvergleich, Integrationsplan und technischer
 Abschlussstatus stehen in [DESIGN-REPORT.md](DESIGN-REPORT.md).
+
+## Durchgeführte Designprüfung
+
+`npm run build` und `npm run typecheck` bestanden. Die gezielte Browserprüfung
+liegt unter `scripts/verify-browser.mjs` und nutzt das bereits im CRM vorhandene
+Playwright (nach Installation der Root-Dev-Abhängigkeiten). Ein vorhandener
+Playwright-Pfad kann über `PLAYWRIGHT_MODULE_PATH` gesetzt werden. Geprüft wurden
+15 Ansichten bei Desktop- und Smartphonebreite, drei Tablet-Dashboards und die
+zentralen Demo-Interaktionen. Ergebnisse: `verification/summary.json`.

@@ -133,7 +133,7 @@ Ein gemeinsamer Token- und Komponentenvertrag sollte Schrift, Abstände, Formula
 | Demoaktionen | Lokaler React-Zustand für Menüs, Tabs, Dialoge und Einrichtungsabläufe. Kein produktiver Versand, Upload, Import, KI-Aufruf, Checkout oder Kalenderzugriff. |
 | Abhängigkeiten | Kein Import aus produktiven CRM-Services, Datenbankmodulen oder Authentifizierungsclients; keine zusätzlichen Providerbibliotheken. |
 | Konfiguration | Keine produktiven Zugangsdaten oder Runtime-Umgebungsvariablen in der Demo; keine Übernahme von CRM-Environment-Dateien. |
-| Deployment | Geplant ist ein getrenntes Projekt `evelyn-crm-design-concepts` mit ausschließlich statischen Dateien und Ziel `preview`. Bestehende CRM-Domains und Production-Deployments bleiben unberührt. |
+| Deployment | Autorisiertes Ziel ist ein getrenntes statisches Preview. Der Onlineversuch ist wegen automatischer Production-Zuordnung blockiert und pausiert (Abschnitt 11). Das bestehende CRM und seine Domains bleiben unberührt. |
 | Kennzeichnung | Kunden, Projekte, Umsätze, Abos und KI-Aktivitäten sind Demodaten. Status „geplant“ unterscheidet zukünftige Module von simulierten Abläufen. |
 | Mandantenwechsel | Wechselt ausschließlich zwischen synthetischen Beispielen. Die Oberfläche zeigt den aktiven Scope; dies ist kein Nachweis serverseitiger Mandantentrennung. |
 
@@ -170,7 +170,7 @@ Der gemeinsame Evelyn-Masterplan und dessen Entwicklungsstatus werden durch dies
 
 ## 9. Technischer Abschlussstatus
 
-Dieser Abschnitt enthält die belegte Ausgangslage und bewusst offene Abschlussfelder. Der koordinierende Agent ergänzt hier nach Durchführung die tatsächlichen Ergebnisse.
+Dieser Abschnitt enthält die belegte Ausgangslage und die tatsächlich ausgeführten Abschlussprüfungen. Die Onlinebereitstellung ist wegen der nachfolgend dokumentierten Providerabweichung nicht freigegeben.
 
 | Punkt | Status |
 | --- | --- |
@@ -178,16 +178,37 @@ Dieser Abschnitt enthält die belegte Ausgangslage und bewusst offene Abschlussf
 | Designbranch | `codex/evelyn-crm-design-concepts` |
 | Ausgangsrevision | `ea668e625b8c778c2f79dd6a33210e731bb8a662` |
 | Aktuelles CRM-Production-Deployment | `dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk` auf obiger Ausgangsrevision; nur lesend verifiziert |
-| Ergebnis-Commit | **OFFEN – nach Fertigstellung einzutragen** |
-| Design-Preview-Projekt/-Deployment | **OFFEN – isoliertes Preview-Projekt und Deployment nach erfolgreicher Bereitstellung einzutragen** |
-| Öffentliche Design-Preview-URL | **OFFEN – nach Erreichbarkeitsprüfung einzutragen** |
-| Frontend-Build | **OFFEN – vom koordinierenden Agenten gezielt auszuführen und zu dokumentieren** |
-| Drei Varianten erreichbar | **OFFEN – Auswahlseite und Direktaufrufe prüfen** |
-| Demo-Navigation | **OFFEN – fünf Ansichten und Variantenwechsel prüfen** |
-| Responsive Grunddarstellung | **OFFEN – Desktop, Tablet und Smartphone gezielt prüfen** |
-| Keine produktiven Daten/Aktionen | **OFFEN – Quelltext/Export und beobachtete Netzwerkanfragen gezielt prüfen** |
-| Geänderte Dateien | **OFFEN – finale Git-Dateiliste nach Fertigstellung eintragen; Umfang `design-concepts/` sowie genau eine branchbezogene Deploymentsperre in `vercel.json`** |
+| Ergebnis-Commit | Implementierung `43247d29cb292aa7511d0884f9b97743cf5b1b11`; Nachweise und Abschlussbericht im nachfolgenden Dokumentationscommit desselben Branches |
+| Design-Preview-Projekt/-Deployment | **BLOCKIERT** – Erstdeployments wurden trotz Preview-Auftrag automatisch Production zugeordnet; beide neuen Demoprojekte sind pausiert (Abschnitt 11) |
+| Öffentliche Design-Preview-URL | Keine freigegebene Online-Preview. Vollständige lokale Vorschau: portables ZIP mit `run-preview.py`, URL nach Start `http://127.0.0.1:4173/` |
+| Frontend-Build | **PASS** – `npm run build`, statischer Export; `npm run typecheck` ebenfalls bestanden |
+| Drei Varianten erreichbar | **PASS lokal** – Auswahl, A/B/C sowie Vergleich; keine erfolgreiche Online-Preview-Abnahme |
+| Demo-Navigation | **PASS** – 15 Ansichten über Navigation, Varianten-/Vergleichswechsel mit Kontext, sechs Einrichtungsschritte, Tabs und lokale Freigabe |
+| Responsive Grunddarstellung | **PASS** – 15 Ansichten bei 1440 px und 390 px, alle drei Dashboards bei 768 px; kein horizontaler Seitenüberlauf |
+| Keine produktiven Anwendungsdaten/-aktionen | **PASS** – unabhängige Quellprüfung, statischer Export; Browser: 0 externe oder nicht-GET-Anfragen, 0 JavaScript-Fehler; Preview-Projekt hat 0 Umgebungsvariablen |
+| Geänderte Dateien | Vollständige Liste: `CHANGED-FILES.txt`; Anwendung und Nachweise unter `design-concepts/`, eine zusätzliche branchbezogene Deploymentsperre in Root-`vercel.json` |
 
 Für die Designanalyse wurden Repositorydateien und öffentliche Referenzseiten gelesen sowie die drei Einzelreferenzen visuell betrachtet. In diesem Dokumentationsschritt wurden keine Tests ausgeführt. Der geforderte Abschlussumfang besteht aus Frontend-Build, Erreichbarkeit der drei Varianten, Demo-Navigation, responsiver Grunddarstellung und Prüfung der Datentrennung. Weitere Prüfungen sind nur bei einem konkreten Befund oder einem tatsächlich anwendbaren verpflichtenden Gate erforderlich.
 
 Offene fachliche Punkte bleiben die Designentscheidung, eine spätere Nutzerprüfung, die exakte Portalnavigation nach Rollen und Modulrechten sowie die Integration zukünftiger Fähigkeiten nach deren eigener Abnahme.
+
+## 10. Nachweise der Designprüfung
+
+`verification/summary.json` bindet die Checks an den SHA-256-Quelldigest. `source-manifest.json` und `export-manifest.json` enthalten die Quelldatei- beziehungsweise Exporthashes; `browser-results.json` enthält die Beobachtungen. Die anfangs gefundenen zwei mobilen Überläufe wurden korrigiert und erneut gezielt geprüft. Ein unabhängiger Quellreview fand keine produktiven Datenpfade; seine beiden P2-Befunde zu Vergleichskontext und Dialognamen wurden behoben und im Browser geprüft. Kein Production-, Merge- oder CRM-Regressionstest wurde als ausgeführt behauptet.
+
+## 11. Vercel-Abweichung und verbleibende Bereinigung
+
+**Eine regelkonforme Online-Preview konnte in dieser Sitzung nicht bereitgestellt werden.** Der native Vercel-Aufruf erhielt zuerst ausdrücklich `target: "preview"`. Vercel erzeugte für das neue, vollständig isolierte Projekt `evelyn-crm-design-concepts` dennoch `dpl_6MLXqWM4coUN6N6jKmabxa2ZgtuC` mit `target: "production"`. Ein sofortiger Abbruch wurde mit `deployment_not_canceled` abgewiesen, weil die statische Bereitstellung bereits READY war. Das Projekt wurde daraufhin pausiert.
+
+Die offizielle OpenAPI beschreibt einen ausgelassenen `target` als Preview. Ein Aufruf ohne dieses Feld erzeugte im pausierten Projekt tatsächlich einen Preview-Datensatz (`target: null`, `dpl_5KQur5JArHkyNAaYbQcKa9MYN7Fb`), blieb dort aber BLOCKED. Ein einzelner korrigierter Erstbereitstellungsversuch in `evelyn-crm-design-preview` wurde erneut automatisch Production (`dpl_2Kjy1RBzwMLgcvSBteg4T4tif3Gx`). Auch dieses Projekt wurde sofort pausiert. Weitere Versuche wurden beendet.
+
+Das ist eine Abweichung von der ausdrücklichen Vorgabe „keine Production-Deployments“ und kein erfolgreicher Preview-Nachweis. Beide Projekte enthielten ausschließlich die 54 statischen Exportdateien plus die restriktive Deploymentkonfiguration, keine CRM-Quellen, Funktionen, Umgebungsvariablen oder produktiven Daten. Ihr Zugangsschutz blieb aktiv. Beide Projektabfragen zeigen nach Pausierung `live: false`. Die automatisch erzeugten Vercel-Standarddomains gehören ausschließlich zu diesen neuen Demoprojekten. Bestehende Domains wurden nicht verändert.
+
+Das produktive CRM wurde zum Abschluss erneut gelesen: unverändert `dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk` auf `ea668e625b8c778c2f79dd6a33210e731bb8a662`. Kein Production-Deploy, Rollback oder Konfigurationswechsel des bestehenden CRM wurde ausgeführt.
+
+**Offene Bereinigung:** Die zwei neuen, pausierten Projekte können in Vercel gelöscht werden:
+
+- `evelyn-crm-design-concepts` / `prj_byaRLMqSbFzO3Ci3IahHGzpB200p`
+- `evelyn-crm-design-preview` / `prj_M9TqVYIDHvU2e2yatO8caEilA1qA`
+
+Die aktuell verfügbaren Vercel-Werkzeuge bieten keine Projekt-/Deployment-Löschung. Ein angemeldeter CLI- oder Browserzugang steht in dieser Cloud-Sitzung ebenfalls nicht zur Verfügung. Die Bereinigung ist deshalb offen, nicht als erledigt markiert. Das portable Vorschaupaket stellt sämtliche interaktiven Ansichten ohne Node-Installation bereit; Python 3 genügt. Eine spätere Onlinebereitstellung benötigt einen nachgewiesenen Preview-Zielpfad, der die automatische Erst-Promotion verhindert.

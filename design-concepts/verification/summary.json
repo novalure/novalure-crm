@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-19",
+  "implementationCommit": "43247d29cb292aa7511d0884f9b97743cf5b1b11",
+  "sourceDigest": "2afa9dc853a7252381ec10a88c9070b969517bfe79eae365d9ce3a3995ff9d64",
+  "scope": "synthetic static design preview only",
+  "build": "PASS — Next.js 16.4 static export, 7 pages including framework fallback",
+  "typecheck": "PASS",
+  "browser": {
+    "javascriptErrors": 0,
+    "externalOrNonGetRequests": 0,
+    "desktopViews": 15,
+    "mobileViews": 15,
+    "tabletDashboards": 3,
+    "horizontalPageOverflow": false,
+    "wizard": "PASS — 6 steps",
+    "knowledgeApprovalAndTenantReset": "PASS",
+    "variantAndComparisonContext": "PASS",
+    "portalNav": "PASS — 4 core items in each variant",
+    "dialogAccessibleNameAndEscape": "PASS",
+    "darkAndMobilePreview": "PASS"
+  },
+  "independentSourceReview": {
+    "scope": "static isolation and concrete navigation/accessibility risks",
+    "productionActionBlockers": 0,
+    "findings": [
+      "P2 comparison query context: fixed and browser verified",
+      "P2 unnamed modal: fixed and browser verified"
+    ],
+    "trustedGitHubAppReview": "NOT_RUN — no merge or production requested"
+  },
+  "databaseOrAuthChanges": 0,
+  "crmRootConfigChange": "only this design branch git auto-deployment disabled",
+  "previewEnvironmentVariables": 0,
+  "crmProductionActions": 0,
+  "demoProviderDeploymentDeviation": {
+    "status": "BLOCKED_AND_PROJECTS_PAUSED",
+    "firstProject": "prj_byaRLMqSbFzO3Ci3IahHGzpB200p",
+    "firstAutoProductionDeployment": "dpl_6MLXqWM4coUN6N6jKmabxa2ZgtuC",
+    "blockedPreviewDeployment": "dpl_5KQur5JArHkyNAaYbQcKa9MYN7Fb",
+    "secondProject": "prj_M9TqVYIDHvU2e2yatO8caEilA1qA",
+    "secondAutoProductionDeployment": "dpl_2Kjy1RBzwMLgcvSBteg4T4tif3Gx",
+    "previewUrlReleased": false,
+    "cleanup": "Manual deletion required; deployment/project delete and authenticated CLI/browser are unavailable in this session",
+    "credentials": 0,
+    "crmAndExistingDomainsChanged": false
+  },
+  "portablePreview": {
+    "status": "PASS",
+    "httpStatus": 200,
+    "connectSrcNone": true,
+    "namedWizardDialog": true,
+    "comparisonFrames": 3,
+    "javascriptErrors": 0
+  }
+}
