@@ -1,0 +1,260 @@
+{
+  "errors": [],
+  "nonStaticRequests": [],
+  "checks": [
+    {
+      "variant": "a",
+      "view": "dashboard",
+      "width": 1440,
+      "heading": "Guten Morgen, Alex ✳",
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "customers",
+      "width": 1440,
+      "heading": "Kunden & Mandanten",
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "studio",
+      "width": 1440,
+      "heading": "Novalure Studio",
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "assistants",
+      "width": 1440,
+      "heading": "Eine gute Antwort beginnt hier.",
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "knowledge",
+      "width": 1440,
+      "heading": "Wissen mit klarem Kontext.",
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "dashboard",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "customers",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "studio",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "assistants",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "knowledge",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "a",
+      "view": "dashboard",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "dashboard",
+      "width": 1440,
+      "heading": "Schön, dass du da bist\n✳",
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "customers",
+      "width": 1440,
+      "heading": "Gute Beziehungen beginnen hier.",
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "studio",
+      "width": 1440,
+      "heading": "Raum für Ihre nächsten Ideen.",
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "assistants",
+      "width": 1440,
+      "heading": "Eine gute Antwort beginnt hier.",
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "knowledge",
+      "width": 1440,
+      "heading": "Wissen mit klarem Kontext.",
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "dashboard",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "customers",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "studio",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "assistants",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "knowledge",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "b",
+      "view": "dashboard",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "dashboard",
+      "width": 1440,
+      "heading": "Alles verbunden.\nDen nächsten Schritt im Blick.",
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "customers",
+      "width": 1440,
+      "heading": "Kunden & Mandanten",
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "studio",
+      "width": 1440,
+      "heading": "Novalure Studio",
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "assistants",
+      "width": 1440,
+      "heading": "Eine gute Antwort beginnt hier.",
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "knowledge",
+      "width": 1440,
+      "heading": "Wissen mit klarem Kontext.",
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "dashboard",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "customers",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "studio",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "assistants",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "knowledge",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "variant": "c",
+      "view": "dashboard",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "wizard": "Demo-Einrichtung abgeschlossen. Kein echter Assistent wurde aktiviert."
+    },
+    {
+      "knowledgeApproval": "Demo-Freigabe erteilt"
+    },
+    {
+      "tenantReset": "Eine neue Version wartet auf Ihre Freigabe.",
+      "wrongTenantContent": false
+    },
+    {
+      "variantPreserved": true
+    },
+    {
+      "darkMode": true
+    },
+    {
+      "mobilePreview": true
+    },
+    {
+      "compareFrames": 3,
+      "compareContext": "/a/?frame=1&tenant=haven#knowledge"
+    },
+    {
+      "portal": "a",
+      "navCount": 4
+    },
+    {
+      "portal": "b",
+      "navCount": 4
+    },
+    {
+      "portal": "c",
+      "navCount": 4
+    },
+    {
+      "dialogName": 1
+    },
+    {
+      "escapeClosesDialog": true
+    }
+  ]
+}

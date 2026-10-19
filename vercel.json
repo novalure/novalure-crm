@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "main": false,
-      "codex/studio-preview-crm-handoff": false
+      "codex/studio-preview-crm-handoff": false,
+      "codex/evelyn-crm-design-concepts": false
     }
   },
   "crons": [
