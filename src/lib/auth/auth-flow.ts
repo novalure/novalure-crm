@@ -10,7 +10,7 @@ import {
   hashRecoveryCode,
   isPrivilegedMembership,
   buildTotpProvisioningUri,
-  verifyTotpCode,
+  matchTotpCounter,
 } from "@/lib/auth/mfa";
 import {
   hashOpaqueToken,
@@ -18,7 +18,7 @@ import {
   readCookieValue,
 } from "@/lib/auth/auth-security";
 import { verifyPassword } from "@/lib/auth/passwords";
-import { clearSuccessfulLoginRateLimit, reserveAuthRateLimitAttempt } from "@/lib/auth/rate-limit";
+import { clearSuccessfulLoginRateLimit, clearSuccessfulMfaRateLimit, reserveAuthRateLimitAttempt } from "@/lib/auth/rate-limit";
 import { writeAuthAuditEvent } from "@/lib/auth/auth-audit";
 import { queryOne, queryRows } from "@/lib/db/client";
 import {
@@ -41,6 +41,8 @@ export type AuthenticatedMembership = {
   email: string;
   id: string;
   mfaEnabledAt: string | Date | null;
+  /** Exact database timestamp of the password proved; never replace with newer state. */
+  passwordVersion?: string | null;
   name: string;
   productRole: ProductRole | null;
   role: AppRole;
@@ -69,6 +71,7 @@ type LoginChallengeRow = {
   mfaEnabledAt: string | Date | null;
   mfaSecretCiphertext: string | null;
   payloadCiphertext: string | null;
+  passwordVersion: string | null;
   workspaceUserId: string | null;
 };
 
@@ -138,6 +141,7 @@ async function findIdentityMemberships(email: string) {
       select
         identity.id as "authIdentityId",
         identity.password_hash as "passwordHash",
+        identity.password_changed_at::text as "passwordVersion",
         identity.credential_state as "credentialState",
         identity.mfa_secret_ciphertext as "mfaSecretCiphertext",
         identity.mfa_enabled_at as "mfaEnabledAt",
@@ -172,6 +176,7 @@ async function findMembership(authIdentityId: string, workspaceUserId: string) {
       select
         identity.id as "authIdentityId",
         identity.password_hash as "passwordHash",
+        identity.password_changed_at::text as "passwordVersion",
         identity.credential_state as "credentialState",
         identity.mfa_secret_ciphertext as "mfaSecretCiphertext",
         identity.mfa_enabled_at as "mfaEnabledAt",
@@ -203,6 +208,7 @@ async function findMembership(authIdentityId: string, workspaceUserId: string) {
 
 async function issueChallenge(input: {
   authIdentityId: string;
+  passwordVersion: string | null;
   kind: LoginChallengeRow["kind"];
   payloadCiphertext?: string | null;
   request: Request;
@@ -211,7 +217,13 @@ async function issueChallenge(input: {
   const token = createChallengeToken();
   const row = await queryOne<{ id: string }>(
     `
-      with expired_enrollments as (
+      with locked_identity as (
+        select id, password_changed_at
+        from auth_identities
+        where id = $3 and credential_state = 'active'
+          and password_changed_at is not distinct from $7::timestamptz
+        for update
+      ), expired_enrollments as (
         update auth_login_challenges
         set payload_ciphertext = null,
             used_at = coalesce(used_at, now())
@@ -225,9 +237,12 @@ async function issueChallenge(input: {
           auth_identity_id,
           workspace_user_id,
           payload_ciphertext,
+          password_version,
           expires_at
         )
-        values ($1, $2, $3, $4::uuid, $5, now() + ($6::int * interval '1 minute'))
+        select $1, $2, identity.id, $4::uuid, $5, identity.password_changed_at,
+          now() + ($6::int * interval '1 minute')
+        from locked_identity identity
         returning id
       )
       select id from created
@@ -239,9 +254,10 @@ async function issueChallenge(input: {
       input.workspaceUserId ?? null,
       input.payloadCiphertext ?? null,
       challengeLifetimeMinutes,
+      input.passwordVersion,
     ],
   );
-  if (!row) throw new Error("Login challenge was not persisted");
+  if (!row) return { error: "invalid_credentials", kind: "error" } as const;
 
   await writeAuthAuditEvent({
     authIdentityId: input.authIdentityId,
@@ -263,13 +279,14 @@ async function advanceSelectedMembership(
   membership: IdentityMembershipRow,
   request: Request,
 ): Promise<AuthFlowResult> {
-  if (!isMembershipPrivileged(membership)) {
+  if (!isMembershipPrivileged(membership) && !membership.mfaEnabledAt) {
     return { kind: "authenticated", membership, mfaVerifiedAt: null };
   }
 
   if (membership.mfaEnabledAt && membership.mfaSecretCiphertext) {
     return issueChallenge({
       authIdentityId: membership.authIdentityId,
+      passwordVersion: membership.passwordVersion ?? null,
       kind: "mfa_verification",
       request,
       workspaceUserId: membership.id,
@@ -279,6 +296,7 @@ async function advanceSelectedMembership(
   const enrollment = createMfaEnrollmentPayload();
   return issueChallenge({
     authIdentityId: membership.authIdentityId,
+    passwordVersion: membership.passwordVersion ?? null,
     kind: "mfa_enrollment",
     payloadCiphertext: encryptMfaEnrollmentPayload(enrollment),
     request,
@@ -336,14 +354,15 @@ export async function authenticateIdentityLogin(input: {
     await clearSuccessfulLoginRateLimit({ email, request: input.request });
 
     if (memberships.length > 1) {
-      return issueChallenge({
+      return await issueChallenge({
         authIdentityId: identity.authIdentityId,
+        passwordVersion: identity.passwordVersion ?? null,
         kind: "workspace_selection",
         request: input.request,
       });
     }
 
-    return advanceSelectedMembership(memberships[0], input.request);
+    return await advanceSelectedMembership(memberships[0], input.request);
   } catch {
     return { error: "database_unavailable", kind: "error" };
   }
@@ -360,6 +379,7 @@ async function getChallenge(cookieHeader: string | null | undefined) {
         challenge.auth_identity_id as "authIdentityId",
         challenge.workspace_user_id as "workspaceUserId",
         challenge.payload_ciphertext as "payloadCiphertext",
+        challenge.password_version::text as "passwordVersion",
         challenge.attempts,
         challenge.max_attempts as "maxAttempts",
         identity.display_email as email,
@@ -372,6 +392,7 @@ async function getChallenge(cookieHeader: string | null | undefined) {
         and challenge.expires_at > now()
         and challenge.attempts < challenge.max_attempts
         and identity.credential_state = 'active'
+        and challenge.password_version is not distinct from identity.password_changed_at
       limit 1
     `,
     [hashOpaqueToken(token)],
@@ -407,11 +428,13 @@ export async function getLoginChallengeView(
       active.challenge.authIdentityId,
       active.challenge.workspaceUserId,
     );
-    if (!membership || !isMembershipPrivileged(membership)) return null;
+    if (!membership || (!isMembershipPrivileged(membership) && !membership.mfaEnabledAt)) return null;
 
     if (active.challenge.kind === "mfa_verification") {
       return { kind: "mfa_verification", workspaceName: membership.workspaceName };
     }
+
+    if (membership.mfaEnabledAt) return null;
 
     const enrollment = active.challenge.payloadCiphertext
       ? decryptMfaEnrollmentPayload(active.challenge.payloadCiphertext)
@@ -475,15 +498,22 @@ async function consumeWorkspaceChallenge(input: {
 }) {
   return queryOne<{ id: string }>(
     `
-      with consumed as (
-        update auth_login_challenges
+      with locked_identity as (
+        select id, password_changed_at
+        from auth_identities
+        where id = $2 and credential_state = 'active'
+        for update
+      ), consumed as (
+        update auth_login_challenges challenge
         set used_at = now()
+        from locked_identity identity
         where token_hash = $1
           and kind = 'workspace_selection'
           and auth_identity_id = $2
           and used_at is null
           and expires_at > now()
-        returning id
+          and challenge.password_version is not distinct from identity.password_changed_at
+        returning challenge.id
       )
       select consumed.id
       from consumed
@@ -528,19 +558,45 @@ async function consumeMfaVerification(input: {
     : null;
   if (!secret) return false;
 
-  if (verifyTotpCode(secret, input.code)) {
+  const counter = matchTotpCounter(secret, input.code);
+  if (counter !== null) {
     const consumed = await queryOne<{ id: string }>(
       `
-        update auth_login_challenges
-        set used_at = now()
-        where token_hash = $1
-          and kind = 'mfa_verification'
-          and used_at is null
-          and expires_at > now()
-          and attempts < max_attempts
-        returning id
+        with locked_identity as (
+          select id, password_changed_at
+          from auth_identities
+          where id = $2 and credential_state = 'active'
+            and mfa_secret_ciphertext = $4
+          for update
+        ), locked_challenge as (
+          select challenge.id
+          from auth_login_challenges challenge
+          join locked_identity identity on identity.id = challenge.auth_identity_id
+          where token_hash = $1
+            and kind = 'mfa_verification'
+            and used_at is null
+            and expires_at > now()
+            and attempts < max_attempts
+            and challenge.password_version is not distinct from identity.password_changed_at
+          for update of challenge
+        ), advanced_counter as (
+          update auth_identities identity
+          set mfa_last_totp_counter = $3::bigint
+          where identity.id = $2
+            and (mfa_last_totp_counter is null or mfa_last_totp_counter < $3::bigint)
+            and exists (select 1 from locked_challenge)
+          returning identity.id
+        ), consumed as (
+          update auth_login_challenges challenge
+          set used_at = now()
+          from locked_challenge
+          where challenge.id = locked_challenge.id
+            and exists (select 1 from advanced_counter)
+          returning challenge.id
+        )
+        select id from consumed
       `,
-      [input.tokenHash],
+      [input.tokenHash, input.challenge.authIdentityId, counter, input.challenge.mfaSecretCiphertext],
     );
     return Boolean(consumed);
   }
@@ -549,21 +605,30 @@ async function consumeMfaVerification(input: {
   if (!recoveryCodeHash) return false;
   const consumed = await queryOne<{ id: string }>(
     `
-      with locked_challenge as (
-        select id
-        from auth_login_challenges
+      with locked_identity as (
+        select id, password_changed_at
+        from auth_identities
+        where id = $1 and credential_state = 'active'
+          and mfa_secret_ciphertext = $4
+        for update
+      ), locked_challenge as (
+        select challenge.id
+        from auth_login_challenges challenge
+        join locked_identity identity on identity.id = challenge.auth_identity_id
         where token_hash = $3
           and kind = 'mfa_verification'
           and used_at is null
           and expires_at > now()
           and attempts < max_attempts
-        for update
+          and challenge.password_version is not distinct from identity.password_changed_at
+        for update of challenge
       ), locked_code as (
         select id
         from auth_mfa_recovery_codes
         where auth_identity_id = $1
           and code_hash = $2
           and used_at is null
+          and exists (select 1 from locked_challenge)
         for update
       ), consumed_challenge as (
         update auth_login_challenges challenge
@@ -584,7 +649,7 @@ async function consumeMfaVerification(input: {
       from consumed_challenge
       where exists (select 1 from consumed_code)
     `,
-    [input.challenge.authIdentityId, recoveryCodeHash, input.tokenHash],
+    [input.challenge.authIdentityId, recoveryCodeHash, input.tokenHash, input.challenge.mfaSecretCiphertext],
   );
   return Boolean(consumed);
 }
@@ -599,7 +664,9 @@ async function consumeMfaEnrollment(input: {
   const enrollment = input.challenge.payloadCiphertext
     ? decryptMfaEnrollmentPayload(input.challenge.payloadCiphertext)
     : null;
-  if (!enrollment || !verifyTotpCode(enrollment.secret, input.code)) return false;
+  if (!enrollment) return false;
+  const counter = matchTotpCounter(enrollment.secret, input.code);
+  if (counter === null) return false;
 
   const codeHashes = enrollment.recoveryCodes
     .map(hashRecoveryCode)
@@ -608,24 +675,46 @@ async function consumeMfaEnrollment(input: {
 
   const enabled = await queryOne<{ id: string }>(
     `
-      with consumed as (
-        update auth_login_challenges
+      with locked_identity as (
+        select id, password_changed_at
+        from auth_identities
+        where id = $7 and credential_state = 'active' and mfa_enabled_at is null
+        for update
+      ), consumed as (
+        update auth_login_challenges challenge
         set used_at = now(), payload_ciphertext = null
+        from locked_identity identity
         where token_hash = $1
+          and challenge.auth_identity_id = identity.id
           and kind = 'mfa_enrollment'
           and used_at is null
           and expires_at > now()
           and attempts < max_attempts
-        returning auth_identity_id
+          and challenge.password_version is not distinct from identity.password_changed_at
+        returning challenge.auth_identity_id
       ), enabled as (
         update auth_identities identity
         set mfa_secret_ciphertext = $2,
             mfa_enabled_at = now(),
+            mfa_last_totp_counter = $6::bigint,
             updated_at = now()
         from consumed
         where identity.id = consumed.auth_identity_id
           and identity.mfa_enabled_at is null
         returning identity.id
+      ), revoked_unverified_sessions as (
+        update auth_sessions session
+        set revoked_at = now(), revoked_reason = 'mfa_enrollment'
+        from enabled
+        where session.auth_identity_id = enabled.id
+          and session.mfa_verified_at is null and session.revoked_at is null
+      ), cancelled_enrollments as (
+        update auth_login_challenges challenge
+        set used_at = now(), payload_ciphertext = null
+        from enabled
+        where challenge.auth_identity_id = enabled.id
+          and challenge.kind = 'mfa_enrollment' and challenge.token_hash <> $1
+          and challenge.used_at is null
       ), cleared as (
         delete from auth_mfa_recovery_codes codes
         using enabled
@@ -664,6 +753,8 @@ async function consumeMfaEnrollment(input: {
       codeHashes,
       input.challenge.workspaceUserId,
       codeHashes.length,
+      counter,
+      input.challenge.authIdentityId,
     ],
   );
   return Boolean(enabled);
@@ -694,7 +785,7 @@ export async function continueIdentityLogin(input: {
         workspaceUserId: membership.id,
       });
       if (!consumed) return { error: "invalid_credentials", kind: "error" };
-      return advanceSelectedMembership(membership, input.request);
+      return await advanceSelectedMembership({ ...membership, passwordVersion: active.challenge.passwordVersion }, input.request);
     }
 
     if (!active.challenge.workspaceUserId) {
@@ -704,8 +795,27 @@ export async function continueIdentityLogin(input: {
       active.challenge.authIdentityId,
       active.challenge.workspaceUserId,
     );
-    if (!membership || !isMembershipPrivileged(membership)) {
+    if (!membership || (!isMembershipPrivileged(membership) && !membership.mfaEnabledAt)) {
       return { error: "invalid_credentials", kind: "error" };
+    }
+
+    // These buckets survive fresh password logins and replacement challenges.
+    const reservation = await reserveAuthRateLimitAttempt({
+      email: active.challenge.email,
+      kind: "mfa",
+      request: input.request,
+    });
+    if (reservation.blocked) {
+      await recordInvalidMfaChallenge(active.tokenHash);
+      await writeAuthAuditEvent({
+        authIdentityId: active.challenge.authIdentityId,
+        eventType: "auth.mfa.blocked",
+        metadata: { limiter: "progressive_backoff" },
+        outcome: "blocked",
+        request: input.request,
+        workspaceUserId: membership.id,
+      });
+      return { error: "invalid_mfa", kind: "error" };
     }
 
     const code = input.code?.trim() ?? "";
@@ -731,6 +841,7 @@ export async function continueIdentityLogin(input: {
       return { error: "invalid_mfa", kind: "error" };
     }
 
+    await clearSuccessfulMfaRateLimit({ email: active.challenge.email, request: input.request });
     await writeAuthAuditEvent({
       authIdentityId: active.challenge.authIdentityId,
       eventType: "auth.mfa.verified",
@@ -740,7 +851,15 @@ export async function continueIdentityLogin(input: {
       workspaceId: membership.workspaceId,
       workspaceUserId: membership.id,
     });
-    return { kind: "authenticated", membership, mfaVerifiedAt: new Date() };
+    return {
+      kind: "authenticated",
+      membership: {
+        ...membership,
+        mfaEnabledAt: membership.mfaEnabledAt ?? new Date(),
+        passwordVersion: active.challenge.passwordVersion,
+      },
+      mfaVerifiedAt: new Date(),
+    };
   } catch {
     return { error: "database_unavailable", kind: "error" };
   }

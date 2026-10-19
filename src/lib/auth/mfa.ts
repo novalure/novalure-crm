@@ -17,6 +17,7 @@ export {
   createRecoveryCodes,
   createTotpCode,
   createTotpSecret,
+  matchTotpCounter,
   normalizeRecoveryCode,
   verifyTotpCode,
 } from "@/lib/auth/mfa-core";

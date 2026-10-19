@@ -332,7 +332,8 @@ export async function changeOwnWorkspacePassword(input: {
             updated_at = now()
         where identity.id = $1
           and identity.credential_state = 'active'
-        returning identity.id
+          and identity.password_hash = $6
+        returning identity.id, identity.password_changed_at
       ), password_mirrored as (
         update workspace_users wu
         set password_hash = $2, updated_at = now()
@@ -347,6 +348,24 @@ export async function changeOwnWorkspacePassword(input: {
           and session.revoked_at is null
           and ($3::uuid is null or session.id <> $3::uuid)
         returning session.id
+      ), current_session_refreshed as (
+        update auth_sessions session
+        set password_version = credential_updated.password_changed_at
+        from credential_updated
+        where session.id = $3::uuid
+          and session.auth_identity_id = credential_updated.id
+          and session.workspace_user_id = $4::uuid
+          and session.workspace_id = $5::uuid
+          and session.revoked_at is null
+          and session.expires_at > now()
+        returning session.id
+      ), challenges_invalidated as (
+        update auth_login_challenges challenge
+        set used_at = now(), payload_ciphertext = null
+        from credential_updated
+        where challenge.auth_identity_id = credential_updated.id
+          and challenge.used_at is null
+        returning challenge.id
       ), audited as (
         insert into auth_audit_events (
           event_type,
@@ -364,7 +383,11 @@ export async function changeOwnWorkspacePassword(input: {
           $4::uuid,
           $5::uuid,
           $3::uuid,
-          jsonb_build_object('revokedSessionCount', (select count(*) from sessions_revoked))
+          jsonb_build_object(
+            'revokedSessionCount', (select count(*) from sessions_revoked),
+            'refreshedSessionCount', (select count(*) from current_session_refreshed),
+            'invalidatedChallengeCount', (select count(*) from challenges_invalidated)
+          )
         from credential_updated
         returning auth_identity_id as id
       )
@@ -376,6 +399,7 @@ export async function changeOwnWorkspacePassword(input: {
       input.session.authSessionId ?? null,
       user.id,
       user.workspaceId,
+      user.passwordHash,
     ],
   );
   if (!updated) return { ok: false as const, reason: "password_change_unavailable", status: 503 };

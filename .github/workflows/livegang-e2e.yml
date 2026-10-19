@@ -64,8 +64,14 @@ jobs:
       - name: Security and scope integration tests
         run: npm run test:integration
 
+      - name: MFA against isolated local PostgreSQL
+        run: npm run test:mfa
+
       - name: Install local QA browser
         run: npx playwright install chromium --with-deps
+
+      - name: MFA QR and manual enrollment browser flows
+        run: npm run test:mfa:qr:browser
 
       - name: Sales transactions against isolated local PostgreSQL
         run: npm run test:sales

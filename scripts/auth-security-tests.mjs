@@ -17,6 +17,7 @@ import {
 import {
   createRecoveryCodes,
   createTotpCode,
+  matchTotpCounter,
   normalizeRecoveryCode,
   verifyTotpCode,
 } from "../src/lib/auth/mfa-core.ts";
@@ -86,11 +87,16 @@ test("opaque session identifiers are random and only stable through their SHA-25
   }
 });
 
-test("TOTP verification matches the RFC vector, bounds clock drift and rejects replay-shaped wrong codes", () => {
+test("TOTP verification matches the RFC vector, returns the replay counter and bounds clock drift", () => {
   const rfcSecret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"; // gitleaks:allow -- RFC 6238 Appendix B public test vector.
   const at59Seconds = 59_000;
   assert.equal(createTotpCode(rfcSecret, at59Seconds), "287082");
   assert.equal(verifyTotpCode(rfcSecret, "287082", at59Seconds), true);
+  assert.equal(matchTotpCounter(rfcSecret, "287082", at59Seconds), 1);
+  assert.equal(matchTotpCounter(rfcSecret, "287082", 89_000), 1);
+  assert.equal(matchTotpCounter(rfcSecret, "287082", 119_000), null);
+  assert.equal(createTotpCode(rfcSecret, -1), null);
+  assert.equal(verifyTotpCode(rfcSecret, createTotpCode(rfcSecret, 0), 0), true);
   assert.equal(verifyTotpCode(rfcSecret, createTotpCode(rfcSecret, 29_000), at59Seconds), true);
   assert.equal(verifyTotpCode(rfcSecret, createTotpCode(rfcSecret, 89_000), at59Seconds), true);
   assert.equal(verifyTotpCode(rfcSecret, createTotpCode(rfcSecret, 119_000), at59Seconds), false);

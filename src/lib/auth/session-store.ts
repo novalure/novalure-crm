@@ -13,6 +13,18 @@ export const sessionCookieName = "novalure_session";
 export const sessionMaxAgeSeconds = 60 * 60 * 8;
 
 const rotationAgeMinutes = 30;
+const privilegedProductRoles = [
+  "platform_admin",
+  "novalureGrowth",
+  "novalureServiceOps",
+  "novalureAdmin",
+  "novalure_sales",
+  "novalure_onboarding",
+  "novalure_customer_success",
+  "novalure_operator",
+  "customer_owner",
+  "workspace_admin",
+];
 
 type StoredSessionRow = AuthenticatedMembership & {
   authSessionId: string;
@@ -37,7 +49,7 @@ function membershipRequiresMfa(membership: AuthenticatedMembership) {
     technicalRole: membership.role,
     workspaceName: membership.workspaceName,
   });
-  return isPrivilegedMembership(membership.role, productRole);
+  return Boolean(membership.mfaEnabledAt) || isPrivilegedMembership(membership.role, productRole);
 }
 
 export async function createPersistedSession(input: {
@@ -45,8 +57,11 @@ export async function createPersistedSession(input: {
   mfaVerifiedAt: Date | null;
   request: Request;
 }) {
+  if (input.membership.passwordVersion === undefined) {
+    throw new Error("Session creation requires a verified password version");
+  }
   if (membershipRequiresMfa(input.membership) && !input.mfaVerifiedAt) {
-    throw new Error("Privileged session creation requires verified MFA");
+    throw new Error("Session creation requires verified MFA");
   }
 
   const value = `v2.${createOpaqueToken(32)}`;
@@ -59,6 +74,7 @@ export async function createPersistedSession(input: {
           auth_identity_id,
           workspace_user_id,
           workspace_id,
+          password_version,
           mfa_verified_at,
           ip_hash,
           user_agent_hash,
@@ -69,6 +85,7 @@ export async function createPersistedSession(input: {
           identity.id,
           wu.id,
           wu.workspace_id,
+          $10::timestamptz,
           $4::timestamptz,
           $5,
           $6,
@@ -78,13 +95,15 @@ export async function createPersistedSession(input: {
         join workspaces w on w.id = wu.workspace_id
         where identity.id = $2
           and identity.credential_state = 'active'
+          and identity.password_changed_at is not distinct from $10::timestamptz
           and wu.id = $3
           and wu.workspace_id = $8
           and wu.status = 'active'
           and (
             $4::timestamptz is not null
             or not (
-              wu.role in ('owner', 'admin')
+              identity.mfa_enabled_at is not null
+              or wu.role in ('owner', 'admin')
               or coalesce(wu.product_role, '') = any($9::text[])
               or (
                 wu.product_role is null
@@ -132,18 +151,8 @@ export async function createPersistedSession(input: {
       fingerprint.userAgentHash,
       sessionMaxAgeSeconds,
       input.membership.workspaceId,
-      [
-        "platform_admin",
-        "novalureGrowth",
-        "novalureServiceOps",
-        "novalureAdmin",
-        "novalure_sales",
-        "novalure_onboarding",
-        "novalure_customer_success",
-        "novalure_operator",
-        "customer_owner",
-        "workspace_admin",
-      ],
+      privilegedProductRoles,
+      input.membership.passwordVersion,
     ],
   );
   if (!row) throw new Error("Session creation failed closed");
@@ -172,13 +181,15 @@ export async function readPersistedSession(cookieHeader: string | null | undefin
           and session.revoked_at is null
           and session.expires_at > now()
           and identity.credential_state = 'active'
+          and session.password_version is not distinct from identity.password_changed_at
           and wu.auth_identity_id = identity.id
           and wu.workspace_id = session.workspace_id
           and wu.status = 'active'
           and (
             session.mfa_verified_at is not null
             or not (
-              wu.role in ('owner', 'admin')
+              identity.mfa_enabled_at is not null
+              or wu.role in ('owner', 'admin')
               or coalesce(wu.product_role, '') = any($2::text[])
               or (
                 wu.product_role is null
@@ -194,6 +205,7 @@ export async function readPersistedSession(cookieHeader: string | null | undefin
         valid_session.auth_identity_id as "authIdentityId",
         valid_session.created_at as "createdAt",
         valid_session.expires_at as "expiresAt",
+        valid_session.password_version::text as "passwordVersion",
         valid_session.mfa_verified_at as "mfaVerifiedAt",
         valid_session.created_at < now() - ($3::int * interval '1 minute') as "rotationDue",
         wu.id,
@@ -217,18 +229,7 @@ export async function readPersistedSession(cookieHeader: string | null | undefin
     `,
     [
       hashOpaqueToken(value),
-      [
-        "platform_admin",
-        "novalureGrowth",
-        "novalureServiceOps",
-        "novalureAdmin",
-        "novalure_sales",
-        "novalure_onboarding",
-        "novalure_customer_success",
-        "novalure_operator",
-        "customer_owner",
-        "workspace_admin",
-      ],
+      privilegedProductRoles,
       rotationAgeMinutes,
     ],
   );
@@ -244,19 +245,34 @@ export async function touchPersistedRequestSession(cookieHeader: string | null |
     `
       update auth_sessions session
       set last_seen_at = now()
-      from auth_identities identity, workspace_users membership
+      from auth_identities identity, workspace_users membership, workspaces w
       where session.token_hash = $1
         and session.revoked_at is null
         and session.expires_at > now()
         and identity.id = session.auth_identity_id
         and identity.credential_state = 'active'
+        and session.password_version is not distinct from identity.password_changed_at
         and membership.id = session.workspace_user_id
         and membership.auth_identity_id = identity.id
         and membership.workspace_id = session.workspace_id
         and membership.status = 'active'
+        and w.id = session.workspace_id
+        and (
+          session.mfa_verified_at is not null
+          or not (
+            identity.mfa_enabled_at is not null
+            or membership.role in ('owner', 'admin')
+            or coalesce(membership.product_role, '') = any($2::text[])
+            or (
+              membership.product_role is null
+              and membership.role = 'agent'
+              and lower(w.name) similar to '%(novalure|internal|jarvis)%'
+            )
+          )
+        )
       returning session.id
     `,
-    [hashOpaqueToken(value)],
+    [hashOpaqueToken(value), privilegedProductRoles],
   );
   return Boolean(row);
 }
@@ -316,16 +332,31 @@ export async function rotatePersistedRequestSession(input: {
       with revoked as (
         update auth_sessions session
         set revoked_at = now(), revoked_reason = 'rotation'
-        from auth_identities identity, workspace_users wu
+        from auth_identities identity, workspace_users wu, workspaces w
         where session.token_hash = $1
           and session.revoked_at is null
           and session.expires_at > now()
           and identity.id = session.auth_identity_id
           and identity.credential_state = 'active'
+          and session.password_version is not distinct from identity.password_changed_at
           and wu.id = session.workspace_user_id
           and wu.auth_identity_id = identity.id
           and wu.workspace_id = session.workspace_id
           and wu.status = 'active'
+          and w.id = session.workspace_id
+          and (
+            session.mfa_verified_at is not null
+            or not (
+              identity.mfa_enabled_at is not null
+              or wu.role in ('owner', 'admin')
+              or coalesce(wu.product_role, '') = any($5::text[])
+              or (
+                wu.product_role is null
+                and wu.role = 'agent'
+                and lower(w.name) similar to '%(novalure|internal|jarvis)%'
+              )
+            )
+          )
         returning session.*
       ), created as (
         insert into auth_sessions (
@@ -333,6 +364,7 @@ export async function rotatePersistedRequestSession(input: {
           auth_identity_id,
           workspace_user_id,
           workspace_id,
+          password_version,
           mfa_verified_at,
           ip_hash,
           user_agent_hash,
@@ -344,6 +376,7 @@ export async function rotatePersistedRequestSession(input: {
           revoked.auth_identity_id,
           revoked.workspace_user_id,
           revoked.workspace_id,
+          revoked.password_version,
           revoked.mfa_verified_at,
           $3,
           $4,
@@ -385,6 +418,7 @@ export async function rotatePersistedRequestSession(input: {
       hashOpaqueToken(nextValue),
       fingerprint.ipHash,
       fingerprint.userAgentHash,
+      privilegedProductRoles,
     ],
   );
   if (!row) return null;

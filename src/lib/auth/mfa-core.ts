@@ -61,22 +61,33 @@ export function createTotpSecret() {
 
 export function createTotpCode(secret: string, now = Date.now()) {
   const decoded = base32Decode(secret);
-  if (!decoded) return null;
-  return hotp(decoded, Math.floor(now / 30_000));
+  const counter = Math.floor(now / 30_000);
+  if (!decoded || !Number.isSafeInteger(counter) || counter < 0) return null;
+  return hotp(decoded, counter);
 }
 
-export function verifyTotpCode(secret: string, code: string, now = Date.now()) {
+/** Return the matched step so persistence can atomically reject factor-wide replay. */
+export function matchTotpCounter(secret: string, code: string, now = Date.now()) {
   const normalizedCode = code.trim();
-  if (!/^\d{6}$/.test(normalizedCode)) return false;
+  if (!/^\d{6}$/.test(normalizedCode)) return null;
 
+  let matched: number | null = null;
   for (const offset of [-1, 0, 1]) {
-    const expected = createTotpCode(secret, now + offset * 30_000);
+    const time = now + offset * 30_000;
+    const expected = createTotpCode(secret, time);
     if (!expected) continue;
     const left = Buffer.from(normalizedCode);
     const right = Buffer.from(expected);
-    if (left.length === right.length && timingSafeEqual(left, right)) return true;
+    if (left.length === right.length && timingSafeEqual(left, right)) {
+      // Prefer the latest step if truncation produces a collision in the window.
+      matched = Math.floor(time / 30_000);
+    }
   }
-  return false;
+  return matched;
+}
+
+export function verifyTotpCode(secret: string, code: string, now = Date.now()) {
+  return matchTotpCounter(secret, code, now) !== null;
 }
 
 export function normalizeRecoveryCode(value: string) {

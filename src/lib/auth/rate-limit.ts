@@ -42,7 +42,16 @@ export async function reserveAuthRateLimitAttempt(input: {
 }) {
   const policy = authRateLimitPolicy[input.kind];
   const subjects = getRateLimitSubjects(input.kind, input.email, input.request);
-  const rows = await queryRows<RateLimitRow>(
+  // MFA decides admission from the locked previous bucket state. A newly
+  // scheduled backoff applies to the next attempt, allowing retries after it
+  // expires without resetting the one-hour progressive attempt count.
+  const rows = input.kind === "mfa"
+    ? await queryRows<RateLimitRow>(
+        `select scope, "attemptCount", "blockedUntil", blocked
+         from public.reserve_mfa_rate_limit_attempt($1::text, $2::text)`,
+        [subjects[0].subjectHash, subjects[1].subjectHash],
+      )
+    : await queryRows<RateLimitRow>(
     `
       with cleanup as (
         delete from auth_rate_limit_buckets
@@ -146,11 +155,12 @@ export async function reserveAuthRateLimitAttempt(input: {
   };
 }
 
-export async function clearSuccessfulLoginRateLimit(input: {
+async function clearSuccessfulAuthRateLimit(input: {
   email: string;
+  kind: AuthRateLimitKind;
   request: Request;
 }) {
-  const subjects = getRateLimitSubjects("login", input.email, input.request);
+  const subjects = getRateLimitSubjects(input.kind, input.email, input.request);
   await executeQuery(
     `
       delete from auth_rate_limit_buckets
@@ -163,4 +173,12 @@ export async function clearSuccessfulLoginRateLimit(input: {
       subjects[1].subjectHash,
     ],
   );
+}
+
+export function clearSuccessfulLoginRateLimit(input: { email: string; request: Request }) {
+  return clearSuccessfulAuthRateLimit({ ...input, kind: "login" });
+}
+
+export function clearSuccessfulMfaRateLimit(input: { email: string; request: Request }) {
+  return clearSuccessfulAuthRateLimit({ ...input, kind: "mfa" });
 }
