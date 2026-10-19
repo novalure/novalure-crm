@@ -248,7 +248,7 @@ try {
     await expect(page.getByText("Änderungen am Vorschlag gespeichert.", { exact: true })).toBeVisible();
     await proposal.getByRole("textbox", { name: /^Begründung für die Entscheidung/ }).fill("SYNTHETIC als Entwurf übernehmen");
     await proposal.getByRole("button", { name: "Annehmen und Entwurf erstellen", exact: true }).click();
-    await expect(page.getByText("Vorschlag angenommen. Der neue Entwurf muss noch separat geprüft und freigegeben werden.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Vorschlag angenommen. Der neue Entwurf muss noch separat geprüft, freigegeben und veröffentlicht werden.", { exact: true })).toBeVisible();
     const source = (await readSnapshot()).sources.find(item => item.name === "SYNTHETIC Unternehmenswebsite");
     assert.equal(source.version.version, 2);
     assert.equal(source.approvedVersionId, null);
