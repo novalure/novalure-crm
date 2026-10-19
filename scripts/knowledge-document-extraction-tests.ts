@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deflateSync } from "node:zlib";
-import { PDFDocument, PDFName, PDFNumber } from "pdf-lib";
+import { PDFDocument, PDFName, PDFNumber, type PDFObject } from "pdf-lib";
 import sharp from "sharp";
 import { extractKnowledgeDocument } from "../src/lib/knowledge-center/document-extraction";
 import { KnowledgeCenterError } from "../src/lib/knowledge-center/policy";
@@ -89,4 +89,20 @@ test("PDF row-predictor allocations cannot bypass stream inflation bounds", asyn
   });
   page.node.set(PDFName.of("Contents"), doc.context.register(stream));
   await assert.rejects(extractPdf(await doc.save()), rejectsCode("DOCUMENT_LIMIT_EXCEEDED"));
+});
+test("PDF decoder aliases cannot bypass filter or predictor preflight", async () => {
+  // Small inputs prove rejection without allocating hostile predictor buffers.
+  for (const key of ["DP", "F", "FFilter", "FDecodeParms", "BPC"]) {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage();
+    const parameters = doc.context.obj({ Predictor: 12, Columns: 32 });
+    const dictionary: Record<string, PDFObject> = { Filter: PDFName.of("FlateDecode") };
+    if (key === "BPC") {
+      parameters.set(PDFName.of("BPC"), PDFNumber.of(8));
+      Object.assign(dictionary, { Subtype: PDFName.of("Image"), Width: PDFNumber.of(1), Height: PDFNumber.of(1), DecodeParms: parameters });
+    } else dictionary[key] = key === "F" || key === "FFilter" ? PDFName.of("FlateDecode") : parameters;
+    const stream = doc.context.stream(deflateSync(Buffer.from([0, 32])), dictionary);
+    page.node.set(PDFName.of("Contents"), doc.context.register(stream));
+    await assert.rejects(extractPdf(await doc.save()), rejectsCode("DOCUMENT_LIMIT_EXCEEDED"));
+  }
 });

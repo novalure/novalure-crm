@@ -36,6 +36,9 @@ async function preflightPdf(bytes) {
   const streamLengths = new Map();
   for (const [, item] of objects) {
     if (!(item instanceof PDFRawStream)) continue;
+    // PDF.js accepts abbreviated keys that pdf-lib's decoder does not read.
+    // Refuse these ambiguous/external-stream paths before either decoder runs.
+    if (["F", "DP", "FFilter", "FDecodeParms"].some(key => item.dict.has(PDFName.of(key)))) fail("LIMIT");
     const filter = item.dict.lookup(PDFName.of("Filter"));
     const filters = filter === undefined ? [] : filter instanceof PDFName ? [filter.decodeText()] : filter instanceof PDFArray && filter.size() <= 5
       ? filter.asArray().map(value => { const entry = doc.context.lookup(value); return entry instanceof PDFName ? entry.decodeText() : ""; }) : [""];
@@ -46,6 +49,7 @@ async function preflightPdf(bytes) {
       // pdf-lib's stream preflight does not apply PDF.js row predictors.
       // Bound their independent row allocations; no text/font stream needs one.
       if (!image || filters.length !== 1 || !(parameters instanceof PDFDict)) fail("LIMIT");
+      if (parameters.has(PDFName.of("BPC"))) fail("LIMIT");
       const number = (key, fallback) => {
         const value = parameters.lookup(PDFName.of(key));
         if (value === undefined) return fallback;
