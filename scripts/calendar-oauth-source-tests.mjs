@@ -67,6 +67,11 @@ test("managed workspace reads use the selected workspace and expose read-only co
   assert.ok(!html.includes(copy.bookingOverview.noMessages));
   const bookingTab = (html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? []).find(button => button.includes(copy.bookings));
   assert.ok(bookingTab?.includes("–"), "foreign booking count must be unavailable rather than a confirmed zero");
+  assert.ok(!html.includes(copy.builder.confirmationMetric));
+  assert.ok(!html.includes(copy.builder.remindersMetric));
+  assert.ok(!html.includes(copy.builder.selfServiceMetric));
+  assert.ok(!html.includes(copy.setup.editLarge));
+  assert.match(html, /Booking page configuration for this workspace is unavailable here/);
 });
 
 test("managed workspace context cannot invoke origin-workspace connection or settings writers", async () => {

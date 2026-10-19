@@ -2636,7 +2636,7 @@ export function CalendarCommandCenter({
         ) : null}
       </article>
 
-      <article className="rounded-lg border border-blue-100 bg-blue-50 p-5">
+      {isHomeWorkspace ? <article className="rounded-lg border border-blue-100 bg-blue-50 p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
@@ -2722,7 +2722,7 @@ export function CalendarCommandCenter({
             {meetingStatusMessage}
           </p>
         ) : null}
-      </article>
+      </article> : <article className="rounded-lg border border-stone-200 bg-white p-5"><h4 className="text-lg font-semibold text-slate-950">{text.setup.title}</h4><p className="mt-2 text-sm text-stone-600" role="status">{language === "de" ? "Die Buchungsseiten-Konfiguration dieses Workspaces ist hier nicht verfügbar." : "Booking page configuration for this workspace is unavailable here."}</p></article>}
 
       <article className="rounded-lg border border-blue-100 bg-white p-5">
         <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">

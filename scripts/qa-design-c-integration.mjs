@@ -398,13 +398,33 @@ async function verifyOperationalReaders() {
         await details.locator("summary").first().click();
       await workspaceSwitch.selectOption(customer.workspaceId);
       await expect(workspaceSwitch).toHaveValue(customer.workspaceId);
+      await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+        "SYNTHETIC CUSTOMER CONTACT",
+      );
       const responses = [];
+      const unsupportedHomeRequests = [];
+      const requestListener = (request) => {
+        const url = new URL(request.url());
+        if (
+          url.origin === base.origin &&
+          [
+            "/api/bots/documents",
+            "/api/meetings/bookings",
+            "/api/meetings/settings",
+          ].includes(url.pathname)
+        )
+          unsupportedHomeRequests.push({
+            path: url.pathname,
+            method: request.method(),
+          });
+      };
       const listener = (response) => {
         const url = new URL(response.url());
         if (operationalReaders.some((reader) => reader.path === url.pathname))
           responses.push(url);
       };
       operatorPage.on("response", listener);
+      operatorPage.on("request", requestListener);
       try {
         await operatorPage
           .locator(
@@ -466,6 +486,19 @@ async function verifyOperationalReaders() {
         await expect(
           operatorPage.locator("[data-crm-content]"),
         ).not.toContainText(seeded.secret);
+        await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+          "Die Kanal-, Freigabe- und Aktionshistorien sind hier nur lesbar.",
+        );
+        const approvalButtons = operatorPage.locator(
+          ".evelyn-bot-approval button",
+        );
+        await expect(approvalButtons).toHaveCount(3);
+        for (const button of await approvalButtons.all())
+          await expect(button).toBeDisabled();
+        for (const upload of await operatorPage
+          .locator('[data-crm-content] input[type="file"]')
+          .all())
+          await expect(upload).toBeDisabled();
         await operatorPage.screenshot({
           path: path.join(output, "readers-managed-nonempty-bots-1440.png"),
           fullPage: true,
@@ -497,12 +530,33 @@ async function verifyOperationalReaders() {
           "Verbindungsstatus derzeit nicht verfügbar.",
         );
         await expect(calendarPanel).not.toContainText(seeded.secret);
+        await expect(calendarPanel).toContainText(
+          "Kalenderverbindungen sind hier schreibgeschützt.",
+        );
+        await expect(
+          operatorPage.getByRole("button", {
+            name: "Neuen Termin anlegen",
+            exact: true,
+          }),
+        ).toBeDisabled();
+        await operatorPage
+          .getByRole("button", { name: /^Buchungen\s/ })
+          .click();
+        await expect(operatorPage.locator("[data-crm-content]")).toContainText(
+          "Buchungen, Benachrichtigungen und Freigabelinks sind für diesen Workspace hier nicht verfügbar.",
+        );
+        assert.deepEqual(
+          unsupportedHomeRequests,
+          [],
+          "Managed workspace must not read home-only documents, booking or settings adapters",
+        );
         await operatorPage.screenshot({
           path: path.join(output, "readers-managed-nonempty-calendar-1440.png"),
           fullPage: true,
         });
       } finally {
         operatorPage.off("response", listener);
+        operatorPage.off("request", requestListener);
       }
     },
   );
