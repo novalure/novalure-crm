@@ -6,6 +6,26 @@ import path from "node:path";
 import pg from "pg";
 
 const { Pool } = pg;
+
+/** Pool.end() can resolve before its clients' sockets have actually closed. */
+export class LocalSalesPool extends Pool {
+  #clientEnds = new Set();
+
+  constructor(options) {
+    super(options);
+    this.on("connect", client => {
+      const ended = new Promise(resolve => client.once("end", resolve));
+      this.#clientEnds.add(ended);
+      void ended.then(() => this.#clientEnds.delete(ended));
+    });
+  }
+
+  async end() {
+    await super.end();
+    await Promise.all(this.#clientEnds);
+  }
+}
+
 const workRoot = path.resolve(".");
 const qaRoot = path.join(workRoot, ".npm-cache", "qa");
 async function binaries() {
@@ -49,11 +69,11 @@ export async function startLocalSalesDb() {
   const stopCluster = () => run(bin.pg_ctl, ["-D", directory, "-m", "fast", "-t", "15", "-w", "stop"], workRoot);
   try {
     await run(bin.pg_ctl, ["-D", directory, "-l", logfile, "-o", options, "-t", "30", "-w", "start"], workRoot);
-    admin = new Pool({ host: "127.0.0.1", port, user: "qa_admin", database: "postgres", max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
+    admin = new LocalSalesPool({ host: "127.0.0.1", port, user: "qa_admin", database: "postgres", max: 5, connectionTimeoutMillis: 5_000, query_timeout: 15_000 });
     await admin.query(`create role ${role} login inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls`);
     await admin.query("create role novalure_app nologin inherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls");
     await admin.query(`grant novalure_app to ${role}`);
-    pool = new Pool({ host: "127.0.0.1", port, user: role, database: "postgres", max: 8, connectionTimeoutMillis: 5_000 });
+    pool = new LocalSalesPool({ host: "127.0.0.1", port, user: role, database: "postgres", max: 8, connectionTimeoutMillis: 5_000 });
     return {
       admin, pool, port, role, directory,
       stop() {

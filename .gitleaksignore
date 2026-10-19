@@ -17,3 +17,8 @@ de42e6b7791101b11a515726f26f8676f5fdd897:src/lib/property-export/provider-adapte
 # Keep full-history/tree scanning and all generic-api-key rules enabled.
 61ac6b71a20261e9b72a000953eb08e9dcbd9873:scripts/lib/studio-stage3-qa-fresh-bootstrap.mjs:generic-api-key:17
 61ac6b71a20261e9b72a000953eb08e9dcbd9873:scripts/lib/studio-stage3-qa-fresh-bootstrap.mjs:generic-api-key:18
+# Independently reviewed deterministic wrong-secret fixture in a negative HMAC
+# test, not a credential. Limit the exception to this exact history/tree finding;
+# retain full-history/current-tree scanning and every scanner rule.
+e662e86b9fa701b9e53ab96e85c0160fd672a570:scripts/studio-enquiry-tests.ts:generic-api-key:178
+scripts/studio-enquiry-tests.ts:generic-api-key:178
