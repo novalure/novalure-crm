@@ -61,12 +61,16 @@ export function studioEnquiryCandidateBinding(env: NodeJS.ProcessEnv = process.e
   return { host, name, role, project, branch };
 }
 
-export function studioEnquiryCandidateRequestAllowed(request: Pick<Request, "url" | "method">,
+export function studioEnquiryCandidateRequestAllowed(request: Pick<Request, "url" | "method"> & Partial<Pick<Request, "headers">>,
   env: NodeJS.ProcessEnv = process.env) {
   if (request.method !== "POST" || !studioEnquiryCandidateBinding(env)) return false;
   try {
     const url = new URL(request.url);
-    return url.origin === candidateOrigin && url.pathname === enquiryPath &&
+    // NextRequest canonicalizes loopback IPs to localhost. Accept that form only
+    // when the original Host still identifies this exact configured listener.
+    const normalizedLoopback = url.origin === "http://localhost:3000" &&
+      request.headers?.get("host") === "127.0.0.1:3000";
+    return (url.origin === candidateOrigin || normalizedLoopback) && url.pathname === enquiryPath &&
       !url.username && !url.password && !url.search && !url.hash;
   } catch { return false; }
 }

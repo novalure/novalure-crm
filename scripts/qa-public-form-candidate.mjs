@@ -8,7 +8,7 @@ import { listWebsiteForms, upsertWebsiteForm } from "../src/lib/db/form-reposito
 import { getRolePermissions } from "../src/lib/auth/permissions.ts";
 import { getProductRoleCapabilities } from "../src/lib/product-model.ts";
 import { studioEnquiryCandidateBinding } from "../src/lib/studio-enquiry-candidate.ts";
-import { attestStudioEnquiryCandidate } from "./lib/qa-studio-enquiry-candidate.mjs";
+import { attestStudioEnquiryCandidate, studioCandidateHttpDiagnostic } from "./lib/qa-studio-enquiry-candidate.mjs";
 
 const qa = await assertQaTarget();
 if (process.env.DATABASE_URL?.trim() !== qa.databaseUrl) {
@@ -487,6 +487,8 @@ try {
 } catch (error) {
   const code = error instanceof Error && /^QA_[A-Z0-9_]+$/u.test(error.message) ? error.message : "QA_UNEXPECTED_FAILURE";
   console.error(`CRM_CANDIDATE_QA_FAIL code=${code}`);
+  const diagnostic = studioCandidateHttpDiagnostic(error);
+  if (diagnostic) console.error(`CRM_CANDIDATE_STUDIO_HTTP_DIAG ${JSON.stringify(diagnostic)}`);
   process.exitCode = 1;
 } finally {
   await Promise.allSettled([owner.end(), app.end()]);

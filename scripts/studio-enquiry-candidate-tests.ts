@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { NextRequest } from "next/server";
 import { studioEnquiryCandidateBinding, studioEnquiryCandidateRequestAllowed } from "../src/lib/studio-enquiry-candidate";
 
 const origin = "http://127.0.0.1:3000";
@@ -36,6 +37,28 @@ test("only the complete local Actions profile yields public target coordinates",
   assert.equal(studioEnquiryCandidateRequestAllowed(request(), profile()), true);
   const optionalOwner = profile(); delete optionalOwner.NOVALURE_QA_MIGRATION_DATABASE_HOST;
   assert.ok(studioEnquiryCandidateBinding(optionalOwner));
+});
+
+test("NextRequest loopback normalization retains the exact original candidate Host", () => {
+  const frameworkRequest = new NextRequest(origin + pathname, {
+    method: "POST", headers: { host: "127.0.0.1:3000" },
+  });
+  assert.equal(new URL(frameworkRequest.url).origin, "http://localhost:3000");
+  assert.equal(studioEnquiryCandidateRequestAllowed(frameworkRequest, profile()), true);
+  for (const host of ["localhost:3000", "127.0.0.2:3000", "[::1]:3000", "attacker.invalid",
+    "127.0.0.1:3001", "127.0.0.1:3000, attacker.invalid", ""]) {
+    const otherHost = new NextRequest(origin + pathname, {
+      method: "POST", headers: { host, "x-forwarded-host": "127.0.0.1:3000" },
+    });
+    assert.equal(studioEnquiryCandidateRequestAllowed(otherHost, profile()), false, host);
+  }
+  assert.equal(studioEnquiryCandidateRequestAllowed(request("http://localhost:3000" + pathname), profile()), false);
+  for (const url of ["http://localhost:3001" + pathname, "https://localhost:3000" + pathname,
+    "http://localhost:3000" + pathname + "?extra=1", "http://localhost:3000/wrong-path"]) {
+    assert.equal(studioEnquiryCandidateRequestAllowed(new NextRequest(url, {
+      method: "POST", headers: { host: "127.0.0.1:3000" },
+    }), profile()), false);
+  }
 });
 
 test("missing or changed trust/run fields cannot activate the candidate profile", () => {
