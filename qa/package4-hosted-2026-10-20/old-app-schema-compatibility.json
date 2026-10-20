@@ -1,0 +1,86 @@
+{
+  "format": "package4-old-app-expanded-schema-compatibility-v1",
+  "status": "PASS_WITH_ROLLBACK_LIMITATIONS",
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "oldApplicationRevision": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+  "newMigrationCandidate": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+  "actualRuntimeRole": "novalure_app",
+  "postgresVersion": "17.11",
+  "vectorVersion": "0.8.0",
+  "checks": [
+    {
+      "name": "old_repository_legacy_vector_source_insert_list_and_cosine_search_execute",
+      "status": "PASS"
+    },
+    {
+      "name": "old_media_deletion_fails_closed_before_storage_with_sixth_101_fk",
+      "status": "PASS"
+    },
+    {
+      "name": "old_unscoped_knowledge_reader_can_read_published_source_without_bot_channel_grant",
+      "status": "PASS"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "rollback_degradation",
+      "code": "OLD_MEDIA_DELETE_UNKNOWN_REFERENCE_FAIL_CLOSED",
+      "confirmedByActualOldCode": true,
+      "storageDeletes": 0,
+      "dbAssetRetained": true,
+      "behavior": "Old app supports exactly five media reference FKs; original101 adds sixth knowledge_source_versions FK. All generic deletion fails closed before storage IO.",
+      "source": "src/lib/media-lifecycle.ts:knownReferences/hasCompleteMediaReferenceVisibility"
+    },
+    {
+      "severity": "rollback_requires_feature_containment",
+      "code": "OLD_RAG_LACKS_SAVED_BOT_CHANNEL_GRANT_GATE",
+      "confirmedByActualOldCode": true,
+      "actualSavedBotChannelGrants": 0,
+      "currentCandidateSavedChannelMatches": 0,
+      "oldApplicationUnscopedMatches": 1,
+      "behavior": "Old searchPersistedKnowledge accepts workspace/project and no bot/channel argument. It can retrieve new approved Knowledge Center content without a saved bot/channel assignment. New RLS keeps tenant/project/approved-version restrictions but does not add the missing application channel gate.",
+      "source": "src/lib/db/runtime-repositories.ts:searchPersistedKnowledge; src/lib/bots/chat-runtime.ts callers"
+    }
+  ],
+  "oldApplicationRollbackVerdict": "CONDITIONAL_CORE_SCHEMA_COMPATIBILITY_ONLY; NOT AN UNCONDITIONAL FULL-FEATURE ROLLBACK",
+  "requiredRollbackConditions": [
+    "Keep extended database schema and preserve post-release business rows; do not roll back database to pre-release after new transactions.",
+    "Use a compatible Knowledge-aware last-known-good application artifact, or explicitly contain/disable old Knowledge and bot RAG routes before ea668e6 rollback.",
+    "Expect generic media deletion to be unavailable on ea668e6; do not bypass unknown-reference protection.",
+    "Existing normal auth/MFA, environment/store/runtime bindings and credential validity require the separate deployment checks."
+  ],
+  "sourceSha256": {
+    "src/lib/db/runtime-repositories.ts": "a3d82608285b145c64715fac240cbce52071cd5f4abf6f763f0ecc0567f879ab",
+    "src/lib/media-lifecycle.ts": "5184973983bca8a886cfdfc7ba2176c583ede39743ff4eca896788437559c5a8",
+    "src/lib/crm-command.ts": "6cbce3ce5ae0e1c7fdc8cd19015443287d3b89d9fbf2509796b6fdebe73e42a9",
+    "src/lib/db/client.ts": "8d582c716ad71c51a412e58c66a116d212de30446b9a00286cb62e4f2fb16a33",
+    "src/lib/db/tenant-client.ts": "a5485a89cf9b85f3b09b359b1fd65d8b4ee361250f3c92a3187817e9139cdc15",
+    "src/lib/bots/chat-runtime.ts": "dd1fa0dec93063bd55691b7cda4512eb93648fe4dd3fc835f03f78099452bd80"
+  },
+  "limits": [
+    "Actual old source data-layer operations, not a full old Vercel deployment or browser/auth acceptance.",
+    "Core schema compatibility does not imply old Knowledge/bot publication and channel-grant behavior is acceptable after new writes."
+  ],
+  "startedAt": "2026-10-20T10:33:54.872Z",
+  "completedAt": "2026-10-20T10:33:54.924Z",
+  "poolCleanup": [
+    "fulfilled",
+    "fulfilled"
+  ],
+  "priorFixtureFailure": {
+    "sha256": "9936816ab3906ff55fd26295e4aafec13e428a31704754d7f1d31493c5e612c1",
+    "preserved": true,
+    "cause": "Invalid synthetic media URL was correctly rejected by existing media_assets_internal_url_check"
+  },
+  "additionalFixtureFailureSha256": "260013609bc91946b3a36b2d0d795d763c725d034581fd34831309b57e24c31e",
+  "privateResultSha256": "a308680fef6c29af70d683b4bbb73be0f067046c0880816c83f5dd3a90f40348",
+  "harnessSha256": {
+    "old-app-probe.mjs": "923d4d85310bad09cc5f8b1b7ad8e3c630e990a85794e54f0c9b2fc02f9ac00d",
+    "old-app-probe-remaining.mjs": "92a4d62274a402c1ad1bf8d922a4546bf0c8ea0c07e171b94c585f0e6f1d8d6e",
+    "old-app-probe-completion.mjs": "f687d9176f8f2d9e1d9a3272605524c04650563f157ab28a3ffce49256712565"
+  },
+  "oldWorktree": "/workspace/package4-old-app-schema-worktree",
+  "aliasesBoundToOldTsconfig": true,
+  "rollbackToPreMigrationDatabaseAfterNewBusinessWritesAllowed": false
+}

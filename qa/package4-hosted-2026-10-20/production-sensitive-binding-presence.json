@@ -1,0 +1,109 @@
+{
+  "format": "package4-production-sensitive-binding-presence-v1",
+  "observedAtUtc": "2026-10-20T10:58:41.123Z",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "variables": [
+    {
+      "key": "DATABASE_URL",
+      "rows": [
+        {
+          "id": "ebl2hg1EtMtNP65J",
+          "type": "sensitive",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_URL",
+      "rows": [
+        {
+          "id": "kpsfn6LcAO5cbs5u",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_DATABASE_URL",
+      "rows": [
+        {
+          "id": "LytCyxwW5DBDA2WU",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_PRISMA_URL",
+      "rows": [
+        {
+          "id": "fv4qouuPTHNa1u5n",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_URL_NON_POOLING",
+      "rows": [
+        {
+          "id": "l8KADOJNooXIZ8C1",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "rows": [
+        {
+          "id": "BqSjOf4aUOm0KXCS",
+          "type": "sensitive",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "rows": [
+        {
+          "id": "H27k1cWzplwCbGtV",
+          "type": "plain",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    }
+  ],
+  "sensitiveBlankExportDoesNotProveUnset": true,
+  "activeDeploymentRuntimeValuesNotProven": true,
+  "providerWrites": 0,
+  "secretsEmitted": false
+}

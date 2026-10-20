@@ -1,8 +1,8 @@
 # Evelyn CRM — Paket 4: Gesamtintegration und Releasebereitschaft
 
-Stand: 20.10.2026. **Gesamtstatus BLOCKIERT; keine Produktivfreigabe und keine Freigabeanfrage.**
+Stand: 20.10.2026, Fortschreibung nach der ausdrücklich erteilten Produktionsfreigabe. **Gesamtstatus BLOCKIERT durch offene technische Gates.**
 Die begrenzten Previewprüfungen sowie der vollständige QA-Datenbank-/Privatdateienrestore sind **PASS**.
-Der offene Credential-Ausgabevorfall verhindert die Gesamtfreigabe.
+Der alte offengelegte Evelyn-Schlüssel ist tatsächlich widerrufen; Pflichtworkflow und Produktionsnachweise bleiben offen.
 Implementierung: `c291e21288903e2807b108bba852a597f77b777a`, [Draft-PR #92](https://github.com/novalure/novalure-crm/pull/92).
 Recovery-Tooling: `5f7bed6578d8c29631745f6627bbec1bf605f3c8`; ausschließlich Typfix und gezielter echter PG-Test.
 [Source-Bindung](../qa/package4-integration-2026-10-20/source-binding.json),
@@ -94,27 +94,50 @@ Unabhängige Rekonstruktion bestätigte acht korrekte Objekte und neun fehlende;
 [WebSocket-FAIL](../qa/package4-hosted-2026-10-20/neon-full-recovery-websocket-failure.json),
 [Dateiread-FAIL](../qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json) und
 [8/9-Rekonstruktion](../qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json).
-QA: PostgreSQL 18.6/vector 0.8.6; Production: 17.11/vector 0.8.0. Statische SQL-Prüfung ersetzt keine Versionsparität.
+QA: PostgreSQL 18.6/vector 0.8.6; Production: 17.11/vector 0.8.0.
+Die zusätzliche echte isolierte Prüfung mit **PostgreSQL 17.11/vector 0.8.0 ist PASS**:
+historischer 54er-Ledger → unveränderte 101–106 → 60 Zeilen, individuelle und kombinierte Transaktionsrücknahmen,
+normale `novalure_app`-Rolle, 94 FORCE-RLS-Tabellen, Dokumenten-/Veröffentlichungsverträge und vier Operational-Reader.
+Alle 201 vorherigen Publicfunktionen einschließlich Owner und ACL blieben erhalten; 231 Funktionen danach.
+Ein falsches synthetisches Approval-Fixture blieb als FAIL erhalten; ausschließlich der betroffene Restlauf wurde korrigiert.
+[Versionsnachweis](../qa/package4-hosted-2026-10-20/production-version-compatibility.json).
+Das ist ein Versionsnachweis mit synthetischen Daten, kein bereits ausgeführtes Produktionsbackup oder Produktionsupgrade.
 
 ## F. Sicherheit und offener Vorfall
 
 Mandanten-/Projekt-/Dokumentgrenzen, Rollen, Veröffentlichung, Widerruf, Vertrags-/Quotaentscheidungen,
 SSRF, private Storebindung und failclosed Maschine sind quellengebunden geprüft; Runtime ist kein Owner/Superuser/BYPASSRLS.
 Gezielte unabhängige Code- und Artefaktreviews meldeten keine offenen Codebefunde; keine Trusted-App-Attestierung.
-**Securitygate BLOCKED:** Beim Hosting-Metadatenread erschien versehentlich ein bestehendes projektweites
+Beim Hosting-Metadatenread erschien versehentlich ein bestehendes projektweites
 Automationcredential im Tooloutput. Der wertfreie [Incidentbeleg](../qa/package4-hosted-2026-10-20/credential-output-incident.json)
 meldet keine Kopie in Git oder öffentliche Receipts. Ein pauschales „keine Secrets ausgegeben“ wäre falsch.
-Eng autorisiert abgeschlossen: genau **ein Ersatz erzeugt und einmal als Future-Build-Default gewählt** (zwei Credentialwrites).
-Drei feste Production-GETs ohne App-Bearer/Cookie: erster 302-Klassifizierungsversuch bleibt FAIL; korrigierte SSO-302-Baseline PASS;
-neues Credential erreicht exakt JSON-403/no-store der App: PASS für Plattformzugang, kein HTTP-200-Health-/Consumer-Cutovernachweis.
-Native unabhängige Prüfung: zwei aktive Keys, Ersatz Default; Productiondeployment, Schutzpolicy und alle 37 Envmetadaten unverändert.
-**Nutzerentscheidung: „Alten Schlüssel vorerst aktiv lassen“. Kein Revoke; Vorfall und Securitygate bleiben BLOCKED.**
-Die frühere Ein-Key-Baseline ist historisch. Bestehende Deployment-Envkopien werden durch Defaultwahl nicht aktualisiert.
-[Rotationsfortschritt](../qa/package4-hosted-2026-10-20/credential-rotation-progress.json),
-[Behalteentscheidung](../qa/package4-hosted-2026-10-20/credential-retention-decision.json) und [unabhängiger Zustand](../qa/package4-hosted-2026-10-20/independent-rotation-native-state.json).
-Das [statische Inventar](../qa/package4-hosted-2026-10-20/evelyn-credential-consumer-inventory.json) umfasst 13 Quellvarianten;
-tatsächlich konfigurierte/externe Verbraucher bleiben UNKNOWN. Verbraucher/Owner klären, Cutover validieren und erst nach neuer
-expliziter Alt-Widerrufsentscheidung weitergehen; keine CRM-Deployment-/DB-/Domain-/MFA-/Cronänderung aus dieser Ausnahme.
+**Credential-Remediation COMPLETE, 20.10.2026 um 12:55:44 Europe/Vienna (10:55:44 UTC).**
+Der vorhandene Ersatz wurde weiterverwendet; kein dritter Schlüssel entstand. Ein frischer Evelyn-Produktionsbuild
+`dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB` verwendet exakt die bisher aktive Quelle `a1b348b…` und Node24.
+Nach getrennt geprüfter Umschaltung der bestehenden Domain und genau zwei ursprünglichen Cronplänen wurde der alte Schlüssel einmal widerrufen.
+Frischer nativer Readback: ausschließlich ein Ersatzschlüssel aktiv und Default. Alter Zugriff: exakter Hosting-302;
+Ersatz: bestehende PKCE-Seite HTTP200 mit 13 geprüften Merkmalen. Kein OAuth-JavaScript, App-Bearer oder Cookie verwendet.
+37 Envmetadaten und übrige geprüfte Projekteinstellungen blieben erhalten; kein Cron wurde manuell aufgerufen.
+[Aktueller Abschluss](../qa/package4-hosted-2026-10-20/evelyn-credential-remediation-summary.json),
+[Widerrufsbeleg](../qa/package4-hosted-2026-10-20/evelyn-credential-remediation-completion.json) und
+[Datenschutzscan](../qa/package4-hosted-2026-10-20/evelyn-credential-remediation-public-scan.json).
+Die frühere Behalteentscheidung und die ursprünglichen drei GETs einschließlich des ersten Klassifizierungs-FAIL bleiben historische Belege.
+Der spätere Gesamtauftrag hebt KEEPOLD ausdrücklich auf. Zusätzlich erfolgten vier feste GETs und ein gleichbleibender Source-Neubuild.
+Erreichbare Quellen und native Konfigurationen wurden untersucht; GitHub-Secretnamen waren wegen HTTP403 nicht lesbar,
+externe Verbraucher bleiben UNKNOWN. Fehlende Hinweise beweisen keinen fehlenden Missbrauch.
+Der PKCE-Nachweis belegt erwartete Seitenausgabe und Hosting-Zugang; kein authentifizierter Entra-Health- oder Provider-Geschäftsaufruf.
+Deployment-Envpull verweigert HTTP400: direkte gespeicherte/ausgeführte Credential-Bytegleichheit bleibt UNKNOWN;
+verwendet wurde der offizielle Injection-Vertrag eines frischen Builds mit dem einzigen ausgewählten Ersatz.
+Alte unveränderliche Deployments können unwirksame widerrufene Kopien behalten. Keine dauerhafte Byte-Löschung behauptet.
+
+Frische ausschließlich lesende Produktionsprüfung: 54/54 Original-Ledgerchecksummen, PostgreSQL17.11/vector0.8.0;
+separat mit tatsächlicher `novalure_app`-Verbindung ausgeführter Rollen-Preflight PASS, keine erhöhten Rechte oder eigenen Objekte.
+Ein zusätzlicher Fünf-Tabellen-Denytest bleibt **FAIL**: vier private Tabellen verweigern Zugriff,
+die bestehende Legacy-Tabelle `provider_connections` hat direkte Rechte ohne RLS. Keine Grants verändert oder neue Regression behauptet.
+Private OAuth-Routen binden den Session-Tenant; bestehende öffentliche Terminpfade und globale Microsoft-Fallbacks sind davon getrennte Grenzen.
+`DATABASE_URL` und privater Blobtoken sind als **sensitive vorhanden**; leere Exportwerte beweisen kein Fehlen oder Ownerbetrieb.
+Tatsächlich konsumierte Produktionsbindungen sind damit noch nicht bestätigt und wurden nicht überschrieben.
+[Nativer Produktions-Preflight](../qa/package4-hosted-2026-10-20/production-native-preflight.json).
 
 ## G. Tests und erhaltene Fehler
 
@@ -123,7 +146,14 @@ und Secretsworkflows **PASS**; manuell auszulösender Job **SKIPPED**; kein Ausf
 [CI des separaten Tooling-Heads 5f7bed6](../qa/package4-hosted-2026-10-20/ci-5f7bed6.json): erforderliche Workflows **PASS**;
 die fünf zusätzlichen Typregressions-PG-Tests sind gezielt lokal belegt und werden nicht als CI-Ausführung ausgegeben.
 [Berichtsstand 7dd97c8](../qa/package4-hosted-2026-10-20/ci-7dd97c8.json): automatische Quality/Secrets PASS;
-required Vercel MISSING, required manueller QA-Job SKIPPED. Mergechecks damit offen; Gitdeploy deaktiviert.
+required Vercel MISSING, required manueller QA-Job SKIPPED. Mergechecks dieses historischen Berichtsheads blieben offen.
+Die neue gezielte Konfigurationsänderung erlaubt Gitdeploy ausschließlich für den Paket-4-Integrationsbranch;
+`main` und alle anderen vorhandenen Branchflags bleiben deaktiviert. Der native Anbietercheck muss am neuen Commit tatsächlich laufen.
+Die bestätigte GitHub-CLI-Anmeldung erweitert den verwendeten App-Zugang nicht: Secrets-/Administrations-APIs weiterhin HTTP403.
+Der echte vorbereitende QA-Preflight bestand vier feste Read-only-Katalogabfragen einschließlich 60 Original-Ledgerzeilen.
+Ein ungültiger privater QA-Studio-Input wurde einmal durch einen frischen QA-Testsecret ersetzt; ursprünglicher FAIL erhalten.
+Keine GitHub-Secrets oder Regeln wurden geschrieben und kein manueller Workflow ausgelöst.
+[QA-Preflight](../qa/package4-hosted-2026-10-20/candidate-ci-native-preflight-proof.json) ist kein Ersatz für den erforderlichen Workflow.
 [Lokale Einzelläufe](../qa/package4-integration-2026-10-20/local-checks.json) behalten ihre damaligen Revisionen und überlappenden Zählungen.
 Historische Fehler bleiben erhalten: fehlendes Chrome, erster Design-C-Lauf 48/50, zwei lokale Zusatz-Harnessfehler,
 Hosted-Upload-Busy/Transport-FAIL und Hosted-Suche-Escape-FAIL. Korrekturen schwächten keine App-/Tenant-/Quotaassertion ab.
@@ -160,21 +190,22 @@ deren unveränderliche Envwerte ersetzen keinen tatsächlichen Identitäts-/Trus
 | Gate | Status | Geltungsbereich und verbleibende Grenze |
 | --- | --- | --- |
 | A Integration | PASS | Eltern/Merge und exakte c291-Runtime-/SQL-Bindung |
-| B Build/CI | BLOCKED | Automatische c291/5f/7dd Quality/Secrets PASS; required Vercel MISSING, required Manual SKIPPED |
-| C Datenbank/Restore | PASS | Strenger Same-Project-COW/17 Dateien/5 Appprüfungen; historische FAILs und Versions-/DR-Grenzen erhalten |
-| D Sicherheit | BLOCKED | Ersatz erzeugt/Default/Plattformzugang validiert; offengelegter Alt-Key bleibt auf Nutzerwunsch aktiv |
+| B Build/CI | BLOCKED | Historische automatische CI PASS; neuer nativer Anbietercheck und tatsächlicher manueller Pflichtworkflow offen, GitHub-API403 |
+| C Datenbank/Restore | BLOCKED | QA-Restore und echte PG17.11/vector0.8.0-Abnahme PASS; frischer Produktionsrestorepunkt und 101–106 noch offen |
+| D Sicherheit | BLOCKED | Alt-Key widerrufen und Ersatz/Domain/Crons geprüft; tatsächliche CRM-Produktionsartefaktbindungen noch offen |
 | E Funktionen | PASS | Gehostete Basis 18/18, begrenzte Wiederverwendung + Compat5 + reale QA-Machine40/5 |
 | F Preview | PASS | Begrenzte 18er-Wiederverwendung + Compat5 + Machine40/5; finale Source5/HTTP3 und nativer aktiver Source-Readback |
-| G Produktion | BLOCKED | Keine Freigabe; Plan DRAFT_NOT_APPROVABLE_OLD_EXPOSED_CREDENTIAL_RETAINED |
+| G Produktion | BLOCKED | Nutzerfreigabe liegt vor; Merge, Originalmigrationen, eigener CRM-Produktionsbuild, Smoke und Beobachtung nicht ausgeführt |
 
 ## J. Reviewbarer Produktions- und Betriebsplan
 
 [Releaseplan](../qa/package4-hosted-2026-10-20/production-release-plan.json) und
-[Runnerplan](../qa/package4-hosted-2026-10-20/production-runner-plan.json) bleiben **DRAFT**, keine Ausführung/Freigabeanfrage.
+[Runnerplan](../qa/package4-hosted-2026-10-20/production-runner-plan.json) sind **autorisiert, mit offenen technischen Gates**.
+Es fehlt keine pauschale Nutzerfreigabe. Providerrechte, echte Pflichtchecks und konkrete Wiederherstellungsnachweise bleiben erforderlich.
 Aktuelles Productiondeployment `dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk`/`ea668e6…`, Neon `misty-cloud-70835427`/`br-snowy-fog-aldx77v8`;
 54 Ledgerzeilen, ausschließlich die sechs Originalmigrationen 101→102→103→104→105→106 fehlen.
 Privater Productionstore ist providerseitig zugeordnet; konsumierter Token/Runtime-Store muss am eigenen Productionartefakt geprüft werden.
-Erst nach konkreter Freigabe und Credentialremediation: neuer konsistenter DB-/Dateienrestorepunkt → sechs Migrationen →
+Nach den noch offenen Pflichtchecks: neuer konsistenter DB-/Dateienrestorepunkt → sechs Migrationen →
 separater Productionbuild mit Productionbindungen und `--prod --skip-domain` → eigene Artefaktdiagnose → exakter Promote → Smoke/Beobachtung.
 Bereits `--prod --skip-domain` kann Schedulerwirkungen haben; es garantiert nur fehlendes automatisches Domain-Aliasing.
 Vier bestehende Cronjobs bleiben mit unveränderten Pfaden/Schedules im späteren Freigabeumfang aktiv:
@@ -185,8 +216,14 @@ Kein Knowledge-Timer, neuer Job, manueller Cron-/Providerpositivaufruf oder QA-P
 Rollback A: fehlgeschlagene Migration samt Ledger in ihrer Transaktion zurückrollen; frühere Datei-Commits bleiben bestehen.
 Rollback B: eigenes schema-kompatibles Appdeployment zurücksetzen, mögliche Cronrücknahme mitprüfen; Daten bleiben separat.
 Recovery C: committete DB-/Dateiänderungen nur aus dem neu genehmigten konsistenten Restorepunkt mit exakten Pfaden/Hashes wiederherstellen.
-Vorschlag: Novalure-Projektowner entscheidet Freigabe/Incident, Codex führt im freigegebenen Fenster aus;
-Vertreter, Meldeweg sowie konkrete Fehler-/Latenzgrenzen vor Production festlegen.
+Die vorherige App `ea668e6…` ist nach neuen Knowledge-Publikationen kein uneingeschränkter Rücknahmeweg:
+der echte isolierte Test belegt fehlende neue Kanalgrants im alten Retrieval sowie Media-Delete-Einschränkungen.
+[Alter-App-Test](../qa/package4-hosted-2026-10-20/old-app-schema-compatibility.json).
+`196f0da…` ist als Knowledge-kompatible Rücknahmequelle nachgewiesen; ein korrekt gebundenes eigenes Rücknahmeartefakt fehlt noch.
+[Quellbindung](../qa/package4-hosted-2026-10-20/knowledge-aware-rollback-source-binding.json).
+Vorbereitete Recovery-/Provisionierungshelfer sind keine ausgeführten Produktionsoperationen.
+Eine reine DB-Schreibsperre schützt nicht vor vorausgehenden Blob-Löschungen; ohne geprüfte vollständige Sperre beziehungsweise
+streng nachgewiesenen konsistenten Aufnahmevertrag darf der vorbereitete Recovery-Adapter nicht gestartet werden.
 Baseline und Beobachtung bei 0/5/15/30 Minuten: 5xx/Latenz, Login/MFA, Rollen/RLS, private Downloads/Uploads,
 Reservierungs-/Extraktionsfehler, Veröffentlichungs-/Queryaudit und Scanleases; keine privaten Quelltexte in Monitoring exportieren.
 Bei Fremdzugriff, Fingerprint-/Ledger-/Dateihashabweichung oder Credentialoutput sofort stoppen und passenden A/B/C-Pfad wählen.

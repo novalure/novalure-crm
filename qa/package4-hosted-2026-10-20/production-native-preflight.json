@@ -1,0 +1,202 @@
+{
+  "format": "package4-production-native-preflight-v1",
+  "observedAtUtc": "2026-10-20T11:01:45.583293+00:00",
+  "status": "CATALOG_AND_ORIGINAL_LEDGER_CHECKED_ARTIFACT_BINDINGS_PENDING",
+  "target": {
+    "projectId": "misty-cloud-70835427",
+    "branchId": "br-snowy-fog-aldx77v8",
+    "databaseName": "neondb",
+    "ownerRole": "neondb_owner",
+    "runtimeRole": "novalure_app"
+  },
+  "identity": {
+    "role": "novalure_app",
+    "session_role": "novalure_app",
+    "database": "neondb",
+    "project": "misty-cloud-70835427",
+    "branch": "br-snowy-fog-aldx77v8",
+    "read_only": "on",
+    "server_version": "17.11 (11592b3)",
+    "database_owner": "neondb_owner",
+    "rolname": "novalure_app",
+    "rolcanlogin": true,
+    "rolinherit": false,
+    "rolsuper": false,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolreplication": false,
+    "rolbypassrls": false
+  },
+  "posture": {
+    "tenant_group_usage": true,
+    "owner_usage": false,
+    "owner_set": false,
+    "database_create": false,
+    "public_create": false,
+    "read_all_data": false,
+    "write_all_data": false,
+    "owned_public_relations": 0,
+    "owned_public_functions": 0,
+    "reachable_elevated_roles": 0
+  },
+  "existingProductionRuntimePreflight": {
+    "status": "PASS_PRODUCTION_RUNTIME_ROLE",
+    "provider": "Neon",
+    "providerProjectId": "misty-cloud-70835427",
+    "database": "neondb",
+    "role": "novalure_app",
+    "readOnlyProof": true,
+    "elevatedPrivileges": 0
+  },
+  "originalLedger": {
+    "status": "PASS",
+    "rows": 54,
+    "sourceRevision": "6774478b29ab9e5f813618b6483b9a0ea190a78f",
+    "sqlWrites": 0
+  },
+  "additionalPrivateTableProbe": {
+    "originalStatus": "FAIL",
+    "allFiveExpectedDenialsPassed": false,
+    "actualMetadata": [
+      {
+        "relname": "company_profiles",
+        "select_allowed": false,
+        "mutation_allowed": false,
+        "information_schema_visible": false
+      },
+      {
+        "relname": "crm_service_principals",
+        "select_allowed": false,
+        "mutation_allowed": false,
+        "information_schema_visible": false
+      },
+      {
+        "relname": "novalure_migration_execution_receipts",
+        "select_allowed": false,
+        "mutation_allowed": false,
+        "information_schema_visible": false
+      },
+      {
+        "relname": "novalure_schema_migrations",
+        "select_allowed": false,
+        "mutation_allowed": false,
+        "information_schema_visible": false
+      },
+      {
+        "relname": "provider_connections",
+        "select_allowed": true,
+        "mutation_allowed": true,
+        "information_schema_visible": true
+      }
+    ],
+    "classification": "Four private tables deny access; provider_connections intentionally remains a pre-existing legacy direct-access table without RLS. Original five-table assumption failure is preserved, not reported as five passes. No grant or RLS alteration.",
+    "legacySourceBoundary": "Private OAuth routes bind the session workspace and signed one-time callback state; new106 status DTO excludes config/tokens. Existing public meeting routes and global Microsoft fallback remain separate legacy limits."
+  },
+  "sensitiveEnvironmentMetadata": [
+    {
+      "key": "DATABASE_URL",
+      "rows": [
+        {
+          "id": "ebl2hg1EtMtNP65J",
+          "type": "sensitive",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_URL",
+      "rows": [
+        {
+          "id": "kpsfn6LcAO5cbs5u",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_DATABASE_URL",
+      "rows": [
+        {
+          "id": "LytCyxwW5DBDA2WU",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_PRISMA_URL",
+      "rows": [
+        {
+          "id": "fv4qouuPTHNa1u5n",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "POSTGRES_URL_NON_POOLING",
+      "rows": [
+        {
+          "id": "l8KADOJNooXIZ8C1",
+          "type": "encrypted",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "rows": [
+        {
+          "id": "BqSjOf4aUOm0KXCS",
+          "type": "sensitive",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "rows": [
+        {
+          "id": "H27k1cWzplwCbGtV",
+          "type": "plain",
+          "target": [
+            "production"
+          ],
+          "gitBranch": null,
+          "configurationId": null
+        }
+      ]
+    }
+  ],
+  "sensitiveBlankExportDoesNotProveUnset": true,
+  "activeDeploymentRuntimeValueConsumptionProven": false,
+  "actualPrivateBlobTokenStoreBindingProven": false,
+  "productionProvisioningOrAuthenticationExecuted": false,
+  "sqlWrites": 0,
+  "appHttpRequests": 0,
+  "credentialValuesOrBusinessRowsIncluded": false
+}

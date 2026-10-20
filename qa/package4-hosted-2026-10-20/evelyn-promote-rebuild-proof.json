@@ -1,0 +1,300 @@
+{
+  "format": "package4-evelyn-promote-rebuild-proof-v1",
+  "status": "PROMOTED_EXACT_NEW_DEPLOYMENT_PKCE_PASS_OLD_STILL_ACTIVE",
+  "startedAtUtc": "2026-10-20T10:53:35.211Z",
+  "helperSha256": "93b4257df5708f0127e7f57b988c789c78ed46866ee55be08cfff7b301f9d6cb",
+  "readySha256": "18d272e4aaf686969d652c00e15be0e153c4369be90782c2e854218e2e40573b",
+  "userInstructionSha256": "c6402bd098a245580b7b106781fa1d5096a8bbad9d7e8f558a50989054b62054",
+  "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "sourceCommit": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+  "oldDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+  "newDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+  "promotionRequests": 1,
+  "applicationRequests": 1,
+  "revocations": 0,
+  "credentialGenerations": 0,
+  "providerReads": 16,
+  "credentialValuesEmitted": false,
+  "rawProviderResponsesPersisted": false,
+  "scope": "Exact same-source credential-holder rebuild promotion and positive existing PKCE page rendering. No authenticated-health/provider/business or runtime credential-byte attestation.",
+  "before": {
+    "observedAtUtc": "2026-10-20T10:53:38.776Z",
+    "pass": true,
+    "checks": {
+      "identityExact": true,
+      "ready": true,
+      "production": true,
+      "sourceExact": true,
+      "sourceMarker": true,
+      "freshDeployment": true,
+      "node24": true,
+      "exactTwoKeyMap": true,
+      "soleReplacementDefault": true,
+      "environmentMetadataUnchanged": true,
+      "exactLatestWindow": true,
+      "allOtherStableMetadataUnchanged": true,
+      "productionTargetExact": true,
+      "canonicalAliasExact": true,
+      "cronDefinitionsExact": true,
+      "cronSingleExactAssociation": true,
+      "cronEnableStateUnchanged": true
+    },
+    "productionTargetDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "canonicalAliasDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "environmentMetadataRows": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "stableMetadataAfterExactWindowReconciliationSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+    "crons": {
+      "deploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+      "disabledAt": null,
+      "enabledAt": 1791298548000,
+      "updatedAt": 1792401354740,
+      "definitions": [
+        {
+          "path": "/api/internal/reviewer/scan",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-22di2vnz6-novalure.vercel.app"
+        },
+        {
+          "path": "/api/internal/teams/a1-outbox/cron",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-22di2vnz6-novalure.vercel.app"
+        }
+      ]
+    },
+    "runtimeCredentialByteIdentityProven": false
+  },
+  "promotion": {
+    "startedAtUtc": "2026-10-20T10:53:38.778Z",
+    "method": "POST",
+    "path": "/v10/projects/prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I/promote/dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "automaticRetries": 0,
+    "httpStatus": 201,
+    "acknowledged": true
+  },
+  "postObservations": [
+    {
+      "observedAtUtc": "2026-10-20T10:53:40.018Z",
+      "pass": false,
+      "checks": {
+        "identityExact": true,
+        "ready": true,
+        "production": true,
+        "sourceExact": true,
+        "sourceMarker": true,
+        "freshDeployment": true,
+        "node24": true,
+        "exactTwoKeyMap": true,
+        "soleReplacementDefault": true,
+        "environmentMetadataUnchanged": true,
+        "exactLatestWindow": true,
+        "allOtherStableMetadataUnchanged": true,
+        "productionTargetExact": true,
+        "canonicalAliasExact": false,
+        "cronDefinitionsExact": true,
+        "cronSingleExactAssociation": true,
+        "cronEnableStateUnchanged": true
+      },
+      "productionTargetDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "canonicalAliasDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+      "environmentMetadataRows": 37,
+      "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+      "stableMetadataAfterExactWindowReconciliationSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+      "crons": {
+        "deploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+        "disabledAt": null,
+        "enabledAt": 1791298548000,
+        "updatedAt": 1792493619456,
+        "definitions": [
+          {
+            "path": "/api/internal/reviewer/scan",
+            "schedule": "*/5 * * * *",
+            "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+          },
+          {
+            "path": "/api/internal/teams/a1-outbox/cron",
+            "schedule": "*/5 * * * *",
+            "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+          }
+        ]
+      },
+      "runtimeCredentialByteIdentityProven": false
+    },
+    {
+      "observedAtUtc": "2026-10-20T10:53:43.782Z",
+      "pass": true,
+      "checks": {
+        "identityExact": true,
+        "ready": true,
+        "production": true,
+        "sourceExact": true,
+        "sourceMarker": true,
+        "freshDeployment": true,
+        "node24": true,
+        "exactTwoKeyMap": true,
+        "soleReplacementDefault": true,
+        "environmentMetadataUnchanged": true,
+        "exactLatestWindow": true,
+        "allOtherStableMetadataUnchanged": true,
+        "productionTargetExact": true,
+        "canonicalAliasExact": true,
+        "cronDefinitionsExact": true,
+        "cronSingleExactAssociation": true,
+        "cronEnableStateUnchanged": true
+      },
+      "productionTargetDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "canonicalAliasDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "environmentMetadataRows": 37,
+      "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+      "stableMetadataAfterExactWindowReconciliationSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+      "crons": {
+        "deploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+        "disabledAt": null,
+        "enabledAt": 1791298548000,
+        "updatedAt": 1792493619456,
+        "definitions": [
+          {
+            "path": "/api/internal/reviewer/scan",
+            "schedule": "*/5 * * * *",
+            "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+          },
+          {
+            "path": "/api/internal/teams/a1-outbox/cron",
+            "schedule": "*/5 * * * *",
+            "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+          }
+        ]
+      },
+      "runtimeCredentialByteIdentityProven": false
+    }
+  ],
+  "after": {
+    "observedAtUtc": "2026-10-20T10:53:43.782Z",
+    "pass": true,
+    "checks": {
+      "identityExact": true,
+      "ready": true,
+      "production": true,
+      "sourceExact": true,
+      "sourceMarker": true,
+      "freshDeployment": true,
+      "node24": true,
+      "exactTwoKeyMap": true,
+      "soleReplacementDefault": true,
+      "environmentMetadataUnchanged": true,
+      "exactLatestWindow": true,
+      "allOtherStableMetadataUnchanged": true,
+      "productionTargetExact": true,
+      "canonicalAliasExact": true,
+      "cronDefinitionsExact": true,
+      "cronSingleExactAssociation": true,
+      "cronEnableStateUnchanged": true
+    },
+    "productionTargetDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "canonicalAliasDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "environmentMetadataRows": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "stableMetadataAfterExactWindowReconciliationSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+    "crons": {
+      "deploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "disabledAt": null,
+      "enabledAt": 1791298548000,
+      "updatedAt": 1792493619456,
+      "definitions": [
+        {
+          "path": "/api/internal/reviewer/scan",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+        },
+        {
+          "path": "/api/internal/teams/a1-outbox/cron",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+        }
+      ]
+    },
+    "runtimeCredentialByteIdentityProven": false
+  },
+  "application": {
+    "status": 200,
+    "startedAtUtc": "2026-10-20T10:53:43.784Z",
+    "method": "GET",
+    "fixedUrl": "https://evelyn-canary.novalure.eu/auth/callback",
+    "credential": "EXISTING_REPLACEMENT_PLATFORM_HEADER_ONLY",
+    "maximumBytes": 65536,
+    "deadlineMs": 30000,
+    "redirectsFollowed": 0,
+    "applicationBearerOrCookieSent": false,
+    "queryOrOAuthExecution": false,
+    "automaticRetries": 0,
+    "completedAtUtc": "2026-10-20T10:53:46.378Z",
+    "bytes": 5781,
+    "bodySha256": "d6c2109a0cd3858efa287cbff7753eadee0dc15f2d362c4657b2edad0fd02db5",
+    "checks": {
+      "status200": true,
+      "html": true,
+      "noLocation": true,
+      "noStore": true,
+      "nonceCspExact": true,
+      "nonceElements": true,
+      "nosniff": true,
+      "frameDeny": true,
+      "referrerNone": true,
+      "exactPublicConfig": true,
+      "exactPkceMarkers": true,
+      "credentialEchoAbsent": true,
+      "bodyBounded": true
+    },
+    "classification": "EXACT_EXISTING_PKCE_PAGE"
+  },
+  "finalNative": {
+    "observedAtUtc": "2026-10-20T10:53:47.139Z",
+    "pass": true,
+    "checks": {
+      "identityExact": true,
+      "ready": true,
+      "production": true,
+      "sourceExact": true,
+      "sourceMarker": true,
+      "freshDeployment": true,
+      "node24": true,
+      "exactTwoKeyMap": true,
+      "soleReplacementDefault": true,
+      "environmentMetadataUnchanged": true,
+      "exactLatestWindow": true,
+      "allOtherStableMetadataUnchanged": true,
+      "productionTargetExact": true,
+      "canonicalAliasExact": true,
+      "cronDefinitionsExact": true,
+      "cronSingleExactAssociation": true,
+      "cronEnableStateUnchanged": true
+    },
+    "productionTargetDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "canonicalAliasDeploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+    "environmentMetadataRows": 37,
+    "environmentMetadataSha256": "1733e23349016ca23d7812afeb3e9f65e7060cd2210dade8156b546f6e9187a5",
+    "stableMetadataAfterExactWindowReconciliationSha256": "299bd477dd895c302956581c0875bf5d2bc47f9e53e3f510528cc9c8b339f0be",
+    "crons": {
+      "deploymentId": "dpl_DBpVn4qm6EGLrGFop8pirWLLNLQB",
+      "disabledAt": null,
+      "enabledAt": 1791298548000,
+      "updatedAt": 1792493619456,
+      "definitions": [
+        {
+          "path": "/api/internal/reviewer/scan",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+        },
+        {
+          "path": "/api/internal/teams/a1-outbox/cron",
+          "schedule": "*/5 * * * *",
+          "host": "evelyn-n9z0kksgj-novalure.vercel.app"
+        }
+      ]
+    },
+    "runtimeCredentialByteIdentityProven": false
+  },
+  "completedAtUtc": "2026-10-20T10:53:47.140Z",
+  "oldCredentialRevoked": false
+}
