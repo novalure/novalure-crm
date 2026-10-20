@@ -1,0 +1,240 @@
+{
+  "schema": "novalure.package4.auth-compatibility-smoke.v1",
+  "status": "PASS",
+  "scope": "EXISTING_CUSTOMER_A_COMPATIBILITY_ONLY",
+  "startedAt": "2026-10-20T07:35:56.111Z",
+  "candidate": {
+    "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+    "deploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "origin": "https://novalure-5j7pionbs-novalure.vercel.app"
+  },
+  "baselineEvidence": {
+    "sourceSha": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+    "receiptSha256": "a3a5d722881b3c1a932af58caaacea493234948d012c0efeee903f2116436ec6",
+    "originalScenariosPassed": 18,
+    "scenariosRerunHere": false
+  },
+  "sourceComparison": {
+    "baselineRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+    "candidateRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "hashFormat": "SHA256 of raw Git blob bytes; package.json excludes only test:/qa: script entries; component digests hash sorted path/mode/SHA256 records",
+    "status": "PASS",
+    "components": {
+      "existingHostedHarness": {
+        "baseline": {
+          "files": 3,
+          "sha256": "44c11c2e63985a75a3eaa411bb815d371bc385f6101d9f8ed09d32a8279a7082"
+        },
+        "candidate": {
+          "files": 3,
+          "sha256": "44c11c2e63985a75a3eaa411bb815d371bc385f6101d9f8ed09d32a8279a7082"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "knowledgeImplementation": {
+        "baseline": {
+          "files": 23,
+          "sha256": "fe24cb43added6c07b1d50ab1275715fab6a11a87dc73e7db30234081f17007c"
+        },
+        "candidate": {
+          "files": 23,
+          "sha256": "fe24cb43added6c07b1d50ab1275715fab6a11a87dc73e7db30234081f17007c"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "knowledgeRoutes": {
+        "baseline": {
+          "files": 15,
+          "sha256": "6108f8b8ec4fc7d4c2f4e08215198940f26ca9dc43492d7a196a9c900d71980e"
+        },
+        "candidate": {
+          "files": 15,
+          "sha256": "6108f8b8ec4fc7d4c2f4e08215198940f26ca9dc43492d7a196a9c900d71980e"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "migrationHistory": {
+        "baseline": {
+          "files": 108,
+          "sha256": "678455122131235ccb78ed5cf971d7266cc614b726085c99722b1d9e5a3211d2"
+        },
+        "candidate": {
+          "files": 108,
+          "sha256": "678455122131235ccb78ed5cf971d7266cc614b726085c99722b1d9e5a3211d2"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "otherRuntimeAndBuild": {
+        "baseline": {
+          "files": 309,
+          "sha256": "299d684f69dda8e190a88a10c386005a5d41075b4d693a945acff19978f27730"
+        },
+        "candidate": {
+          "files": 309,
+          "sha256": "299d684f69dda8e190a88a10c386005a5d41075b4d693a945acff19978f27730"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "presentation": {
+        "baseline": {
+          "files": 87,
+          "sha256": "4ac908e7df5be9c191302d1235d67e1a517080961d97572158ed16e3fb57245c"
+        },
+        "candidate": {
+          "files": 87,
+          "sha256": "4ac908e7df5be9c191302d1235d67e1a517080961d97572158ed16e3fb57245c"
+        },
+        "unchanged": true,
+        "interpretation": "Eligible for bounded baseline evidence reuse only when unchanged"
+      },
+      "reviewedAuthDelta": {
+        "baseline": {
+          "files": 2,
+          "sha256": "32f66bc54529f0e34af8f9d792445d902d2ddf13a3801ce9f43824f3f59c89e3"
+        },
+        "candidate": {
+          "files": 3,
+          "sha256": "53fa5ca87c7cf256274ea27291bba1f8d39add003c5b5f3e8d06bc742d04f2af"
+        },
+        "unchanged": false,
+        "interpretation": "Auth delta requires its own review/tests and targeted smoke; the baseline does not cover the new machine profile"
+      }
+    },
+    "changedFiles": [
+      {
+        "path": "src/lib/auth/session.ts",
+        "baseline": {
+          "mode": "100644",
+          "sha256": "e6c478ca8a887f73d092d0397023e02e7b4efc40d24a86a06ff52f644bcfce74"
+        },
+        "candidate": {
+          "mode": "100644",
+          "sha256": "af40e1e8c3f3f8136fdbc5f244fc40bb792c0d631e993ece0016ae78951827dd"
+        },
+        "reviewedAuthDelta": true
+      },
+      {
+        "path": "src/lib/knowledge-center/assistant-http.ts",
+        "baseline": {
+          "mode": "100644",
+          "sha256": "4b40d2cca87b8dd9da2f0019415acbb6900a9460ef3309da47d11e5a7ea53cd5"
+        },
+        "candidate": {
+          "mode": "100644",
+          "sha256": "232485177bd094283da1ec16e459c28fd3425dbd8237568232120d45a2cc0048"
+        },
+        "reviewedAuthDelta": true
+      },
+      {
+        "path": "src/lib/knowledge-center/qa-machine-auth.ts",
+        "baseline": null,
+        "candidate": {
+          "mode": "100644",
+          "sha256": "98c076805a89c7b692c41ce84a2fedfbe2f03bae0bfc73276e2cfd206a65d4e5"
+        },
+        "reviewedAuthDelta": true
+      }
+    ],
+    "unexpectedRuntimeChanges": [],
+    "productionMachineVerifierUnchanged": true,
+    "note": "This is a source comparison, not a rerun or extension of the original 18/18 hosted result. New machine authentication needs separate positive/negative evidence."
+  },
+  "rootBindingReceipt": {
+    "sha256": "b728a83b834b13a96f876a629676b950be7204921b723d2305a232110c2b2288",
+    "separatelyObservedByRoot": true,
+    "customerSystemDiagnosticsMustRemain404": true
+  },
+  "runnerSha256": "730337ddb9dae5ca36c62887afbb01b51e75c8006b35a92390859bf35535a4dc",
+  "results": [
+    {
+      "name": "Existing customer A normal password and previously enrolled genuine TOTP",
+      "status": "PASS",
+      "proof": {
+        "userId": "a8aab462-a0f3-4c10-8ede-90cbba5f4d6d",
+        "workspaceId": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08"
+      }
+    },
+    {
+      "name": "Existing tenant runtime core remains database-backed; administrative diagnostics stay hidden",
+      "status": "PASS",
+      "proof": {
+        "coreSource": "database",
+        "existingBot": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+        "existingUnit": "998e7fa9-7498-4d9b-aadf-1c2e75f3adc3",
+        "systemDiagnostics": 404,
+        "runtimeBindingSource": "separate root operator/native receipt"
+      }
+    },
+    {
+      "name": "Pinned published PDF v1 and existing unpublished replacement v2 stay distinct",
+      "status": "PASS",
+      "proof": {
+        "sourceId": "eecf12c0-e36a-4bd5-a40d-50420c2d54a0",
+        "areaId": "8cdc7251-d591-441b-a6ef-cf3e7eb5742c",
+        "publishedVersionId": "d98b2e70-fb25-4f4c-924f-c54afd6342cb",
+        "publishedVersion": 1,
+        "draftVersionId": "78b96eca-bbcb-4314-9593-0af78ef52b94",
+        "draftVersion": 2,
+        "savedChannels": [
+          "webchat",
+          "voice"
+        ],
+        "assignmentsWritten": false
+      }
+    },
+    {
+      "name": "Existing published private PDF returns the original pinned bytes",
+      "status": "PASS",
+      "proof": {
+        "status": 200,
+        "sizeBytes": 877,
+        "sha256": "d989ece4f7e4c7d870392dbc3df479b1e2a3c1c9218772ca4aa34e19d576516e",
+        "cacheControl": "private, no-store"
+      }
+    },
+    {
+      "name": "Both saved user channels retrieve only the existing published v1",
+      "status": "PASS",
+      "proof": [
+        {
+          "channel": "webchat",
+          "sourceId": "eecf12c0-e36a-4bd5-a40d-50420c2d54a0",
+          "versionId": "d98b2e70-fb25-4f4c-924f-c54afd6342cb",
+          "draftExcluded": true
+        },
+        {
+          "channel": "voice",
+          "sourceId": "eecf12c0-e36a-4bd5-a40d-50420c2d54a0",
+          "versionId": "d98b2e70-fb25-4f4c-924f-c54afd6342cb",
+          "draftExcluded": true
+        }
+      ]
+    }
+  ],
+  "blockedOutbound": [],
+  "pageErrors": [],
+  "serverErrors": [],
+  "providerRequests": [],
+  "writes": {
+    "newUploads": 0,
+    "businessConfigurationWrites": 0,
+    "publications": 0,
+    "assignments": 0,
+    "expectedNormalQueryUsageAuditWrites": 2
+  },
+  "authentication": {
+    "ordinaryPassword": true,
+    "actualExistingMfa": true,
+    "sessionInjected": false
+  },
+  "browserContextsClosed": true,
+  "newQaMachineProfile": "NOT TESTED BY THIS SMOKE; requires its own scoped positive/negative proof",
+  "persistentTimerActivated": false,
+  "productionMutationPerformed": false,
+  "finishedAt": "2026-10-20T07:36:23.817Z"
+}

@@ -1,0 +1,929 @@
+{
+  "dryLocalComputationOnly": true,
+  "source": "existing createMigrationPlan + validateMigrationPlan",
+  "actualLedgerRows": 54,
+  "plan": [
+    {
+      "file": "101_knowledge_center.sql",
+      "path": "migrations/101_knowledge_center.sql",
+      "version": "101_knowledge_center",
+      "number": 101,
+      "name": "knowledge_center",
+      "checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "normalizedSourceSha256": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+      "sqlUnchanged": true
+    },
+    {
+      "file": "102_knowledge_document_processing.sql",
+      "path": "migrations/102_knowledge_document_processing.sql",
+      "version": "102_knowledge_document_processing",
+      "number": 102,
+      "name": "knowledge_document_processing",
+      "checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "normalizedSourceSha256": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+      "sqlUnchanged": true
+    },
+    {
+      "file": "103_knowledge_assistant_service.sql",
+      "path": "migrations/103_knowledge_assistant_service.sql",
+      "version": "103_knowledge_assistant_service",
+      "number": 103,
+      "name": "knowledge_assistant_service",
+      "checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "normalizedSourceSha256": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+      "sqlUnchanged": true
+    },
+    {
+      "file": "104_knowledge_publication_workflow.sql",
+      "path": "migrations/104_knowledge_publication_workflow.sql",
+      "version": "104_knowledge_publication_workflow",
+      "number": 104,
+      "name": "knowledge_publication_workflow",
+      "checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "normalizedSourceSha256": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+      "sqlUnchanged": true
+    },
+    {
+      "file": "105_knowledge_website_monitoring.sql",
+      "path": "migrations/105_knowledge_website_monitoring.sql",
+      "version": "105_knowledge_website_monitoring",
+      "number": 105,
+      "name": "knowledge_website_monitoring",
+      "checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "normalizedSourceSha256": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+      "sqlUnchanged": true
+    },
+    {
+      "file": "106_crm_operational_readers.sql",
+      "path": "migrations/106_crm_operational_readers.sql",
+      "version": "106_crm_operational_readers",
+      "number": 106,
+      "name": "crm_operational_readers",
+      "checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "manualCutover": false,
+      "rollback": false,
+      "currentRawSourceSha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "normalizedSourceSha256": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+      "sqlUnchanged": true
+    }
+  ],
+  "schemaVersion": 2,
+  "status": "DRAFT_NOT_APPROVABLE_CREDENTIAL_INCIDENT_OPEN",
+  "updatedAtUtc": "2026-10-20T09:06:04.574Z",
+  "approvalRequestIssued": false,
+  "productionExecutionAuthorized": false,
+  "expectedFinalLedgerRows": 60,
+  "finalCandidateSha": null,
+  "observedSourceHead": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "sourceSqlHashNormalization": "CRLF to LF only, matching existing runner; original six SQL files unchanged",
+  "exactTarget": {
+    "vercelProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+    "currentProductionDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "currentProductionSha": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "neonProjectId": "misty-cloud-70835427",
+    "neonBranchId": "br-snowy-fog-aldx77v8",
+    "database": "neondb",
+    "migrationOwner": "neondb_owner",
+    "runtimeRole": "novalure_app",
+    "postgres": "17.11",
+    "vector": "0.8.0",
+    "privateStoreId": "store_vCn7LiyRocYNC8pM",
+    "storeAssociationStatus": "PROVIDER_PRODUCTION_PRIVATE_STORE_ASSOCIATION_PROVEN_METADATA_ONLY",
+    "runningTokenBindingVerified": false
+  },
+  "executionOrder": [
+    "101_knowledge_center",
+    "102_knowledge_document_processing",
+    "103_knowledge_assistant_service",
+    "104_knowledge_publication_workflow",
+    "105_knowledge_website_monitoring",
+    "106_crm_operational_readers"
+  ],
+  "previouslyAppliedVersionsMustNotReplay": "091–096 and100; actual ledger contains54 verified rows",
+  "excludedManualVersions": [
+    "097_studio_sales_calendar_bridge",
+    "098_studio_enquiry_handoff",
+    "099_studio_enquiry_public_launch"
+  ],
+  "guardsBeforeFirstWrite": [
+    "One later concrete approval covering exactfinalSHA/targets/sixSQL/new DB+files restorepoint/Productionbuild+skip-domain/artifactdiagnosis/promote/unchanged four active jobs and possible scheduler effect; all Hosted+Files gates closed.",
+    "Project-wide credential incident remains BLOCKED: explicit Productionauthorization for private dependency inventory/replacement/consumer validation/old credential revocation; complete and evidence this before DBrestorepoint, migration or Productionbuild. No automatic rotation and no blanket noSecretOutput/securityPASS claim.",
+    "Clean reviewed committed tree; entire migration plan committed byte-for-byte inHEAD.",
+    "MIGRATION_TARGET=prod; exactProductiondirectownerconnection privately supplied asMIGRATION_DATABASE_URL. NoURL/credentialvalue inplan/log/Git; connected provider identity verified.",
+    "Fresh actual ledger/metadata readonly read and exact6plan comparison; no target/ledger/checksum/plan drift.",
+    "Fresh concrete approvedProductionDB+privatefiles recoverypoint exists; olderbackups not renewed.",
+    "Existingrunner advisorylock, server>=170000, transaction/statement/lock timeouts unchanged.",
+    "No compatibilityprofile forold061/062/080, no manualcutover flag, no rewrittenSQL/ledger/checksum/RLS bypass."
+  ],
+  "commandsAfterApprovalOnly": {
+    "generateBoundPlan": "MIGRATION_TARGET=prod node scripts/db-migrate.mjs dry-run --plan-token-file=<absolute owner-only path outside repository>",
+    "applySamePlan": "MIGRATION_TARGET=prod node scripts/db-migrate.mjs up --plan-token-file=<same absolute owner-only path outside repository>",
+    "secretInput": "MIGRATION_DATABASE_URL through existing authorized private secret channel only; never literal command argument, plan or artifact"
+  },
+  "planTokenBinds": [
+    "clean HEAD commit",
+    "actual connected target/project/branch/database",
+    "actual ledger state",
+    "exact six version/checksum execution plan"
+  ],
+  "transactionSemantics": {
+    "unit": "Each migration SQL plus its ledgerinsert inone transaction",
+    "allSixAtomic": false,
+    "onFailure": "Currentmigrationrollsback; earlier commits remain. Stop, reread ledger/catalog and diagnose. No delete/checksumrewrite/blindreplay.",
+    "afterEach": "Confirm originalchecksum, expectedobjects, tenantRLS/FORCE-RLS/ACL/runtimeleastprivilege beforecontinuing."
+  },
+  "qaAndRecoveryLimits": {
+    "production": {
+      "postgres": "17.11 (11592b3)",
+      "vector": "0.8.0",
+      "pgcrypto": "1.3"
+    },
+    "actualQa": {
+      "postgres": "18.6",
+      "vector": "0.8.6",
+      "pgcrypto": "1.4"
+    },
+    "staticReview": {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-postgres-version-review.json",
+      "sha256": "a9e88f88733f9b74c85558db1aa9640f22bc9f304008b519f368672ae58cb792"
+    },
+    "staticReviewResult": "Keine PG18-exklusive SQL- oder neuere Vector-API-Abhängigkeit in101–106 identifiziert. Kein realer PG17/vector0.8.0-Ausführungstest und keine Providerparität.",
+    "runtimeRoleInheritanceDifference": {
+      "production": false,
+      "qa": true,
+      "dangerousRoleFlagsRemainFalse": true
+    },
+    "productionUpgradePlanned": false,
+    "currentQaAcceptance": {
+      "reference": "#/currentQaAcceptance"
+    },
+    "fullDatabaseAndPrivateFiles": {
+      "status": "PASS",
+      "scope": "Synthetic same-project Neon COW database recovery plus exhaustive private files in a separately bound private Blob store",
+      "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "resultSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+      "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+      "completedAtUtc": "2026-10-20T09:03:31.101Z",
+      "finalCompletionElapsedMs": 347199,
+      "singleUninterruptedRun": false,
+      "elapsedIsTotalRecoveryRto": false,
+      "catalogCategories": 20,
+      "databaseMetadataAndGlobalRoleSettingsIncluded": true,
+      "dataTables": 167,
+      "dataRows": 793,
+      "canonicalLedgerRows": 60,
+      "strictSourceAndRestoredCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+      "workingCombinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1",
+      "originalNormalWorkingTaskCommits": 1,
+      "additionalWorkingCommitsDuringCompletion": 0,
+      "ignoredCategories": 0,
+      "aclNormalization": false,
+      "privateFiles": 17,
+      "privateBytes": 41950560,
+      "existingVerifiedFilesRetained": 8,
+      "missingFilesCreatedExactlyOnce": 9,
+      "allFileSizesAndSha256Match": true,
+      "allAnonymousFileReadsStatus": 403,
+      "historicalVersionsIncluded": true,
+      "sourceAndTargetPrivateInventoryExhaustive": true,
+      "overwritesOrDeletes": 0,
+      "actualRestoredApplicationChecks": {
+        "status": "PASS",
+        "count": 5,
+        "mode": "Actual candidate repository/route code in process, restored DB, normal browser cookies and real private target store",
+        "authenticatedSessionVerified": true,
+        "runtimeRole": "novalure_app",
+        "runtimeIsOwnerSuperuserOrBypassRls": false,
+        "secondRestoredHostedDeploymentVerified": false,
+        "intentionalRestoredFunctionalWritesOnlyAfterStrictInitialEquality": true
+      },
+      "sourceDatabaseAndFilesUnchanged": true,
+      "allFourPoolsClosed": true,
+      "allThreeSourceWorkingRestoredEndpointsDisabledIdleAtClosure": true,
+      "branchCount": 9,
+      "branchCap": 10,
+      "newBranchesDuringFinalCompletion": 0,
+      "checkpointBranch": "br-broad-mouse-baohb06c",
+      "workingBranch": "br-little-lake-bagp4n0i",
+      "restoredBranch": "br-nameless-sun-bazc0qdt",
+      "parentLsn": "0/32A4C10",
+      "nativePgDumpRestoreProven": false,
+      "crossProjectDisasterRecoveryProven": false,
+      "productionVersionParityProven": false,
+      "productionChanges": 0,
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+        "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3"
+      },
+      "lifecycleReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+        "sha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0"
+      },
+      "rootReviewReceipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+        "sha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036"
+      },
+      "historicalFailuresPreserved": {
+        "firstCaptureTextUuid": {
+          "status": "FAIL",
+          "sqlstate": "42883",
+          "archiveBytes": 0,
+          "databaseOrStorageWrites": 0,
+          "newBranches": 0,
+          "correctedInTooling": "5f7bed6578d8c29631745f6627bbec1bf605f3c8"
+        },
+        "firstR2WebSocketProcessAbort": {
+          "status": "FAIL",
+          "attempt": "R2",
+          "observedProcessAbortAtUtc": "2026-10-20T08:22:00Z",
+          "error": "Unhandled Neon WebSocket: Connection terminated unexpectedly",
+          "actualRootClassification": "FAIL; restored database equality, private file copy and application verification did not complete",
+          "rawResultStatus": "RUNNING_STALE_AFTER_PROCESS_CRASH",
+          "rawResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+          "rawArtifactMustNeverBeTreatedAsPass": true,
+          "rootCauseProven": false,
+          "precisePoolOrPendingSqlCause": "UNKNOWN",
+          "idleOwnerHeldAcrossMetadataOrBlobPause": "Plausible hypothesis only; unconfirmed",
+          "checkpoint": {
+            "branchId": "br-broad-mouse-baohb06c",
+            "parentLsn": "0/32A4C10"
+          },
+          "working": {
+            "branchId": "br-little-lake-bagp4n0i",
+            "initialFullEqualityPassed": true,
+            "normalRuntimeTaskRowsCommitted": 1
+          },
+          "restored": {
+            "branchId": "br-nameless-sun-bazc0qdt",
+            "created": true,
+            "completeDatabaseEquality": "NOT TESTED",
+            "privateFilesCopiedComplete": 0,
+            "applicationChecksCompleted": false
+          },
+          "cleanup": {
+            "status": "PASS",
+            "verifiedAtUtc": "2026-10-20T08:23:11Z",
+            "sourceWorkingAndRestoredEndpointsDisabledAndIdle": true,
+            "sourceBranchId": "br-sweet-surf-ba6iahut",
+            "workingBranchId": "br-little-lake-bagp4n0i",
+            "restoredBranchId": "br-nameless-sun-bazc0qdt"
+          },
+          "targetStorageReadback": {
+            "verifiedAtUtc": "2026-10-20T08:25:17Z",
+            "files": 0,
+            "bytes": 0
+          },
+          "deletesOrBranchResetsOrRetriesPerformed": false,
+          "currentOperationActive": false,
+          "guardedSameBranchContinuation": "Historical state at first R2 failure; subsequently completed on the same branches with separately preserved receipts."
+        },
+        "firstSameBranchFileRead": {
+          "status": "FAIL",
+          "elapsedMs": 445876,
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+            "sha256": "0d4a5d395208968bd17b98a2311674b7531a4e27742df82aed504657ae1e8e8e"
+          },
+          "resultSha256": "347f2c212bdd46cce47b8dc6ff59dbdc055d2b1a5c2c13643d7058735e110d3f",
+          "strictDatabaseEqualityPassed": true,
+          "eighthObjectImmediateSdkBodyBytes": 0,
+          "expectedEighthObjectBytes": 10485760,
+          "rootCauseIsDatabaseTransportProven": false
+        },
+        "partialTargetReconciliation": {
+          "status": "PASS",
+          "receipt": {
+            "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+            "sha256": "5daaad8c4e086de6080a6a15b3c84a0758dfe87ac93492803768741b34259a20"
+          },
+          "resultSha256": "3bd2ca63d2f443ab44e8912fece59c149fe4df8f1dc828b6dbb693fa4e85da18",
+          "filesVerifiedWithShaAnd403": 8,
+          "missingFiles": 9,
+          "unexpectedFiles": 0
+        },
+        "originalProviderDefaultGrantMismatchAndBothTemplateFailuresRemainPreserved": true
+      }
+    }
+  },
+  "separateRecoveryPaths": {
+    "A": "Rollback only currentuncommitted migration transaction. Prior committed101–106 remain.",
+    "B": "Only approved schema-compatible application deployment rollback, including documented Vercel Crondefinition reversion and metadata readback; no DBdatarewind or privatefile restore.",
+    "C": "Committeddata+privateobjectrestore with intactcurrent/historicalversionpointers; separate explicitProductionrestore authorization. ExistingQA DB-onlyPASS doesnotprovefiles."
+  },
+  "newProductionRestorePoint": {
+    "status": "NOT CREATED; REQUIRES CONCRETE APPROVAL",
+    "earliestCreation": "Erst nach geschlossenen technischen Gates und ausdrücklicher Freigabe dieses exakten Release-/Recoveryplans, unmittelbar vor dem ersten Productionwrite.",
+    "sourceProjectId": "misty-cloud-70835427",
+    "sourceBranchId": "br-snowy-fog-aldx77v8",
+    "sourceDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "sourceDeploymentSha": "ea668e625b8c778c2f79dd6a33210e731bb8a662",
+    "sourcePrivateStoreId": "store_vCn7LiyRocYNC8pM",
+    "requirements": [
+      "Schreibquellen und laufende Transaktionen im genehmigten Wartungsfenster koordinieren; keine produktiven Cron-/Providerpositivaufrufe.",
+      "Frischen providerbasierten DB-Restorepunkt mit tatsächlicher Parent-/LSN-/Zeitbindung aufnehmen; Providergrants/Katalog/DBMetadata/Ledger unverändert dokumentieren. Ein Metadatenunterschied bleibt FAIL und wird nicht pauschal normalisiert.",
+      "Konsistentes vollständiges privates Dateimanifest einschließlich Größe/SHA/Pfad/Mediaasset-/Quellen-/Versionsbindung und konkret freigegebenem Sicherungs-/Wiederherstellungsziel erstellen. Alte QA-Bytes und bloße4Objekte/43307Bytes-Aggregate sind kein Productionbackup.",
+      "Neuen Branch-/Storagebedarf, Retention/Expiry, RPO/RTO, Operator und tatsächlichen Cleanup in die eine konkrete Freigabe aufnehmen. Keine automatische Verlängerung bestehender alter Backups."
+    ],
+    "oldBackupBranchesRenewalAuthorized": false,
+    "qaOrPreviewMayUseProductionData": false,
+    "restoringProductionDataItselfAuthorized": false
+  },
+  "deploymentProcess": {
+    "status": "DRAFT; PRODUCTION_STAGING_AND_PROMOTION_REQUIRE_ONE_LATER_CONCRETE_APPROVAL",
+    "method": "Im später ausdrücklich freigegebenen Produktionsfenster ein separates Production-Artefakt aus dem final geprüften Commit mit Productionbindungen und --prod --skip-domain bauen, dieses Artefakt selbst diagnostizieren und erst danach exakt dieses Deployment promoten.",
+    "sourceSha": null,
+    "productionStagedDeploymentId": null,
+    "productionStagedOrigin": null,
+    "doNotPromoteQaPreviewAsTestedProductionArtifact": true,
+    "reason": "QA-Preview hat170 isolierte Branchbindungen/QA-Neon/privateQAStores. Previewpromotion kann unter Productionvariablen neu bauen; diese wäre ein neues, erneut zu prüfendes Artefakt.",
+    "proposedCommandsAfterApprovalOnly": [
+      "vercel deploy --prod --skip-domain --scope novalure",
+      "vercel inspect <exaktes neu erzeugtes Productiondeployment> --scope novalure",
+      "vercel promote <exaktes geprüftes Productiondeployment> --scope novalure"
+    ],
+    "commandConstraints": [
+      "Alle Productionbuild-/Staging-/Artefaktdiagnose-/Promote-Schritte erst nach der einen konkreten Freigabe ausführen. --skip-domain ist keine Freigabe für vorgelagertes Production-Staging.",
+      "Aus einem sauberen Checkout des endgültig freigegebenen SHA ausführen. Projektverknüpfung sowie Team/Projekt vor Invocation gegen die freigegebenen IDs prüfen; automatische Gitdeployments bleiben deaktiviert.",
+      "Eigenständigen Productionbuild mit vorhandenen zulässigen Production-DB-, Runtime-, privaten Storage- und Authbindungen erzeugen. Keine QA-Seeds, QA-Datenbank, QA-Storetokens oder Branch-Testsecrets nach Production übernehmen.",
+      "Keine alten Envwerte ziehen, entschlüsseln oder ausgeben; erforderliche Zielidentität über begrenzte aktuelle Metadaten und den freigegebenen Hostkanal nachweisen.",
+      "--prod --skip-domain unterdrückt laut offizieller Zusage nur automatische Promotion/Domainzuordnung. Der Buildprozess erstellt Cronjobs; die genaue Schedulerreihenfolge beim unpromoteten Production-Staging ist unbelegt. Daher gilt bereits Staging als möglicher Produktionseffekt und gehört vollständig zur Freigabe.",
+      "Unmittelbar vor/nach Production-Staging und vor/nach Promote ausschließlich lesend Cronenabled, Crondeployment, die vier historischen Pfad-/Schedule-Paare, Zielhosts und Currentdeployment prüfen. Keine neuen Definitionen, kein Knowledge-Timer und kein manueller Cron- oder Providerpositivaufruf.",
+      "Das neu erzeugte Productiondeployment am generierten Host selbst auf exakten Source-SHA, Productionumgebung, Projekt/Team, novalure_app an misty-cloud/br-snowy, privaten Productionstore und reguläre Auth/MFA prüfen. READY allein reicht nicht; der schreibende synthetische QA-Runner wird nicht gegen Production wiederholt.",
+      "Bestehende Studio-Signatur-/Origin-/Releasebindungen konkret auf den neuen Release prüfen. Keine Provider, positiven Maschinenidentitäten, Vertragsfreigaben oder Scheduler zusätzlich provisionieren oder aktivieren.",
+      "Nur exakt das separat diagnostizierte Productiondeployment promoten und Domain-/Current-/SHA-/Cronbindung nachweisen. Die isolierte QA-Preview wird nicht als identischer Productionbuild promotet.",
+      "Bei Abbruch ausschließlich den konkret freigegebenen A/B/C-Pfad nutzen. App-Rollback kann laut offizieller Dokumentation auch Crondefinitionen zurücksetzen; Daten- und Dateirestore bleiben davon getrennt."
+    ],
+    "gitAutoDeployment": {
+      "main": false,
+      "integrationBranch": false,
+      "source": "vercel.json",
+      "leaveDisabled": true
+    },
+    "existingCronDefinitions": {
+      "count": 4,
+      "source": "vercel.json + tatsächliche Provider-Metadaten vom2026-10-20",
+      "actuallyActive": true,
+      "currentDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+      "pathSchedulePairsUnchangedInLaterReleaseScope": true,
+      "newJobsOrActivationOfPreviouslyInactiveJobsAllowed": false,
+      "knowledgeMonitoringTimerAllowed": false,
+      "manualPositiveCallsAuthorized": false,
+      "cronEvidence": {
+        "path": "/workspace/package4-production-cron-release-semantics.json",
+        "sha256": "f4f4f0df4d7ae2d353b5825057871ae4bc7e610e9e1c57ba6c91019797f8d3cc",
+        "status": "STAGED_PRODUCTION_CRON_DEFERRAL_UNPROVEN_NO_PRODUCTION_ACTION_AUTHORIZED_HERE",
+        "observedAtUtc": "2026-10-20T06:22:42.388017+00:00"
+      }
+    },
+    "skillReference": "skill://plugin_connector_690a90ec05c881918afb6a55dc9bbaa1/deployments-cicd/SKILL.md",
+    "productionStagingIsAlreadyProductionStep": true,
+    "stagingBeforeFinalApprovalAllowed": false,
+    "stagingOnlyPreparationExceptionAllowed": false,
+    "schedulerEffectMayStartBeforePromote": true,
+    "cronEvidence": {
+      "status": "FOUR_EXISTING_PRODUCTION_JOBS_ACTIVE_METADATA_VERIFIED",
+      "evidence": {
+        "path": "/workspace/package4-production-cron-release-semantics.json",
+        "sha256": "f4f4f0df4d7ae2d353b5825057871ae4bc7e610e9e1c57ba6c91019797f8d3cc",
+        "status": "STAGED_PRODUCTION_CRON_DEFERRAL_UNPROVEN_NO_PRODUCTION_ACTION_AUTHORIZED_HERE",
+        "observedAtUtc": "2026-10-20T06:22:42.388017+00:00"
+      },
+      "observedAtUtc": "2026-10-20T06:21:00.340629+00:00",
+      "currentDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+      "cronEnabled": true,
+      "existingDefinitions": [
+        {
+          "host": "novalure-17ga46bw1-novalure.vercel.app",
+          "path": "/api/cron/google-alerts",
+          "schedule": "9,24,39,54 * * * *"
+        },
+        {
+          "host": "novalure-17ga46bw1-novalure.vercel.app",
+          "path": "/api/cron/meeting-reminders",
+          "schedule": "2 * * * *"
+        },
+        {
+          "host": "novalure-17ga46bw1-novalure.vercel.app",
+          "path": "/api/cron/property-reservations",
+          "schedule": "7 * * * *"
+        },
+        {
+          "host": "novalure-17ga46bw1-novalure.vercel.app",
+          "path": "/api/cron/teams-alerts",
+          "schedule": "4,19,34,49 * * * *"
+        }
+      ],
+      "count": 4,
+      "candidatePairsEqualCurrentProviderPairs": true,
+      "knowledgeMonitoringCronPresent": false,
+      "jobExecutionsObserved": false,
+      "productionStagingIsPotentialProductionSchedulerEffect": true,
+      "deferUntilConcreteProductionApproval": true,
+      "guaranteeOfDeferralUntilPromote": false,
+      "approvalMustInclude": "Die vier bereits aktiven Jobs mit exakt unveränderten Pfad-/Schedule-Paaren und einen möglichen Schedulerzielwechsel bereits beim Production-Staging ausdrücklich einschließen. Keine neuen Jobs, keine Aktivierung bisher inaktiver Jobs und kein Knowledge-Timer.",
+      "manualInvokeEnableDisableOrScheduleMutationAuthorizedNow": false,
+      "beforeAndAfterStageAndPromoteReadback": [
+        "project.crons enabled/definitions",
+        "crons.deploymentId",
+        "vier Pfad-/Schedule-Paare",
+        "zugehörige Zielhosts",
+        "Current-Deployment und Source-SHA"
+      ],
+      "unexpectedDriftAction": "Vor weiteren Releaseschritten stoppen; keine improvisierte Schedulerkorrektur oder Konfigurationsänderung außerhalb des später freigegebenen Recoveryumfangs.",
+      "officialSources": [
+        {
+          "label": "manage-cron-jobs",
+          "url": "https://vercel.com/docs/cron-jobs/manage-cron-jobs.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.192057+00:00",
+          "documentationLastUpdated": "2026-08-11",
+          "sha256": "fbdb58648e1bd9671aaafe600d294399c2a7022c3abd0cab9d8b8b0404a08755"
+        },
+        {
+          "label": "cron-jobs",
+          "url": "https://vercel.com/docs/cron-jobs.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.207961+00:00",
+          "documentationLastUpdated": "2026-09-16",
+          "sha256": "a63e7c2d701780bc99ee0f267627cc267b89f7bcaaf1ea4678518b3eaa98ef75"
+        },
+        {
+          "label": "production-deployments",
+          "url": "https://vercel.com/docs/deployments/environments.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.197075+00:00",
+          "documentationLastUpdated": "2026-09-17",
+          "sha256": "c7ac1c8da6fd9eda0263c2a4bb3bdf88bcc8dc900d7f9b7c77686d1997b96000"
+        },
+        {
+          "label": "promoting-deployment",
+          "url": "https://vercel.com/docs/deployments/promoting-a-deployment.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.189714+00:00",
+          "documentationLastUpdated": "2026-06-26",
+          "sha256": "8e9433f28a0ab1ea6ffcd432109043e3554bbe3ae9f9ae2155b9c1316f9b42af"
+        },
+        {
+          "label": "cli-promote",
+          "url": "https://vercel.com/docs/cli/promote.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.196813+00:00",
+          "documentationLastUpdated": "2026-07-15",
+          "sha256": "88a08dc99c3c9cf5755b8651cc6179019f7cde42bbb474cb8cf40d11bc54b15c"
+        },
+        {
+          "label": "cli-deploy",
+          "url": "https://vercel.com/docs/cli/deploy.md",
+          "retrievedAtUtc": "2026-10-20T06:20:46.219504+00:00",
+          "documentationLastUpdated": "2026-09-18",
+          "sha256": "e90fbd7796faf2a977aef566f4396eb8ac75286e88da5fb7e0974242ac0f1b5f"
+        },
+        {
+          "label": "cron-quickstart",
+          "url": "https://vercel.com/docs/cron-jobs/quickstart.md",
+          "retrievedAtUtc": "2026-10-20T06:21:25.108956+00:00",
+          "documentationLastUpdated": "2026-08-11",
+          "sha256": "32eeb667901cabbd2ad58152bdc3a520df1efad51d01a6fa472dfa3cb67f0804"
+        }
+      ],
+      "knownPlatformLimit": "Die geprüften aktuellen offiziellen Quellen legen die genaue Reihenfolge von Builddefinition, Schedulerregistrierung und HTTP-Aufruf bei unpromotetem Production-Staging nicht offen. Weder eine garantierte Änderung schon beim Staging noch ein garantierter Aufschub bis Promote ist belegt."
+    }
+  },
+  "evidenceRefs": {
+    "productionStorage": {
+      "path": "/workspace/package4-production-storage-metadata.json",
+      "sha256": "dd73bb46887f2706c566caaafb8df45eb7e4501b951209cfa648c5bec56bbc22"
+    },
+    "qaDatabaseRecovery": {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-provider-database-recovery.json",
+      "sha256": "f059471d6282ee2675768109d446075f723f0bf8a4c9569551acc418f31770b5"
+    },
+    "qaLifecycle": {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-provider-recovery-lifecycle.json",
+      "sha256": "8d705a97775879df9761cb84a5a0ad8de8c2b87d797e6d7ca10c1830c53f4225"
+    },
+    "qaCloneOwner": {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-clone-attestation.json",
+      "sha256": "730a884bc9c16e7f66277220b4e8016f177336e60b3843b3cd9c348f77150c3b"
+    },
+    "branchEnvironment": {
+      "path": "/workspace/package4-preview-environment-binding.json",
+      "sha256": "1b66ce125abad3c3c884506fbc440ef8e7e07ad2da9cea5bff4d7365fb2fd32c"
+    },
+    "pgVersionReview": {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-postgres-version-review.json",
+      "sha256": "a9e88f88733f9b74c85558db1aa9640f22bc9f304008b519f368672ae58cb792"
+    },
+    "productionCronReleaseSemantics": {
+      "path": "/workspace/package4-production-cron-release-semantics.json",
+      "sha256": "f4f4f0df4d7ae2d353b5825057871ae4bc7e610e9e1c57ba6c91019797f8d3cc",
+      "status": "STAGED_PRODUCTION_CRON_DEFERRAL_UNPROVEN_NO_PRODUCTION_ACTION_AUTHORIZED_HERE",
+      "observedAtUtc": "2026-10-20T06:22:42.388017+00:00"
+    }
+  },
+  "remoteDryRunPerformed": false,
+  "productionMutationPerformed": false,
+  "secretValuesEmitted": true,
+  "productionCronReleaseSemantics": {
+    "status": "FOUR_EXISTING_PRODUCTION_JOBS_ACTIVE_METADATA_VERIFIED",
+    "evidence": {
+      "path": "/workspace/package4-production-cron-release-semantics.json",
+      "sha256": "f4f4f0df4d7ae2d353b5825057871ae4bc7e610e9e1c57ba6c91019797f8d3cc",
+      "status": "STAGED_PRODUCTION_CRON_DEFERRAL_UNPROVEN_NO_PRODUCTION_ACTION_AUTHORIZED_HERE",
+      "observedAtUtc": "2026-10-20T06:22:42.388017+00:00"
+    },
+    "observedAtUtc": "2026-10-20T06:21:00.340629+00:00",
+    "currentDeploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "cronEnabled": true,
+    "existingDefinitions": [
+      {
+        "host": "novalure-17ga46bw1-novalure.vercel.app",
+        "path": "/api/cron/google-alerts",
+        "schedule": "9,24,39,54 * * * *"
+      },
+      {
+        "host": "novalure-17ga46bw1-novalure.vercel.app",
+        "path": "/api/cron/meeting-reminders",
+        "schedule": "2 * * * *"
+      },
+      {
+        "host": "novalure-17ga46bw1-novalure.vercel.app",
+        "path": "/api/cron/property-reservations",
+        "schedule": "7 * * * *"
+      },
+      {
+        "host": "novalure-17ga46bw1-novalure.vercel.app",
+        "path": "/api/cron/teams-alerts",
+        "schedule": "4,19,34,49 * * * *"
+      }
+    ],
+    "count": 4,
+    "candidatePairsEqualCurrentProviderPairs": true,
+    "knowledgeMonitoringCronPresent": false,
+    "jobExecutionsObserved": false,
+    "productionStagingIsPotentialProductionSchedulerEffect": true,
+    "deferUntilConcreteProductionApproval": true,
+    "guaranteeOfDeferralUntilPromote": false,
+    "approvalMustInclude": "Die vier bereits aktiven Jobs mit exakt unveränderten Pfad-/Schedule-Paaren und einen möglichen Schedulerzielwechsel bereits beim Production-Staging ausdrücklich einschließen. Keine neuen Jobs, keine Aktivierung bisher inaktiver Jobs und kein Knowledge-Timer.",
+    "manualInvokeEnableDisableOrScheduleMutationAuthorizedNow": false,
+    "beforeAndAfterStageAndPromoteReadback": [
+      "project.crons enabled/definitions",
+      "crons.deploymentId",
+      "vier Pfad-/Schedule-Paare",
+      "zugehörige Zielhosts",
+      "Current-Deployment und Source-SHA"
+    ],
+    "unexpectedDriftAction": "Vor weiteren Releaseschritten stoppen; keine improvisierte Schedulerkorrektur oder Konfigurationsänderung außerhalb des später freigegebenen Recoveryumfangs.",
+    "officialSources": [
+      {
+        "label": "manage-cron-jobs",
+        "url": "https://vercel.com/docs/cron-jobs/manage-cron-jobs.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.192057+00:00",
+        "documentationLastUpdated": "2026-08-11",
+        "sha256": "fbdb58648e1bd9671aaafe600d294399c2a7022c3abd0cab9d8b8b0404a08755"
+      },
+      {
+        "label": "cron-jobs",
+        "url": "https://vercel.com/docs/cron-jobs.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.207961+00:00",
+        "documentationLastUpdated": "2026-09-16",
+        "sha256": "a63e7c2d701780bc99ee0f267627cc267b89f7bcaaf1ea4678518b3eaa98ef75"
+      },
+      {
+        "label": "production-deployments",
+        "url": "https://vercel.com/docs/deployments/environments.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.197075+00:00",
+        "documentationLastUpdated": "2026-09-17",
+        "sha256": "c7ac1c8da6fd9eda0263c2a4bb3bdf88bcc8dc900d7f9b7c77686d1997b96000"
+      },
+      {
+        "label": "promoting-deployment",
+        "url": "https://vercel.com/docs/deployments/promoting-a-deployment.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.189714+00:00",
+        "documentationLastUpdated": "2026-06-26",
+        "sha256": "8e9433f28a0ab1ea6ffcd432109043e3554bbe3ae9f9ae2155b9c1316f9b42af"
+      },
+      {
+        "label": "cli-promote",
+        "url": "https://vercel.com/docs/cli/promote.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.196813+00:00",
+        "documentationLastUpdated": "2026-07-15",
+        "sha256": "88a08dc99c3c9cf5755b8651cc6179019f7cde42bbb474cb8cf40d11bc54b15c"
+      },
+      {
+        "label": "cli-deploy",
+        "url": "https://vercel.com/docs/cli/deploy.md",
+        "retrievedAtUtc": "2026-10-20T06:20:46.219504+00:00",
+        "documentationLastUpdated": "2026-09-18",
+        "sha256": "e90fbd7796faf2a977aef566f4396eb8ac75286e88da5fb7e0974242ac0f1b5f"
+      },
+      {
+        "label": "cron-quickstart",
+        "url": "https://vercel.com/docs/cron-jobs/quickstart.md",
+        "retrievedAtUtc": "2026-10-20T06:21:25.108956+00:00",
+        "documentationLastUpdated": "2026-08-11",
+        "sha256": "32eeb667901cabbd2ad58152bdc3a520df1efad51d01a6fa472dfa3cb67f0804"
+      }
+    ],
+    "knownPlatformLimit": "Die geprüften aktuellen offiziellen Quellen legen die genaue Reihenfolge von Builddefinition, Schedulerregistrierung und HTTP-Aufruf bei unpromotetem Production-Staging nicht offen. Weder eine garantierte Änderung schon beim Staging noch ein garantierter Aufschub bis Promote ist belegt."
+  },
+  "orderedReleasePhases": [
+    "AFTER CONCRETE PRODUCTION AUTHORIZATION: complete private dependent-automation credential replacement, bounded consumer validation and exposed-old-credential revocation before other Production release steps",
+    "AFTER CONCRETE APPROVAL: fresh Production DB + private files recovery point",
+    "Original migration101",
+    "Original migration102",
+    "Original migration103",
+    "Original migration104",
+    "Original migration105",
+    "Original migration106",
+    "Production build from final SHA with Production env + --prod --skip-domain (already possible scheduler effect)",
+    "Diagnose this exact new Production artifact",
+    "Promote this exact diagnosed Production deployment",
+    "Smoke, Cron/Current/alias readback and observation"
+  ],
+  "beforeApprovalAllowed": "Only authorized QA work, local plan preparation and bounded read-only metadata. No Productionbuild/staging, migration, restorepoint creation, promotion, domain or scheduler/provider mutation.",
+  "mandatoryMachinePositiveGate": {
+    "id": "MANDATORY_MACHINE_POSITIVE_IDENTITY",
+    "status": "PASS",
+    "actualPositiveMachineCall": "PASS",
+    "required": "Tatsächliche technische Evelyn-OIDC-/Serviceprincipal-/Voice-Kanalabnahme auf einem erlaubten Pfad mit synthetischen Daten. Reguläre Benutzerkanäle und korrektes Preview-Failclosed sind kein Ersatz.",
+    "runtimeGuard": "src/lib/crm-machine-auth.ts:65",
+    "identityAndWorkspacePins": [
+      "src/lib/crm-machine-auth.ts:7",
+      "src/lib/crm-machine-auth.ts:17"
+    ],
+    "claimValidation": "src/lib/crm-machine-auth.ts:130",
+    "forbiddenWorkarounds": [
+      "VERCEL_ENV-Spoofing",
+      "Verifierschwächung",
+      "CRM-Projekt-OIDC als Evelyn-Ersatz",
+      "Benutzer-Cookie statt technischer Identität",
+      "Nicht freigegebenes Productionprovisioning"
+    ],
+    "resolution": "Actual bounded distinct QA path completed with positive published-v1 retrieval, missing/default/wrong-audience denials, independent voice revocation, re-enabled channel success, principal disable and final revocation denial. Raw caller FAIL during intended administrative denial phases remains preserved.",
+    "authorizedQaPathInProgress": false,
+    "positiveQaWouldNotProveProductionOnlyAuthenticator": true,
+    "proofScope": "Distinct explicitly enabled Knowledge QA contract with real Evelyn Preview OIDC and native same-tenant saved principal/bot/channel bindings; does not prove the original Production-only authenticator positive.",
+    "sourceRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "receiverDeploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "callerDeploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+    "evidence": {
+      "path": "/workspace/package4-genuine-qa-machine-acceptance.json",
+      "sha256": "d96217a59742f0a745ce8143494fb53e4c33e04320f7ed36c527e047dd452406"
+    },
+    "actualApplicationRequests": 40,
+    "expectedPositiveRetrievals": 5,
+    "expectedApplicationDenials": 35,
+    "phases": 5,
+    "freshDistinctCustomJtiHashes": 20,
+    "runtimeBlankKeyCount": 15,
+    "allExpectedPhaseOutcomesVerified": true,
+    "nativeFinalState": "REVOKED; both saved bindings disabled and revoked",
+    "scopedCallerCredentialRetired": true,
+    "temporaryControlPlaneCleanup": "PASS: saved principal/bindings revoked, temporary Preview trust and two branch keys removed, scoped credential revoked, completed Caller Preview natively DELETED; original project-wide credential incident remains open.",
+    "productionOnlyAuthenticatorPositive": "NOT TESTED",
+    "signedCallerDeploymentOrBranchClaimAssumed": false,
+    "callerDeploymentDeleted": true,
+    "providerManagedSystemEnvironmentFullyNeutralized": false,
+    "blankRuntimeKeyScope": "Exactly15 named project Preview application keys, separate from provider-managed system environment."
+  },
+  "technicalOverallStatus": "BLOCKIERT",
+  "productionApprovalAskAllowed": false,
+  "mandatorySecurityIncidentGate": {
+    "id": "EXPOSED_PROJECT_AUTOMATION_CREDENTIAL",
+    "status": "BLOCKED",
+    "incidentStatus": "OPEN_ROTATION_REQUIRES_PRODUCTION_AUTHORIZATION",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "evidence": {
+      "path": "/workspace/package4-credential-output-incident.json",
+      "sha256": "873f7ca0b9f4a8608efe953283f11ea5339cd1de6f7f0436d678915255f897ca"
+    },
+    "credentialValueIncluded": false,
+    "publicGitOrReceiptCredentialCopyObserved": false,
+    "productionRotationAuthorizedNow": false,
+    "qaWorkMayContinue": true,
+    "securityCompletePassAllowed": false,
+    "noSecretOutputClaimAllowed": false,
+    "requiredResolution": "Privat abhängige Automation inventarisieren; unter ausdrücklicher Productionautorisierung Ersatz bereitstellen, exakt freigegebene Verbraucher validieren und erst danach das offengelegte alte Credential widerrufen. Vor tatsächlich abgeschlossener Rotation keine Securityvollabnahme behaupten.",
+    "authorizationBoundary": "Das bestehende Evelyn-Projektcredential gilt projektweit und kann Productionautomation betreffen. Keine automatische Rotation, Löschung oder Policyänderung unter der geltenden No-Production-Anweisung. Die konkrete Ersatz-/Validierungs-/Widerrufssequenz gehört zur späteren reviewbaren Productionfreigabe; aktuell keine Freigabeanfrage.",
+    "consumerCensusStatus": "UNKNOWN_ACTUAL_CONSUMERS;13static source variants do not prove configured consumers or absence"
+  },
+  "credentialRemediationAfterConcreteAuthorization": {
+    "status": "DRAFT_REQUIRES_EXPLICIT_PRODUCTION_AUTHORIZATION",
+    "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+    "scope": "Existing Evelyn project-wide automation access credential; separate from CRM application identity/MFA/tenant authorization and from the fresh short-lived deployment-specific QA credential.",
+    "valuesOrDictionaryKeysMayBePrinted": false,
+    "newCredentialValueDestination": "Existing owner-only private secret channel and the explicitly inventoried approved consumers; no chat, Git, public receipt or raw provider output.",
+    "steps": [
+      {
+        "order": 1,
+        "action": "Privat die tatsächlich abhängigen Automationen, Verantwortlichen, Zielumgebungen und kontrollierten Validierungsaufrufe inventarisieren; nur Metadaten und vollständige private Objekt-/Policyhashes in Belegen, niemals protectionBypass-Dictionarykeys ausgeben.",
+        "allowedBeforeProductionAuthorization": "Bounded read-only inventory only; no credential or consumer mutation."
+      },
+      {
+        "order": 2,
+        "action": "Konkrete Productionautorisierung für das bestehende Evelyn-Projekt und alle betroffenen Verbraucher/Validierungen einholen, nachdem die übrige autorisierte QA-/Restorearbeit abgeschlossen und der genaue Ablauf reviewbar ist.",
+        "authorizedNow": false
+      },
+      {
+        "order": 3,
+        "action": "Über den privaten Provider-/Secretkanal ein frisches Ersatzcredential erzeugen und ausschließlich die freigegebenen abhängigen Verbraucher umstellen. Providerfähigkeit für parallelen Ersatz vorab verifizieren; falls nicht unterstützt, stoppen und einen konkreten koordinierten Cutover vorlegen. Keine ungeprüfte Downtimeannahme.",
+        "productionAffecting": true
+      },
+      {
+        "order": 4,
+        "action": "Die exakt freigegebenen Verbraucher mit begrenzten normalen Zugriffen validieren; Hostingzugriff und App-/MFA-/Mandantenschutz getrennt prüfen. Keine Businessjobs, neuen Provider oder Cron-Positivaufrufe aktivieren. Fehler und unbekannte Zustände stoppen den Ablauf.",
+        "productionAffecting": true
+      },
+      {
+        "order": 5,
+        "action": "Erst nach erfolgreicher Verbraucherprüfung das offengelegte alte Credential nativ widerrufen; anschließend per begrenztem Readback und freigegebenem Negativzugriff den Widerruf sowie neue Verbraucherfunktion belegen. Keine automatische Wiederholung bei unklarem Mutationsergebnis.",
+        "productionAffecting": true
+      },
+      {
+        "order": 6,
+        "action": "Sanitisierten Abschlussbeleg mit Zeitpunkten, Target-/Consumerkennungen, vollständigen privaten Policyhashes und Ergebnissen speichern; alle Werte ausschließen. Securitygate erst nach tatsächlichem Ersatz, Validierung und Alt-Widerruf schließen.",
+        "securityPassCondition": true
+      }
+    ],
+    "rollbackAndStop": "Bei unklarer Mutation oder Validierungsfehler stoppen und nativ lesend rekonstruieren; keine automatische Credential-Neuerzeugung oder erneute Aktivierung des offengelegten Credentials. Ein notwendiger Consumerrollback gehört ausdrücklich in die Productionautorisierung.",
+    "crmReleaseDependency": "Vor Production-DBrestorepunkt, sechs Migrationen oder neuem Productionbuild muss die autorisierte Credentialremediation abgeschlossen sein; Reihenfolge DBrestorepunkt→101–106→Productionbuild mit --skip-domain→Artefaktdiagnose→Promote→Smoke bleibt danach unverändert."
+  },
+  "secretOutputScope": "Earlier actual provider-metadata inspection exposed an existing project-wide automation credential in tool output. This plan contains no credential values; no global noSecretOutput claim is made.",
+  "planContainsCredentialValues": false,
+  "currentQaAcceptance": {
+    "status": "PASS",
+    "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+    "exactDeploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+    "origin": "https://novalure-5j7pionbs-novalure.vercel.app",
+    "deploymentReceipt": {
+      "publicPath": "qa/package4-hosted-2026-10-20/deployment-c291e21.json",
+      "sha256": "2b83a6623d411064af35702647d9de04f004ef347c26e0fe99202b111ea9dad7"
+    },
+    "baseline18": {
+      "status": "PASS",
+      "applicationRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+      "scenarios": 18,
+      "receipt": {
+        "publicPath": "qa/package4-hosted-2026-10-20/hosted-196f0da.json",
+        "sha256": "a3a5d722881b3c1a932af58caaacea493234948d012c0efeee903f2116436ec6"
+      },
+      "currentEvidenceReuse": "Only unchanged Runtime/UI components; separately reviewed auth delta",
+      "rerunAll18OnC291": false
+    },
+    "actualCompatibility5": {
+      "status": "PASS",
+      "scenarios": 5,
+      "receipt": {
+        "publicPath": "qa/package4-hosted-2026-10-20/auth-compatibility-c291e21.json",
+        "sha256": "5739253057d166ce63a7f68f4a3a367b88a27304903dbc5135b006f2b1c5f935"
+      },
+      "ordinaryPasswordAndExistingTotp": true,
+      "sessionInjection": false
+    },
+    "actualMachine40": {
+      "status": "PASS",
+      "requests": 40,
+      "phases": 5,
+      "expectedPublishedV1Retrievals": 5,
+      "expectedApplicationDenials": 35,
+      "freshDistinctCustomJtiHashes": 20,
+      "receipt": {
+        "publicPath": "qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json",
+        "sha256": "d96217a59742f0a745ce8143494fb53e4c33e04320f7ed36c527e047dd452406"
+      },
+      "productionOnlyAuthenticatorPositive": "NOT TESTED",
+      "blankRuntimeKeyScope": "Exactly15 inventoried inherited Evelyn project Preview application keys, not all provider-managed system environment.",
+      "providerManagedSystemContextFullyNeutralized": false,
+      "fixtureReadsOrForwardsProviderAutomationCredential": false,
+      "jwtCallerDeploymentOrBranchClaimAssumed": false
+    },
+    "ciApplication": {
+      "status": "PASS",
+      "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+      "receipt": {
+        "publicPath": "qa/package4-hosted-2026-10-20/ci-c291e21.json",
+        "sha256": "1cbfa3b4a26264a47cfc32315c515d90fb46872a24184806597459a1b4a37187"
+      },
+      "requiredWorkflowsPass": true,
+      "optionalManualJob": "SKIPPED; no PASS claim"
+    },
+    "ciTooling": {
+      "status": "PASS",
+      "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/ci-5f7bed6.json",
+        "sha256": "27ed20078b81605bb055827a891be66eb255c2e59e7f75c142d53f42d7b33dc1"
+      },
+      "requiredQualityRunId": 39390975218,
+      "requiredSecretRunId": 39390975073,
+      "optionalManualJob": "SKIPPED",
+      "targetedExtraLocalPgCases": 5,
+      "targetedExtraPgTestsExecutedSeparatelyInRemoteCi": false
+    },
+    "cleanup": {
+      "status": "PASS",
+      "receipt": {
+        "publicPath": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json",
+        "sha256": "0a46259a1312c22aba7cd3353593eeea8a3f6a1ac2c0a47fc721256413b97808"
+      },
+      "nativePrincipal": "REVOKED",
+      "bothSavedBindingsDisabledAndRevoked": true,
+      "temporaryPreviewTrustPairRemoved": true,
+      "twoNewQaBranchKeysRemoved": true,
+      "branchEntriesAtDeployment": 173,
+      "branchEntriesAfterCleanup": 171,
+      "productionEntriesUnchanged": 74,
+      "globalPreviewEntriesUnchanged": 65,
+      "oldMetadataRowsPreserved": 405,
+      "freshDeploymentScopedCallerAccessCredentialRevoked": true,
+      "completedCallerDeployment": {
+        "status": "PASS",
+        "state": "DELETED",
+        "id": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+        "independentAuthenticatedGetStatus": 404,
+        "receipt": {
+          "publicPath": "qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json",
+          "sha256": "76b110bfdadf72f5576680e79be13d07fbd461948936cbe7923abbf1ef759f14"
+        },
+        "deleteRetried": false,
+        "initialPublicPropagationAssertionFailurePreserved": true,
+        "immediatePermanentByteErasureClaimed": false,
+        "existingEvelynProductionUnchanged": true
+      },
+      "existingReceiverDeploymentEnvironmentImmutable": true,
+      "credentialOutputIncidentNotResolvedByQaCleanup": true
+    },
+    "fullDatabaseAndPrivateFiles": {
+      "status": "PASS",
+      "reference": "#/qaAndRecoveryLimits/fullDatabaseAndPrivateFiles"
+    },
+    "securityGate": "BLOCKED",
+    "productionApprovalGranted": false,
+    "currentSourceAvailability": "PASS",
+    "historicalBoundedAcceptanceStatus": "PASS",
+    "scope": "QA acceptance only, within explicit reuse/version/recovery limits; Security incident remains BLOCKED and Production unapproved",
+    "sourceAvailability": {
+      "status": "PASS",
+      "receipt": {
+        "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+        "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be"
+      },
+      "sourceOnlyEnableSeparateAfterFullRecoveryClosure": true,
+      "normalExistingCookiesNoLoginOrSessionMint": true,
+      "actualReadonlySourceApplicationChecks": 5,
+      "httpProtectionChecks": 3,
+      "sourceWrites": 0,
+      "sourceProviderState": "active; disabled=false",
+      "workingAndRestoredProviderState": "disabled=true; idle",
+      "providerReadbackAtUtc": "2026-10-20T09:06:04.574Z",
+      "sameApplicationRevisionDeploymentAndOrigin": true,
+      "secondHostedSuiteOrNewDeployment": false,
+      "productionChanges": 0
+    }
+  },
+  "currentCiToolingStatus": "PASS",
+  "deployedApplicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "recoveryToolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "overallStatus": "BLOCKIERT",
+  "credentialConsumerInventory": {
+    "status": "STATIC_REFERENCE_INVENTORY_COMPLETE_CONSUMER_CENSUS_INCOMPLETE",
+    "sourceInventoryFile": "package4-evelyn-credential-consumer-inventory.json",
+    "sourceInventorySha256": "dcf0b378cd10ec02c697f5bc00956a7e0cecbfc1b1fbd9d801e4fd33d5b323aa",
+    "independentReviewOpenFindings": 0,
+    "uniqueSourceVariants": 13,
+    "conditionalTransports": 5,
+    "exactEvelynProductionRevision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "localEvelynHeadUnchanged": "14aecea14e3304bfc187480cd1158febab6ad2b9",
+    "exactProductionObjectFetchedOnly": true,
+    "allRecordedVariantAndWorkflowHashesVerifiedAgainstGit": true,
+    "threeNameDirectRuntimeAndCiReferences": 0,
+    "configuredConsumerCount": "UNKNOWN",
+    "absenceOfExternalOrIndirectConsumersProven": false,
+    "secretValuesQueriedOrIncluded": false,
+    "productionHttpProbesPerformed": false,
+    "productionRotationAuthorized": false,
+    "requiredBeforeRotation": "Actual private configured-consumer census/owners, exact read-only health route and hostname safety, bounded consumer cutover, explicit Production authorization. The source variants are not automatically configured consumers."
+  },
+  "currentGateStatus": {
+    "A": "PASS",
+    "B": "PASS",
+    "C": "PASS",
+    "D": "BLOCKED",
+    "E": "PASS",
+    "F": "PASS",
+    "G": "BLOCKED"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "format": "package4-r2-partial-target-readonly-v1",
+  "checkedAt": "2026-10-20T08:51:49.363Z",
+  "completedAt": "2026-10-20T08:51:54.264Z",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "expectedObjects": 17,
+  "objects": 8,
+  "inventoryBytes": 20975206,
+  "sourceWrites": 0,
+  "targetWrites": 0,
+  "targetDeletes": 0,
+  "unexpectedObjects": 0,
+  "missingObjects": 9,
+  "allExistingBytesAndHashesMatch": true,
+  "allExistingAnonymousDenied": true,
+  "readOnlyReceiptSha256": "3bd2ca63d2f443ab44e8912fece59c149fe4df8f1dc828b6dbb693fa4e85da18",
+  "failedAssetNowVerified": true,
+  "immediateFailureClassification": "Immediate SDK stream read contained zero bytes instead of expected10485760; persisted object later read-only verified exact bytes and SHA. Root cause unknown; original raw response headers/status/stack not captured.",
+  "files": [
+    {
+      "assetId": "1fb7bd41-a0d3-452d-b58f-aef2ad0badd2",
+      "expectedBytes": 877,
+      "expectedSha256": "f26cbea8f6a7607c1486f72706aa4af16396695ba3e91d4a1c16a2dae011268d",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 877,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "364be846-a465-498f-b79a-f73e4d4d3b42",
+      "expectedBytes": 946,
+      "expectedSha256": "8db4491f6b0fbcd7d5bd6428e6273fd38027b510e0561b79fb82d52101ccdcd7",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 946,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "2b104b23-d3c7-4ce5-93b8-69f68aab8207",
+      "expectedBytes": 10485760,
+      "expectedSha256": "9f48e6896e209401262a0cfbd47dd0d4faf67cfd53c3d92f7fbc1fabec222cfb",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 10485760,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "2f67bf19-e33d-463e-b79a-6e9f2f9ffe5c",
+      "expectedBytes": 876,
+      "expectedSha256": "77a162e4089b207e588d617ac8a2385bec4fac98fcd44acbd53387e0be17c01f",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 876,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "28ff44d6-63b4-4d14-b780-07f5d9743016",
+      "expectedBytes": 914,
+      "expectedSha256": "7af99b5d96e63c696ed159eb9efcefa8a426d0075cf36148586b0c84c652835d",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 914,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "2895bd0a-9c67-48ca-8d5c-6bebaf70bbf7",
+      "expectedBytes": 39,
+      "expectedSha256": "0461c3250c5076bc989b4d91ec9260677eec70eb0736a4420505326e933b7058",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 39,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "3afa5007-23aa-4f16-b4a8-06beb90d4301",
+      "expectedBytes": 10485760,
+      "expectedSha256": "38206e452d53f15eb86548a6dd59e86ff9d3010bf7306a69504c20e861c0e5ba",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 10485760,
+      "bytesMatch": true,
+      "shaMatch": true
+    },
+    {
+      "assetId": "05273609-a4c5-4cbe-9963-a4d98702d1f2",
+      "expectedBytes": 34,
+      "expectedSha256": "a58fe249f77c6d5b7e5bc6131950093f015eeca919844f119b165fc1c012434c",
+      "sdkStatus": 200,
+      "anonymousStatus": 403,
+      "actualBytes": 34,
+      "bytesMatch": true,
+      "shaMatch": true
+    }
+  ]
+}

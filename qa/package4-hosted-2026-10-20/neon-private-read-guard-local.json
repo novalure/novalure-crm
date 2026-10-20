@@ -1,0 +1,32 @@
+{
+  "format": "package4-r2-completion-local-read-guard-v1",
+  "status": "PASS",
+  "launcherSha256": "dbb979739b58e1a988843245d42a51a2b14624d58e11ee132196d46ced2e35a9",
+  "remoteCalls": 0,
+  "cases": [
+    {
+      "name": "one_empty_body_then_exact_success",
+      "status": "PASS",
+      "gets": 2,
+      "anonymous": 1
+    },
+    {
+      "name": "empty_wrong_metadata_no_retry",
+      "status": "PASS",
+      "gets": 1,
+      "anonymous": 0
+    },
+    {
+      "name": "nonempty_wrong_hash_no_retry",
+      "status": "PASS",
+      "gets": 1,
+      "anonymous": 0
+    },
+    {
+      "name": "anonymous_public_denied_no_retry",
+      "status": "PASS",
+      "gets": 1,
+      "anonymous": 1
+    }
+  ]
+}

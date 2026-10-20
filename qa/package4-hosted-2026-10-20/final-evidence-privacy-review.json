@@ -1,0 +1,263 @@
+{
+  "format": "package4-final-incremental-public-scan-v1",
+  "observedAtUtc": "2026-10-20T09:21:01.115740+00:00",
+  "status": "PASS",
+  "scope": "Only current changed allowed public Git files plus the exact frozen two production plans and PR body. No ignored private fixture directory scanned.",
+  "pinnedScanner": {
+    "version": "8.30.1",
+    "package": "@nogoo9/gitleaks-linux-x64@8.30.1-post.3",
+    "binarySha256": "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509",
+    "redaction": 100
+  },
+  "gitleaksExitCode": 0,
+  "gitleaksFindings": [],
+  "targetedValueShapeFindings": [],
+  "malformedJsonFindings": [],
+  "newOrChangedFileCount": 22,
+  "newOrChangedFiles": [
+    {
+      "path": "repo/docs/crm-package4-release-readiness-2026-10-20.md",
+      "sourcePath": "/workspace/novalure-crm/docs/crm-package4-release-readiness-2026-10-20.md",
+      "bytes": 17556,
+      "sha256": "d3cbeab5b10f8127dbb386b05c4febcc70f75654c4c6c1df1b3ee63f6e473061"
+    },
+    {
+      "path": "repo/qa/package4-integration-2026-10-20/infrastructure.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-integration-2026-10-20/infrastructure.json",
+      "bytes": 19899,
+      "sha256": "f6037475d01cf5adf3ac4decc71dfc0aa87872cf46a8b6e68c7ac2d365422a63"
+    },
+    {
+      "path": "repo/qa/package4-integration-2026-10-20/source-binding.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-integration-2026-10-20/source-binding.json",
+      "bytes": 25419,
+      "sha256": "0aadf2fd2fe07d62e5315f22b86141149bac8498c5d8ff605c1b8da7e67cc638"
+    },
+    {
+      "path": "repo/qa/package4-integration-2026-10-20/verification.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-integration-2026-10-20/verification.json",
+      "bytes": 34901,
+      "sha256": "297691a0846c586469b672e2e93c87ee76a1a46d6764f0dbc1826ef3d90f2e42"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+      "bytes": 10669,
+      "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-completion-review.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-completion-review.json",
+      "bytes": 2877,
+      "sha256": "1d7680b39342c9bf425db532d3d2c7cf5009c959531fa6d4cd432c36999af166"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-file-read-failure.json",
+      "bytes": 2610,
+      "sha256": "0d4a5d395208968bd17b98a2311674b7531a4e27742df82aed504657ae1e8e8e"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+      "bytes": 1940,
+      "sha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-partial-files-reconciliation.json",
+      "bytes": 3466,
+      "sha256": "5daaad8c4e086de6080a6a15b3c84a0758dfe87ac93492803768741b34259a20"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+      "bytes": 1121,
+      "sha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+      "bytes": 6847,
+      "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-full-recovery-websocket-failure.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-websocket-failure.json",
+      "bytes": 6078,
+      "sha256": "113bcbf6f6025b7d3741c61ec00ce0758387fc8ce1471b39b72b635f7d863f25"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-independent-recovery-review.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-independent-recovery-review.json",
+      "bytes": 3427,
+      "sha256": "1415e3e291b341a0e6fb0bb7287391d425f7fb3a892163ea80cfa676bc050ecb"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-private-read-guard-gaps.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-private-read-guard-gaps.json",
+      "bytes": 1201,
+      "sha256": "538933c8dc86c20529362e42a794f37628d1b01f3af4ff21a36a09bcf4cab2e9"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-private-read-guard-local.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-private-read-guard-local.json",
+      "bytes": 700,
+      "sha256": "419373185103ea13785152193791ca5aca82594230e31a48102cc1e555b12fd1"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-recovery-continuation-root-review.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-recovery-continuation-root-review.json",
+      "bytes": 2409,
+      "sha256": "396fe9e08ae84c1fdca4f065a2bd00c399541958aa202a025714eb302e6148ac"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/neon-scoped-owner-transport-local.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-scoped-owner-transport-local.json",
+      "bytes": 4538,
+      "sha256": "3849bbbc7a3bdd9b3e2982de7793c7783e4d48dce7e8f1e3553605723cee9c8f"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/production-release-plan.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/production-release-plan.json",
+      "bytes": 100979,
+      "sha256": "9b6186959b74786d611f6ec1dbbf72059071376cc2ded96ba9df48a8543c8182"
+    },
+    {
+      "path": "repo/qa/package4-hosted-2026-10-20/production-runner-plan.json",
+      "sourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/production-runner-plan.json",
+      "bytes": 51014,
+      "sha256": "25257d60ff95e459b55fb2ad16fe684918aa08a8265176a2ec4be1ce6c844849"
+    },
+    {
+      "path": "outside/package4-production-release-plan.json",
+      "sourcePath": "/workspace/package4-production-release-plan.json",
+      "bytes": 100979,
+      "sha256": "9b6186959b74786d611f6ec1dbbf72059071376cc2ded96ba9df48a8543c8182"
+    },
+    {
+      "path": "outside/package4-production-runner-plan.json",
+      "sourcePath": "/workspace/package4-production-runner-plan.json",
+      "bytes": 51014,
+      "sha256": "25257d60ff95e459b55fb2ad16fe684918aa08a8265176a2ec4be1ce6c844849"
+    },
+    {
+      "path": "outside/package4-pr92-body.md",
+      "sourcePath": "/workspace/package4-pr92-body.md",
+      "bytes": 5876,
+      "sha256": "1e62c5d7601cb75e83adbc138c7e3d07393f08a6d67d2b29e718da03bdb5ac37"
+    }
+  ],
+  "reusedPriorScanSourceCount": 13,
+  "reusedCurrentGitPaths": [
+    {
+      "path": "qa/package4-hosted-2026-10-20/auth-compatibility-c291e21.json",
+      "sha256": "5739253057d166ce63a7f68f4a3a367b88a27304903dbc5135b006f2b1c5f935",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/auth-compatibility-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/ci-5f7bed6.json",
+      "sha256": "27ed20078b81605bb055827a891be66eb255c2e59e7f75c142d53f42d7b33dc1",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/ci-5f7bed6.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/ci-c291e21.json",
+      "sha256": "1cbfa3b4a26264a47cfc32315c515d90fb46872a24184806597459a1b4a37187",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/ci-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/credential-output-incident.json",
+      "sha256": "873f7ca0b9f4a8608efe953283f11ea5339cd1de6f7f0436d678915255f897ca",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/credential-output-incident.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/deployment-c291e21.json",
+      "sha256": "2b83a6623d411064af35702647d9de04f004ef347c26e0fe99202b111ea9dad7",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/deployment-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/evelyn-caller-artifact-c291e21.json",
+      "sha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/evelyn-caller-artifact-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/evelyn-caller-deployment-c291e21.json",
+      "sha256": "37d620bad31985b183b5997d14b253a4386de4a19e0102aede064940e0ad80ee",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/evelyn-caller-deployment-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json",
+      "sha256": "76b110bfdadf72f5576680e79be13d07fbd461948936cbe7923abbf1ef759f14",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/evelyn-caller-retirement-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/evelyn-credential-consumer-inventory.json",
+      "sha256": "dcf0b378cd10ec02c697f5bc00956a7e0cecbfc1b1fbd9d801e4fd33d5b323aa",
+      "priorSourcePath": "/workspace/package4-evelyn-credential-consumer-inventory.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json",
+      "sha256": "d96217a59742f0a745ce8143494fb53e4c33e04320f7ed36c527e047dd452406",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json",
+      "sha256": "0a46259a1312c22aba7cd3353593eeea8a3f6a1ac2c0a47fc721256413b97808",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/machine-qa-cleanup-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/machine-qa-native-c291e21.json",
+      "sha256": "aae77d737ab1fcf7c1ca2af62794ed8e2fff19b01decb72ab2b295975a4bafb3",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/machine-qa-native-c291e21.json"
+    },
+    {
+      "path": "qa/package4-hosted-2026-10-20/neon-full-recovery-tooling-type-fix.json",
+      "sha256": "100b8339695a36c3933bd6ae6b584d54b9753fd26334d8e13fc2d02cbb13a4f6",
+      "priorSourcePath": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-tooling-type-fix.json"
+    }
+  ],
+  "priorScanReceiptSha256": "cbe4a194d15f66920a746f00fa30e77bdbcacc324327b1612d4d97a988ec5917",
+  "sourceFilesStillIdentical": true,
+  "sourceFilesModified": 0,
+  "providerOperations": 0,
+  "secretValuesEmitted": false,
+  "semanticReview": {
+    "status": "PASS",
+    "completedAtUtc": "2026-10-20T09:24:41.572212+00:00",
+    "findings": [],
+    "correctedFinding": "Only verification top-level stale Full restore open scope corrected; all other bytes unchanged. One changed-file scan returned zero findings.",
+    "gates": {
+      "A": "PASS",
+      "B": "PASS",
+      "C": "PASS",
+      "D": "BLOCKED",
+      "E": "PASS",
+      "F": "PASS",
+      "G": "BLOCKED"
+    },
+    "sharedRecoveryBlocksAcrossFiveCurrentReportsAndPlans": "All 49 fields identical; counts and source/result hashes independently matched actual receipts.",
+    "currentPublicArtifactHashReferencesVerified": 60,
+    "scopeLimitsVerified": [
+      "18-scenario baseline reused only for unchanged components; actual compatibility5 and machine40/5 separate.",
+      "Five retrieved-v1 responses,35 actual application denials,20 distinct customJTI hashes; intended rawFAIL phases preserved.",
+      "15 named project Preview application keys only; no all-system-credential neutralization claim.",
+      "Caller DELETED plus independent404; no immediate permanent byte-erasure claim.",
+      "Full same-project COW recovery20/167/793/60 plus17files/41950560bytes,8preserved+9created; prior failures retained.",
+      "In-process actual restored App5; separate Source5+HTTP3 and native active-readback; no second Hosted deployment.",
+      "QA PG18/vector0.8.6 versus Production PG17/vector0.8.0; no native dump,cross-projectDR or parity proof.",
+      "Appc291 versus two-file recovery-tooling5f and later reporting commit remain separate.",
+      "Incident remains OPEN/BLOCKED; actual configured consumers UNKNOWN; no global no-secret-output claim.",
+      "Both production plans DRAFT; no approval request/execution; migration101-106 and staging/scheduler effects explicitly require later authorization."
+    ],
+    "sourceFilesStillIdentical": true,
+    "noTestsOrRemoteCallsByReviewer": true
+  },
+  "postFreezeMinimalDelta": {
+    "path": "/workspace/novalure-crm/qa/package4-integration-2026-10-20/verification.json",
+    "sha256": "297691a0846c586469b672e2e93c87ee76a1a46d6764f0dbc1826ef3d90f2e42",
+    "reason": "Corrected only stale top-level Full restore open scope; completed recovery scope now agrees with gate C and actual final receipts.",
+    "gitleaksExitCode": 0,
+    "gitleaksFindings": [],
+    "otherFrozenFilesUnchanged": true
+  }
+}

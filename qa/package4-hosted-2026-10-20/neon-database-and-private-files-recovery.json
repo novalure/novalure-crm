@@ -1,0 +1,274 @@
+{
+  "format": "package4-post-hosted-full-recovery-safe-summary-v1",
+  "status": "PASS",
+  "proofStatus": "PASS",
+  "scope": "Synthetic same-project Neon COW recovery plus all private file bytes in a separately bound Vercel Blob store",
+  "applicationRevision": "c291e21288903e2807b108bba852a597f77b777a",
+  "toolingRevision": "5f7bed6578d8c29631745f6627bbec1bf605f3c8",
+  "deploymentId": "dpl_CJuybvc8rn275Ypvwv5bK4bFYvko",
+  "producingPrivateLauncherSha256": "dbb979739b58e1a988843245d42a51a2b14624d58e11ee132196d46ced2e35a9",
+  "resultSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "baselineCapturedAt": "2026-10-20T08:11:09.576Z",
+  "startedAt": "2026-10-20T08:57:43.902Z",
+  "completedAt": "2026-10-20T09:03:31.101Z",
+  "elapsedMs": 347199,
+  "singleUninterruptedRun": false,
+  "previousAttemptsPreserved": {
+    "originalR2UnhandledTransportResultSha256": "cff3bbc468d1a9c6f426e85552c2e9b4ffe3bf3f9f569dfc1686379dfcd6329b",
+    "originalR2RecordedStatus": "RUNNING",
+    "originalR2ClassifiedStatus": "FAIL",
+    "firstSameBranchCompletionFailureSha256": "347f2c212bdd46cce47b8dc6ff59dbdc055d2b1a5c2c13643d7058735e110d3f",
+    "partialTargetReadOnlyReconciliationSha256": "3bd2ca63d2f443ab44e8912fece59c149fe4df8f1dc828b6dbb693fa4e85da18",
+    "originalProviderDefaultAclFailurePreserved": true
+  },
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "sourceBranchId": "br-sweet-surf-ba6iahut",
+    "pointBranchId": "br-broad-mouse-baohb06c",
+    "workingBranchId": "br-little-lake-bagp4n0i",
+    "restoredBranchId": "br-nameless-sun-bazc0qdt",
+    "parentLsn": "0/32A4C10",
+    "postgresVersion": "18.6",
+    "vectorVersion": "0.8.6",
+    "productionVersionParityClaimed": false
+  },
+  "preflight": {
+    "status": "PASS",
+    "checkedAt": "2026-10-20T09:00:43.274Z",
+    "sourceCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+    "workingCombinedSha256": "74c8eea535435d1333aa173470b6977d408d4affbc7d63a34c91aca651acf4d1",
+    "restoredCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa",
+    "catalogCategories": 20,
+    "dataTables": 167,
+    "rows": 793,
+    "ledgerRows": 60,
+    "versionBindingsSha256": "803ef82d65203e12bb7b839ceee1e6c88e91feb5b9f57c88a8c8acb6a53f51de",
+    "targetObjects": 8,
+    "existingTargetFilesVerified": 8,
+    "missingObjects": 9,
+    "archivesVerified": 17
+  },
+  "databaseEquality": {
+    "comparedCatalogCategories": 20,
+    "comparedDataTables": 167,
+    "comparedRows": 793,
+    "ledgerRows": 60,
+    "databaseMetadataAndGlobalRoleSettingsCompared": true,
+    "noIgnoredCategories": true,
+    "sourceAndRestoredExactBaselineBeforeFunctionalWrites": true,
+    "workingExactPreviouslyCommittedState": true,
+    "workingActualCommittedRowsInOriginalR2": 1,
+    "newWorkingCommits": 0,
+    "noAclNormalizationOrGrantChanges": true,
+    "finalSourceDatabaseUnchanged": true,
+    "finalSourceExpectedCombinedSha256": "1d68d20c23ff94368b22cc55611bc7675d769bf5bcf0cf451c9936cf2c44a6aa"
+  },
+  "privateFiles": {
+    "status": "PASS",
+    "allHistoricalSourceObjectsIncluded": true,
+    "sourceStoreId": "store_6i5sZDmCf4qX9J86",
+    "targetStoreId": "store_2FsqiotLlmJJ6toi",
+    "objects": 17,
+    "bytes": 41950560,
+    "existingObjectsRetained": 8,
+    "missingObjectsCreatedExactlyOnce": 9,
+    "overwrites": 0,
+    "deletes": 0,
+    "allBytesAndSha256Verified": true,
+    "allUnauthenticatedRequests": 403,
+    "fullSourceAndTargetInventoriesExhaustive": true,
+    "versionBindingsSha256": "803ef82d65203e12bb7b839ceee1e6c88e91feb5b9f57c88a8c8acb6a53f51de",
+    "sourceFilesUnchangedAfterRecovery": true,
+    "transientEmptyBodyReadsInThisCompletion": 0,
+    "files": [
+      {
+        "assetId": "05273609-a4c5-4cbe-9963-a4d98702d1f2",
+        "bytes": 34,
+        "sha256": "a58fe249f77c6d5b7e5bc6131950093f015eeca919844f119b165fc1c012434c",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "1fb7bd41-a0d3-452d-b58f-aef2ad0badd2",
+        "bytes": 877,
+        "sha256": "f26cbea8f6a7607c1486f72706aa4af16396695ba3e91d4a1c16a2dae011268d",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "2895bd0a-9c67-48ca-8d5c-6bebaf70bbf7",
+        "bytes": 39,
+        "sha256": "0461c3250c5076bc989b4d91ec9260677eec70eb0736a4420505326e933b7058",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "28ff44d6-63b4-4d14-b780-07f5d9743016",
+        "bytes": 914,
+        "sha256": "7af99b5d96e63c696ed159eb9efcefa8a426d0075cf36148586b0c84c652835d",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "2b104b23-d3c7-4ce5-93b8-69f68aab8207",
+        "bytes": 10485760,
+        "sha256": "9f48e6896e209401262a0cfbd47dd0d4faf67cfd53c3d92f7fbc1fabec222cfb",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "2f67bf19-e33d-463e-b79a-6e9f2f9ffe5c",
+        "bytes": 876,
+        "sha256": "77a162e4089b207e588d617ac8a2385bec4fac98fcd44acbd53387e0be17c01f",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "364be846-a465-498f-b79a-f73e4d4d3b42",
+        "bytes": 946,
+        "sha256": "8db4491f6b0fbcd7d5bd6428e6273fd38027b510e0561b79fb82d52101ccdcd7",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "3afa5007-23aa-4f16-b4a8-06beb90d4301",
+        "bytes": 10485760,
+        "sha256": "38206e452d53f15eb86548a6dd59e86ff9d3010bf7306a69504c20e861c0e5ba",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "78865f1b-0fc7-4c55-96d6-e44a3fd211be",
+        "bytes": 914,
+        "sha256": "7af99b5d96e63c696ed159eb9efcefa8a426d0075cf36148586b0c84c652835d",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "794bcf44-f3b5-4509-b790-11273eb384e6",
+        "bytes": 10485760,
+        "sha256": "9f48e6896e209401262a0cfbd47dd0d4faf67cfd53c3d92f7fbc1fabec222cfb",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "7e9819a8-fdf8-46f6-8a92-6804d47ee699",
+        "bytes": 10485760,
+        "sha256": "b3976da4b0302bc790b3d0ac8261f7b7d4b5bc7c37d7ca5ef281fc3febf25950",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "87ac1613-1038-43db-af66-93944695d96c",
+        "bytes": 877,
+        "sha256": "d989ece4f7e4c7d870392dbc3df479b1e2a3c1c9218772ca4aa34e19d576516e",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "8bccbe24-5a92-4ca0-a6a1-1e3291e65950",
+        "bytes": 39,
+        "sha256": "620543e78431b76c012640964eb7d70b14c6385ace6a0c97159d9154ccaf44b4",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "9acec85e-b0c3-4c9a-ac82-ad044efca8d8",
+        "bytes": 945,
+        "sha256": "38f4a8e0a9866e9bca3453dd2b52040dbf38dfe26193ff312914aa0896a16a16",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "cbf94ccc-5a33-4239-acf4-43f0ca581467",
+        "bytes": 879,
+        "sha256": "102c6ca9d143d15d78de4aea85597b3b954b8dff4473aba09f6d093fc5c91df8",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "d71f9d12-f190-4198-976c-5e8736fbc786",
+        "bytes": 90,
+        "sha256": "60b2c422dce4476bf942589534d1f3ec015011f45ccf49000b7cb321db9dc73d",
+        "unauthenticatedStatus": 403
+      },
+      {
+        "assetId": "f62cdc58-9ba0-4f02-bb1b-72393f4ee1f8",
+        "bytes": 90,
+        "sha256": "60b2c422dce4476bf942589534d1f3ec015011f45ccf49000b7cb321db9dc73d",
+        "unauthenticatedStatus": 403
+      }
+    ]
+  },
+  "application": {
+    "status": "PASS",
+    "method": "Actual deployed-candidate repository and route code in process against restored database with ordinary browser cookies and actual private-store token",
+    "databaseRole": "novalure_app",
+    "superuser": false,
+    "bypassRls": false,
+    "ownsPublicObjects": 0,
+    "authenticatedSessionVerified": true,
+    "checks": [
+      {
+        "name": "private_current_and_historical_documents",
+        "status": "PASS"
+      },
+      {
+        "name": "foreign_tenant_document_denial",
+        "status": "PASS"
+      },
+      {
+        "name": "same_published_version_binding",
+        "status": "PASS"
+      },
+      {
+        "name": "revoked_document_denial",
+        "status": "PASS"
+      },
+      {
+        "name": "restored_knowledge_and_106_readers",
+        "status": "PASS"
+      }
+    ],
+    "restoredHostedDeploymentVerified": false,
+    "intentionalRestoredFunctionalWrites": "Ordinary download/authz audits, four quota-counted knowledge queries and one normal publication revocation after strict initial equality; Source unchanged"
+  },
+  "lifecycle": {
+    "existingProjectBranches": 9,
+    "projectBranchCapacity": 10,
+    "newBranchesInThisCompletion": 0,
+    "noBranchesDeleted": true,
+    "checkpointHasCompute": false,
+    "checkpointHasExpiration": false,
+    "childrenActualExpiresAt": "2026-10-21T08:15:22Z",
+    "computeMinCu": 0.25,
+    "computeMaxCu": 0.25,
+    "poolClosesAllFulfilled": true,
+    "endpointCleanup": {
+      "status": "PASS",
+      "checkedAt": "2026-10-20T09:03:31.101Z",
+      "allThreeDisabledAndIdle": true,
+      "problems": [],
+      "endpoints": [
+        {
+          "id": "ep-lively-dawn-ba2sskxd",
+          "branchId": "br-nameless-sun-bazc0qdt",
+          "disabled": true,
+          "state": "idle"
+        },
+        {
+          "id": "ep-crimson-forest-ba4kk6sb",
+          "branchId": "br-sweet-surf-ba6iahut",
+          "disabled": true,
+          "state": "idle"
+        },
+        {
+          "id": "ep-purple-truth-baye3wwh",
+          "branchId": "br-little-lake-bagp4n0i",
+          "disabled": true,
+          "state": "idle"
+        }
+      ],
+      "sourceAvailabilityRequiresSeparateRootAction": true
+    },
+    "sourceReactivatedByThisAgent": false,
+    "automaticBranchDeletionClaimed": false
+  },
+  "productionAccess": 0,
+  "sourceWrites": 0,
+  "nativeDumpRestore": false,
+  "crossProjectDisasterRecoveryClaimed": false,
+  "limitations": [
+    "Same-project COW and separate private Blob byte recovery; no independent native pg_dump restore or cross-project disaster recovery claim.",
+    "Actual QA database PostgreSQL18.6/vector0.8.6 differs from production PostgreSQL17.11/vector0.8.0.",
+    "Ordinary restored application verification used actual candidate code in process; no separate restored Vercel deployment was created.",
+    "Source availability after all-three closure requires separate explicit Root action.",
+    "Both earlier R2 failures remain immutable; this is a separately evidenced completion, not a single uninterrupted run."
+  ]
+}

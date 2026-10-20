@@ -1,0 +1,653 @@
+{
+  "format": "package4-evelyn-preview-caller-artifact-v1",
+  "target": "preview",
+  "deployable": true,
+  "callerProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "receiverOrigin": "https://novalure-5j7pionbs-novalure.vercel.app",
+  "receiverProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "logicalContentAccess": "read-only",
+  "runtime": "nodejs24.x",
+  "deadlineMs": 30000,
+  "fixedMaximumRequests": 8,
+  "environmentIsolation": {
+    "expectedBlankKeyCount": 15,
+    "explicitEmptyRequiredBeforeOidc": true
+  },
+  "oidcEvidence": "Signed workload claims identify project, owner, subject, environment and audience. No branch or deployment claim is assumed.",
+  "originalPdfProvenance": {
+    "bytes": 877,
+    "sha256": "d989ece4f7e4c7d870392dbc3df479b1e2a3c1c9218772ca4aa34e19d576516e",
+    "scope": "Original uploaded file bytes; not the semantic excerpt hash."
+  },
+  "expectedSourceId": "eecf12c0-e36a-4bd5-a40d-50420c2d54a0",
+  "expectedVersionId": "d98b2e70-fb25-4f4c-924f-c54afd6342cb",
+  "sources": [
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.mjs",
+      "sha256": "e9b90d4fcdd6f5ca5b6fbbbb5835a9d28b525930fdf3a8dba1734a6c1f7f3bfd"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/handler.mjs",
+      "sha256": "9c26d8bdab7dfa6a99880beb6691200959452a52da8885a425f8d4a1dd4885d8"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/contract.json",
+      "sha256": "e87101740f387ff24fb32decefd8dc3af578fa583999ed1c37f136fdb6429a06"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/build.mjs",
+      "sha256": "a893aa43631f44eee10bd0224faeb78cfbf1efb0dacbbed837d5e5f14175bb0c"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.test.mjs",
+      "sha256": "9bd4704a57eeb24f63140b7754ff123de068996921cf97b6d72c4e5a7e3c44c5"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/README.md",
+      "sha256": "15f4ccd6708b7840690597cbcbf09faac76f07f91cfc2a11d85ee5991df18ac2"
+    }
+  ],
+  "lockfile": {
+    "path": "package-lock.json",
+    "sha256": "f6a47237c3cf191d639dfb2b0acf5ad48752aac61c14fd58af6ec4ea7c1c009f"
+  },
+  "sdk": {
+    "package": "@vercel/oidc",
+    "version": "3.8.8",
+    "lockIntegrity": "sha512-aeq4/sgVh80zO6j2H+7FRfsG6NOXBrvzV1EEO8IdXPEJgwHIPakP+BFq3QmprsEQ18bIimds07kvaYhm2lehtg=="
+  },
+  "dependencyInputs": [
+    {
+      "path": "node_modules/@vercel/cli-config/dist/index.js",
+      "sha256": "8616c52c0865e69152338daee59e635731bd0e72e9618f7dda6dcc7cb57fd126"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/envpath.js",
+      "sha256": "87147f22306720572134021dd8560cbf586fc0ee46212df1ee71c81ac97b9ca0"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/errors.js",
+      "sha256": "44927258b256c69f51b80fd253ce1052ca7dc467c3ab576ed6e55f196f0cc159"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/errutils.js",
+      "sha256": "f39a18ea3d8c94b572d537824ac4b7b08c8a93c77f0c638ffb2f0fe1cdcb8028"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/exec.js",
+      "sha256": "d092f2382fbb4dcc7a1c3da76f89f231a655c66712cd5f996521c88a818ce0f5"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/fsutils.js",
+      "sha256": "97589e78daf5c8ccd92743c1f0f2b4e1facdf877ae01776a4f5bb191fb3eb243"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/index.js",
+      "sha256": "0a9ebfcb626c28e00f0e6ffccde7c3c7661e04a50753bca1669ef3f7672c5109"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/lookup.js",
+      "sha256": "3a0f3363083a7f50ae7e5f4ca0d73902e805d086e658ae53b8faf085a99ab262"
+    },
+    {
+      "path": "node_modules/@vercel/cli-exec/dist/safety.js",
+      "sha256": "4e4925d682efc56b35091752e55db6838efdeb5323e123cc99811e20e023b99b"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/auth-errors.js",
+      "sha256": "37eba5e3fed8c68fe5aad25afbc76a84b657c5d23069496bc3a778acfd3c521c"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/exchange-vercel-oidc-token.js",
+      "sha256": "0d00d1d7ca67c137d9744f3c7cfc9f470dfc859f5ed953be58bd52420a08d6a3"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/get-context.js",
+      "sha256": "4331b07d75d102e20b6faabae865fd9f52e53a56f59761224452f926b9c010e2"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/get-vercel-oidc-token-sync.js",
+      "sha256": "95be27b00923074f71db054d0802b48722e5459b3c0fffb082f5b226c6e00066"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/get-vercel-oidc-token-with-refresh.js",
+      "sha256": "aa0061d370b39ceac8180539dee8337ec6dba67adbc2055a151182e3aca4400f"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/index.js",
+      "sha256": "a03d93026c0923abf5adbe40acfdfd6e20945296192c0c62b24ea9a50bafac50"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/oauth.js",
+      "sha256": "e1bc26bb6267a6d926e6f3aa065b6e703426e6a90deedf401d90676b81554c69"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/token-error.js",
+      "sha256": "72202e6eca000686ae2820b9e4b1b919b2c4ddaeacd155c4b08d97a1f6fffee9"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/token-io.js",
+      "sha256": "fed3bbf0f3e69a001c91628eddec104d88c7a29d5b489ee261b00002bf95eca4"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/token-util.js",
+      "sha256": "0b750fc022624cdd0b6308fa2e0dad1e47e304422fe0f8f61dafc727eb8059ec"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/token.js",
+      "sha256": "aa7c3b8350242fad1185ab628444b969d934c6397d3f881b263e1a2d1765da07"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/verify-vercel-oidc-token.js",
+      "sha256": "af1abbd1023f7a7e7b55e4cf7e74aa7e18ec676e49b76efb71826e122debf48b"
+    },
+    {
+      "path": "node_modules/@vercel/oidc/dist/version.js",
+      "sha256": "a4b73ef39ea61bb9e25446a9b0c61431a4796f1c4be0faafb0ba4eb00190c1c5"
+    },
+    {
+      "path": "node_modules/cross-spawn/index.js",
+      "sha256": "b8e01cb18ba87ee1b0e5eb2eb1ce6cbb25a2bdd229f9e08671f8a10ed7e3ad35"
+    },
+    {
+      "path": "node_modules/cross-spawn/lib/enoent.js",
+      "sha256": "0f9aab5c708991cf01d3fda557318c4600a46071138742ee8596244f7fd73ef5"
+    },
+    {
+      "path": "node_modules/cross-spawn/lib/parse.js",
+      "sha256": "0a67601365a3ae413653c8c9d3c6bff2202861e1eb8b5d28bf46d4812a4465ea"
+    },
+    {
+      "path": "node_modules/cross-spawn/lib/util/escape.js",
+      "sha256": "5d61b2829e0e7912874e1e664146554d0cd02fd5524abf4ea59a879f0fc30675"
+    },
+    {
+      "path": "node_modules/cross-spawn/lib/util/readShebang.js",
+      "sha256": "b05ba732e167fcf9a4fd67ebb4a5c28cca4712a36376c0b0f2e4e1d37e7f18d2"
+    },
+    {
+      "path": "node_modules/cross-spawn/lib/util/resolveCommand.js",
+      "sha256": "e525fe739aba01cf5eee6473df449cdda93df6266effa8eae0fcfb9a4e6c5de6"
+    },
+    {
+      "path": "node_modules/execa/index.js",
+      "sha256": "fb539673c9689a0613bbf0fa7c864857fd40462692d6addc15b420b7605b6770"
+    },
+    {
+      "path": "node_modules/execa/lib/command.js",
+      "sha256": "b13060ad8e7262a9656edb57f894a57f039b86bd706466d8aecf315e0d9888ef"
+    },
+    {
+      "path": "node_modules/execa/lib/error.js",
+      "sha256": "7c0ef8a52066d45f9ad2b8e43ff1f8d06955cd2fe4dec3ec1ddad7fb49205454"
+    },
+    {
+      "path": "node_modules/execa/lib/kill.js",
+      "sha256": "6984ac704c67dd84fe5e6a86441d3902d94b44842aa7a2037279a01b95d678ed"
+    },
+    {
+      "path": "node_modules/execa/lib/promise.js",
+      "sha256": "13c171151f5c3ce102bc711841bc12ff09058134f7f414d144cf0c766da15e1e"
+    },
+    {
+      "path": "node_modules/execa/lib/stdio.js",
+      "sha256": "adae66bc15a0e364688c5baa8a3ebe55056d62f33d5b0cad17b5e3b61af0cf0d"
+    },
+    {
+      "path": "node_modules/execa/lib/stream.js",
+      "sha256": "b2ba44c25beb717ca5de07ed5c19508b4f2ce46d90b45c441ddca0592d286847"
+    },
+    {
+      "path": "node_modules/get-stream/buffer-stream.js",
+      "sha256": "74502372f3e457ae4d05546c47b4fd88c8df6ed8eb6166b6feb8bec1798ec6dc"
+    },
+    {
+      "path": "node_modules/get-stream/index.js",
+      "sha256": "3f17a6bc0f9f1f0d93f5b9d3eee80168a638280a10a1588bfad14a118b846c7d"
+    },
+    {
+      "path": "node_modules/human-signals/build/src/core.js",
+      "sha256": "be3841504f5cb1ac4c61000637e95044ba9d4593866aeb498dee246f5f751115"
+    },
+    {
+      "path": "node_modules/human-signals/build/src/main.js",
+      "sha256": "97771c477204331457c525c2547f329400aabe2194d6287165b13d886cc056d1"
+    },
+    {
+      "path": "node_modules/human-signals/build/src/realtime.js",
+      "sha256": "d5546eba2a83a02b5264d8081f1c8baa96e6def11ec5ea7d9adb1adc5e5be83a"
+    },
+    {
+      "path": "node_modules/human-signals/build/src/signals.js",
+      "sha256": "9135798c3f3d93bfdbda07d8145e271958bfd218a63984e8096f8f07e1dbf35d"
+    },
+    {
+      "path": "node_modules/is-stream/index.js",
+      "sha256": "14cddb2ce9959337b9f9f018ee57171ec8c4eacf1b27de9d5b5c268a2167288c"
+    },
+    {
+      "path": "node_modules/isexe/index.js",
+      "sha256": "7af7a68708317ab2b8743b44591d98ca6f5ca787e89e7c289154471fd2f67331"
+    },
+    {
+      "path": "node_modules/isexe/mode.js",
+      "sha256": "0381513485dd6d0799b160a5c0bf7b4a79d1ece5c32182de44aa73f756a7ac54"
+    },
+    {
+      "path": "node_modules/isexe/windows.js",
+      "sha256": "b422b8fbb7815542dfbd1b3adaec5700249a1934c44a1d994654329c06fc1018"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/index.js",
+      "sha256": "ab345af9c9ae04b77518275393c1fa2439c5004a259ad04ee0bd707d2760d474"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/compact/decrypt.js",
+      "sha256": "983572520cefc2098f5976b222d672644473326fe1f4322bd380853b807511c7"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/compact/encrypt.js",
+      "sha256": "a352255e4de0fea40d0dcd4787cad8606e7418de0ccac1302f8c52b4975b0666"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/flattened/decrypt.js",
+      "sha256": "c67c82b0848da266466e80bfc8e5d7c09da145df6c2898d5c94c272c35909b9f"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/flattened/encrypt.js",
+      "sha256": "ac8280a896cdbd45ed29582a5515f0a6898d7c4329c9167918475ecc9e5e05b3"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/general/decrypt.js",
+      "sha256": "06d6cdc24d0fe09fd0e9fa14d0f3560990ead965841b87be880e4d4adc1bafce"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwe/general/encrypt.js",
+      "sha256": "258ab66789bb58171dbd88d5a9bd68dd1f40b224cb25822f5efe9a0f16340231"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwk/embedded.js",
+      "sha256": "4d667d63d9141bf7eececd97a341a6d26bd046641efce07625ada57379db9b6b"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwk/thumbprint.js",
+      "sha256": "0cb5ed7e0aa7c02156c8f1490acdc0406f6e27f8766d64f32a549c84c1ce2c16"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwks/local.js",
+      "sha256": "072e09b16623c6e3a065e98a9e29df9964b0982b7cb7dd07ec0007f1e6948604"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwks/remote.js",
+      "sha256": "16f627780db229e3b71f96e6984c53fc32cc660730ca91b5224003ae86821007"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/compact/sign.js",
+      "sha256": "c2f4342941efd1cd621832a05940d024d10536806168825568799d15009d87aa"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/compact/verify.js",
+      "sha256": "614be8b4155911223add1e8e04b3a2c1401ba2db564461401b40ee3732b4833d"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/flattened/sign.js",
+      "sha256": "1007a359332f9c22f4339718ed3d2ecda0265c33ab53ed8ba9fd1663c3544f45"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/flattened/verify.js",
+      "sha256": "788c5d380af35dd722676763315a3854b03f809e81a5b49c5c8e16dcab82f673"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/general/sign.js",
+      "sha256": "7ad31d63c223ff64eb212c290443b78dd044e66f5296d04d115b653fe0de53f9"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jws/general/verify.js",
+      "sha256": "da5f56b6ec6fc67aedcf434b668d688b99a136c2d63669ca2feb28e7e33ad28e"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/decrypt.js",
+      "sha256": "704e3e99f7d26c2417d9fe844655e5662ffbd81e68469ec4e78c5956d4cd5182"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/encrypt.js",
+      "sha256": "17cc877a14f51e083705f6db5ab973563fc421acbddcc8d88a389f0c32e92e27"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/produce.js",
+      "sha256": "46c2d88a5db792e83edaab5550c519fbbfa53e3cb223ee5b751f072fe55b2b9f"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/sign.js",
+      "sha256": "52646cb8ae7f5fd59369a78e3ebe05d088392c9ccc925c019bae21d8a1e6d44f"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/unsecured.js",
+      "sha256": "4d6824ad7a7298ba5299e37860c9bd4921e88936afa69c509ba59913ab32ac0d"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/jwt/verify.js",
+      "sha256": "e9ea2b5711ff7307d78adccc69a96f1745b6569ac1716fa77f36c60729d8e8ad"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/key/export.js",
+      "sha256": "09cecadc3fcff55609ccb88285b31d6302ddab59738830b8c20c38b982dcd264"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/key/generate_key_pair.js",
+      "sha256": "a52f656f7019d12c63aa621e8812392952b985c154216c4124f6eae15f1e81d3"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/key/generate_secret.js",
+      "sha256": "f1f7d5fc2ff796a483a6e13a489e68251fad147b164706021361d53105ae6857"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/key/import.js",
+      "sha256": "f978a41f46628e7aeaece82baeb2fbc3cadafbb617dd2a08a5a5e9d1153a2280"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/aesgcmkw.js",
+      "sha256": "e4ae0bb7b53d6f2f506efc2763f5ddf51bfd385096dc1ded957b3095a07db7fe"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/buffer_utils.js",
+      "sha256": "f260255e8fd7efdb2def4b253198abef584d63ffab8982c55ccfe354910a205b"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/cek.js",
+      "sha256": "1346c6fa4510d3e7ce119df83ca550e7786e97d0a53316d29d98939ebc0a83c1"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/check_iv_length.js",
+      "sha256": "2687fcf438509d00640256298c7544839b3409620a13f6f42c37abb454800002"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/check_key_type.js",
+      "sha256": "789f18b650620e86a4cc5048d823c69e2302e9a2b9ae32bf74e3b2a50de91121"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/check_p2s.js",
+      "sha256": "364b094ce3808e52693dc5afe6d15f7f2cafd629dd47436c07d87d062fd50417"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/crypto_key.js",
+      "sha256": "f8a6dc5f696871f969673eb3131b99da2b46c436507760d2618e1cd03a02d0a5"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/decrypt_key_management.js",
+      "sha256": "dcdf50ef02155c5acb1ea266e80cc75036eb572b1dd9e9ec122a6d4a85edc840"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/encrypt_key_management.js",
+      "sha256": "a5a57736e675533f2e771a0a7ae0a87bcbd7cc51e1f07f4912ec53198d28cbd1"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/epoch.js",
+      "sha256": "6229a652e68b9c1e99ffc2d9949671222c605441925e662f440a1b620437f5ba"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/invalid_key_input.js",
+      "sha256": "1910876cf3b9cb4c771e709629db4a087879b87e98354ac00f6ccace4657d693"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/is_disjoint.js",
+      "sha256": "7fb0d3fab7dc87c37ba55fe8639ad0aef160f6a74a177ec8d1f0caf07051dc32"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/is_jwk.js",
+      "sha256": "8f64bde664e1bed7ea024c8e2372fd73f2d24b8337d691e31a640f649be376e3"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/is_object.js",
+      "sha256": "e2d73ca21d786c65b8f1c6dfc7de9ef1ed058c2a5e0aaf6bf6187d58208de9c3"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/iv.js",
+      "sha256": "e0b7423930c6ded496243220b663f2fd160129fb43a8418d953298d503e9016e"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/jwt_claims_set.js",
+      "sha256": "2d6eca7600ed5f2709fe8f62e1dd0c9b445fd0661c501d1e0ee036f467ee374a"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/private_symbols.js",
+      "sha256": "813b2935f8c178fb5592683230244522b6955e5aefa37f11f6c8fb9ac6bb1534"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/secs.js",
+      "sha256": "8903f9b484ef7c4143f15d95cc0d3013abd22f2f0d0f3a9140d9f96f9b81e055"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/validate_algorithms.js",
+      "sha256": "f04b9fce70acc99b3a2a35b4d5569295bc484668d094a6b06258a395d9645701"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/lib/validate_crit.js",
+      "sha256": "6031365e6671e2560761e6bb9d8bc3c82ec852708c448ea821220527f30b0946"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/aeskw.js",
+      "sha256": "8aaaddff06d7fc6fe8d9acae16cbb7935138e11031d576f41282e0893c4c20d3"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/asn1.js",
+      "sha256": "550fad8b159a4f3db1f6c6875c07d256f8b8a3baca78a49501e886eda07e8b68"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/base64url.js",
+      "sha256": "489f134067e21805db4317b000d356ca572ea8215efe5effb5189dc03544d3fd"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/cbc_tag.js",
+      "sha256": "620481544d3ce46314fc94ff45d2ec7484422ecb835cccfea567a610d3f16e16"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/check_cek_length.js",
+      "sha256": "0509f2b9cab076ec10a02b1bcf05b40650c5c65dde43921a623a59fc60f8f739"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/check_key_length.js",
+      "sha256": "43f6b48cd1bfed3f37d10c88290db86a0859682d99e2ecced91f1a15cca60dc2"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/ciphers.js",
+      "sha256": "ef3630259da74c6bb448095c7aebcd77442fbfdae8ea18531156a85dfa89c80b"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/decrypt.js",
+      "sha256": "c758b956d8d87b3ccea371844890d993bc63c5b2b1873af26fa21ff0d25fae97"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/digest.js",
+      "sha256": "2b50b054116b20c7d043cdad83724a24e8db705fe4c71a805762fd75cc41eac2"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/dsa_digest.js",
+      "sha256": "860225cca3661f4b134b13962aec84a8637605e87d8e979dd8f017daf55885be"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/ecdhes.js",
+      "sha256": "41bdfaab44c7a019a8c4bce15e7acfb7062f3024f5bf50e1762772c7f99f22c7"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/encrypt.js",
+      "sha256": "145c27b44527ddd8495aecd3843b9ab8bc6c04882076cf6d7433260bb536e04c"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/fetch_jwks.js",
+      "sha256": "5334644ef804daacd65b96a3645c403aa285bee5f9da5131432dd5aaee26ed57"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/generate.js",
+      "sha256": "b9cb7a20b39d4bac54a91dba7b85de6ded862f096dcc80a3b53421962305ee2c"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/get_named_curve.js",
+      "sha256": "782ecb8faa2f2747b3133a7f5dcd00f2cb77e298fd9ba2d40253f7b0aaf8ab79"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/get_sign_verify_key.js",
+      "sha256": "e5de517626304f8ae9a4603b90c2a6327c3d5f194a29f4d4643962298d83b51c"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/hmac_digest.js",
+      "sha256": "4caab5bf211a9989b5282537d368c86e8e6cf10a14513171509ab12469e9f463"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/is_key_like.js",
+      "sha256": "96e8dc93f8f1a44bd1cf9cf78084ce3292fdaceb338605533e31e0368f06cb3a"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/is_key_object.js",
+      "sha256": "254748ad9dbc2c8043b2ef0bdf214aa67f9e180f04b0233aa8347d0eb19098da"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/jwk_to_key.js",
+      "sha256": "63f9763013e23a3d6d9e6cfffd45f6a79e69eb36c8f96354b1a8eeadc8d5c253"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/key_to_jwk.js",
+      "sha256": "b2e83b1745a3722055715c8fcbdc0ef20a39d9a5cab9fb7626f55048c245a87a"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/node_key.js",
+      "sha256": "e2e4baf5634b261b914be7e2a8b969f10f96bbbc448d6c955565abd38bcdf255"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/normalize_key.js",
+      "sha256": "fe43050213c3253739b52c041b67d4b0453949d978c21f0d8694afff6f0af488"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/pbes2kw.js",
+      "sha256": "e63f0e5d4f2d13a451615e12978dd342c59c0257f01f6f5a6cf7f1c4ab057f08"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/random.js",
+      "sha256": "bfb20b0d910573ada26bab218e249968491f7f3de964fc298a0e8ee8a9dd406f"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/rsaes.js",
+      "sha256": "9b91d298c45028d3f05fd09f6bc8e7ebdb644cf1067bf2657a88491e8bdaf8ec"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/runtime.js",
+      "sha256": "f5b528ca34d5d74e15663edc98148ee5a2f9b46634e2cb8b719e74e355a2b3e4"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/sign.js",
+      "sha256": "e8ba3a112a94730fad84e42274b5d4d76c03d2120c58123c64ec2ff66b98be64"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/timing_safe_equal.js",
+      "sha256": "ce47d97aab282673bc7dfc0aee8d448862c8cdc150dc797f415a6746f239a338"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/verify.js",
+      "sha256": "20903c2471979d3f828f06b3f2dd3b48276dd467693749f5983568d4d9c3f922"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/runtime/webcrypto.js",
+      "sha256": "85b3208bfb55b431ed59211b77f388a653e4710424f06de13976da09d81fd98a"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/util/base64url.js",
+      "sha256": "5aef281268ad384feb3d40a45f3590d8176b7f8227b89c35468a47a104f9cb9d"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/util/decode_jwt.js",
+      "sha256": "778a70a036bbd27fda5f975e87b036eb92687f587f3284825e61827d89d6e039"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/util/decode_protected_header.js",
+      "sha256": "d22141c95555fe628bfdebd5ec20eb2773818cb9cf63a7291da6a5c1f4016cb8"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/util/errors.js",
+      "sha256": "72aea0daf5dfb4fc94c4392a070627f436b891a75086e21b6e12726a61ec0c95"
+    },
+    {
+      "path": "node_modules/jose/dist/node/cjs/util/runtime.js",
+      "sha256": "d5b5f40631fc881cf1a6bb4fc371f4e78658203f04a98baa5292a29a7c19a661"
+    },
+    {
+      "path": "node_modules/merge-stream/index.js",
+      "sha256": "79a8881e309ecd45a9193d02fdf79bc2e623effbcdba49c41b2a35e09319ef19"
+    },
+    {
+      "path": "node_modules/mimic-fn/index.js",
+      "sha256": "9ca2b409cdf1718ce957292dc479c83516e4ea369f4b2cb3510066d4e50074e2"
+    },
+    {
+      "path": "node_modules/npm-run-path/index.js",
+      "sha256": "51a998b34bd7ff983b316f77f9de24370f53158e1c7b8dc3ee021a08628ecfc1"
+    },
+    {
+      "path": "node_modules/onetime/index.js",
+      "sha256": "59a0b25379fff19195343d47759339397c689e8ab93270adcab2d106a80e1625"
+    },
+    {
+      "path": "node_modules/path-key/index.js",
+      "sha256": "fdbafdc163f668fe325333d62387365c9b074e01253e32824a4dbf5cc552705d"
+    },
+    {
+      "path": "node_modules/shebang-command/index.js",
+      "sha256": "d98c3aa373c72016e990a723e919af495423bc4ac1daa0736c5f45fac0418d7f"
+    },
+    {
+      "path": "node_modules/shebang-regex/index.js",
+      "sha256": "e91e547bad596a389841fd7938bfcbd22af82f44a01f794e86878e4ff0274250"
+    },
+    {
+      "path": "node_modules/signal-exit/index.js",
+      "sha256": "7cc6f6a1e14dec79dc23f6afd7caca1319189747144e1a33af77616c21d9e9de"
+    },
+    {
+      "path": "node_modules/signal-exit/signals.js",
+      "sha256": "ae538fdae683d6fa2e14579da06df10fb7a66378cfa50971956fb68c2c86c727"
+    },
+    {
+      "path": "node_modules/strip-final-newline/index.js",
+      "sha256": "f338131e750ebd9dcfbf7350f22baee11b90af95ee3e484951e9a3eb7e4a63c4"
+    },
+    {
+      "path": "node_modules/which/which.js",
+      "sha256": "76845e1fe7851267fb7ee72b18f2d916996d330150e31e48f4657a79e9b46b5b"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".vercel/project.json",
+      "bytes": 124,
+      "sha256": "d29815f4b63dfa9da78e92132ddfa501ac10818dcc6597e27aa652359cba3327"
+    },
+    {
+      "path": ".vercel/output/config.json",
+      "bytes": 194,
+      "sha256": "36e8ae2e5fdfc89968d8d897bc10cb39e06924186e63071396c321fa8359cfa9"
+    },
+    {
+      "path": ".vercel/output/functions/api/package4-machine-proof.func/.vc-config.json",
+      "bytes": 104,
+      "sha256": "f9ff1e2f6f309e1c8088b91ffc97e89fa3758d870dbc42b4f4b4bf55d60a08c5"
+    },
+    {
+      "path": ".vercel/output/functions/api/package4-machine-proof.func/index.cjs",
+      "bytes": 477525,
+      "sha256": "7f7465dc760bb778634718b7f110d1d65e3cc0d090ed5afd22ff7015b19c1de0"
+    }
+  ],
+  "excluded": [
+    "Environment values",
+    "Authentication state",
+    "Tokens",
+    "Evelyn repository/application",
+    "Unrelated CRM files"
+  ],
+  "requiredBeforeDeployment": [
+    "Native inventory and blank per-deployment shadow of every inherited Evelyn Preview environment key, except reviewed fresh caller configuration and platform-managed OIDC/system context.",
+    "Independent frozen-source and artifact review.",
+    "Parent-authorized prebuilt Preview deployment to the exact existing Evelyn project; retain Deployment Protection.",
+    "Native receipt binding the unique caller deployment to this artifact manifest; this metadata is separate from OIDC claims."
+  ]
+}

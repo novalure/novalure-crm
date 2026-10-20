@@ -1,0 +1,21 @@
+{
+  "format": "package4-caller-full-deployment-retirement-v1",
+  "status": "PASS",
+  "retiredAt": "2026-10-20T08:04:16.040Z",
+  "deploymentId": "dpl_724YCNAwMyKDnht5jZk2Z5uKoVCD",
+  "projectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "nativeState": "DELETED",
+  "nativeReadbackStatus": 404,
+  "anonymousUrlStatus": 404,
+  "anonymousLimit": "Hosting protection may run before deleted-deployment routing; deletion is proved by the native DELETE acknowledgement and independent authenticated deployment lookup.",
+  "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+  "targetBeforeDeletion": "preview",
+  "artifactManifestSha256": "1df687f221e29fbef28ba371e5622447a068583c58f43172d3aa215b98e6fd45",
+  "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+  "productionUnchanged": true,
+  "projectNotDeleted": true,
+  "platformCredentialIsolationScope": "15 named project Preview application keys were runtime-verified empty. Provider-managed system environment names included an automation access credential; its runtime value was not inspected and fixture source does not read or forward it. Completed Preview deployment now deleted.",
+  "deletionLimit": "Provider DELETED removes deployment access; no immediate permanent byte erasure is claimed.",
+  "initialCheckPreserved": "DELETE succeeded once. A later overly narrow public404/410 assertion failed; this read-only reconciliation did not repeat DELETE.",
+  "secretValuesEmitted": false
+}

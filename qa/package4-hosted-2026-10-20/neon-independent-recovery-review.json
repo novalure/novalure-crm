@@ -1,0 +1,63 @@
+{
+  "format": "package4-independent-final-recovery-review-v1",
+  "status": "PASS",
+  "reviewedAtUtc": "2026-10-20T09:07:56.193849+00:00",
+  "method": "Local read-only exact receipt, code hash, baseline and field comparison; no rerun or provider requests.",
+  "privateFinalReceiptSha256": "7f956ff4fccba08c129feb2d69d02fb9164c72ba6d9c51bbd93b9cf3b22f6f63",
+  "baselineSha256": "74e227aca435e01adabd7bde1af1b487613dcd3ccd91528545114c3dbe72a64c",
+  "summarySha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3",
+  "lifecycleSha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0",
+  "rootFinalReviewSha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036",
+  "finalAvailabilitySha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be",
+  "catalogCategories": 20,
+  "dataTables": 167,
+  "rows": 793,
+  "ledgerRows": 60,
+  "privateFiles": 17,
+  "privateBytes": 41950560,
+  "all17ByteSha403AndSourceBeforeAfterMatch": true,
+  "existingFilesPreserved": 8,
+  "newFilesCreated": 9,
+  "ordinaryRuntimeApplicationChecks": 5,
+  "separateSourceRuntimeReadChecks": 5,
+  "separateHostingChecks": 3,
+  "earlierFailuresPreserved": true,
+  "sameUninterruptedRunClaimed": false,
+  "secondHostedDeploymentClaimed": false,
+  "nativeDumpOrCrossProjectRecoveryClaimed": false,
+  "productionVersionParityClaimed": false,
+  "securityIncidentRemediatedClaimed": false,
+  "findings": [],
+  "sourceEnableAndPostSqlRawNativeReceiptChain": "PASS_WITH_EXPLICIT_NORMALIZED_READBACK_BOUNDARY",
+  "providerOperations": 0,
+  "sourceEnableMetadataReceiptSha256": "0fccf89dc27ef7630fac825717fc5d85c3df9a29f9cffb641180989a6e8bb8e2",
+  "postSqlNormalizedNativeObservationSha256": "a02288ed0449a0b48af9cf53a5aa5124f7105cebe98feb2144c7fd8f66c6222a",
+  "nativeReadbackBoundary": "Root recorded actual provider tool read and normalized metadata; full unprojected post-SQL provider response was not separately persisted. This is not a signed provider attestation. No provider re-query by this reviewer.",
+  "completedAtUtc": "2026-10-20T09:09:31.145576+00:00",
+  "publicRecoveryCopies": [
+    {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-database-and-private-files-recovery.json",
+      "sha256": "c4c91e61bf2d500c29d90b6469133671cd289911ff62d70e39516f6ea0dcaac3",
+      "reviewedExternalCopy": "/workspace/package4-full-db-files-recovery-summary.json",
+      "byteIdentical": true
+    },
+    {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-lifecycle.json",
+      "sha256": "b4d18f9451a278ed5d503cbebc1c9f180badadf2c45116799f03f8967dc8eff0",
+      "reviewedExternalCopy": "/workspace/package4-full-db-files-recovery-lifecycle.json",
+      "byteIdentical": true
+    },
+    {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-root-review.json",
+      "sha256": "ad32043480127ab81aa83fe519cb3a08d1d81e56a230ede556b6dc9e1b9dc036",
+      "reviewedExternalCopy": "/workspace/package4-full-recovery-root-final-review.json",
+      "byteIdentical": true
+    },
+    {
+      "path": "/workspace/novalure-crm/qa/package4-hosted-2026-10-20/neon-full-recovery-source-availability.json",
+      "sha256": "0349e91e02842e07286cd72228d3245dea773ee84b986ac06de177cb68e9d7be",
+      "reviewedExternalCopy": "/workspace/package4-final-source-availability.json",
+      "byteIdentical": true
+    }
+  ]
+}

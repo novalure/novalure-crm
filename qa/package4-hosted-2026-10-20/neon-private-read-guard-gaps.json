@@ -1,0 +1,41 @@
+{
+  "format": "package4-completion-read-guard-gap-proof-v1",
+  "status": "PASS",
+  "checkedAt": "2026-10-20T08:57:57.197Z",
+  "launcherSha256": "dbb979739b58e1a988843245d42a51a2b14624d58e11ee132196d46ced2e35a9",
+  "actualFunctionSha256": "29f4756aea11f33e3a05037c69828070dd637bc4f73fd9cf2b7ade113bceb170",
+  "actualFunctionExtracted": true,
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "scenario": "two-empty-streams",
+      "status": "PASS",
+      "getCalls": 2,
+      "anonymousFetchCalls": 0,
+      "mutationCalls": 0,
+      "failedAttemptRecords": 2
+    },
+    {
+      "scenario": "wrong-key",
+      "status": "PASS",
+      "getCalls": 1,
+      "anonymousFetchCalls": 0,
+      "mutationCalls": 0,
+      "failedAttemptRecords": 1
+    },
+    {
+      "scenario": "wrong-origin",
+      "status": "PASS",
+      "getCalls": 1,
+      "anonymousFetchCalls": 0,
+      "mutationCalls": 0,
+      "failedAttemptRecords": 1
+    }
+  ],
+  "reusedPriorProofSha256": "419373185103ea13785152193791ca5aca82594230e31a48102cc1e555b12fd1",
+  "priorProofStatus": "PASS",
+  "providerRequests": 0,
+  "externalNetworkRequests": 0,
+  "localMutations": "This proof file only; no source/provider/Blob mutations"
+}

@@ -1,0 +1,352 @@
+{
+  "format": "package4-exact-candidate-ci-v1",
+  "status": "PASS",
+  "sourceSha": "c291e21288903e2807b108bba852a597f77b777a",
+  "recordedAt": "2026-10-20T07:42:45.023Z",
+  "runs": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-10-20T07:28:16Z",
+      "databaseId": 39386714157,
+      "headSha": "c291e21288903e2807b108bba852a597f77b777a",
+      "jobs": [
+        {
+          "databaseId": 118508180792,
+          "name": "Gitleaks full-history and current-tree scan",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714157/job/118508180792",
+          "startedAt": "2026-10-20T07:28:19Z",
+          "completedAt": "2026-10-20T07:28:33Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Checkout full history",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Install pinned Gitleaks binary",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Scan all commits and the checked-out tree",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Checkout full history",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ],
+      "name": "Secret scan",
+      "status": "completed",
+      "updatedAt": "2026-10-20T07:28:33Z",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714157"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-10-20T07:28:16Z",
+      "databaseId": 39386714217,
+      "headSha": "c291e21288903e2807b108bba852a597f77b777a",
+      "jobs": [
+        {
+          "databaseId": 118508181677,
+          "name": "Lockfile, lint, typecheck, tests and build",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118508181677",
+          "startedAt": "2026-10-20T07:28:19Z",
+          "completedAt": "2026-10-20T07:35:18Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Checkout",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Setup Node.js",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Install dependencies from lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify toolchain",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Lint without warnings",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Typecheck",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Unit and component smoke tests",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Design C data provenance and customer self-service regression",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Design C operational reader permissions and source availability",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Knowledge Center tenant, role, document, entitlement and scanner isolation",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Knowledge publication, monitoring, scheduler and two-tenant acceptance",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Combined package 4 migration ledger, runtime roles and rollback",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Security and scope integration tests",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Install local QA browser",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Sales transactions against isolated local PostgreSQL",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Final sales contract, approval, route and recovery regression",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "G08 Evelyn contract, fail-closed consumer and Preview boundaries",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "D11 staged Expand, Backfill, Contract and rollback",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Reproducible build metadata endpoint",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "U1-C03 reconciliation and environment manifests",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Protected preview access contract regression",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Install PostgreSQL 18 restore clients",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Neon 061 compatibility and role isolation regression",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Sales schema upgrade, rollback and native restore",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Form tenant isolation and published lookup",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Signed and anonymous website form ingestion",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Confirmed Studio enquiry and private attachment handoff",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Tenant scoped Studio enquiry detail display",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "External integration gateway, public forms and training chat",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Isolated sales browser flows",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Production build",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Integrated Design C and Knowledge customer acceptance on isolated PostgreSQL",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Retain bounded synthetic integration results",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Reject whitespace errors",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Setup Node.js",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Checkout",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "databaseId": 118508181839,
+          "name": "Production dependency audit and SBOM",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118508181839",
+          "startedAt": "2026-10-20T07:28:19Z",
+          "completedAt": "2026-10-20T07:28:54Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Checkout",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Setup Node.js",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Install dependencies from lockfile",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Fail on production dependency findings",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Generate CycloneDX SBOM",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Canonicalize SBOM component inventory",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Upload SBOM",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Setup Node.js",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Checkout",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "databaseId": 118510725993,
+          "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+          "status": "completed",
+          "conclusion": "skipped",
+          "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217/job/118510725993",
+          "startedAt": "2026-10-20T07:35:19Z",
+          "completedAt": "2026-10-20T07:35:18Z",
+          "steps": []
+        }
+      ],
+      "name": "Go-live quality gates",
+      "status": "completed",
+      "updatedAt": "2026-10-20T07:35:19Z",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39386714217"
+    }
+  ],
+  "optionalManualWorkflow": "SKIPPED; no execution or PASS claim",
+  "secretValuesEmitted": false
+}
