@@ -39,6 +39,8 @@ export function validateHostedTarget(value) {
   if (value.neonCloneAttestation && (value.neon.projectId !== cloneProfile.projectId || value.neon.branchId !== cloneProfile.cloneBranchId ||
     value.neon.database !== "neondb" || value.neon.runtimeRole !== "novalure_app" || value.neon.migrationRole !== "neondb_owner" || value.neonRuntimeCatalogReceipt)) fail("HOSTED_EXACT_CLONE_PROFILE_REQUIRED");
   if (value.storage?.provider !== "vercel-blob" || value.storage.access !== "private" || typeof value.storage.storeId !== "string" || !value.storage.storeId) fail("HOSTED_PRIVATE_STORAGE_BINDING_REQUIRED");
+  if (value.storage.uploadApi?.origin !== "https://vercel.com" || value.storage.uploadApi.pathname !== "/api/blob/" ||
+    Object.keys(value.storage.uploadApi).length !== 2 || !/^store_[A-Za-z0-9-]+$/u.test(value.storage.storeId)) fail("HOSTED_EXACT_PROVIDER_UPLOAD_API_REQUIRED");
   if (!Array.isArray(value.storage.allowedUploadOrigins) || !value.storage.allowedUploadOrigins.length) fail("HOSTED_PRIVATE_UPLOAD_ORIGINS_REQUIRED");
   for (const origin of value.storage.allowedUploadOrigins) {
     let parsed;
@@ -64,6 +66,9 @@ export function validateHostedTarget(value) {
       typeof account.email !== "string" || !account.email.endsWith("@example.invalid") ||
       !/^[A-Z][A-Z0-9_]{1,80}$/u.test(account.credentialKey ?? "")) fail("HOSTED_SYNTHETIC_ACCOUNT_BINDING_REQUIRED");
   }
+  const expectedWorkspaces = [...new Set([...Object.values(value.accounts).map(account => account.workspaceId), value.studio.workspaceId])].sort();
+  if (!Array.isArray(value.allWorkspaceIds) || value.allWorkspaceIds.some(value => !uuid.test(value)) ||
+    JSON.stringify([...value.allWorkspaceIds].sort()) !== JSON.stringify(expectedWorkspaces)) fail("HOSTED_EXACT_SYNTHETIC_WORKSPACE_MANIFEST_REQUIRED");
   if (typeof value.accounts.operator.workspaceName !== "string" || !value.accounts.operator.workspaceName.trim()) fail("HOSTED_OPERATOR_WORKSPACE_LABEL_REQUIRED");
   if (!uuid.test(value.accounts.customerA.hiddenProjectId) || !uuid.test(value.accounts.customerA.hiddenUnitId) ||
     value.accounts.customerA.hiddenProjectId === value.accounts.customerA.projectId ||

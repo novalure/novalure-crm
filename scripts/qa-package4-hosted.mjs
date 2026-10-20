@@ -36,7 +36,7 @@ const pdfName = "SYNTHETIC HOSTED PDF " + runId;
 const websiteName = "SYNTHETIC HOSTED WEBSITE " + runId;
 const marker = "hpdf" + runId;
 const reason = "SYNTHETIC hosted acceptance: content, currentness and legal information reviewed";
-const results = [], pageErrors = [], serverErrors = [], blockedOutbound = [], uploadProofs = [], mfa = new Map();
+const results = [], pageErrors = [], serverErrors = [], blockedOutbound = [], uploadProofs = [], networkRequests = [], authorizedProviderRequests = [], mfa = new Map();
 const knownSecrets = new Set([protectionToken]);
 for (const account of Object.values(target.accounts)) {
   const secret = credentials[account.credentialKey];
@@ -72,7 +72,7 @@ const evidence = { schema: "novalure.package4.hosted-acceptance.v1", status: "NO
   deployment: { id: target.deploymentId, origin: target.origin, sourceSha: target.sourceSha, gitBranch: target.gitBranch, projectId: target.projectId, teamId: target.teamId },
   neon: { projectId: target.neon.projectId, branchId: target.neon.branchId, database: target.neon.database, runtimeRole: target.neon.runtimeRole, migrationRole: target.neon.migrationRole },
   storage: { provider: target.storage.provider, access: target.storage.access, storeId: target.storage.storeId },
-  startedAt: new Date().toISOString(), plannedScenarios, results, pageErrors, serverErrors, blockedOutbound, uploadProofs, authenticationProofs: [],
+  startedAt: new Date().toISOString(), plannedScenarios, results, pageErrors, serverErrors, blockedOutbound, uploadProofs, networkRequests, authorizedProviderRequests, authenticationProofs: [],
   externalMachinePositive: { status: "NOT TESTED", reason: "Existing pinned verifier requires production runtime and actual Evelyn production OIDC workload; Preview acceptance preserves this restriction." },
   recurringScheduler: { status: "NOT TESTED", activated: false }, telephonyProviderConnections: 0, paidProviderActivations: 0 };
 
@@ -127,8 +127,27 @@ async function newPage(label) {
   }
   const page = await context.newPage();
   await installHostedOriginRouting(page, { origin: target.origin, protectionToken, allowedUploadOrigins: allowedStorage,
+    uploadApi: { ...target.storage.uploadApi, storeId: target.storage.storeId, workspaceIds: target.allWorkspaceIds, actorIds: Object.values(target.accounts).map(account => account.userId) },
+    onAuthorizedProviderRequest: value => authorizedProviderRequests.push({ label, ...value }),
     onBlocked: value => blockedOutbound.push({ label, ...value }),
     onFailure: value => pageErrors.push({ label, ...value }),
+  });
+  // Bounded transport metadata locates a stalled hop without storing headers,
+  // request bodies, signed queries or private object paths.
+  const requests = new WeakMap();
+  page.on("request", request => {
+    if (networkRequests.length >= 2_000) return;
+    const url = new URL(request.url());
+    if (!["http:", "https:"].includes(url.protocol)) return;
+    const record = { label, method: request.method(), origin: url.origin, ...(url.origin === target.origin ? { path: url.pathname } : {}),
+      resourceType: request.resourceType(), startedAt: new Date().toISOString(), state: "pending" };
+    requests.set(request, record); networkRequests.push(record);
+  });
+  page.on("response", response => { const record = requests.get(response.request()); if (record) record.status = response.status(); });
+  page.on("requestfinished", request => { const record = requests.get(request); if (record) Object.assign(record, { state: "finished", finishedAt: new Date().toISOString() }); });
+  page.on("requestfailed", request => {
+    const record = requests.get(request), error = request.failure()?.errorText;
+    if (record) Object.assign(record, { state: "failed", finishedAt: new Date().toISOString(), code: /^[A-Za-z0-9_:.-]{1,100}$/u.test(error ?? "") ? error : "HOSTED_TRANSPORT_FAILED" });
   });
   page.setDefaultTimeout(30_000); page.setDefaultNavigationTimeout(90_000);
   page.on("pageerror", error => pageErrors.push({ label, message: safeError(error) }));

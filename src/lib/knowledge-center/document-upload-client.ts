@@ -1,6 +1,7 @@
 "use client";
 
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { finalizeAfterPrivateDocumentUpload } from "./document-upload-transport";
 
 type DocumentTarget = { areaId: string; name: string; sourceId?: string; expectedVersion?: number };
 
@@ -23,10 +24,13 @@ export async function uploadKnowledgeDocument(endpoint: string, file: File, targ
     return csrfFetch(endpoint, { method: "POST", body });
   }
   if (grant.transport !== "private-blob" || !grant.pathname || !grant.clientToken || !grant.ticket) throw new Error("Private document upload authorization is unavailable.");
-  const { put } = await import("@vercel/blob/client");
-  await put(grant.pathname, file, { access: "private", token: grant.clientToken, contentType: file.type, abortSignal: AbortSignal.timeout(60_000) });
-  return csrfFetch(endpoint, {
+  const { pathname, clientToken, ticket } = grant;
+  return finalizeAfterPrivateDocumentUpload(async (signal) => {
+    const { put } = await import("@vercel/blob/client");
+    signal.throwIfAborted();
+    await put(pathname, file, { access: "private", token: clientToken, contentType: file.type, abortSignal: signal });
+  }, () => csrfFetch(endpoint, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "finalize", ticket: grant.ticket }),
-  });
+    body: JSON.stringify({ action: "finalize", ticket }),
+  }));
 }

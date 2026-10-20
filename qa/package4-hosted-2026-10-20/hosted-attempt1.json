@@ -1,0 +1,603 @@
+{
+  "schema": "novalure.package4.hosted-acceptance.v1",
+  "status": "FAIL",
+  "syntheticOnly": true,
+  "productionMutationPerformed": false,
+  "sessionInjection": false,
+  "scannerPortInjection": false,
+  "deployment": {
+    "id": "dpl_4BD3dwh4bVj7Pbn3bJiBKzYTGniz",
+    "origin": "https://novalure-oynq94waf-novalure.vercel.app",
+    "sourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+    "gitBranch": "codex/evelyn-crm-package4-integration",
+    "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+  },
+  "neon": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "runtimeRole": "novalure_app",
+    "migrationRole": "neondb_owner"
+  },
+  "storage": {
+    "provider": "vercel-blob",
+    "access": "private",
+    "storeId": "store_6i5sZDmCf4qX9J86"
+  },
+  "startedAt": "2026-10-20T06:22:14.548Z",
+  "plannedScenarios": [
+    {
+      "name": "Exact Preview is protected without access credentials",
+      "status": "PASS"
+    },
+    {
+      "name": "Operator uses regular password and genuine TOTP; missing MFA remains unauthorized",
+      "status": "PASS"
+    },
+    {
+      "name": "Authenticated diagnostics bind exact Preview implementation, Neon runtime and migration ledger",
+      "status": "PASS"
+    },
+    {
+      "name": "Operator Design C navigation, scoped database core and explicit Studio/customer workspaces",
+      "status": "PASS"
+    },
+    {
+      "name": "Two independent synthetic customers use ordinary password and TOTP sessions",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer company/project scope and property/bot views read actual tenant database rows",
+      "status": "PASS"
+    },
+    {
+      "name": "Hosted private PDF/DOCX/UTF8 import parses real bytes; scan PDF and image retain honest OCR state",
+      "status": "FAIL"
+    },
+    {
+      "name": "Near-limit private PDF and DOCX cross hosted upload transport and round-trip exact bytes",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Identical document retry deduplicates and explicit review/publication feeds both independent channels",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Document replacement retains publication and older private immutable version bytes",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Viewer cannot write or publish and restricted project member cannot read or alter another project",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Real external HTTPS scan stores an untrusted change proposal while published answers stay unchanged",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Hosted manual batch uses saved current-actor scopes and real HTTPS without installing a timer",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Customer compares and accepts real website proposal; new version reaches both channels only after publication",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Historical restoration stays a private draft and source revocation immediately denies both channels",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Foreign tenant knowledge, files, dashboard and approvals deny access; missing feature and query quota are enforced",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Machine endpoints remain failclosed on Preview without widening pinned Evelyn identity",
+      "status": "NOT TESTED"
+    },
+    {
+      "name": "Desktop and mobile Design C retain usable hosted uploads, lifecycle controls and tenant state",
+      "status": "NOT TESTED"
+    }
+  ],
+  "results": [
+    {
+      "name": "Exact Preview is protected without access credentials",
+      "status": "PASS",
+      "detail": {
+        "status": 302
+      }
+    },
+    {
+      "name": "Operator uses regular password and genuine TOTP; missing MFA remains unauthorized",
+      "status": "PASS"
+    },
+    {
+      "name": "Authenticated diagnostics bind exact Preview implementation, Neon runtime and migration ledger",
+      "status": "PASS",
+      "detail": {
+        "environment": "preview",
+        "sourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+        "deploymentId": "dpl_4BD3dwh4bVj7Pbn3bJiBKzYTGniz",
+        "neonProjectId": "green-thunder-49879900",
+        "neonBranchId": "br-sweet-surf-ba6iahut",
+        "database": "neondb",
+        "runtimeRole": "novalure_app",
+        "leastPrivilege": true,
+        "verifiedMigrationChecksums": 13,
+        "runtimeLedger": {
+          "status": "EXPECTED DENIAL",
+          "code": "migration_ledger_unavailable",
+          "privilegedRuntimeGrantAdded": false
+        },
+        "administrativeLedger": {
+          "status": "PASS",
+          "source": "qa/package4-hosted-2026-10-20/neon-clone-attestation.json",
+          "receiptSha256": "730a884bc9c16e7f66277220b4e8016f177336e60b3843b3cd9c348f77150c3b",
+          "receiptImplementationRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+          "candidateMigrationHashesMatch": true,
+          "cloneProvenance": {
+            "originalRootBranchId": "br-shiny-darkness-baz4524v",
+            "checkpointBranchId": "br-flat-block-baycv1oa",
+            "cloneBranchId": "br-sweet-surf-ba6iahut",
+            "checkpointParentId": "br-shiny-darkness-baz4524v",
+            "cloneParentId": "br-flat-block-baycv1oa",
+            "checkpointParentLsn": "0/2F63518",
+            "cloneParentLsn": "0/2F63518",
+            "initialSnapshotBytesSha256": "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7",
+            "bootstrapReceiptSha256": "546694454846899536a18c63672ff43930d9eba66746b879770bf13941a0dac3",
+            "bootstrapImplementationRevision": "eb889bb826a5f5fed87d37781f5d0019fae509a6"
+          }
+        },
+        "runtimeInvisiblePrivateTables": [
+          {
+            "tableName": "approval_requests",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "auth_password_reset_tokens",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "automations",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_answer_quality_checks",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_channel_accounts",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_channel_webhooks",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_document_sends",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_evaluation_runs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "bot_language_rules",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "calendar_sync_events",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "call_insights",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "company_profile_versions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "company_profiles",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "contact_relationships",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "conversations",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_bulk_runtime_batches",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_conversion_snapshots",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_fallback_audits",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_follow_up_actions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_operational_recommendation_runs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "crm_permission_audit_runs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "customer_onboarding_risk_alerts",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "customer_project_access",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "customer_workspace_access",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "data_quality_cleanup_actions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "data_quality_issues",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "funnel_conversion_reports",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "funnel_submissions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "google_notification_jobs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "google_notification_targets",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "lead_workflow_runs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "lead_workflows",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "meeting_bookings",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "meeting_notification_jobs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "meeting_pages",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "microsoft_booking_health_checks",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "newsletter_sends",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "pipeline_bulk_actions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "pipeline_forecast_snapshots",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "property_channels",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "property_data_quality_issues",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "property_export_jobs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "property_inquiries",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "property_openimmo_mappings",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "provider_connections",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_definitions",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_enrollments",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_events",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_runtime_reviews",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_step_runs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "sequence_steps",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "teams_notification_jobs",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "teams_notification_targets",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          },
+          {
+            "tableName": "workspace_lead_sources",
+            "ownerVerifiedExists": true,
+            "runtimeAnyTablePrivilege": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "Operator Design C navigation, scoped database core and explicit Studio/customer workspaces",
+      "status": "PASS"
+    },
+    {
+      "name": "Two independent synthetic customers use ordinary password and TOTP sessions",
+      "status": "PASS"
+    },
+    {
+      "name": "Customer company/project scope and property/bot views read actual tenant database rows",
+      "status": "PASS"
+    },
+    {
+      "name": "Hosted private PDF/DOCX/UTF8 import parses real bytes; scan PDF and image retain honest OCR state",
+      "status": "FAIL",
+      "error": "expect(locator).toBeVisible() failed"
+    }
+  ],
+  "pageErrors": [],
+  "serverErrors": [],
+  "blockedOutbound": [
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "operator",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerB",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerB",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerB",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "GET",
+      "origin": "https://vercel.live"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    },
+    {
+      "label": "customerA",
+      "method": "OPTIONS",
+      "origin": "https://vercel.com"
+    }
+  ],
+  "uploadProofs": [],
+  "authenticationProofs": [
+    {
+      "userId": "01f3c5e9-eac8-4398-bf9b-513d76e206aa",
+      "ordinaryPassword": true,
+      "actualMfaChallengeCompleted": true,
+      "sessionInjected": false
+    },
+    {
+      "userId": "a8aab462-a0f3-4c10-8ede-90cbba5f4d6d",
+      "ordinaryPassword": true,
+      "actualMfaChallengeCompleted": true,
+      "sessionInjected": false
+    },
+    {
+      "userId": "a3930c71-98b9-4e64-b9c6-c3cb4e31c31f",
+      "ordinaryPassword": true,
+      "actualMfaChallengeCompleted": true,
+      "sessionInjected": false
+    }
+  ],
+  "externalMachinePositive": {
+    "status": "NOT TESTED",
+    "reason": "Existing pinned verifier requires production runtime and actual Evelyn production OIDC workload; Preview acceptance preserves this restriction."
+  },
+  "recurringScheduler": {
+    "status": "NOT TESTED",
+    "activated": false
+  },
+  "telephonyProviderConnections": 0,
+  "paidProviderActivations": 0,
+  "finishedAt": "2026-10-20T06:25:03.424Z",
+  "execution": {
+    "scope": "FIRST_FULL_HOSTED_ATTEMPT_STOPPED_ON_FIRST_FAILURE",
+    "applicationSourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+    "qaSourceSha": "ca408c9ca557513f4a75c61d832968e15b02bacf",
+    "qaWorkingTreeModifiedAtStart": false,
+    "unexecutedScenariosRemain": "NOT TESTED",
+    "zeroUploadProofs": true
+  }
+}

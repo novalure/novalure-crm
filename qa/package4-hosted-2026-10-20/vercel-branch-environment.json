@@ -7,7 +7,7 @@
   "target": "preview",
   "gitBranch": "codex/evelyn-crm-package4-integration",
   "globalsShadowed": 65,
-  "entries": 170,
+  "entries": 171,
   "staticReviewPlanSha256": "39fb34d8e7cc131864afa0154619994d7f252517e4965e258c21da104a473d4e",
   "sourceDatabase": {
     "projectId": "green-thunder-49879900",
@@ -1729,6 +1729,18 @@
       "gitBranch": "codex/evelyn-crm-package4-integration",
       "policy": "explicitEmpty",
       "id": "MimowSBMPPlpDdnF"
+    },
+    {
+      "id": "X2vRW5nVDnl800dN",
+      "key": "VERCEL_PREVIEW_FEEDBACK_ENABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "configurationId": null,
+      "customEnvironmentIds": null,
+      "policy": "fixedQaConfiguration"
     }
   ],
   "existingScopeMutations": 0,
@@ -1743,14 +1755,24 @@
     "branchEntriesAfter": 0
   },
   "readback": {
-    "actualBranchEntries": 170,
+    "actualBranchEntries": 171,
     "allExactBranchAndPreview": true,
     "allNewIds": true,
     "existingMetadataUnchanged": true,
     "previousEntries": 234,
-    "finalEntries": 404,
+    "finalEntries": 405,
     "productionEntriesUnchanged": 74,
     "globalPreviewEntriesUnchanged": 65
   },
-  "remoteApplicationAndStorageProof": "NOT TESTED"
+  "remoteApplicationAndStorageProof": "NOT TESTED",
+  "updatedAt": "2026-10-20T06:30:19.671Z",
+  "toolbarOptOut": {
+    "status": "BRANCH_SETTING_APPLIED_AWAITING_NEW_DEPLOYMENT",
+    "key": "VERCEL_PREVIEW_FEEDBACK_ENABLED",
+    "value": "0",
+    "source": "https://vercel.com/docs/vercel-toolbar/managing-toolbar#enable-or-disable-the-toolbar-for-a-specific-branch",
+    "observedRequestHeaderOnlyDidNotRemoveAllBrowserAttempts": true,
+    "protectionChange": false,
+    "otherScopesChanged": false
+  }
 }

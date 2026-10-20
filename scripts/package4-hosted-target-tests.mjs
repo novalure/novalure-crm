@@ -10,16 +10,18 @@ import { assertHostedOwnerMigrationReceipt, assertHostedRuntimeBinding, exactHos
 function target() {
   const account = label => ({ userId: randomUUID(), workspaceId: randomUUID(), projectId: randomUUID(), email: `${label}@example.invalid`, credentialKey: `PACKAGE4_${label.toUpperCase()}_CREDENTIALS` });
   const customerA = { ...account("customer_a"), hiddenProjectId: randomUUID(), hiddenUnitId: randomUUID() };
-  return { schema: "novalure.package4.hosted-target.v1", syntheticOnly: true, target: "preview",
+  const value = { schema: "novalure.package4.hosted-target.v1", syntheticOnly: true, target: "preview",
     origin: "https://novalure-crm-synthetic123-novalure.vercel.app", sourceSha: "a".repeat(40), gitBranch: "codex/evelyn-crm-package4-integration",
     deploymentId: "dpl_" + "a".repeat(24), projectId: "prj_" + "b".repeat(24), teamId: "team_" + "c".repeat(24),
     neon: { projectId: "synthetic-project", branchId: "br-synthetic", database: "neondb", runtimeRole: "synthetic_runtime", migrationRole: "synthetic_owner" },
     neonMigrationReceipt: { path: "qa/package4-hosted-2026-10-20/neon-migrations.json", sha256: "f".repeat(64), implementationRevision: "b".repeat(40) },
-    storage: { provider: "vercel-blob", access: "private", storeId: "synthetic-private-store", allowedUploadOrigins: ["https://blob.vercel-storage.com"] },
+    storage: { provider: "vercel-blob", access: "private", storeId: "store_synthetic", uploadApi: { origin: "https://vercel.com", pathname: "/api/blob/" }, allowedUploadOrigins: ["https://blob.vercel-storage.com"] },
     studio: { workspaceId: randomUUID() }, controlledWebsite: { url: "https://synthetic-public.com/after.txt", beforeContent: "SYNTHETIC anchor 09:00", afterContent: "SYNTHETIC anchor 10:00", query: "anchor" },
     migrationChecksums: Object.fromEntries(["091_", "092_", "093_", "094_", "095_", "096_", "100_", "101_", "102_", "103_", "104_", "105_", "106_"].map(prefix => [prefix + "synthetic", "d".repeat(64)])),
     accounts: { operator: { ...account("operator"), workspaceName: "SYNTHETIC INTERNAL" }, customerA, customerB: account("customer_b"),
       viewer: { ...account("viewer"), workspaceId: customerA.workspaceId }, projectMember: { ...account("project_member"), workspaceId: customerA.workspaceId } } };
+  value.allWorkspaceIds = [...new Set([...Object.values(value.accounts).map(a => a.workspaceId), value.studio.workspaceId])];
+  return value;
 }
 function diagnostics(config) {
   const identity = { leastPrivilege: true, neonProjectId: config.neon.projectId, neonBranchId: config.neon.branchId, database: config.neon.database,
@@ -58,6 +60,10 @@ test("hosted descriptor requires an exact synthetic Preview origin and isolated 
   for (const mutation of [
     { target: "production" }, { syntheticOnly: false }, { sourceSha: "unknown" }, { gitBranch: "main" }, { deploymentId: "latest" },
     { neon: { ...valid.neon, runtimeRole: valid.neon.migrationRole } }, { storage: { ...valid.storage, access: "public" } },
+    { storage: { ...valid.storage, uploadApi: { origin: "https://vercel.com", pathname: "/api/" } } },
+    { storage: { ...valid.storage, uploadApi: { origin: "https://other.vercel.com", pathname: "/api/blob/" } } },
+    { allWorkspaceIds: [...valid.allWorkspaceIds, randomUUID()] },
+    { allWorkspaceIds: [...valid.allWorkspaceIds, valid.allWorkspaceIds[0]] },
     { accounts: { ...valid.accounts, customerB: { ...valid.accounts.customerB, workspaceId: valid.accounts.customerA.workspaceId } } },
     { accounts: { ...valid.accounts, customerA: { ...valid.accounts.customerA, password: "do-not-save" } } },
     { migrationChecksums: Object.fromEntries(Object.entries(valid.migrationChecksums).filter(([version]) => !version.startsWith("106_"))) },
