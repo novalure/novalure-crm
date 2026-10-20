@@ -22,3 +22,9 @@ de42e6b7791101b11a515726f26f8676f5fdd897:src/lib/property-export/provider-adapte
 # retain full-history/current-tree scanning and every scanner rule.
 e662e86b9fa701b9e53ab96e85c0160fd672a570:scripts/studio-enquiry-tests.ts:generic-api-key:178
 scripts/studio-enquiry-tests.ts:generic-api-key:178
+
+# Reviewed exact historical false positives: source-file SHA-256 digests in
+# the hosted transport review. Each digest equals its named committed file.
+# The current report uses {path, sha256} records; retain all scanner rules.
+13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:27
+13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6:qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json:generic-api-key:28

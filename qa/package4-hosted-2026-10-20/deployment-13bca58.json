@@ -1,0 +1,37 @@
+{
+  "format": "package4-exact-protected-preview-deployment-v1",
+  "status": "DEPLOYED_NOT_YET_ACCEPTED",
+  "recordedAt": "2026-10-20T06:38:09.268Z",
+  "sourceSha": "13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6",
+  "gitBranch": "codex/evelyn-crm-package4-integration",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "deploymentId": "dpl_oSWsAiGXUGv5QRQHGHkvxUozGxrZ",
+  "origin": "https://novalure-mujr89423-novalure.vercel.app",
+  "target": "preview",
+  "nativeTarget": null,
+  "gitSource": {
+    "type": "github",
+    "ref": "codex/evelyn-crm-package4-integration",
+    "sha": "13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6",
+    "repoId": 1236453352
+  },
+  "readyState": "READY",
+  "createdAt": 1792478151604,
+  "readyAt": 1792478190219,
+  "branchEnvironmentEntries": 171,
+  "toolbarBranchConfiguration": "0; runtime browser confirmation pending",
+  "protection": {
+    "anonymousStatus": 302,
+    "oidcNormalLoginStatus": 200,
+    "normalCrmWithoutAppSession": 401,
+    "protectionDisabled": false
+  },
+  "productionAlias": {
+    "hostname": "www.novalure-crm.app",
+    "deploymentId": "dpl_GmsvmFHvXR3u3sNhiujptB5KSjkk",
+    "unchanged": true
+  },
+  "hostedAcceptance": "NOT TESTED",
+  "secretValuesEmitted": false
+}
