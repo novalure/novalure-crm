@@ -1,14 +1,66 @@
-import { maxMediaUploadBytes, MediaStoreError } from "@/lib/media-store";
-import { assertKnowledgeUploadAllowed, importKnowledgeDocument } from "@/lib/knowledge-center/repository";
-import { knowledgeJson, knowledgeQueryParams, readKnowledgeBytes, withKnowledgeRequest } from "@/lib/knowledge-center/http";
+import { getPrivateMediaBlobToken, maxMediaUploadBytes, MediaStoreError } from "@/lib/media-store";
+import { assertKnowledgeDocumentUploadAllowed, assertKnowledgeUploadAllowed, expiredKnowledgeDocumentUploads, findKnowledgeDocumentImport, importKnowledgeDocument, releaseKnowledgeDocumentUpload, reserveKnowledgeDocumentUpload } from "@/lib/knowledge-center/repository";
+import { knowledgeJson, knowledgeQueryParams, readKnowledgeBytes, readKnowledgeJson, withKnowledgeRequest } from "@/lib/knowledge-center/http";
 import { KnowledgeCenterError, knowledgeId, knowledgeRevision, knowledgeText } from "@/lib/knowledge-center/policy";
+import { createKnowledgeDocumentUploadTicket, discardExpiredKnowledgeDocumentUpload, knowledgeDocumentUploadStoreFingerprint, parseKnowledgeDocumentUploadMetadata, readKnowledgeDocumentUpload, verifyKnowledgeDocumentUploadTicket } from "@/lib/knowledge-center/document-upload";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
+
+async function cleanupExpiredUploads(session: Parameters<typeof expiredKnowledgeDocumentUploads>[0]) {
+  const expired = await expiredKnowledgeDocumentUploads(session);
+  for (const upload of expired) {
+    // Retain the durable reservation if private storage deletion fails.
+    await releaseKnowledgeDocumentUpload(session, upload.uploadId, {}, (pending) => discardExpiredKnowledgeDocumentUpload(session, pending));
+  }
+  return expired.length;
+}
 export async function POST(request: Request) {
   return withKnowledgeRequest(request, async (session) => {
     knowledgeQueryParams(request, []);
-    await assertKnowledgeUploadAllowed(session, { sizeBytes: 0 });
     const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.split(";", 1)[0].trim().toLowerCase() === "application/json") {
+      const body = await readKnowledgeJson(request, ["action", "ticket", "areaId", "name", "alt", "sourceId", "expectedVersion", "fileName", "mimeType", "sizeBytes", "sha256"], 16 * 1024);
+      if (body.action === "cleanup" && Object.keys(body).length === 1) return knowledgeJson({ cleaned: await cleanupExpiredUploads(session) });
+      if (body.action === "prepare") {
+        if (body.ticket !== undefined) throw new KnowledgeCenterError("UNKNOWN_FIELD", "A preparation request cannot include a ticket.");
+        const metadata = parseKnowledgeDocumentUploadMetadata(body);
+        const completed = await findKnowledgeDocumentImport(session, metadata);
+        if (completed) return knowledgeJson({ transport: "completed", result: completed });
+        await assertKnowledgeDocumentUploadAllowed(session, metadata);
+        if (!getPrivateMediaBlobToken() && process.env.VERCEL !== "1") return knowledgeJson({ transport: "multipart" });
+        await cleanupExpiredUploads(session);
+        const grant = await createKnowledgeDocumentUploadTicket(session, metadata);
+        const upload = verifyKnowledgeDocumentUploadTicket(session, grant.ticket);
+        await reserveKnowledgeDocumentUpload(session, upload, knowledgeDocumentUploadStoreFingerprint());
+        return knowledgeJson({ transport: "private-blob", ...grant });
+      }
+      if (body.action !== "finalize" || Object.keys(body).some((key) => !["action", "ticket"].includes(key))) throw new KnowledgeCenterError("UNKNOWN_FIELD", "Invalid document upload action or fields.");
+      const upload = verifyKnowledgeDocumentUploadTicket(session, body.ticket);
+      const repeated = await findKnowledgeDocumentImport(session, upload.metadata);
+      if (repeated) return knowledgeJson(repeated);
+      try { await assertKnowledgeDocumentUploadAllowed(session, upload.metadata); }
+      catch (error) {
+        // Keep exact-byte replay idempotent if another finalize committed after
+        // the first receipt lookup but before this current-revision check.
+        const completed = await findKnowledgeDocumentImport(session, upload.metadata);
+        if (completed) return knowledgeJson(completed);
+        throw error;
+      }
+      let file: File;
+      try { file = await readKnowledgeDocumentUpload(upload); }
+      catch (error) {
+        // A concurrent successful finalizer may already have removed staging.
+        const completed = await findKnowledgeDocumentImport(session, upload.metadata);
+        if (completed) return knowledgeJson(completed);
+        throw error;
+      }
+      const result = await importKnowledgeDocument(session, { ...upload.metadata, file, uploadReservationId: upload.uploadId });
+      // Keep staging reserved until its provider grant expires. Deleting now
+      // would let the still-valid token recreate an unaccounted object.
+      return knowledgeJson(result, result.reused ? 200 : 201);
+    }
+    await assertKnowledgeUploadAllowed(session, { sizeBytes: 0 });
     if (!contentType.toLowerCase().startsWith("multipart/form-data;")) throw new KnowledgeCenterError("FORM_REQUIRED", "A multipart document upload is required.", 415);
     const bytes = await readKnowledgeBytes(request, maxMediaUploadBytes + 64 * 1024);
     let form: FormData;

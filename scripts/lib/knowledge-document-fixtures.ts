@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
@@ -55,4 +56,22 @@ export function createDocx(options: { documentXml?: string; relationshipsXml?: s
     ...(options.relationshipsXml ? { "word/_rels/document.xml.rels": options.relationshipsXml } : {}),
     ...options.additions,
   }, options.compress ?? true);
+}
+
+const applicationMaximumBytes = 10 * 1024 * 1024;
+
+/** Real documents with bounded non-text payloads, generated from synthetic data. */
+export async function createNearLimitPdf() {
+  const pdf = Buffer.from(await createTextPdf(["SYNTHETIC near-limit private PDF ALPHA"]));
+  const trailerStart = pdf.lastIndexOf("startxref");
+  assert.ok(trailerStart > 0);
+  const padding = Buffer.alloc(applicationMaximumBytes - pdf.length, 32);
+  padding[0] = 37; // A legal PDF comment before the unchanged cross-reference pointer.
+  padding[padding.length - 1] = 10;
+  return Buffer.concat([pdf.subarray(0, trailerStart), padding, pdf.subarray(trailerStart)]);
+}
+
+export function createNearLimitDocx() {
+  const baseSize = createDocx({ compress: false, additions: { "word/media/synthetic-padding.bin": new Uint8Array() } }).length;
+  return createDocx({ compress: false, additions: { "word/media/synthetic-padding.bin": new Uint8Array(applicationMaximumBytes - baseSize) } });
 }

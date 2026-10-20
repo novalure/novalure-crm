@@ -23,13 +23,15 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
     await applySalesSchema(db, { maxMigrationNumber: 102 });
     for (const key of keys) delete process.env[key];
     Object.assign(process.env, { DATABASE_URL: `postgresql://${db.role}@127.0.0.1:${db.port}/postgres`, CRM_LOCAL_TEST_DATABASE: "1", NODE_ENV: "test", NOVALURE_MEDIA_ROOT: mediaRoot });
-    const workspaceId = randomUUID(), ownerId = randomUUID(), staffId = randomUUID(), projectId = randomUUID();
+    const workspaceId = randomUUID(), ownerId = randomUUID(), staffId = randomUUID(), viewerId = randomUUID(), projectId = randomUUID();
     await db.admin.query("insert into workspaces(id,name) values($1,'SYNTHETIC document import')", [workspaceId]);
     await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role) values($1,$3,'SYNTHETIC Owner','owner@example.invalid','owner','customer_owner'),($2,$3,'SYNTHETIC Staff','staff@example.invalid','agent','project_sales_member')", [ownerId, staffId, workspaceId]);
+    await db.admin.query("insert into workspace_users(id,workspace_id,name,email,role,product_role) values($1,$2,'SYNTHETIC Viewer','viewer@example.invalid','assistant','viewer')", [viewerId, workspaceId]);
     await db.admin.query("insert into projects(id,workspace_id,name,type) values($1,$2,'SYNTHETIC hidden project','Bauträger')", [projectId, workspaceId]);
     await db.admin.query(`insert into knowledge_center_entitlements(workspace_id,enabled,max_sources,max_storage_bytes,max_queries_per_month,contract_reference,features,limits) values($1,true,20,20000000,100,'SYNTHETIC-DOCUMENT-IMPORT','{"webchatAccess":true,"voiceAccess":true}','{"maxAreas":10,"maxWebsites":5,"maxScansPerMonth":5,"maxUsers":20,"maxAssistants":20}')`, [workspaceId]);
     const owner: AppSession = { authenticated: true, userId: ownerId, workspaceId, workspaceName: "SYNTHETIC", name: "Owner", email: "owner@example.invalid", role: "owner", permissions: getRolePermissions("owner"), productRole: "customer_owner", productPermissions: getProductRoleCapabilities("customer_owner"), source: "database" };
     const staff: AppSession = { ...owner, userId: staffId, role: "agent", permissions: getRolePermissions("agent"), productRole: "project_sales_member", productPermissions: getProductRoleCapabilities("project_sales_member") };
+    const viewer: AppSession = { ...owner, userId: viewerId, role: "assistant", permissions: getRolePermissions("assistant"), productRole: "viewer", productPermissions: getProductRoleCapabilities("viewer") };
     const options: TenantTransactionOptions = { pool: db.pool as unknown as NonNullable<TenantTransactionOptions["pool"]> };
     const repository = await import("../src/lib/knowledge-center/repository");
     const media = await import("../src/lib/media-store");
@@ -71,6 +73,25 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
       await assert.rejects(repository.importKnowledgeDocument(staff, { areaId: area.id, sourceId: previous.id, expectedVersion: previous.revision, file: textFile("different stale file") }, options), code("VERSION_CONFLICT"));
       await assert.rejects(repository.importKnowledgeDocument(staff, { areaId: area.id, file: textFile("another source") }, options), code("LIMIT_EXCEEDED"));
       await db.admin.query("update knowledge_center_entitlements set max_sources=20 where workspace_id=$1", [workspaceId]);
+      const approvedDocument = await repository.getKnowledgeDocument(viewer, { sourceId: previous.id }, options);
+      const historicalDocument = await repository.getKnowledgeDocument(staff, { sourceId: previous.id, versionId: previous.approvedVersionId! }, options);
+      assert.equal(historicalDocument.assetId, approvedDocument.assetId);
+      assert.notEqual(historicalDocument.assetId, imported.asset.id);
+      assert.equal((await repository.getKnowledgeDocument(staff, { sourceId: previous.id }, options)).assetId, imported.asset.id);
+      await assert.rejects(repository.getKnowledgeDocument(viewer, { sourceId: previous.id, versionId: imported.source.draftVersionId! }, options), code("NOT_FOUND"));
+      const { withCrmRead } = await import("../src/lib/crm-command");
+      const oldContent = await withCrmRead(staff, async () => {
+        const asset = await media.authorizedKnowledgeMediaAsset(historicalDocument.assetId, workspaceId);
+        assert.ok(asset);
+        const content = await media.readMediaAssetContent(asset);
+        assert.ok(content);
+        return new Response(content.body).text();
+      }, options);
+      assert.equal(oldContent, "SYNTHETIC blueberry delivery is Monday.");
+      imported.source = await repository.publishKnowledgeSource(owner, { sourceId: imported.source.id, versionId: imported.source.draftVersionId!, expectedVersion: imported.source.revision }, options);
+      assert.equal((await repository.getKnowledgeDocument(viewer, { sourceId: previous.id }, options)).assetId, imported.asset.id);
+      await assert.rejects(repository.getKnowledgeDocument(viewer, { sourceId: previous.id, versionId: previous.approvedVersionId! }, options), code("NOT_FOUND"));
+      assert.equal((await repository.getKnowledgeDocument(staff, { sourceId: previous.id, versionId: previous.approvedVersionId! }, options)).assetId, historicalDocument.assetId);
     });
 
     await t.test("parse failures retain private bytes and cannot be approved or cleared by generic edits", async () => {
@@ -78,6 +99,7 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
       assert.equal(failed.source.version?.processingStatus, "failed");
       assert.ok(failed.source.version?.processingMessage);
       assert.equal((await repository.getKnowledgeDocument(staff, { sourceId: failed.source.id }, options)).assetId, failed.asset.id);
+      await assert.rejects(repository.getKnowledgeDocument(staff, { sourceId: failed.source.id, versionId: imported.source.approvedVersionId! }, options), code("NOT_FOUND"));
       assert.equal(await media.findWorkspaceMediaAsset(failed.asset.id, workspaceId), null);
       const repeated = await repository.importKnowledgeDocument(staff, { areaId: area.id, file: new File(["%PDF-1.7\nSYNTHETIC corrupt PDF\n%%EOF"], "broken.pdf", { type: "application/pdf" }) }, options);
       assert.equal(repeated.reused, true);

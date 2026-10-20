@@ -8,10 +8,10 @@ import { KnowledgeCenterError, knowledgeId } from "@/lib/knowledge-center/policy
 export const runtime = "nodejs";
 export async function GET(request: Request, context: { params: Promise<{ sourceId: string }> }) {
   return withKnowledgeRequest(request, async (session) => {
-    knowledgeQueryParams(request, []);
+    const query = knowledgeQueryParams(request, ["versionId"]);
     const { sourceId } = await context.params;
     const asset = await withCrmRead(session, async (_tx, fresh) => {
-      const document = await getKnowledgeDocument(fresh, { sourceId: knowledgeId(sourceId, "sourceId") });
+      const document = await getKnowledgeDocument(fresh, { sourceId: knowledgeId(sourceId, "sourceId"), ...(query.has("versionId") ? { versionId: knowledgeId(query.get("versionId"), "versionId") } : {}) });
       return authorizedKnowledgeMediaAsset(document.assetId, fresh.workspaceId);
     });
     if (!asset) throw new KnowledgeCenterError("NOT_FOUND", "Knowledge document is unavailable.", 404);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { del, get, put } from "@vercel/blob";
+import { del, get, head, put } from "@vercel/blob";
 import { executeQuery, hasDatabaseUrl, queryOne, queryRows } from "@/lib/db/client";
 import { currentTenantTransaction } from "@/lib/db/transaction-context";
 import type { TenantPool } from "@/lib/db/tenant-client";
@@ -127,6 +127,7 @@ const libraryPath = path.join(mediaRoot, "library.json");
 // the source may deliberately be invisible to the current media-library user.
 export const knowledgeMediaFolderPrefix = "knowledge-private-";
 const authorizedKnowledgeReads = new WeakSet<MediaAsset>();
+const verifiedKnowledgeUploads = new WeakMap<File, { actorId: string; workspaceId: string; pathname: string }>();
 const knowledgeUploadRollbacks = new WeakMap<MediaAsset, { asset: MediaAsset; actorId: string; transaction: NonNullable<ReturnType<typeof currentTenantTransaction>>["transaction"] }>();
 const validMediaScopeId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const isKnowledgePrivateMedia = (asset: Pick<MediaAsset, "folder">) => asset.folder.toLowerCase().startsWith(knowledgeMediaFolderPrefix);
@@ -231,9 +232,25 @@ export async function saveKnowledgeFile(input: {
       active?.scope.actorId !== input.actorId || active.scope.workspaceId !== input.workspaceId) {
     throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "An authorized Knowledge upload is required.");
   }
+  const verifiedUpload = verifiedKnowledgeUploads.get(input.file);
+  if (verifiedUpload && (verifiedUpload.actorId !== input.actorId || verifiedUpload.workspaceId !== input.workspaceId)) {
+    throw new MediaStoreError("KNOWLEDGE_MEDIA_PRIVATE", "The private upload belongs to another actor or workspace.");
+  }
   const asset = await saveMediaFile({ ...input, folder: `${knowledgeMediaFolderPrefix}${input.actorId.toLowerCase()}` }, true);
   knowledgeUploadRollbacks.set(asset, { asset: Object.freeze({ ...asset }), actorId: input.actorId, transaction: active.transaction });
   return asset;
+}
+
+/** The direct transport registers only bytes it read from the exact private
+ * object and verified against the signed size/hash. File identity is the opaque
+ * capability; ordinary client locators never reach saveKnowledgeFile. */
+export function bindVerifiedPrivateKnowledgeUpload(file: File, scope: { actorId: string; workspaceId: string; pathname: string }) {
+  const prefix = `${scope.workspaceId}/knowledge-staging-${scope.actorId}/`;
+  if (!validMediaScopeId(scope.actorId) || !validMediaScopeId(scope.workspaceId) || !scope.pathname.startsWith(prefix) ||
+      scope.pathname !== path.posix.normalize(scope.pathname) || !/^\d+-[0-9a-f-]+\.[a-z]+$/.test(scope.pathname.slice(prefix.length))) {
+    throw new MediaStoreError("INVALID_STORAGE_REFERENCE", "The verified private upload reference is invalid.");
+  }
+  verifiedKnowledgeUploads.set(file, Object.freeze({ ...scope }));
 }
 
 /** Compensate only this process's failed upload after authoritative DB absence.
@@ -295,7 +312,17 @@ async function saveMediaFile(input: {
   const folderSegment = sanitizeSegment(folder);
   const fileName = `${new Date().getTime()}-${sanitizeSegment(path.basename(input.file.name, extension))}-${id.slice(0, 8)}${extension}`;
   const relativePath = path.posix.join(workspaceSegment, folderSegment, fileName);
-  const stored = await storeMediaFile(input.file, relativePath);
+  const verifiedUpload = knowledgeUpload ? verifiedKnowledgeUploads.get(input.file) : undefined;
+  let stored: Pick<MediaAsset, "relativePath" | "storageAccess" | "storageProvider">;
+  if (verifiedUpload) {
+    // The importer and expired cleanup hold the same workspace lock. Confirm
+    // existence inside that lock before attaching an immutable provider object.
+    const token = privateBlobToken();
+    if (!token) throw new MediaStoreError("PRIVATE_STORAGE_UNAVAILABLE", "Private media storage is unavailable.");
+    const blob = await head(verifiedUpload.pathname, { token, abortSignal: AbortSignal.timeout(15_000) });
+    if (blob.size !== sizeBytes || blob.contentType.split(";", 1)[0].trim().toLowerCase() !== input.file.type.toLowerCase()) throw new MediaStoreError("FILE_CONTENT_MISMATCH", "The verified private upload changed.");
+    stored = { relativePath: verifiedUpload.pathname, storageAccess: "private", storageProvider: "vercel-blob" };
+  } else stored = await storeMediaFile(input.file, relativePath);
 
   const asset: MediaAsset = {
     id,
@@ -1030,13 +1057,17 @@ async function deleteStoredFile(asset: MediaAsset) {
   await rm(mediaAssetPath(asset), { force: true });
 }
 
-function privateBlobToken() {
+/** Server-only credential for the existing private store; never use the public
+ * store's fallback credentials for confidential document transport. */
+export function getPrivateMediaBlobToken() {
   return (
     process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN?.trim() ||
     process.env.BLOB_PRIVATE_READ_WRITE_TOKEN?.trim() ||
     ""
   );
 }
+
+const privateBlobToken = getPrivateMediaBlobToken;
 
 function publicBlobToken() {
   return (

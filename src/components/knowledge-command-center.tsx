@@ -40,6 +40,7 @@ import type {
   KnowledgeVersion,
 } from "@/lib/knowledge-center/types";
 import { csrfFetch } from "@/lib/security/csrf-client";
+import { uploadKnowledgeDocument } from "@/lib/knowledge-center/document-upload-client";
 
 const inputClass =
   "evelyn-domain-input min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:bg-stone-100";
@@ -556,18 +557,10 @@ function KnowledgeCenterContent({
     setError("");
     setNotice("");
     try {
-      const body = new FormData();
-      body.append("file", file);
-      body.append("name", replacement?.name || editor?.name.trim() || file.name);
-      body.append("areaId", areaId);
-      if (replacement) {
-        body.append("sourceId", replacement.id);
-        body.append("expectedVersion", String(replacement.revision));
-      }
-      const response = await csrfFetch(
-        scopedPath("/api/knowledge-center/documents"),
-        { method: "POST", body },
-      );
+      const response = await uploadKnowledgeDocument(scopedPath("/api/knowledge-center/documents"), file, {
+        name: replacement?.name || editor?.name.trim() || file.name, areaId,
+        ...(replacement ? { sourceId: replacement.id, expectedVersion: replacement.revision } : {}),
+      });
       const { asset, source } = await readResponse<{
         asset: { id: string; name: string };
         source: KnowledgeSource;

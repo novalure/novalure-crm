@@ -138,6 +138,14 @@ test("Knowledge HTTP handlers enforce cookie, CSRF, tenant membership, draft pub
       assert.equal(delivered.status, 200, await delivered.clone().text());
       assert.match(delivered.headers.get("content-disposition") ?? "", /attachment/);
       assert.match(await delivered.text(), /SYNTHETIC PRIVATE DOCUMENT/);
+      const explicitVersion = await document.GET(request(pathname + "?versionId=" + fileSource.version!.id), { params: Promise.resolve({ sourceId: fileSource.id }) });
+      assert.equal(explicitVersion.status, 200);
+      assert.match(await explicitVersion.text(), /SYNTHETIC PRIVATE DOCUMENT/);
+      for (const suffix of ["?versionId=", "?versionId=invalid", "?versionId=" + fileSource.version!.id + "&versionId=" + fileSource.version!.id, "?assetId=" + asset.id]) {
+        assert.equal((await document.GET(request(pathname + suffix), { params: Promise.resolve({ sourceId: fileSource.id }) })).status, 400);
+      }
+      assert.equal((await document.GET(request(pathname + "?versionId=" + source.version!.id), { params: Promise.resolve({ sourceId: fileSource.id }) })).status, 404);
+      assert.equal((await document.GET(request(pathname + "?workspaceId=" + foreign.workspaceId), { params: Promise.resolve({ sourceId: fileSource.id }) })).status, 403);
       const generic = await genericMedia.GET(request("/api/media/files/" + asset.id), { params: Promise.resolve({ assetId: asset.id }) });
       assert.equal(generic.status, 404);
       const missing = await document.GET(request("/api/knowledge-center/sources/" + randomUUID() + "/document"), { params: Promise.resolve({ sourceId: randomUUID() }) });
