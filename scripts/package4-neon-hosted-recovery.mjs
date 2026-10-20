@@ -115,14 +115,16 @@ async function versionBindings(client, binding) {
   required(rows.length > 0 && rows.every(row => binding.workspaceIds.includes(row.workspace_id)), "OWNED_NONEMPTY_DOCUMENT_VERSION_BINDINGS_REQUIRED");
   return hash(canonical(rows));
 }
+export const package4HostedPrivateAssetInventorySql = `select m.id,m.workspace_id,m.relative_path,m.storage_provider,m.storage_access,
+  m.is_public,m.public_token,m.size_bytes::text,exists(select 1 from public.knowledge_source_versions v
+    where v.media_asset_id=m.id and v.workspace_id::text=m.workspace_id) as has_version
+  from public.media_assets m where m.storage_access='private' order by m.id`;
+
 async function privateAssetInventory(client, binding) {
   await client.query("begin isolation level repeatable read read only");
   try {
     await assertPackage4RestoreIdentity(client, binding);
-    const rows = (await client.query(`select m.id,m.workspace_id,m.relative_path,m.storage_provider,m.storage_access,
-      m.is_public,m.public_token,m.size_bytes::text,exists(select 1 from public.knowledge_source_versions v
-        where v.media_asset_id=m.id and v.workspace_id=m.workspace_id) as has_version
-      from public.media_assets m where m.storage_access='private' order by m.id`)).rows;
+    const rows = (await client.query(package4HostedPrivateAssetInventorySql)).rows;
     required(rows.length > 0 && rows.length <= 100 && rows.every(row => binding.workspaceIds.includes(row.workspace_id) &&
       row.storage_provider === "vercel-blob" && row.storage_access === "private" && row.is_public === false &&
       row.public_token === null && row.has_version === true), "ALL_PRIVATE_MEDIA_MUST_BE_OWNED_AND_COVERED_BY_KNOWLEDGE_ARCHIVE");
