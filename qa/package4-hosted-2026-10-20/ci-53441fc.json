@@ -1,0 +1,148 @@
+{
+  "format": "package4-exact-head-ci-monitor-v1",
+  "status": "PASS",
+  "observedAtUtc": "2026-10-20T06:49:58.000Z",
+  "repository": "novalure/novalure-crm",
+  "candidateRevision": "53441fc69b2e85c6a5fce25d1fc963934265c094",
+  "commitWorkflowAssociationVerified": true,
+  "workflows": [
+    {
+      "id": 39382085812,
+      "name": "Secret scan",
+      "status": "completed",
+      "conclusion": "success",
+      "runNumber": 238,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39382085812"
+    },
+    {
+      "id": 39382085775,
+      "name": "Go-live quality gates",
+      "status": "completed",
+      "conclusion": "success",
+      "runNumber": 412,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39382085775"
+    }
+  ],
+  "jobs": {
+    "quality": [
+      {
+        "id": 118493256237,
+        "name": "Production dependency audit and SBOM",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 11,
+        "activeStep": null,
+        "failedSteps": []
+      },
+      {
+        "id": 118493256583,
+        "name": "Lockfile, lint, typecheck, tests and build",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 38,
+        "activeStep": null,
+        "failedSteps": []
+      },
+      {
+        "id": 118494892813,
+        "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+        "status": "completed",
+        "conclusion": "skipped",
+        "completedSteps": 0,
+        "activeStep": null,
+        "failedSteps": []
+      }
+    ],
+    "secret": [
+      {
+        "id": 118493256164,
+        "name": "Gitleaks full-history and current-tree scan",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 6,
+        "activeStep": null,
+        "failedSteps": []
+      }
+    ]
+  },
+  "priorImplementation": {
+    "revision": "13bca582ac9fc64900b18ba36f2e35d0d9a5d5b6",
+    "qualityRunId": 39381298781,
+    "qualityJobs": [
+      {
+        "id": 118490773131,
+        "name": "Production dependency audit and SBOM",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 118490773545,
+        "name": "Lockfile, lint, typecheck, tests and build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 118493004775,
+        "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+        "status": "completed",
+        "conclusion": "skipped"
+      }
+    ],
+    "optionalManualJobSkipped": true,
+    "previousSecretScan": {
+      "runId": 39381298742,
+      "status": "FAIL",
+      "classification": "Two exact source-digest false positives; preserved and resolved by exact historical fingerprints and metadata-shape change.",
+      "evidence": "qa/package4-hosted-2026-10-20/secret-scan-false-positives.json"
+    }
+  },
+  "limits": [
+    "Pending jobs are not PASS.",
+    "The optional manual trusted-candidate job was skipped and is not claimed as executed.",
+    "No code changes or re-runs were triggered by this monitoring task."
+  ],
+  "codeChangesPerformed": 0,
+  "secretValuesEmitted": false,
+  "metadataOnlyDeltaFromPriorImplementation": {
+    "verified": true,
+    "paths": [
+      ".gitleaksignore",
+      "qa/package4-hosted-2026-10-20/deployment-13bca58.json",
+      "qa/package4-hosted-2026-10-20/hosted-transport-fix-review.json",
+      "qa/package4-hosted-2026-10-20/secret-scan-false-positives.json"
+    ],
+    "applicationAndMigrationAndPackageAndConfigBytesUnchanged": true
+  },
+  "localAndRemoteBranchHeadVerified": true,
+  "localAndRemoteBranchHead": "53441fc69b2e85c6a5fce25d1fc963934265c094",
+  "requiredChecks": [
+    {
+      "name": "Gitleaks full-history and current-tree scan",
+      "runId": 39382085812,
+      "jobId": 118493256164,
+      "status": "PASS",
+      "conclusion": "success"
+    },
+    {
+      "name": "Production dependency audit and SBOM",
+      "runId": 39382085775,
+      "jobId": 118493256237,
+      "status": "PASS",
+      "conclusion": "success"
+    },
+    {
+      "name": "Lockfile, lint, typecheck, tests and build",
+      "runId": 39382085775,
+      "jobId": 118493256583,
+      "status": "PASS",
+      "conclusion": "success"
+    }
+  ],
+  "optionalManualDispatch": {
+    "jobId": 118494892813,
+    "status": "SKIPPED",
+    "condition": "github.event_name == 'workflow_dispatch'",
+    "reason": "This run was triggered by pull_request; the separate manual shared-QA job was not invoked.",
+    "countedAsExecuted": false
+  }
+}

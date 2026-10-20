@@ -495,11 +495,15 @@ try {
     const own = await api(foreignPage, "/api/crm/core", undefined, target.accounts.customerB.workspaceId); assert.equal(own.status, 200);
     assert(!JSON.stringify(own.body).includes(target.accounts.customerA.unitId));
     await open(foreignPage, target.accounts.customerB.workspaceId, "dashboard");
-    await foreignPage.getByRole("button", { name: "CRM durchsuchen", exact: true }).click();
+    const searchTrigger = foreignPage.getByRole("button", { name: "CRM durchsuchen", exact: true });
+    await searchTrigger.click();
     const search = foreignPage.getByRole("dialog", { name: "CRM durchsuchen", exact: true });
-    await search.getByRole("searchbox", { name: "CRM durchsuchen", exact: true }).fill(target.accounts.customerA.searchSentinel || marker);
+    const searchbox = search.getByRole("searchbox", { name: "CRM durchsuchen", exact: true });
+    await searchbox.fill(target.accounts.customerA.searchSentinel || marker);
     await expect(search.locator("[data-crm-search-results]")).toHaveText("Keine passenden Ergebnisse im geladenen Bereich.");
-    await foreignPage.keyboard.press("Escape"); await expect(search).not.toBeVisible();
+    // Chromium gives a populated native search input the first Escape to clear.
+    await foreignPage.keyboard.press("Escape"); await expect(searchbox).toHaveValue(""); await expect(search).toBeVisible();
+    await foreignPage.keyboard.press("Escape"); await expect(search).not.toBeVisible(); await expect(searchTrigger).toBeFocused();
     for (const [channel, expectedCode] of [["voice", "ENTITLEMENT_REQUIRED"], ["webchat", "LIMIT_EXCEEDED"]]) {
       const denied = await api(foreignPage, "/api/knowledge-center/query", { botId: target.accounts.customerB.botId, channel, query: marker }, target.accounts.customerB.workspaceId);
       assert([403, 409].includes(denied.status)); assert.equal(denied.body.code, expectedCode);
