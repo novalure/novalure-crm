@@ -45,6 +45,7 @@ async function publishThroughUi(card, expectedContent) {
     await lifecycle.locator("form textarea").first().fill("SYNTHETIC vollständig geprüfte Veröffentlichung");
     if (action !== "submit") await lifecycle.getByRole("checkbox", { name: "Ich habe den Inhalt vollständig geprüft.", exact: true }).check();
     await button.click();
+    await expect(button).toHaveCount(0);
   }
   await expect(lifecycle.getByTestId("knowledge-revoke")).toBeVisible();
 }
