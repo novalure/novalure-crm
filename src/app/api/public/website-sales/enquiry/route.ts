@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { executeStudioEnquiry, studioEnquiryTargetVerified } from "@/lib/studio-enquiry";
+import { studioEnquiryCandidateRequestAllowed } from "@/lib/studio-enquiry-candidate";
 import { StudioEnquiryError, parseStudioEnquiryRequest, studioEnquiryMaxBodyBytes,
   studioEnquiryRecipientsAllowed, verifyStudioEnquirySignature, verifyStudioSyntheticTestProof,
   studioEnquiryRequestOriginAllowed, studioEnquiryStudioOrigin, studioEnquiryStudioProject,
@@ -44,7 +45,14 @@ export async function POST(request: Request) {
           request.headers.get("x-studio-project-id") !== studioEnquiryStudioProject) return failure(403, "studio_origin_not_allowed");
       if (payload.snapshot.syntheticTest && !verifyStudioSyntheticTestProof(payload,
         request.headers.get("x-studio-synthetic-test-proof"))) return failure(403, "synthetic_test_not_authorized");
-    } else if (!studioEnquiryRecipientsAllowed(payload.snapshot)) return failure(403, "qa_recipient_not_allowed");
+    } else {
+      if (!studioEnquiryRecipientsAllowed(payload.snapshot)) return failure(403, "qa_recipient_not_allowed");
+      if (process.env.STUDIO_ENQUIRY_CANDIDATE_ENABLED === "1" &&
+          (!studioEnquiryCandidateRequestAllowed(request) || !payload.snapshot.syntheticTest ||
+           payload.snapshot.files.length !== 0 || payload.snapshot.websites.length !== 0)) {
+        return failure(403, "candidate_request_not_allowed");
+      }
+    }
     if (!await studioEnquiryTargetVerified()) return failure(503, "studio_qa_target_unverified");
     const result = await executeStudioEnquiry(payload);
     return NextResponse.json(result, { headers, status: result.status === "transmitted" ? 202 : 200 });

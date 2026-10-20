@@ -233,6 +233,10 @@ jobs:
       NOVALURE_PUBLIC_SUBMISSION_QA_MODE: "1"
       NOVALURE_QA_BASE_URL: http://127.0.0.1:3000
       NOVALURE_TRUSTED_CLIENT_IP_HEADER: x-forwarded-for
+      NOVALURE_QA_PROFILE: ${{ inputs.qa_profile }}
+      STUDIO_ENQUIRY_CANDIDATE_ENABLED: ${{ inputs.qa_profile == 'isolated-candidate' && '1' || '0' }}
+      STUDIO_ENQUIRY_QA_EMAILS_JSON: '["studio-candidate-${{ github.run_id }}-${{ github.run_attempt }}@example.invalid"]'
+      STUDIO_ENQUIRY_QA_PHONES_JSON: '[]'
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -540,6 +544,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
           NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          NOVALURE_QA_DATABASE_URL: ${{ secrets.NOVALURE_QA_DATABASE_URL }}
+          NOVALURE_QA_DATABASE_HOST: ${{ secrets.NOVALURE_QA_DATABASE_HOST }}
+          NOVALURE_QA_DATABASE_ROLE: ${{ secrets.NOVALURE_QA_DATABASE_ROLE }}
+          NOVALURE_QA_DATABASE_NAME: ${{ vars.NOVALURE_QA_DATABASE_NAME }}
+          NOVALURE_QA_PROJECT_ID: ${{ vars.NOVALURE_QA_PROJECT_ID }}
+          NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
+          NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
           NOVALURE_LOGIN_PASSCODE: ${{ secrets.NOVALURE_QA_PASSWORD }}
           NOVALURE_ABUSE_SECRET: ${{ secrets.NOVALURE_QA_ABUSE_SECRET }}
           NOVALURE_AUTH_ENCRYPTION_KEY: ${{ secrets.NOVALURE_QA_AUTH_ENCRYPTION_KEY }}
@@ -547,6 +560,9 @@ jobs:
           NOVALURE_SESSION_SECRET: ${{ secrets.NOVALURE_QA_SESSION_SECRET }}
           OAUTH_STATE_SECRET: ${{ secrets.NOVALURE_QA_OAUTH_STATE_SECRET }}
         run: |
+          if [ "$STUDIO_ENQUIRY_CANDIDATE_ENABLED" = "1" ]; then
+            node --import tsx --input-type=module -e 'import { studioEnquiryCandidateBinding } from "./src/lib/studio-enquiry-candidate.ts"; if (!studioEnquiryCandidateBinding()) { console.error("QA_STUDIO_CANDIDATE_BINDING_INVALID"); process.exitCode=1; }' || exit 1
+          fi
           npm run start -- --hostname 127.0.0.1 > /tmp/novalure-livegang.log 2>&1 &
           echo $! > /tmp/novalure-livegang.pid
 
@@ -586,7 +602,8 @@ jobs:
           NOVALURE_QA_BRANCH_ID: ${{ vars.NOVALURE_QA_BRANCH_ID }}
           NOVALURE_QA_MIGRATION_DATABASE_URL: ${{ secrets.NOVALURE_QA_MIGRATION_DATABASE_URL }}
           NOVALURE_PRODUCTION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_DATABASE_HOST }}
-          NOVALURE_STUDIO_INGESTION_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
+          NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST: ${{ secrets.NOVALURE_PRODUCTION_MIGRATION_DATABASE_HOST }}
+          STUDIO_ENQUIRY_SIGNING_SECRET: ${{ secrets.NOVALURE_QA_STUDIO_INGESTION_SECRET }}
         run: node --conditions=react-server --import tsx scripts/qa-public-form-candidate.mjs
 
       - name: Stop production server before RLS diagnostic

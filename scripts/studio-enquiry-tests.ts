@@ -618,3 +618,37 @@ test("Studio source links require the exact immutable media operation marker", a
   await assert.rejects(withPublicSubmissionTransaction(actor, () => queryRows(
     "update media_assets set studio_enquiry_operation_id=$2::uuid where id=$1::uuid", [unmarked, r.operationId])), /Public submission transaction failed/);
 });
+
+test("text-only enquiries reserve, finalize and replay without granting file capabilities", async () => {
+  delete process.env.NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN;
+  delete process.env.BLOB_PRIVATE_READ_WRITE_TOKEN;
+  const beforeCounts = await counts();
+  const s = snapshot(false);
+  s.brief.values.email = `text-only-${randomUUID()}@example.invalid`;
+  const r = request(s);
+  const reserved = await executeStudioEnquiry(r);
+  assert.equal(reserved.status, "reserved");
+  assert.deepEqual(reserved.targets, []);
+  assert.deepEqual(await counts(), beforeCounts, "reservation publishes no CRM records");
+  const finalized = await executeStudioEnquiry(withAction(r, "finalize"));
+  const receipt = accepted(finalized);
+  assert.deepEqual(accepted(await executeStudioEnquiry(withAction(r, "finalize"))), receipt);
+  assert.deepEqual(accepted(await executeStudioEnquiry(withAction(r, "status"))), receipt);
+  assert.equal(receipt.operationId, r.operationId);
+  assert.deepEqual(receipt.attachments, []);
+  const afterCounts = await counts();
+  assert.equal(afterCounts.leads, beforeCounts.leads + 1);
+  assert.equal(afterCounts.form_submissions, beforeCounts.form_submissions + 1);
+  assert.equal(afterCounts.contacts, beforeCounts.contacts + 1);
+  for (const table of ["deals", "tasks", "media_assets", "studio_enquiry_assets"]) {
+    assert.equal(afterCounts[table], beforeCounts[table], table);
+  }
+  const persisted = (await db.admin.query(`select fs.mode,l.metadata #>> '{websiteSales,syntheticTest}' as synthetic,
+    l.metadata #>> '{studioEnquiry,operationId}' as operation_id
+    from form_submissions fs join leads l on l.id=fs.lead_id where fs.id=$1::uuid`, [receipt.formSubmissionId])).rows[0];
+  assert.deepEqual(persisted, { mode: "test", synthetic: "true", operation_id: r.operationId });
+  const fileRequest = request();
+  await assert.rejects(executeStudioEnquiry(fileRequest), (error: unknown) =>
+    error instanceof Error && error.message === "private_storage_unavailable");
+  assert.deepEqual(await counts(), afterCounts, "missing file capability cannot publish a file-bearing enquiry");
+});

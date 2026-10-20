@@ -4,6 +4,7 @@ import { queryOne, queryRows, resolveDatabaseUrl, withPublicSubmissionTransactio
 import { persistWebsiteFormSubmission } from "@/lib/db/form-repositories";
 import { hasExpectedMediaMagicBytes } from "@/lib/media-security";
 import { workspaceImageQuotaBytes } from "@/lib/media-store";
+import { studioEnquiryCandidateBinding } from "@/lib/studio-enquiry-candidate";
 import { websiteSalesActorId, websiteSalesFormId, websiteSalesWorkspaceId } from "@/lib/website-sales-ingestion";
 import { StudioEnquiryError, studioEnquiryBranch, studioEnquiryHash, studioEnquiryProject,
   studioEnquiryProductionOrigin, studioEnquiryStudioOrigin, studioEnquiryStudioProject, studioEnquiryCrmProject,
@@ -71,6 +72,29 @@ async function studioEnquiryProductionTargetVerified(env: NodeJS.ProcessEnv) {
 /** Preview retains its original isolated target guard; Production has a separate exact binding. */
 export async function studioEnquiryTargetVerified(env: NodeJS.ProcessEnv = process.env) {
   if (env.VERCEL_ENV === "production") return studioEnquiryProductionTargetVerified(env);
+  if (env.STUDIO_ENQUIRY_CANDIDATE_ENABLED === "1") {
+    const binding = studioEnquiryCandidateBinding(env);
+    if (!binding) return false;
+    try {
+      const actual = await withPublicSubmissionTransaction(scope, () => queryOne<{
+        project: string; branch: string; name: string; role: string; sessionRole: string; ready: boolean;
+      }>(`select current_setting('neon.project_id',true) as project,
+          current_setting('neon.branch_id',true) as branch, current_database() as name,
+          current_user as role, session_user as "sessionRole",
+          (exists(select 1 from pg_constraint where conrelid=to_regclass('public.studio_enquiry_transfers')
+             and conname='studio_enquiry_snapshot_synthetic_marker_boolean' and convalidated)
+           and (select count(*)=2 from pg_class where oid in
+             (to_regclass('public.studio_enquiry_transfers'),to_regclass('public.studio_enquiry_assets'))
+             and relrowsecurity and relforcerowsecurity)
+           and exists(select 1 from workspace_users where id=$1::uuid and workspace_id=$2::uuid
+             and status='active' and role='agent' and product_role='novalure_operator')
+           and exists(select 1 from forms where id=$3::uuid and workspace_id=$2::uuid
+             and project_id=$4::uuid and status='aktiv')) as ready`,
+      [websiteSalesActorId, websiteSalesWorkspaceId, websiteSalesFormId, studioEnquiryCrmProject]), { readOnly: true });
+      return actual?.project === binding.project && actual.branch === binding.branch &&
+        actual.name === binding.name && actual.role === binding.role && actual.sessionRole === binding.role && actual.ready === true;
+    } catch { return false; }
+  }
   if (env.VERCEL !== "1" || env.VERCEL_ENV !== "preview" || env.VERCEL_PROJECT_ID !== studioEnquiryProject ||
       env.STUDIO_ENQUIRY_QA_CRM_PROJECT_ID !== studioEnquiryProject || env.VERCEL_GIT_COMMIT_REF !== studioEnquiryBranch ||
       env.STUDIO_ENQUIRY_QA_ENABLED !== "1" || !env.STUDIO_ENQUIRY_QA_APPROVAL_ID?.trim()) return false;
@@ -224,17 +248,20 @@ async function persistTarget(target: EnquiryTarget, file: StudioEnquiryFile, req
     [request.operationId, websiteSalesWorkspaceId, target.sourceId, target.variant, target.assetId, target.sha256, file.originalSha256]);
 }
 /** Only server-owned validated requests enter here; material text never selects actions or scope. */
-export async function executeStudioEnquiry(request: StudioEnquiryRequest, { store = studioEnquiryPrivateStore() }: { store?: EnquiryPrivateStore } = {}) {
+export async function executeStudioEnquiry(request: StudioEnquiryRequest, { store }: { store?: EnquiryPrivateStore } = {}) {
   const row = await loadTransfer(request, request.action === "reserve");
   if (row.state === "accepted") return transmitted(row);
+  // Text-only enquiries and accepted replays require no object-store capability.
+  // File-bearing requests still resolve the same validated private store before I/O.
+  const privateStore = () => store ??= studioEnquiryPrivateStore();
   if (request.action !== "finalize") {
     const targets = [], inspected = new Map<string, { existing: boolean; put?: { url: string; headers: Record<string,string> } }>();
     for (const target of row.targets) {
       let checked = inspected.get(target.pathname);
       if (!checked) {
-        const existing = await store.read(target);
+        const existing = await privateStore().read(target);
         if (existing) verifyStudioCopiedFile(target, existing);
-        checked = { existing: Boolean(existing), ...(!existing && request.action === "reserve" ? { put: await store.grant(target) } : {}) };
+        checked = { existing: Boolean(existing), ...(!existing && request.action === "reserve" ? { put: await privateStore().grant(target) } : {}) };
         inspected.set(target.pathname, checked);
       }
       targets.push({ sourceId: target.sourceId, variant: target.variant, assetId: target.assetId, sha256: target.sha256, pathname: target.pathname,
@@ -244,7 +271,7 @@ export async function executeStudioEnquiry(request: StudioEnquiryRequest, { stor
   }
   const checkedPaths = new Set<string>();
   for (const target of row.targets) if (!checkedPaths.has(target.pathname)) {
-    verifyStudioCopiedFile(target, await store.read(target)); checkedPaths.add(target.pathname);
+    verifyStudioCopiedFile(target, await privateStore().read(target)); checkedPaths.add(target.pathname);
   }
   // Object writes are immutable. DB publication is a separate all-or-nothing transaction.
   // A failed or uncertain COMMIT leaves the reserved objects for same-key reconciliation.
