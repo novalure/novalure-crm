@@ -1,0 +1,64 @@
+{
+  "format": "package4-evelyn-preview-caller-frozen-source-v1",
+  "commit": "41f638f3d54a116318d3fd972fbeeebb4c0044e6",
+  "parent": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "branch": "codex/evelyn-crm-package4-machine-caller-qa-20261020",
+  "pushed": false,
+  "committedFileCount": 6,
+  "sourceFiles": [
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.mjs",
+      "sha256": "e9b90d4fcdd6f5ca5b6fbbbb5835a9d28b525930fdf3a8dba1734a6c1f7f3bfd"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/handler.mjs",
+      "sha256": "9c26d8bdab7dfa6a99880beb6691200959452a52da8885a425f8d4a1dd4885d8"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/contract.json",
+      "sha256": "ccd7be4748655e00f7a218cb3c8d6a3642bc1b005dd190de1b212988a60cc9c7"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/build.mjs",
+      "sha256": "a893aa43631f44eee10bd0224faeb78cfbf1efb0dacbbed837d5e5f14175bb0c"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/caller.test.mjs",
+      "sha256": "9bd4704a57eeb24f63140b7754ff123de068996921cf97b6d72c4e5a7e3c44c5"
+    },
+    {
+      "path": "scripts/qa-fixtures/evelyn-preview-knowledge-caller/README.md",
+      "sha256": "15f4ccd6708b7840690597cbcbf09faac76f07f91cfc2a11d85ee5991df18ac2"
+    }
+  ],
+  "committedTemplateContractSha256": "ccd7be4748655e00f7a218cb3c8d6a3642bc1b005dd190de1b212988a60cc9c7",
+  "receiverOrigin": null,
+  "resolvedContractSha256": null,
+  "actualBuildArtifactExists": false,
+  "deploymentPerformed": false,
+  "independentSourceReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0,
+    "frozenBytesVerified": true
+  },
+  "localValidationReceipt": "/workspace/package4-evelyn-caller-local-validation.json",
+  "privateMaterializationPlan": "After native CRM Preview READY receipt, copy exact committed six fixture files and package-lock.json into a private isolated repository-shaped snapshot, link the existing lock-pinned dependencies, replace only receiverOrigin in that private contract.json, record committed template and resolved contract hashes, then build into a new stage and obtain narrow artifact review before any deployment.",
+  "commits": [
+    "6ae66dd14ca952709d37f357535db1dc558e5fb2",
+    "41f638f3d54a116318d3fd972fbeeebb4c0044e6"
+  ],
+  "inheritedEnvironmentMetadata": {
+    "rows": 37,
+    "previewRows": 21,
+    "uniquePreviewKeyCount": 15,
+    "keyListMatchesContract": true,
+    "secretValuesInspected": false,
+    "rawFileSha256": "9b22f2394164e385ec8c94d2a3456952acb6ea7d993cf1b2dd37f7b901ec701e",
+    "scope": "Raw metadata-only JSON file bytes, including customEnvironmentIds; separate from canonical before/after comparison hashes."
+  },
+  "additiveGuardReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0,
+    "exactAll15KeyPinsVerified": true
+  }
+}

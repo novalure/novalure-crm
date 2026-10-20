@@ -1,0 +1,46 @@
+{
+  "format": "package4-evelyn-preview-knowledge-caller-v1",
+  "receiverOrigin": null,
+  "receiverProjectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "callerProjectId": "prj_8bbjKnQ5XDr52YYPRYtvqtoSj71I",
+  "ownerId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "issuer": "https://oidc.vercel.com/novalure",
+  "subject": "owner:novalure:project:evelyn:environment:preview",
+  "environment": "preview",
+  "audience": "urn:novalure:crm:knowledge-qa:prj_R32Okl6AHijTohvuKmryuTLjWMsk:603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+  "trustedAudience": "https://vercel.com/novalure",
+  "workspaceId": "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+  "botId": "4cbc599d-a1f0-42ef-8bcb-9acb72cb02a5",
+  "blankEnvironmentKeys": [
+    "EVELYN_EVM04B_DATABASE",
+    "EVELYN_EVM04B_DATABASE_ROLE",
+    "EVELYN_EVM04B_DATABASE_URL",
+    "EVELYN_EVM04B_DEPLOYMENT_SCOPE",
+    "EVELYN_EVM04B_NEON_HOST",
+    "EVELYN_EVM04B_QA_ACTOR_ID",
+    "EVELYN_EVM04B_VERCEL_PROJECT_ID",
+    "EVELYN_EVM04B_WEBHOOK_SECRET",
+    "EVELYN_EVM09A_COMPLIANCE_VERSION",
+    "EVELYN_EVM09A_CREDENTIAL_VERSION",
+    "EVELYN_EVM09A_POLICY_VERSION",
+    "EVELYN_PREVIEW_CONFIG",
+    "EVELYN_PREVIEW_DATABASE_URL",
+    "EVELYN_TEST_OWNER_PASSWORD_HASH",
+    "EVELYN_TEST_VIEWER_PASSWORD_HASH"
+  ],
+  "query": "hpdf925774b5e5",
+  "expectedExcerptMarker": "09:00",
+  "forbiddenExcerptMarker": "11:00",
+  "expectedSourceId": "eecf12c0-e36a-4bd5-a40d-50420c2d54a0",
+  "expectedVersionId": "d98b2e70-fb25-4f4c-924f-c54afd6342cb",
+  "originalPdfProvenance": {
+    "bytes": 877,
+    "sha256": "d989ece4f7e4c7d870392dbc3df479b1e2a3c1c9218772ca4aa34e19d576516e",
+    "scope": "Original uploaded file bytes; not the semantic excerpt hash."
+  },
+  "triggerPath": "/api/package4-machine-proof",
+  "channels": [
+    { "channel": "webchat", "path": "/api/integrations/knowledge/webchat", "maxResults": 5 },
+    { "channel": "voice", "path": "/api/integrations/knowledge/voice", "maxResults": 3 }
+  ]
+}

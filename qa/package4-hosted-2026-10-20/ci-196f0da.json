@@ -1,0 +1,129 @@
+{
+  "format": "package4-exact-head-ci-monitor-v1",
+  "status": "PASS",
+  "observedAtUtc": "2026-10-20T07:04:14Z",
+  "repository": "novalure/novalure-crm",
+  "candidateRevision": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "commitWorkflowAssociationVerified": true,
+  "workflows": [
+    {
+      "id": 39383356676,
+      "name": "Secret scan",
+      "status": "completed",
+      "conclusion": "success",
+      "runNumber": 239,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39383356676"
+    },
+    {
+      "id": 39383356698,
+      "name": "Go-live quality gates",
+      "status": "completed",
+      "conclusion": "success",
+      "runNumber": 413,
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39383356698"
+    }
+  ],
+  "jobs": {
+    "quality": [
+      {
+        "id": 118497334503,
+        "name": "Lockfile, lint, typecheck, tests and build",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 38,
+        "activeStep": null,
+        "failedSteps": []
+      },
+      {
+        "id": 118497334760,
+        "name": "Production dependency audit and SBOM",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 11,
+        "activeStep": null,
+        "failedSteps": []
+      },
+      {
+        "id": 118499656295,
+        "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+        "status": "completed",
+        "conclusion": "skipped",
+        "completedSteps": 0,
+        "activeStep": null,
+        "failedSteps": []
+      }
+    ],
+    "secret": [
+      {
+        "id": 118497333835,
+        "name": "Gitleaks full-history and current-tree scan",
+        "status": "completed",
+        "conclusion": "success",
+        "completedSteps": 6,
+        "activeStep": null,
+        "failedSteps": []
+      }
+    ]
+  },
+  "priorCandidate": {
+    "revision": "53441fc69b2e85c6a5fce25d1fc963934265c094",
+    "requiredChecksStatus": "PASS",
+    "qualityRunId": 39382085775,
+    "secretRunId": 39382085812,
+    "evidence": "qa/package4-hosted-2026-10-20/ci-53441fc.json"
+  },
+  "qaAndEvidenceOnlyDelta": {
+    "verified": true,
+    "paths": [
+      "qa/package4-hosted-2026-10-20/ci-53441fc.json",
+      "qa/package4-hosted-2026-10-20/deployment-53441fc.json",
+      "qa/package4-hosted-2026-10-20/hosted-attempt2-search-escape.png",
+      "qa/package4-hosted-2026-10-20/hosted-attempt2.json",
+      "qa/package4-hosted-2026-10-20/machine-binding-gap.json",
+      "scripts/qa-package4-hosted.mjs"
+    ],
+    "applicationAndMigrationAndPackageAndConfigAndWorkflowBytesUnchanged": true,
+    "qaSequence": "For a filled native search field, first Escape clears the field while the dialog remains open; second Escape closes it and restores focus.",
+    "priorHostedFailurePreserved": true
+  },
+  "localAndRemoteBranchHeadVerified": true,
+  "localAndRemoteBranchHead": "196f0daa71e0d9b1eaeb51584388b27d7673dd3e",
+  "limits": [
+    "Only the three required checks are counted as PASS.",
+    "The optional manual-dispatch job was skipped by its workflow condition and is not counted as executed.",
+    "No workflow reruns or code changes were performed."
+  ],
+  "codeChangesPerformed": 0,
+  "secretValuesEmitted": false,
+  "requiredChecks": [
+    {
+      "name": "Gitleaks full-history and current-tree scan",
+      "runId": 39383356676,
+      "jobId": 118497333835,
+      "status": "PASS",
+      "conclusion": "success"
+    },
+    {
+      "name": "Production dependency audit and SBOM",
+      "runId": 39383356698,
+      "jobId": 118497334760,
+      "status": "PASS",
+      "conclusion": "success"
+    },
+    {
+      "name": "Lockfile, lint, typecheck, tests and build",
+      "runId": 39383356698,
+      "jobId": 118497334503,
+      "status": "PASS",
+      "conclusion": "success"
+    }
+  ],
+  "optionalManualDispatch": {
+    "jobId": 118499656295,
+    "status": "SKIPPED",
+    "condition": "github.event_name == 'workflow_dispatch'",
+    "conditionSource": ".github/workflows/livegang-e2e.yml:221",
+    "reason": "This pull-request workflow does not meet the manual-dispatch condition.",
+    "countedAsExecuted": false
+  }
+}

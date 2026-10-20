@@ -55,6 +55,12 @@ export type AppSession = {
     consumer: "EVELYN";
     environment: "production";
     jtiHash: string;
+  } | {
+    identityId: "EVELYN_CRM_KNOWLEDGE_QA_IDENTITY";
+    role: "Evelyn.QA";
+    consumer: "EVELYN";
+    environment: "preview";
+    jtiHash: string;
   }>;
   authIdentityId?: string;
   authSessionId?: string;

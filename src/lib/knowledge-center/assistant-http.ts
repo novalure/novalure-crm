@@ -9,14 +9,17 @@ import { getProductRoleCapabilities } from "@/lib/product-model";
 import { assistantKnowledgeFallback, assistantKnowledgeLimits, retrieveAssistantKnowledge } from "./integrations";
 import { knowledgeErrorResponse, knowledgeJson, readKnowledgeJson } from "./http";
 import { KnowledgeCenterError, knowledgeText } from "./policy";
+import { resolveKnowledgeQaProfile, verifyKnowledgeQaToken, type KnowledgeQaAuthOptions, type KnowledgeQaClaims } from "./qa-machine-auth";
 
 type MachinePrincipal = {
   id: string; workspace_id: string; actor_user_id: string;
   identity_id: string; data_context: string;
+  auth_type?: string; service_role?: string; environment?: string;
 };
-export type MachineKnowledgeOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions };
+export type MachineKnowledgeOptions = TenantTransactionOptions & { machineAuth?: CrmMachineAuthOptions; qaMachineAuth?: KnowledgeQaAuthOptions };
 const machineAuthenticationSql = "select * from public.crm_authenticate_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";
-function machineParams(claims: CrmMachineClaims) {
+const qaMachineAuthenticationSql = "select * from public.crm_authenticate_knowledge_qa_machine($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9)";
+function machineParams(claims: CrmMachineClaims | KnowledgeQaClaims) {
   return [claims.identityId, claims.subject, claims.issuer, claims.audience, claims.projectId,
     claims.ownerId, claims.workspaceId, claims.environment, claims.role];
 }
@@ -49,27 +52,36 @@ export async function handleMachineKnowledgeRequest(
       new URL(request.url).searchParams.size !== 0 || !["webchat", "voice"].includes(savedChannel)) denied(401);
     const token = getCrmMachineBearer(request.headers);
     if (!token) denied(401);
-    const claims = await verifyCrmMachineToken(token, options.machineAuth);
+    const qa = resolveKnowledgeQaProfile(request.url, options.qaMachineAuth?.env ?? process.env);
+    // An explicitly selected QA profile never falls back to Production auth.
+    const claims = qa
+      ? await verifyKnowledgeQaToken(token, request.url, options.qaMachineAuth)
+      : await verifyCrmMachineToken(token, options.machineAuth);
+    const authenticationSql = qa ? qaMachineAuthenticationSql : machineAuthenticationSql;
     const bounded = { ...options, statementTimeoutMs: assistantKnowledgeLimits.statementTimeoutMs };
-    const principal = (await queryAuthenticationRows<MachinePrincipal>(machineAuthenticationSql, machineParams(claims), bounded))[0];
+    const principal = (await queryAuthenticationRows<MachinePrincipal>(authenticationSql, machineParams(claims), bounded))[0];
     if (!principal || principal.workspace_id !== claims.workspaceId || principal.identity_id !== claims.identityId) denied(401);
+    if (qa && (principal.data_context !== "CUSTOMER_TENANT" || principal.auth_type !== "VERCEL_OIDC_QA" ||
+      principal.service_role !== "Evelyn.QA" || principal.environment !== "preview")) denied();
     const body = await readKnowledgeJson(request, ["query", "maxResults"], 8192);
     const query = parseAssistantKnowledgeQuery(body);
     const productRole = principal.data_context === "NOVALURE_INTERNAL" ? "novalure_operator" : "project_sales_member";
     const session: AppSession = {
       authenticated: true, source: "database", userId: principal.actor_user_id,
       workspaceId: principal.workspace_id, workspaceName: "Verified assistant workspace",
-      name: "Verified Evelyn service", email: "evelyn-crm-service@service.invalid",
+      name: qa ? "SYNTHETIC verified Evelyn QA service" : "Verified Evelyn service",
+      email: qa ? "evelyn-crm-knowledge-qa@service.invalid" : "evelyn-crm-service@service.invalid",
       role: "agent", productRole, permissions: getRolePermissions("agent"),
       productPermissions: getProductRoleCapabilities(productRole),
-      serviceIdentity: { identityId: claims.identityId, role: claims.role, consumer: claims.consumer,
-        environment: claims.environment, jtiHash: claims.jtiHash },
+      serviceIdentity: claims.environment === "preview"
+        ? { identityId: claims.identityId, role: claims.role, consumer: claims.consumer, environment: claims.environment, jtiHash: claims.jtiHash }
+        : { identityId: claims.identityId, role: claims.role, consumer: claims.consumer, environment: claims.environment, jtiHash: claims.jtiHash },
     };
     const context = await withCrmRead(session, async (tx, member) => {
       const binding = await tx.queryOne<{ bot_id: string; workspace_id: string }>(
         "select * from public.knowledge_lock_assistant_service_binding($1::uuid,$2)", [principal.id, savedChannel]);
       if (!binding || binding.workspace_id !== member.workspaceId) denied();
-      const current = await tx.queryOne<MachinePrincipal>(machineAuthenticationSql, machineParams(claims));
+      const current = await tx.queryOne<MachinePrincipal>(authenticationSql, machineParams(claims));
       if (!current || crmPayloadDigest(current) !== crmPayloadDigest(principal)) denied();
       return retrieveAssistantKnowledge(member, {
         ...query, assistantId: binding.bot_id, channel: savedChannel === "voice" ? "telephony" : "webchat",
