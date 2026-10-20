@@ -44,7 +44,6 @@ Die 18er-Abnahme umfasst echte PDF/DOCX/UTF-8-Uploads, Roundtrips nahe 10 MiB, D
 unveränderliche private Historie, echten externen HTTPS-Scan und manuellen gehosteten Batch.
 Websiteänderungen bleiben Vorschläge; erst Annahme und Veröffentlichung ändern beide Kanäle.
 Bilder und PDFs ohne ausreichende Textebene bleiben ehrlich `needs_ocr`; es gibt keine OCR.
-
 Der separate opt-in [QA-Workloadvertrag](knowledge-machine-qa-profile.md) wurde mit echtem Evelyn-Preview-OIDC
 und gespeicherter nativer Customer-QA-Identität geprüft: **40 Requests, fünf Phasen, alle erwarteten Ergebnisse PASS**.
 Fünf veröffentlichte v1-Retrievals und 35 Anwendungsablehnungen belegen fehlenden/falschen Bearer,
@@ -53,7 +52,6 @@ unabhängigen Voice-Widerruf, Wiederfreigabe, Principal-Deaktivierung und endgü
 [Machine-Abnahme](../qa/package4-hosted-2026-10-20/machine-qa-acceptance-c291e21.json).
 Der unveränderte Production-only-Verifier erhielt dadurch keinen positiven Productionnachweis.
 OIDC signiert Projekt/Owner/Umgebung/Subject/Audience; Caller-Deployment und Quellbytes sind separat nativ/artifaktgebunden.
-
 Webchat/Voice verlangen getrennte gespeicherte Grants, aktuelle Mitgliedschaft, Projekt-/Bot-/Bereichsrechte,
 veröffentlichtes Wissen, Modul, Vertragsmerkmale und Kontingent. Runtime provisioniert keine Principals oder Bindings.
 Externer Studio-Webchat folgt dem [Servicevertrag](knowledge-assistant-service.md): aktive Integration/Origin/Session,
@@ -106,19 +104,26 @@ Gezielte unabhängige Code- und Artefaktreviews meldeten keine offenen Codebefun
 **Securitygate BLOCKED:** Beim Hosting-Metadatenread erschien versehentlich ein bestehendes projektweites
 Automationcredential im Tooloutput. Der wertfreie [Incidentbeleg](../qa/package4-hosted-2026-10-20/credential-output-incident.json)
 meldet keine Kopie in Git oder öffentliche Receipts. Ein pauschales „keine Secrets ausgegeben“ wäre falsch.
-Die Rotation kann Productionautomation betreffen: privat Verbraucher inventarisieren → unter konkreter Productionfreigabe
-Ersatz/Umstellung → begrenzte Validierung → altes Credential widerrufen und Abschluss belegen.
-Keine automatische Rotation unter No-Production; übrige QA-/Recoveryarbeit kann unabhängig abgeschlossen werden.
-Statisches Inventar einschließlich exakter Evelyn-Productionquelle: 13 Quellvarianten, keine direkten Namensreferenzen in Runtime/CI;
-tatsächlich konfigurierte Verbraucher bleiben UNKNOWN, externe/indirekte Nutzung ist damit nicht ausgeschlossen.
-[Statisches Verbraucherinventar](../qa/package4-hosted-2026-10-20/evelyn-credential-consumer-inventory.json).
+Eng autorisiert abgeschlossen: genau **ein Ersatz erzeugt und einmal als Future-Build-Default gewählt** (zwei Credentialwrites).
+Drei feste Production-GETs ohne App-Bearer/Cookie: erster 302-Klassifizierungsversuch bleibt FAIL; korrigierte SSO-302-Baseline PASS;
+neues Credential erreicht exakt JSON-403/no-store der App: PASS für Plattformzugang, kein HTTP-200-Health-/Consumer-Cutovernachweis.
+Native unabhängige Prüfung: zwei aktive Keys, Ersatz Default; Productiondeployment, Schutzpolicy und alle 37 Envmetadaten unverändert.
+**Nutzerentscheidung: „Alten Schlüssel vorerst aktiv lassen“. Kein Revoke; Vorfall und Securitygate bleiben BLOCKED.**
+Die frühere Ein-Key-Baseline ist historisch. Bestehende Deployment-Envkopien werden durch Defaultwahl nicht aktualisiert.
+[Rotationsfortschritt](../qa/package4-hosted-2026-10-20/credential-rotation-progress.json),
+[Behalteentscheidung](../qa/package4-hosted-2026-10-20/credential-retention-decision.json) und [unabhängiger Zustand](../qa/package4-hosted-2026-10-20/independent-rotation-native-state.json).
+Das [statische Inventar](../qa/package4-hosted-2026-10-20/evelyn-credential-consumer-inventory.json) umfasst 13 Quellvarianten;
+tatsächlich konfigurierte/externe Verbraucher bleiben UNKNOWN. Verbraucher/Owner klären, Cutover validieren und erst nach neuer
+expliziter Alt-Widerrufsentscheidung weitergehen; keine CRM-Deployment-/DB-/Domain-/MFA-/Cronänderung aus dieser Ausnahme.
 
 ## G. Tests und erhaltene Fehler
 
 [CI am exakten c291-Kandidaten](../qa/package4-hosted-2026-10-20/ci-c291e21.json): erforderliche Quality-/Build-/Audit-
-und Secretsworkflows **PASS**; optionaler manueller Job **SKIPPED**, kein PASS dafür.
+und Secretsworkflows **PASS**; manuell auszulösender Job **SKIPPED**; kein AusführungsPASS.
 [CI des separaten Tooling-Heads 5f7bed6](../qa/package4-hosted-2026-10-20/ci-5f7bed6.json): erforderliche Workflows **PASS**;
 die fünf zusätzlichen Typregressions-PG-Tests sind gezielt lokal belegt und werden nicht als CI-Ausführung ausgegeben.
+[Berichtsstand 7dd97c8](../qa/package4-hosted-2026-10-20/ci-7dd97c8.json): automatische Quality/Secrets PASS;
+required Vercel MISSING, required manueller QA-Job SKIPPED. Mergechecks damit offen; Gitdeploy deaktiviert.
 [Lokale Einzelläufe](../qa/package4-integration-2026-10-20/local-checks.json) behalten ihre damaligen Revisionen und überlappenden Zählungen.
 Historische Fehler bleiben erhalten: fehlendes Chrome, erster Design-C-Lauf 48/50, zwei lokale Zusatz-Harnessfehler,
 Hosted-Upload-Busy/Transport-FAIL und Hosted-Suche-Escape-FAIL. Korrekturen schwächten keine App-/Tenant-/Quotaassertion ab.
@@ -155,12 +160,12 @@ deren unveränderliche Envwerte ersetzen keinen tatsächlichen Identitäts-/Trus
 | Gate | Status | Geltungsbereich und verbleibende Grenze |
 | --- | --- | --- |
 | A Integration | PASS | Eltern/Merge und exakte c291-Runtime-/SQL-Bindung |
-| B Build/CI | PASS | Exakte erforderliche c291- und 5f7bed6-Workflows; manueller Job SKIPPED |
+| B Build/CI | BLOCKED | Automatische c291/5f/7dd Quality/Secrets PASS; required Vercel MISSING, required Manual SKIPPED |
 | C Datenbank/Restore | PASS | Strenger Same-Project-COW/17 Dateien/5 Appprüfungen; historische FAILs und Versions-/DR-Grenzen erhalten |
-| D Sicherheit | BLOCKED | Ausgabevorfall: projektweite Credentialrotation/Validierung/Alt-Widerruf offen |
+| D Sicherheit | BLOCKED | Ersatz erzeugt/Default/Plattformzugang validiert; offengelegter Alt-Key bleibt auf Nutzerwunsch aktiv |
 | E Funktionen | PASS | Gehostete Basis 18/18, begrenzte Wiederverwendung + Compat5 + reale QA-Machine40/5 |
 | F Preview | PASS | Begrenzte 18er-Wiederverwendung + Compat5 + Machine40/5; finale Source5/HTTP3 und nativer aktiver Source-Readback |
-| G Produktion | BLOCKED | Keine Freigabe; Plan DRAFT_NOT_APPROVABLE_CREDENTIAL_INCIDENT_OPEN |
+| G Produktion | BLOCKED | Keine Freigabe; Plan DRAFT_NOT_APPROVABLE_OLD_EXPOSED_CREDENTIAL_RETAINED |
 
 ## J. Reviewbarer Produktions- und Betriebsplan
 

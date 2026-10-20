@@ -1,0 +1,91 @@
+{
+  "format": "package4-automatic-ci-report-head-v1",
+  "observedAtUtc": "2026-10-20T09:51:07.059756+00:00",
+  "headSha": "7dd97c879cb215cc780232d8b06e5f105d497829",
+  "status": "AUTOMATIC_CI_PASS_MERGE_REQUIREMENTS_INCOMPLETE",
+  "runs": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-10-20T09:29:42Z",
+      "databaseId": 39401068290,
+      "event": "pull_request",
+      "headSha": "7dd97c879cb215cc780232d8b06e5f105d497829",
+      "name": "Secret scan",
+      "status": "completed",
+      "updatedAt": "2026-10-20T09:29:57Z",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068290"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-10-20T09:29:42Z",
+      "databaseId": 39401068223,
+      "event": "pull_request",
+      "headSha": "7dd97c879cb215cc780232d8b06e5f105d497829",
+      "name": "Go-live quality gates",
+      "status": "completed",
+      "updatedAt": "2026-10-20T09:36:45Z",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068223"
+    }
+  ],
+  "checkRuns": [
+    {
+      "name": "Manual trusted-candidate QA regression and tenant diagnostics",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068223/job/118558536175"
+    },
+    {
+      "name": "Production dependency audit and SBOM",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068223/job/118555632910"
+    },
+    {
+      "name": "Lockfile, lint, typecheck, tests and build",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068223/job/118555632739"
+    },
+    {
+      "name": "Gitleaks full-history and current-tree scan",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/novalure/novalure-crm/actions/runs/39401068290/job/118555631971"
+    }
+  ],
+  "commitStatusContexts": [],
+  "requiredCheckContextsFromBranchMetadata": [
+    "Lockfile, lint, typecheck, tests and build",
+    "Gitleaks full-history and current-tree scan",
+    "Production dependency audit and SBOM",
+    "Manual trusted-candidate QA regression and tenant diagnostics",
+    "Vercel"
+  ],
+  "requiredCheckDetailsFromBranchMetadata": [
+    {
+      "context": "Lockfile, lint, typecheck, tests and build",
+      "app_id": 15368
+    },
+    {
+      "context": "Gitleaks full-history and current-tree scan",
+      "app_id": 15368
+    },
+    {
+      "context": "Production dependency audit and SBOM",
+      "app_id": 15368
+    },
+    {
+      "context": "Manual trusted-candidate QA regression and tenant diagnostics",
+      "app_id": 15368
+    },
+    {
+      "context": "Vercel",
+      "app_id": 8329
+    }
+  ],
+  "vercelCheck": "MISSING; automatic Git deployments disabled for this integration branch; tested app remains exact c291 deployment.",
+  "manualQaJob": "SKIPPED; not counted as executed PASS.",
+  "fullBranchProtectionReviewRules": "UNKNOWN; separate full-protection read denied by integration403 in prior independent read.",
+  "testOrWorkflowDispatchPerformedByReceipt": false,
+  "secretsIncluded": false
+}

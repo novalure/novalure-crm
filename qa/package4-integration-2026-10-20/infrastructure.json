@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "observedAtUtc": "2026-10-20T09:06:04.574Z",
+  "observedAtUtc": "2026-10-20T09:49:25.075616Z",
   "scope": "Sanitized current actual QA infrastructure and production planning metadata; no credentials or row payloads.",
   "status": "BLOCKIERT",
   "historicalInitialInventory": {
@@ -364,9 +364,9 @@
     "historicalCredentialToolOutputOccurred": true,
     "credentialValueIncludedInThisReport": false,
     "publicGitOrReceiptCredentialCopyObserved": false,
-    "rotationAuthorizedNow": false,
+    "rotationAuthorizedNow": true,
     "projectWideProductionImpactPossible": true,
-    "requiredRemediation": "Private dependent-automation inventory -> explicit Production-authorized replacement/consumer update -> bounded validation -> exposed old credential revocation and sanitized completion evidence.",
+    "requiredRemediation": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
     "codeReviewOpenFindings": 0,
     "trustedAppAttestationClaimed": false,
     "allNoSecretOutputClaimAllowed": false,
@@ -385,9 +385,106 @@
       "configuredConsumerCount": "UNKNOWN",
       "absenceOfExternalOrIndirectConsumersProven": false,
       "secretValuesQueriedOrIncluded": false,
-      "productionHttpProbesPerformed": false,
-      "productionRotationAuthorized": false,
-      "requiredBeforeRotation": "Actual private configured-consumer census/owners, exact read-only health route and hostname safety, bounded consumer cutover, explicit Production authorization. The source variants are not automatically configured consumers."
+      "productionRotationAuthorizedAtHistoricalInventory": false,
+      "historicalInventoryActionsOnly": true,
+      "productionHttpProbesPerformedByHistoricalInventory": false,
+      "requiredBeforeOldRetirement": "Actual configured/private/external consumer census and owners, validated cutover and a new explicit retirement decision; user currently requires old credential active."
+    },
+    "rotationAuthorizationScope": "Only completed two Evelyn credential writes and three fixed bounded GETs; not CRM release or old-key revocation",
+    "oldCredentialRetainedByExplicitUserDecision": true,
+    "oldRevocationAuthorized": false,
+    "currentRotationProgress": {
+      "status": "BLOCKED",
+      "phase": "REPLACEMENT_VALIDATED_OLD_EXPOSED_CREDENTIAL_RETAINED_BY_USER",
+      "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+      "scope": "Explicit user-authorized Evelyn project-wide automation credential rotation only; no CRM Production release authorization",
+      "userDecision": "Alten Schlüssel vorerst aktiv lassen",
+      "replacementCreated": true,
+      "replacementSelectedForFutureBuilds": true,
+      "replacementPlatformAccessValidated": true,
+      "providerWrites": 2,
+      "providerWriteOperations": [
+        "GENERATE_ONE_REPLACEMENT",
+        "SELECT_REPLACEMENT_FOR_FUTURE_BUILDS"
+      ],
+      "productionHttpRequests": 3,
+      "requestResults": [
+        {
+          "ordinal": 1,
+          "httpStatus": 302,
+          "status": "FAIL",
+          "classification": "Initial classifier omitted legitimate Vercel SSO redirect; immutable original failure retained"
+        },
+        {
+          "ordinal": 2,
+          "httpStatus": 302,
+          "status": "PASS",
+          "classification": "Exact Vercel SSO protection denial baseline; redirect not followed"
+        },
+        {
+          "ordinal": 3,
+          "httpStatus": 403,
+          "status": "PASS",
+          "classification": "Replacement reached exact JSON application denial PRODUCTION_ACCESS_DENIED with no-store; no successful app authentication/health claim"
+        }
+      ],
+      "httpScope": "Exactly fixed Evelyn Production immutable /api/health, no app Bearer/Cookie, no redirects, no retries; runtime/access metadata logging possible",
+      "oldCredentialActive": true,
+      "oldCredentialRevoked": false,
+      "oldRevocationAuthorized": false,
+      "revocationHelperExecuted": false,
+      "revocationAuthorizationFileCreated": false,
+      "currentNativeCredentialMapKeys": 2,
+      "replacementIsFutureEnvironmentDefault": true,
+      "oldIsFutureEnvironmentDefault": false,
+      "preRotationOneKeyBaseline": "Historical baseline only; current native map has exactly old and replacement keys",
+      "configuredConsumerCount": "UNKNOWN",
+      "consumerCutoverProven": false,
+      "consumerAbsenceProven": false,
+      "immutableDeploymentEnvironmentCopiesUpdated": false,
+      "productionDeploymentUnchanged": true,
+      "protectionPolicyUnchanged": true,
+      "projectEnvironmentMetadataRows": 37,
+      "projectEnvironmentMetadataUnchanged": true,
+      "unrelatedProjectMetadataUnchanged": true,
+      "crmDeploymentDatabaseDomainMfaCronMutations": 0,
+      "nextStep": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+      "securityPassAllowed": false,
+      "credentialValuesIncluded": false,
+      "evidence": {
+        "credential-rotation-progress": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+          "sha256": "90387e28466e4837811d41d4010ee0bcccee02252b50b9f8ebfb31a3d8ec1004"
+        },
+        "credential-retention-decision": {
+          "path": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+          "sha256": "ce64bf5fed2c2bea9ff50802b1b72aac0bc6422207abd535313c5b9eb5ed4bc1"
+        },
+        "independent-rotation-native-state": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+          "sha256": "0da4b9faa879d641d20274eec79277bce9b46697efcba0443f6edb4a64658140"
+        },
+        "independent-rotation-helper-review": {
+          "path": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+          "sha256": "183da6f522d33af33c32f966ad9a4b657aeb6215fb7b258da0e2f38e2dfae40a"
+        },
+        "rotation-configured-consumer-selectors": {
+          "path": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+          "sha256": "e525db421ec49361af66f75e982c33f08771ccb47779b54e88eaf974fc3e461f"
+        },
+        "credential-rotation-validation-prerequisite": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+          "sha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7"
+        },
+        "credential-rotation-baseline-redirect-failure": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+          "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+        },
+        "credential-rotation-preflight": {
+          "path": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+          "sha256": "24587c826fb459f3dba1c9f2a1c5a469551ccdb0154c5bdcd33d316408f1e09c"
+        }
+      }
     }
   },
   "production": {
@@ -411,11 +508,130 @@
     "skipDomainOnlyGuaranteesNoAutomaticDomainAliasing": true,
     "releasePlan": "qa/package4-hosted-2026-10-20/production-release-plan.json",
     "runnerPlan": "qa/package4-hosted-2026-10-20/production-runner-plan.json",
-    "planStatus": "DRAFT_NOT_APPROVABLE_CREDENTIAL_INCIDENT_OPEN",
-    "productionMutationPerformed": false,
-    "productionAuthorizationRequested": false
+    "planStatus": "DRAFT_NOT_APPROVABLE_OLD_EXPOSED_CREDENTIAL_RETAINED",
+    "productionMutationPerformed": true,
+    "productionAuthorizationRequested": false,
+    "productionMutationScope": "Exactly two separately authorized Evelyn project-wide credential writes; CRM Production deployment/DB/domain/MFA/cron unchanged",
+    "crmProductionMutationPerformed": false
   },
   "credentialValuesIncluded": false,
   "historicalCredentialOutputOccurred": true,
-  "overallStatus": "BLOCKIERT"
+  "overallStatus": "BLOCKIERT",
+  "credentialRotationProgress": {
+    "status": "BLOCKED",
+    "phase": "REPLACEMENT_VALIDATED_OLD_EXPOSED_CREDENTIAL_RETAINED_BY_USER",
+    "recordedAtUtc": "2026-10-20T09:49:25.075616Z",
+    "scope": "Explicit user-authorized Evelyn project-wide automation credential rotation only; no CRM Production release authorization",
+    "userDecision": "Alten Schlüssel vorerst aktiv lassen",
+    "replacementCreated": true,
+    "replacementSelectedForFutureBuilds": true,
+    "replacementPlatformAccessValidated": true,
+    "providerWrites": 2,
+    "providerWriteOperations": [
+      "GENERATE_ONE_REPLACEMENT",
+      "SELECT_REPLACEMENT_FOR_FUTURE_BUILDS"
+    ],
+    "productionHttpRequests": 3,
+    "requestResults": [
+      {
+        "ordinal": 1,
+        "httpStatus": 302,
+        "status": "FAIL",
+        "classification": "Initial classifier omitted legitimate Vercel SSO redirect; immutable original failure retained"
+      },
+      {
+        "ordinal": 2,
+        "httpStatus": 302,
+        "status": "PASS",
+        "classification": "Exact Vercel SSO protection denial baseline; redirect not followed"
+      },
+      {
+        "ordinal": 3,
+        "httpStatus": 403,
+        "status": "PASS",
+        "classification": "Replacement reached exact JSON application denial PRODUCTION_ACCESS_DENIED with no-store; no successful app authentication/health claim"
+      }
+    ],
+    "httpScope": "Exactly fixed Evelyn Production immutable /api/health, no app Bearer/Cookie, no redirects, no retries; runtime/access metadata logging possible",
+    "oldCredentialActive": true,
+    "oldCredentialRevoked": false,
+    "oldRevocationAuthorized": false,
+    "revocationHelperExecuted": false,
+    "revocationAuthorizationFileCreated": false,
+    "currentNativeCredentialMapKeys": 2,
+    "replacementIsFutureEnvironmentDefault": true,
+    "oldIsFutureEnvironmentDefault": false,
+    "preRotationOneKeyBaseline": "Historical baseline only; current native map has exactly old and replacement keys",
+    "configuredConsumerCount": "UNKNOWN",
+    "consumerCutoverProven": false,
+    "consumerAbsenceProven": false,
+    "immutableDeploymentEnvironmentCopiesUpdated": false,
+    "productionDeploymentUnchanged": true,
+    "protectionPolicyUnchanged": true,
+    "projectEnvironmentMetadataRows": 37,
+    "projectEnvironmentMetadataUnchanged": true,
+    "unrelatedProjectMetadataUnchanged": true,
+    "crmDeploymentDatabaseDomainMfaCronMutations": 0,
+    "nextStep": "Identify actual configured/external consumers and owners; prepare validated cutover and obtain a new explicit old-key retirement decision. No revoke while current retention instruction applies.",
+    "securityPassAllowed": false,
+    "credentialValuesIncluded": false,
+    "evidence": {
+      "credential-rotation-progress": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-progress.json",
+        "sha256": "90387e28466e4837811d41d4010ee0bcccee02252b50b9f8ebfb31a3d8ec1004"
+      },
+      "credential-retention-decision": {
+        "path": "qa/package4-hosted-2026-10-20/credential-retention-decision.json",
+        "sha256": "ce64bf5fed2c2bea9ff50802b1b72aac0bc6422207abd535313c5b9eb5ed4bc1"
+      },
+      "independent-rotation-native-state": {
+        "path": "qa/package4-hosted-2026-10-20/independent-rotation-native-state.json",
+        "sha256": "0da4b9faa879d641d20274eec79277bce9b46697efcba0443f6edb4a64658140"
+      },
+      "independent-rotation-helper-review": {
+        "path": "qa/package4-hosted-2026-10-20/independent-rotation-helper-review.json",
+        "sha256": "183da6f522d33af33c32f966ad9a4b657aeb6215fb7b258da0e2f38e2dfae40a"
+      },
+      "rotation-configured-consumer-selectors": {
+        "path": "qa/package4-hosted-2026-10-20/rotation-configured-consumer-selectors.json",
+        "sha256": "e525db421ec49361af66f75e982c33f08771ccb47779b54e88eaf974fc3e461f"
+      },
+      "credential-rotation-validation-prerequisite": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-validation-prerequisite.json",
+        "sha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7"
+      },
+      "credential-rotation-baseline-redirect-failure": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-baseline-redirect-failure.json",
+        "sha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa"
+      },
+      "credential-rotation-preflight": {
+        "path": "qa/package4-hosted-2026-10-20/credential-rotation-preflight.json",
+        "sha256": "24587c826fb459f3dba1c9f2a1c5a469551ccdb0154c5bdcd33d316408f1e09c"
+      }
+    },
+    "evidenceReview": {
+      "path": "qa/package4-hosted-2026-10-20/credential-rotation-evidence-review.json",
+      "binding": "Separate subsequent review; no self-referential report hash."
+    }
+  },
+  "reportingRevisionCi": {
+    "revision": "7dd97c879cb215cc780232d8b06e5f105d497829",
+    "status": "PASS",
+    "qualityRunId": 39401068223,
+    "qualityUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068223",
+    "secretRunId": 39401068290,
+    "secretUrl": "https://github.com/novalure/novalure-crm/actions/runs/39401068290",
+    "optionalManualJob": "SKIPPED",
+    "configuredRequiredVercelCheck": "MISSING",
+    "gitAutoDeploymentDisabled": true,
+    "newReportAmendmentCiClaimed": false,
+    "newApplicationDeploymentClaimed": false,
+    "receipt": {
+      "path": "qa/package4-hosted-2026-10-20/ci-7dd97c8.json",
+      "sha256": "cb5dcc7d73fbf5d8880a334e821c903736bd1e20ec755b9e6ecd2f1c93ba1343"
+    },
+    "allConfiguredRequiredMergeChecksPass": false,
+    "requiredManualQaJob": "SKIPPED",
+    "automaticQualityAndSecretsSuccess": true
+  }
 }

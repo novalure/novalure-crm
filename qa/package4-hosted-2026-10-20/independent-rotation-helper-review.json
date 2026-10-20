@@ -1,0 +1,33 @@
+{
+  "format": "package4-independent-rotation-helper-review-v1",
+  "reviewedAtUtc": "2026-10-20T09:46:28.608182+00:00",
+  "status": "PASS",
+  "helperSha256": "04a75349d01a11edc4951c16ac4346976351dd814e840405edfa624d19951c72",
+  "reviewMethod": "Static read-only source and exact frozen bytes; no execution, tests, provider calls or Production HTTP by reviewer.",
+  "initialBaselineFailureSha256": "07c58e07cd28893a504141bd1df9138721ee616ebf046cc1b7422ef65a695efa",
+  "initialBaselineRemainsFailure": true,
+  "separateActions": [
+    "baseline",
+    "reconcile-baseline",
+    "create",
+    "select-default",
+    "validate-new"
+  ],
+  "guardsVerified": [
+    "Existing state not overwritten after EEXIST; ownership only after wx success.",
+    "Mutating API requests fixed to exact Evelyn project/team, no redirects.",
+    "Complete credential metadata/keysets checked before and after each mutation, only intended old/new isEnvVar transition accepted.",
+    "INTENT persisted before network; ambiguous outcome cannot blindly replay same mutation/request.",
+    "Corrected baseline allowed exactly once from immutable failed first302/no-writes/no-new-key state.",
+    "SSO302 requires absolute HTTPS exact vercel.com/sso-api, no userinfo/fragment, singleton url parameter equals fixed target.",
+    "Only recognized redirect gets constant origin/path; unknown location emits only enum and hash, never raw path/query.",
+    "Request sequence failed1/correctedbaseline2/new3; total budget4,30s/64KiB,manualredirect,noappbearer/cookie.",
+    "Original failed request preserved; omitted final anonymous check stated, native unchanged protection readback required.",
+    "No revoke implementation; final phase old active and revocation BLOCKED while configured consumers UNKNOWN.",
+    "Secret values stay private; public output contains only statuses, counts, safe classifications and hashes."
+  ],
+  "openFindings": [],
+  "providerOperations": 0,
+  "productionHttpRequests": 0,
+  "testsExecutedByReviewer": 0
+}

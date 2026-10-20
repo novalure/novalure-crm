@@ -1,0 +1,175 @@
+{
+  "format": "package4-rotation-configured-consumer-selectors-v1",
+  "observedAtUtc": "2026-10-20T09:37:03.009018Z",
+  "scope": "Parallel read-only source/metadata assistance for separately authorized narrow credential rotation. No production HTTP or mutation in this task.",
+  "inventorySha256": "dcf0b378cd10ec02c697f5bc00956a7e0cecbfc1b1fbd9d801e4fd33d5b323aa",
+  "healthPrerequisiteSha256": "aa3f31443358c714295676b2c7fcfc34fe21d543cae7d6fd30659623eed23da7",
+  "frozenInputsModified": false,
+  "selectors": [
+    {
+      "transport": "CRM G08 live Preview",
+      "source": "scripts/qa-g08-live-preview.mjs:11-14,59-75",
+      "revision": "c291e21288903e2807b108bba852a597f77b777a",
+      "configPath": "/workspace/novalure-crm/.npm-cache/g08/live-access.json",
+      "configExists": false,
+      "incidentCandidateSelectors": [
+        "evelyn.protectionHeaders[\"x-vercel-protection-bypass\"]",
+        "evelyn.protectionUrl query field x-vercel-protection-bypass or _vercel_share"
+      ],
+      "separateCrmSelectors": [
+        "crm.protectionHeaders[\"x-vercel-protection-bypass\"]",
+        "crm.protectionUrl"
+      ],
+      "scope": "Evelyn target pinned to historical immutable Preview evelyn-hrc1fof30-novalure.vercel.app; not current Production. Separate CRM credential must not be silently replaced."
+    },
+    {
+      "transport": "Evelyn Preview live QA",
+      "source": "scripts/preview-live-test.mjs:24-53,369-379",
+      "revision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+      "configPath": "/workspace/evelyn/artifacts/preview-access.json",
+      "configExists": false,
+      "configOverride": "argv[2], arbitrary ignored access JSON selected by explicit caller",
+      "selectors": [
+        "protectionHeaders[\"x-vercel-protection-bypass\"]",
+        "protectionUrl query field x-vercel-protection-bypass or _vercel_share",
+        "EVELYN_PREVIEW_PROTECTION_HEADER_NAME paired with EVELYN_PREVIEW_PROTECTION_HEADER_VALUE"
+      ],
+      "scope": "VERCEL_PREVIEW_ONLY; header may instead be trusted OIDC, so selector existence alone cannot bind incident credential."
+    },
+    {
+      "transport": "Evelyn post-deployment smoke",
+      "source": "scripts/post-deployment-verification.mjs:24-45",
+      "revision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+      "configPath": null,
+      "selectors": [
+        "process.env.EVELYN_VERCEL_PROTECTION_BYPASS"
+      ],
+      "separateAppAuthSelector": "process.env.EVELYN_CANARY_TESTER_TOKEN",
+      "scope": "Canonical Production origin only. No value or process environment was inspected. This runner also sends tester Bearer and probes /api/canary/webchat, so MUST NOT be run as the bounded four-GET no-Bearer rotation canary."
+    },
+    {
+      "transport": "CRM Studio enquiry live QA",
+      "source": "scripts/studio-enquiry-live-qa.mjs:25-45,143-147,440-443",
+      "revision": "c291e21288903e2807b108bba852a597f77b777a",
+      "configPath": null,
+      "configOverride": "argv[2] ignored private config JSON",
+      "selectors": [
+        "config.protectionTokenFile -> absolute path to existing token file"
+      ],
+      "scope": "Pinned CRM project prj_R32Okl6AHijTohvuKmryuTLjWMsk / codex/studio-preview-crm-handoff; not an Evelyn Production consumer based on source. Config pathname cannot be recovered from source alone."
+    },
+    {
+      "transport": "CRM Preview bypass adapter plus CI call chain",
+      "source": "scripts/lib/vercel-preview-access.mjs:38-78,90-110; .github/workflows/exact-protected-preview-qa.yml:54,123-126; scripts/qa-protected-preview-action-runner.mjs:365-377; scripts/qa-protected-preview-workflow-contract.mjs:102-107",
+      "revision": "c291e21288903e2807b108bba852a597f77b777a",
+      "configPath": null,
+      "selectors": [
+        "GitHub repository novalure/novalure-crm -> Environment go-live-preview -> secret NOVALURE_QA_VERCEL_SHARE_URL",
+        "process.env.NOVALURE_QA_VERCEL_SHARE_URL -> shareUrl -> --share-url-stdin -> bound Preview adapter",
+        "public-runtime input.shareUrl or direct caller-supplied bindVercelAutomationBypass argument"
+      ],
+      "scope": "Exact CRM Preview origin-bound transport. CI secret name reference is proven; configured existence, current secret version/value and any binding to Evelyn incident credential are UNKNOWN. GitHub secret values cannot be read back through secret-name metadata."
+    }
+  ],
+  "cachedEnvironmentMetadata": [
+    {
+      "cachedFile": "qa-caller-env-before-metadata.json",
+      "sha256": "9b22f2394164e385ec8c94d2a3456952acb6ea7d993cf1b2dd37f7b901ec701e",
+      "rowCount": 37,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "qa-caller-env-inventory.response.private.json",
+      "sha256": "4d695b6ccfb57b4fa99791ca1c4509937a9a2bbd30b1c1f59abe33dbca62557b",
+      "rowCount": 37,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "caller-env-before-deploy.response.private.json",
+      "sha256": "4d695b6ccfb57b4fa99791ca1c4509937a9a2bbd30b1c1f59abe33dbca62557b",
+      "rowCount": 37,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "caller-env-after-proof.response.private.json",
+      "sha256": "4d695b6ccfb57b4fa99791ca1c4509937a9a2bbd30b1c1f59abe33dbca62557b",
+      "rowCount": 37,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "root-env-before-metadata.json",
+      "sha256": "bd567f618dd2dd22805cf5716ef982f631cec929eb1e037c433b1d9e8d488793",
+      "rowCount": 234,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "storage-agent-all-env-before-private.json",
+      "sha256": "c875bf4de6a3857edddd16ebedd9b0fc729070f32ef40bc9fe532ffada3f4b8c",
+      "rowCount": 231,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    },
+    {
+      "cachedFile": "root-before-env-audit.response.private.json",
+      "sha256": "e8f58d0a7457847abf8940fdef782f4be82be88d7d9a57d399c524edc1a78fdc",
+      "rowCount": 234,
+      "matchingKeyMetadata": [],
+      "limit": "Historical cached metadata only, not a fresh environment census; values were not accessed. Provider-managed system injection may not be included in project env rows."
+    }
+  ],
+  "workflowFindings": {
+    "evelynExactLiveRevision": "a1b348b960c74ec1870e1b838dd5d4edbd8f64ce",
+    "workflowFiles": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/cross-repo-crm-contract.yml"
+    ],
+    "directIncidentProtectionCredentialNameOrHeaderReferences": 0,
+    "evelynWorkflowNamedSecretSelectorsFound": [],
+    "githubTokenBuiltinReference": ".github/workflows/ci.yml:100 uses github.token, which is a distinct GitHub credential",
+    "crmCiNamedSelector": "novalure/novalure-crm Environment go-live-preview / NOVALURE_QA_VERCEL_SHARE_URL",
+    "secretNameMetadataCacheAvailable": false,
+    "secretValueReadBackPossibleFromNameMetadata": false
+  },
+  "configuredConsumerCensus": {
+    "status": "INCOMPLETE",
+    "configuredIncidentConsumerCount": "UNKNOWN",
+    "absenceProven": false,
+    "positiveConfiguredIncidentBindingFoundByThisMetadataReview": false,
+    "notEquivalentToZeroConsumers": true,
+    "unresolved": [
+      "Ignored private configs passed via argv and externally supplied shell env values/owners.",
+      "The exact current GitHub Environment/repository/organization secret configuration and which value/version it supplies.",
+      "External CI, monitoring, operator scripts, third-party automation, webhooks or untracked consumers outside these repositories.",
+      "Existing immutable deployments may retain old provider-managed env copies; no hot-swap or implicit redeploy is proven."
+    ],
+    "rootPrivateComparisonInputs": "Root alone may compare the incident credential privately to exact configured selector values under its explicit authorization. This task identified paths/selectors only, never token values. Missing default files do not prove alternate configurations absent.",
+    "revocationBoundary": "This metadata review does not meet a requirement to clarify all unknown consumers before revocation; do not convert UNKNOWN into zero or treat the capability inventory as actual binding proof."
+  },
+  "noBearerCanary": {
+    "fixedUrl": "https://evelyn-22di2vnz6-novalure.vercel.app/api/health",
+    "productionDeploymentId": "dpl_un7nF1M36rS3A9uKctZd1385yLKG",
+    "sufficientFor": "Narrow platform acceptance/rejection proof only: with no Authorization/Cookie, new bypass must reach exact app JSON403 PRODUCTION_ACCESS_DENIED, old revoked bypass must be rejected by hosting protection, anonymous baseline must also be blocked. Manual/no redirect; max four GETs total, zero retries.",
+    "insufficientFor": [
+      "Authenticated HTTP-200 health or live provider health",
+      "Actual consumer cutover or consumer absence",
+      "Any immutable environment copy being updated"
+    ],
+    "staticSafety": "No auth/session/business/provider mutation found on fixed no-Bearer route; app guard emits bounded runtime metadata logs.",
+    "independentReview": "hosted_upload_debug independently confirmed the frozen health addendum SHA and all eight source hashes, target whitelist and limitations with zero open findings; no provider/HTTP execution by reviewer."
+  },
+  "actions": {
+    "productionHttpRequests": 0,
+    "newProviderQueries": 0,
+    "credentialValuesInspected": false,
+    "credentialValuesEmitted": false,
+    "privateConfigValuesOpened": false,
+    "secretQueries": 0,
+    "externalMutations": 0,
+    "repoOrPrEdits": 0
+  }
+}
