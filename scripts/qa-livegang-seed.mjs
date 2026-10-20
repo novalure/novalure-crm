@@ -2,7 +2,9 @@
 import { createHash, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import fs from "node:fs";
 import { promisify } from "node:util";
-import { neon, Pool } from "@neondatabase/serverless";
+import { Pool } from "@neondatabase/serverless";
+import { pathToFileURL } from "node:url";
+import { withQaSeedOwner, withQaSeedRuntimeTenant } from "./lib/qa-livegang-seed-bootstrap.mjs";
 import { assertQaTarget } from "./qa-target-guard.mjs";
 
 const scrypt = promisify(scryptCallback);
@@ -20,27 +22,27 @@ function loadEnv(path) {
   }
 }
 
-loadEnv(".env.local");
-loadEnv(".env.production.local");
+export function qaLivegangUuid(runPrefix, input) {
+  const chars = createHash("sha1").update(`novalure-livegang:${runPrefix}:${input}`).digest("hex").slice(0, 32).split("");
+  chars[12] = "5";
+  chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
+  const hex = chars.join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
-const qaTarget = await assertQaTarget();
+/** Injected pools are exclusively for actual disposable PostgreSQL regression tests. */
+export async function seedQaLivegang({ qaTarget, qaPassword, runtimePool, ownerPoolFactory } = {}) {
+if (qaTarget?.expectedRole !== "novalure_app" || !/^GOLIVETEST_[A-Za-z0-9_-]{6,80}$/.test(qaTarget.runPrefix)
+  || typeof qaPassword !== "string" || qaPassword.length < 12 || qaPassword.length > 512 || /[\r\n\0]/.test(qaPassword)) {
+  throw new Error("QA_SEED_INPUT_INVALID");
+}
 const qaRunSlug = qaTarget.runPrefix.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
 
 function qaEmail(localPart) {
   return `${localPart}+${qaRunSlug}@novalure.local`;
 }
 
-function stableUuid(input) {
-  const chars = createHash("sha1")
-    .update(`novalure-livegang:${qaTarget.runPrefix}:${input}`)
-    .digest("hex")
-    .slice(0, 32)
-    .split("");
-  chars[12] = "5";
-  chars[16] = ((Number.parseInt(chars[16], 16) & 0x3) | 0x8).toString(16);
-  const hex = chars.join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+const stableUuid = (input) => qaLivegangUuid(qaTarget.runPrefix, input);
 
 async function hashPassword(password) {
   const salt = randomBytes(16).toString("base64url");
@@ -52,27 +54,25 @@ function json(value) {
   return JSON.stringify(value);
 }
 
-const configuredQaPassword = process.env.NOVALURE_QA_SEED_PASSWORD || process.env.NOVALURE_QA_PASSWORD;
-if (!configuredQaPassword) throw new Error("NOVALURE_QA_SEED_PASSWORD or NOVALURE_QA_PASSWORD is required.");
-const qaPassword = configuredQaPassword;
-const databaseUrl = qaTarget.databaseUrl;
-
-const sql = neon(databaseUrl);
-const tenantPool = new Pool({
-  allowExitOnIdle: true,
-  connectionString: databaseUrl,
-  idleTimeoutMillis: 10_000,
-  max: 1,
+const tenantPool = runtimePool ?? new Pool({
+  allowExitOnIdle: true, connectionString: qaTarget.databaseUrl,
+  idleTimeoutMillis: 10_000, max: 1,
 });
-let activeTenantClient = null;
+let activeTenantQuery = null;
+let runtimeFailed = false;
+const onRuntimeError = () => { runtimeFailed = true; };
+tenantPool.on?.("error", onRuntimeError);
 
 async function queryOne(query, params = []) {
-  if (activeTenantClient) {
-    const result = await activeTenantClient.query(query, params);
+  if (runtimeFailed) throw new Error("QA_SEED_RUNTIME_CONNECTION_FAILED");
+  if (activeTenantQuery) {
+    const result = await activeTenantQuery(query, params);
     return result.rows[0] ?? null;
   }
-  const rows = await sql.query(query, params);
-  return rows[0] ?? null;
+  if (!/^\s*select\b/i.test(query)) throw new Error("QA_SEED_RUNTIME_TENANT_CONTEXT_REQUIRED");
+  const result = await tenantPool.query(query, params);
+  if (runtimeFailed) throw new Error("QA_SEED_RUNTIME_CONNECTION_FAILED");
+  return result.rows[0] ?? null;
 }
 
 async function assertSafeTenantRuntimeRole() {
@@ -148,32 +148,13 @@ async function assertSafeTenantRuntimeRole() {
 }
 
 async function withWorkspaceTenantContext(workspaceId, actorId, callback) {
-  if (activeTenantClient) throw new Error("Nested QA tenant transactions are not permitted.");
-  const client = await tenantPool.connect();
-  let begun = false;
-  try {
-    await client.query("begin");
-    begun = true;
-    const context = await client.query(
-      "select set_config('app.tenant_id', $1, true) as workspace_id, set_config('app.actor_id', $2, true) as actor_id",
-      [workspaceId, actorId],
-    );
-    if (context.rows[0]?.workspace_id !== workspaceId || context.rows[0]?.actor_id !== actorId) {
-      throw new Error("QA tenant context could not be verified.");
-    }
-    activeTenantClient = client;
-    const result = await callback();
-    activeTenantClient = null;
-    await client.query("commit");
-    begun = false;
-    return result;
-  } catch (error) {
-    activeTenantClient = null;
-    if (begun) await client.query("rollback");
-    throw error;
-  } finally {
-    client.release();
-  }
+  if (activeTenantQuery) throw new Error("Nested QA tenant transactions are not permitted.");
+  return withQaSeedRuntimeTenant({ pool: tenantPool, qaTarget, workspaceId, actorId,
+    isFailed: () => runtimeFailed, onError: onRuntimeError }, async (query) => {
+    activeTenantQuery = query;
+    try { return await callback(); }
+    finally { activeTenantQuery = null; }
+  });
 }
 
 const workspaces = {
@@ -346,8 +327,8 @@ function templateForWorkspace(workspace) {
   return templates.broker;
 }
 
-async function upsertWorkspace(workspace) {
-  const row = await queryOne(
+async function upsertWorkspace(workspace, ownerQuery) {
+  const row = await ownerQuery(
     `
       insert into workspaces (
         id,
@@ -391,8 +372,8 @@ async function upsertWorkspace(workspace) {
   }
 }
 
-async function upsertUser(user, passwordHash) {
-  const row = await queryOne(
+async function upsertUser(user, passwordHash, ownerQuery) {
+  const row = await ownerQuery(
     `
       insert into workspace_users (
         id,
@@ -412,11 +393,13 @@ async function upsertUser(user, passwordHash) {
         product_role = excluded.product_role,
         password_hash = excluded.password_hash,
         updated_at = now()
+      where workspace_users.id = excluded.id
       returning id
     `,
     [user.id, user.workspace.id, user.name, user.email, user.role, user.productRole, passwordHash],
   );
-  return row?.id ?? user.id;
+  if (row?.id !== user.id) throw new Error("QA_SEED_USER_FIXTURE_COLLISION");
+  return row.id;
 }
 
 async function upsertProject(record) {
@@ -795,8 +778,8 @@ async function upsertCoreRecords(record, projectId) {
   return { contactId, dealId, leadId, taskId };
 }
 
-async function upsertPipelinePermission(workspace, projectId, user) {
-  await queryOne(
+async function upsertPipelinePermission(workspace, projectId, user, ownerQuery) {
+  await ownerQuery(
     `
       insert into project_pipeline_permissions (
         id,
@@ -1175,29 +1158,33 @@ async function upsertBotAndKnowledge(record, projectId) {
         metadata
       )
       values ($1::uuid, 0, $2, 'Projektinfo Seeblick', null, 80, 'deterministic-local-1536', $3::jsonb)
-      on conflict (source_id, chunk_index) do update set
-        content = excluded.content,
-        citation_title = excluded.citation_title,
-        token_count = excluded.token_count,
-        embedding_model = excluded.embedding_model,
-        metadata = knowledge_chunks.metadata || excluded.metadata
+      on conflict (source_id, chunk_index) do nothing
       returning id
     `,
     [sourceId, knowledgeText, json({ embeddingReady: true, qaSeed: "livegang-8-10" })],
   );
+  const chunk = await queryOne(`select c.id from knowledge_chunks c join knowledge_sources s on s.id=c.source_id
+    where c.source_id=$1::uuid and c.chunk_index=0 and s.workspace_id=$2::uuid and s.project_id=$3::uuid
+      and c.content=$4 and c.citation_title='Projektinfo Seeblick' and c.citation_url is null
+      and c.token_count=80 and c.embedding_model='deterministic-local-1536'
+      and c.metadata->>'qaSeed'='livegang-8-10' and c.metadata->'embeddingReady'='true'::jsonb`,
+  [sourceId, record.workspace.id, projectId, knowledgeText]);
+  if (!chunk) throw new Error("QA_SEED_KNOWLEDGE_CHUNK_FIXTURE_MISMATCH");
 }
 
 async function main() {
   const passwordHash = await hashPassword(qaPassword);
   await assertSafeTenantRuntimeRole();
 
-  for (const workspace of Object.values(workspaces)) {
-    await upsertWorkspace(workspace);
-  }
-
-  for (const user of users) {
-    user.id = await upsertUser(user, passwordHash);
-  }
+  const scope = {
+    workspaceIds: Object.values(workspaces).map((workspace) => workspace.id),
+    users: users.map((user) => ({ id: user.id, workspaceId: user.workspace.id, email: user.email })),
+    projects: qaRecords.map((record) => ({ id: stableUuid(`project:${record.workspace.id}`), workspaceId: record.workspace.id })),
+  };
+  await withQaSeedOwner({ qaTarget, scope, phase: "identities", ownerPoolFactory }, async (ownerQuery) => {
+    for (const workspace of Object.values(workspaces)) await upsertWorkspace(workspace, ownerQuery);
+    for (const user of users) await upsertUser(user, passwordHash, ownerQuery);
+  });
 
   for (const record of qaRecords) {
     const owner = users.find((user) => user.workspace.id === record.workspace.id && user.role === "owner");
@@ -1208,12 +1195,17 @@ async function main() {
       const ids = await upsertCoreRecords(record, projectId);
       await upsertObjectData(record, projectId, ids);
       await upsertBotAndKnowledge(record, projectId);
-      for (const user of users.filter((item) => item.workspace.id === record.workspace.id && item.role !== "assistant")) {
-        await upsertPipelinePermission(record.workspace, projectId, user);
-      }
     });
   }
 
+  await withQaSeedOwner({ qaTarget, scope, phase: "permissions", ownerPoolFactory }, async (ownerQuery) => {
+    for (const record of qaRecords) {
+      const projectId = stableUuid(`project:${record.workspace.id}`);
+      for (const user of users.filter((item) => item.workspace.id === record.workspace.id && item.role !== "assistant")) {
+        await upsertPipelinePermission(record.workspace, projectId, user, ownerQuery);
+      }
+    }
+  });
   console.log("QA Livegang seed complete.");
   console.log("Workspaces:");
   for (const workspace of Object.values(workspaces)) {
@@ -1224,9 +1216,28 @@ async function main() {
     console.log(`- ${user.email} (${user.productRole})`);
   }
   console.log("QA password source: NOVALURE_QA_SEED_PASSWORD or NOVALURE_QA_PASSWORD.");
+  return { workspaceIds: scope.workspaceIds, userIds: scope.users.map((user) => user.id),
+    projectIds: scope.projects.map((project) => project.id), ownerBootstrapTransactions: 2, runtimeRole: "novalure_app" };
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+try { return await main(); }
+finally {
+  try { if (!runtimePool) await tenantPool.end(); }
+  finally { tenantPool.removeListener?.("error", onRuntimeError); }
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  Promise.resolve().then(async () => {
+    loadEnv(".env.local");
+    loadEnv(".env.production.local");
+    const qaTarget = await assertQaTarget();
+    const qaPassword = process.env.NOVALURE_QA_SEED_PASSWORD || process.env.NOVALURE_QA_PASSWORD;
+    return seedQaLivegang({ qaTarget, qaPassword });
+  }).catch((error) => {
+    const code = /^QA_[A-Z0-9_]+$/.test(error.message) ? error.message : "QA_LIVEGANG_SEED_FAILED";
+    const sqlstate = /^[A-Z0-9]{5}$/.test(error.code ?? "") ? error.code : null;
+    console.error(JSON.stringify({ status: "FAIL", code, sqlstate }));
+    process.exitCode = 1;
+  });
+}
