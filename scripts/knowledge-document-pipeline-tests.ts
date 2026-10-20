@@ -75,6 +75,8 @@ test("private document pipeline: bytes, immutable results, replay, approval, rep
       await db.admin.query("update knowledge_center_entitlements set max_sources=20 where workspace_id=$1", [workspaceId]);
       const approvedDocument = await repository.getKnowledgeDocument(viewer, { sourceId: previous.id }, options);
       const historicalDocument = await repository.getKnowledgeDocument(staff, { sourceId: previous.id, versionId: previous.approvedVersionId! }, options);
+      assert.equal(approvedDocument.downloadPath, `/api/knowledge-center/sources/${previous.id}/document`);
+      assert.equal(historicalDocument.downloadPath, `/api/knowledge-center/sources/${previous.id}/document?versionId=${previous.approvedVersionId}`);
       assert.equal(historicalDocument.assetId, approvedDocument.assetId);
       assert.notEqual(historicalDocument.assetId, imported.asset.id);
       assert.equal((await repository.getKnowledgeDocument(staff, { sourceId: previous.id }, options)).assetId, imported.asset.id);

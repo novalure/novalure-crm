@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import pg from 'pg';
 import { startLocalSalesDb } from './lib/local-sales-db.mjs';
-import { applyNeon061Compatibility, renderNeon061Compatibility, neon061SourceChecksum, neon061QaTarget, neon061StudioQaTarget } from './lib/neon-061-compat.mjs';
+import { applyNeon061Compatibility, renderNeon061Compatibility, neon061SourceChecksum, neon061QaTarget, neon061StudioQaTarget, neon061Package4QaTarget } from './lib/neon-061-compat.mjs';
 const source = await readFile(new URL('../migrations/061_validate_and_activate_tenant_rls_pilot.sql', import.meta.url), 'utf8');
 const preparation = await readFile(new URL('../migrations/060_tenant_rls_pilot_prepare.sql', import.meta.url), 'utf8');
 const sha = value => createHash('sha256').update(value.replace(/\r\n/g, '\n')).digest('hex');
@@ -163,6 +163,26 @@ test('Studio Stage3 exact target uses the unchanged real 061 validation path on 
       assert.equal(persisted.source_checksum,neon061SourceChecksum);
     });
     assert.equal(JSON.stringify((await admin.query('select * from pg_auth_members order by roleid,member,grantor')).rows),roles);
+  });
+  await t.test('Package4 fresh QA profile pins its new target and preserves the same complete activation invariants',async()=>{
+    await client.query("select set_config('neon.project_id',$1,false),set_config('neon.branch_id',$2,false)",[neon061Package4QaTarget.projectId,neon061Package4QaTarget.branchId]);
+    try {
+      await rolledBack(async()=>{
+        const receipt=await apply({target:neon061Package4QaTarget,executionProfile:'package4-qa'});
+        assert.equal(receipt.profileId,'package4-qa:neon-provider-creator-admin-only-061-v1');
+        assert.deepEqual(receipt.evidence.identity.projectId,neon061Package4QaTarget.projectId);
+        assert.equal(receipt.sourceChecksum,neon061SourceChecksum);
+        assert.equal(receipt.evidence.foreignKeysValidated.length,15);
+        assert.deepEqual(receipt.evidence.forcedRlsTables,pilot);
+        assert.equal(receipt.evidence.roles.runtimePrivilegedReachability,false);
+      });
+      for(const [key,value] of [['projectId','foreign-project'],['branchId','br-foreign'],['databaseName','other'],['runtimeRole','other_runtime']]) {
+        await deny(/fingerprint|identity mismatch/,{target:{...neon061Package4QaTarget,[key]:value},executionProfile:'package4-qa'});
+      }
+      await deny(/pinned Neon Package4 QA/,{target:{...neon061Package4QaTarget,runtimeRole:'other_runtime'},executionProfile:'package4-qa'});
+    } finally {
+      await client.query("select set_config('neon.project_id',$1,false),set_config('neon.branch_id',$2,false)",[neon061StudioQaTarget.projectId,neon061StudioQaTarget.branchId]);
+    }
   });
   await t.test('wrong target field or actual Neon fingerprint/session owner is never accepted by the new profile',async()=>{
     for(const [key,value] of [['projectId','foreign-project'],['branchId','br-foreign'],['databaseName','other'],['runtimeRole','other_runtime']]){

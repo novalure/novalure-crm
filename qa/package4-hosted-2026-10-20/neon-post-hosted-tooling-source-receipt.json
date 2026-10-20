@@ -1,0 +1,33 @@
+{
+  "format": "package4-post-hosted-tooling-source-v1",
+  "status": "PREPARED_NOT_EXECUTED",
+  "sourceRevision": "b2d493331dbb5b13f269bbe9bcfc38cce36eba42",
+  "appSourceRevision": "e9d80b908d9244722ee9b661002baf0cf30d8692",
+  "file": {
+    "path": "scripts/package4-neon-hosted-recovery.mjs",
+    "sha256": "4d19dabf6cf203c52ddf677cbdf1030a9438ce7e341965478a92af8532d94ac9"
+  },
+  "existingFrozenFilesChanged": false,
+  "independentReview": {
+    "reviewer": "/root/masterplan_context",
+    "openFindings": 0,
+    "finalChanges": "Persist created-resource identity before TTL remote await; mandatory existing hosted target validation; final comment-only precision update"
+  },
+  "validation": {
+    "syntax": "PASS",
+    "eslint": "PASS",
+    "diffCheck": "PASS",
+    "targetedNoIoGuards": 4,
+    "remoteCalls": 0
+  },
+  "executionPreconditions": [
+    "BrowserDone and actual write quiescence on exact provider Hosted source",
+    "Exact public target manifest including allWorkspaceIds for all4 synthetic workspaces",
+    "Actual new private source and separate empty restore stores plus verified SDK ports",
+    "Fresh full source+private-byte baseline reviewed and SHA-pinned before create",
+    "Exact6 existing branches ->3 new branches=9/10; no paid snapshots",
+    "Actual normal authenticated runtime application callback against restored DB+store",
+    "Caller finally proves source/working/restored disabled+idle before final PASS"
+  ],
+  "fullFileRecoveryStatus": "NOT YET EXECUTED"
+}

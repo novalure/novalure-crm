@@ -1,0 +1,34 @@
+{
+  "format": "package4-neon-synthetic-seed-v1",
+  "status": "PASS",
+  "implementationRevision": "5c43577cb78c3843a8835311c646112be50b39bc",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "host": "ep-steep-shadow-bapfxomh.c-8.eu-central-1.aws.neon.tech",
+    "databaseName": "neondb",
+    "owner": "neondb_owner"
+  },
+  "marker": "package4-hosted-20261020-v1",
+  "productionAccess": 0,
+  "providerActivations": 0,
+  "grantChanges": 0,
+  "seededSessions": 0,
+  "seededMfaSecrets": 0,
+  "startedAt": "2026-10-20T05:44:59.642Z",
+  "authState": {
+    "sessions": 0,
+    "challenges": 0,
+    "recovery_codes": 0,
+    "mfa_identities": 0
+  },
+  "seededAt": "2026-10-20T05:45:05.509Z",
+  "accountCount": 5,
+  "operatorMembershipCount": 3,
+  "foreignOperatorMemberships": 0,
+  "syntheticWorkspaceCount": 3,
+  "recoveryTaskId": "323a4ef6-685e-4a71-81b0-01907684475e",
+  "providerCountsUnchanged": true,
+  "normalMfaEnrollmentRequired": true,
+  "committedAt": "2026-10-20T05:45:05.621Z"
+}

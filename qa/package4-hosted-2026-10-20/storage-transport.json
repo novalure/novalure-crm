@@ -1,0 +1,139 @@
+{
+  "startedAtUtc": "2026-10-20T06:12:45.744Z",
+  "scope": "New package4 synthetic QA stores only",
+  "secretValuesEmitted": false,
+  "maxTestContentBytes": 1024,
+  "operations": [
+    {
+      "storeId": "store_QCHn2posJdJcvdUP",
+      "kind": "put-public-synthetic-html-and-anonymous-https-get",
+      "success": true
+    },
+    {
+      "role": "source",
+      "storeId": "store_6i5sZDmCf4qX9J86",
+      "access": "private",
+      "kind": "sdk-put-head-authenticated-get-and-anonymous-denial",
+      "sdkGetStatus": 200,
+      "anonymousStatus": 403,
+      "bytes": 67,
+      "sha256": "690d45cea1e1e441f6b560a196adfb758642ee9a72ac400e15ac5179f94e5c41",
+      "contentType": "text/plain; charset=utf-8",
+      "cacheControl": "public, max-age=2592000",
+      "authenticatedHeaders": {
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": "67",
+        "cache-control": "no-store",
+        "etag": "\"f90a8d292252c08c6e20fad4705e2f50\"",
+        "last-modified": "Tue, 20 Oct 2026 06:12:47 GMT",
+        "x-vercel-cache": "MISS"
+      },
+      "observedAtUtc": "2026-10-20T06:12:47.862Z",
+      "success": true
+    },
+    {
+      "role": "restore",
+      "storeId": "store_2FsqiotLlmJJ6toi",
+      "access": "private",
+      "kind": "sdk-put-head-authenticated-get-and-anonymous-denial",
+      "sdkGetStatus": 200,
+      "anonymousStatus": 403,
+      "bytes": 68,
+      "sha256": "3188dacc61abb1cb87ba1747c5e54bd56944214a8636ba42510951e565500b18",
+      "contentType": "text/plain; charset=utf-8",
+      "cacheControl": "public, max-age=2592000",
+      "authenticatedHeaders": {
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": "68",
+        "cache-control": "no-store",
+        "etag": "\"e29817d929cd7a238a3ecf9aade3e0e9\"",
+        "last-modified": "Tue, 20 Oct 2026 06:12:48 GMT",
+        "x-vercel-cache": "MISS"
+      },
+      "observedAtUtc": "2026-10-20T06:12:48.992Z",
+      "success": true
+    }
+  ],
+  "controlledWebsite": {
+    "storeId": "store_QCHn2posJdJcvdUP",
+    "url": "https://qchn2posjdjcvdup.public.blob.vercel-storage.com/website/hostedwebanchor.html",
+    "beforeContent": "SYNTHETIC hostedwebanchor: Office opens at 09:00.",
+    "afterContent": "SYNTHETIC hostedwebanchor: Office opens at 10:00.",
+    "query": "hostedwebanchor",
+    "httpStatus": 200,
+    "sha256": "992dc2861532584640c829120bab689476dd86df3da6e22678664d45a33a4b42",
+    "bytes": 82,
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "content-length": "82",
+      "cache-control": "public, max-age=60",
+      "etag": "\"e28024ee312e40fad893cb53daf156b4\"",
+      "last-modified": "Tue, 20 Oct 2026 06:12:47 GMT",
+      "x-vercel-cache": "MISS"
+    },
+    "observedAtUtc": "2026-10-20T06:12:46.629Z"
+  },
+  "status": "PASS_SYNTHETIC_STORAGE_TRANSPORT_ONLY",
+  "finishedAtUtc": "2026-10-20T06:12:48.992Z",
+  "privateProbeCleanup": {
+    "startedAtUtc": "2026-10-20T06:14:07.916Z",
+    "scope": "Only the two exact synthetic private I/O probe paths created by this agent",
+    "results": [
+      {
+        "role": "source",
+        "storeId": "store_6i5sZDmCf4qX9J86",
+        "pathname": "ops/package4-transport-proof-20261020.txt",
+        "expectedSha256": "690d45cea1e1e441f6b560a196adfb758642ee9a72ac400e15ac5179f94e5c41",
+        "privateOrigin": "https://6i5szdmcf4qx9j86.private.blob.vercel-storage.com",
+        "originSource": "Actual authenticated SDK get result blob.url before deletion",
+        "verifiedBeforeDelete": {
+          "status": 200,
+          "bytes": 67,
+          "sha256": "690d45cea1e1e441f6b560a196adfb758642ee9a72ac400e15ac5179f94e5c41"
+        },
+        "deleteCompleted": true,
+        "probeReadbackAbsent": true,
+        "fullListReadback": {
+          "pages": 1,
+          "totalObjects": 0,
+          "empty": true,
+          "probeListed": false
+        },
+        "observedAtUtc": "2026-10-20T06:14:09.408Z"
+      },
+      {
+        "role": "restore",
+        "storeId": "store_2FsqiotLlmJJ6toi",
+        "pathname": "ops/package4-transport-proof-20261020.txt",
+        "expectedSha256": "3188dacc61abb1cb87ba1747c5e54bd56944214a8636ba42510951e565500b18",
+        "privateOrigin": "https://2fsqiotllmjj6toi.private.blob.vercel-storage.com",
+        "originSource": "Actual authenticated SDK get result blob.url before deletion",
+        "verifiedBeforeDelete": {
+          "status": 200,
+          "bytes": 68,
+          "sha256": "3188dacc61abb1cb87ba1747c5e54bd56944214a8636ba42510951e565500b18"
+        },
+        "deleteCompleted": true,
+        "probeReadbackAbsent": true,
+        "fullListReadback": {
+          "pages": 1,
+          "totalObjects": 0,
+          "empty": true,
+          "probeListed": false
+        },
+        "observedAtUtc": "2026-10-20T06:14:10.624Z"
+      }
+    ],
+    "status": "PASS_EXACT_PROBE_CLEANUP",
+    "finishedAtUtc": "2026-10-20T06:14:10.624Z"
+  },
+  "privateStoreOrigins": {
+    "source": "https://6i5szdmcf4qx9j86.private.blob.vercel-storage.com",
+    "restore": "https://2fsqiotllmjj6toi.private.blob.vercel-storage.com"
+  },
+  "sourceArtifact": {
+    "fileName": "package4-storage-transport-evidence.json",
+    "sha256": "25d892f9cddb1c56f15957de3534f7be4d778019e167c12a57be3d4d14f6ad0b",
+    "transform": "Removed private credential/raw response file paths; remapped only public artifact links; all provider metadata, request sources and original evidence hashes preserved."
+  }
+}

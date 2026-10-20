@@ -1,0 +1,2615 @@
+{
+  "observedAtUtc": "2026-10-20T06:11:44.142162+00:00",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "source": "native GET /v10/projects/{project}/env?decrypt=false",
+  "totalEntries": 234,
+  "secretValuesEmitted": false,
+  "entries": [
+    {
+      "id": "iH6GPISJ08bWdZaA",
+      "key": "PACKAGE4_QA_20261020_FIXTURE_READ_WRITE_TOKEN",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "56HZySGwDMzchmci",
+      "key": "PACKAGE4_QA_20261020_RESTORE_READ_WRITE_TOKEN",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZBvlViWbABGSlcAz",
+      "key": "PACKAGE4_QA_20261020_SOURCE_READ_WRITE_TOKEN",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ozhArH0UgnBoOsMM",
+      "key": "STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "a5pa7J5cVWG0ruPv",
+      "key": "STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8myQ0kyuAzM9ASpx",
+      "key": "STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ykDZZlLKrhdLyQ6I",
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "o4NUCr4JFScGN1g5",
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "g3IrTE5Ss5hV0iiy",
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "tKI78D4a3AcokuEB",
+      "key": "STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "PQICTT5vTXacamS1",
+      "key": "STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "nFhtwIm0CokriKT3",
+      "key": "STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "kLXVi1D6p0WIXwKG",
+      "key": "STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "bYRTVNoZGIckrXvK",
+      "key": "STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Es8ycmTnpxjEi9Ws",
+      "key": "NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Avp93qq1edc7tF5j",
+      "key": "STUDIO_PUBLIC_CANARY_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "0Rskqv1YmGsxgid8",
+      "key": "STUDIO_ENQUIRY_SIGNING_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "lzjPEHZSHndW2Msn",
+      "key": "STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "aqmxAJtxnK8RAZ3n",
+      "key": "STUDIO_PUBLIC_ENQUIRY_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Mi9pIcqF3kJwmXte",
+      "key": "NOVALURE_PRODUCTION_DATABASE_HOST",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "iv2wO91iiG9UwRlq",
+      "key": "NOVALURE_QA_DATABASE_ROLE",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "7tJrPX1Yf5M06s8V",
+      "key": "NOVALURE_QA_DATABASE_NAME",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "EAGByPsnvGPomrul",
+      "key": "NOVALURE_QA_BRANCH_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "K1hkeeNqNkTKbC6x",
+      "key": "NOVALURE_QA_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "cxVAEtJ7zmIv7PhB",
+      "key": "NOVALURE_QA_DATABASE_HOST",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8Z3aZw7jxxckcD5k",
+      "key": "NOVALURE_QA_DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "DWy5KFnaJPLupwYT",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "xXo3uD7AVzSf44ry",
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "T875OmvYCzJ7S0Re",
+      "key": "STUDIO_BOOKING_QA_RECIPIENTS_JSON",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "7D8hPYDjRPbqkJuc",
+      "key": "STUDIO_BOOKING_REAL_MODE",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Pyli27jUCtZ3S8bY",
+      "key": "NOVALURE_TRUST_AUTH_HEADERS",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "6kMBq8z7bKlmitzc",
+      "key": "NOVALURE_DEMO_AUTH_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "LuTYGV0RINMH4TFn",
+      "key": "NOVALURE_AUTH_STRICT",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZPJB2GW09aJeZOth",
+      "key": "STUDIO_ENQUIRY_QA_PHONES_JSON",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "3gNAitgjJCFbyuRs",
+      "key": "STUDIO_ENQUIRY_QA_EMAILS_JSON",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "HllzFbFOziJeFVJV",
+      "key": "STUDIO_ENQUIRY_QA_APPROVAL_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "VUug6aD1TFBU2LQp",
+      "key": "STUDIO_ENQUIRY_QA_CRM_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "zcm3nMP0Wa8y77Di",
+      "key": "STUDIO_ENQUIRY_QA_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "WOVtCNhDnaDZ5osg",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "NwzkJxfkJ7IBUCI1",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "sN7i9LHs6A8S3bqq",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "vlioXVeWuwTl4ITP",
+      "key": "STUDIO_ENQUIRY_SIGNING_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/studio-preview-crm-handoff",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "U1v916l3Iz7cre5k",
+      "key": "NOVALURE_STUDIO_INGESTION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "2tHTY7cZ22NVmOGl",
+      "key": "CRM_MACHINE_AUTH_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "UoYlViiv9vIaoyRo",
+      "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "h2cN51VdJ9GucyJ9",
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "lIJ5mya0TtdMOtmb",
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "3fU59xz5Cbbz4JZr",
+      "key": "NOVALURE_APP_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "cg2ae4nEiGZVqHir",
+      "key": "NEXT_PUBLIC_APP_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "O3mHtEXj6IctZc4l",
+      "key": "NOVALURE_AUTH_STRICT",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ADy0TQRh5PtxCInA",
+      "key": "NOVALURE_DEMO_USER_ROLE",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "hY8KnmXd1p21MSDd",
+      "key": "NOVALURE_DEMO_USER_NAME",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "qpV3H6m5MsYoeVJy",
+      "key": "NOVALURE_DEMO_USER_EMAIL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "quqXu8Lj9toyJGG6",
+      "key": "NOVALURE_DEMO_AUTH_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8VwrQqZ9pDVMAFSc",
+      "key": "OAUTH_TOKEN_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "gowB2HnllNReUkZu",
+      "key": "OAUTH_STATE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "jz6MgU72BTqAERYU",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "5SRACWITTjU1sp4I",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "pSzZNPIOtwTDVVHS",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "GpXlFzAhnB61qDWV",
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "446MJgY8cs2UC3hm",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/u1-c03-production-reconciliation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ql6BHMMYO4FT2reG",
+      "key": "QA_TENANT_DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Whiq4eNHlWzqk62e",
+      "key": "QA_TENANT_POSTGRES_URL_NON_POOLING",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "9bnmIdLjiJqJ8cFY",
+      "key": "QA_TENANT_POSTGRES_PRISMA_URL",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "x7ta4OZICxeWCPL0",
+      "key": "QA_TENANT_POSTGRES_PASSWORD",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "GGXe3BcryMRWW0s7",
+      "key": "QA_TENANT_NEON_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "I4EyLgd9QG78SOBP",
+      "key": "QA_TENANT_POSTGRES_HOST",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "IjY3BA5Fml9LLSxt",
+      "key": "QA_TENANT_POSTGRES_URL",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "FKXS5E6kdw0C6NDd",
+      "key": "QA_TENANT_PGDATABASE",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "KegXT9gnaEo4Bi0N",
+      "key": "QA_TENANT_DATABASE_URL_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "4E5YaIe4VoJbyTpm",
+      "key": "QA_TENANT_POSTGRES_DATABASE",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "gZiUOdmYRyPRDSjM",
+      "key": "QA_TENANT_PGHOST_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8Q7UBIZYoYQ111Jn",
+      "key": "QA_TENANT_PGHOST",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "AzYTdLKXh2E1Jt4H",
+      "key": "QA_TENANT_POSTGRES_URL_NO_SSL",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "zOfAwQA9M8cmqecz",
+      "key": "QA_TENANT_PGPASSWORD",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rkaNa1katzr1qr5v",
+      "key": "QA_TENANT_POSTGRES_USER",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Zq297DXVnKw6wFbm",
+      "key": "QA_TENANT_PGUSER",
+      "type": "encrypted",
+      "target": [
+        "preview",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "pbx9k1sbk6GFmZKO",
+      "key": "G27_QA_POSTGRES_URL_NON_POOLING",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "GHZGswtRTRcyCOtc",
+      "key": "G27_QA_PGPASSWORD",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Ecea1uXIg05aYadU",
+      "key": "G27_QA_DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "cS1iZ7cWKDeV9byP",
+      "key": "G27_QA_POSTGRES_PRISMA_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "HMYSvbg0OyReDyAA",
+      "key": "G27_QA_PGUSER",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "pKakWuDgi3yfMx2V",
+      "key": "G27_QA_POSTGRES_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "n1GVF65rVP4n4aYx",
+      "key": "G27_QA_POSTGRES_USER",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZMKZ0AzjuYT6v4T6",
+      "key": "G27_QA_PGHOST",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "bxgLoCQkCAwwZkKK",
+      "key": "G27_QA_NEON_PROJECT_ID",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Aexh00bURU4gm8Hn",
+      "key": "G27_QA_POSTGRES_DATABASE",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "WQ9tElGlMzqaZsI6",
+      "key": "G27_QA_PGHOST_UNPOOLED",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ow8aaklZllrTiyva",
+      "key": "G27_QA_PGDATABASE",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "HMP3SvsXwsbdFwtg",
+      "key": "G27_QA_POSTGRES_URL_NO_SSL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "YKTE9DG2bFnqC41l",
+      "key": "G27_QA_POSTGRES_PASSWORD",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "otcFdP6ijGbcqw3I",
+      "key": "G27_QA_DATABASE_URL_UNPOOLED",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "oD7YWdJkmWBSYKJX",
+      "key": "G27_QA_POSTGRES_HOST",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "cyJig8M2ZuLiH1h9",
+      "key": "CRM_EVELYN_QA_TENANT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "jnWwACVZYkS2ySPP",
+      "key": "CRM_EVELYN_QA_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "irfrUwWwvxS4crRK",
+      "key": "CRM_EVELYN_QA_WORKSPACE_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "fYOUaAO9TV91nyUS",
+      "key": "NEXT_PUBLIC_APP_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "604olELXghgoQhFl",
+      "key": "NOVALURE_APP_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "JCgx3PaA1ESHngSU",
+      "key": "NOVALURE_AUTH_STRICT",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "nYqJX2sn6EguDfRa",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "PF4vFT6F1sXvrv0E",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "xRkmpVeAWKFDD1tE",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "DEM4nzcCwKfwwqp9",
+      "key": "DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/crm-sales-readiness-high-gaps",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "SxX0lw6bpG7DXwZM",
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "UW4mfhwU2DyvIldG",
+      "key": "NOVALURE_QA_DATABASE_ROLE",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "mqAhaq2gFxY9rwpy",
+      "key": "NOVALURE_PRODUCTION_PROJECT_ID",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "aJULxAQahUYHC2Pd",
+      "key": "NOVALURE_PRODUCTION_BRANCH_ID",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "0hlkri4EJmoEL1kD",
+      "key": "NOVALURE_QA_PROJECT_ID",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "sykqVDOtRYbx4EQK",
+      "key": "NOVALURE_QA_BRANCH_ID",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "UkvXT5BxOgBzpR6q",
+      "key": "NOVALURE_QA_DATABASE_NAME",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "UdrFm7oNTbEOWtfE",
+      "key": "NOVALURE_PRODUCTION_WORKSPACE_IDS",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "NgrQFtJS7zDwLDmm",
+      "key": "NOVALURE_QA_RESET_EXECUTION_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "PwlDCoWYy4xepGfM",
+      "key": "NOVALURE_QA_RESET_WORKSPACE_IDS",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OB76ZbKeVukiQze8",
+      "key": "NOVALURE_QA_BATCH_REGISTRATION_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "iaukNy0TTlEUZ0CR",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "aZeFAXazuXoD0kwD",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZQWP9aAhZYxotzTX",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "vv8APWqwJD4Ptrgj",
+      "key": "POSTGRES_URL_NON_POOLING",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "UTCeOUVmBvBAsRAu",
+      "key": "POSTGRES_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "BhUc59P8nUnxgqcf",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-20260822",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "YYWmRP60WZeY2pPq",
+      "key": "POSTGRES_URL_NO_SSL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OOfsVlylYmbuWUJx",
+      "key": "POSTGRES_PGHOST_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rx2bikPlToTriyhO",
+      "key": "POSTGRES_DATABASE",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "tvOnJGRESuONwg7z",
+      "key": "POSTGRES_USER",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "z0TkgCEMXoHAZ6WQ",
+      "key": "POSTGRES_VITE_NEON_AUTH_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8pzObqnTYIGu48q3",
+      "key": "POSTGRES_HOST",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "LytCyxwW5DBDA2WU",
+      "key": "POSTGRES_DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "CrE5NkwxpSNZEZ26",
+      "key": "POSTGRES_PGDATABASE",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "umtGjxd0EvlZsZr0",
+      "key": "POSTGRES_NEON_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "kpsfn6LcAO5cbs5u",
+      "key": "POSTGRES_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "GQVnoPg3BgfFkUmx",
+      "key": "POSTGRES_PASSWORD",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "l8KADOJNooXIZ8C1",
+      "key": "POSTGRES_URL_NON_POOLING",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "SXHR4U3Y7g5TWa9D",
+      "key": "POSTGRES_PGPASSWORD",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "9S3zseVLEJ19Yy90",
+      "key": "POSTGRES_DATABASE_URL_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "fv4qouuPTHNa1u5n",
+      "key": "POSTGRES_PRISMA_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "gxp0YfIANF4LUcI4",
+      "key": "POSTGRES_NEON_AUTH_BASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "6KNvuhCb6cwL6Nue",
+      "key": "POSTGRES_PGHOST",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "bH841vt79YeBR4a0",
+      "key": "POSTGRES_PGUSER",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "UrF1bhGuLPuVqj1T",
+      "key": "BLOB_READ_WRITE_TOKEN",
+      "type": "encrypted",
+      "target": [
+        "production",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rULTXfj9meOwJUDE",
+      "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "H27k1cWzplwCbGtV",
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "BqSjOf4aUOm0KXCS",
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "wI4pSazIfh6OAb7H",
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "l0JsRDnxkxYpERS9",
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "yEC9jcYfF92V4b9E",
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "KWHkJYanSdATb1v2",
+      "key": "OAUTH_STATE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "lT5gQAOLp6xH3WLQ",
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "JeP60biRICzAVgOV",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "2N4iauaNtdqZODlK",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "omZ5Jm6Y0XqsJRd4",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "S2JwdzojPUBfn99m",
+      "key": "OAUTH_TOKEN_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-reapply-after-env-fix",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "RSyi6X2aRNCVYPaK",
+      "key": "OAUTH_STATE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "1nQ6u2D2v6eadBtM",
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "vnjCguY8K3agrRym",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rBrxb5tA7Fnc1Ipk",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "bkXeL8p1mA3zMshz",
+      "key": "NOVALURE_APP_ORIGIN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-final-remediation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8HJJSqPJUV7ywl0P",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-final-remediation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "1AOMO8wXSZGaE3Xg",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-final-remediation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "0G5AjHfpzWbCZ29A",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-final-remediation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "fTjHKvvsg0ZjT8sj",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-final-remediation",
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "jgelXdAvTFFjCT24",
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "7pyEhoYH2D4AcP52",
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "nuCzqFkkkwGXS1Q1",
+      "key": "OAUTH_STATE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "jaS3mlGoLVssdHHC",
+      "key": "NOVALURE_APP_ORIGIN",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "wGnPaiedS4smcfAB",
+      "key": "NOVALURE_AUTH_STRICT",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "TeZDXSBbHwKplj5f",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "REVIqkgy9lPNSG2P",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "bpeTtYDUhNGbCMqM",
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/go-live-remediation-2026-08-11",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "8fXq68PFwYQZLm8S",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "fix/qa-remediation-2026-08-03",
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "ebl2hg1EtMtNP65J",
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "h6vE67nIObLZNucB",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "iQFXlfgdlSr9BlAj",
+      "key": "POSTGRES_PGHOST_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "kqw8HWj1UnPzxy8m",
+      "key": "POSTGRES_PGHOST",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "dnxKeaqXOrud2xXo",
+      "key": "POSTGRES_PGDATABASE",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "kC0DH9QLhMR1JI7U",
+      "key": "POSTGRES_PGPASSWORD",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "flAgZjXjhifdgzc2",
+      "key": "POSTGRES_PGUSER",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "oVQvxGbqcDscimGb",
+      "key": "POSTGRES_HOST",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ifOohLt3ifVTgoN7",
+      "key": "POSTGRES_DATABASE",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "0pEaq3vqraSWPCBe",
+      "key": "POSTGRES_PASSWORD",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "WWCbh4d698c6DPEN",
+      "key": "POSTGRES_USER",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "a9ADLkwdGWKsp9CP",
+      "key": "POSTGRES_NEON_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "YkyUnMxRVM5Xn2yn",
+      "key": "POSTGRES_URL_NO_SSL",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "XwaWpEWELPSBW8MG",
+      "key": "POSTGRES_DATABASE_URL_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "urshlxSkTtx67z8C",
+      "key": "POSTGRES_URL_NON_POOLING",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "eQp3Wof2DlDmblq6",
+      "key": "POSTGRES_URL",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rxjmxVO1n8MDwUGn",
+      "key": "POSTGRES_PRISMA_URL",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OnLNjNliofG7BtGG",
+      "key": "POSTGRES_DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "WszAXciqOJkXASy0",
+      "key": "DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "wp9PAdGljwcmPmmw",
+      "key": "POSTGRES_PGHOST_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "O3Vgz7otroP4Eqab",
+      "key": "POSTGRES_PGHOST",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "nmQlSJuoivXxLS0U",
+      "key": "POSTGRES_PGDATABASE",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Sm3JNkl182mY6qTD",
+      "key": "POSTGRES_PGPASSWORD",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "1arUIS9iGFyY4S6n",
+      "key": "POSTGRES_PGUSER",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "caybaXwLvRYxgRmS",
+      "key": "POSTGRES_HOST",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "kdRp6jbNZ5nAU41P",
+      "key": "POSTGRES_DATABASE",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "xfkG8s6mOFpNWoav",
+      "key": "POSTGRES_PASSWORD",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OB0EYWS6dMZTQFA7",
+      "key": "POSTGRES_USER",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "nHvoCCaICbnW5bsg",
+      "key": "POSTGRES_NEON_PROJECT_ID",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "mjnvFYiSRntaS9TS",
+      "key": "POSTGRES_URL_NO_SSL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "QMOkiOKRXHc1rvGT",
+      "key": "POSTGRES_DATABASE_URL_UNPOOLED",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "8VeVx7ebtQC9S34p",
+      "key": "POSTGRES_URL_NON_POOLING",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "T8ZdxgCOeFASAQjq",
+      "key": "POSTGRES_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OSGygK0ixAMGEa7V",
+      "key": "POSTGRES_PRISMA_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "EDHqqaTpgqBx9VhB",
+      "key": "POSTGRES_DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "eNhGCSWUPBfTkeuV",
+      "key": "DATABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZKh3d7VcdVZiaCD3",
+      "key": "NOVALURE_LOGIN_PASSCODE",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "TJPA75E5WtnC1m3W",
+      "key": "NOVALURE_BOT_DEFAULT_MEETING_SLUG",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "mlizB0ZSstlaPoQK",
+      "key": "NOVALURE_LOGIN_PASSCODE_HASH",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "CUElxr8fj7O17xe7",
+      "key": "GOOGLE_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ZFTFzuC5inLNJruh",
+      "key": "NOVALURE_EMAIL_FROM",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ukMYUrejFk0y7qQI",
+      "key": "META_WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Jsh9kV6bxgb3P7K3",
+      "key": "META_WHATSAPP_PHONE_NUMBER_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "Mfn24apPAMdSeAGs",
+      "key": "META_WHATSAPP_ACCESS_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "0u79NTCCdxeQZIvr",
+      "key": "META_GRAPH_API_VERSION",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "oKSda5BWOQTAyX0Y",
+      "key": "NOVALURE_BOT_WEBHOOK_VERIFY_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "CW0rrVNfHVEYzrkB",
+      "key": "NOVALURE_BOT_STRICT_KNOWLEDGE",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "nueCzVrmSMnWcICz",
+      "key": "NOVALURE_BOT_REQUIRE_HUMAN_APPROVAL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "cwSOhF26LdGkEZUZ",
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "oDPFATYlVcMqadcg",
+      "key": "NOVALURE_BOT_TEST_MODE",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "AjUiplJmOcsQsPAJ",
+      "key": "NOVALURE_BOT_KILL_SWITCH",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "wDa9sUnJvJ7bsyny",
+      "key": "NOVALURE_WORKSPACE_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "NlUg6AJDHMFfmxuu",
+      "key": "META_APP_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "7JvTXeGNdd4ji7wl",
+      "key": "GOOGLE_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "OVeTDyLtRA31TPlH",
+      "key": "NEXT_PUBLIC_APP_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "jG1jv9DcIu9hwAlw",
+      "key": "OAUTH_TOKEN_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "ON9oZkvb4N0LWPU8",
+      "key": "NOVALURE_BOT_WEBHOOK_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production",
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "AomfaKlkc6yKhIoa",
+      "key": "CRON_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "byhkRyiEjRX9OJnT",
+      "key": "RESEND_FORM",
+      "type": "sensitive",
+      "target": [
+        "production",
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "TQijWmTWu0Pgv0gE",
+      "key": "RESEND_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "UV33yIuIvcL0vtFm",
+      "key": "MICROSOFT_CALENDAR_USER_ID",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "BMncjdTvo6XUh5EM",
+      "key": "MICROSOFT_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production",
+        "preview"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "HB5FXBnOGpmUiYmj",
+      "key": "MICROSOFT_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "nfBENLHQ23OGBMSn",
+      "key": "MICROSOFT_TENANT_ID",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    },
+    {
+      "id": "cGyEi7jqodtGLsET",
+      "key": "AI_GATEWAY_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview",
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": [],
+      "configurationId": null
+    }
+  ],
+  "sourceArtifact": {
+    "fileName": "package4-native-all-env-after-metadata.json",
+    "sha256": "3e05fdd84287c1f94f7dd1a7ffe3fcab29b679aee4b219ee203bcbf4bbb48938",
+    "transform": "Removed private credential/raw response file paths; remapped only public artifact links; all provider metadata, request sources and original evidence hashes preserved."
+  }
+}

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { assertHostedRuntimeBinding, exactHostedUrl, validateHostedTarget } from "./lib/package4-hosted-target.mjs";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { canonical } from "./lib/studio-stage3-qa-fingerprint.mjs";
+import { assertHostedOwnerMigrationReceipt, assertHostedRuntimeBinding, exactHostedUrl, loadHostedOwnerMigrationReceipt, validateHostedTarget } from "./lib/package4-hosted-target.mjs";
 
 function target() {
   const account = label => ({ userId: randomUUID(), workspaceId: randomUUID(), projectId: randomUUID(), email: `${label}@example.invalid`, credentialKey: `PACKAGE4_${label.toUpperCase()}_CREDENTIALS` });
@@ -34,8 +38,9 @@ function ownerBundle(config) {
     applied: Object.entries(config.migrationChecksums).map(([version, sourceChecksum]) => ({ file: version + ".sql", sourceChecksum, execution: "unchangedOriginalSql" })),
     final: { actualRuntimeConnectionVerified: true, runtimeOwnsNoPublicObjects: true, privateProvisioningTablesDenied: true, missingContextDeniesKnowledge: true,
       runtime: { rolcanlogin: true, rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolreplication: false, rolbypassrls: false },
+      forcedRls: [{ relname: "knowledge_sources", relrowsecurity: true, relforcerowsecurity: true }],
       ledger: Object.entries(config.migrationChecksums).map(([version, checksum]) => ({ version, checksum })),
-      runtimeCatalogVisibility: { expectedTablesSourceSha256: "f".repeat(64), checkedAt: new Date().toISOString(), tables: [
+      runtimeCatalogVisibility: { expectedTablesSourceFile: "src/lib/db/schema.ts", expectedTablesSourceSha256: "f".repeat(64), checkedAt: new Date().toISOString(), tables: [
         { tableName: "contacts", exists: true, runtimeVisible: true, runtimeAnyTablePrivilege: true },
         { tableName: "company_profiles", exists: true, runtimeVisible: false, runtimeAnyTablePrivilege: false },
       ] } } };
@@ -114,4 +119,122 @@ test("only proven administrative ledger denial and exact private table visibilit
     const altered = structuredClone(owner); mutate(altered);
     assert.throws(() => assertHostedRuntimeBinding(valid, config, altered), /HOSTED_/);
   }
+});
+
+function updateSourceProof(receipt) {
+  const hash = value => createHash("sha256").update(canonical(value)).digest("hex");
+  receipt.currentSourceProof = { branchId: receipt.target.branchId, checkedAt: receipt.checkedAt,
+    ledgerSha256: hash(receipt.final.ledger), runtimeProofSha256: hash(receipt.final.runtimeProof), catalogSha256: hash(receipt.final.runtimeCatalogVisibility),
+    hashFormat: "SHA256 of canonical JSON (scripts/lib/studio-stage3-qa-fingerprint.mjs canonical)" };
+}
+
+function cloneBundle(config) {
+  config.neon = { projectId: "green-thunder-49879900", branchId: "br-shiny-darkness-baz4524v", database: "neondb", runtimeRole: "novalure_app", migrationRole: "neondb_owner" };
+  const bundle = ownerBundle(config);
+  const original = structuredClone(bundle.receipt);
+  config.neon.branchId = "br-sweet-surf-ba6iahut";
+  config.neonCloneAttestation = { path: "qa/package4-hosted-2026-10-20/neon-clone-attestation.json", sha256: "a".repeat(64), implementationRevision: "c".repeat(40) };
+  const receipt = { format: "package4-neon-clone-v1", status: "PASS", productionAccess: 0, implementationRevision: config.neonCloneAttestation.implementationRevision,
+    appSourceRevision: "e".repeat(40), checkedAt: new Date().toISOString(),
+    target: { ...original.target, branchId: config.neon.branchId, migrationRole: config.neon.migrationRole },
+    bootstrapReceipt: { ...config.neonMigrationReceipt, manifestDigest: original.manifestDigest, target: structuredClone(original.target) },
+    provenance: { originalRootBranchId: "br-shiny-darkness-baz4524v", checkpointBranchId: "br-flat-block-baycv1oa", cloneBranchId: config.neon.branchId,
+      checkpointParentId: "br-shiny-darkness-baz4524v", cloneParentId: "br-flat-block-baycv1oa", checkpointParentLsn: "0/2F63518", cloneParentLsn: "0/2F63518",
+      initialSnapshotBytesSha256: "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7" },
+    identity: { ...original.identity, branch: config.neon.branchId, sessionRole: config.neon.migrationRole },
+    final: structuredClone(original.final), sourceMigrationChecksums: structuredClone(config.migrationChecksums), manifestDigest: original.manifestDigest,
+    migrationsExecutedOnClone: false, migrationsInheritedThroughCOW: true };
+  receipt.final.runtime = { ...receipt.final.runtime, rolname: config.neon.runtimeRole, rolinherit: true };
+  receipt.final.runtimeCatalogVisibility.checkedAt = receipt.checkedAt;
+  receipt.final.forcedRlsTables = structuredClone(receipt.final.forcedRls);
+  delete receipt.final.forcedRls;
+  receipt.final.runtimeProof = { identity: { project: config.neon.projectId, branch: config.neon.branchId, database: config.neon.database, role: config.neon.runtimeRole, sessionRole: config.neon.runtimeRole },
+    role: structuredClone(receipt.final.runtime), ownsPublicObjects: 0, publicCreate: false,
+    privateProvisioningDenied: ["novalure_schema_migrations", "novalure_migration_execution_receipts", "crm_service_principals", "provider_connections", "company_profiles"],
+    missingContextDeniedKnowledge: ["knowledge_sources", "knowledge_areas", "knowledge_workflow_events", "knowledge_website_monitoring"] };
+  updateSourceProof(receipt);
+  bundle.cloneAttestation = { receipt, sha256: config.neonCloneAttestation.sha256 };
+  return bundle;
+}
+
+test("original branch accepts only its explicit separately hashed catalog measurement", () => {
+  const config = target(), bundle = ownerBundle(config);
+  const catalog = structuredClone(bundle.receipt.final.runtimeCatalogVisibility);
+  delete bundle.receipt.final.runtimeCatalogVisibility;
+  config.neonRuntimeCatalogReceipt = { path: "qa/package4-hosted-2026-10-20/neon-runtime-catalog-visibility.json", sha256: "a".repeat(64) };
+  bundle.catalogReceipt = { sha256: config.neonRuntimeCatalogReceipt.sha256,
+    receipt: { format: "package4-neon-runtime-catalog-visibility-v1", status: "PASS", target: { ...config.neon }, runtimeCatalogVisibility: catalog } };
+  assert.deepEqual(assertHostedOwnerMigrationReceipt(bundle, validateHostedTarget(config)).catalog, catalog);
+  const altered = structuredClone(bundle); altered.catalogReceipt.receipt.target.branchId = "br-foreign";
+  assert.throws(() => assertHostedOwnerMigrationReceipt(altered, config), /HOSTED_OWNER_MIGRATION_TARGET_MISMATCH/);
+  const noSeparateBinding = structuredClone(config); delete noSeparateBinding.neonRuntimeCatalogReceipt;
+  assert.throws(() => assertHostedOwnerMigrationReceipt(bundle, noSeparateBinding), /HOSTED_UNEXPECTED_CATALOG/);
+  const relabeled = structuredClone(config); relabeled.neon.branchId = "br-sweet-surf-ba6iahut";
+  assert.throws(() => assertHostedOwnerMigrationReceipt(bundle, relabeled), /HOSTED_OWNER_MIGRATION_TARGET_MISMATCH/);
+});
+
+test("provider clone needs immutable bootstrap, exact COW provenance and fresh native proofs", () => {
+  const config = target(), bundle = cloneBundle(config), valid = diagnostics(config);
+  const result = assertHostedRuntimeBinding(valid, validateHostedTarget(config), bundle);
+  assert.equal(result.administrativeLedger.source, config.neonCloneAttestation.path);
+  assert.equal(result.administrativeLedger.cloneProvenance.bootstrapReceiptSha256, config.neonMigrationReceipt.sha256);
+  assert.notEqual(bundle.cloneAttestation.receipt.appSourceRevision, config.sourceSha);
+  for (const mutate of [
+    value => { delete value.cloneAttestation; },
+    value => { value.cloneAttestation.sha256 = "0".repeat(64); },
+    value => { value.cloneAttestation.receipt.status = "FAIL"; },
+    value => { value.cloneAttestation.receipt.bootstrapReceipt.sha256 = "0".repeat(64); },
+    value => { value.cloneAttestation.receipt.bootstrapReceipt.target.branchId = config.neon.branchId; },
+    value => { value.cloneAttestation.receipt.provenance.checkpointParentId = "br-foreign"; },
+    value => { value.cloneAttestation.receipt.provenance.cloneParentId = "br-shiny-darkness-baz4524v"; },
+    value => { value.cloneAttestation.receipt.provenance.cloneParentLsn = "0/0000000"; },
+    value => { value.cloneAttestation.receipt.provenance.initialSnapshotBytesSha256 = "0".repeat(64); },
+    value => { value.cloneAttestation.receipt.identity.branch = "br-shiny-darkness-baz4524v"; },
+    value => { value.cloneAttestation.receipt.identity.sessionRole = "cloud_admin"; },
+    value => { value.cloneAttestation.receipt.final.runtime.rolbypassrls = true; },
+    value => { value.cloneAttestation.receipt.final.actualRuntimeConnectionVerified = false; },
+    value => { value.cloneAttestation.receipt.sourceMigrationChecksums[Object.keys(config.migrationChecksums)[0]] = "0".repeat(64); },
+    value => { value.cloneAttestation.receipt.final.ledger.pop(); updateSourceProof(value.cloneAttestation.receipt); },
+    value => { value.cloneAttestation.receipt.currentSourceProof.ledgerSha256 = "0".repeat(64); },
+    value => { value.cloneAttestation.receipt.currentSourceProof.branchId = "br-foreign"; },
+    value => { value.cloneAttestation.receipt.currentSourceProof.checkedAt = "2000-01-01T00:00:00.000Z"; },
+    value => { value.cloneAttestation.receipt.final.runtimeProof.identity.branch = "br-foreign"; updateSourceProof(value.cloneAttestation.receipt); },
+    value => { value.cloneAttestation.receipt.final.runtimeProof.privateProvisioningDenied.pop(); updateSourceProof(value.cloneAttestation.receipt); },
+    value => { value.cloneAttestation.receipt.final.runtimeProof.publicCreate = true; updateSourceProof(value.cloneAttestation.receipt); },
+    value => { value.cloneAttestation.receipt.final.forcedRlsTables[0].relforcerowsecurity = false; },
+    value => { value.cloneAttestation.receipt.migrationsExecutedOnClone = true; },
+    value => { value.cloneAttestation.receipt.final.runtimeCatalogVisibility.tables[1].runtimeAnyTablePrivilege = true; },
+    value => { value.receipt.target.branchId = config.neon.branchId; },
+  ]) {
+    const altered = structuredClone(bundle); mutate(altered);
+    assert.throws(() => assertHostedRuntimeBinding(valid, config, altered), /HOSTED_/);
+  }
+  const missingCloneBinding = structuredClone(config); delete missingCloneBinding.neonCloneAttestation;
+  assert.throws(() => assertHostedRuntimeBinding(valid, missingCloneBinding, bundle), /HOSTED_/);
+  assert.throws(() => validateHostedTarget({ ...config, neon: { ...config.neon, branchId: "br-arbitrary" } }), /HOSTED_EXACT_CLONE_PROFILE_REQUIRED/);
+});
+
+test("clone loader hashes actual receipt bytes and binds the fresh catalog to candidate schema source", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "package4-hosted-receipt-"));
+  try {
+    const config = target(), bundle = cloneBundle(config), clone = bundle.cloneAttestation.receipt;
+    const schema = "// SYNTHETIC candidate schema source\n";
+    clone.final.runtimeCatalogVisibility.expectedTablesSourceSha256 = createHash("sha256").update(schema).digest("hex");
+    updateSourceProof(clone);
+    const cloneBytes = JSON.stringify(clone);
+    config.neonCloneAttestation.sha256 = createHash("sha256").update(cloneBytes).digest("hex");
+    await mkdir(path.join(root, "qa/package4-hosted-2026-10-20"), { recursive: true });
+    await mkdir(path.join(root, "src/lib/db"), { recursive: true });
+    await writeFile(path.join(root, "src/lib/db/schema.ts"), schema);
+    await writeFile(path.join(root, config.neonMigrationReceipt.path), JSON.stringify(bundle.receipt));
+    await writeFile(path.join(root, config.neonCloneAttestation.path), cloneBytes);
+    const loaded = await loadHostedOwnerMigrationReceipt(validateHostedTarget(config), root);
+    assert.equal(loaded.sha256, config.neonMigrationReceipt.sha256);
+    assert.equal(loaded.cloneAttestation.sha256, config.neonCloneAttestation.sha256);
+    await writeFile(path.join(root, config.neonCloneAttestation.path), cloneBytes + "\n");
+    await assert.rejects(loadHostedOwnerMigrationReceipt(config, root), /HOSTED_CLONE_ATTESTATION_MISMATCH/);
+    await writeFile(path.join(root, config.neonCloneAttestation.path), cloneBytes);
+    await writeFile(path.join(root, "src/lib/db/schema.ts"), schema + "// source changed\n");
+    await assert.rejects(loadHostedOwnerMigrationReceipt(config, root), /HOSTED_OWNER_CATALOG_SOURCE_MISMATCH/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

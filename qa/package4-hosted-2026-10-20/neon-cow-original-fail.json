@@ -1,0 +1,69 @@
+{
+  "format": "package4-neon-database-only-recovery-v1",
+  "scope": "DATABASE_ONLY",
+  "status": "FAIL",
+  "implementationRevision": "5c43577cb78c3843a8835311c646112be50b39bc",
+  "method": "Create-only COW checkpoint, committed change on working branch, recovered branch from checkpoint",
+  "source": {
+    "syntheticOnly": true,
+    "newIsolatedResource": true,
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "host": "ep-steep-shadow-bapfxomh.c-8.eu-central-1.aws.neon.tech",
+    "databaseName": "neondb",
+    "owner": "neondb_owner",
+    "workspaceIds": [
+      "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "d095c301-8f15-43a3-b3dc-5ea9114b51d2",
+      "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+      "71a68b45-1dfb-4893-a694-23d2a6c2ab69"
+    ]
+  },
+  "startedAt": "2026-10-20T05:45:18.737Z",
+  "productionAccess": 0,
+  "sourceWrites": 0,
+  "nativeDumpRestore": false,
+  "existingBranchesOverwritten": 0,
+  "createdBranches": [
+    {
+      "id": "br-flat-block-baycv1oa",
+      "name": "package4-db-recovery-20261020-r1-point",
+      "parentId": "br-shiny-darkness-baz4524v",
+      "parentLsn": "0/2F63518",
+      "expiresAt": "2026-10-21T05:46:21.053Z",
+      "compute": false
+    },
+    {
+      "id": "br-sweet-surf-ba6iahut",
+      "name": "package4-db-recovery-20261020-r1-working",
+      "parentId": "br-flat-block-baycv1oa",
+      "parentLsn": "0/2F63518",
+      "expiresAt": "2026-10-21T05:46:21.053Z",
+      "compute": true
+    }
+  ],
+  "privateFiles": {
+    "status": "NOT TESTED",
+    "prerequisiteStatus": "BLOCKED",
+    "reason": "Private Vercel Blob access returned HTTP 403",
+    "bytesArchived": 0,
+    "bytesRestored": 0,
+    "databaseFileReferencesAreNotFileByteProof": true
+  },
+  "completeDatabaseAndPrivateFileRecovery": "BLOCKED",
+  "limits": {
+    "projectBranchCapacity": 10,
+    "createdBranches": 3,
+    "minCu": 0.25,
+    "maxCu": 0.25,
+    "suspendTimeoutSeconds": 300
+  },
+  "limitations": [
+    "Database-only COW recovery of the new synthetic QA project; no private-file, independent dump or cross-project recovery claim.",
+    "Private-file references and version bindings are included in the database digest, but document existence, bytes and storage access are NOT TESTED.",
+    "Original source and application deployment remain unchanged; recovered branch requires separate endpoint/application binding.",
+    "Elapsed time is measured for this synthetic drill; it is not an agreed or guaranteed production recovery time."
+  ],
+  "elapsedMs": 323711,
+  "failureCode": "DATABASE_CHECKPOINT_COW_COPY_MISMATCH"
+}

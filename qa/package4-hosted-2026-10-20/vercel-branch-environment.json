@@ -1,0 +1,1756 @@
+{
+  "format": "package4-preview-environment-plan-v1",
+  "status": "PASS",
+  "preparedAt": "2026-10-20T06:12:45.525Z",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "target": "preview",
+  "gitBranch": "codex/evelyn-crm-package4-integration",
+  "globalsShadowed": 65,
+  "entries": 170,
+  "staticReviewPlanSha256": "39fb34d8e7cc131864afa0154619994d7f252517e4965e258c21da104a473d4e",
+  "sourceDatabase": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "role": "novalure_app",
+    "database": "neondb"
+  },
+  "sourceStorage": {
+    "storeId": "store_6i5sZDmCf4qX9J86",
+    "access": "private"
+  },
+  "freshQaSecrets": [
+    "DATABASE_URL",
+    "NOVALURE_ABUSE_SECRET",
+    "NOVALURE_AUTH_ENCRYPTION_KEY",
+    "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+    "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+    "NOVALURE_SESSION_SECRET",
+    "OAUTH_STATE_SECRET",
+    "OAUTH_TOKEN_ENCRYPTION_KEY"
+  ],
+  "metadata": [
+    {
+      "key": "AI_GATEWAY_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "It207FU3wv7hsi04"
+    },
+    {
+      "key": "BLOB_PRIVATE_READ_WRITE_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "gl8fkfUP49BzmAaE"
+    },
+    {
+      "key": "BLOB_READ_WRITE_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "3uj9jHwN64qzPBCO"
+    },
+    {
+      "key": "CRM_EVELYN_QA_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "gkScSOPfAhT1yCjM"
+    },
+    {
+      "key": "CRM_EVELYN_QA_TENANT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "GpWIY0HD7eSkR0C8"
+    },
+    {
+      "key": "CRM_EVELYN_QA_WORKSPACE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "MZXVPPrAvhVj0lgL"
+    },
+    {
+      "key": "CRM_LOCAL_TEST_DATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "SxmbuEY09kHyKqYV"
+    },
+    {
+      "key": "CRM_MACHINE_AUTH_ENABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "fPckANtGwetDweEC"
+    },
+    {
+      "key": "CRM_PUBLIC_FORM_LOOKUP_DATABASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "g51yqoKN72vnFeLU"
+    },
+    {
+      "key": "CRM_SYNTHETIC_APPROVAL_TESTS",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "Tm0hsw7CHNI5Dg9b"
+    },
+    {
+      "key": "CRON_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "SI0ZqeHhlmYT2swe"
+    },
+    {
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "tvWUkgdjFpnIDwwZ"
+    },
+    {
+      "key": "G27_QA_DATABASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "3zQvoR9z5Es4r7UP"
+    },
+    {
+      "key": "G27_QA_DATABASE_URL_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "ESGIZuKFnM1wR9Aj"
+    },
+    {
+      "key": "G27_QA_NEON_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "aeXORbccfZB0yRVl"
+    },
+    {
+      "key": "G27_QA_PGDATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "OLLv2ZKqAusY07v5"
+    },
+    {
+      "key": "G27_QA_PGHOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "J9J1Te0QgOBllacs"
+    },
+    {
+      "key": "G27_QA_PGHOST_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "bf4aalZmXYWckSPm"
+    },
+    {
+      "key": "G27_QA_PGPASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "0DE8a6pQeA7l7RI6"
+    },
+    {
+      "key": "G27_QA_PGUSER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "bg59JQu6q7hS8VVc"
+    },
+    {
+      "key": "G27_QA_POSTGRES_DATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "ElmQJVzE00zxtxJB"
+    },
+    {
+      "key": "G27_QA_POSTGRES_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "VA7pYgCSmtZpk1lQ"
+    },
+    {
+      "key": "G27_QA_POSTGRES_PASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "y6LwESQzosaFGvRQ"
+    },
+    {
+      "key": "G27_QA_POSTGRES_PRISMA_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "MrW0M5H0JMsQCbpf"
+    },
+    {
+      "key": "G27_QA_POSTGRES_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "qfc0wHbbzqaeQAdd"
+    },
+    {
+      "key": "G27_QA_POSTGRES_URL_NO_SSL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "tYKPeVuT9mMKwywI"
+    },
+    {
+      "key": "G27_QA_POSTGRES_URL_NON_POOLING",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "BJ0EgnqepvHfCPoB"
+    },
+    {
+      "key": "G27_QA_POSTGRES_USER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "0hSrHfy3nq11kJVW"
+    },
+    {
+      "key": "GOOGLE_CLIENT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "MtymY9sLXv1M2MEQ"
+    },
+    {
+      "key": "GOOGLE_CLIENT_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "xLafoXB7xawMEbq1"
+    },
+    {
+      "key": "META_APP_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "FxLbtnWpe3zTpE84"
+    },
+    {
+      "key": "META_FACEBOOK_PAGE_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "LSXQs5lSYLaB6iVs"
+    },
+    {
+      "key": "META_FACEBOOK_PAGE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "SrMIsybEHtfTmSIM"
+    },
+    {
+      "key": "META_INSTAGRAM_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "TywvQA2M26KVoGm9"
+    },
+    {
+      "key": "META_INSTAGRAM_ACCOUNT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "rt1AqHwtn1B1FOsn"
+    },
+    {
+      "key": "META_INSTAGRAM_PAGE_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "04LQEIxvJU28nU4a"
+    },
+    {
+      "key": "META_INSTAGRAM_PAGE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "1o8RbnbM26HxxWJm"
+    },
+    {
+      "key": "META_MESSENGER_PAGE_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "eaBE7kKFAfAaq3aZ"
+    },
+    {
+      "key": "META_MESSENGER_PAGE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "VVMitDQEXcOhADTq"
+    },
+    {
+      "key": "META_PAGE_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "1Qo0cz16erMOi27X"
+    },
+    {
+      "key": "META_WHATSAPP_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "1IMxqykgW3hTNGFa"
+    },
+    {
+      "key": "META_WHATSAPP_PHONE_NUMBER_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "7T09wDLTIf3nM0pZ"
+    },
+    {
+      "key": "MICROSOFT_CALENDAR_USER_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "Fin6bejVlWjQL9wz"
+    },
+    {
+      "key": "MICROSOFT_CLIENT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "uVEv3JWCqtw5tyGX"
+    },
+    {
+      "key": "MICROSOFT_CLIENT_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "0luA79luJYvWY3BL"
+    },
+    {
+      "key": "MICROSOFT_GRAPH_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "6H1DTc3GzMrWMHo0"
+    },
+    {
+      "key": "MICROSOFT_GRAPH_USER_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "2KCqcIwJYuM7zZ0R"
+    },
+    {
+      "key": "MICROSOFT_TENANT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "LXsIUBdJRowOGzJ0"
+    },
+    {
+      "key": "NEXT_PUBLIC_APP_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "sNTXCWY09b9lxM5X"
+    },
+    {
+      "key": "NOVALURE_ABUSE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "Z0Wam2J293TuHVBi"
+    },
+    {
+      "key": "NOVALURE_ALLOW_UNAUTHENTICATED_CRON_LOCAL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "O55JcdddG8AJuVDC"
+    },
+    {
+      "key": "NOVALURE_APP_ORIGIN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "q0CFdxS5zGneHrGc"
+    },
+    {
+      "key": "NOVALURE_AUTH_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "7Mjj7jBBmWRUN91Q"
+    },
+    {
+      "key": "NOVALURE_AUTH_RATE_LIMIT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "wIKWtikSkb9cgRRS"
+    },
+    {
+      "key": "NOVALURE_AUTH_STRICT",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "DWGRw86Z4sbvmOSs"
+    },
+    {
+      "key": "NOVALURE_BOT_ALLOW_UNSIGNED_WEBHOOKS",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "R8Sv0rst4cUj567M"
+    },
+    {
+      "key": "NOVALURE_BOT_DEFAULT_MEETING_SLUG",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "ubkyjbXIi20EsAOQ"
+    },
+    {
+      "key": "NOVALURE_BOT_DISABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "XJhSSnxUeaPwWK52"
+    },
+    {
+      "key": "NOVALURE_BOT_DRY_RUN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "ASJdPhccnY9UJfQs"
+    },
+    {
+      "key": "NOVALURE_BOT_KILL_SWITCH",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "FaDR1D5xJNDEqKY3"
+    },
+    {
+      "key": "NOVALURE_BOT_NOT_AUS",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "VsE7CV04XxKN5Wm8"
+    },
+    {
+      "key": "NOVALURE_BOT_REQUIRE_HUMAN_APPROVAL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "HVod3yrMhAHwrOeG"
+    },
+    {
+      "key": "NOVALURE_BOT_STRICT_KNOWLEDGE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "7Skm0sFLUe6P4AYO"
+    },
+    {
+      "key": "NOVALURE_BOT_TEST_MODE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "G6ltGTYZUjj5dRni"
+    },
+    {
+      "key": "NOVALURE_BOT_WEBHOOK_DISABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "Xh0qfCbqh2HHYnhP"
+    },
+    {
+      "key": "NOVALURE_BOT_WEBHOOK_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "0wC4MxImmG2SoOvD"
+    },
+    {
+      "key": "NOVALURE_BOT_WEBHOOK_VERIFY_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "LPc8Oke7Ny432oex"
+    },
+    {
+      "key": "NOVALURE_DEMO_AUTH_ENABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "bDn0uPPK8QQnNVig"
+    },
+    {
+      "key": "NOVALURE_DEMO_USER_EMAIL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "XmVjUyxSV6JKcR5P"
+    },
+    {
+      "key": "NOVALURE_DEMO_USER_NAME",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "SAHVTP3c8vxrsX2Q"
+    },
+    {
+      "key": "NOVALURE_DEMO_USER_ROLE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "sEVaGMbNUUQTQI7X"
+    },
+    {
+      "key": "NOVALURE_EMAIL_FROM",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "YmLV5ymclkhLWoV9"
+    },
+    {
+      "key": "NOVALURE_EMBEDDING_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "2raCUNAbFiBgLsgB"
+    },
+    {
+      "key": "NOVALURE_EMBEDDING_BASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "sEPvYQIHE1dEI2Kb"
+    },
+    {
+      "key": "NOVALURE_FORM_REDIRECT_ALLOWLIST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "q8Np2vjAKR9YjZYV"
+    },
+    {
+      "key": "NOVALURE_LLM_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "0UjrREz48fdOUP7n"
+    },
+    {
+      "key": "NOVALURE_LLM_BASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "lrLUmkTwiWXZQr3e"
+    },
+    {
+      "key": "NOVALURE_MEDIA_ROOT",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "kYK07I1rXIbIwRtA"
+    },
+    {
+      "key": "NOVALURE_MEETING_PAGE_SLUG",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "ZYimtIDaWyGfw3Hq"
+    },
+    {
+      "key": "NOVALURE_NOTIFICATION_TEST_SINK_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "gJ2ViClgPg2LUPRa"
+    },
+    {
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_READ_WRITE_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "B8EPqC8BAZazT5v3"
+    },
+    {
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "YjPD3a0ymFkwlxFg"
+    },
+    {
+      "key": "NOVALURE_PREVIEW_PUBLIC_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "cdhJ5tVT3qvpttrV"
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "DY8O4RuUsrMLPLtc"
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "7EMVcZCF67LeGOPo"
+    },
+    {
+      "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "uVJPNHnXVbSfsjc3"
+    },
+    {
+      "key": "NOVALURE_PRODUCTION_DATABASE_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "BATfb1oiytKDGtEx"
+    },
+    {
+      "key": "NOVALURE_PUBLIC_BLOB_READ_WRITE_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "47ReWXVrmi4drrsH"
+    },
+    {
+      "key": "NOVALURE_PUBLIC_SUBMISSION_QA_MODE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "KnAgRPn7ihhAEb6f"
+    },
+    {
+      "key": "NOVALURE_QA_BRANCH_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "hvT7Dg8yryZMsXxB"
+    },
+    {
+      "key": "NOVALURE_QA_DATABASE_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "Of1AUpucpv2bTRFE"
+    },
+    {
+      "key": "NOVALURE_QA_DATABASE_NAME",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "9d2MCl4AktRpHfB5"
+    },
+    {
+      "key": "NOVALURE_QA_DATABASE_ROLE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "kp4wdbwYP0KyKTSL"
+    },
+    {
+      "key": "NOVALURE_QA_DATABASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "5rHvNHNyhJNumUJT"
+    },
+    {
+      "key": "NOVALURE_QA_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "WvYxvvS3gJjC5KHU"
+    },
+    {
+      "key": "NOVALURE_QA_WORKSPACE_IDS",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "UWIbwn1ev1h7JkP7"
+    },
+    {
+      "key": "NOVALURE_SESSION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "CTgH4GvDDMCyAsSS"
+    },
+    {
+      "key": "NOVALURE_STUDIO_INGESTION_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "idJaxXkBx4w9SZY0"
+    },
+    {
+      "key": "NOVALURE_STUDIO_SYNTHETIC_TEST_EMAIL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "wopVwLntlTeG0fFY"
+    },
+    {
+      "key": "NOVALURE_TRUST_AUTH_HEADERS",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "JECSUzoysxHiXbl0"
+    },
+    {
+      "key": "NOVALURE_TRUSTED_CLIENT_IP_HEADER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "1itwsXgN7J1PQwx5"
+    },
+    {
+      "key": "NOVALURE_WORKERS_PAUSED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "KjbDpCzL6c5NBtzl"
+    },
+    {
+      "key": "NOVALURE_WORKSPACE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "KhDDgG52wYerGXW0"
+    },
+    {
+      "key": "OAUTH_STATE_SECRET",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "v1KQEB7bFYdj4Qnu"
+    },
+    {
+      "key": "OAUTH_TOKEN_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "newQaSecret",
+      "id": "gvlpR3n5lBKpP8Fx"
+    },
+    {
+      "key": "OPENAI_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "DqvsHT1brTPy9cMs"
+    },
+    {
+      "key": "OPENAI_BASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "ThQPAQOc2SsNt9is"
+    },
+    {
+      "key": "POSTGRES_DATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "r0cTtAW4YHIYArQj"
+    },
+    {
+      "key": "POSTGRES_DATABASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "aCqKVmcsr82INmHh"
+    },
+    {
+      "key": "POSTGRES_DATABASE_URL_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "T7Ahox5AIRWm9CkS"
+    },
+    {
+      "key": "POSTGRES_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "b2BIWLEO2qK20yFo"
+    },
+    {
+      "key": "POSTGRES_NEON_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "5OJekykAdPZwtHg9"
+    },
+    {
+      "key": "POSTGRES_PASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "Oo65oLdIcQSCxFsv"
+    },
+    {
+      "key": "POSTGRES_PGDATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "sIEnXKoUkImqRhYI"
+    },
+    {
+      "key": "POSTGRES_PGHOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "WFsI4xwQ9HOHWhAQ"
+    },
+    {
+      "key": "POSTGRES_PGHOST_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "IxTqhERZZEtXZe7w"
+    },
+    {
+      "key": "POSTGRES_PGPASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "3BiEh4FyIw85GdQ9"
+    },
+    {
+      "key": "POSTGRES_PGUSER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "T8QMzxnwOgZXXZ5P"
+    },
+    {
+      "key": "POSTGRES_PRISMA_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "e4ZdPDPIwABOi0di"
+    },
+    {
+      "key": "POSTGRES_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "s1j7pebqYCj2OTHP"
+    },
+    {
+      "key": "POSTGRES_URL_NO_SSL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "FxnWUcLX9cTvrRMf"
+    },
+    {
+      "key": "POSTGRES_URL_NON_POOLING",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "V3b3OKvZZXJMKJ1i"
+    },
+    {
+      "key": "POSTGRES_USER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "z0Pcrj5Tf2XAP3de"
+    },
+    {
+      "key": "QA_TENANT_DATABASE_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "6rvtCX583RJmYPU8"
+    },
+    {
+      "key": "QA_TENANT_DATABASE_URL_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "J51JnR4IZKWzN5QP"
+    },
+    {
+      "key": "QA_TENANT_NEON_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "iyLzHiIVxSu4opXU"
+    },
+    {
+      "key": "QA_TENANT_PGDATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "sw9pddTL7Dt5fDAi"
+    },
+    {
+      "key": "QA_TENANT_PGHOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "riNAB0ZKJu2s4Iul"
+    },
+    {
+      "key": "QA_TENANT_PGHOST_UNPOOLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "pBe7Sj5HuwLJLtgA"
+    },
+    {
+      "key": "QA_TENANT_PGPASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "I9EaYJXyvS3g7sr6"
+    },
+    {
+      "key": "QA_TENANT_PGUSER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "zIWeOZD3D0HZTe1u"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_DATABASE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "XwgxjwD75hYsZM04"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "kq8aEXDcaA4ibJVD"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_PASSWORD",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "CFyXFGgcH60ekFlW"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_PRISMA_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "aBVJ4orIAaAUyObM"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_URL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "uhDmdVTq0ID9wuNB"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_URL_NO_SSL",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "68CXsaV18ax7Qyow"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_URL_NON_POOLING",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "dsJO03tgZy7D7mMV"
+    },
+    {
+      "key": "QA_TENANT_POSTGRES_USER",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "H1TotiUkee6WkoYR"
+    },
+    {
+      "key": "RESEND_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "Is7yD2PzvMjZnOzr"
+    },
+    {
+      "key": "RESEND_FORM",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "YeONnYnNCqoajRdm"
+    },
+    {
+      "key": "RESEND_FROM",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "vViwwuWOfQuPlUBz"
+    },
+    {
+      "key": "STUDIO_BOOKING_CONFIG_APPROVAL_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "wdwoJzJu88BnLoVP"
+    },
+    {
+      "key": "STUDIO_BOOKING_POLICY_JSON",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "nLt0gu3AHBtzEOih"
+    },
+    {
+      "key": "STUDIO_BOOKING_QA_CRM_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "oOcJrNsyKVgcLdIo"
+    },
+    {
+      "key": "STUDIO_BOOKING_QA_RECIPIENTS_JSON",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "oo6C0GjlXR0WdqJx"
+    },
+    {
+      "key": "STUDIO_BOOKING_REAL_MODE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "QpLEm1zGDCUYUeK0"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_QA_APPROVAL_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "6Qdal4Itv8fi4CX5"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_QA_CRM_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "huybynfgaeJKD1sx"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_QA_EMAILS_JSON",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "05e1RfQ0j7uOQm3o"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_QA_ENABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "NF5sRI2pxXvoL6rt"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_QA_PHONES_JSON",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "73vb2bWcbJztHUsz"
+    },
+    {
+      "key": "STUDIO_ENQUIRY_SIGNING_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "q4H3vObXQ7UAIMwq"
+    },
+    {
+      "key": "STUDIO_PUBLIC_CANARY_SECRET",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "aL3onm9bLiLKSkGz"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_APPROVAL_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "RbJ7626lXrUXGX9I"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "jNU0qiR1ybT4lbu5"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_CRM_ORIGIN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "LWJTyd8HMZYcuvET"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_CRM_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "whDnIeI6pHqpjp2m"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_HOST",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "Jd8sQGF4mNp4Y9kt"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_NAME",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "dtBg9F9AjCQum7A1"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_DATABASE_ROLE",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "tiCpPjlYDDaZ9JhB"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_ENABLED",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "fixedQaConfiguration",
+      "id": "yCuV3ElHluPX4234"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_NEON_BRANCH_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "5q7yVHqh9O6FTfkt"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_NEON_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "7LhzrtiNM3pxAy1d"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_RELEASE_SHA",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "Dv7grY0quy9r82sl"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_STUDIO_ORIGIN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "86reGiiQkzWwVteT"
+    },
+    {
+      "key": "STUDIO_PUBLIC_ENQUIRY_STUDIO_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "2iYPNsQIqAJonoV8"
+    },
+    {
+      "key": "VERCEL_AI_GATEWAY_API_KEY",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "JfJEYBxzJhJsWbyA"
+    },
+    {
+      "key": "WHATSAPP_ACCESS_TOKEN",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "r4KsOLbcIDi0Ctch"
+    },
+    {
+      "key": "WHATSAPP_PHONE_NUMBER_ID",
+      "type": "plain",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/evelyn-crm-package4-integration",
+      "policy": "explicitEmpty",
+      "id": "MimowSBMPPlpDdnF"
+    }
+  ],
+  "existingScopeMutations": 0,
+  "productionMutationAuthorized": false,
+  "secretValuesEmitted": false,
+  "appliedAt": "2026-10-20T06:15:51.616Z",
+  "transport": "native authenticated API POST with explicit application/json; prior CLI api JSON-array400 preserved",
+  "priorAttempt": {
+    "status": "FAIL",
+    "code": "INVALID_JSON",
+    "httpStatus": 400,
+    "branchEntriesAfter": 0
+  },
+  "readback": {
+    "actualBranchEntries": 170,
+    "allExactBranchAndPreview": true,
+    "allNewIds": true,
+    "existingMetadataUnchanged": true,
+    "previousEntries": 234,
+    "finalEntries": 404,
+    "productionEntriesUnchanged": 74,
+    "globalPreviewEntriesUnchanged": 65
+  },
+  "remoteApplicationAndStorageProof": "NOT TESTED"
+}

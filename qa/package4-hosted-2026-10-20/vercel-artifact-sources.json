@@ -1,0 +1,50 @@
+{
+  "createdAtUtc": "2026-10-20T06:14:35.514243+00:00",
+  "scope": "Sanitized public QA metadata and synthetic storage evidence only",
+  "secretValuesEmitted": false,
+  "privateCredentialPathsIncluded": false,
+  "files": [
+    {
+      "file": "storage-provisioning.json",
+      "sourceFileName": "package4-storage-provisioning.json",
+      "sourceSha256": "66f3dd9a44ddd0d855f12c7659b745d52ee5f930a15088c9c339117640f00bde",
+      "publishedSha256": "9ab00405bd3cb5667442c6abba090982415179bff6d7edf99b5a4fbd43daa7f2",
+      "bytes": 9631
+    },
+    {
+      "file": "storage-transport.json",
+      "sourceFileName": "package4-storage-transport-evidence.json",
+      "sourceSha256": "25d892f9cddb1c56f15957de3534f7be4d778019e167c12a57be3d4d14f6ad0b",
+      "publishedSha256": "82cc4ba630af5acef0b1b9a9f8fa45b71f57b7b10efb9a367a5d06c7a714a0aa",
+      "bytes": 5438
+    },
+    {
+      "file": "vercel-preview-env-metadata.json",
+      "sourceFileName": "package4-native-preview-env-metadata.json",
+      "sourceSha256": "6f9598d83792c237b1366d4cb7cab7620b4c0d072122f8964708e56d99833db5",
+      "publishedSha256": "d8eaf19266085362fd6a6e88174f4d9db3a568f6f37c07c3b7fb5a2aece2de57",
+      "bytes": 34888
+    },
+    {
+      "file": "vercel-all-env-before-metadata.json",
+      "sourceFileName": "package4-native-all-env-before-metadata.json",
+      "sourceSha256": "06019c8dffeee3cb8ad58817f7cc519676c6d3397e83bd90e0bdf34f8926c2c9",
+      "publishedSha256": "e90828e8ae827473b7792d1972daf3b82ff316d6aeaafbf4b958ee2b60b13b49",
+      "bytes": 61648
+    },
+    {
+      "file": "vercel-all-env-after-metadata.json",
+      "sourceFileName": "package4-native-all-env-after-metadata.json",
+      "sourceSha256": "3e05fdd84287c1f94f7dd1a7ffe3fcab29b679aee4b219ee203bcbf4bbb48938",
+      "publishedSha256": "22fef5e1ff5f9024fd1fa21842947115d52c4393efd47d26bee44787235aa779",
+      "bytes": 62431
+    },
+    {
+      "file": "production-storage-metadata.json",
+      "sourceFileName": "package4-production-storage-metadata.json",
+      "sourceSha256": "dd73bb46887f2706c566caaafb8df45eb7e4501b951209cfa648c5bec56bbc22",
+      "publishedSha256": "ccbbd8ddefe8eb02f3e430f3040241a62d2047d75a42e594a11bd2165efefbf2",
+      "bytes": 19815
+    }
+  ]
+}

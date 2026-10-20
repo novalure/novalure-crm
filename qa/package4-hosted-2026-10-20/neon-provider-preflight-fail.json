@@ -1,0 +1,29 @@
+{
+  "format": "package4-provider-preflight-incident-v1",
+  "status": "FAIL",
+  "implementationRevision": "94da37968f7785d7c0d64c7a90f51103e1625f67",
+  "phase": "Runtime attribute assertion before helper and all branch creation",
+  "failure": "Runner incorrectly expected QA novalure_app.rolinherit=false; actual and both original byte-pinned snapshots are true",
+  "observedQaRole": {
+    "role": "novalure_app",
+    "rolinherit": true,
+    "rolsuper": false,
+    "rolbypassrls": false,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolreplication": false,
+    "createPublic": false
+  },
+  "originalBootstrapSource": "scripts/package4-neon-bootstrap.mjs:196 creates LOGIN INHERIT",
+  "roleOrAclChanges": 0,
+  "branchesCreated": 0,
+  "sourceSqlWrites": 0,
+  "originalRootTouched": false,
+  "rawLogSha256": "cff9d2087e76add8d2779dadf8591b23e0b0b50b8524defb46c2a05c752721af",
+  "resolution": "Correct only the exact QA source expectation to its recorded original value; no ALTER ROLE. Production NOINHERIT differs and is not represented as parity. A separate committed attempt uses separate artifacts.",
+  "computeAfterFailure": {
+    "endpointId": "ep-crimson-forest-ba4kk6sb",
+    "disabled": true,
+    "currentState": "idle"
+  }
+}

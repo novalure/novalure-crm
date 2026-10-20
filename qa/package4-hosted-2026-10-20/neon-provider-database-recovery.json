@@ -1,0 +1,181 @@
+{
+  "format": "package4-provider-baseline-database-recovery-v1",
+  "profile": "existing-provider-nine-defaults-v1",
+  "scope": "DATABASE_ONLY",
+  "status": "PASS",
+  "implementationRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+  "source": {
+    "syntheticOnly": true,
+    "newIsolatedResource": true,
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "host": "ep-crimson-forest-ba4kk6sb.c-8.eu-central-1.aws.neon.tech",
+    "databaseName": "neondb",
+    "owner": "neondb_owner",
+    "workspaceIds": [
+      "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "d095c301-8f15-43a3-b3dc-5ea9114b51d2",
+      "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+      "71a68b45-1dfb-4893-a694-23d2a6c2ab69"
+    ]
+  },
+  "originalStrictRootRecovery": {
+    "status": "FAIL",
+    "sourceBranchId": "br-shiny-darkness-baz4524v",
+    "failureCode": "DATABASE_CHECKPOINT_COW_COPY_MISMATCH",
+    "bytesSha256": "3cb471e3bf286b95efccf0245c31d66fd598e33c4cc99356911b593872041eab"
+  },
+  "initialSnapshot": {
+    "bytesSha256": "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7",
+    "stateSha256": "57b982522f79b536b383b589de059c8a301ed1d282c3443dbc493319e5fc5550",
+    "providerDefaultGrantRows": 9
+  },
+  "method": "Separate unchanged provider baseline, create-only checkpoint, committed working change, new recovered branch",
+  "startedAt": "2026-10-20T06:06:27.140Z",
+  "productionAccess": 0,
+  "sourceWrites": 0,
+  "sourceMetadataChangesWithinHelper": 0,
+  "grantChanges": 0,
+  "categoriesIgnored": 0,
+  "nativeDumpRestore": false,
+  "existingBranchesOverwritten": 0,
+  "createdBranches": [
+    {
+      "id": "br-icy-boat-baaov5es",
+      "name": "package4-db-recovery-20261020-provider-r2-point",
+      "parentId": "br-sweet-surf-ba6iahut",
+      "parentLsn": "0/2FFE638",
+      "noCompute": true,
+      "expiresAt": null,
+      "cleanup": "Manual review required; no automatic deletion"
+    },
+    {
+      "id": "br-mute-salad-babco1q7",
+      "name": "package4-db-recovery-20261020-provider-r2-working",
+      "parentId": "br-icy-boat-baaov5es",
+      "parentLsn": "0/2FFE638",
+      "noCompute": false,
+      "expiresAt": "2026-10-21T06:07:38.744Z"
+    },
+    {
+      "id": "br-dark-block-bakix0lx",
+      "name": "package4-db-recovery-20261020-provider-r2-restored",
+      "parentId": "br-icy-boat-baaov5es",
+      "parentLsn": "0/2FFE638",
+      "noCompute": false,
+      "expiresAt": "2026-10-21T06:07:38.744Z"
+    }
+  ],
+  "limits": {
+    "maximumTotalBranches": 6,
+    "projectBranchCapacity": 10,
+    "createdBranches": 3,
+    "minCu": 0.25,
+    "maxCu": 0.25,
+    "providerSuspendTimeoutConfigurable": false,
+    "observedSuspendTimeoutSeconds": null
+  },
+  "privateFiles": {
+    "status": "NOT TESTED",
+    "prerequisiteStatus": "BLOCKED",
+    "reason": "Private Vercel Blob access returned HTTP403; no private bytes archived or restored"
+  },
+  "completeDatabaseAndPrivateFileRecovery": "BLOCKED",
+  "limitations": [
+    "The original zero-default-grant root-source recovery stays FAIL. This is a distinct, explicitly authorized existing provider baseline, not parity with that root.",
+    "All catalog/ledger/data categories, all nine provider grants and database metadata are compared exactly. No ACL alteration, excluded category or normalization repairs a mismatch.",
+    "Same-project COW database-only proof. No native archive, cross-project recovery, private-file recovery or hosted login/MFA claim.",
+    "Source and checkpoint must have no TTL to allow children. The new checkpoint has no compute or TTL and needs manual cleanup review.",
+    "The caller separately removes the existing source branch expiration and temporarily re-enables its own compute before this helper. These provider metadata prerequisites are recorded separately; no source SQL state is changed.",
+    "Leaf branches expire after24h. The provider controls suspension; the caller must deactivate created computes and verify actual endpoint state after the proof."
+  ],
+  "provenance": {
+    "sourceBranchId": "br-sweet-surf-ba6iahut",
+    "parentBranchId": "br-flat-block-baycv1oa",
+    "originalRootBranchId": "br-shiny-darkness-baz4524v",
+    "parentLsn": "0/2F63518",
+    "parentParentLsn": "0/2F63518",
+    "sourceExpiry": null
+  },
+  "sourceApplication": {
+    "status": "PASS",
+    "databaseRole": "novalure_app",
+    "superuser": false,
+    "bypassRls": false,
+    "ownsPublicObjects": 0,
+    "checks": [
+      {
+        "name": "pre-checkpoint synthetic task restored through actual application scoped read",
+        "status": "PASS"
+      },
+      {
+        "name": "application tenant-scoped project reads remain isolated after recovery",
+        "status": "PASS"
+      },
+      {
+        "name": "actual Knowledge repository loads the restored active synthetic contract",
+        "status": "PASS"
+      },
+      {
+        "name": "migration106 operational application readers remain compatible",
+        "status": "PASS"
+      }
+    ],
+    "scope": "real application data layer through ordinary runtime; hosted login/MFA and files are not claimed"
+  },
+  "workingChange": {
+    "branchId": "br-mute-salad-babco1q7",
+    "committedRows": 1,
+    "combinedSha256": "13ef75eb612fbdbcb3d9412276a22899999ebe9a6b22f0d3652e44b29b3d194d"
+  },
+  "application": {
+    "status": "PASS",
+    "databaseRole": "novalure_app",
+    "superuser": false,
+    "bypassRls": false,
+    "ownsPublicObjects": 0,
+    "checks": [
+      {
+        "name": "pre-checkpoint synthetic task restored through actual application scoped read",
+        "status": "PASS"
+      },
+      {
+        "name": "application tenant-scoped project reads remain isolated after recovery",
+        "status": "PASS"
+      },
+      {
+        "name": "actual Knowledge repository loads the restored active synthetic contract",
+        "status": "PASS"
+      },
+      {
+        "name": "migration106 operational application readers remain compatible",
+        "status": "PASS"
+      }
+    ],
+    "scope": "real application data layer through ordinary runtime; hosted login/MFA and files are not claimed"
+  },
+  "recoveryPoint": {
+    "branchId": "br-icy-boat-baaov5es",
+    "parentBranchId": "br-sweet-surf-ba6iahut",
+    "parentLsn": "0/2FFE638",
+    "createdAt": "2026-10-20T06:07:54Z",
+    "combinedSha256": "e73a8c2b45015c3c9a4278bdc93a4a3c7dea054ef543149282409010cfe72677",
+    "catalogLedgerDataSha256": "57b982522f79b536b383b589de059c8a301ed1d282c3443dbc493319e5fc5550",
+    "databaseMetadataSha256": "c44118eae43133c199b6468dc98daddb7adabbc7bbdfa13de2e7d8ff247ac98c"
+  },
+  "restored": {
+    "branchId": "br-dark-block-bakix0lx",
+    "combinedSha256": "e73a8c2b45015c3c9a4278bdc93a4a3c7dea054ef543149282409010cfe72677",
+    "ledgerRows": 60,
+    "dataTables": 167,
+    "dataRows": 168,
+    "vector": {
+      "extname": "vector",
+      "extversion": "0.8.6",
+      "schema": "public"
+    },
+    "providerDefaultGrantRows": 9
+  },
+  "elapsedMs": 279608,
+  "completedAt": "2026-10-20T06:11:06.748Z"
+}

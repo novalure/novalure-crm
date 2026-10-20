@@ -1,0 +1,75 @@
+{
+  "format": "package4-neon-cow-lifecycle-v1",
+  "checkedAt": "2026-10-20T05:57:58.214Z",
+  "projectId": "green-thunder-49879900",
+  "sourceBranchId": "br-shiny-darkness-baz4524v",
+  "originalResult": "FAIL",
+  "originalReceiptRetained": true,
+  "initialProviderFailures": [
+    {
+      "operation": "Create child of expiring checkpoint",
+      "httpStatus": 400,
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Branches with an expiration date cannot have child branches"
+          },
+          {
+            "type": "text",
+            "text": "[HTTP 400] Branches with an expiration date cannot have child branches"
+          }
+        ],
+        "structuredContent": {
+          "error_code": "INVALID_ARGUMENT"
+        },
+        "isError": true
+      },
+      "resolution": "Only the new checkpoint expiration removed; retry did not alter SQL privileges."
+    },
+    {
+      "operation": "Create free-plan child compute with suspend_timeout_seconds=300",
+      "httpStatus": 412,
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "modifying the suspend interval is not permitted on this account"
+          },
+          {
+            "type": "text",
+            "text": "[HTTP 412] modifying the suspend interval is not permitted on this account"
+          }
+        ],
+        "structuredContent": {
+          "error_code": "INVALID_ARGUMENT"
+        },
+        "isError": true
+      },
+      "resolution": "Retry omitted unsupported suspend option; no paid plan or settings change."
+    }
+  ],
+  "observedCheckpoint": {
+    "branchId": "br-flat-block-baycv1oa",
+    "expiresAt": null,
+    "computeCount": 0,
+    "cleanup": "Manual review required; no automatic deletion performed"
+  },
+  "observedWorking": {
+    "branchId": "br-sweet-surf-ba6iahut",
+    "expiresAt": "2026-10-21T05:46:21Z",
+    "endpointId": "ep-crimson-forest-ba4kk6sb",
+    "disabled": true,
+    "currentState": "idle",
+    "suspendedAt": "2026-10-20T05:57:12Z",
+    "minCu": 0.25,
+    "maxCu": 0.25,
+    "suspendTimeoutSeconds": 0
+  },
+  "sourceEndpointModified": false,
+  "automaticComputeSuspensionClaimed": false,
+  "branchDeletionPerformed": false,
+  "projectBranchCount": 3,
+  "projectBranchCapacity": 10,
+  "warning": "Original FAIL receipt contains original attempted TTL/300-second settings. This supplementary actual provider inventory supersedes only those stale planned lifecycle fields; it does not change the FAIL verdict."
+}

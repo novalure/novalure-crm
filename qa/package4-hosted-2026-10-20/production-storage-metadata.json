@@ -1,0 +1,656 @@
+{
+  "observedAtUtc": "2026-10-20T06:13:00.065043+00:00",
+  "status": "PROVIDER_PRODUCTION_PRIVATE_STORE_ASSOCIATION_PROVEN_METADATA_ONLY",
+  "project": {
+    "id": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+    "name": "novalure-crm",
+    "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv"
+  },
+  "safety": {
+    "providerOperations": [
+      "GET"
+    ],
+    "environmentValueInspection": "FORBIDDEN (config/vercel-environment-manifest.json)",
+    "decryptedOldEnvValues": false,
+    "secretValuesEmitted": false,
+    "storageObjectReadsOrWrites": false,
+    "externalMutations": false
+  },
+  "sources": [
+    {
+      "method": "GET",
+      "endpoint": "/v1/storage/stores?teamId=team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "observedAtUtc": "2026-10-20T06:12:59.141456+00:00"
+    },
+    {
+      "method": "GET",
+      "endpoint": "/v10/projects/prj_R32Okl6AHijTohvuKmryuTLjWMsk/env?target=production&decrypt=false&source=vercel-cli%3Aenv%3Als&teamId=team_sjD78IkSicXJK6TAOR1JC7Wv",
+      "observedAtUtc": "2026-10-20T06:12:59.141848+00:00"
+    }
+  ],
+  "productionPrivateStore": {
+    "id": "store_vCn7LiyRocYNC8pM",
+    "name": "NOVALURE_PRIVATE_BLOB",
+    "type": "blob",
+    "region": "iad1",
+    "access": "private",
+    "status": "available",
+    "size": 43307,
+    "count": 4,
+    "totalConnectedProjects": 1,
+    "usageQuotaExceeded": false,
+    "billingState": "active",
+    "connections": [
+      {
+        "id": "spc_kYVPVyeV690yocE2",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "name": "novalure-crm",
+        "environments": [
+          "production"
+        ],
+        "envVarPrefix": "NOVALURE_PRIVATE_BLOB",
+        "environmentVariables": [
+          "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+          "NOVALURE_PRIVATE_BLOB_STORE_ID",
+          "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY"
+        ],
+        "makeEnvVarsSensitive": true,
+        "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+      }
+    ]
+  },
+  "productionBindingMetadata": {
+    "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN": {
+      "id": "BqSjOf4aUOm0KXCS",
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    "NOVALURE_PRIVATE_BLOB_STORE_ID": {
+      "id": "H27k1cWzplwCbGtV",
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY": {
+      "id": "rULTXfj9meOwJUDE",
+      "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    }
+  },
+  "allProductionStorageEnvMetadata": [
+    {
+      "id": "ozhArH0UgnBoOsMM",
+      "key": "STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "UrF1bhGuLPuVqj1T",
+      "key": "BLOB_READ_WRITE_TOKEN",
+      "type": "encrypted",
+      "target": [
+        "production",
+        "development"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "rULTXfj9meOwJUDE",
+      "key": "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "H27k1cWzplwCbGtV",
+      "key": "NOVALURE_PRIVATE_BLOB_STORE_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    },
+    {
+      "id": "BqSjOf4aUOm0KXCS",
+      "key": "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "gitBranch": null,
+      "customEnvironmentIds": null,
+      "configurationId": null
+    }
+  ],
+  "completeStoreInventory": [
+    {
+      "id": "store_QCHn2posJdJcvdUP",
+      "name": "novalure-crm-package4-qa-fixture-20261020",
+      "type": "blob",
+      "region": "fra1",
+      "access": "public",
+      "status": "available",
+      "size": 82,
+      "count": 1,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_bHDSjwzbvJnr6YMP",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "development"
+          ],
+          "envVarPrefix": "PACKAGE4_QA_20261020_FIXTURE",
+          "environmentVariables": [
+            "PACKAGE4_QA_20261020_FIXTURE_READ_WRITE_TOKEN"
+          ],
+          "makeEnvVarsSensitive": null,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_2FsqiotLlmJJ6toi",
+      "name": "novalure-crm-package4-qa-restore-20261020",
+      "type": "blob",
+      "region": "fra1",
+      "access": "private",
+      "status": "available",
+      "size": 0,
+      "count": 0,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_QlmANy1tEq4MmLAO",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "development"
+          ],
+          "envVarPrefix": "PACKAGE4_QA_20261020_RESTORE",
+          "environmentVariables": [
+            "PACKAGE4_QA_20261020_RESTORE_READ_WRITE_TOKEN"
+          ],
+          "makeEnvVarsSensitive": null,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_6i5sZDmCf4qX9J86",
+      "name": "novalure-crm-package4-qa-source-20261020",
+      "type": "blob",
+      "region": "fra1",
+      "access": "private",
+      "status": "available",
+      "size": 0,
+      "count": 0,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_YxFFpiFauvYe0WOW",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "development"
+          ],
+          "envVarPrefix": "PACKAGE4_QA_20261020_SOURCE",
+          "environmentVariables": [
+            "PACKAGE4_QA_20261020_SOURCE_READ_WRITE_TOKEN"
+          ],
+          "makeEnvVarsSensitive": null,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_Ukdy4BKS8nAbiIUA",
+      "name": "novalure-studio-preview",
+      "type": "blob",
+      "region": "fra1",
+      "access": "private",
+      "status": "available",
+      "size": 1723086,
+      "count": 55,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_inphCUS4v0yLNwcm",
+          "projectId": "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp",
+          "name": "novalure-web-design",
+          "environments": [
+            "preview",
+            "production"
+          ],
+          "envVarPrefix": "BLOB",
+          "environmentVariables": [
+            "BLOB_STORE_ID",
+            "BLOB_WEBHOOK_PUBLIC_KEY"
+          ],
+          "makeEnvVarsSensitive": null,
+          "latestDeployment": "dpl_HQEmBY1SRzdQhiYrhSHR1Vohs5Ze"
+        }
+      ]
+    },
+    {
+      "id": "store_eZciElpcD1Xn1XHt",
+      "name": "evelyn-production",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "available",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 0,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": []
+    },
+    {
+      "id": "store_iC0dv0mmYWCDj7ww",
+      "name": "novalure-g27-disposable-qa-20260920",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "available",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_woqZocrcWBmfrkB9",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "preview"
+          ],
+          "envVarPrefix": "G27_QA",
+          "environmentVariables": [
+            "G27_QA_POSTGRES_PASSWORD",
+            "G27_QA_DATABASE_URL_UNPOOLED",
+            "G27_QA_POSTGRES_HOST",
+            "G27_QA_POSTGRES_URL_NON_POOLING",
+            "G27_QA_PGPASSWORD",
+            "G27_QA_DATABASE_URL",
+            "G27_QA_POSTGRES_PRISMA_URL",
+            "G27_QA_PGUSER",
+            "G27_QA_POSTGRES_URL",
+            "G27_QA_POSTGRES_USER",
+            "G27_QA_PGHOST",
+            "G27_QA_NEON_PROJECT_ID",
+            "G27_QA_POSTGRES_DATABASE",
+            "G27_QA_PGHOST_UNPOOLED",
+            "G27_QA_PGDATABASE",
+            "G27_QA_POSTGRES_URL_NO_SSL"
+          ],
+          "makeEnvVarsSensitive": true,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_o5iS48IiSkuYJQ6u",
+      "name": "evelyn-phase-2b-preview",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "available",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 0,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": []
+    },
+    {
+      "id": "store_02EWd3TY6A37G3sV",
+      "name": "novalure-preview-public-0822",
+      "type": "blob",
+      "region": "fra1",
+      "access": "public",
+      "status": "available",
+      "size": 0,
+      "count": 0,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_5mDR9OzsQ4cEMyTs",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "preview"
+          ],
+          "envVarPrefix": "NOVALURE_PREVIEW_PUBLIC_BLOB",
+          "environmentVariables": [
+            "NOVALURE_PREVIEW_PUBLIC_BLOB_READ_WRITE_TOKEN",
+            "NOVALURE_PREVIEW_PUBLIC_BLOB_STORE_ID",
+            "NOVALURE_PREVIEW_PUBLIC_BLOB_WEBHOOK_PUBLIC_KEY"
+          ],
+          "makeEnvVarsSensitive": true,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_s5ER4TRlBGRnZXwf",
+      "name": "novalure-preview-private-0822",
+      "type": "blob",
+      "region": "fra1",
+      "access": "private",
+      "status": "available",
+      "size": 6920458,
+      "count": 25,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_VTP2rhwxvJK4UQyE",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "preview"
+          ],
+          "envVarPrefix": "NOVALURE_PRIVATE_BLOB",
+          "environmentVariables": [
+            "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+            "NOVALURE_PRIVATE_BLOB_STORE_ID",
+            "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY"
+          ],
+          "makeEnvVarsSensitive": true,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_vCn7LiyRocYNC8pM",
+      "name": "NOVALURE_PRIVATE_BLOB",
+      "type": "blob",
+      "region": "iad1",
+      "access": "private",
+      "status": "available",
+      "size": 43307,
+      "count": 4,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_kYVPVyeV690yocE2",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "production"
+          ],
+          "envVarPrefix": "NOVALURE_PRIVATE_BLOB",
+          "environmentVariables": [
+            "NOVALURE_PRIVATE_BLOB_READ_WRITE_TOKEN",
+            "NOVALURE_PRIVATE_BLOB_STORE_ID",
+            "NOVALURE_PRIVATE_BLOB_WEBHOOK_PUBLIC_KEY"
+          ],
+          "makeEnvVarsSensitive": true,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_1sTetGlebqP2lnyG",
+      "name": "novalure-playbook-rate-limit",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "suspended",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_1WNQOxV1giBhEsgI",
+          "projectId": "prj_R8cbT91ofmIc6mt6SPzYniIvsBe6",
+          "name": "novalure-website",
+          "environments": [
+            "production",
+            "preview"
+          ],
+          "envVarPrefix": null,
+          "environmentVariables": [
+            "REDIS_URL",
+            "KV_REST_API_TOKEN",
+            "KV_REST_API_READ_ONLY_TOKEN",
+            "KV_URL",
+            "KV_REST_API_URL"
+          ],
+          "makeEnvVarsSensitive": true,
+          "latestDeployment": "dpl_gC6Lsf7PE1iZdESS6UphBQz3z88x"
+        }
+      ]
+    },
+    {
+      "id": "store_3n3qzgGn0jnR4PSr",
+      "name": "novalure-crm-tenant-isolation-test",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "available",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_sgiLNrJzHAxxOung",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "preview",
+            "development"
+          ],
+          "envVarPrefix": "QA_TENANT",
+          "environmentVariables": [
+            "QA_TENANT_DATABASE_URL_UNPOOLED",
+            "QA_TENANT_POSTGRES_DATABASE",
+            "QA_TENANT_PGHOST_UNPOOLED",
+            "QA_TENANT_PGHOST",
+            "QA_TENANT_POSTGRES_URL_NO_SSL",
+            "QA_TENANT_PGPASSWORD",
+            "QA_TENANT_POSTGRES_USER",
+            "QA_TENANT_PGUSER",
+            "QA_TENANT_DATABASE_URL",
+            "QA_TENANT_POSTGRES_URL_NON_POOLING",
+            "QA_TENANT_POSTGRES_PRISMA_URL",
+            "QA_TENANT_POSTGRES_PASSWORD",
+            "QA_TENANT_NEON_PROJECT_ID",
+            "QA_TENANT_POSTGRES_HOST",
+            "QA_TENANT_POSTGRES_URL",
+            "QA_TENANT_PGDATABASE"
+          ],
+          "makeEnvVarsSensitive": false,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_9pemd06SFUWiEt5i",
+      "name": "novalure-crm-media",
+      "type": "blob",
+      "region": "iad1",
+      "access": "public",
+      "status": "available",
+      "size": 0,
+      "count": 0,
+      "totalConnectedProjects": 0,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": []
+    },
+    {
+      "id": "store_c6K21XYtIdQ6dOEk",
+      "name": "novalure-crm-media",
+      "type": "blob",
+      "region": "iad1",
+      "access": "public",
+      "status": "available",
+      "size": 0,
+      "count": 0,
+      "totalConnectedProjects": 0,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": []
+    },
+    {
+      "id": "store_Uj8OXhGdgb9YDS37",
+      "name": "novalure-crm-media",
+      "type": "blob",
+      "region": "iad1",
+      "access": "public",
+      "status": "available",
+      "size": 362780,
+      "count": 1,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_uEYJkqgQO7ownsmG",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "production",
+            "development"
+          ],
+          "envVarPrefix": "BLOB",
+          "environmentVariables": [
+            "BLOB_READ_WRITE_TOKEN"
+          ],
+          "makeEnvVarsSensitive": false,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    },
+    {
+      "id": "store_PChjYUpVXiyvXwg2",
+      "name": "neon-red-blanket",
+      "type": "integration",
+      "region": null,
+      "access": null,
+      "status": "available",
+      "size": null,
+      "count": null,
+      "totalConnectedProjects": 1,
+      "usageQuotaExceeded": false,
+      "billingState": "active",
+      "connections": [
+        {
+          "id": "spc_BTevBEBUK1Phhb8F",
+          "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+          "name": "novalure-crm",
+          "environments": [
+            "production"
+          ],
+          "envVarPrefix": "POSTGRES",
+          "environmentVariables": [
+            "POSTGRES_NEON_AUTH_BASE_URL",
+            "POSTGRES_PGHOST",
+            "POSTGRES_PGUSER",
+            "POSTGRES_URL_NO_SSL",
+            "POSTGRES_PGHOST_UNPOOLED",
+            "POSTGRES_DATABASE",
+            "POSTGRES_USER",
+            "POSTGRES_VITE_NEON_AUTH_URL",
+            "POSTGRES_HOST",
+            "POSTGRES_DATABASE_URL",
+            "POSTGRES_PGDATABASE",
+            "POSTGRES_NEON_PROJECT_ID",
+            "POSTGRES_URL",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_URL_NON_POOLING",
+            "POSTGRES_PGPASSWORD",
+            "POSTGRES_DATABASE_URL_UNPOOLED",
+            "POSTGRES_PRISMA_URL"
+          ],
+          "makeEnvVarsSensitive": false,
+          "latestDeployment": "dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ"
+        }
+      ]
+    }
+  ],
+  "completeStoreInventoryCount": 16,
+  "productionEnvMetadataCount": 74,
+  "distinction": {
+    "crmGlobalPreviewPrivateStore": {
+      "id": "store_s5ER4TRlBGRnZXwf",
+      "environments": [
+        "preview"
+      ],
+      "isProvenProductionTarget": false
+    },
+    "otherStudioPrivateStore": {
+      "id": "store_Ukdy4BKS8nAbiIUA",
+      "projectId": "prj_ktiCTisS9QmWy4vkHLO8HG3BrhQp",
+      "isCrmTarget": false
+    },
+    "newQaStoresAreNotProduction": [
+      "store_6i5sZDmCf4qX9J86",
+      "store_2FsqiotLlmJJ6toi",
+      "store_QCHn2posJdJcvdUP"
+    ]
+  },
+  "limits": [
+    "Provider connection metadata proves the existing store is connected to this CRM project in Production, with the expected private-store prefix and variable names.",
+    "No old secret value or plain environment value was inspected. Token-to-store cryptographic identity and actual running-deployment consumption were not tested.",
+    "The connection metadata latestDeployment field is dpl_5gnUPoTo3688jh5Au5hvQVMajNcQ and must not be treated as the independently verified active Production deployment.",
+    "BLOB_READ_WRITE_TOKEN and STUDIO_PUBLIC_ENQUIRY_BLOB_STORE_ID exist in Production metadata, but their values/identities were not read or inferred.",
+    "Object counts and sizes are provider aggregate metadata only; no object names or customer payloads were requested."
+  ],
+  "sourceArtifact": {
+    "fileName": "package4-production-storage-metadata.json",
+    "sha256": "dd73bb46887f2706c566caaafb8df45eb7e4501b951209cfa648c5bec56bbc22",
+    "transform": "Removed private credential/raw response file paths; remapped only public artifact links; all provider metadata, request sources and original evidence hashes preserved."
+  }
+}

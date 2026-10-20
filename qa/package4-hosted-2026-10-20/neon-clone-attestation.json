@@ -1,0 +1,1640 @@
+{
+  "format": "package4-neon-clone-v1",
+  "status": "PASS",
+  "productionAccess": 0,
+  "checkedAt": "2026-10-20T06:11:55.064Z",
+  "implementationRevision": "02ce0386b7611c400723b5958ad8699a769923ba",
+  "appSourceRevision": "e9d80b908d9244722ee9b661002baf0cf30d8692",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-sweet-surf-ba6iahut",
+    "databaseName": "neondb",
+    "runtimeRole": "novalure_app",
+    "migrationRole": "neondb_owner"
+  },
+  "bootstrapReceipt": {
+    "path": "qa/package4-hosted-2026-10-20/neon-migrations.json",
+    "sha256": "546694454846899536a18c63672ff43930d9eba66746b879770bf13941a0dac3",
+    "implementationRevision": "eb889bb826a5f5fed87d37781f5d0019fae509a6",
+    "manifestDigest": "cfd7f04f4323f6f5fdf273f51ba02f7b4a579f11b53fa2fd4eec779c6c61e3ed",
+    "target": {
+      "projectId": "green-thunder-49879900",
+      "branchId": "br-shiny-darkness-baz4524v",
+      "databaseName": "neondb",
+      "runtimeRole": "novalure_app"
+    }
+  },
+  "manifestDigest": "cfd7f04f4323f6f5fdf273f51ba02f7b4a579f11b53fa2fd4eec779c6c61e3ed",
+  "provenance": {
+    "originalRootBranchId": "br-shiny-darkness-baz4524v",
+    "checkpointBranchId": "br-flat-block-baycv1oa",
+    "cloneBranchId": "br-sweet-surf-ba6iahut",
+    "checkpointParentId": "br-shiny-darkness-baz4524v",
+    "cloneParentId": "br-flat-block-baycv1oa",
+    "checkpointParentLsn": "0/2F63518",
+    "cloneParentLsn": "0/2F63518",
+    "initialSnapshotBytesSha256": "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7"
+  },
+  "identity": {
+    "project": "green-thunder-49879900",
+    "branch": "br-sweet-surf-ba6iahut",
+    "database": "neondb",
+    "role": "neondb_owner",
+    "sessionRole": "neondb_owner"
+  },
+  "sourceMigrationChecksums": {
+    "091_production_runtime_forced_rls_cutover": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155",
+    "092_crm_production_machine_identity": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104",
+    "093_crm_machine_internal_context": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a",
+    "094_website_sales_ingestion": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac",
+    "095_form_tenant_isolation": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219",
+    "096_public_integration_gateway": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000",
+    "100_studio_enquiry_production": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778",
+    "101_knowledge_center": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+    "102_knowledge_document_processing": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+    "103_knowledge_assistant_service": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+    "104_knowledge_publication_workflow": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+    "105_knowledge_website_monitoring": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+    "106_crm_operational_readers": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf"
+  },
+  "migrationsExecutedOnClone": false,
+  "migrationsInheritedThroughCOW": true,
+  "final": {
+    "ledger": [
+      {
+        "version": "041_schema_ledger_baseline",
+        "name": "041_schema_ledger_baseline.sql",
+        "checksum": "24f8937ca066775e7cc93e6ea61c07798183e143c3bd0e04023f7ee7c8f93045",
+        "applied_at": "2026-10-20T05:40:13.172Z"
+      },
+      {
+        "version": "042_teams_notification_reservation_workflow_constraint",
+        "name": "042_teams_notification_reservation_workflow_constraint.sql",
+        "checksum": "c51f01cfe6a8081e2d741b733b79ae7ddfc7795a2d86143c3b8442b69118b38f",
+        "applied_at": "2026-10-20T05:40:13.720Z"
+      },
+      {
+        "version": "043_leads_idempotency",
+        "name": "043_leads_idempotency.sql",
+        "checksum": "a3c0f025781067cb22f1fc7c09a5b5dd14c7cd368993695a8d98a1b1f71238d6",
+        "applied_at": "2026-10-20T05:40:14.263Z"
+      },
+      {
+        "version": "044_fk_performance_indexes",
+        "name": "044_fk_performance_indexes.sql",
+        "checksum": "e94833d9e8bf85c537a585e2f05216b33503a36eadd0154292e692bbc3bb231c",
+        "applied_at": "2026-10-20T05:40:14.805Z"
+      },
+      {
+        "version": "045_media_schema",
+        "name": "045_media_schema.sql",
+        "checksum": "caa10d953f41f0f9a4a9351c5cea3c27a6ddc2c62cea2dfb3b63836310c6a2db",
+        "applied_at": "2026-10-20T05:40:15.351Z"
+      },
+      {
+        "version": "046_schema_residual_reconciliation",
+        "name": "046_schema_residual_reconciliation.sql",
+        "checksum": "39b4a114922912de86192dccab8740441b92511651c33c925d5456b628535ec9",
+        "applied_at": "2026-10-20T05:40:15.894Z"
+      },
+      {
+        "version": "047_deals_idempotency",
+        "name": "047_deals_idempotency.sql",
+        "checksum": "ef1309f10a9772ea934e401f039035dd36035014460e66daee8c38b484d3d5a6",
+        "applied_at": "2026-10-20T05:40:16.440Z"
+      },
+      {
+        "version": "048_bot_webhook_integrity",
+        "name": "048_bot_webhook_integrity.sql",
+        "checksum": "f5993d9f44ad61f71862570a702c14a7f549269f0a30b57bc007e57b06115b9d",
+        "applied_at": "2026-10-20T05:40:16.983Z"
+      },
+      {
+        "version": "049_property_inventory_tenant_guards",
+        "name": "049_property_inventory_tenant_guards.sql",
+        "checksum": "ffd4be362a4a25a324067c0621a3de8438d0da97d02acf41159b6e8f7eed942b",
+        "applied_at": "2026-10-20T05:40:17.526Z"
+      },
+      {
+        "version": "050_durable_job_leasing",
+        "name": "050_durable_job_leasing.sql",
+        "checksum": "62dc4b16f770aadeb5e4557a90fe34d93d62e859494aed806d8e7a9d742f4439",
+        "applied_at": "2026-10-20T05:40:18.077Z"
+      },
+      {
+        "version": "051_private_media_access",
+        "name": "051_private_media_access.sql",
+        "checksum": "2222942814ab1db328acee645439f9dd9ec2200be4ca3b01d133601ae1f4c12b",
+        "applied_at": "2026-10-20T05:40:18.635Z"
+      },
+      {
+        "version": "052_validate_property_inventory_tenant_guards",
+        "name": "052_validate_property_inventory_tenant_guards.sql",
+        "checksum": "a8f10a4f62e10da8e4c099383decc3805520a1d755e1c8c2a2994f297aeb0233",
+        "applied_at": "2026-10-20T05:40:19.184Z"
+      },
+      {
+        "version": "053_oauth_state_integrity",
+        "name": "053_oauth_state_integrity.sql",
+        "checksum": "c78f509d09ddb6ff8f6d445e60c2d06e0620c578f1e7a1995c5f8b189d881b28",
+        "applied_at": "2026-10-20T05:40:19.729Z"
+      },
+      {
+        "version": "054_csrf_token_integrity",
+        "name": "054_csrf_token_integrity.sql",
+        "checksum": "d6cba6c9cd616c4b4a52ecc3b251f412150d479cefcd2fc71abd90de99ae5504",
+        "applied_at": "2026-10-20T05:40:20.277Z"
+      },
+      {
+        "version": "055_public_submission_abuse_guards",
+        "name": "055_public_submission_abuse_guards.sql",
+        "checksum": "f0ddb2b3103ba7d6d70b5a41883f768831b1cffc3fc8d689254aa408ca0ac358",
+        "applied_at": "2026-10-20T05:40:20.823Z"
+      },
+      {
+        "version": "056_auth_identity_sessions_mfa",
+        "name": "056_auth_identity_sessions_mfa.sql",
+        "checksum": "621d5c856a80ab10b4700642e53d42e821a6c7b9048ad434200df5caec66deba",
+        "applied_at": "2026-10-20T05:40:21.377Z"
+      },
+      {
+        "version": "057_bot_webhook_legacy_index_cutover",
+        "name": "057_bot_webhook_legacy_index_cutover.sql",
+        "checksum": "97eaa18aecc3d9c819a8d233d5cf664703a8aff39badf7a15cf86a501a252d1f",
+        "applied_at": "2026-10-20T05:40:21.974Z"
+      },
+      {
+        "version": "060_tenant_rls_pilot_prepare",
+        "name": "060_tenant_rls_pilot_prepare.sql",
+        "checksum": "b037f00c56daf6af4a12b7641bd60fe6e3b981240859800d3f62a21b68a31baf",
+        "applied_at": "2026-10-20T05:40:23.712Z"
+      },
+      {
+        "version": "061_validate_and_activate_tenant_rls_pilot",
+        "name": "061_validate_and_activate_tenant_rls_pilot.sql",
+        "checksum": "0fdd95faee430de5b6e1ea0d22d477099ff151c5583476bdb542b6e00dcb5d23",
+        "applied_at": "2026-10-20T05:40:24.308Z"
+      },
+      {
+        "version": "062_private_media_contract_cutover",
+        "name": "062_private_media_contract_cutover.sql",
+        "checksum": "e07103bc6eff0cf3e45154e591b15254ec3629497fcdb8acd5e75c94c8bd7e96",
+        "applied_at": "2026-10-20T05:40:22.516Z"
+      },
+      {
+        "version": "064_notification_provider_and_lead_assignee_integrity",
+        "name": "064_notification_provider_and_lead_assignee_integrity.sql",
+        "checksum": "bb70c95a27cedc065535e689390036262084759aed7e3fd932d12a5c61ae130e",
+        "applied_at": "2026-10-20T05:40:27.285Z"
+      },
+      {
+        "version": "065_notification_guard_search_path_hardening",
+        "name": "065_notification_guard_search_path_hardening.sql",
+        "checksum": "1f944f5d2d315de4c960ffa574dfe78af4828b5ad9739a2b16bf490cc7a84b3b",
+        "applied_at": "2026-10-20T05:40:27.827Z"
+      },
+      {
+        "version": "066_oauth_state_workspace_user_guard",
+        "name": "066_oauth_state_workspace_user_guard.sql",
+        "checksum": "dca5893b5bf788b1b0ecac798b0ed965977678b5ca5a6e37b936214dcce717f0",
+        "applied_at": "2026-10-20T05:40:28.372Z"
+      },
+      {
+        "version": "067_app_role_runtime_grants",
+        "name": "067_app_role_runtime_grants.sql",
+        "checksum": "c48afb3409308f74ee03743ec0932c7fc3460bf3085c55c5b8ae753c545f2f3e",
+        "applied_at": "2026-10-20T05:40:28.916Z"
+      },
+      {
+        "version": "068_qa_batch_reset_safety",
+        "name": "068_qa_batch_reset_safety.sql",
+        "checksum": "9f93c0f8e1b03544285bf0b118c78355190f8d6ef78e62b0348b7eb37ff704a3",
+        "applied_at": "2026-10-20T05:40:29.457Z"
+      },
+      {
+        "version": "069_property_unit_idempotency",
+        "name": "069_property_unit_idempotency.sql",
+        "checksum": "5d8807bea865dbc12e4492277f400931252cad115c686c8a0d22a5138ec28cc7",
+        "applied_at": "2026-10-20T05:40:30.025Z"
+      },
+      {
+        "version": "070_funnel_submission_idempotency_recovery",
+        "name": "070_funnel_submission_idempotency_recovery.sql",
+        "checksum": "14fee3cca4530a5ab93b18aa9291837dc055a9f0b3f7132a11bb0ddbc1cc1598",
+        "applied_at": "2026-10-20T05:40:30.578Z"
+      },
+      {
+        "version": "071_forms_owner_tenant_guard",
+        "name": "071_forms_owner_tenant_guard.sql",
+        "checksum": "504180c4f5f7da5f3e7b57547b3b07023fd83edcd29a452a1b0175edf5637011",
+        "applied_at": "2026-10-20T05:40:31.122Z"
+      },
+      {
+        "version": "072_form_submission_atomicity",
+        "name": "072_form_submission_atomicity.sql",
+        "checksum": "5313d802ed2087c64d859292e8851a5817cda174be8470d70514ba54c7cd311d",
+        "applied_at": "2026-10-20T05:40:31.665Z"
+      },
+      {
+        "version": "073_launch_tenant_relation_guards",
+        "name": "073_launch_tenant_relation_guards.sql",
+        "checksum": "5e65eb70b7c5e20e66ed921f52539dde141bb5c02fd974c1a38164803e05e80d",
+        "applied_at": "2026-10-20T05:40:32.227Z"
+      },
+      {
+        "version": "074_validate_launch_tenant_relation_guards",
+        "name": "074_validate_launch_tenant_relation_guards.sql",
+        "checksum": "a644091fc9c2239968c9934651f8992bc913e1740077c907839b647dae6246e9",
+        "applied_at": "2026-10-20T05:40:32.800Z"
+      },
+      {
+        "version": "075_public_funnel_visit_truth",
+        "name": "075_public_funnel_visit_truth.sql",
+        "checksum": "0b0e5d08e6e82ef5a0a01c4514ea9c4a907ef8508f9f0a464b9eb5e27c710466",
+        "applied_at": "2026-10-20T05:40:33.357Z"
+      },
+      {
+        "version": "076_bot_webhook_durable_processing",
+        "name": "076_bot_webhook_durable_processing.sql",
+        "checksum": "c440582584555c006845f99a7c71ceab5318cd1acbd1138325b2034d4f0f0086",
+        "applied_at": "2026-10-20T05:40:33.910Z"
+      },
+      {
+        "version": "077_schema_ledger_runtime_projection",
+        "name": "077_schema_ledger_runtime_projection.sql",
+        "checksum": "6465c9173b38198f1000204acee5d18ef3c370f32755454570aa983d0c46d6ae",
+        "applied_at": "2026-10-20T05:40:34.484Z"
+      },
+      {
+        "version": "078_company_profile_approval_integrity",
+        "name": "078_company_profile_approval_integrity.sql",
+        "checksum": "cbab8020febdebb01bd81c5590f0ffa45d87db5d27a2c8cb02512d84ee23a339",
+        "applied_at": "2026-10-20T05:40:35.032Z"
+      },
+      {
+        "version": "079_public_funnel_visit_role_boundary",
+        "name": "079_public_funnel_visit_role_boundary.sql",
+        "checksum": "f6503eeeee9e83f838519fb30dfc4d663d479e85e24b5d116cde5d64cc499432",
+        "applied_at": "2026-10-20T05:40:35.576Z"
+      },
+      {
+        "version": "080_crm_command_safety",
+        "name": "080_crm_command_safety.sql",
+        "checksum": "9f401db3b2d08cd4458c5a4b3ab0d114d76bdc2ae87e5a1528de3309b379174e",
+        "applied_at": "2026-10-20T05:40:36.119Z"
+      },
+      {
+        "version": "081_crm_offer_workflow",
+        "name": "081_crm_offer_workflow.sql",
+        "checksum": "ce629bd48ef61d96fa8be4e7a75e4dbaff0f80dc6f6b5844340ece7e30bb0f54",
+        "applied_at": "2026-10-20T05:40:36.792Z"
+      },
+      {
+        "version": "082_crm_property_sales_workflow",
+        "name": "082_crm_property_sales_workflow.sql",
+        "checksum": "7266aba1e0f6a1f597465ba2ae730520c571be6c6e31c3a5155093b7761182bb",
+        "applied_at": "2026-10-20T05:40:37.383Z"
+      },
+      {
+        "version": "083_crm_core_cas",
+        "name": "083_crm_core_cas.sql",
+        "checksum": "0ca41b859e15cd92c173e1da239e98c1b9c7c82f1afdb78bd04dc9eaf06e864a",
+        "applied_at": "2026-10-20T05:40:37.970Z"
+      },
+      {
+        "version": "084_crm_contract_service_boundary",
+        "name": "084_crm_contract_service_boundary.sql",
+        "checksum": "3258b3a4e99d2a78bd4cdb06ad88c9aa699fd9a1ed1dd98fd31804deeccc1a11",
+        "applied_at": "2026-10-20T05:40:38.513Z"
+      },
+      {
+        "version": "085_crm_approval_evidence",
+        "name": "085_crm_approval_evidence.sql",
+        "checksum": "0d2f9aa924f8199798b2af5040033c6b3579d5639652861f8980540a365759f9",
+        "applied_at": "2026-10-20T05:40:39.080Z"
+      },
+      {
+        "version": "086_crm_evelyn_preview_contract",
+        "name": "086_crm_evelyn_preview_contract.sql",
+        "checksum": "31609898bb8ed86e46a350c2262e91e361cb199b946509253705ecf75fc6af81",
+        "applied_at": "2026-10-20T05:40:39.645Z"
+      },
+      {
+        "version": "087_d11_crm_source_of_truth_closure",
+        "name": "087_d11_crm_source_of_truth_closure.sql",
+        "checksum": "c618a95363ade2705ba1345bf647822c8d1dc4e834b7c0d15136d936b766eeb4",
+        "applied_at": "2026-10-20T05:40:40.230Z"
+      },
+      {
+        "version": "088_property_media_runtime_access",
+        "name": "088_property_media_runtime_access.sql",
+        "checksum": "4588186cd69c9c59a1d51a8e8f70473d2572527bdeee8000a768e294c2fa78bd",
+        "applied_at": "2026-10-20T05:40:41.238Z"
+      },
+      {
+        "version": "089_property_surface_runtime_access",
+        "name": "089_property_surface_runtime_access.sql",
+        "checksum": "a03daea3b2252cf6d5b5e4a1866be1537adcef75e7f991c494d77170b021deac",
+        "applied_at": "2026-10-20T05:40:41.783Z"
+      },
+      {
+        "version": "090_property_media_delete_runtime",
+        "name": "090_property_media_delete_runtime.sql",
+        "checksum": "39d566b4575f90b72b84ac08f5df9ffd603392dcba33e48ebf5b7eec211ecb0c",
+        "applied_at": "2026-10-20T05:40:42.324Z"
+      },
+      {
+        "version": "091_production_runtime_forced_rls_cutover",
+        "name": "091_production_runtime_forced_rls_cutover.sql",
+        "checksum": "6c03d7fda881ecae9bac516e409dad7427823a1283c3550e6348004cf93f0155",
+        "applied_at": "2026-10-20T05:40:42.870Z"
+      },
+      {
+        "version": "092_crm_production_machine_identity",
+        "name": "092_crm_production_machine_identity.sql",
+        "checksum": "d5f6f543a8ba53b24f0234ca1534b8db2112d553fbfa5f687e4028b29b9ac104",
+        "applied_at": "2026-10-20T05:40:43.440Z"
+      },
+      {
+        "version": "093_crm_machine_internal_context",
+        "name": "093_crm_machine_internal_context.sql",
+        "checksum": "da8a9739233cd1e57bf8d8c51d144db650af3dbecf6cb95d1007a7fd79146b5a",
+        "applied_at": "2026-10-20T05:40:44.028Z"
+      },
+      {
+        "version": "094_website_sales_ingestion",
+        "name": "094_website_sales_ingestion.sql",
+        "checksum": "75e00b1898d09a245ceaccc0ecb66fbe7349ad698584062a00856742b1c552ac",
+        "applied_at": "2026-10-20T05:40:44.581Z"
+      },
+      {
+        "version": "095_form_tenant_isolation",
+        "name": "095_form_tenant_isolation.sql",
+        "checksum": "349abb5235c3f4c1d321d08532f2776767d1587c9f5f03c6aeb79346b7a8f219",
+        "applied_at": "2026-10-20T05:40:45.131Z"
+      },
+      {
+        "version": "096_public_integration_gateway",
+        "name": "096_public_integration_gateway.sql",
+        "checksum": "76373fbeb937454e3f2767fb8e4808b57bc43a4760f0480be5cf953dfe9d3000",
+        "applied_at": "2026-10-20T05:40:45.715Z"
+      },
+      {
+        "version": "100_studio_enquiry_production",
+        "name": "100_studio_enquiry_production.sql",
+        "checksum": "d2de9448d72f4b7cfebc0e53074652343154939db453f0a57eb7d929c622c778",
+        "applied_at": "2026-10-20T05:40:46.347Z"
+      },
+      {
+        "version": "101_knowledge_center",
+        "name": "101_knowledge_center.sql",
+        "checksum": "43a106a3a0a3d961bef7e6b668146a75b9a5b2fb7de4bb0597ee3c9dbe32cf2e",
+        "applied_at": "2026-10-20T05:40:46.919Z"
+      },
+      {
+        "version": "102_knowledge_document_processing",
+        "name": "102_knowledge_document_processing.sql",
+        "checksum": "acc978d62a5e5d4a1ba65b5e9995f7d0a2147b4de35a915044f0982031c9b5cd",
+        "applied_at": "2026-10-20T05:40:47.519Z"
+      },
+      {
+        "version": "103_knowledge_assistant_service",
+        "name": "103_knowledge_assistant_service.sql",
+        "checksum": "df76ac9baaecb30706ebb31c8f0bbf015d594dc8b6620e257c6bbd7f6d3b9f98",
+        "applied_at": "2026-10-20T05:40:48.066Z"
+      },
+      {
+        "version": "104_knowledge_publication_workflow",
+        "name": "104_knowledge_publication_workflow.sql",
+        "checksum": "3369466e1b9b08368554a298f6f7d1fa21d8f3b3d28b0ad0936c7d9feb759610",
+        "applied_at": "2026-10-20T05:40:51.405Z"
+      },
+      {
+        "version": "105_knowledge_website_monitoring",
+        "name": "105_knowledge_website_monitoring.sql",
+        "checksum": "dd44512080248017a2abb5a7a0d705acb991ea2383fe19596a51df0f2fd38c30",
+        "applied_at": "2026-10-20T05:40:51.986Z"
+      },
+      {
+        "version": "106_crm_operational_readers",
+        "name": "106_crm_operational_readers.sql",
+        "checksum": "245c38be7896f2804639921a79b285532adacef8e99a170ab29a28f87fcdc8bf",
+        "applied_at": "2026-10-20T05:40:52.553Z"
+      }
+    ],
+    "runtime": {
+      "rolname": "novalure_app",
+      "rolcanlogin": true,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false,
+      "rolbypassrls": false
+    },
+    "runtimeProof": {
+      "identity": {
+        "project": "green-thunder-49879900",
+        "branch": "br-sweet-surf-ba6iahut",
+        "database": "neondb",
+        "role": "novalure_app",
+        "sessionRole": "novalure_app"
+      },
+      "role": {
+        "rolname": "novalure_app",
+        "rolcanlogin": true,
+        "rolinherit": true,
+        "rolsuper": false,
+        "rolcreatedb": false,
+        "rolcreaterole": false,
+        "rolreplication": false,
+        "rolbypassrls": false
+      },
+      "ownsPublicObjects": 0,
+      "publicCreate": false,
+      "privateProvisioningDenied": [
+        "novalure_schema_migrations",
+        "novalure_migration_execution_receipts",
+        "crm_service_principals",
+        "provider_connections",
+        "company_profiles"
+      ],
+      "missingContextDeniedKnowledge": [
+        "knowledge_sources",
+        "knowledge_areas",
+        "knowledge_workflow_events",
+        "knowledge_website_monitoring"
+      ]
+    },
+    "actualRuntimeConnectionVerified": true,
+    "runtimeOwnsNoPublicObjects": true,
+    "privateProvisioningTablesDenied": true,
+    "missingContextDeniesKnowledge": true,
+    "runtimeCatalogVisibility": {
+      "expectedTablesSourceFile": "src/lib/db/schema.ts",
+      "expectedTablesSourceSha256": "36b29d53790dec12c10e6bf6b002804a75e7bf0ef29eb17d12e3a669f38564d5",
+      "hashFormat": "SHA256 of normalized source file bytes",
+      "checkedAt": "2026-10-20T06:11:55.064Z",
+      "tables": [
+        {
+          "tableName": "analytics_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "approval_requests",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "audit_logs",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_audit_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_identities",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_login_challenges",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_mfa_recovery_codes",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_password_reset_exchanges",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_password_reset_tokens",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "auth_rate_limit_buckets",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "auth_sessions",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "automations",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_answer_quality_checks",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_channel_accounts",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_channel_webhooks",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_conversations",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "bot_document_sends",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_evaluation_runs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_language_rules",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "bot_messages",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "bot_tool_calls",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "bots",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "broker_mandates",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "buyer_search_profiles",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "calendar_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "calendar_sync_events",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "call_insights",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "company_profile_versions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "company_profiles",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "consent_policy_decisions",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "consent_records",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "contact_relationships",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "contact_timeline_items",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "contacts",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "conversations",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_bulk_runtime_batches",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_conversion_snapshots",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_fallback_audits",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_follow_up_actions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_operational_recommendation_runs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_outreach_deliveries",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "crm_permission_audit_runs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "crm_pipeline_stages",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "crm_pipelines",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "customer_onboarding_risk_alerts",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "customer_project_access",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "customer_workspace_access",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "dashboard_views",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "data_quality_cleanup_actions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "data_quality_issues",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "deal_stage_history",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "deals",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "editor_preflight_runs",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "form_submissions",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "forms",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "funnel_conversion_reports",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "funnel_steps",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "funnel_submissions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "funnels",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "google_notification_jobs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "google_notification_targets",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "knowledge_chunks",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "knowledge_sources",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "lead_workflow_runs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "lead_workflows",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "leads",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "media_assets",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "meeting_bookings",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "meeting_notification_jobs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "meeting_pages",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "microsoft_booking_health_checks",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "newsletter_campaigns",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "newsletter_segments",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "newsletter_sends",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "newsletter_suppressions",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "organizations",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "pipeline_bulk_actions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "pipeline_forecast_snapshots",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "project_pipeline_permissions",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "projects",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_activity_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_buildings",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_channels",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "property_cost_items",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_data_quality_issues",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "property_documents",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_export_jobs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "property_inquiries",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "property_media",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_offer_milestones",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_openimmo_mappings",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "property_reservations",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_text_blocks",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_unit_audit_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_units",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "property_viewing_slots",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "provider_connections",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "seller_listings",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "sequence_definitions",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "sequence_enrollments",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "sequence_events",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "sequence_runtime_reviews",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "sequence_step_runs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "sequence_steps",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "speed_to_lead_events",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "tasks",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "teams_notification_jobs",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "teams_notification_targets",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "workspace_lead_sources",
+          "exists": true,
+          "runtimeVisible": false,
+          "runtimeAnyTablePrivilege": false
+        },
+        {
+          "tableName": "workspace_module_settings",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "workspace_users",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        },
+        {
+          "tableName": "workspaces",
+          "exists": true,
+          "runtimeVisible": true,
+          "runtimeAnyTablePrivilege": true
+        }
+      ]
+    },
+    "forcedRlsTables": [
+      {
+        "relname": "analytics_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "audit_logs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_conversations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_messages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bot_tool_calls",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "bots",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "broker_mandates",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "buyer_search_profiles",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "calendar_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "company_profile_versions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "company_profiles",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "consent_policy_decisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "consent_records",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "contact_timeline_items",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "contacts",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_command_receipts",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_domain_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_actions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_approvals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_executions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_contract_revisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_evelyn_preview_targets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_approvals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_deliveries",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offer_revisions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_offers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_outreach_deliveries",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_pipeline_stages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_pipelines",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_project_sales_authorities",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_audit_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_principals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_service_resource_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_effects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_evidence",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "crm_synthetic_approval_requests",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "dashboard_views",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "deal_stage_history",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "deals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "editor_preflight_runs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_chat_messages",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_chat_sessions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integration_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integration_widget_configs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "external_integrations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "form_submissions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "forms",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "funnel_steps",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "funnels",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_area_grants",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_areas",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_assistant_service_bindings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_center_entitlements",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_change_proposals",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_chunks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_maintenance_configurations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_publication_workflows",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_query_usage",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_source_versions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_sources",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_website_monitoring",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_website_scan_runs",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "knowledge_workflow_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "lead_sales_handovers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "leads",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "media_assets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_campaigns",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_segments",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "newsletter_suppressions",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "organizations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "projects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_activity_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_building_idempotency",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_buildings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_cost_items",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_documents",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_media",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_offer_milestones",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_reservations",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_sales",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_text_blocks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_unit_audit_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_unit_idempotency",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_units",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "property_viewing_slots",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_batch_objects",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_batches",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "qa_reset_audit_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "seller_listings",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "speed_to_lead_events",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "studio_enquiry_assets",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "studio_enquiry_transfers",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      },
+      {
+        "relname": "tasks",
+        "relrowsecurity": true,
+        "relforcerowsecurity": true
+      }
+    ]
+  },
+  "currentSourceProof": {
+    "branchId": "br-sweet-surf-ba6iahut",
+    "checkedAt": "2026-10-20T06:11:55.064Z",
+    "ledgerSha256": "aed063005b8a2d637436af64f3f04fe162bab17c0b91291d1e86d38c34caf006",
+    "runtimeProofSha256": "80545cd39311022e860117b29b62dde80d2dd9cde85c09292b9751364619d73d",
+    "catalogSha256": "63ca4be051a492a96aed8ce772e29cbb5acad2b524fcad30725b0c9c52d72f29",
+    "hashFormat": "SHA256 of canonical JSON (scripts/lib/studio-stage3-qa-fingerprint.mjs canonical)"
+  },
+  "limitations": [
+    "Clone attestation; migrations were executed only on the original root, inherited through exact COW provenance.",
+    "Original strict root-to-COW fingerprint remains FAIL because provider inserted9defaultACLs; this attestation does not relabel that verdict.",
+    "QA PostgreSQL18.6/vector0.8.6 and original runtime INHERIT=true differ from observed production metadata.",
+    "This metadata proof is separate from hosted login/MFA and private-file byte recovery."
+  ]
+}

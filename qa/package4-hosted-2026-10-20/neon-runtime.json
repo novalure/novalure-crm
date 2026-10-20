@@ -1,0 +1,52 @@
+{
+  "format": "package4-neon-runtime-data-layer-v1",
+  "status": "PASS",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "database": "neondb",
+    "role": "novalure_app"
+  },
+  "implementationRevision": "5c43577cb78c3843a8835311c646112be50b39bc",
+  "at": "2026-10-20T05:48:04.077Z",
+  "syntheticOnly": true,
+  "productionAccess": 0,
+  "committedBusinessMutations": 0,
+  "checks": [
+    {
+      "name": "actual_unprivileged_runtime_and_exact_target",
+      "status": "PASS"
+    },
+    {
+      "name": "viewer_and_project_member_see_only_granted_project",
+      "status": "PASS"
+    },
+    {
+      "name": "foreign_tenant_projects_are_hidden",
+      "status": "PASS"
+    },
+    {
+      "name": "actual_application_repository_reads_trusted_synthetic_contracts_and_quota",
+      "status": "PASS"
+    },
+    {
+      "name": "voice_feature_denial_and_exhausted_webchat_quota_are_independent",
+      "status": "PASS"
+    },
+    {
+      "name": "actual_migration106_application_readers_work",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary_customer_cannot_provision_contracts",
+      "status": "PASS"
+    },
+    {
+      "name": "tenant_context_clears_after_commit_and_rollback",
+      "status": "PASS"
+    }
+  ],
+  "limitations": [
+    "Real Neon application data-layer calls with persisted actors and the ordinary runtime; no hosted login, MFA, browser or private-file proof is claimed."
+  ]
+}

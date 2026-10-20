@@ -289,7 +289,7 @@ export async function getKnowledgeDocument(session: AppSession, input: { sourceI
     const asset = await tx.queryOne<{ assetId: string; name: string; mimeType: string; sizeBytes: number }>(`select id as "assetId",original_name as name,mime_type as "mimeType",size_bytes::float8 as "sizeBytes" from media_assets where id=$1::uuid and workspace_id=$2 and storage_access='private' and is_public=false`, [assetId, fresh.workspaceId]);
     if (!asset) fail("NOT_FOUND", "Document is unavailable", 404);
     await audit(tx, fresh, "knowledge.document.authorized", row.id, { assetId, versionId });
-    return { ...asset, downloadPath: `/api/knowledge-center/sources/${row.id}/document?versionId=${versionId}` };
+    return { ...asset, downloadPath: `/api/knowledge-center/sources/${row.id}/document${requestedVersionId ? `?versionId=${versionId}` : ""}` };
   }, options);
 }
 export async function getKnowledgeScanSource(session: AppSession, input: { sourceId: string; expectedVersion?: number }, options: TenantTransactionOptions = {}) {

@@ -1,0 +1,87 @@
+{
+  "format": "package4-neon-database-template-recovery-v1",
+  "scope": "DATABASE_ONLY",
+  "status": "FAIL",
+  "implementationRevision": "e669841e8e49af3908b18369f38c7f49489ed058",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "host": "ep-steep-shadow-bapfxomh.c-8.eu-central-1.aws.neon.tech",
+    "owner": "neondb_owner",
+    "syntheticOnly": true,
+    "newIsolatedResource": true,
+    "workspaceIds": [
+      "8b8d996e-5b6a-4a9d-9a8e-0b91c6b89101",
+      "d095c301-8f15-43a3-b3dc-5ea9114b51d2",
+      "603df0e3-5b1f-4a9f-a914-e7986a2d3a08",
+      "71a68b45-1dfb-4893-a694-23d2a6c2ab69"
+    ]
+  },
+  "method": "Committed PostgreSQL CREATE DATABASE TEMPLATE checkpoint, changed working database, new restored database",
+  "startedAt": "2026-10-20T05:59:59.037Z",
+  "productionAccess": 0,
+  "sourceWrites": 0,
+  "existingDatabasesOverwritten": 0,
+  "nativeDumpRestore": false,
+  "createdDatabases": [],
+  "copyAttempts": [
+    {
+      "database": "package4_checkpoint_20261020_r2",
+      "template": "neondb",
+      "attempt": 1,
+      "status": "FAIL",
+      "code": "55006",
+      "message": "source database \"neondb\" is being accessed by other users"
+    },
+    {
+      "database": "package4_checkpoint_20261020_r2",
+      "template": "neondb",
+      "attempt": 2,
+      "status": "FAIL",
+      "code": "55006",
+      "message": "source database \"neondb\" is being accessed by other users"
+    },
+    {
+      "database": "package4_checkpoint_20261020_r2",
+      "template": "neondb",
+      "attempt": 3,
+      "status": "FAIL",
+      "code": "55006",
+      "message": "source database \"neondb\" is being accessed by other users"
+    }
+  ],
+  "sessionObservations": [
+    {
+      "database": "neondb",
+      "snapshot": "source-before",
+      "pid": 1408,
+      "usename": "neondb_owner",
+      "application_name": "package4_template_r2_neondb",
+      "backend_start": "2026-10-20T06:00:00.356Z"
+    }
+  ],
+  "run": "r2",
+  "providerAclChanges": 0,
+  "privateFiles": {
+    "status": "NOT TESTED",
+    "prerequisiteStatus": "BLOCKED",
+    "reason": "Private Vercel Blob access was HTTP403; private object bytes not archived or restored"
+  },
+  "completeDatabaseAndPrivateFileRecovery": "BLOCKED",
+  "limitations": [
+    "Same isolated Neon branch and compute; global roles already exist. No independent archive, cross-cluster, point-in-time or production DR claim.",
+    "Only database state and ordinary application data-layer compatibility are tested. Hosted login/MFA and private-file bytes are separate gates.",
+    "Three bounded synthetic databases are retained for review; no automatic cleanup or measured production recovery SLA is claimed."
+  ],
+  "storageSizeGuard": {
+    "currentDatabaseBytes": 40493056,
+    "eachCopyBytes": 24731648,
+    "projectedDatabaseBytes": 114688000,
+    "maximumProjectedBytes": 419430400
+  },
+  "elapsedMs": 46315,
+  "failure": {
+    "code": "55006",
+    "message": "source database \"neondb\" is being accessed by other users"
+  }
+}

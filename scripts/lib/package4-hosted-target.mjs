@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { canonical } from "./studio-stage3-qa-fingerprint.mjs";
 
 const productionHosts = new Set(["novalure-crm.vercel.app", "novalure-crm-novalure.vercel.app", "novalure-crm.app", "www.novalure-crm.app"]);
+const receiptDirectory = "qa/package4-hosted-2026-10-20/";
+const cloneProfile = Object.freeze({ projectId: "green-thunder-49879900", originalRootBranchId: "br-shiny-darkness-baz4524v",
+  checkpointBranchId: "br-flat-block-baycv1oa", cloneBranchId: "br-sweet-surf-ba6iahut", parentLsn: "0/2F63518",
+  initialSnapshotBytesSha256: "7760928f4cdbb479b4373818ff0c5ebe002b453df92a49dd513a387b53c250e7" });
+const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const sameMap = (a, b) => JSON.stringify(Object.entries(a ?? {}).sort()) === JSON.stringify(Object.entries(b ?? {}).sort());
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
 const fail = code => { throw new Error(code); };
 const requireMatch = (value, pattern, code) => typeof value === "string" && pattern.test(value) ? value : fail(code);
@@ -24,6 +31,13 @@ export function validateHostedTarget(value) {
   if (value.neonMigrationReceipt?.path !== "qa/package4-hosted-2026-10-20/neon-migrations.json" ||
     !/^[a-f0-9]{64}$/u.test(value.neonMigrationReceipt.sha256 ?? "") ||
     !/^[a-f0-9]{40}$/u.test(value.neonMigrationReceipt.implementationRevision ?? "")) fail("HOSTED_OWNER_MIGRATION_RECEIPT_BINDING_REQUIRED");
+  for (const [key, filename] of [["neonCloneAttestation", "neon-clone-attestation.json"], ["neonRuntimeCatalogReceipt", "neon-runtime-catalog-visibility.json"]]) {
+    const binding = value[key];
+    if (binding !== undefined && (binding?.path !== receiptDirectory + filename || !/^[a-f0-9]{64}$/u.test(binding.sha256 ?? "") ||
+      (key === "neonCloneAttestation" && !/^[a-f0-9]{40}$/u.test(binding.implementationRevision ?? "")))) fail("HOSTED_ADDITIONAL_NEON_RECEIPT_BINDING_REQUIRED");
+  }
+  if (value.neonCloneAttestation && (value.neon.projectId !== cloneProfile.projectId || value.neon.branchId !== cloneProfile.cloneBranchId ||
+    value.neon.database !== "neondb" || value.neon.runtimeRole !== "novalure_app" || value.neon.migrationRole !== "neondb_owner" || value.neonRuntimeCatalogReceipt)) fail("HOSTED_EXACT_CLONE_PROFILE_REQUIRED");
   if (value.storage?.provider !== "vercel-blob" || value.storage.access !== "private" || typeof value.storage.storeId !== "string" || !value.storage.storeId) fail("HOSTED_PRIVATE_STORAGE_BINDING_REQUIRED");
   if (!Array.isArray(value.storage.allowedUploadOrigins) || !value.storage.allowedUploadOrigins.length) fail("HOSTED_PRIVATE_UPLOAD_ORIGINS_REQUIRED");
   for (const origin of value.storage.allowedUploadOrigins) {
@@ -39,6 +53,7 @@ export function validateHostedTarget(value) {
   if (website.protocol !== "https:" || website.username || website.password || website.search || website.hash || website.origin === value.origin ||
     typeof control.beforeContent !== "string" || typeof control.afterContent !== "string" || typeof control.query !== "string" || !control.query.trim() ||
     control.beforeContent === control.afterContent || !control.beforeContent.includes(control.query) || !control.afterContent.includes(control.query)) fail("HOSTED_CONTROLLED_HTTPS_SOURCE_INVALID");
+  if (Object.keys(value.migrationChecksums ?? {}).length !== 13) fail("HOSTED_EXACT_MIGRATION_SET_REQUIRED");
   for (const prefix of ["091_", "092_", "093_", "094_", "095_", "096_", "100_", "101_", "102_", "103_", "104_", "105_", "106_"]) {
     const entries = Object.entries(value.migrationChecksums ?? {}).filter(([name]) => name.startsWith(prefix));
     if (entries.length !== 1 || !/^[a-f0-9]{64}$/u.test(entries[0][1])) fail("HOSTED_PINNED_MIGRATION_CHECKSUM_REQUIRED");
@@ -60,38 +75,116 @@ export function validateHostedTarget(value) {
   return structuredClone(value);
 }
 
-/** Administrative ledger proof is checked through an owner-produced, immutable
- * receipt. It never requires giving the application raw ledger privileges. */
-export function assertHostedOwnerMigrationReceipt(bundle, target) {
-  const receipt = bundle?.receipt, catalog = receipt?.final?.runtimeCatalogVisibility;
-  if (!receipt || bundle.sha256 !== target.neonMigrationReceipt.sha256 || receipt.format !== "package4-neon-bootstrap-v1" || receipt.status !== "PASS" || receipt.productionAccess !== 0 ||
-    receipt.implementationRevision !== target.neonMigrationReceipt.implementationRevision || !/^[a-f0-9]{64}$/u.test(receipt.manifestDigest ?? "")) fail("HOSTED_OWNER_MIGRATION_RECEIPT_MISMATCH");
-  if (receipt.target?.projectId !== target.neon.projectId || receipt.target.branchId !== target.neon.branchId || receipt.target.databaseName !== target.neon.database || receipt.target.runtimeRole !== target.neon.runtimeRole ||
-    receipt.identity?.role !== target.neon.migrationRole || receipt.identity.project !== target.neon.projectId || receipt.identity.branch !== target.neon.branchId || receipt.identity.database !== target.neon.database) fail("HOSTED_OWNER_MIGRATION_TARGET_MISMATCH");
-  if (receipt.final.actualRuntimeConnectionVerified !== true || receipt.final.runtimeOwnsNoPublicObjects !== true || receipt.final.privateProvisioningTablesDenied !== true || receipt.final.missingContextDeniesKnowledge !== true ||
-    receipt.final.runtime?.rolcanlogin !== true || ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"].some(flag => receipt.final.runtime?.[flag] !== false)) fail("HOSTED_OWNER_RUNTIME_PROOF_REQUIRED");
-  for (const [version, checksum] of Object.entries(target.migrationChecksums)) {
-    const ledger = (receipt.final.ledger ?? []).filter(row => row.version === version);
-    const applied = (receipt.applied ?? []).filter(row => row.file === `${version}.sql`);
-    if (ledger.length !== 1 || ledger[0].checksum !== checksum || applied.length !== 1 || applied[0].sourceChecksum !== checksum || applied[0].execution !== "unchangedOriginalSql") fail("HOSTED_OWNER_MIGRATION_CHECKSUM_MISMATCH");
-  }
-  if (!catalog || !/^[a-f0-9]{64}$/u.test(catalog.expectedTablesSourceSha256 ?? "") || !Array.isArray(catalog.tables) || !catalog.tables.length ||
+function assertRuntimeReceipt(final) {
+  if (final?.actualRuntimeConnectionVerified !== true || final.runtimeOwnsNoPublicObjects !== true || final.privateProvisioningTablesDenied !== true || final.missingContextDeniesKnowledge !== true ||
+    final.runtime?.rolcanlogin !== true || ["rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"].some(flag => final.runtime?.[flag] !== false)) fail("HOSTED_OWNER_RUNTIME_PROOF_REQUIRED");
+}
+function assertCatalog(catalog) {
+  if (!catalog || catalog.expectedTablesSourceFile !== "src/lib/db/schema.ts" || !/^[a-f0-9]{64}$/u.test(catalog.expectedTablesSourceSha256 ?? "") || !Array.isArray(catalog.tables) || !catalog.tables.length ||
     new Set(catalog.tables.map(row => row.tableName)).size !== catalog.tables.length || !Number.isFinite(Date.parse(catalog.checkedAt))) fail("HOSTED_OWNER_CATALOG_RECEIPT_REQUIRED");
   for (const row of catalog.tables) {
     if (!/^[a-z][a-z0-9_]+$/u.test(row.tableName ?? "") || row.exists !== true || typeof row.runtimeVisible !== "boolean" || typeof row.runtimeAnyTablePrivilege !== "boolean" ||
       (!row.runtimeVisible && row.runtimeAnyTablePrivilege !== false)) fail("HOSTED_OWNER_CATALOG_PROOF_INVALID");
   }
-  return { ledger: receipt.final.ledger, catalog, sourceRevision: receipt.implementationRevision, sha256: bundle.sha256 };
+  return catalog;
+}
+function assertTarget(actual, expected, databaseKey = "databaseName") {
+  if (actual?.projectId !== expected.projectId || actual.branchId !== expected.branchId || actual[databaseKey] !== expected.database || actual.runtimeRole !== expected.runtimeRole) fail("HOSTED_OWNER_MIGRATION_TARGET_MISMATCH");
+}
+function assertOwnerIdentity(identity, expected, sessionKey) {
+  if (identity?.role !== expected.migrationRole || identity.project !== expected.projectId || identity.branch !== expected.branchId || identity.database !== expected.database ||
+    (sessionKey && identity[sessionKey] !== expected.migrationRole)) fail("HOSTED_OWNER_MIGRATION_TARGET_MISMATCH");
+}
+function ledgerMap(ledger) {
+  if (!Array.isArray(ledger) || !ledger.length || new Set(ledger.map(row => row.version)).size !== ledger.length ||
+    ledger.some(row => !/^\d{3}_[a-z0-9_]+$/u.test(row.version ?? "") || !/^[a-f0-9]{64}$/u.test(row.checksum ?? ""))) fail("HOSTED_OWNER_MIGRATION_LEDGER_INVALID");
+  return Object.fromEntries(ledger.map(row => [row.version, row.checksum]));
+}
+
+function assertCloneSourceProof(clone, original, target) {
+  const final = clone.final, proof = final.runtimeProof, identity = proof?.identity, source = clone.currentSourceProof;
+  if (identity?.project !== target.neon.projectId || identity.branch !== target.neon.branchId || identity.database !== target.neon.database ||
+    identity.role !== target.neon.runtimeRole || identity.sessionRole !== target.neon.runtimeRole || proof.ownsPublicObjects !== 0 || proof.publicCreate !== false ||
+    proof.role?.rolname !== target.neon.runtimeRole || proof.role.rolinherit !== true || canonical(proof.role) !== canonical(final.runtime)) fail("HOSTED_CLONE_ACTUAL_RUNTIME_PROOF_MISMATCH");
+  const privateTables = ["novalure_schema_migrations", "novalure_migration_execution_receipts", "crm_service_principals", "provider_connections", "company_profiles"];
+  const knowledgeTables = ["knowledge_sources", "knowledge_areas", "knowledge_workflow_events", "knowledge_website_monitoring"];
+  if (!Array.isArray(proof.privateProvisioningDenied) || !Array.isArray(proof.missingContextDeniedKnowledge) ||
+    canonical([...proof.privateProvisioningDenied].sort()) !== canonical(privateTables.sort()) || canonical([...proof.missingContextDeniedKnowledge].sort()) !== canonical(knowledgeTables.sort())) fail("HOSTED_CLONE_NATIVE_DENIAL_PROOF_MISMATCH");
+  const rls = final.forcedRlsTables, originalRls = original.final.forcedRls;
+  if (!Array.isArray(rls) || !rls.length || !Array.isArray(originalRls) || !originalRls.length || rls.some(row => row.relrowsecurity !== true || row.relforcerowsecurity !== true) ||
+    canonical([...rls].sort((a, b) => a.relname.localeCompare(b.relname))) !== canonical([...originalRls].sort((a, b) => a.relname.localeCompare(b.relname)))) fail("HOSTED_CLONE_FORCED_RLS_PROOF_MISMATCH");
+  if (source?.branchId !== target.neon.branchId || source.checkedAt !== clone.checkedAt || final.runtimeCatalogVisibility?.checkedAt !== clone.checkedAt ||
+    source.hashFormat !== "SHA256 of canonical JSON (scripts/lib/studio-stage3-qa-fingerprint.mjs canonical)" ||
+    source.ledgerSha256 !== sha256(canonical(final.ledger)) || source.runtimeProofSha256 !== sha256(canonical(proof)) ||
+    source.catalogSha256 !== sha256(canonical(final.runtimeCatalogVisibility))) fail("HOSTED_CLONE_SOURCE_PROOF_DIGEST_MISMATCH");
+}
+
+/** The original bootstrap is immutable and proves only its original branch.
+ * An explicitly pinned clone needs a separate, freshly measured attestation. */
+export function assertHostedOwnerMigrationReceipt(bundle, target) {
+  const receipt = bundle?.receipt, clone = bundle?.cloneAttestation?.receipt;
+  if (!receipt || bundle.sha256 !== target.neonMigrationReceipt.sha256 || receipt.format !== "package4-neon-bootstrap-v1" || receipt.status !== "PASS" || receipt.productionAccess !== 0 ||
+    receipt.implementationRevision !== target.neonMigrationReceipt.implementationRevision || !/^[a-f0-9]{64}$/u.test(receipt.manifestDigest ?? "")) fail("HOSTED_OWNER_MIGRATION_RECEIPT_MISMATCH");
+  const original = target.neonCloneAttestation ? { projectId: cloneProfile.projectId, branchId: cloneProfile.originalRootBranchId,
+    database: "neondb", runtimeRole: "novalure_app", migrationRole: "neondb_owner" } : target.neon;
+  assertTarget(receipt.target, original);
+  assertOwnerIdentity(receipt.identity, original);
+  assertRuntimeReceipt(receipt.final);
+  const originalLedger = ledgerMap(receipt.final.ledger);
+  for (const [version, checksum] of Object.entries(target.migrationChecksums)) {
+    const applied = (receipt.applied ?? []).filter(row => row.file === `${version}.sql`);
+    if (originalLedger[version] !== checksum || applied.length !== 1 || applied[0].sourceChecksum !== checksum || applied[0].execution !== "unchangedOriginalSql") fail("HOSTED_OWNER_MIGRATION_CHECKSUM_MISMATCH");
+  }
+  if (target.neonCloneAttestation) {
+    if (target.neon.projectId !== cloneProfile.projectId || target.neon.branchId !== cloneProfile.cloneBranchId || target.neon.database !== "neondb" ||
+      target.neon.runtimeRole !== "novalure_app" || target.neon.migrationRole !== "neondb_owner" || target.neonRuntimeCatalogReceipt || bundle.catalogReceipt ||
+      !clone || bundle.cloneAttestation.sha256 !== target.neonCloneAttestation.sha256 || clone.format !== "package4-neon-clone-v1" || clone.status !== "PASS" || clone.productionAccess !== 0 ||
+      clone.implementationRevision !== target.neonCloneAttestation.implementationRevision || !/^[a-f0-9]{40}$/u.test(clone.appSourceRevision ?? "") || !Number.isFinite(Date.parse(clone.checkedAt)) ||
+      clone.manifestDigest !== receipt.manifestDigest || clone.migrationsExecutedOnClone !== false || clone.migrationsInheritedThroughCOW !== true) fail("HOSTED_CLONE_ATTESTATION_MISMATCH");
+    const bootstrap = clone.bootstrapReceipt;
+    if (bootstrap?.path !== target.neonMigrationReceipt.path || bootstrap.sha256 !== bundle.sha256 || bootstrap.implementationRevision !== receipt.implementationRevision ||
+      bootstrap.manifestDigest !== receipt.manifestDigest || !sameMap(bootstrap.target, receipt.target)) fail("HOSTED_CLONE_BOOTSTRAP_BINDING_MISMATCH");
+    assertTarget(clone.target, target.neon);
+    if (clone.target.migrationRole !== target.neon.migrationRole) fail("HOSTED_OWNER_MIGRATION_TARGET_MISMATCH");
+    assertOwnerIdentity(clone.identity, target.neon, "sessionRole");
+    const provenance = clone.provenance;
+    if (provenance?.originalRootBranchId !== cloneProfile.originalRootBranchId || provenance.checkpointBranchId !== cloneProfile.checkpointBranchId ||
+      provenance.cloneBranchId !== cloneProfile.cloneBranchId || provenance.checkpointParentId !== cloneProfile.originalRootBranchId || provenance.cloneParentId !== cloneProfile.checkpointBranchId ||
+      provenance.checkpointParentLsn !== cloneProfile.parentLsn || provenance.cloneParentLsn !== cloneProfile.parentLsn ||
+      provenance.initialSnapshotBytesSha256 !== cloneProfile.initialSnapshotBytesSha256) fail("HOSTED_CLONE_PROVENANCE_MISMATCH");
+    assertRuntimeReceipt(clone.final);
+    assertCloneSourceProof(clone, receipt, target);
+    if (!sameMap(clone.sourceMigrationChecksums, target.migrationChecksums) || !sameMap(ledgerMap(clone.final.ledger), originalLedger)) fail("HOSTED_CLONE_MIGRATION_CHECKSUM_MISMATCH");
+    return { ledger: clone.final.ledger, catalog: assertCatalog(clone.final.runtimeCatalogVisibility), sourceRevision: clone.implementationRevision,
+      sha256: bundle.cloneAttestation.sha256, source: target.neonCloneAttestation.path,
+      cloneProvenance: { ...provenance, bootstrapReceiptSha256: bundle.sha256, bootstrapImplementationRevision: receipt.implementationRevision } };
+  }
+  if (clone || bundle?.cloneAttestation) fail("HOSTED_UNEXPECTED_CLONE_ATTESTATION");
+  let catalog = receipt.final.runtimeCatalogVisibility;
+  if (target.neonRuntimeCatalogReceipt) {
+    const extra = bundle.catalogReceipt;
+    if (!extra || extra.sha256 !== target.neonRuntimeCatalogReceipt.sha256 || extra.receipt?.format !== "package4-neon-runtime-catalog-visibility-v1" || extra.receipt.status !== "PASS") fail("HOSTED_OWNER_CATALOG_RECEIPT_MISMATCH");
+    assertTarget(extra.receipt.target, target.neon, "database");
+    if (extra.receipt.target.migrationRole !== target.neon.migrationRole) fail("HOSTED_OWNER_MIGRATION_TARGET_MISMATCH");
+    catalog = extra.receipt.runtimeCatalogVisibility;
+  } else if (bundle?.catalogReceipt) fail("HOSTED_UNEXPECTED_CATALOG_RECEIPT");
+  return { ledger: receipt.final.ledger, catalog: assertCatalog(catalog), sourceRevision: receipt.implementationRevision,
+    sha256: bundle.sha256, source: target.neonMigrationReceipt.path };
 }
 
 export async function loadHostedOwnerMigrationReceipt(target, root = process.cwd()) {
-  const bytes = await readFile(path.resolve(root, target.neonMigrationReceipt.path));
-  let receipt;
-  try { receipt = JSON.parse(bytes.toString("utf8")); } catch { fail("HOSTED_OWNER_MIGRATION_RECEIPT_JSON_INVALID"); }
-  const bundle = { receipt, sha256: createHash("sha256").update(bytes).digest("hex") };
+  const load = async binding => {
+    const bytes = await readFile(path.resolve(root, binding.path));
+    let receipt;
+    try { receipt = JSON.parse(bytes.toString("utf8")); } catch { fail("HOSTED_OWNER_MIGRATION_RECEIPT_JSON_INVALID"); }
+    return { receipt, sha256: sha256(bytes) };
+  };
+  const bundle = await load(target.neonMigrationReceipt);
+  if (target.neonCloneAttestation) bundle.cloneAttestation = await load(target.neonCloneAttestation);
+  if (target.neonRuntimeCatalogReceipt) bundle.catalogReceipt = await load(target.neonRuntimeCatalogReceipt);
   const proof = assertHostedOwnerMigrationReceipt(bundle, target);
   const schema = await readFile(path.resolve(root, "src/lib/db/schema.ts"), "utf8");
-  if (createHash("sha256").update(schema.replace(/\r\n/gu, "\n")).digest("hex") !== proof.catalog.expectedTablesSourceSha256) fail("HOSTED_OWNER_CATALOG_SOURCE_MISMATCH");
+  if (sha256(schema.replace(/\r\n/gu, "\n")) !== proof.catalog.expectedTablesSourceSha256) fail("HOSTED_OWNER_CATALOG_SOURCE_MISMATCH");
   return bundle;
 }
 
@@ -125,7 +218,7 @@ export function assertHostedRuntimeBinding(value, target, ownerBundle) {
     neonProjectId: identity.neonProjectId, neonBranchId: identity.neonBranchId, database: identity.database, runtimeRole: identity.currentUser,
     leastPrivilege: true, verifiedMigrationChecksums: Object.keys(target.migrationChecksums).length,
     runtimeLedger: { status: "EXPECTED DENIAL", code: value.migrationLedgerError, privilegedRuntimeGrantAdded: false },
-    administrativeLedger: { status: "PASS", source: target.neonMigrationReceipt.path, receiptSha256: owner.sha256, receiptImplementationRevision: owner.sourceRevision, candidateMigrationHashesMatch: true },
+    administrativeLedger: { status: "PASS", source: owner.source, receiptSha256: owner.sha256, receiptImplementationRevision: owner.sourceRevision, candidateMigrationHashesMatch: true, ...(owner.cloneProvenance ? { cloneProvenance: owner.cloneProvenance } : {}) },
     runtimeInvisiblePrivateTables: invisible.map(tableName => ({ tableName, ownerVerifiedExists: true, runtimeAnyTablePrivilege: false })) };
 }
 

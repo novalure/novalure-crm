@@ -1,0 +1,692 @@
+{
+  "format": "package4-neon-runtime-catalog-visibility-v1",
+  "status": "PASS",
+  "target": {
+    "projectId": "green-thunder-49879900",
+    "branchId": "br-shiny-darkness-baz4524v",
+    "database": "neondb",
+    "runtimeRole": "novalure_app",
+    "migrationRole": "neondb_owner"
+  },
+  "runtimeCatalogVisibility": {
+    "expectedTablesSourceFile": "src/lib/db/schema.ts",
+    "expectedTablesSourceSha256": "36b29d53790dec12c10e6bf6b002804a75e7bf0ef29eb17d12e3a669f38564d5",
+    "hashFormat": "SHA256 of source file bytes",
+    "checkedAt": "2026-10-20T05:51:01.599Z",
+    "tables": [
+      {
+        "tableName": "analytics_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "approval_requests",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "audit_logs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_audit_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_identities",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_login_challenges",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_mfa_recovery_codes",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_password_reset_exchanges",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_password_reset_tokens",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "auth_rate_limit_buckets",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "auth_sessions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "automations",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_answer_quality_checks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_channel_accounts",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_channel_webhooks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_conversations",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "bot_document_sends",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_evaluation_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_language_rules",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "bot_messages",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "bot_tool_calls",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "bots",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "broker_mandates",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "buyer_search_profiles",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "calendar_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "calendar_sync_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "call_insights",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "company_profile_versions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "company_profiles",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "consent_policy_decisions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "consent_records",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "contact_relationships",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "contact_timeline_items",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "contacts",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "conversations",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_bulk_runtime_batches",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_conversion_snapshots",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_fallback_audits",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_follow_up_actions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_operational_recommendation_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_outreach_deliveries",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "crm_permission_audit_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "crm_pipeline_stages",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "crm_pipelines",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "customer_onboarding_risk_alerts",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "customer_project_access",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "customer_workspace_access",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "dashboard_views",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "data_quality_cleanup_actions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "data_quality_issues",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "deal_stage_history",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "deals",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "editor_preflight_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "form_submissions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "forms",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "funnel_conversion_reports",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "funnel_steps",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "funnel_submissions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "funnels",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "google_notification_jobs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "google_notification_targets",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "knowledge_chunks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "knowledge_sources",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "lead_workflow_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "lead_workflows",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "leads",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "media_assets",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "meeting_bookings",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "meeting_notification_jobs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "meeting_pages",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "microsoft_booking_health_checks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "newsletter_campaigns",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "newsletter_segments",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "newsletter_sends",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "newsletter_suppressions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "organizations",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "pipeline_bulk_actions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "pipeline_forecast_snapshots",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "project_pipeline_permissions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "projects",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_activity_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_buildings",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_channels",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "property_cost_items",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_data_quality_issues",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "property_documents",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_export_jobs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "property_inquiries",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "property_media",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_offer_milestones",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_openimmo_mappings",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "property_reservations",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_text_blocks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_unit_audit_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_units",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "property_viewing_slots",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "provider_connections",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "seller_listings",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "sequence_definitions",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "sequence_enrollments",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "sequence_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "sequence_runtime_reviews",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "sequence_step_runs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "sequence_steps",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "speed_to_lead_events",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "tasks",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "teams_notification_jobs",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "teams_notification_targets",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "workspace_lead_sources",
+        "exists": true,
+        "runtimeAnyTablePrivilege": false,
+        "runtimeVisible": false
+      },
+      {
+        "tableName": "workspace_module_settings",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "workspace_users",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      },
+      {
+        "tableName": "workspaces",
+        "exists": true,
+        "runtimeAnyTablePrivilege": true,
+        "runtimeVisible": true
+      }
+    ]
+  },
+  "scope": "Metadata-only; zero business-row reads or grant changes"
+}

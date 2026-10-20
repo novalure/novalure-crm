@@ -1,0 +1,238 @@
+{
+  "observedAtUtc": "2026-10-20T06:13:15.778149+00:00",
+  "status": "PROVISIONED_AND_SYNTHETIC_TRANSPORT_VERIFIED",
+  "scope": "Only new explicitly authorized QA resources; parent owns exact branch Preview env binding and deployment",
+  "teamId": "team_sjD78IkSicXJK6TAOR1JC7Wv",
+  "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+  "region": "fra1",
+  "secretValuesEmitted": false,
+  "credentialHandling": "Only newly issued QA credentials resolved internally through native CLI, captured in ignored 0700 directory / 0600 files; no values in chat, logs, Git or public receipts",
+  "planOrContractChange": false,
+  "usageBudget": {
+    "maximumSyntheticStorageBytes": 52428800,
+    "maximumTestOperations": 500,
+    "newStores": 3,
+    "actualSyntheticPayloadBytes": 217,
+    "plan": "Existing Novalure Pro Blob service; no upgrade, new contract or external service purchase",
+    "usageNote": "Store creation and bounded test operations use existing metered Blob service. No claim of zero measured charges."
+  },
+  "nativeCliVersion": "64.7.0",
+  "stores": [
+    {
+      "role": "source",
+      "id": "store_6i5sZDmCf4qX9J86",
+      "name": "novalure-crm-package4-qa-source-20261020",
+      "access": "private",
+      "region": "fra1",
+      "createdAt": 1792476649131,
+      "billingState": "active",
+      "usageQuotaExceeded": false,
+      "providerStatus": "available",
+      "creationOmittedProjectId": true,
+      "createAndGetReturnedCredential": false,
+      "credentialIssuance": "Dry-run validated Development-only storage connect --auth token --add-rw-token, unique prefix; native GET decrypted only the newly created env ID",
+      "connection": {
+        "id": "spc_YxFFpiFauvYe0WOW",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "name": "novalure-crm",
+        "environments": [
+          "development"
+        ],
+        "envVarPrefix": "PACKAGE4_QA_20261020_SOURCE",
+        "environmentVariables": [
+          "PACKAGE4_QA_20261020_SOURCE_READ_WRITE_TOKEN"
+        ]
+      },
+      "credentialEnvMetadata": {
+        "id": "ZBvlViWbABGSlcAz",
+        "key": "PACKAGE4_QA_20261020_SOURCE_READ_WRITE_TOKEN",
+        "type": "encrypted",
+        "target": [
+          "development"
+        ],
+        "gitBranch": null,
+        "customEnvironmentIds": null,
+        "configurationId": null
+      },
+      "tokenFileMode": "0600",
+      "credentialFilePresent": true
+    },
+    {
+      "role": "restore",
+      "id": "store_2FsqiotLlmJJ6toi",
+      "name": "novalure-crm-package4-qa-restore-20261020",
+      "access": "private",
+      "region": "fra1",
+      "createdAt": 1792476651827,
+      "billingState": "active",
+      "usageQuotaExceeded": false,
+      "providerStatus": "available",
+      "creationOmittedProjectId": true,
+      "createAndGetReturnedCredential": false,
+      "credentialIssuance": "Dry-run validated Development-only storage connect --auth token --add-rw-token, unique prefix; native GET decrypted only the newly created env ID",
+      "connection": {
+        "id": "spc_QlmANy1tEq4MmLAO",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "name": "novalure-crm",
+        "environments": [
+          "development"
+        ],
+        "envVarPrefix": "PACKAGE4_QA_20261020_RESTORE",
+        "environmentVariables": [
+          "PACKAGE4_QA_20261020_RESTORE_READ_WRITE_TOKEN"
+        ]
+      },
+      "credentialEnvMetadata": {
+        "id": "56HZySGwDMzchmci",
+        "key": "PACKAGE4_QA_20261020_RESTORE_READ_WRITE_TOKEN",
+        "type": "encrypted",
+        "target": [
+          "development"
+        ],
+        "gitBranch": null,
+        "customEnvironmentIds": null,
+        "configurationId": null
+      },
+      "tokenFileMode": "0600",
+      "credentialFilePresent": true
+    },
+    {
+      "role": "fixture",
+      "id": "store_QCHn2posJdJcvdUP",
+      "name": "novalure-crm-package4-qa-fixture-20261020",
+      "access": "public",
+      "region": "fra1",
+      "createdAt": 1792476653513,
+      "billingState": "active",
+      "usageQuotaExceeded": false,
+      "providerStatus": "available",
+      "creationOmittedProjectId": true,
+      "createAndGetReturnedCredential": false,
+      "credentialIssuance": "Dry-run validated Development-only storage connect --auth token --add-rw-token, unique prefix; native GET decrypted only the newly created env ID",
+      "connection": {
+        "id": "spc_bHDSjwzbvJnr6YMP",
+        "projectId": "prj_R32Okl6AHijTohvuKmryuTLjWMsk",
+        "name": "novalure-crm",
+        "environments": [
+          "development"
+        ],
+        "envVarPrefix": "PACKAGE4_QA_20261020_FIXTURE",
+        "environmentVariables": [
+          "PACKAGE4_QA_20261020_FIXTURE_READ_WRITE_TOKEN"
+        ]
+      },
+      "credentialEnvMetadata": {
+        "id": "iH6GPISJ08bWdZaA",
+        "key": "PACKAGE4_QA_20261020_FIXTURE_READ_WRITE_TOKEN",
+        "type": "encrypted",
+        "target": [
+          "development"
+        ],
+        "gitBranch": null,
+        "customEnvironmentIds": null,
+        "configurationId": null
+      },
+      "tokenFileMode": "0600",
+      "credentialFilePresent": true
+    }
+  ],
+  "environmentAudit": {
+    "beforeAllEnvironmentEntryCount": 231,
+    "afterAllEnvironmentEntryCount": 234,
+    "previewEntryCountBefore": 149,
+    "globalPreviewEntryCountBefore": 65,
+    "candidateBranchEntryCountBefore": 0,
+    "prefixAbsentInEveryScopeBefore": true,
+    "newEntryCount": 3,
+    "newEntriesDevelopmentOnly": true,
+    "existingMetadataChanged": [],
+    "existingRemoved": [],
+    "productionOrPreviewEntriesCreatedByThisTask": 0,
+    "allBeforeMetadata": "qa/package4-hosted-2026-10-20/vercel-all-env-before-metadata.json",
+    "allAfterMetadata": "qa/package4-hosted-2026-10-20/vercel-all-env-after-metadata.json",
+    "fullPreviewMetadata": "qa/package4-hosted-2026-10-20/vercel-preview-env-metadata.json"
+  },
+  "transportEvidence": "qa/package4-hosted-2026-10-20/storage-transport.json",
+  "controlledWebsite": {
+    "storeId": "store_QCHn2posJdJcvdUP",
+    "url": "https://qchn2posjdjcvdup.public.blob.vercel-storage.com/website/hostedwebanchor.html",
+    "beforeContent": "SYNTHETIC hostedwebanchor: Office opens at 09:00.",
+    "afterContent": "SYNTHETIC hostedwebanchor: Office opens at 10:00.",
+    "query": "hostedwebanchor",
+    "httpStatus": 200,
+    "sha256": "992dc2861532584640c829120bab689476dd86df3da6e22678664d45a33a4b42",
+    "bytes": 82,
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "content-length": "82",
+      "cache-control": "public, max-age=60",
+      "etag": "\"e28024ee312e40fad893cb53daf156b4\"",
+      "last-modified": "Tue, 20 Oct 2026 06:12:47 GMT",
+      "x-vercel-cache": "MISS"
+    },
+    "observedAtUtc": "2026-10-20T06:12:46.629Z"
+  },
+  "cleanupNote": "Only the three recorded new Development connections and their three new env IDs are eligible for eventual QA cleanup. Do not disconnect before root finishes because token lifecycle after disconnect is not established.",
+  "privateStoreOrigins": {
+    "source": "https://6i5szdmcf4qx9j86.private.blob.vercel-storage.com",
+    "restore": "https://2fsqiotllmjj6toi.private.blob.vercel-storage.com"
+  },
+  "privateProbeCleanup": {
+    "startedAtUtc": "2026-10-20T06:14:07.916Z",
+    "scope": "Only the two exact synthetic private I/O probe paths created by this agent",
+    "results": [
+      {
+        "role": "source",
+        "storeId": "store_6i5sZDmCf4qX9J86",
+        "pathname": "ops/package4-transport-proof-20261020.txt",
+        "expectedSha256": "690d45cea1e1e441f6b560a196adfb758642ee9a72ac400e15ac5179f94e5c41",
+        "privateOrigin": "https://6i5szdmcf4qx9j86.private.blob.vercel-storage.com",
+        "originSource": "Actual authenticated SDK get result blob.url before deletion",
+        "verifiedBeforeDelete": {
+          "status": 200,
+          "bytes": 67,
+          "sha256": "690d45cea1e1e441f6b560a196adfb758642ee9a72ac400e15ac5179f94e5c41"
+        },
+        "deleteCompleted": true,
+        "probeReadbackAbsent": true,
+        "fullListReadback": {
+          "pages": 1,
+          "totalObjects": 0,
+          "empty": true,
+          "probeListed": false
+        },
+        "observedAtUtc": "2026-10-20T06:14:09.408Z"
+      },
+      {
+        "role": "restore",
+        "storeId": "store_2FsqiotLlmJJ6toi",
+        "pathname": "ops/package4-transport-proof-20261020.txt",
+        "expectedSha256": "3188dacc61abb1cb87ba1747c5e54bd56944214a8636ba42510951e565500b18",
+        "privateOrigin": "https://2fsqiotllmjj6toi.private.blob.vercel-storage.com",
+        "originSource": "Actual authenticated SDK get result blob.url before deletion",
+        "verifiedBeforeDelete": {
+          "status": 200,
+          "bytes": 68,
+          "sha256": "3188dacc61abb1cb87ba1747c5e54bd56944214a8636ba42510951e565500b18"
+        },
+        "deleteCompleted": true,
+        "probeReadbackAbsent": true,
+        "fullListReadback": {
+          "pages": 1,
+          "totalObjects": 0,
+          "empty": true,
+          "probeListed": false
+        },
+        "observedAtUtc": "2026-10-20T06:14:10.624Z"
+      }
+    ],
+    "status": "PASS_EXACT_PROBE_CLEANUP",
+    "finishedAtUtc": "2026-10-20T06:14:10.624Z"
+  },
+  "transportEvidenceSha256": "25d892f9cddb1c56f15957de3534f7be4d778019e167c12a57be3d4d14f6ad0b",
+  "sourceArtifact": {
+    "fileName": "package4-storage-provisioning.json",
+    "sha256": "66f3dd9a44ddd0d855f12c7659b745d52ee5f930a15088c9c339117640f00bde",
+    "transform": "Removed private credential/raw response file paths; remapped only public artifact links; all provider metadata, request sources and original evidence hashes preserved."
+  }
+}
