@@ -63,7 +63,7 @@ function runStaticChecks() {
   const writes = readText("src/lib/db/crm-write-repositories.ts");
   const migration = readText("migrations/030_novalure_growth_workspace.sql");
   const navigationOrder = parseNavigationPresetOrder(crmWorkspace);
-  const expectedNavigationProfiles = ["completeBrokerage", "realEstateBroker", "propertyDeveloper", "hybridRealEstate", "managedService", "sales", "salesLead", "management", "marketing", "assistant", "newUser", "admin", "novalureInternal", "novalureGrowth", "novalureServiceOps", "novalureAdmin"];
+  const expectedNavigationProfiles = ["completeBrokerage", "realEstateBroker", "propertyDeveloper", "hybridRealEstate", "managedService", "sales", "salesLead", "management", "marketing", "assistant", "newUser", "admin", "novalureInternal", "novalureGrowth", "novalureServiceOps", "novalureAdmin", "novalureStudio"];
   for (const role of newRoles) addMatrix({ check: `product role ${role}`, expected: "role is additive in server product model", actual: productModel.includes(`| \"${role}\"`) ? "present" : "missing", ok: productModel.includes(`| \"${role}\"`), cause: `${role} is missing from ProductRole` });
   addMatrix({ check: "existing navigation order", expected: "completeBrokerage first; standard profiles before team and Novalure internal profiles", actual: navigationOrder.length ? navigationOrder.join(", ") : "not confirmed", ok: sameArray(navigationOrder, expectedNavigationProfiles), cause: "new profile order is not visible in navigationPresetOrder" });
   const growthRoleBlock = productRoleBlock(productModel, "novalureGrowth");
