@@ -60,7 +60,7 @@
     "qa:lead-idempotency": "node scripts/qa-lead-idempotency.mjs",
     "qa:phase2-property-kpis": "node scripts/qa-phase2-property-kpis.mjs",
     "qa:phase3-duplicate-guards": "node scripts/qa-phase3-duplicate-guards.mjs",
-    "test:sales": "node --conditions=react-server --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts",
+    "test:sales": "node --conditions=react-server --import tsx --test scripts/crm-command-tests.ts scripts/offer-workflow-tests.ts scripts/property-sales-tests.ts scripts/legacy-sales-tests.ts scripts/core-cas-tests.ts scripts/editor-preflight-rls-tests.ts",
     "qa:sales:server": "node scripts/qa-sales-browser-server.mjs",
     "qa:sales:browser": "node scripts/qa-sales-browser.mjs",
     "qa:sales:e2e": "node scripts/qa-sales-e2e.mjs",

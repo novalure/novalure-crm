@@ -1,4 +1,5 @@
 import type { AppSession } from "@/lib/auth/session";
+import { assertProjectGrant, withCrmRead, type TenantTransactionOptions } from "@/lib/crm-command";
 import type {
   EditorPreflightCheck,
   EditorPreflightRun,
@@ -22,13 +23,28 @@ type EditorPreflightRunRow = {
   workspaceId: string;
 };
 
-export async function runEditorPreflight(input: {
+type EditorPreflightInput = {
   editorType: EditorPreflightType;
   entityId?: string | null;
   payload?: unknown;
   projectId?: string | null;
   session: AppSession;
-}): Promise<EditorPreflightRun> {
+};
+
+export async function runEditorPreflight(
+  input: EditorPreflightInput,
+  options: TenantTransactionOptions = {},
+): Promise<EditorPreflightRun> {
+  if (!canPersist()) return runEditorPreflightInTransaction(input);
+
+  return withCrmRead(input.session, async (tx, session) => {
+    const projectId = normalizeUuid(input.projectId ?? asObject(input.payload).projectId);
+    if (projectId) await assertProjectGrant(tx, session, projectId, true);
+    return runEditorPreflightInTransaction({ ...input, session });
+  }, options);
+}
+
+async function runEditorPreflightInTransaction(input: EditorPreflightInput): Promise<EditorPreflightRun> {
   const payload = asObject(input.payload);
   const projectId = normalizeUuid(input.projectId ?? payload.projectId);
   const checks = await buildChecks({
