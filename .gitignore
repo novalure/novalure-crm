@@ -13,6 +13,11 @@
 # testing
 /coverage
 
+# Exact QA screenshot outputs reconstructed from reviewed Base64 sources.
+/docs/qa/crm-ux-i18n-images/approval-after-de.png
+/docs/qa/crm-ux-i18n-images/approval-before-de.png
+/docs/qa/crm-ux-i18n-images/properties-after-en.png
+
 # next.js
 /.next/
 /out/

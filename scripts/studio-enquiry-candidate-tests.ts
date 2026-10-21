@@ -39,6 +39,36 @@ test("only the complete local Actions profile yields public target coordinates",
   assert.ok(studioEnquiryCandidateBinding(optionalOwner));
 });
 
+test("only the two reviewed branch and workflow pairs admit the isolated candidate profile", () => {
+  const reviewedRefs = [
+    "refs/heads/codex/evelyn-crm-package4-integration",
+    "refs/heads/codex/crm-ux-i18n-polish",
+  ];
+  for (const ref of reviewedRefs) {
+    const env = profile();
+    env.GITHUB_REF = ref;
+    env.GITHUB_WORKFLOW_REF = `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${ref}`;
+    assert.ok(studioEnquiryCandidateBinding(env), ref);
+    assert.equal(studioEnquiryCandidateRequestAllowed(request(), env), true, ref);
+    for (const otherRef of reviewedRefs.filter(other => other !== ref)) {
+      assert.equal(studioEnquiryCandidateBinding({ ...env,
+        GITHUB_WORKFLOW_REF: `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${otherRef}`,
+      }), null, "Separately approved refs cannot be mixed into an unreviewed pair");
+    }
+    for (const workflow of [
+      `novalure/novalure-crm/.github/workflows/other.yml@${ref}`,
+      `foreign/novalure-crm/.github/workflows/livegang-e2e.yml@${ref}`,
+    ]) assert.equal(studioEnquiryCandidateBinding({ ...env, GITHUB_WORKFLOW_REF: workflow }), null, workflow);
+  }
+  for (const ref of ["refs/heads/main", "refs/pull/95/merge", "refs/tags/codex/crm-ux-i18n-polish",
+    "refs/heads/codex/crm-ux-i18n-polish-copy", "refs/heads/codex/unreviewed-candidate"]) {
+    const env = profile();
+    env.GITHUB_REF = ref;
+    env.GITHUB_WORKFLOW_REF = `novalure/novalure-crm/.github/workflows/livegang-e2e.yml@${ref}`;
+    assert.equal(studioEnquiryCandidateBinding(env), null, ref);
+  }
+});
+
 test("NextRequest loopback normalization retains the exact original candidate Host", () => {
   const frameworkRequest = new NextRequest(origin + pathname, {
     method: "POST", headers: { host: "127.0.0.1:3000" },

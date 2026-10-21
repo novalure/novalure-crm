@@ -8,8 +8,8 @@
     "npm": ">=11 <12"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/materialize-crm-ux-i18n-images.mjs && next dev",
+    "build": "node scripts/materialize-crm-ux-i18n-images.mjs && next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
