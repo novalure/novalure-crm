@@ -65,6 +65,13 @@ test("newsletter transport and provider failures use localized feedback while lo
   }
 });
 
+test("newsletter summary gives desktop labels room and English navigation uses Reports", () => {
+  assert.equal(getNewsletterCommandCenterCopy("en").analytics, "Reports");
+  const source = readFileSync(new URL("../src/components/newsletter-command-center.tsx", import.meta.url), "utf8");
+  assert.match(source, /xl:min-w-\[32rem\] xl:shrink-0" data-newsletter-summary-metrics/);
+  assert.match(source, /className="break-normal text-xs text-stone-500">\{metric.label\}/);
+});
+
 test("funnel designer renders localized formatting controls, system confidence and consent warning without changing draft content", () => {
   const blueprint = buildFunnelBlueprint({ funnel: { ...funnels[0], name: "SYNTHETIC draft" }, steps: [] });
   blueprint.pages = [{

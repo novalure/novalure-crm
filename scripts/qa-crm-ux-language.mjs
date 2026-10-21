@@ -23,9 +23,11 @@ assert.equal(fixture.database.database, "neondb");
 const visualDelta = process.argv.includes("--visual-delta");
 const inspectClosedControls = process.argv.includes("--inspect-closed-controls");
 const captureOnly = process.argv.includes("--capture-only");
-assert(process.argv.slice(2).every(argument => ["--visual-delta", "--inspect-closed-controls", "--capture-only"].includes(argument)) && [visualDelta, inspectClosedControls, captureOnly].filter(Boolean).length <= 1, "Unknown QA argument");
+const affectedSections = process.argv.includes("--affected-sections");
+const screenshotOnly = captureOnly || affectedSections;
+assert(process.argv.slice(2).every(argument => ["--visual-delta", "--inspect-closed-controls", "--capture-only", "--affected-sections"].includes(argument)) && [visualDelta, inspectClosedControls, captureOnly, affectedSections].filter(Boolean).length <= 1, "Unknown QA argument");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
-const mode = visualDelta ? "visual-delta" : inspectClosedControls ? "closed-controls-inspection" : captureOnly ? "capture-only" : "full-focused-ui";
+const mode = visualDelta ? "visual-delta" : inspectClosedControls ? "closed-controls-inspection" : affectedSections ? "affected-sections" : captureOnly ? "capture-only" : "full-focused-ui";
 const output = path.resolve(".npm-cache/qa/crm-ux-language", `${mode}-${runId}`);
 await mkdir(output, { recursive: true });
 console.log(JSON.stringify({ runId, output, mode }));
@@ -263,9 +265,57 @@ async function geometry(page) {
       horizontalScrollContainers: [...root.querySelectorAll("div,section,article")].filter(element => visible(element) && ["auto", "scroll"].includes(getComputedStyle(element).overflowX) && element.scrollWidth > element.clientWidth + 1).length };
   });
 }
+async function assertAffectedState(page, item) {
+  const content = page.locator("[data-crm-content]");
+  if (["sellerLeads", "buyerLeads", "developerLeads"].includes(item.section) && item.language === "en") {
+    const workflow = content.locator("#property-sales-workflow");
+    await expect(workflow.locator("summary")).toHaveText("Project sales: qualification to completion");
+    await expect(workflow.getByLabel("Project", { exact: true })).toBeVisible();
+  }
+  if (item.section === "contacts" && item.role !== "viewer") {
+    const quality = content.locator("article").filter({ has: page.getByRole("heading", { name: /^(Data quality|Datenqualität)$/ }) });
+    const percentage = quality.getByText(/^\d+%$/, { exact: true });
+    if (await percentage.count()) {
+      const singleLine = await percentage.evaluate(element => {
+        const range = document.createRange(); range.selectNodeContents(element);
+        const rect = range.getBoundingClientRect(), lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+        return rect.height <= lineHeight * 1.4;
+      });
+      assert(singleLine, "Contact quality percentage must remain a readable single numeric token");
+    }
+  }
+  if (item.section === "tasks") await expect(content).not.toContainText(/Microsoft 365 (ready|bereit)/);
+  if (item.section === "newsletter" && item.language === "en") await expect(content).not.toContainText("Auswertungen");
+  if (item.role === "viewer" && ["tasks", "calendar"].includes(item.section)) {
+    const task = item.section === "tasks";
+    const hint = task ? content.locator("[data-task-readonly]") : content.locator("[data-calendar-readonly]");
+    await expect(hint).toHaveText(item.language === "de"
+      ? `Sie können ${task ? "Aufgaben" : "Termine"} ansehen und filtern. Änderungen sind für Ihr Profil nicht freigeschaltet.`
+      : `You can view and filter ${task ? "tasks" : "appointments"}. Your profile does not have permission to change them.`);
+    const create = content.getByRole("button", { name: task ? /^(New task|Neue Aufgabe)$/ : /^(Create appointment|Neuen Termin anlegen)$/ });
+    await expect(create).toBeDisabled();
+    item.readOnlyAffordance = "Create is disabled with visible account-role reason; no business action invoked";
+  }
+  if (item.role === "viewer" && item.section === "projectPipeline") {
+    await expect(content.locator("[data-pipeline-readonly]")).toHaveText(item.language === "de"
+      ? "Sie können Verkaufschancen ansehen und filtern. Änderungen sind für Ihr Profil nicht freigeschaltet."
+      : "You can view and filter deals. Your profile does not have permission to change them.");
+    await expect(content.getByRole("button", { name: /^(Create deal|Deal anlegen)$/ })).toBeDisabled();
+    await expect(content.locator('[draggable="true"]')).toHaveCount(0);
+    const cards = content.locator('article[draggable="false"]');
+    item.readOnlyAffordance = "Create is disabled with visible account-role reason; no business action invoked";
+    item.nonDraggableCards = await cards.count();
+    if (!item.nonDraggableCards) item.dragEvidenceLimit = "No visible deal rows in this viewer scope; absence of a draggable card does not prove populated drag behavior. Source guard is reviewed separately.";
+  }
+  if (item.role === "viewer" && item.section === "properties") {
+    const save = content.getByRole("button", { name: /^(Save property|Objekt speichern)$/ });
+    await expect(save).toBeDisabled();
+    item.readOnlyAffordance = "Property save is visibly disabled; no business action invoked";
+  }
+}
 async function coverageForRole(page, role) {
   const scopes = role === "operator"
-    ? [{ id: accounts.operator.workspaceId, kind: "internal", profiles: ["novalureAdmin", "completeBrokerage", "propertyDeveloper"] }, { id: accounts.studio.workspaceId, kind: "Studio", profiles: ["novalureStudio"] }]
+    ? [{ id: accounts.operator.workspaceId, kind: "internal", profiles: ["novalureAdmin", "completeBrokerage", "propertyDeveloper"] }, ...(!affectedSections ? [{ id: accounts.studio.workspaceId, kind: "Studio", profiles: ["novalureStudio"] }] : [])]
     : [{ id: accounts[role].workspaceId, kind: "customer", profiles: ["completeBrokerage", "propertyDeveloper"] }];
   for (const language of ["de", "en"]) {
     await pageResetForLanguage(page);
@@ -281,6 +331,12 @@ async function coverageForRole(page, role) {
           await chooseProfile(page, profile);
           const entries = await navEntries(page);
           for (const entry of entries) {
+            if (affectedSections) {
+              const general = ["properties", "newsletter", "knowledge", "contacts", "tasks", "calendar", "settings", "projects", "projectOverview"].includes(entry.id);
+              const viewerPipeline = role === "viewer" && entry.id === "projectPipeline";
+              const leadWrapper = role === "operator" && ["sellerLeads", "buyerLeads", "developerLeads"].includes(entry.id) && (language === "en" || (width === 1440 && entry.id === "developerLeads"));
+              if (!general && !leadWrapper && !viewerPipeline) continue;
+            }
             const key = `${scope.kind}:${entry.id}`;
             if (visited.has(key)) { coverage.push({ role, scope: scope.kind, language, width, profile, section: entry.id, status: "COVERED_VIA_SAME_SECTION", coveredVia: visited.get(key) }); continue; }
             const item = { role, scope: scope.kind, language, width, profile, section: entry.id, status: "PASS" };
@@ -295,7 +351,16 @@ async function coverageForRole(page, role) {
               }
               Object.assign(item, layout);
               if (layout.document > layout.viewport + 1 || layout.unnamedSymbolControls.length) item.status = "FAIL";
+              if (affectedSections && item.status !== "LOADING_ONLY") await assertAffectedState(page, item);
               item.screenshot = await screenshot(page, `${role}-${scope.kind}-${language}-${width}-${entry.id}`);
+              if (affectedSections && language === "en" && role === "operator" && width === 1440 && entry.id === "properties") {
+                await page.evaluate(() => scrollTo(0, 0));
+                await screenshot(page, "after-en-desktop-header-1440", false);
+              }
+              if (affectedSections && language === "en" && role === "viewer" && width === 390 && entry.id === "knowledge") {
+                await page.evaluate(() => scrollTo(0, 0));
+                await screenshot(page, "after-en-viewer-knowledge-390", false);
+              }
               visited.set(key, profile);
             } catch (error) { item.status = "FAIL"; item.error = safeMessage(error); item.screenshot = await screenshot(page, `coverage-failure-${coverage.length}`); }
             coverage.push(item);
@@ -463,7 +528,7 @@ try {
   } else if (visualDelta) {
     await visualDeltaCases(operator);
   } else {
-  if (!captureOnly) {
+  if (!screenshotOnly) {
   await languageCases(operator);
   await step("Manual language survives normal logout and another normal login", async () => {
     await chooseLanguage(operator, "en"); await logout(operator); await login(operator, "operator"); await expect(languageControl(operator)).toHaveValue("en");
@@ -475,7 +540,7 @@ try {
   });
   }
   currentPage = operator; await coverageForRole(operator, "operator");
-  if (!captureOnly) {
+  if (!screenshotOnly) {
   await step("Another user in the same browser keeps their independent saved choice", async () => {
     await pageResetForLanguage(operator);
     await chooseLanguage(operator, "en"); await logout(operator); await login(operator, "viewer");
@@ -491,7 +556,7 @@ try {
     });
     await coverageForRole(page, role);
   }
-  if (!captureOnly) await step("The actual app remains usable when localStorage throws", async () => {
+  if (!screenshotOnly) await step("The actual app remains usable when localStorage throws", async () => {
     const blocked = await newContext("blocked-storage-viewer", true); currentPage = blocked; await login(blocked, "viewer");
     await chooseLanguage(blocked, "en"); await blocked.reload({ waitUntil: "domcontentloaded" }); await ready(blocked); await expect(languageControl(blocked)).toHaveValue("en");
     const layout = await geometry(blocked); assert(layout.document <= layout.viewport + 1);
@@ -503,7 +568,7 @@ try {
 } finally {
   for (const context of contexts) await context.close().catch(() => undefined);
   await browser?.close().catch(() => undefined); await admin.end();
-  const report = { runId, mode, sourceBinding, syntheticOnly: true, supplementaryIsolatedBrowser: true, actualSignedInAppBrowserAudit: false, productionAccess: 0, source: "working tree; final exact-SHA gate remains separate", results, coverage, authentication, controlledFaults: faults, pageErrors, unexpectedResponses, externalRequests, blockedWrites, screenshotVisualReview: "pending human/parent inspection", secondDeviceEvidence: "new isolated browser context, not a physical second device" };
+  const report = { runId, mode, sourceBinding, syntheticOnly: true, supplementaryIsolatedBrowser: true, actualSignedInAppBrowserAudit: false, productionAccess: 0, source: "working tree; final exact-SHA gate remains separate", ...(affectedSections ? { boundedCaptureScope: "Affected properties/newsletter/knowledge/contact/task/calendar/settings/project sections, real operator/customer/viewer roles, DE/EN at 1440/390, plus viewer project pipeline guards. Three operator lead wrappers EN at both sizes and developer wrapper DE1440. Existing 300-section capture remains separate; duplicate Studio wrappers and unaffected pages are deliberately not replayed." } : {}), results, coverage, authentication, controlledFaults: faults, pageErrors, unexpectedResponses, externalRequests, blockedWrites, screenshotVisualReview: "pending human/parent inspection", secondDeviceEvidence: "new isolated browser context, not a physical second device" };
   await writeFile(path.join(output, "result.json"), JSON.stringify(report, null, 2));
   const failures = results.filter(result => result.status === "FAIL").length + coverage.filter(item => ["FAIL", "LOADING_ONLY"].includes(item.status)).length + pageErrors.length + unexpectedResponses.length + externalRequests.length + blockedWrites.length;
   console.log(JSON.stringify({ results: results.length, coverage: coverage.length, failures, report: path.join(output, "result.json") }));

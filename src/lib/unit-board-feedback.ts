@@ -29,4 +29,3 @@ export function getUnitBoardErrorMessage(language: LanguageCode, cause: unknown)
   if (["UNAUTHORIZED", "Unauthorized", "UNAUTHENTICATED"].includes(code)) return text.session;
   return text.unconfirmed;
 }
-

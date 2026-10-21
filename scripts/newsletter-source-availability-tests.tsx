@@ -35,6 +35,7 @@ test("unconnected newsletter auxiliary data preserves campaigns and labels unkno
   assert.match(html, /Zustellbarkeit · —/);
   assert.match(html, /— verifizierte Empfänger/);
   assert.match(html, /Einwilligungen und Sperrlisten nicht verfügbar/);
+  assert.equal((html.match(/Einwilligungen, Sperrlisten, Vorlagen, Automationen und Zustellbarkeit sind nicht angebunden\./g) ?? []).length, 1, "the complete consent warning is prominent once, with a distinct concise reason at the disabled action");
   assert.match(html, /<button[^>]*disabled=""[^>]*>Kampagne senden<\/button>/);
   assert.doesNotMatch(html, /0 CRM-Opt-ins|Keine Newsletter-Opt-ins|Nur Newsletter Opt-ins im Segment:/);
 });
@@ -43,6 +44,7 @@ test("unavailable newsletter data is localized in English", () => {
   const html = render("en", false);
   assert.match(html, /Consent and suppression data unavailable/);
   assert.match(html, /Sending remains disabled/);
+  assert.equal((html.match(/Consents, suppression lists, templates, automations and deliverability are not connected\./g) ?? []).length, 1);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Send campaign<\/button>/);
   assert.doesNotMatch(html, /0 CRM opt-ins|No newsletter opt-ins/);
 });

@@ -14,6 +14,8 @@ import {
 import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 
 type TaskCommandCenterProps = {
+  canWriteTasks: boolean;
+  canPrepareFollowUps: boolean;
   activeProjectId: string | null;
   contacts: Contact[];
   language: LanguageCode;
@@ -174,6 +176,8 @@ function createDefaultTaskDraft(
 }
 
 export function TaskCommandCenter({
+  canWriteTasks,
+  canPrepareFollowUps,
   activeProjectId,
   contacts,
   language,
@@ -289,10 +293,12 @@ export function TaskCommandCenter({
   ];
 
   const updateTaskDraft = (field: keyof NewTaskDraft, value: string) => {
+    if (!canWriteTasks) return;
     setTaskDraft((current) => ({ ...current, [field]: value }));
   };
 
   const createTask = async () => {
+    if (!canWriteTasks) return;
     if (!taskDraft.title.trim()) {
       setNoticeIsError(true);
       setNotice(text.titleRequired);
@@ -346,6 +352,7 @@ export function TaskCommandCenter({
   };
 
   const toggleTask = (taskId: string) => {
+    if (!canWriteTasks) return;
     const currentTask = decoratedTasks.find((item) => item.task.id === taskId);
     if (!currentTask || savingTaskIds.includes(taskId)) return;
     const nextStatus = currentTask.isCompleted ? "open" : "done";
@@ -368,7 +375,7 @@ export function TaskCommandCenter({
   };
 
   const prepareTaskFollowUp = async () => {
-    if (!selectedTask) return;
+    if (!canPrepareFollowUps || !selectedTask) return;
 
     setFollowUpSaving(true);
     setNotice("");
@@ -438,6 +445,8 @@ export function TaskCommandCenter({
         <div className="mt-4 flex flex-col items-stretch gap-2 sm:items-end">
           <button
             className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
+            disabled={!canWriteTasks}
+            title={!canWriteTasks ? text.readOnlyHint : undefined}
             onClick={() => {
               if (!isCreateOpen) {
                 setTaskDraft(createDefaultTaskDraft(projects, sessionUserId, activeProjectId));
@@ -449,7 +458,8 @@ export function TaskCommandCenter({
             {isCreateOpen ? text.cancel : text.newTask}
           </button>
         </div>
-        {isCreateOpen ? (
+        {!canWriteTasks ? <p className="mt-3 text-sm text-stone-600" data-task-readonly role="status">{text.readOnlyHint}</p> : null}
+        {isCreateOpen && canWriteTasks ? (
           <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold">{text.createTaskTitle}</h4>
@@ -579,6 +589,7 @@ export function TaskCommandCenter({
               <button
                 className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={
+                  !canWriteTasks ||
                   taskSaving ||
                   !draftProjects.some((project) => project.id === taskDraft.projectId)
                 }
@@ -746,7 +757,8 @@ export function TaskCommandCenter({
 
           <button
             className="mt-4 w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!selectedTask || savingTaskIds.includes(selectedTask.task.id)}
+            disabled={!canWriteTasks || !selectedTask || savingTaskIds.includes(selectedTask.task.id)}
+            title={!canWriteTasks ? text.readOnlyHint : undefined}
             onClick={() => {
               if (selectedTask) {
                 toggleTask(selectedTask.task.id);
@@ -759,7 +771,8 @@ export function TaskCommandCenter({
 
           <button
             className="mt-2 w-full rounded-md border border-stone-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!selectedTask || followUpSaving}
+            disabled={!canPrepareFollowUps || !selectedTask || followUpSaving}
+            title={!canPrepareFollowUps ? text.readOnlyHint : undefined}
             onClick={() => {
               void prepareTaskFollowUp();
             }}

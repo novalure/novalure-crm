@@ -1612,11 +1612,11 @@ export function ContactCommandCenter({
           <section className="grid min-w-0 gap-4 lg:grid-cols-3">
             <article className="min-w-0 rounded-lg border border-stone-200 bg-white p-5">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <h4 className="text-lg font-semibold">{copy.dataQuality}</h4>
                   <p className="mt-1 text-sm text-stone-500">{relatedDataAvailable ? copy.importReadiness : relatedCopy.partialQuality}</p>
                 </div>
-                <span className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
+                <span className="shrink-0 whitespace-nowrap rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
                   {qualityScore}%
                 </span>
               </div>

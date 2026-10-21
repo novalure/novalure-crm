@@ -43,7 +43,7 @@ import {
   type PropertyUnitBoardScope,
 } from "@/lib/property-department";
 import type { ProductRole, WorkspaceProductContext } from "@/lib/product-model";
-import { formatCurrency, formatNumber, getCrmProjectTypeLabel, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
+import { formatCurrency, formatNumber, getCrmProjectTypeLabel, getCrmPropertyTypeLabel, getCrmSystemTextLabel, getLocale, getPropertyDepartmentCopy, type LanguageCode } from "@/lib/i18n";
 import { csrfFetch } from "@/lib/security/csrf-client";
 import { PropertyCoreEditor } from "@/components/property-core-editor";
 import { PropertyRelationshipEditor } from "@/components/property-relationship-editor";
@@ -768,9 +768,9 @@ export function PropertyCommandCenter({
       ) : null}
 
       {activeTab === "overview" ? (
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid min-w-0 max-w-full grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
+            <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
               <input
                 className="min-w-0 rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold text-slate-900"
                 onChange={(event) => setQuery(event.target.value)}
@@ -778,7 +778,7 @@ export function PropertyCommandCenter({
                 value={query}
               />
               <select
-                className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                className="min-w-0 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
                 onChange={(event) => setStatusFilter(event.target.value as PropertyAssetStatus | "all")}
                 value={statusFilter}
               >
@@ -788,7 +788,7 @@ export function PropertyCommandCenter({
                 ))}
               </select>
             </div>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 min-w-0 max-w-full overflow-x-auto">
               <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
                 <colgroup>
                   <col className="w-[30%]" />
@@ -850,30 +850,30 @@ export function PropertyCommandCenter({
             </div>
           </article>
 
-          <article className="rounded-lg border border-stone-200 bg-white p-5">
+          <article className="min-w-0 max-w-full rounded-lg border border-stone-200 bg-white p-5">
             {selectedAsset ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusChip label={copy.statusLabels[selectedAsset.status]} status={selectedAsset.status} />
-                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{selectedAsset.objectType}</span>
+                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-700">{getCrmPropertyTypeLabel(getCrmSystemTextLabel(selectedAsset.objectType, language), language)}</span>
                 </div>
                 <h4 className="mt-3 break-words text-xl font-semibold text-slate-950">{selectedAsset.title}</h4>
                 <p className="mt-2 break-words text-sm text-stone-600">{selectedAsset.location}</p>
-                <div className="mt-4 grid gap-2 text-sm">
-                  <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
+                <div className="mt-4 grid min-w-0 gap-2 text-sm">
+                  <div className="flex min-w-0 flex-col gap-1 rounded-md bg-stone-50 px-3 py-2 sm:flex-row sm:justify-between sm:gap-3">
                     <span className="text-stone-500">{copy.detail.project}</span>
-                    <span className="text-right font-semibold text-slate-900">{selectedAsset.projectName}</span>
+                    <span className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">{selectedAsset.projectName}</span>
                   </div>
-                  <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
+                  <div className="flex min-w-0 flex-col gap-1 rounded-md bg-stone-50 px-3 py-2 sm:flex-row sm:justify-between sm:gap-3">
                     <span className="text-stone-500">{copy.detail.price}</span>
-                    <span className="text-right font-semibold text-slate-900">{selectedAsset.price ? formatCurrency(selectedAsset.price, language) : "-"}</span>
+                    <span className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">{selectedAsset.price ? formatCurrency(selectedAsset.price, language) : "-"}</span>
                   </div>
-                  <div className="flex justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
+                  <div className="flex min-w-0 flex-col gap-1 rounded-md bg-stone-50 px-3 py-2 sm:flex-row sm:justify-between sm:gap-3">
                     <span className="text-stone-500">{copy.detail.reservations}</span>
-                    <span className="text-right font-semibold text-slate-900">{selectedAsset.activeReservations}</span>
+                    <span className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">{selectedAsset.activeReservations}</span>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-2">
+                <div className="mt-4 grid min-w-0 grid-cols-1 gap-2">
                   <button
                     className="min-h-11 rounded-md border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!selectedUnitBoardScope}

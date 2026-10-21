@@ -15,6 +15,10 @@ import {
 import { csrfFetch } from "@/lib/security/csrf-client";
 
 type CalendarCommandCenterProps = {
+  canWriteEvents: boolean;
+  canManageMeetingSettings: boolean;
+  canSyncCalendars: boolean;
+  canSendNotifications: boolean;
   activeProjectId: string | null;
   contacts: Contact[];
   events: CalendarEvent[];
@@ -697,6 +701,10 @@ function createDefaultCalendarEventDraft(
 }
 
 export function CalendarCommandCenter({
+  canWriteEvents,
+  canManageMeetingSettings,
+  canSyncCalendars,
+  canSendNotifications,
   activeProjectId,
   contacts,
   events,
@@ -837,7 +845,7 @@ export function CalendarCommandCenter({
   }, [isHomeWorkspace]);
 
   async function confirmBooking(bookingId: string) {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     setConfirmingBookingId(bookingId);
     setBookingActionMessage("");
 
@@ -887,7 +895,7 @@ export function CalendarCommandCenter({
   }
 
   async function retryNotification(notificationId: string) {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     setRetryingNotificationId(notificationId);
     setBookingActionMessage("");
 
@@ -1160,11 +1168,12 @@ export function CalendarCommandCenter({
   ];
 
   const updateEventDraft = (field: keyof NewCalendarEventDraft, value: string) => {
+    if (!canWriteEvents) return;
     setEventDraft((current) => ({ ...current, [field]: value }));
   };
 
   const createCalendarEvent = async () => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canWriteEvents) return;
     if (!eventDraft.title.trim()) {
       setEventCreateNotice(text.eventTitleRequired);
       return;
@@ -1327,7 +1336,7 @@ export function CalendarCommandCenter({
   });
 
   const saveMeetingSettings = async (closeAfterSave = false) => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canManageMeetingSettings) return;
     const page = getMeetingSettingsPayload();
     const cacheKey = `novalure.meeting.${page.slug}`;
 
@@ -1363,7 +1372,7 @@ export function CalendarCommandCenter({
   };
 
   const sendMeetingTestNotification = async () => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSendNotifications) return;
     const to = selectedEvent?.contact?.email ?? users[0]?.email ?? "";
 
     if (!to) {
@@ -1416,6 +1425,7 @@ export function CalendarCommandCenter({
     field: Field,
     value: MeetingAutomationConfig[Field],
   ) => {
+    if (!canManageMeetingSettings) return;
     setMeetingAutomation((current) => ({ ...current, [field]: value }));
   };
 
@@ -1424,6 +1434,7 @@ export function CalendarCommandCenter({
     field: Field,
     value: MeetingReminderConfig[Field],
   ) => {
+    if (!canManageMeetingSettings) return;
     setMeetingAutomation((current) => ({
       ...current,
       reminders: current.reminders.map((reminder) =>
@@ -1433,6 +1444,7 @@ export function CalendarCommandCenter({
   };
 
   const addReminder = () => {
+    if (!canManageMeetingSettings) return;
     const id = `reminder_${Date.now()}`;
     setMeetingAutomation((current) => ({
       ...current,
@@ -1456,6 +1468,7 @@ export function CalendarCommandCenter({
   };
 
   const duplicateReminder = (reminder: MeetingReminderConfig) => {
+    if (!canManageMeetingSettings) return;
     const id = `reminder_${Date.now()}`;
     setMeetingAutomation((current) => ({
       ...current,
@@ -1468,6 +1481,7 @@ export function CalendarCommandCenter({
   };
 
   const removeReminder = (reminderId: string) => {
+    if (!canManageMeetingSettings) return;
     setMeetingAutomation((current) => {
       const reminders = current.reminders.filter((reminder) => reminder.id !== reminderId);
       return {
@@ -1480,6 +1494,7 @@ export function CalendarCommandCenter({
   };
 
   const applyTemplate = (templateKey: MeetingTemplateKey) => {
+    if (!canManageMeetingSettings) return;
     const template = getTemplateById(templateKey, text);
     setMeetingAutomation((current) => ({
       ...current,
@@ -1501,6 +1516,7 @@ export function CalendarCommandCenter({
   };
 
   const appendTokenToConfirmation = (token: string) => {
+    if (!canManageMeetingSettings) return;
     setMeetingAutomation((current) => ({
       ...current,
       confirmationBody: `${current.confirmationBody}${current.confirmationBody ? " " : ""}${token}`,
@@ -1508,7 +1524,7 @@ export function CalendarCommandCenter({
   };
 
   const appendTokenToReminder = (token: string) => {
-    if (!selectedReminder) return;
+    if (!canManageMeetingSettings || !selectedReminder) return;
     updateReminder(
       selectedReminder.id,
       "body",
@@ -1521,7 +1537,7 @@ export function CalendarCommandCenter({
     field: keyof CalendarConnectionConfig,
     value: string | boolean,
   ) => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canManageMeetingSettings) return;
     setCalendarIntegrations((current) => ({
       ...current,
       [provider]: {
@@ -1532,7 +1548,7 @@ export function CalendarCommandCenter({
   };
 
   const connectCalendarProvider = (provider: CalendarProvider) => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     const option = calendarProviderOptions.find((item) => item.id === provider);
 
     setCalendarIntegrations((current) => ({
@@ -1558,7 +1574,7 @@ export function CalendarCommandCenter({
   };
 
   const connectMeetingProvider = (provider: CalendarProvider) => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     const meetingProvider =
       provider === "google" ? ("google-meet" as const) : ("microsoft-teams" as const);
 
@@ -1585,7 +1601,7 @@ export function CalendarCommandCenter({
   };
 
   const disconnectCalendarProvider = async (provider: CalendarProvider) => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     const providerLabel = getCalendarProviderLabel(provider, text);
 
     setLiveCalendarAction({
@@ -1638,7 +1654,7 @@ export function CalendarCommandCenter({
             : text.calendarSetup.missingConnection);
 
   const syncLiveTeamsMeeting = async () => {
-    if (!isHomeWorkspace) return;
+    if (!isHomeWorkspace || !canSyncCalendars) return;
     setLiveCalendarAction({ status: "running" });
 
     try {
@@ -1704,7 +1720,7 @@ export function CalendarCommandCenter({
     }
   };
 
-  if (meetingBuilderOpen) {
+  if (meetingBuilderOpen && canManageMeetingSettings) {
     return (
       <section className="fixed inset-0 z-50 flex min-h-0 flex-col bg-[#f4f6fa] text-slate-950">
         <header className="shrink-0 border-b border-blue-100 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
@@ -1740,7 +1756,7 @@ export function CalendarCommandCenter({
               </a>
               <button
                 className="rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={meetingNotificationStatus === "sending"}
+                disabled={!canSendNotifications || meetingNotificationStatus === "sending"}
                 onClick={sendMeetingTestNotification}
                 type="button"
               >
@@ -1748,7 +1764,7 @@ export function CalendarCommandCenter({
               </button>
               <button
                 className="rounded-md bg-blue-500 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-blue-300"
-                disabled={meetingSettingsStatus === "saving"}
+                disabled={!canManageMeetingSettings || meetingSettingsStatus === "saving"}
                 onClick={() => saveMeetingSettings(true)}
                 type="button"
               >
@@ -1919,7 +1935,7 @@ export function CalendarCommandCenter({
                     </p>
                   </div>
                   <label className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold">
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       checked={meetingAutomation.confirmationEnabled}
                       onChange={(event) =>
                         updateMeetingAutomation("confirmationEnabled", event.target.checked)
@@ -1932,7 +1948,7 @@ export function CalendarCommandCenter({
                 <div className="grid gap-3">
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.builder.subject}
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                       onChange={(event) =>
                         updateMeetingAutomation("confirmationSubject", event.target.value)
@@ -1942,7 +1958,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.builder.emailTitle}
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                       onChange={(event) =>
                         updateMeetingAutomation("confirmationTitle", event.target.value)
@@ -1952,7 +1968,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.builder.image}
-                    <select
+                    <select disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                       onChange={(event) =>
                         updateMeetingAutomation(
@@ -1971,7 +1987,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.builder.body}
-                    <textarea
+                    <textarea disabled={!canManageMeetingSettings}
                       className="min-h-64 rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal"
                       onChange={(event) =>
                         updateMeetingAutomation("confirmationBody", event.target.value)
@@ -2009,7 +2025,7 @@ export function CalendarCommandCenter({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <label className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold">
-                      <input
+                      <input disabled={!canManageMeetingSettings}
                         checked={meetingAutomation.reminderEnabled}
                         onChange={(event) =>
                           updateMeetingAutomation("reminderEnabled", event.target.checked)
@@ -2058,7 +2074,7 @@ export function CalendarCommandCenter({
                       <div className="grid gap-3 md:grid-cols-[120px_1fr_1fr]">
                         <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                           {text.builder.when}
-                          <input
+                          <input disabled={!canManageMeetingSettings}
                             className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                             onChange={(event) =>
                               updateReminder(selectedReminder.id, "amount", event.target.value)
@@ -2069,7 +2085,7 @@ export function CalendarCommandCenter({
                         </label>
                         <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                           {text.builder.unit}
-                          <select
+                          <select disabled={!canManageMeetingSettings}
                             className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                             onChange={(event) =>
                               updateReminder(
@@ -2089,7 +2105,7 @@ export function CalendarCommandCenter({
                         </label>
                         <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                           {text.builder.channel}
-                          <select
+                          <select disabled={!canManageMeetingSettings}
                             className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                             onChange={(event) =>
                               updateReminder(
@@ -2110,7 +2126,7 @@ export function CalendarCommandCenter({
                       </div>
 
                       <label className="flex items-center gap-2 text-sm font-semibold">
-                        <input
+                        <input disabled={!canManageMeetingSettings}
                           checked={selectedReminder.enabled}
                           onChange={(event) =>
                             updateReminder(selectedReminder.id, "enabled", event.target.checked)
@@ -2121,7 +2137,7 @@ export function CalendarCommandCenter({
                       </label>
                       <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                         {text.builder.subject}
-                        <input
+                        <input disabled={!canManageMeetingSettings}
                           className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                           onChange={(event) =>
                             updateReminder(selectedReminder.id, "subject", event.target.value)
@@ -2131,7 +2147,7 @@ export function CalendarCommandCenter({
                       </label>
                       <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                         {text.builder.emailTitle}
-                        <input
+                        <input disabled={!canManageMeetingSettings}
                           className="rounded-md border border-stone-300 px-3 py-2 text-sm font-semibold normal-case tracking-normal"
                           onChange={(event) =>
                             updateReminder(selectedReminder.id, "title", event.target.value)
@@ -2141,7 +2157,7 @@ export function CalendarCommandCenter({
                       </label>
                       <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                         {text.builder.body}
-                        <textarea
+                        <textarea disabled={!canManageMeetingSettings}
                           className="min-h-52 rounded-md border border-stone-300 px-3 py-2 text-sm normal-case tracking-normal"
                           onChange={(event) =>
                             updateReminder(selectedReminder.id, "body", event.target.value)
@@ -2197,7 +2213,7 @@ export function CalendarCommandCenter({
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="grid gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold">
                     <span className="flex items-center gap-2">
-                      <input
+                      <input disabled={!canManageMeetingSettings}
                         checked={meetingAutomation.allowReschedule}
                         onChange={(event) =>
                           updateMeetingAutomation("allowReschedule", event.target.checked)
@@ -2207,7 +2223,7 @@ export function CalendarCommandCenter({
                       {text.builder.allowReschedule}
                     </span>
                     <span className="text-xs font-normal text-stone-600">{text.builder.deadlineHours}</span>
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 bg-white px-3 py-2"
                       onChange={(event) =>
                         updateMeetingAutomation("rescheduleDeadlineHours", event.target.value)
@@ -2218,7 +2234,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold">
                     <span className="flex items-center gap-2">
-                      <input
+                      <input disabled={!canManageMeetingSettings}
                         checked={meetingAutomation.allowCancel}
                         onChange={(event) =>
                           updateMeetingAutomation("allowCancel", event.target.checked)
@@ -2228,7 +2244,7 @@ export function CalendarCommandCenter({
                       {text.builder.allowCancel}
                     </span>
                     <span className="text-xs font-normal text-stone-600">{text.builder.deadlineHours}</span>
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 bg-white px-3 py-2"
                       onChange={(event) =>
                         updateMeetingAutomation("cancelDeadlineHours", event.target.value)
@@ -2239,7 +2255,7 @@ export function CalendarCommandCenter({
                   </label>
                 </div>
                 <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm font-semibold">
-                  <input
+                  <input disabled={!canManageMeetingSettings}
                     checked={meetingAutomation.requireCancelReason}
                     onChange={(event) =>
                       updateMeetingAutomation("requireCancelReason", event.target.checked)
@@ -2250,7 +2266,7 @@ export function CalendarCommandCenter({
                 </label>
                 <label className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-4 text-sm font-semibold">
                   <span className="flex items-center gap-2">
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       checked={meetingAutomation.postFollowUpEnabled}
                       onChange={(event) =>
                         updateMeetingAutomation("postFollowUpEnabled", event.target.checked)
@@ -2260,7 +2276,7 @@ export function CalendarCommandCenter({
                     {text.builder.prepareFollowUp}
                   </span>
                   <span className="text-xs font-normal text-stone-600">{text.builder.hoursAfterAppointment}</span>
-                  <input
+                  <input disabled={!canManageMeetingSettings}
                     className="max-w-40 rounded-md border border-stone-300 bg-white px-3 py-2"
                     onChange={(event) =>
                       updateMeetingAutomation("postFollowUpDelayHours", event.target.value)
@@ -2415,7 +2431,8 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex justify-end">
           <button
             className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-            disabled={!isHomeWorkspace}
+            disabled={!isHomeWorkspace || !canWriteEvents}
+            title={!canWriteEvents ? text.readOnlyHint : undefined}
             onClick={() => {
               if (!isCreateEventOpen) {
                 setEventDraft(createDefaultCalendarEventDraft(
@@ -2432,7 +2449,8 @@ export function CalendarCommandCenter({
             {isCreateEventOpen ? text.cancel : text.newEvent}
           </button>
         </div>
-        {isCreateEventOpen ? (
+        {!canWriteEvents ? <p className="mt-3 text-sm text-stone-600" data-calendar-readonly role="status">{text.readOnlyHint}</p> : null}
+        {isCreateEventOpen && canWriteEvents ? (
           <div className="mt-4 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="min-w-0">
               <h4 className="text-lg font-semibold text-slate-950">{text.createEventTitle}</h4>
@@ -2441,7 +2459,7 @@ export function CalendarCommandCenter({
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
                 {text.eventTitleField}
-                <input
+                <input disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("title", event.target.value)}
                   value={eventDraft.title}
@@ -2449,7 +2467,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.start}
-                <input
+                <input disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("startsAt", event.target.value)}
                   type="datetime-local"
@@ -2458,7 +2476,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.end}
-                <input
+                <input disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("endsAt", event.target.value)}
                   type="datetime-local"
@@ -2467,7 +2485,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.project}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("projectId", event.target.value)}
                   required
@@ -2485,7 +2503,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.owner}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("ownerUserId", event.target.value)}
                   value={eventDraft.ownerUserId}
@@ -2501,7 +2519,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.contact}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("contactId", event.target.value)}
                   value={eventDraft.contactId}
@@ -2516,7 +2534,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.leadContext}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("leadId", event.target.value)}
                   value={eventDraft.leadId}
@@ -2531,7 +2549,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.meetingProvider}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("meetingProvider", event.target.value as MeetingProvider)}
                   value={eventDraft.meetingProvider}
@@ -2545,7 +2563,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.location}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("location", event.target.value as CalendarEvent["location"])}
                   value={eventDraft.location}
@@ -2559,7 +2577,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.status}
-                <select
+                <select disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("status", event.target.value as CalendarEvent["status"])}
                   value={eventDraft.status}
@@ -2573,7 +2591,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.outcomeGoal}
-                <input
+                <input disabled={!canWriteEvents}
                   className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("outcomeGoal", event.target.value)}
                   value={eventDraft.outcomeGoal}
@@ -2581,7 +2599,7 @@ export function CalendarCommandCenter({
               </label>
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 md:col-span-2">
                 {text.notes}
-                <textarea
+                <textarea disabled={!canWriteEvents}
                   className="mt-2 min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-slate-950"
                   onChange={(event) => updateEventDraft("notes", event.target.value)}
                   value={eventDraft.notes}
@@ -2592,6 +2610,7 @@ export function CalendarCommandCenter({
               <button
                 className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={
+                  !canWriteEvents ||
                   eventSaving ||
                   !draftProjects.some((project) => project.id === eventDraft.projectId)
                 }
@@ -2668,7 +2687,8 @@ export function CalendarCommandCenter({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-            disabled={!isHomeWorkspace}
+            disabled={!isHomeWorkspace || !canManageMeetingSettings}
+            title={!canManageMeetingSettings ? text.settingsPermissionHint : undefined}
             onClick={() => setMeetingBuilderOpen(true)}
             type="button"
           >
@@ -2676,7 +2696,8 @@ export function CalendarCommandCenter({
           </button>
           <button
             className="rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-950 hover:bg-blue-100"
-            disabled={!isHomeWorkspace}
+            disabled={!isHomeWorkspace || !canManageMeetingSettings}
+            title={!canManageMeetingSettings ? text.settingsPermissionHint : undefined}
             onClick={() => {
               setAutomationStep("reminders");
               setMeetingBuilderOpen(true);
@@ -2687,7 +2708,8 @@ export function CalendarCommandCenter({
           </button>
           <button
             className="rounded-md border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!isHomeWorkspace || meetingSettingsStatus === "saving"}
+            disabled={!isHomeWorkspace || !canManageMeetingSettings || meetingSettingsStatus === "saving"}
+            title={!canManageMeetingSettings ? text.settingsPermissionHint : undefined}
             onClick={() => saveMeetingSettings(false)}
             type="button"
           >
@@ -2736,7 +2758,7 @@ export function CalendarCommandCenter({
               htmlFor="calendar-default-provider"
             >
               {text.calendarSetup.calendarForPage}
-              <select
+              <select disabled={!canManageMeetingSettings}
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 id="calendar-default-provider"
                 onChange={(event) => {
@@ -2766,7 +2788,7 @@ export function CalendarCommandCenter({
               htmlFor="calendar-default-meeting-provider"
             >
               {text.calendarSetup.meetingProviderForPage}
-              <select
+              <select disabled={!canManageMeetingSettings}
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 id="calendar-default-meeting-provider"
                 onChange={(event) =>
@@ -2789,7 +2811,7 @@ export function CalendarCommandCenter({
               htmlFor="calendar-sync-mode"
             >
               {text.calendarSetup.syncMode}
-              <select
+              <select disabled={!canManageMeetingSettings}
                 className="w-full min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 id="calendar-sync-mode"
                 onChange={(event) =>
@@ -2879,7 +2901,7 @@ export function CalendarCommandCenter({
                 {isHomeWorkspace && <><div className="mt-4 grid gap-3">
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.calendarSetup.accountEmail}
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                       onChange={(event) =>
                         updateProviderConfig(option.id, "accountEmail", event.target.value)
@@ -2893,7 +2915,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.calendarSetup.calendarLinkOrId}
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                       onChange={(event) =>
                         updateProviderConfig(option.id, "calendarUrl", event.target.value)
@@ -2909,7 +2931,7 @@ export function CalendarCommandCenter({
                   </label>
                   <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                     {text.calendarSetup.meetingLinkTemplate}
-                    <input
+                    <input disabled={!canManageMeetingSettings}
                       className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                       onChange={(event) =>
                         updateProviderConfig(option.id, "meetingLinkTemplate", event.target.value)
@@ -2923,6 +2945,8 @@ export function CalendarCommandCenter({
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                    disabled={!canSyncCalendars}
+                    title={!canSyncCalendars ? text.settingsPermissionHint : undefined}
                     onClick={() => connectCalendarProvider(option.id)}
                     type="button"
                   >
@@ -2930,6 +2954,8 @@ export function CalendarCommandCenter({
                   </button>
                   <button
                     className="rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-950 hover:bg-blue-50"
+                    disabled={!canSyncCalendars}
+                    title={!canSyncCalendars ? text.settingsPermissionHint : undefined}
                     onClick={() => connectMeetingProvider(option.id)}
                     type="button"
                   >
@@ -2938,6 +2964,7 @@ export function CalendarCommandCenter({
                   {oauthStatus === "ready" && config.connected && !isSelectedForPage ? (
                     <button
                       className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      disabled={!canManageMeetingSettings}
                       onClick={() =>
                         setCalendarIntegrations((current) =>
                           normalizeCalendarIntegrationSelection(
@@ -2958,6 +2985,7 @@ export function CalendarCommandCenter({
                   {oauthStatus === "ready" && config.connected ? (
                     <button
                       className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-100"
+                      disabled={!canSyncCalendars}
                       onClick={() => void disconnectCalendarProvider(option.id)}
                       type="button"
                     >
@@ -3008,7 +3036,7 @@ export function CalendarCommandCenter({
               htmlFor="calendar-share-meeting-type"
             >
               {text.share.meetingType}
-              <select
+              <select disabled={!canManageMeetingSettings}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 id="calendar-share-meeting-type"
                 onChange={(event) =>
@@ -3026,7 +3054,7 @@ export function CalendarCommandCenter({
             </label>
             <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
               {text.share.slug}
-              <input
+              <input disabled={!canManageMeetingSettings}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 onChange={(event) =>
                   setShareConfig((current) => ({ ...current, slug: slugify(event.target.value) }))
@@ -3038,7 +3066,7 @@ export function CalendarCommandCenter({
             </label>
             <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
               {text.share.buttonText}
-              <input
+              <input disabled={!canManageMeetingSettings}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 onChange={(event) =>
                   setShareConfig((current) => ({ ...current, buttonLabel: event.target.value }))
@@ -3050,7 +3078,7 @@ export function CalendarCommandCenter({
             </label>
             <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
               {text.share.trackingSource}
-              <input
+              <input disabled={!canManageMeetingSettings}
                 className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                 onChange={(event) =>
                   setShareConfig((current) => ({ ...current, utmSource: event.target.value }))
@@ -3063,7 +3091,7 @@ export function CalendarCommandCenter({
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
               <label className="grid min-w-0 gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                 {text.share.embedHeight}
-                <input
+                <input disabled={!canManageMeetingSettings}
                   className="min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                   min="520"
                   onChange={(event) =>
@@ -3078,7 +3106,7 @@ export function CalendarCommandCenter({
                 htmlFor="calendar-share-theme"
               >
                 {text.share.theme}
-                <select
+                <select disabled={!canManageMeetingSettings}
                   className="min-w-0 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950"
                   id="calendar-share-theme"
                   onChange={(event) =>
@@ -3256,7 +3284,7 @@ export function CalendarCommandCenter({
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
             <button
               className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-              disabled={!isHomeWorkspace || oauthStatus !== "ready" || liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
+              disabled={!isHomeWorkspace || !canSyncCalendars || oauthStatus !== "ready" || liveCalendarAction.status === "running" || !selectedEvent || !selectedProviderConfig.connected}
               onClick={syncLiveTeamsMeeting}
               type="button"
             >
@@ -3395,7 +3423,7 @@ export function CalendarCommandCenter({
                         {booking.status !== "confirmed" && booking.status !== "cancelled" ? (
                           <button
                             className="mt-3 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-stone-400"
-                            disabled={!isHomeWorkspace || confirmingBookingId === booking.id}
+                            disabled={!isHomeWorkspace || !canSyncCalendars || confirmingBookingId === booking.id}
                             onClick={() => confirmBooking(booking.id)}
                             type="button"
                           >
@@ -3493,7 +3521,7 @@ export function CalendarCommandCenter({
                         {notification.status === "failed" ? (
                           <button
                             className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={!isHomeWorkspace || retryingNotificationId === notification.id}
+                            disabled={!isHomeWorkspace || !canSyncCalendars || retryingNotificationId === notification.id}
                             onClick={() => retryNotification(notification.id)}
                             type="button"
                           >

@@ -1683,7 +1683,7 @@ export function NewsletterCommandCenter({
               {text.description}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4 xl:min-w-[32rem] xl:shrink-0" data-newsletter-summary-metrics>
             {[
               { label: text.recipients, value: formatNumber(totalRecipients, language) },
               { label: text.optIns, value: formatNumber(totalOptIns, language) },
@@ -1692,7 +1692,7 @@ export function NewsletterCommandCenter({
             ].map((metric) => (
               <div className="rounded-md bg-stone-50 p-3" key={metric.label}>
                 <p className="font-semibold">{metric.value}</p>
-                <p className="break-words text-xs text-stone-500">{metric.label}</p>
+                <p className="break-normal text-xs text-stone-500">{metric.label}</p>
               </div>
             ))}
           </div>
@@ -1735,9 +1735,9 @@ export function NewsletterCommandCenter({
               {text.liveIntegrationEyebrow}
             </p>
             <h4 className="mt-1 break-words text-lg font-semibold">{text.liveIntegrationTitle}</h4>
-            <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
-              {relatedDataAvailable ? text.liveIntegrationDescription : relatedDataText.detail}
-            </p>
+            {relatedDataAvailable ? <p className="mt-2 max-w-3xl break-words text-sm text-emerald-900">
+              {text.liveIntegrationDescription}
+            </p> : null}
             <p className="mt-2 break-words text-xs font-semibold text-emerald-900">
               {relatedDataAvailable ? text.liveSendRecipients.replace(
                 "{{count}}",
@@ -2844,15 +2844,14 @@ export function NewsletterCommandCenter({
 
       {!relatedDataAvailable && (activeArea === "automations" || activeArea === "deliverability") ? (
         <article className="rounded-lg border border-stone-200 bg-white p-5">
-          <h4 className="font-semibold">{relatedDataText.unavailable}</h4>
-          <p className="mt-2 text-sm text-stone-600">{relatedDataText.detail}</p>
+          <h4 className="font-semibold">{activeArea === "automations" ? text.automations : text.deliverability} · {relatedDataText.unavailable}</h4>
         </article>
       ) : null}
 
-      <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-950">
-        {relatedDataAvailable ? <><span className="font-semibold">{text.consentSafe}:</span> {newsletterOptIns.length}{" "}
-          {language === "de" ? "Newsletter Opt-ins im aktuellen Projektfilter." : "newsletter opt-ins in the current project filter."}</> : relatedDataText.detail}
-      </article>
+      {relatedDataAvailable ? <article className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-950">
+        <span className="font-semibold">{text.consentSafe}:</span> {newsletterOptIns.length}{" "}
+        {language === "de" ? "Newsletter Opt-ins im aktuellen Projektfilter." : "newsletter opt-ins in the current project filter."}
+      </article> : null}
     </section>
   );
 }

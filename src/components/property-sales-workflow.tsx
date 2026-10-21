@@ -25,7 +25,7 @@ export function openPropertySalesWorkflow(detail:OpenSalesDetail){
  window.dispatchEvent(new CustomEvent("property-sales-open",{detail}));
  document.getElementById("property-sales-workflow")?.scrollIntoView({behavior:"smooth",block:"start"});
 }
-export function PropertySalesWorkflow({projects,workspaceId,initialProjectId,onChanged,language="de"}:{language?:LanguageCode;projects:{id:string;name:string}[];workspaceId:string;initialProjectId?:string|null;onChanged?:()=>Promise<boolean|void>|boolean|void}){
+export function PropertySalesWorkflow({projects,workspaceId,initialProjectId,onChanged,language}:{language:LanguageCode;projects:{id:string;name:string}[];workspaceId:string;initialProjectId?:string|null;onChanged?:()=>Promise<boolean|void>|boolean|void}){
  const t=(value:string)=>getSalesWorkflowText(value,language);
  const choices=actions.map(item=>({...item,label:t(item.label)}));
  const endpoint="/api/crm/property-sales?workspaceId="+encodeURIComponent(workspaceId);

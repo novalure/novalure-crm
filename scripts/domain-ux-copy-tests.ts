@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getCrmProjectTypeLabel } from "../src/lib/i18n";
 import { getKnowledgeCenterCopy, getKnowledgeErrorMessage } from "../src/lib/knowledge-center/copy";
 
 test("knowledge failures keep internal service details out of user feedback in both CRM languages", () => {
@@ -32,4 +33,11 @@ test("known knowledge conflicts and access failures give localized next steps", 
 test("expired knowledge sessions give a sign-in next step without exposing a service code", () => {
   assert.match(getKnowledgeErrorMessage("de", new Error("SESSION_EXPIRED"), "fallback"), /erneut an/);
   assert.match(getKnowledgeErrorMessage("en", new Error("UNAUTHORIZED"), "fallback"), /sign in again/);
+});
+
+test("legacy project type values have localized display without changing their stored value", () => {
+  const stored = "Bauträger";
+  assert.equal(getCrmProjectTypeLabel(stored, "en"), "Property development");
+  assert.equal(getCrmProjectTypeLabel(stored, "de"), "Bauträgerprojekt");
+  assert.equal(stored, "Bauträger");
 });

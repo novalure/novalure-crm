@@ -42,7 +42,7 @@ import { ReservationBoard } from "@/components/reservation-board";
 import { TaskCommandCenter } from "@/components/task-command-center";
 import { UnitBoard } from "@/components/unit-board";
 import { WorkspaceOnboardingTour } from "@/components/workspace-onboarding-tour";
-import { can as hasAppPermission } from "@/lib/auth/permissions";
+import { can as hasAppPermission, type AppPermission } from "@/lib/auth/permissions";
 import { canAssignContactOwner, canWriteContacts } from "@/lib/contact-access";
 import { isBusinessKpiRecord } from "@/lib/website-sales-kpi";
 import {
@@ -85,6 +85,7 @@ import {
   isWorkspaceModuleEnabled,
   hasProductCapability,
   type CalendarProviderChoice,
+  type ProductCapability,
   type ProductRole,
   type WorkspaceModuleKey,
   type WorkspaceCustomerType,
@@ -172,7 +173,10 @@ type ManagedWorkspaceOption = {
   id: string;
   name: string;
   operatingModel?: WorkspaceOperatingModel | null;
+  permissions?: AppPermission[];
+  productPermissions?: ProductCapability[];
   productRole?: ProductRole | null;
+  role?: WorkspaceRole;
   setupState?: Record<string, unknown> | null;
   teamStructure?: WorkspaceTeamStructure | null;
 };
@@ -1124,6 +1128,8 @@ type CrmWorkspaceProps = {
   initialLanguagePreference?: LanguagePreference;
   automaticLanguage?: LanguageCode;
   languagePreferenceAvailable?: boolean;
+  sessionPermissions: AppPermission[];
+  sessionProductPermissions: ProductCapability[];
   sessionProductRole: ProductRole;
   sessionRole: WorkspaceRole;
   sessionUserId: string;
@@ -2985,6 +2991,8 @@ export function CrmWorkspace({
   initialLanguagePreference = "auto",
   automaticLanguage = initialLanguage,
   languagePreferenceAvailable = true,
+  sessionPermissions,
+  sessionProductPermissions,
   sessionProductRole,
   sessionRole,
   sessionUserId,
@@ -3053,7 +3061,10 @@ export function CrmWorkspace({
     id: sessionWorkspace.id,
     name: sessionWorkspace.name,
     operatingModel: sessionWorkspace.operatingModel ?? workspace.operatingModel ?? "self_service_customer",
+    permissions: sessionPermissions,
+    productPermissions: sessionProductPermissions,
     productRole: sessionProductRole,
+    role: sessionRole,
     setupState: sessionWorkspace.setupState ?? workspace.setupState ?? {},
     teamStructure: sessionWorkspace.teamStructure ?? workspace.teamStructure ?? "small_team",
   }));
@@ -3115,6 +3126,13 @@ export function CrmWorkspace({
   const canCreateOrEditContacts = canWriteContacts(contactAccessActor);
   const canManageContactOwners = canAssignContactOwner(contactAccessActor);
   const canCreateProject = hasAppPermission(sessionRole, "crm:write") && hasProductCapability(sessionProductRole, "settings:manage");
+  const isSignedInWorkspace = activeWorkspace.id === sessionWorkspace.id;
+  const canOperateWorkspace = isSignedInWorkspace && sessionPermissions.includes("crm:write") && sessionProductPermissions.includes("workspace:operate");
+  const canPrepareTaskFollowUps = isSignedInWorkspace && sessionPermissions.includes("crm:write");
+  const canManageMeetingSettings = isSignedInWorkspace && sessionPermissions.includes("crm:write") && sessionProductPermissions.includes("calendar:manage");
+  const canSyncCalendars = isSignedInWorkspace && sessionPermissions.includes("calendar:sync") && sessionProductPermissions.includes("calendar:manage");
+  const canSendMeetingNotifications = isSignedInWorkspace && sessionPermissions.includes("newsletter:send");
+  const canWritePipeline = Boolean(activeWorkspace.permissions?.includes("crm:write") && activeWorkspace.productPermissions?.includes("pipeline:write"));
 
   const refreshCoreData = useCallback(async (workspaceId = activeWorkspace.id) => {
     setCoreDataStatus("loading");
@@ -3156,7 +3174,10 @@ export function CrmWorkspace({
       id: activeWorkspace.id,
       name: activeWorkspace.name,
       operatingModel: activeWorkspace.operatingModel,
+      permissions: activeWorkspace.permissions,
+      productPermissions: activeWorkspace.productPermissions,
       productRole: activeWorkspace.productRole,
+      role: activeWorkspace.role,
       setupState: activeWorkspace.setupState,
       teamStructure: activeWorkspace.teamStructure,
     };
@@ -3186,7 +3207,10 @@ export function CrmWorkspace({
               current.id !== nextWorkspace.id ||
               current.name !== nextWorkspace.name ||
               current.operatingModel !== nextWorkspace.operatingModel ||
+              JSON.stringify(current.permissions) !== JSON.stringify(nextWorkspace.permissions) ||
+              JSON.stringify(current.productPermissions) !== JSON.stringify(nextWorkspace.productPermissions) ||
               current.productRole !== nextWorkspace.productRole ||
+              current.role !== nextWorkspace.role ||
               current.teamStructure !== nextWorkspace.teamStructure ||
               currentSetupState !== nextSetupState;
 
@@ -3211,7 +3235,10 @@ export function CrmWorkspace({
     activeWorkspace.id,
     activeWorkspace.name,
     activeWorkspace.operatingModel,
+    activeWorkspace.permissions,
+    activeWorkspace.productPermissions,
     activeWorkspace.productRole,
+    activeWorkspace.role,
     activeWorkspace.setupState,
     activeWorkspace.teamStructure,
     canUseWorkspaceSwitch,
@@ -5122,6 +5149,7 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "pipelines" ? (
               <DealPipelineWorkspace
+                canWrite={canWritePipeline}
                 calendarEvents={visibleCalendarEvents}
                 contacts={visibleContacts}
                 crmPipelineStages={crmPipelineStages.filter((stage) => isProjectInActiveScope(stage.projectId))}
@@ -5216,6 +5244,8 @@ export function CrmWorkspace({
             <section className="grid gap-4">
               {visibleActiveSection === "tasks" ? (
                 <TaskCommandCenter
+                  canWriteTasks={canOperateWorkspace}
+                  canPrepareFollowUps={canPrepareTaskFollowUps}
                   activeProjectId={activeProject?.id ?? null}
                   contacts={visibleContacts}
                   language={language}
@@ -5279,6 +5309,10 @@ export function CrmWorkspace({
 
             {visibleActiveSection === "calendar" ? (
               <CalendarCommandCenter
+                canWriteEvents={canOperateWorkspace}
+                canManageMeetingSettings={canManageMeetingSettings}
+                canSyncCalendars={canSyncCalendars}
+                canSendNotifications={canSendMeetingNotifications}
                 key={activeWorkspace.id}
                 workspaceId={activeWorkspace.id}
                 sessionWorkspaceId={sessionWorkspace.id}

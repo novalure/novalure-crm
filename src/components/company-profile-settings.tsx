@@ -372,11 +372,11 @@ async function readJsonResponse<T>(response: Response): Promise<T | null> {
 }
 
 function inputClass() {
-  return "min-h-10 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950 outline-none focus:border-slate-950";
+  return "min-h-10 min-w-0 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-slate-950 outline-none focus:border-slate-950";
 }
 
 function labelClass() {
-  return "grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500";
+  return "grid min-w-0 gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-stone-500";
 }
 
 function SmallButton({
@@ -963,7 +963,7 @@ export function CompanyProfileSettings({
         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
           <div className="min-w-0">
             {accessPayload?.canManage ? (
-              <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto]">
+              <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <Field label={text.name} onChange={(value) => setInviteDraft((current) => ({ ...current, name: value }))} value={inviteDraft.name} />
                 <Field label={text.email} onChange={(value) => setInviteDraft((current) => ({ ...current, email: value }))} type="email" value={inviteDraft.email} />
                 <label className={labelClass()}>
@@ -985,7 +985,9 @@ export function CompanyProfileSettings({
             ) : null}
 
             <div className="max-w-full overflow-x-auto rounded-lg border border-stone-200">
-              <table className="w-full min-w-[860px] text-left text-sm">
+              <table className="w-full min-w-[1300px] table-fixed text-left text-sm">
+                <caption className="sr-only">{text.users}</caption>
+                <colgroup><col className="w-[180px]" /><col className="w-[260px]" /><col className="w-[220px]" /><col className="w-[170px]" /><col className="w-[160px]" /><col className="w-[310px]" /></colgroup>
                 <thead className="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-500">
                   <tr>
                     <th className="px-3 py-2 font-semibold">{text.name}</th>

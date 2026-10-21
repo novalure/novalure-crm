@@ -555,11 +555,13 @@ function KnowledgeCenterContent({
     setBusy(existing ? `website:${existing.id}` : "website");
     setError("");
     setNotice("");
+    let saved = false;
     try {
       const result = await mutate<WebsiteImportResponse>("/api/knowledge-center/websites", existing
         ? { action: "import", sourceId: existing.id, expectedVersion: existing.revision }
         : { action: "create", ...create });
       if (!result.source?.id || !result.websiteImport?.status) throw new Error(text.saveError);
+      saved = true;
       const source = result.source;
       // Keep the created ID even if the follow-up refresh fails. A failed fetch
       // is a saved URL with a partial import, not a reason to create a duplicate.
@@ -580,7 +582,7 @@ function KnowledgeCenterContent({
               : `${text.websiteImportPending}${result.websiteImport.errorCode ? ` ${knowledgeMonitoringError(language, result.websiteImport.errorCode)}` : ""}`);
       setSnapshot(await loadSnapshot());
     } catch (cause) {
-      setError(getKnowledgeErrorMessage(language, cause, text.saveError));
+      setError(saved ? text.savedRefreshError : getKnowledgeErrorMessage(language, cause, text.saveError));
     } finally {
       setBusy("");
     }

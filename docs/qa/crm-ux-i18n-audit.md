@@ -1,60 +1,87 @@
-# CRM UX, Text und Sprache — Prüfinventar
+# CRM UX, Text und Sprache — Prüfinventar und Ergebnis
 
-Stand: 21. Oktober 2026. Ausgangsrevision: `86a09f04ef01614c5236d20f36b8cf4fb4569853`. Dieses Dokument ist die gemeinsame, fortgeschriebene Prüfliste. Ein Quellbefund ist keine Browserabnahme; bestehende historische Prüfergebnisse werden nicht als neue Läufe ausgegeben.
+Stand: 21. Oktober 2026. Ausgangsrevision: `86a09f04ef01614c5236d20f36b8cf4fb4569853`, beim Start tatsächliche Production und `origin/main`. Branch: `codex/crm-ux-i18n-polish`. Später eingetroffene Änderungen aus `main` bis `4c0b460` (PR #94) wurden übernommen und erhalten. Dies ist die einmal angelegte und fortgeschriebene Prüfliste.
 
-## Zugang und Prüfgrenzen
+## Tatsächlicher Zugang und Prüfgrenzen
 
-- Der tatsächliche App-Browser ist erreichbar. Die kanonische Adresse ist `https://www.novalure-crm.app`; die regulär angemeldete Anwendung wurde vom Hauptagenten gesehen.
-- Beobachteter Kontext: Novalure Growth, Novalure Eigenakquise und Novalure Studio. Der beobachtete administrative Zugriff belegt keine Kundenrolle.
-- Production-Sichtprüfung durch den Hauptagenten: Deutsch, Desktop 1440 × 900, alle zwölf sichtbaren Studio-Navigationseinträge; außerdem die standardmäßige mobile Navigation. Anfragen, Wissen, Kontakte, Pipeline, Aufgaben und Kalender wurden ausdrücklich geöffnet. Die Formularansicht benötigt nach beobachtetem Laden noch einen abschließenden Besuch. Englisch wurde zunächst an der Pipeline geprüft; dort blieben die Prioritätsoptionen deutsch. Weitere Sprachen, Größen und Zustände stehen unten noch offen.
-- Production dient Navigation, Lesen und erlaubter Sprachwahl. Schreib-, Validierungs-, Lösch- und Fehlerprüfungen erfolgen ausschließlich mit synthetischen Daten in einer isolierten Umgebung. Zugangsdaten und personenbezogene Screenshots werden nicht in diesen Bericht übernommen.
+Der ausdrücklich verlangte App-Browser war erreichbar. Die kanonische Adresse `https://www.novalure-crm.app` zeigte eine regulär angemeldete Anwendung mit Novalure Growth, Novalure Eigenakquise und Profil Novalure Studio. Diese Administratoransicht ist kein Kundenrollen-Nachweis. Production wurde nur lesend, durch Navigation und erlaubte Sprachwahl geprüft. Keine echten Geschäftsdaten wurden bearbeitet, Nachrichten versandt, Rechte geändert oder Zugangsdaten aus dem Benutzerbrowser gelesen/exportiert.
+
+Production-Sichtprüfung im App-Browser: alle zwölf sichtbaren Studio-Einträge DE auf 1440 × 900, abschließend auch die geladene Formularansicht. EN gezielt an Übersicht, Anfragen, Kontakten und Pipeline. Mobile Kontakte und Bauträger-Projektübersicht wurden bei 390 × 844 betrachtet. Studio, Deutsch und Übersicht wurden wiederhergestellt. Öffentliche Website-, Rechts- und Buchungsseiten sind keine vollständige neue Abnahme dieses Auftrags; betroffen waren die Sprachübergänge von Anmeldung und Passwortseiten.
+
+Die veränderte Anwendung läuft zusätzlich als echter Next.js-Build mit regulärer Passwortanmeldung, erforderlicher MFA und erzwungener PostgreSQL-RLS in der vorhandenen wegwerfbaren Loopback-Prüfumgebung. Sie enthält ausschließlich synthetische Daten und keine `.env`-Datei. Ein regulärer synthetischer Leser wurde auch im App-Browser geprüft. Zusätzliche automatisierte Browserkontexte übernehmen keine Benutzersitzung und ergänzen die Sichtprüfung. Production-Bilder mit Geschäftsinhalten werden nicht geteilt; sämtliche veröffentlichten Bilder stammen aus synthetischer QA.
 
 ## Einmaliges Ansichteninventar
 
-Die authentifizierte Root-Seite verwendet `CrmWorkspace` mit Hashnavigation und vorhandenen Rollen-/Projektfiltern. Die nachstehende Zuordnung beschreibt tatsächlich vorhandenen Quellcode; sie behauptet keine Erreichbarkeit für jede Rolle.
+Die authentifizierte Root-Seite verwendet `CrmWorkspace` mit vorhandener Hashnavigation und Rollen-/Projektfiltern. Profile verändern die Navigation, nicht die serverseitigen Rechte. Die Tests folgen tatsächlich angebotenen Navigationseinträgen.
 
-Der erste ergänzende isolierte App-Lauf vom 21.10.2026, 19:31:45 UTC, hat inzwischen **300 tatsächliche Ansichtenkombinationen** besucht: je Sprache DE/EN und Breite 1440/390 insgesamt 43 verschiedene Navigationseinträge für den internen Operator, 17 für `customer_owner` und 15 für den lesenden `viewer`. Diese Konten wurden mit normalen Passwörtern und der jeweils tatsächlich geforderten MFA angemeldet; fremde Workspaces blieben für Kunden und Viewer gesperrt. Weitere 36 Zeilen verweisen ausdrücklich auf denselben bereits besuchten Abschnitt unter einem anderen Darstellungsprofil; acht Profileinträge waren nicht verfügbar. Ein Darstellungsprofil ist weiterhin kein Rollenwechsel. Der Lauf verwendete den damaligen lokalen Build und erfasste noch nicht für jeden Abschnitt einen Screenshot; die vollständige Bilddokumentation folgt separat. Die Tabelle bleibt das gemeinsame Inventar, die detaillierte Rollen-/Sprachen-/Breitenzuordnung steht im lokalen Laufbericht.
+| Bereich | Vorhandene Ansichten / Umfang |
+| --- | --- |
+| Einstieg und Shell | Übersicht, konfigurierbares Dashboard, Suche, Arbeitsbereich, Projektfilter, Profile, mobile Navigation, Kontextdetails |
+| Kunden und Geschäft | Kontakte, Unternehmen/Kundenverwaltung, Käuferprofile, Käufer-/Verkäufer-/Bauträger-Leads, Website-Anfragen |
+| Vertrieb | Pipeline, Projektpipeline, eingebettete Angebote/Aufträge, Aufgaben, Tagesansicht, Kalender |
+| Immobilien | Projekte, Projektübersicht, Projektanalyse, Immobilien/Mandate, Einheiten, Reservierungen |
+| Kommunikation und Marketing | Kommunikation, Funnels, Formulare, Newsletter, Analyse-Assistent, Analytik, Datenpflege |
+| Wissen und Assistenten | Bots, Wissen, Studio Wissen & KI; vorhandene Publikations-, Monitoring-, Datei- und Governance-Komponenten |
+| Verwaltung | Einstellungen und Sprache, Arbeitsbereiche, Benutzer/Rollen, Audit, Releases, Governance/Compliance |
+| Kundenportal | Gefilterte Root-Anwendung mit echten synthetischen Rollen `customer_owner` und `viewer`; keine eigenständige Portalroute |
 
-| Ansichten / Komponenten | Aktueller Prüfumfang | Noch erforderlich |
+Erster vollständiger lokaler Browserlauf: **300 tatsächlich besuchte Ansichtenkombinationen**, DE/EN jeweils 1440 × 900 und 390 × 844: je Kombination 43 Einträge intern einschließlich Studio-/Makler-/Bauträgerkontext, 17 Kunde und 15 Leser. Weitere 36 Zeilen sind ausdrücklich Profilaliase bereits besuchter Einträge; acht Profilangebote waren nicht verfügbar. Insgesamt enthält der Bericht 344 Zeilen, **nicht 344 unabhängige Seitenabnahmen**. Reguläre Kunden-/Leseranmeldungen und deren Ablehnung eines fremden Arbeitsbereichs wurden separat geprüft.
+
+Nicht jede Ansicht besitzt Daten für jeden Fachzustand. Normal-, Leer- und deaktivierte Zustände hängen von tatsächlicher Verfügbarkeit ab; fehlende Integrationen wurden als solche betrachtet. Schreibende Fachabläufe werden durch bestehende isolierte Vertriebs-/Wissensregression und gezielte Komponenten-/DB-Tests belegt, nicht durch Testeingaben in Production. Eine vollständige neue Integrationabnahme sämtlicher Publikations-, Telefonie-, Kalenderanbieter- oder Versandabläufe wird nicht behauptet. Die Grundmatrix ist eine DOM-/Geometrieprüfung; tatsächlich betrachtete Bilder und deren Grenzen werden gesondert genannt.
+
+## Konkrete Korrekturen
+
+| Element | Ursache | Korrektur |
 | --- | --- | --- |
-| Shell, Suche, Arbeitsbereich-/Projekt-/Profilwechsel, mobile Navigation | Production DE Desktop und mobile Navigation gesehen; Quellen geprüft | EN, Tastatur, schmale Ansichten, lange Namen, Kundenrolle |
-| Übersicht / Command Center und konfigurierbares Dashboard | Production DE: wiederholter Kontext und technische Erklärungstexte beobachtet; Quellen geprüft | DE/EN Desktop/Mobil, Lade-/Leer-/Fehlerzustände, Widgets |
-| Anfragen / Website-Anfragen, Kontakte, Unternehmen / Kundenverwaltung, Managed Service, Onboarding, Customer Success | Routen-/Komponentenbestand erfasst | Erreichbare Ansichten DE/EN, Details, synthetische Formulare und Kundenrollen |
-| Pipeline, Angebote / Aufträge, Aufgaben, Tagesansicht, Kalender | Vorhandene Controller erfasst | DE/EN, Tabellen/Details, Dialoge, leere und fehlerhafte Quellen |
-| Kommunikation, Datenpflege, Sequenzen, Analyse / Auswertungen | Vorhandene, teils verfügbarkeitsabhängige Ansichten erfasst | Tatsächliche Verfügbarkeit und verständliche Meldungen |
-| Projekte, Immobilien / Mandate, Einheiten, Reservierungen | Vorhandene Immobilienkomponenten erfasst | Makler-/Bauträgeransicht, DE/EN, breite Tabellen und Dialoge |
-| Assistenten, Wissen, Dateien, Funnels, Formulare, Newsletter | Vorhandene Controller und Design-C-Anschluss erfasst | DE/EN, lange Inhalte, Entwurf/Prüfung/Freigabe/Veröffentlichung getrennt, sichere Fehlerzustände |
-| Kundenportal | Bestehende Kundenrolle nutzt gefilterte Root-Anwendung; keine separate Portalroute | Normale synthetische Kundenrolle, erlaubte Navigation und serverseitige Grenzen |
-| Profil und Einstellungen einschließlich Sprache | Quellen geprüft; Sprachpersistenz wird gesondert korrigiert | Konto-/Geräte-/Loginfälle, Speicherfehler, ungespeicherte Eingaben |
-| Öffentliche Anmeldung, Passwortzurücksetzung, Rechtstexte, Buchungs-/Formularseiten | Routenbestand erfasst | Betroffene Sprachübergänge gezielt; keine neue umfassende öffentliche Websiteabnahme |
+| Arbeitskontext | Breadcrumb und fünf Abzeichen wiederholten denselben Kontext, besonders hoch auf Mobil | Breadcrumb bleibt sichtbar; weitere Angaben unter „Details zum Arbeitsbereich“ |
+| Gemeinsame Aktionen | Beliebige Worttrennung und schmale mobile Gruppen | Normale Wortgrenzen, stabile Symbole, passende Mindestbreiten und gestapelte Aktionen; begrenzter Notumbruch nur bei schmalen Aktionsbuttons |
+| Dashboard | Titel/Beschreibungen gekürzt, starre Bedienleiste | Vollständige Texte, umbrechende Bedienleiste, benannte Ansichtsauswahl |
+| Einführungstexte | Roadmap-, Architektur- und Werbesprache im täglichen CRM | Kürzere DE/EN-Texte; Folgen, Einwilligungen und Freigaben erhalten |
+| Rollen und Projekte | Interne Rollenbezeichner und Pipeline-UUID | Verständliche Rollen und vorhandener Pipeline-Name bzw. ehrlicher Zuordnungsstatus |
+| Kontosprache | Widersprüchliche Browser-/URL-/Geo-/Speicherregeln | Eine serverseitige persönliche Präferenz `auto/de/en`, gemeinsamer Umschalter und Einstellungen-Karte |
+| Vertrieb | Angebote/Immobilienworkflow und Prioritäten trotz EN deutsch | Systemtexte in bestehender i18n-Datei, lokalisierte Status und Darstellung; gespeicherte Inhalte unverändert |
+| Pipeline | Doppelte fehlende Budgetangabe, breite technische Feldspalten | Korrekte offene Budgetgrenzen, mobile Feldkarten und lokalisierte Labels; technische Zuordnung nur in aufklappbaren Details |
+| Dialoge und Rückmeldung | Deutscher Schließname in EN, rohe Fehler, unklare Bestätigung nach Refreshfehler | Benannte Steuerungen, Fokus/Escape, sichere verständliche Fehler; gespeichert und unbestätigt getrennt |
+| Verwaltung/Immobilien | Rollen, Verwendungen, Historie, Lizenzhinweise und Optionen teilweise roh/einsprachig | DE/EN-Anzeige mit unveränderten Enum-Werten und erhaltenen Lizenz-/Freigabeanforderungen |
+| Marketing/Wissen | Providerfehler, fremdsprachige Fehlermeldungen und technische Blocker | Lokalisierte Fehler und bekannte Blocker, unbekannter Fall bleibt explizit gesperrt; benannte Formatierung |
+| Leserechte | Leerer Wissensbereich forderte Leser zum Erstellen auf | Tatsächlich passende Nur-Lese-Rückmeldung |
+| Browserspeicher | Ungeschützte Zugriffe in Navigation, Dashboard und Cookieauswahl | Fehlertolerante Zugriffe; vorhandener Cookiepfad bleibt nutzbar; keine Übernahme alter Kontosprache |
+| Reservierung | Fehlende verknüpfte Einheit zeigte UUID | „Einheit nicht verfügbar“ / „Unit unavailable“, gespeicherte Zuordnung unverändert |
 
-Gemeinsame Basis: `src/components/ui/*`, Design-C-Primitiven, `crm-theme.css`, `evelyn-design-c.css`, `evelyn-domain-panels.css`; Übersetzungen und Formatierung in `src/lib/i18n.ts`. Maßgeblich bleiben die vorhandenen Daten-, Authentifizierungs-, CSRF-, RLS- und Rollenverträge.
+Vorher-/Nachherbeispiele ohne Kundendaten:
 
-## Befunde und Bearbeitung
+| Vorher | Nachher |
+| --- | --- |
+| „Hot Leads, überfällige SLAs, Termine und Aufgaben in einer mobilen Queue.“ | Kurze Tagesprioritäten statt technischer Ablaufbeschreibung |
+| EN-Pipeline mit „Hoch / Mittel / Normal“ | „High / Medium / Normal“ |
+| „Warum besser als HubSpot“ im Formulareditor | „Vor der Veröffentlichung“ / „Before publishing“ mit konkreten Prüfhinweisen |
+| `customer_owner` oder Pipeline-UUID | Lokalisierte Rolle bzw. Pipeline-Name |
+| Browserlokale Wahl „Deutsch / English“ | Kontoweite Wahl „Automatisch (Standort) / Deutsch / English“ |
 
-| ID | Befund / Quelle | Änderung / Status | Nachweis |
-| --- | --- | --- | --- |
-| UX-01 | Wiederholte Kontextabzeichen und Breadcrumb-Angaben überladen den sichtbaren Einstieg | Gezielte Bereinigung im Shell-/Command-Center-Bereich in Arbeit | Production DE gesehen; erneute Browserprüfung offen |
-| UX-02 | Interne Profilnamen und Serverrechte-Erklärungen im normalen Einstieg | Verständliche Bezeichnungen, notwendige Freigabe-/Versandhinweise bleiben erhalten | Production DE und Quellcode; Prüfung offen |
-| UX-03 | Lange Tagesansicht-Beschreibung mit „Hot Leads“, „SLAs“ und „mobiler Queue“; erklärende CRM-Modell-/Roadmaptexte | Kürzere DE/EN-Texte für Tagesansicht, Anfragen, Kontakte, Pipeline, Aufgaben, Kalender und Newsletter umgesetzt. Sicherheits-/Versandfolgen erhalten | Quellcode; neue Browserprüfung offen |
-| UX-04 | Dashboard-Widgettitel/-beschreibung werden auf zwei Zeilen gekürzt; Bedienleiste beansprucht bei schmalen Karten viel Platz | Vollständige Texte, umbrechende Bedienleiste und benannte Ansichtsauswahl umgesetzt | Quellcode; synthetische Geometrieprüfung offen |
-| UX-05 | Gemeinsame Domänenaktionen erlauben beliebige Worttrennung; lange Labels können einzelne Buchstaben umbrechen | Normale Wortumbrüche, ausreichend breite mobile Aktionsgruppen und begrenzte gemeinsame Buttons umgesetzt | Quellcode; DE/EN-Stressprüfung offen |
-| LANG-01 | Unterschiedliche Geo-/Browser-/Speicher-Fallbacks, keine maßgebliche persönliche Kontoeinstellung | Gemeinsame Konto-/Automatiklogik in Arbeit | Kontrollierte Länder-, Konto- und Browserprüfungen offen |
-| UX-06 | Pipeline schien während eines Zwischenzustands horizontal überzulaufen | Ursache unbestätigt; kein pauschales Abschneiden eingeführt. Geladener Desktopstand hatte Dokumentbreite 1425 bei 1440 Viewport | Production durch Hauptagenten; mobile Prüfung offen |
-| LANG-02 | Pipeline-Prioritätsoptionen in englischer Ansicht bleiben deutsch | Gezielte Korrektur durch Domänenagent in Arbeit | Production EN Desktop gesehen |
-| UX-07 | Gesperrter Browserspeicher kann das konfigurierbare Dashboard beim Lesen der letzten Ansicht abbrechen | Fehlertolerantes Lesen/Schreiben mit nutzbarer aktueller Ansicht umgesetzt | Quellcode; Browserfall mit gesperrtem Speicher offen |
-| UX-08 | Sehr langes deutsches Aktionswort bei 320 px und 200 % Text passt auch nach Stapeln nicht in einen vollständigen Button | Sprachabhängige Silbentrennung; als begrenzter Fallback nur bis 390 px Notumbruch in Aktionsbuttons, keine globale Textregel | Isolierte Stylesheet-Prüfung zunächst 11/12, nach Korrektur 12/12 |
-| UX-09 | Cookie-Auswahl greift beim Login ungeschützt auf gesperrten Browserspeicher zu | Lesen und Schreiben abgesichert; vorhandenes Cookie und bestehendes Auswahlereignis bleiben maßgeblich | Im lokalen Browser als Fehler beobachtet; zwei gezielte Verhaltenstests bestanden, neuer Build-/Browsernachlauf offen |
-| QA-01 | Frühe Prüfheuristik meldete sechs unbenannte Funnel-Buttons | Prüfheuristik korrigiert: tatsächliche beschriftete Buttons lagen in geschlossenem `details`; `checkVisibility` ist false. Keine Produktänderung hierfür | Separater echter DOM-Nachlauf 2/2 bestanden; ursprünglicher Bericht bleibt erhalten |
+## Sprachregel und Schutzgrenzen
 
-## Laufende Verifikation
+Kontrollierte, ausdrücklich **simulierte** Geo-Inputs prüfen AT, DE, CH, LU und LI → Deutsch; FR, IE, US, ES, PT und GB sowie fehlende/ungültige Codes → Englisch. LU und LI sind getrennte Fälle. Manuell EN in AT und manuell DE in IE haben Vorrang. Nur `x-vercel-ip-country` in tatsächlicher Vercel-Laufzeit wird akzeptiert; keine Browser-Sprachregel, GPS-Abfrage, Zusatzdienste oder gespeicherte IP-/Länderinformation. Lokal fehlte Geo tatsächlich und Automatisch ergab Englisch. Kein realer VPN-/Länderlauf wird behauptet.
 
-Zielmatrix: jeder erreichbare Seitentyp DE/EN auf 1440 × 900 und 390 × 844. Gemeinsame Komponenten zusätzlich gezielt bei 1366 × 768, 768 × 1024 und 320 CSS-Pixeln, 200 % Text, vergrößerten Textabständen und Tastaturbedienung. Lange synthetische Firmen-/Kontakt-/Projekt-/Dateinamen, E-Mail, große Zahlen und mehrzeilige Meldungen gehören in die isolierten Prüfungen.
+Der Wert hängt an der bestehenden zentralen Authentifizierungsidentität. Migration 107 ergänzt nur diese kleine Tabelle; bisher gab es keine kontoweite UI-Präferenz. Erzwungene RLS beschränkt Zugriff auf die eigene Identität einer aktiven Mitgliedschaft. Speichern verlangt bestehende Sitzung, CSRF und erwartete aktuelle Benutzer-ID; Präferenz und begrenztes Auditereignis werden gemeinsam bestätigt. Keine automatische Migration. **107 wurde nur in wegwerfbarer lokaler QA angewendet, nicht auf Preview/Production.**
 
-Neue lokale Prüfungen am Arbeitsstand: relevante ESLint-Regeln für Dashboard und zentrale Übersetzungen bestanden; Designgrundlagen, Klickziele und bestehende Copyregressionen **22/22 bestanden**. Der erste i18n-Lauf bestand **9/10**; ein alter Quelltexttest erwartet die gerade ersetzte lokale Sprachpersistenz und wird mit den Verhaltensprüfungen der Kontoeinstellung aktualisiert. Diese Quell-/Komponentenprüfungen sind keine Browserabnahme und kein Produktionsnachweis. Ergebnisse, Grenzen und verbleibende Probleme werden nach tatsächlicher Ausführung hier ergänzt.
+Reguläre synthetische Browserprüfungen belegen Wechsel, Reload, eigenen Arbeitsbereich-/Profilwechsel, Reset auf `auto`, Logout/Login, neue separat angemeldete Browserumgebung ohne kopierten Authzustand und Erhalt von Kontaktentwurf, Suche und Scope. Die neue Browserumgebung simuliert ein weiteres Gerät; kein physisches Zweitgerät wurde benutzt. Kontrollierter 503-Speicherfehler behielt die alte Wahl ohne Erfolgsmeldung. Kontoisolation, neue Sitzungen und RLS werden zusätzlich gegen echtes lokales PostgreSQL geprüft.
 
-Zusätzlicher isolierter Browsercheck der tatsächlichen gemeinsamen Stylesheets mit synthetischem HTML: **12/12 bestanden**, DE/EN bei 320, 390, 768, 1366 und 1440 px sowie 320 px mit 200 % Text. Geprüft wurden vollständige Aktionslabels, mindestens 44 px Buttonhöhe, lange Auswahlwerte und kontrollierter Dateinamenumbruch; DE-320-Screenshot tatsächlich angesehen. Der erste Lauf bestand 11/12 und zeigte ein überlanges deutsches Aktionswort bei 200 %. Nach dem begrenzten schmalen Notumbruch bestand auch dieser Fall. Diese Hilfsprüfung verwendet keine authentifizierte CRM-Seite, beweist keine Formularfunktion oder Kundenrolle und ersetzt die App-Matrix nicht. Lokale synthetische Artefakte: `.npm-cache/qa/ui-reflow-result.json`, `ui-reflow-de-320.png`, `ui-reflow-en-320.png`.
+## Ausgeführte Verifikation und Zwischenstände
 
-Ergänzender authentifizierter App-Lauf `run-2026-10-21T19-31-45-062Z`: **14/15 gezielte Prüfungen bestanden**, 300 besuchte Ansichtenkombinationen ohne beobachteten Dokumentüberlauf oder tatsächlich sichtbare unbenannte Symbolbuttons. Manuelle Kontosprache über Reload, normale Wiederanmeldung, autorisierten Workspace-/Profilwechsel und einen separat normal angemeldeten Browserkontext blieb erhalten. „Automatisch“ wurde als eigener Modus gespeichert und ergab ohne lokale Geo-Information Englisch. Ein tatsächlich abgefangener Speicherausfall behielt die alte Auswahl ohne Erfolgsmeldung. Ein Kontaktentwurf, Suchtext und URL-Scope blieben beim Sprachwechsel erhalten. Der Suchdialog wurde per Tastatur geöffnet/geschlossen; Browser-Chrome im nativen Tabzyklus wurde von Hintergrundfokus unterschieden. Ein verzögerter tatsächlicher Knowledge-GET zeigte zunächst Laden und anschließend den kontrollierten Fehlerzustand.
+Abschlussstand nach Übernahme von PR #94: Unit **245/245**, neue UX-/Sprach-/Verwaltungs-/Marketing-/Pipelineprüfungen **20/20**, zusätzlich echter Forced-RLS-DB-Test **1/1**. Bereits ausgeführte relevante Regression am UX-Arbeitsstand: Design C/Kundenzugriff **27/27**, Vertrieb **101/101**, Wissen **190/190**, Wissen Paket 3 **54/54**. Diese früheren Ergebnisse werden nicht rückwirkend als Test sämtlicher späteren PR-94-Änderungen bezeichnet. ESLint, Typecheck und optimierter Build werden am abschließenden Stand geprüft. Produktionsabhängigkeitsaudit: **0 bekannte Schwachstellen**. Reguläre exakte Remote-CI bleibt ein eigenes Gate.
 
-Dieser Lauf ist **insgesamt kein PASS**: Der Benutzerwechseltest traf am Ende der mobilen Matrix auf einen ungeeigneten Testselektor; zusätzlich trat der echte Cookie-Storagefehler UX-09 auf. Beide wurden gezielt korrigiert und benötigen den nachfolgenden Lauf. Der Bericht bleibt unverändert erhalten: `.npm-cache/qa/crm-ux-language/run-2026-10-21T19-31-45-062Z/result.json`. Es gab keine beobachteten unerwarteten 5xx, externen Browserrequests oder versuchten Business-API-Schreibzugriffe. Der zweite Browserkontext ist ausdrücklich ein simuliertes weiteres Gerät und kein physisches Zweitgerät. Quellen-/Build-Fingerprints werden ab dem folgenden Lauf getrennt festgehalten; eine fehlende frühere Bindung wird nicht nachträglich erfunden.
+Gemeinsame Stylesheet-Stressprüfung: DE/EN bei 320, 390, 768, 1366 und 1440 px, zusätzlich 320 px mit 200 % Text; **12/12** nach Korrektur eines langen deutschen Aktionsworts (zuerst 11/12). Tatsächliche gemeinsame CSS-Regeln, lange synthetische Inhalte und Aktionsflächen; keine authentifizierte Fachabnahme. Tastatur, Escape und Fokusrückgabe wurden am lokalen Suchdialog geprüft. Virtuelle mobile Größen sind keine Hardware-/Bildschirmtastaturabnahme.
+
+Der erste vollständige Browserbericht bleibt unverändert: `.npm-cache/qa/crm-ux-language/run-2026-10-21T19-31-45-062Z/result.json`. Insgesamt **FAIL**, trotz geometrisch unauffälliger 300 Besuche: ein mobiler Auswahlfehler im Testhelfer und ein echter Cookiefehler bei verweigertem Speicher. Beide Ursachen wurden korrigiert; gezielter Nachlauf separat. Sechs zunächst gemeldete unbenannte Funnel-Steuerungen lagen in geschlossenen `details` und waren nicht sichtbar; die falsche Sichtbarkeitsannahme des Tests wurde korrigiert. Keine erfundenen Produktlabels.
+
+Der unabhängige interne Agent prüfte Produktrevision `d3ed5abe5753d0e6de53237784920e5326d41781` gegen `4c0b460`: offen **C0/H0/M0/L0**, 22 unabhängige gezielte Prüfungen bestanden. Dabei wurde ein echter Verdrahtungsfehler behoben: Einstellungen übersetzten zunächst nur den React-Key statt des sichtbaren Prüftexts. Ein Test rendert jetzt fünf tatsächliche Warnungen/Blocker in EN. Dies ist kein vertrauenswürdiges GitHub-App-Attest und keine gehostete Abnahme.
+
+Rohlogs, private Fixturekontexte und alle synthetischen Bildserien bleiben lokal unter `.npm-cache/qa`. Quellenfingerprint und tatsächlich gebaute Bytes werden in den neuen Läufen getrennt erfasst. Die erste Bildserie umfasste Kernansichten; vollständige ergänzende Bilder und der gezielte letzte Lauf werden unten ergänzt. Eine fehlende frühere Buildbindung wird nicht nachträglich erfunden.
+
+## Preview und echte Abschlussgrenze
+
+Eine neue gehostete UX-Preview ist **blockiert**: Die sichere bestehende Paket-4-Preview verwendet 65 branchspezifische Überschreibungen globaler Preview-Variablen. Der neue Branch würde sie nicht automatisch erben. Die verfügbaren Providerwerkzeuge bieten keinen verifizierten geheimnisfreien Klonpfad für diese Konfiguration. Ein isoliertes Neon-Ziel existiert, dessen Bindung an diesen neuen App-Branch aber nicht nachgewiesen ist. Paket 4 und Production werden nicht geändert.
+
+Automatisches Vercel-Deployment dieses Branches ist daher in `vercel.json` deaktiviert. Erforderlich sind eine verifizierte eigene Nichtproduktionsbindung einschließlich Migration 107 und danach reguläre Anmeldung/Abnahme auf genau dieser Preview. Ein alter Paket-4-Link wird nicht als UX-Preview ausgegeben. Die Vercel CLI ist nicht installiert; `npm i -g vercel` wird für sichere hostseitige Verwaltungsarbeit empfohlen. Ihre Installation allein bestätigt keine sichere Bindung.
+
+Geliefert werden Draft-PR und tatsächlich laufende lokale Preview. Exakte GitHub-Checks und unabhängiger SHA-Review bleiben getrennte Gates. Kein Merge oder Production-Deployment; frühere Paket-4-Freigabe wird nicht erweitert. Wegen der gehosteten Preview-Grenze ist dies kein uneingeschränkt vollständig abgeschlossener Auftrag.

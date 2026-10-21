@@ -4,6 +4,7 @@ import { CrmWorkspace } from "@/components/crm-workspace";
 import { getMockCoreCrmData } from "@/lib/db/crm-loaders";
 import { users, workspace } from "@/lib/crm-source";
 import { isVisualQaDeployment } from "../preview-guard";
+import { resolveWorkspaceMembershipAccess } from "@/lib/auth/session";
 import styles from "../visual-qa.module.css";
 
 export const dynamic = "force-dynamic";
@@ -25,13 +26,20 @@ export default function VisualQaContentPage() {
   if (!previewUser) {
     notFound();
   }
+  const previewAccess = resolveWorkspaceMembershipAccess({
+    productRole: previewUser.productRole ?? "platform_admin",
+    role: previewUser.role,
+    workspaceName: workspace.name,
+  });
 
   return (
     <div className={styles.content} inert>
       <CrmWorkspace
         coreData={getMockCoreCrmData(workspace.id)}
         initialLanguage="de"
-        sessionProductRole={previewUser.productRole ?? "platform_admin"}
+        sessionPermissions={previewAccess.permissions}
+        sessionProductPermissions={previewAccess.productPermissions}
+        sessionProductRole={previewAccess.productRole}
         sessionRole={previewUser.role}
         sessionUserId={previewUser.id}
         sessionUserName={previewUser.name}

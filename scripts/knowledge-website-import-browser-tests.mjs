@@ -283,7 +283,10 @@ try {
         await expect(retry).toBeEnabled();
         await expect(item.getByTestId("knowledge-monitoring")).toBeVisible();
         await expect(page.getByRole("status").filter({ hasText: "The address is saved, but content has not been imported." })).toBeVisible();
-        if (mode === "partial-refresh-failure") await expect(page.getByRole("alert")).toHaveText("SYNTHETIC snapshot refresh unavailable");
+        if (mode === "partial-refresh-failure") {
+          await expect(page.getByRole("alert")).toHaveText("The change is saved. The overview could not be refreshed. Please reload the view.");
+          await expect(page.locator("body")).not.toContainText("SYNTHETIC snapshot refresh unavailable");
+        }
         const saved = await inspect(page);
         assert.equal(saved.calls.length, 1);
         assert.equal(saved.snapshot.sources.length, 1);

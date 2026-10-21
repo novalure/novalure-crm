@@ -38,7 +38,7 @@
     "test:phase7": "node --test scripts/phase7-mobile-smoke-tests.mjs",
     "test:phase8": "node --test scripts/phase8-acceptance-smoke-tests.mjs",
     "test:i18n": "node --test scripts/i18n-localization-smoke-tests.mjs",
-    "test:ux-language": "node --import tsx --test scripts/crm-language-preference-tests.ts scripts/domain-ux-copy-tests.ts scripts/settings-unit-localization-tests.ts scripts/marketing-ui-copy-tests.ts scripts/pipeline-presentation-tests.ts scripts/company-profile-preflight-render-tests.ts && node --conditions=react-server --import tsx --test scripts/crm-language-preference-db-tests.ts",
+    "test:ux-language": "node --import tsx --test scripts/crm-language-preference-tests.ts scripts/domain-ux-copy-tests.ts scripts/settings-unit-localization-tests.ts scripts/marketing-ui-copy-tests.ts scripts/pipeline-presentation-tests.ts scripts/company-profile-preflight-render-tests.ts scripts/read-only-operational-ui-tests.ts && node --conditions=react-server --import tsx --test scripts/crm-language-preference-db-tests.ts",
     "test:company-profile-settings": "node --test scripts/company-profile-settings-smoke-tests.mjs",
     "test:contact-access": "node --test scripts/contact-access-rbac-smoke-tests.mjs",
     "test:property-department": "node --test scripts/property-department-smoke-tests.mjs",

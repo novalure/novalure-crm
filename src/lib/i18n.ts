@@ -6252,6 +6252,7 @@ export const leadInboxCommandCopy = {
 
 export const dealPipelineCommandCopy = {
   en: {
+    readOnly: "You can view and filter deals. Your profile does not have permission to change them.",
     title: "Deal pipeline",
     description:
       "Track deals by stage, assignee and next action. Stage changes are saved in the history.",
@@ -6427,6 +6428,7 @@ export const dealPipelineCommandCopy = {
   },
   de: {
     title: "Dealpipeline",
+    readOnly: "Sie können Verkaufschancen ansehen und filtern. Änderungen sind für Ihr Profil nicht freigeschaltet.",
     description:
       "Deals nach Phase, Zuständigkeit und nächstem Schritt bearbeiten. Phasenwechsel werden im Verlauf gespeichert.",
     forecast: "Gewichteter Forecast",
@@ -6615,6 +6617,7 @@ export const taskCommandCenterCopy = {
     search: "Search",
     searchPlaceholder: "Search task, contact, project or source",
     newTask: "New task",
+    readOnlyHint: "You can view and filter tasks. Your profile does not have permission to change them.",
     createTaskTitle: "Create free task",
     createTaskDescription:
       "Create an internal CRM task with optional contact, lead, project and assignee links.",
@@ -6658,7 +6661,7 @@ export const taskCommandCenterCopy = {
     noLead: "No lead linked",
     open: "open",
     done: "done",
-    microsoftReady: "Microsoft 365 ready",
+    microsoftReady: "Meeting planning",
     fieldMappingReady: "Task field mapping",
     taskReliability: "Task logic check",
   },
@@ -6675,6 +6678,7 @@ export const taskCommandCenterCopy = {
     search: "Suche",
     searchPlaceholder: "Aufgabe, Kontakt, Projekt oder Quelle suchen",
     newTask: "Neue Aufgabe",
+    readOnlyHint: "Sie können Aufgaben ansehen und filtern. Änderungen sind für Ihr Profil nicht freigeschaltet.",
     createTaskTitle: "Freie Aufgabe anlegen",
     createTaskDescription:
       "Interne CRM-Aufgabe mit optionalem Kontakt-, Lead-, Projekt- und Zuständigkeitsbezug erstellen.",
@@ -6718,7 +6722,7 @@ export const taskCommandCenterCopy = {
     noLead: "Kein Lead verknüpft",
     open: "offen",
     done: "erledigt",
-    microsoftReady: "Microsoft 365 bereit",
+    microsoftReady: "Terminplanung",
     fieldMappingReady: "Aufgabenfeld-Mapping",
     taskReliability: "Aufgabenlogik geprüft",
   },
@@ -9111,7 +9115,7 @@ export const newsletterCommandCenterCopy = {
     sendStatus: "Send status",
     segments: "Segments",
     automations: "Automations",
-    analytics: "Auswertungen",
+    analytics: "Reports",
     deliverability: "Deliverability",
     search: "Search",
     searchPlaceholder: "Search campaign, segment, subject or goal",
@@ -10426,6 +10430,8 @@ export const calendarCommandCenterCopy = {
     noLead: "Kein Lead verknüpft",
     noOwner: "Nicht zugewiesen",
     newEvent: "Neuen Termin anlegen",
+    readOnlyHint: "Sie können Termine ansehen und filtern. Änderungen sind für Ihr Profil nicht freigeschaltet.",
+    settingsPermissionHint: "Für Buchungsseiten und Kalenderverbindungen fehlt Ihrem Profil die Berechtigung.",
     createEventTitle: "Internen Termin anlegen",
     createEventDescription:
       "Erstellt einen CRM-Termin mit Projekt-, Kontakt-, Lead- und Zuständigkeitsbezug. Danach kann derselbe Termin mit Microsoft 365 oder Google synchronisiert werden.",
@@ -10453,10 +10459,10 @@ export const calendarCommandCenterCopy = {
     liveIntegrationTitle: "Ausgewählten Termin synchronisieren",
     liveIntegrationDescription:
       "Erstellt den aktuell ausgewählten CRM-Termin über die echte Microsoft-365-Anbindung und speichert den Sync im CRM.",
-    liveSyncIdle: "Microsoft 365 ist bereit für den ausgewählten CRM-Termin.",
+    liveSyncIdle: "Der ausgewählte Kalender ist verbunden.",
     liveSyncRunning: "Termin wird synchronisiert",
-    liveSyncSuccess: "Termin \"{{title}}\" wurde in Microsoft 365 erstellt und im CRM protokolliert.",
-    liveSyncError: "Microsoft-365-Termin konnte nicht erstellt werden.",
+    liveSyncSuccess: "Termin \"{{title}}\" wurde im verbundenen Kalender erstellt und im CRM protokolliert.",
+    liveSyncError: "Der Termin konnte im verbundenen Kalender nicht erstellt werden.",
     createTeamsMeeting: "Termin synchronisieren",
     openSyncedEvent: "Synchronisierten Termin öffnen",
     liveSyncSubject: "Novalure CRM Live-Test",
@@ -10901,6 +10907,8 @@ export const calendarCommandCenterCopy = {
     noLead: "No lead linked",
     noOwner: "No assignee",
     newEvent: "Create appointment",
+    readOnlyHint: "You can view and filter appointments. Your profile does not have permission to change them.",
+    settingsPermissionHint: "Your profile does not have permission to manage booking pages and calendar connections.",
     createEventTitle: "Create internal appointment",
     createEventDescription:
       "Creates a CRM appointment with project, contact, lead and assignee context. The same appointment can then be synced to Microsoft 365 or Google.",
@@ -10928,10 +10936,10 @@ export const calendarCommandCenterCopy = {
     liveIntegrationTitle: "Sync selected appointment",
     liveIntegrationDescription:
       "Creates the currently selected CRM appointment through the real Microsoft 365 connection and stores the sync in CRM.",
-    liveSyncIdle: "Microsoft 365 is ready for the selected CRM appointment.",
+    liveSyncIdle: "The selected calendar is connected.",
     liveSyncRunning: "Syncing appointment",
-    liveSyncSuccess: "Appointment \"{{title}}\" was created in Microsoft 365 and logged in CRM.",
-    liveSyncError: "Microsoft 365 appointment could not be created.",
+    liveSyncSuccess: "Appointment \"{{title}}\" was created in the connected calendar and logged in CRM.",
+    liveSyncError: "The appointment could not be created in the connected calendar.",
     createTeamsMeeting: "Sync appointment",
     openSyncedEvent: "Open synced appointment",
     liveSyncSubject: "Novalure CRM Live Test",
@@ -11518,6 +11526,8 @@ const crmPropertyTypeAliases: Record<string, string> = {
 
 const crmProjectTypeAliases: Record<string, string> = {
   b2b_workspace: "b2b_workspace",
+  bautrager: "property_development",
+  bautraeger: "property_development",
   bautragerprojekt: "property_development",
   brokerage: "brokerage",
   buyer_pipeline: "buyer_pipeline",

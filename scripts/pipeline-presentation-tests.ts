@@ -25,7 +25,7 @@ const deal: Deal = { id: "deal-fixture", workspaceId: project.workspaceId, proje
 test("sales details resolve pipeline names and keep integration keys in closed details", () => {
   for (const language of ["de", "en"] as const) {
     const html = renderToStaticMarkup(createElement(DealPipelineWorkspace, {
-      calendarEvents: [], contacts: [], deals: [deal], language, leads: [], organizations: [], pipeline: [], projectPipelinePermissions: [], crmPipelines: [pipeline], crmPipelineStages: [], projectLabel: "Test project", projects: [project], propertyReservations: [], propertyUnits: [], sellerListings: [], tasks: [], users: [], workspaceId: project.workspaceId,
+      canWrite: true, calendarEvents: [], contacts: [], deals: [deal], language, leads: [], organizations: [], pipeline: [], projectPipelinePermissions: [], crmPipelines: [pipeline], crmPipelineStages: [], projectLabel: "Test project", projects: [project], propertyReservations: [], propertyUnits: [], sellerListings: [], tasks: [], users: [], workspaceId: project.workspaceId,
     }));
     assert.ok(html.includes(pipeline.name));
     assert.ok(!html.includes(pipelineId));
@@ -33,5 +33,20 @@ test("sales details resolve pipeline names and keep integration keys in closed d
     assert.match(html, /<details[^>]*><summary[^>]*>(?:Technical field mapping|Technische Feldzuordnung)<\/summary>/);
     assert.ok(!html.includes("min-w-[680px]"));
     assert.equal(project.defaultPipelineId, pipelineId);
+  }
+});
+
+test("a read-only pipeline retains deal details and filters while disabling mutation affordances", () => {
+  for (const language of ["de", "en"] as const) {
+    const html = renderToStaticMarkup(createElement(DealPipelineWorkspace, {
+      canWrite: false, calendarEvents: [], contacts: [], deals: [deal], language, leads: [], organizations: [], pipeline: [], projectPipelinePermissions: [], crmPipelines: [pipeline], crmPipelineStages: [], projectLabel: "Test project", projects: [project], propertyReservations: [], propertyUnits: [], sellerListings: [], tasks: [], users: [], workspaceId: project.workspaceId,
+    }));
+    assert.match(html, /data-pipeline-readonly/);
+    assert.match(html, /disabled=""[^>]*>(?:Deal anlegen|Create deal)<\/button>/);
+    assert.match(html, /draggable="false"/);
+    assert.match(html, /<fieldset disabled=""/);
+    assert.ok(html.includes(deal.name));
+    assert.ok(html.includes(pipeline.name));
+    assert.doesNotMatch(html, /data-pipeline-readonly[^>]*>[^<]*(?:forbidden|crm:write|workspace:operate)/i);
   }
 });

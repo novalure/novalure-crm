@@ -30,3 +30,11 @@ test("an explicitly available related adapter keeps the existing consent and his
   assert.match(html, /UNVERIFIED_CONVERSATION_SENTINEL/);
   assert.doesNotMatch(html, /Conversation history and consent data are currently unavailable/);
 });
+
+test("the lead inbox passes its UI language to the embedded property sales workflow", () => {
+  for (const language of ["de", "en"] as const) {
+    const html = renderToStaticMarkup(createElement(LeadInbox, { ...props, language, showPropertySalesWorkflow: true }));
+    assert.match(html, language === "de" ? /Projektverkauf: Qualifizierung bis Abschluss/ : /Project sales: qualification to completion/);
+    if (language === "en") assert.doesNotMatch(html, /Projektverkauf: Qualifizierung bis Abschluss/);
+  }
+});

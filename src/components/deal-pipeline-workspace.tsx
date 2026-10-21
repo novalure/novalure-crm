@@ -41,6 +41,7 @@ import { salesFetch as csrfFetch } from "@/lib/security/crm-sales-client";
 import { OfferWorkflow } from "@/components/offer-workflow";
 
 type DealPipelineWorkspaceProps = {
+  canWrite: boolean;
   calendarEvents: CalendarEvent[];
   contacts: Contact[];
   deals: Deal[];
@@ -509,6 +510,7 @@ function mapStageHistoryEntry(entry: DealStageHistoryEntry): StageHistoryEntry {
 }
 
 export function DealPipelineWorkspace({
+  canWrite,
   calendarEvents,
   contacts,
   deals,
@@ -865,6 +867,7 @@ export function DealPipelineWorkspace({
     : contacts[0]?.id ?? "";
 
   const patchDeal = (dealId: string, patch: DealPatch) => {
+    if (!canWrite) return;
     setSavedMessage("");
     setDealPatches((current) => ({
       ...current,
@@ -903,6 +906,7 @@ export function DealPipelineWorkspace({
   };
 
   const persistDeal = async (deal: Deal, reason?: string) => {
+    if (!canWrite) return null;
     try {
       const response = await csrfFetch(`/api/crm/deals${workspaceQuery}`, {
         body: JSON.stringify({ deal, reason, expectedVersion: deal.version }),
@@ -926,6 +930,7 @@ export function DealPipelineWorkspace({
     reasonDetail?: string;
     toStage: DealStage;
   }) => {
+    if (!canWrite) return null;
     try {
       const response = await csrfFetch(`/api/crm/deals/${encodeURIComponent(input.dealId)}/stage${workspaceQuery}`, {
         body: JSON.stringify({
@@ -1050,6 +1055,7 @@ export function DealPipelineWorkspace({
     reason?: string,
     reasonCategory?: DealCloseReasonCategory,
   ) => {
+    if (!canWrite) return;
     const nextStage = normalizeDealStage(targetStage, orderedStageTitles);
 
     if (deal.stage === nextStage && !reason?.trim()) {
@@ -1140,6 +1146,7 @@ export function DealPipelineWorkspace({
   };
 
   const requestStageChange = (deal: Deal, targetStage: DealStage) => {
+    if (!canWrite) return;
     const nextStage = normalizeDealStage(targetStage, orderedStageTitles);
     const item = dealViews.find((view) => view.deal.id === deal.id);
     const warnings = getStageGateWarnings(item, nextStage);
@@ -1170,12 +1177,14 @@ export function DealPipelineWorkspace({
   };
 
   const handleDragStart = (event: DragEvent<HTMLElement>, dealId: string) => {
+    if (!canWrite) { event.preventDefault(); return; }
     setDraggedDealId(dealId);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", dealId);
   };
 
   const handleDragOver = (event: DragEvent<HTMLElement>, stage: DealStage) => {
+    if (!canWrite) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropStage(stage);
@@ -1183,6 +1192,7 @@ export function DealPipelineWorkspace({
 
   const handleDrop = (event: DragEvent<HTMLElement>, stage: DealStage) => {
     event.preventDefault();
+    if (!canWrite) return;
     const dealId = event.dataTransfer.getData("text/plain") || draggedDealId;
     const deal = workingDeals.find((item) => item.id === dealId);
 
@@ -1199,7 +1209,7 @@ export function DealPipelineWorkspace({
   };
 
   const createDeal = async () => {
-    if (creatingDeal) {
+    if (!canWrite || creatingDeal) {
       return;
     }
 
@@ -1356,10 +1366,10 @@ export function DealPipelineWorkspace({
     return (
       <article
         aria-label={item.deal.name}
-        className={`cursor-grab rounded-lg border bg-white p-3 text-left shadow-sm transition active:cursor-grabbing ${
+        className={`${canWrite ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} rounded-lg border bg-white p-3 text-left shadow-sm transition ${
           isSelected ? "border-slate-950 ring-2 ring-slate-950/10" : "border-stone-200 hover:border-emerald-300"
         }`}
-        draggable
+        draggable={canWrite}
         key={item.deal.id}
         onClick={() => setSelectedDealId(item.deal.id)}
         onDragEnd={() => {
@@ -1440,7 +1450,7 @@ export function DealPipelineWorkspace({
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap 2xl:justify-end">
             <button
               className="w-full rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-stone-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-400 sm:w-auto"
-              disabled={Object.keys(dealPatches).length === 0}
+              disabled={!canWrite || Object.keys(dealPatches).length === 0}
               onClick={discardDraftChanges}
               type="button"
             >
@@ -1448,6 +1458,7 @@ export function DealPipelineWorkspace({
             </button>
             <button
               className="w-full rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
+              disabled={!canWrite}
               onClick={() => setIsCreateOpen((current) => !current)}
               type="button"
             >
@@ -1486,7 +1497,8 @@ export function DealPipelineWorkspace({
           </div>
         ) : null}
 
-        {isCreateOpen ? (
+        {!canWrite ? <p className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-700" data-pipeline-readonly>{text.readOnly}</p> : null}
+        {isCreateOpen && canWrite ? (
           <div className="mt-5 rounded-lg border border-stone-200 bg-stone-50 p-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500 xl:col-span-2">
@@ -1689,7 +1701,7 @@ export function DealPipelineWorkspace({
                 <h4 className="text-lg font-semibold text-slate-950">{text.endStatus}</h4>
                 <p className="mt-1 max-w-3xl text-sm text-stone-500">{text.endStatusDescription}</p>
               </div>
-              <p className="text-sm font-semibold text-stone-500">{text.dragHint}</p>
+              {canWrite ? <p className="text-sm font-semibold text-stone-500">{text.dragHint}</p> : null}
             </div>
             <div className="mt-4 max-w-full overflow-x-auto">
               <div
@@ -1740,7 +1752,7 @@ export function DealPipelineWorkspace({
             <div className="mb-3 flex flex-col gap-1 px-1 md:flex-row md:items-end md:justify-between">
               <div>
                 <h4 className="text-lg font-semibold text-slate-950">{text.workBoard}</h4>
-                <p className="text-sm text-stone-500">{text.dragHint}</p>
+                {canWrite ? <p className="text-sm text-stone-500">{text.dragHint}</p> : null}
               </div>
             </div>
             <div className="max-w-full overflow-x-auto">
@@ -1839,7 +1851,7 @@ export function DealPipelineWorkspace({
 
           {selectedDeal ? (
             <>
-              <OfferWorkflow key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} language={language} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
+              <OfferWorkflow canWrite={canWrite} key={selectedDeal.id} deal={selectedDeal} contact={selectedDealView.contact} leads={leads} language={language} workspaceQuery={workspaceQuery} onChanged={onDealsChanged} />
               <div className="mt-4 grid gap-3 text-sm">
                 {[
                   [text.stage, stageLabel(selectedDeal.stage)],
@@ -1861,6 +1873,7 @@ export function DealPipelineWorkspace({
                 ))}
               </div>
 
+              <fieldset disabled={!canWrite} className="min-w-0">
               <div className="mt-4 grid gap-3">
                 <label className="text-xs font-semibold uppercase tracking-[0.12em] text-stone-500">
                   {text.stageSelect}
@@ -2001,6 +2014,7 @@ export function DealPipelineWorkspace({
               >
                 {text.save}
               </button>
+              </fieldset>
 
               <div className="mt-4">
                 <p className="text-sm font-semibold text-slate-950">{text.warnings}</p>

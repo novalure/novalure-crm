@@ -129,6 +129,8 @@ export default async function Home({ searchParams }: HomeProps) {
       initialLanguagePreference={crmLanguage.preference}
       automaticLanguage={crmLanguage.automaticLanguage}
       languagePreferenceAvailable={crmLanguage.preferenceAvailable}
+      sessionPermissions={session.permissions}
+      sessionProductPermissions={session.productPermissions}
       sessionProductRole={session.productRole}
       sessionRole={session.role}
       sessionUserId={session.userId}
