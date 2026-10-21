@@ -52,6 +52,10 @@ async function publishThroughUi(card, expectedContent) {
 async function api(path, body, method = "POST") {
   return page.evaluate(async ({ path, body, method }) => {
     const scopedPath = path + (path.includes("?") ? "&" : "?") + new URLSearchParams({ workspaceId: window.knowledgeWorkspace });
+    if (method === "GET") {
+      const response = await fetch(scopedPath, { cache: "no-store" });
+      return { status: response.status, body: await response.json() };
+    }
     const tokenResponse = await fetch("/api/auth/csrf?" + new URLSearchParams({ method, path: new URL(scopedPath, location.origin).pathname }));
     const token = await tokenResponse.json();
     const response = await fetch(scopedPath, { method, headers: { "content-type": "application/json", "x-novalure-csrf-token": token.csrfToken }, body: JSON.stringify(body) });
@@ -217,7 +221,7 @@ try {
     await expect.poll(async () => (await readSnapshot()).sources.find(item => item.id === sourceId).approvedVersionId).toBe(null);
     assert.equal((await api("/api/knowledge-center/query", { query: "mango", botId, channel: "webchat" })).body.matches.length, 0);
   });
-  await step("website monitoring schedules are customer configurable and remain isolated from live publishing", async () => {
+  await step("website schedules stay paused without a configured dispatcher and cannot publish", async () => {
     const snapshot = await readSnapshot();
     await admin.query(`update knowledge_center_entitlements set features=features||'{"monitoring":true,"advancedMaintenance":true}'::jsonb,monitoring_intervals=array['manual','daily','weekly','monthly']::text[] where workspace_id=$1`, [fixture.workspaceId]);
     const response = await api("/api/knowledge-center/sources", { areaId: snapshot.areas.find(item => item.name === "SYNTHETIC Firmenwissen").id, name: "SYNTHETIC Unternehmenswebsite", type: "url", url: "https://company.com", content: "SYNTHETIC website facts." });
@@ -227,15 +231,22 @@ try {
     await card.getByRole("button", { name: "Websiteüberwachung", exact: true }).click();
     const monitoring = card.getByTestId("knowledge-monitoring");
     await monitoring.getByTestId("knowledge-monitoring-interval").selectOption("daily");
+    // This disposable browser server has no production source allowlist. A
+    // booked interval alone must not pretend that background execution exists.
+    await expect(monitoring.getByTestId("knowledge-monitoring-save")).toBeDisabled();
+    const readiness = await api(`/api/knowledge-center/monitoring?sourceId=${response.body.source.id}`, undefined, "GET");
+    assert.equal(readiness.status, 200);
+    assert.deepEqual(readiness.body.dispatcher, { available: false, reason: "cron_auth_unavailable" });
+    await monitoring.getByRole("checkbox", { name: "Geplante Prüfungen aktivieren", exact: true }).uncheck();
     await monitoring.getByTestId("knowledge-monitoring-save").click();
-    await expect(monitoring.getByRole("status")).toHaveText("Änderung gespeichert.");
+    await expect(monitoring.getByText("Änderung gespeichert.", { exact: true })).toBeVisible();
     const stored = (await admin.query("select interval,enabled,next_due_at is not null as scheduled from knowledge_website_monitoring where source_id=$1", [response.body.source.id])).rows[0];
-    assert.deepEqual(stored, { interval: "daily", enabled: true, scheduled: true });
+    assert.deepEqual(stored, { interval: "daily", enabled: false, scheduled: false });
     assert.equal((await admin.query("select count(*)::int as count from knowledge_website_scan_runs")).rows[0].count, 0);
     await monitoring.getByTestId("knowledge-monitoring-interval").selectOption("manual");
     await monitoring.getByTestId("knowledge-monitoring-save").click();
-    await expect(monitoring.getByRole("status")).toHaveText("Änderung gespeichert.");
-    await expect.poll(async () => (await admin.query("select enabled from knowledge_website_monitoring where source_id=$1", [response.body.source.id])).rows[0].enabled).toBe(false);
+    await expect(monitoring.getByText("Änderung gespeichert.", { exact: true })).toBeVisible();
+    await expect.poll(async () => (await admin.query("select interval,enabled,next_due_at is not null as scheduled from knowledge_website_monitoring where source_id=$1", [response.body.source.id])).rows[0]).toEqual({ interval: "manual", enabled: false, scheduled: false });
   });
   await step("maintenance analysis produces persistent customer-reviewable proposals without publishing", async () => {
     await page.getByRole("button", { name: "Wissenspflege", exact: true }).click();
