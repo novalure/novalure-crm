@@ -68,6 +68,7 @@ export async function startDesignCIntegrationDatabase() {
       "104_knowledge_publication_workflow.sql",
       "105_knowledge_website_monitoring.sql",
       "106_crm_operational_readers.sql",
+      "107_knowledge_connected_assistant_quota.sql",
     ]) {
       const sql = await readFile(path.resolve("migrations", filename), "utf8");
       const client = await owner.connect();

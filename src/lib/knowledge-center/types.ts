@@ -8,16 +8,17 @@ export type KnowledgeVersion = { id: string; sourceId: string; version: number; 
 export type KnowledgeSource = { id: string; areaId: string; projectId: string | null; name: string; type: KnowledgeSourceType; status: string; revision: number; approvedVersionId: string | null; draftVersionId: string | null; archivedAt: string | null; version: KnowledgeVersion | null; workflowState?: KnowledgeWorkflowState | "draft" };
 export type KnowledgeAssignment = { botId: string; channel: KnowledgeChannel; areaId: string };
 export type KnowledgeEntitlement = { allowedMonitoringIntervals?: ("manual" | "daily" | "weekly" | "monthly")[]; enabled: boolean; maxSources: number; maxStorageBytes: number; maxQueriesPerMonth: number; contractReference: string | null; features: { websiteImport: boolean; monitoring: boolean; advancedMaintenance: boolean; webchatAccess?: boolean; voiceAccess?: boolean }; limits: { maxAreas: number; maxWebsites: number; maxScansPerMonth: number; maxUsers: number; maxAssistants: number } };
-export type KnowledgeUsage = { sources: number; storageBytes: number; queriesThisMonth: number };
+export type KnowledgeUsage = { sources: number; storageBytes: number; queriesThisMonth: number; connectedAssistants?: number };
 export type KnowledgePermissions = { canWrite: boolean; canPublish: boolean; canAssign: boolean };
-export type KnowledgeCenterSnapshot = { workspace: { id: string; name: string }; available: boolean; areas: KnowledgeArea[]; sources: KnowledgeSource[]; projects: { id: string; name: string }[]; bots: { id: string; name: string; projectId: string | null }[]; assignments: KnowledgeAssignment[]; entitlement: KnowledgeEntitlement; usage: KnowledgeUsage; permissions: KnowledgePermissions };
+export type KnowledgeCenterSnapshot = { workspace: { id: string; name: string }; available: boolean; assignmentManagementAvailable?: boolean; areas: KnowledgeArea[]; sources: KnowledgeSource[]; projects: { id: string; name: string }[]; bots: { id: string; name: string; projectId: string | null }[]; assignments: KnowledgeAssignment[]; entitlement: KnowledgeEntitlement; usage: KnowledgeUsage; permissions: KnowledgePermissions };
 export type CreateKnowledgeAreaInput = { name: string; kind: KnowledgeAreaKind; projectId?: string | null; description?: string };
 export type KnowledgeContentInput = { name: string; content?: string; structuredData?: Record<string, unknown>; url?: string | null; mediaAssetId?: string | null };
 export type CreateKnowledgeSourceInput = KnowledgeContentInput & { areaId: string; type: KnowledgeSourceType };
 export type UpdateKnowledgeSourceInput = Partial<KnowledgeContentInput> & { sourceId: string; expectedVersion: number };
 export type AssignKnowledgeAreasInput = { botId: string; channel: KnowledgeChannel; areaIds: string[] };
 export type QueryKnowledgeCenterInput = { query: string; botId?: string; channel?: KnowledgeChannel; areaIds?: string[]; limit?: number };
-export type KnowledgeMatch = { sourceId: string; versionId: string; chunkId: string; areaId: string; title: string; excerpt: string; citationUrl: string | null; score: number };
+// projectDivision is repository-derived policy context, never a request selector.
+export type KnowledgeMatch = { sourceId: string; versionId: string; chunkId: string; areaId: string; title: string; excerpt: string; citationUrl: string | null; score: number; projectDivision?: import("../crm-division").CrmDivision };
 export type KnowledgeQueryResult = { matches: KnowledgeMatch[]; grounded: boolean; usage: KnowledgeUsage };
 export type KnowledgeDocument = { assetId: string; name: string; mimeType: string; sizeBytes: number; downloadPath: string };
 

@@ -414,6 +414,14 @@ test("standard QA includes 094 but never applies pending manual 095 or 096", () 
   );
 });
 
+test("connected-assistant quota requires the checksummed Knowledge Center predecessor", () => {
+  const migrations = [migration("101_knowledge_center", "sha-101"), migration("107_knowledge_connected_assistant_quota", "sha-107")];
+  assert.throws(() => createMigrationPlan({ ledgerRows: [], migrations, only: migrations[1].version }), /required predecessor 101_knowledge_center/);
+  const ledgerRows = [ledgerRow("101_knowledge_center", "sha-101")];
+  assert.deepEqual(createMigrationPlan({ ledgerRows, migrations, only: migrations[1].version }), [migrations[1]]);
+  assert.deepEqual(createMigrationPlan({ ledgerRows: [...ledgerRows, ledgerRow(migrations[1].version, "sha-107")], migrations, only: "" }), []);
+});
+
 test("legacy-breaking release contracts are isolated from automatic expand migrations", () => {
   assert.doesNotMatch(webhookExpand, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);
   assert.match(webhookCutover, /drop index if exists bot_channel_webhooks_workspace_message_uidx/);

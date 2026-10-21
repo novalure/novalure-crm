@@ -509,6 +509,7 @@ test("public gateway fails closed for malformed, oversized, revoked, and capabil
 });
 
 test("training chat foundation is scoped, replay-safe, and has no CRM or outbound effect", async () => {
+  await db.admin.query("update external_integration_widget_configs set language='de' where integration_id=(select id from external_integrations where public_site_key=$1)", [siteKey]);
   const startKey = "gateway_chat_session_idempotency_key_0001";
   const startRequest = () => new Request("https://crm.example/api/public/integrations/chat/sessions", {
     body: JSON.stringify({ idempotencyKey: startKey, language: "en", siteKey }),
@@ -522,8 +523,8 @@ test("training chat foundation is scoped, replay-safe, and has no CRM or outboun
   const session = await first.json() as { mode: string; sessionId: string; sessionToken: string };
   assert.deepEqual(await replay.json(), session);
   assert.equal(session.mode, "training");
-  const persistedSession = await db.admin.query<{ public_site_key: string; session_token_hash: string }>(
-    `select i.public_site_key,s.session_token_hash
+  const persistedSession = await db.admin.query<{ public_site_key: string; session_token_hash: string; language: string }>(
+    `select i.public_site_key,s.session_token_hash,s.language
      from external_chat_sessions s join external_integrations i on i.id=s.integration_id
      where s.id=$1`,
     [session.sessionId],
@@ -531,7 +532,10 @@ test("training chat foundation is scoped, replay-safe, and has no CRM or outboun
   assert.deepEqual(persistedSession.rows, [{
     public_site_key: siteKey,
     session_token_hash: createHash("sha256").update(session.sessionToken).digest("hex"),
+    language: "de",
   }]);
+  // The saved widget language wins over the customer's page-language hint.
+  await db.admin.query("update external_integration_widget_configs set language='en' where integration_id=(select id from external_integrations where public_site_key=$1)", [siteKey]);
 
   const message = await appendChatMessage(new Request("https://crm.example/api/public/integrations/chat/messages", {
     body: JSON.stringify({

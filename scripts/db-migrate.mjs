@@ -71,6 +71,7 @@ const migrationDependencies = new Map([
   ["098_studio_enquiry_handoff", "097_studio_sales_calendar_bridge"],
   ["099_studio_enquiry_public_launch", "098_studio_enquiry_handoff"],
   ["100_studio_enquiry_production", "096_public_integration_gateway"],
+  ["107_knowledge_connected_assistant_quota", "101_knowledge_center"],
 ]);
 const validCommands = new Set(["status", "dry-run", "up"]);
 const validNeon061Profiles = new Set(["production", "qa", "rehearsal"]);

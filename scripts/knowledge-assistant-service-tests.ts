@@ -88,7 +88,7 @@ before(async () => {
   await db.admin.query("insert into workspaces(id,name,operating_model,customer_type,setup_state) values($1,'SYNTHETIC machine knowledge','novalure_internal','novalure_internal','{}') on conflict(id) do update set operating_model='novalure_internal',customer_type='novalure_internal'", [CRM_MACHINE_WORKSPACE_ID]);
   await db.admin.query("alter table company_profiles enable row level security; alter table company_profiles force row level security; alter table company_profile_versions enable row level security; alter table company_profile_versions force row level security");
   await db.admin.query("do $$ declare r record; begin for r in select format('%I.%I',n.nspname,c.relname) as q from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p') and c.relrowsecurity loop execute 'alter table '||r.q||' force row level security'; end loop; end $$");
-  for (const migration of ["092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql", "101_knowledge_center.sql"]) {
+  for (const migration of ["092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql", "101_knowledge_center.sql", "107_knowledge_connected_assistant_quota.sql"]) {
     await db.admin.query(await readFile(new URL(`../migrations/${migration}`, import.meta.url), "utf8"));
   }
   // Exercise definer row locks under FORCE RLS without superuser/owner bypass.
@@ -170,6 +170,65 @@ test("drafts and unmatched queries return an explicit safe fallback without sour
   assert.equal(previous.excerpts[0].versionId, voiceSource.approvedVersionId);
   assert.doesNotMatch(JSON.stringify(previous), /DRAFT_REPLACEMENT_SECRET/);
   voiceSource = draft;
+});
+
+test("saved project division permits Studio service knowledge while property, tenant and publication guards remain enforced", async t => {
+  const webProject = randomUUID(), estateProject = randomUUID(), foreignProject = randomUUID();
+  const webBot = randomUUID(), estateBot = randomUUID(), unassignedBot = randomUUID(), foreignWebBot = randomUUID();
+  for (const [id, workspace, division] of [
+    [webProject, ids.workspace, "WEB_DESIGN"], [estateProject, ids.workspace, "REAL_ESTATE_GROWTH"],
+    [foreignProject, ids.foreignWorkspace, "WEB_DESIGN"],
+  ]) await db.admin.query("insert into projects(id,workspace_id,name,type,division) values($1,$2,'SYNTHETIC division project','synthetic',$3)", [id, workspace, division]);
+  for (const [id, workspace, project] of [
+    [webBot, ids.workspace, webProject], [estateBot, ids.workspace, estateProject],
+    [unassignedBot, ids.workspace, null], [foreignWebBot, ids.foreignWorkspace, foreignProject],
+  ]) await db.admin.query("insert into bots(id,workspace_id,project_id,name,role) values($1,$2,$3,'SYNTHETIC division assistant','advisor')", [id, workspace, project]);
+  const area = await createKnowledgeArea(session(), { name: "SYNTHETIC published service knowledge", kind: "company" }, options);
+  const service = await published(session(), area.id, "SYNTHETIC website packages", "studioquoteanchor Website package price is EUR 499. Managed care is available.");
+  const contact = await published(session(), area.id, "SYNTHETIC Studio contact", "studiocontactanchor Contact the Studio team. Novalure provides real-estate marketing and CRM services separately. Those services are distinct from Studio website packages and must not be assumed included in a website price.");
+  await published(session(), area.id, "SYNTHETIC property claims", "propertyquoteanchor Apartment A01 is available for EUR 450000.");
+  await createKnowledgeSource(session(), { areaId: area.id, name: "SYNTHETIC unpublished package", type: "manual", content: "studioquoteanchor DRAFT_PACKAGE_SECRET price EUR 9999" }, options);
+  for (const botId of [webBot, estateBot, unassignedBot]) await assignKnowledgeAreas(session(), { botId, channel: "webchat", areaIds: [area.id] }, options);
+  const context = (assistantId: string, query: string, actor = session()) => retrieveAssistantKnowledge(actor, { assistantId, channel: "webchat", query, maxResults: 3 }, options);
+
+  await t.test("published service prices and realistic contact text are grounded for saved WEB_DESIGN", async () => {
+    const prices = await context(webBot, "studioquoteanchor price");
+    assert.equal(prices.answerStatus, "grounded");
+    assert.equal(prices.excerpts.length, 1);
+    assert.equal(prices.excerpts[0].sourceId, service.id);
+    assert.equal(prices.excerpts[0].versionId, service.approvedVersionId);
+    assert.match(prices.excerpts[0].text, /EUR 499/);
+    const contacts = await context(webBot, "studiocontactanchor");
+    assert.equal(contacts.answerStatus, "grounded");
+    assert.equal(contacts.excerpts[0].sourceId, contact.id);
+    assert.match(contacts.excerpts[0].text, /real-estate marketing and CRM services separately/);
+    assert.doesNotMatch(JSON.stringify([prices, contacts]), /DRAFT_PACKAGE_SECRET|projectDivision|WEB_DESIGN/);
+  });
+  await t.test("REAL_ESTATE_GROWTH and an unassigned assistant retain the conservative policy", async () => {
+    for (const botId of [estateBot, unassignedBot]) {
+      assertEmpty(await context(botId, "studioquoteanchor price"));
+      assertEmpty(await context(botId, "studiocontactanchor"));
+    }
+  });
+  await t.test("explicit property claims in either query or excerpt still require live facts", async () => {
+    assertEmpty(await context(webBot, "propertyquoteanchor"));
+    assertEmpty(await context(webBot, '"studioquoteanchor" OR "apartment price"'));
+  });
+  await t.test("a saved project-profile change is observed on the next retrieval", async () => {
+    await db.admin.query("update projects set division='REAL_ESTATE_GROWTH' where id=$1", [webProject]);
+    try { assertEmpty(await context(webBot, "studioquoteanchor price")); } finally {
+      await db.admin.query("update projects set division='WEB_DESIGN' where id=$1", [webProject]);
+    }
+    assert.equal((await context(webBot, "studioquoteanchor price")).answerStatus, "grounded");
+  });
+  await t.test("a WEB_DESIGN profile never substitutes for a current channel grant or tenant identity", async () => {
+    await assignKnowledgeAreas(session(), { botId: webBot, channel: "webchat", areaIds: [] }, options);
+    try { assertEmpty(await context(webBot, "studioquoteanchor price")); } finally {
+      await assignKnowledgeAreas(session(), { botId: webBot, channel: "webchat", areaIds: [area.id] }, options);
+    }
+    await assert.rejects(context(foreignWebBot, "studioquoteanchor price"));
+    await assert.rejects(context(foreignWebBot, "studioquoteanchor price", { ...session(), workspaceId: ids.foreignWorkspace }));
+  });
 });
 
 test("voice grant revocation cannot fall back to telephone or webchat grants", async () => {
@@ -414,6 +473,8 @@ test("public gateway knowledge binds live integration, origin, session, tenant a
         [{ tenantId: ids.foreignWorkspace }, {}, 400],
         [{ assistantId: ids.foreignBot }, {}, 400],
         [{ channel: "voice" }, {}, 400],
+        [{ projectDivision: "WEB_DESIGN" }, {}, 400],
+        [{ division: "WEB_DESIGN" }, {}, 400],
       ] as [Record<string, unknown>, Record<string, string>, number][]) {
         const result = await call(body, headers);
         assert.equal(result.status, expected, JSON.stringify(result));

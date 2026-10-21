@@ -82,7 +82,7 @@ test("native QA auth preserves the real 60/13/94 predecessor under FORCE RLS", {
     for (const filename of ["091_production_runtime_forced_rls_cutover.sql", "092_crm_production_machine_identity.sql", "093_crm_machine_internal_context.sql",
       "094_website_sales_ingestion.sql", "095_form_tenant_isolation.sql", "096_public_integration_gateway.sql", "100_studio_enquiry_production.sql",
       "101_knowledge_center.sql", "102_knowledge_document_processing.sql", "103_knowledge_assistant_service.sql", "104_knowledge_publication_workflow.sql",
-      "105_knowledge_website_monitoring.sql", "106_crm_operational_readers.sql"]) await apply(filename, ownerPool);
+      "105_knowledge_website_monitoring.sql", "106_crm_operational_readers.sql", "107_knowledge_connected_assistant_quota.sql"]) await apply(filename, ownerPool);
     const projectId = randomUUID(), foreignWorkspace = randomUUID(), foreignActor = randomUUID();
     await ownerPool.query(`insert into workspaces(id,name,operating_model,customer_type,setup_state)
       values($1,'SYNTHETIC PACKAGE4 CUSTOMER A','self_service_customer','property_developer','{"syntheticQa":true,"package4HostedSeed":"package4-hosted-20261020-v1"}'),
