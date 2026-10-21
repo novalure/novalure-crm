@@ -1,5 +1,6 @@
 // Supplementary browser regression against the existing disposable loopback app.
 // Run: node --conditions=react-server --import tsx scripts/qa-crm-ux-language.mjs
+// Bounded rerun: append --affected-sections --sections=properties,settings
 // Never attaches to a user browser, exports auth state, starts/stops the server,
 // provisions a provider, or contacts a Production origin.
 import assert from "node:assert/strict";
@@ -22,18 +23,23 @@ assert.equal(fixture.fixtureMode, "design-c-actual-predecessors");
 assert.equal(fixture.database.database, "neondb");
 const visualDelta = process.argv.includes("--visual-delta");
 const inspectClosedControls = process.argv.includes("--inspect-closed-controls");
+const inspectApproval = process.argv.includes("--inspect-approval");
 const captureOnly = process.argv.includes("--capture-only");
 const affectedSections = process.argv.includes("--affected-sections");
 const screenshotOnly = captureOnly || affectedSections;
-assert(process.argv.slice(2).every(argument => ["--visual-delta", "--inspect-closed-controls", "--capture-only", "--affected-sections"].includes(argument)) && [visualDelta, inspectClosedControls, captureOnly, affectedSections].filter(Boolean).length <= 1, "Unknown QA argument");
+const sectionArguments = process.argv.slice(2).filter(argument => argument.startsWith("--sections="));
+const sectionFilter = new Set(sectionArguments.length ? sectionArguments[0].slice("--sections=".length).split(",") : []);
+const knownSections = new Set(["properties", "newsletter", "knowledge", "sellerLeads", "buyerLeads", "developerLeads", "contacts", "tasks", "calendar", "settings", "projects", "projectOverview", "projectPipeline"]);
+assert(sectionArguments.length <= 1 && (!sectionArguments.length || (screenshotOnly && [...sectionFilter].every(section => knownSections.has(section)))), "Sections filter requires capture mode and known section names");
+assert(process.argv.slice(2).every(argument => ["--visual-delta", "--inspect-closed-controls", "--inspect-approval", "--capture-only", "--affected-sections"].includes(argument) || argument.startsWith("--sections=")) && [visualDelta, inspectClosedControls, inspectApproval, captureOnly, affectedSections].filter(Boolean).length <= 1, "Unknown QA argument");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
-const mode = visualDelta ? "visual-delta" : inspectClosedControls ? "closed-controls-inspection" : affectedSections ? "affected-sections" : captureOnly ? "capture-only" : "full-focused-ui";
+const mode = (visualDelta ? "visual-delta" : inspectClosedControls ? "closed-controls-inspection" : inspectApproval ? "approval-control-inspection" : affectedSections ? "affected-sections" : captureOnly ? "capture-only" : "full-focused-ui") + (sectionFilter.size ? "-" + [...sectionFilter].sort().join("-") : "");
 const output = path.resolve(".npm-cache/qa/crm-ux-language", `${mode}-${runId}`);
 await mkdir(output, { recursive: true });
 console.log(JSON.stringify({ runId, output, mode }));
 const admin = new pg.Pool({ ...fixture.database, user: "qa_admin", max: 2 });
 const expect = baseExpect.configure({ timeout: 20_000 });
-const results = [], coverage = [], authentication = [], faults = [], pageErrors = [], unexpectedResponses = [], externalRequests = [], blockedWrites = [];
+const results = [], coverage = [], settingsProfileTabs = [], authentication = [], faults = [], pageErrors = [], unexpectedResponses = [], externalRequests = [], blockedWrites = [];
 const contexts = [], mfaSecrets = new Map(), lastMfaCounter = new Map(), privateValues = new Set();
 let browser, accounts, currentPage, controlledFailure = false;
 async function fingerprintFiles(files) {
@@ -267,6 +273,12 @@ async function geometry(page) {
 }
 async function assertAffectedState(page, item) {
   const content = page.locator("[data-crm-content]");
+  if (item.section === "properties" && item.language === "en" && item.role !== "viewer") {
+    await expect(content.getByText("Property development", { exact: true }).first()).toBeVisible();
+    await expect(content.locator("span").filter({ hasText: /^Bauträger$/ })).toHaveCount(0);
+    await expect(content.getByRole("heading", { name: accounts[item.role].projectName, exact: true }).first()).toBeVisible();
+    item.projectNamePreserved = true;
+  }
   if (["sellerLeads", "buyerLeads", "developerLeads"].includes(item.section) && item.language === "en") {
     const workflow = content.locator("#property-sales-workflow");
     await expect(workflow.locator("summary")).toHaveText("Project sales: qualification to completion");
@@ -313,6 +325,51 @@ async function assertAffectedState(page, item) {
     item.readOnlyAffordance = "Property save is visibly disabled; no business action invoked";
   }
 }
+async function captureCompanyProfileTabs(page, item) {
+  const content = page.locator("[data-crm-content]");
+  const profile = content.locator("article").filter({ has: page.getByRole("heading", { name: /^(Mein Unternehmen|My company)$/ }) }).first();
+  await expect(profile).toBeVisible();
+  const tabs = [
+    ["master", "Stammdaten", "Master data"], ["register", "Recht & Register", "Legal & register"],
+    ["contact", "Kontakt", "Contact"], ["representation", "Vertretung", "Representation"],
+    ["licenses", "Lizenzen", "Licences"], ["privacy", "Datenschutz", "Privacy"],
+    ["branding", "Branding", "Branding"], ["usage", "Verwendung", "Usage"], ["approval", "Freigaben", "Approvals"],
+  ];
+  await expect.poll(async () => (await profile.locator("input,textarea,select").count()) > 0 || /konnten nicht geladen|could not be loaded|permission|Berechtigung/i.test(await profile.innerText()), { timeout: 20_000 }).toBe(true);
+  const profileAvailable = (await profile.locator("input,textarea,select").count()) > 0;
+  if (item.language === "de") {
+    await expect(content.getByText("Einwilligungen", { exact: true }).first()).toBeVisible();
+    await expect(content.getByText("Aktivitäten", { exact: true }).first()).toBeVisible();
+  }
+  for (const [id, de, en] of tabs) {
+    const state = { role: item.role, scope: item.scope, language: item.language, width: item.width, section: "settings", tab: id, status: profileAvailable ? "PASS" : "UNAVAILABLE", profileScope: "own company", writesInvoked: 0 };
+    try {
+      const tab = profile.getByRole("button", { name: item.language === "de" ? de : en, exact: true });
+      await tab.click(); await expect(tab).toHaveAttribute("aria-pressed", "true");
+      if (profileAvailable) await expect(profile.locator("input,textarea,select").first()).toBeVisible();
+      if (profileAvailable) {
+        await expect(profile.getByText(item.language === "de" ? "Standardwerte" : "Default values", { exact: true })).toBeVisible();
+        if (id === "contact" && item.language === "de") await expect(profile.getByLabel("Sitz", { exact: true })).toBeVisible();
+        if (id === "privacy" && item.language === "de") await expect(profile.getByLabel("Datenschutzkontakt", { exact: true })).toBeVisible();
+        if (id === "approval") {
+          const statusControl = profile.locator("select");
+          await expect(statusControl).toHaveCount(1);
+          assert((await statusControl.boundingBox()).height <= 64, "Approval Status select must retain a normal control height beside its issue list");
+        }
+      }
+      const layout = await geometry(page); state.document = layout.document; state.viewport = layout.viewport;
+      if (layout.document > layout.viewport + 1 || layout.unnamedSymbolControls.length) state.status = "FAIL";
+      if (id === "master") { state.screenshot = item.screenshot; state.screenshotNote = "Master tab is visible in the existing full Settings capture"; }
+      else {
+        const filename = `${item.role}-${item.scope}-${item.language}-${item.width}-settings-profile-${id}.png`;
+        await profile.screenshot({ path: path.join(output, filename) });
+        state.screenshot = filename; state.screenshotNote = "Actual company-profile region at the existing app viewport; no fields changed";
+      }
+    } catch (error) { state.status = "FAIL"; state.error = safeMessage(error); }
+    settingsProfileTabs.push(state);
+  }
+  await profile.getByRole("button", { name: item.language === "de" ? "Stammdaten" : "Master data", exact: true }).click();
+}
 async function coverageForRole(page, role) {
   const scopes = role === "operator"
     ? [{ id: accounts.operator.workspaceId, kind: "internal", profiles: ["novalureAdmin", "completeBrokerage", "propertyDeveloper"] }, ...(!affectedSections ? [{ id: accounts.studio.workspaceId, kind: "Studio", profiles: ["novalureStudio"] }] : [])]
@@ -331,6 +388,7 @@ async function coverageForRole(page, role) {
           await chooseProfile(page, profile);
           const entries = await navEntries(page);
           for (const entry of entries) {
+            if (sectionFilter.size && !sectionFilter.has(entry.id)) continue;
             if (affectedSections) {
               const general = ["properties", "newsletter", "knowledge", "contacts", "tasks", "calendar", "settings", "projects", "projectOverview"].includes(entry.id);
               const viewerPipeline = role === "viewer" && entry.id === "projectPipeline";
@@ -361,6 +419,7 @@ async function coverageForRole(page, role) {
                 await page.evaluate(() => scrollTo(0, 0));
                 await screenshot(page, "after-en-viewer-knowledge-390", false);
               }
+              if (affectedSections && sectionFilter.has("settings") && role === "operator" && entry.id === "settings" && item.status !== "LOADING_ONLY") await captureCompanyProfileTabs(page, item);
               visited.set(key, profile);
             } catch (error) { item.status = "FAIL"; item.error = safeMessage(error); item.screenshot = await screenshot(page, `coverage-failure-${coverage.length}`); }
             coverage.push(item);
@@ -511,9 +570,42 @@ async function inspectFunnelControls(page) {
     return { candidatesFromOldBoundingBoxHeuristic: inspection.length, hiddenInsideClosedDetails: inspection.filter(item => item.closedDetails && !item.checkVisibility).length, genuineVisibleUnnamed: 0 };
   });
 }
+async function inspectApprovalControl(page) {
+  const inspections = [];
+  for (const language of ["de", "en"]) {
+    await pageResetForLanguage(page); await chooseLanguage(page, language);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+      await chooseProfile(page, "novalureAdmin");
+      const entry = (await navEntries(page)).find(item => item.id === "settings"); assert(entry);
+      await navigate(page, entry);
+      await step(`Actual own-company Approval select ${language} ${width}`, async () => {
+        const profile = page.locator("[data-crm-content] article").filter({ has: page.getByRole("heading", { name: /^(Mein Unternehmen|My company)$/ }) }).first();
+        await profile.getByRole("button", { name: language === "de" ? "Stammdaten" : "Master data", exact: true }).click();
+        await expect(profile.locator("input").first()).toBeVisible();
+        await profile.getByRole("button", { name: language === "de" ? "Freigaben" : "Approvals", exact: true }).click();
+        const select = profile.locator("select"); await expect(select).toHaveCount(1); await expect(select).toBeVisible();
+        const evidence = await select.evaluate(element => ({
+          html: element.outerHTML, labelText: [...element.labels].map(label => label.textContent),
+          labelHtml: element.parentElement.outerHTML, height: element.getBoundingClientRect().height,
+          width: element.getBoundingClientRect().width, cssHeight: getComputedStyle(element).height,
+        }));
+        const oldExactLabelMatches = await profile.getByLabel("Status", { exact: true }).count();
+        const filename = `operator-internal-${language}-${width}-settings-profile-approval.png`;
+        await profile.screenshot({ path: path.join(output, filename) });
+        inspections.push({ language, width, oldExactLabelMatches, evidence, screenshot: filename, writesInvoked: 0 });
+        assert(evidence.height <= 64, "Approval Status select must retain a normal control height beside its issue list");
+        const layout = await geometry(page); assert(layout.document <= layout.viewport + 1); assert.equal(layout.unnamedSymbolControls.length, 0);
+        return { height: evidence.height, oldExactLabelMatches, correctedUniqueControlMatches: 1, screenshot: filename };
+      });
+    }
+  }
+  await writeFile(path.join(output, "approval-control-dom.json"), JSON.stringify({ syntheticOnly: true, inspections }, null, 2));
+}
 try {
   assert.equal((await admin.query("select current_user as role")).rows[0].role, "qa_admin");
   accounts = await seedDesignCIntegration({ admin, role: fixture.database.user, languagePreference: "de" });
+  for (const role of ["operator", "customer"]) accounts[role].projectName = (await admin.query("select name from projects where id=$1", [accounts[role].projectId])).rows[0].name;
   const leadId = randomUUID(), dealId = randomUUID();
   await admin.query("insert into leads(id,workspace_id,project_id,contact_id,assigned_to_user_id,type,source,intent) values($1,$2,$3,$4,$5,'Bauträger','Manual','SYNTHETIC UX enquiry')", [leadId, accounts.operator.workspaceId, accounts.operator.projectId, accounts.operator.developerContactId, accounts.operator.userId]);
   await admin.query("insert into deals(id,workspace_id,project_id,contact_id,organization_id,lead_id,owner_user_id,name,stage,value_cents) values($1,$2,$3,$4,$5,$6,$7,'SYNTHETIC UX interface offer','Neu',123456789)", [dealId, accounts.operator.workspaceId, accounts.operator.projectId, accounts.operator.developerContactId, accounts.operator.developerId, leadId, accounts.operator.userId]);
@@ -525,6 +617,8 @@ try {
   await step("Regular synthetic operator password and required MFA", () => login(operator, "operator"), true);
   if (inspectClosedControls) {
     await inspectFunnelControls(operator);
+  } else if (inspectApproval) {
+    await inspectApprovalControl(operator);
   } else if (visualDelta) {
     await visualDeltaCases(operator);
   } else {
@@ -568,9 +662,9 @@ try {
 } finally {
   for (const context of contexts) await context.close().catch(() => undefined);
   await browser?.close().catch(() => undefined); await admin.end();
-  const report = { runId, mode, sourceBinding, syntheticOnly: true, supplementaryIsolatedBrowser: true, actualSignedInAppBrowserAudit: false, productionAccess: 0, source: "working tree; final exact-SHA gate remains separate", ...(affectedSections ? { boundedCaptureScope: "Affected properties/newsletter/knowledge/contact/task/calendar/settings/project sections, real operator/customer/viewer roles, DE/EN at 1440/390, plus viewer project pipeline guards. Three operator lead wrappers EN at both sizes and developer wrapper DE1440. Existing 300-section capture remains separate; duplicate Studio wrappers and unaffected pages are deliberately not replayed." } : {}), results, coverage, authentication, controlledFaults: faults, pageErrors, unexpectedResponses, externalRequests, blockedWrites, screenshotVisualReview: "pending human/parent inspection", secondDeviceEvidence: "new isolated browser context, not a physical second device" };
+  const report = { runId, mode, sourceBinding, syntheticOnly: true, supplementaryIsolatedBrowser: true, actualSignedInAppBrowserAudit: false, productionAccess: 0, source: "working tree; final exact-SHA gate remains separate", ...(affectedSections ? { boundedCaptureScope: sectionFilter.size ? "Only requested sections in actual allowed navigation, real operator/customer/viewer roles, DE/EN at1440/390. Operator own-company Settings tabs receive read-only navigation captures when Settings is requested. Earlier matrix evidence remains separate." : "Affected properties/newsletter/knowledge/contact/task/calendar/settings/project sections, real operator/customer/viewer roles, DE/EN at 1440/390, plus viewer project pipeline guards. Three operator lead wrappers EN at both sizes and developer wrapper DE1440. Existing 300-section capture remains separate; duplicate Studio wrappers and unaffected pages are deliberately not replayed." } : {}), ...(sectionFilter.size ? { requestedSectionFilter: [...sectionFilter] } : {}), results, coverage, settingsProfileTabs, authentication, controlledFaults: faults, pageErrors, unexpectedResponses, externalRequests, blockedWrites, screenshotVisualReview: "pending human/parent inspection", secondDeviceEvidence: "new isolated browser context, not a physical second device" };
   await writeFile(path.join(output, "result.json"), JSON.stringify(report, null, 2));
-  const failures = results.filter(result => result.status === "FAIL").length + coverage.filter(item => ["FAIL", "LOADING_ONLY"].includes(item.status)).length + pageErrors.length + unexpectedResponses.length + externalRequests.length + blockedWrites.length;
-  console.log(JSON.stringify({ results: results.length, coverage: coverage.length, failures, report: path.join(output, "result.json") }));
+  const failures = results.filter(result => result.status === "FAIL").length + [...coverage, ...settingsProfileTabs].filter(item => ["FAIL", "LOADING_ONLY"].includes(item.status)).length + pageErrors.length + unexpectedResponses.length + externalRequests.length + blockedWrites.length;
+  console.log(JSON.stringify({ results: results.length, coverage: coverage.length, settingsTabs: settingsProfileTabs.length, failures, report: path.join(output, "result.json") }));
   process.exitCode = failures ? 1 : 0;
 }

@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-21",
+  "classification": "LOCAL_SYNTHETIC_EVIDENCE_NOT_HOSTED_OR_PRODUCTION_ACCEPTANCE",
+  "runtimeRevision": "d690b9c80221942c74e640b952ae2eb20ce5fc79",
+  "runtimeTrees": {
+    "src": "a959c9018bda23a0acd3a0b00277baa91bb01535",
+    "migrations": "9644b9e40c85127fff0d36aabc0f77c80e391695"
+  },
+  "base": "4c0b460fd487cf5a6de94e2ee6e9e47d6639bf7e",
+  "initialProduction": "86a09f04ef01614c5236d20f36b8cf4fb4569853",
+  "localPreview": "http://127.0.0.1:56068",
+  "testResults": {
+    "unit": 245,
+    "uxLanguage": 27,
+    "forcedRlsPreferenceDatabase": 1,
+    "designCAndCustomerAccess": 28,
+    "earlierSales": 101,
+    "earlierKnowledge": 190,
+    "earlierKnowledgePackage3": 54,
+    "mergedKnowledgeDatabaseTests": 31,
+    "knowledgeImportStubbedHttpUi": 4,
+    "sharedStylesheetStress": 12,
+    "productionDependencyAuditVulnerabilities": 0,
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "review": {
+    "kind": "INDEPENDENT_INTERNAL_AI_SOURCE_REVIEW_NOT_GITHUB_APP_ATTESTATION",
+    "runtimeRevision": "d690b9c80221942c74e640b952ae2eb20ce5fc79",
+    "open": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "priorFullDeltaChecks": 36,
+    "lastSettingsDeltaChecks": 7
+  },
+  "reports": [
+    {
+      "name": "first-full-run",
+      "localReport": ".npm-cache/qa/crm-ux-language/run-2026-10-21T19-31-45-062Z/result.json",
+      "sourceBinding": null,
+      "checks": {
+        "PASS": 14,
+        "FAIL": 1
+      },
+      "pageCoverage": {
+        "PASS": 300,
+        "COVERED_VIA_SAME_SECTION": 36,
+        "NOT_AVAILABLE": 8
+      },
+      "settingsTabs": {},
+      "errors": {
+        "javascript": 1,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "fixed-storage-and-account-switch",
+      "localReport": ".npm-cache/qa/crm-ux-language/visual-delta-2026-10-21T19-45-20-601Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "d3ed5abe5753d0e6de53237784920e5326d41781",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "f2afc2423631073b8bdcee4408bf0ac54f05e96c7005c45f34a95d9456691dd3"
+        },
+        "trackedRuntimeDiffFromMainSha256": "ab449f280d8c2ebcbaaec857dc106a5668e1fa06d40f1da1ce4ed8958d4dacf9",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "1edee87703b4211a46671659f3f09f64b1edd1f4c767fd049970c7d6d1792178"
+        },
+        "buildId": "E9I9ZLtn0Wj63tUb-PY9_",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 7
+      },
+      "pageCoverage": {},
+      "settingsTabs": {},
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "full-capture",
+      "localReport": ".npm-cache/qa/crm-ux-language/capture-only-2026-10-21T19-45-37-149Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "d3ed5abe5753d0e6de53237784920e5326d41781",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "f2afc2423631073b8bdcee4408bf0ac54f05e96c7005c45f34a95d9456691dd3"
+        },
+        "trackedRuntimeDiffFromMainSha256": "ab449f280d8c2ebcbaaec857dc106a5668e1fa06d40f1da1ce4ed8958d4dacf9",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "1edee87703b4211a46671659f3f09f64b1edd1f4c767fd049970c7d6d1792178"
+        },
+        "buildId": "E9I9ZLtn0Wj63tUb-PY9_",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 5
+      },
+      "pageCoverage": {
+        "PASS": 300,
+        "COVERED_VIA_SAME_SECTION": 36,
+        "NOT_AVAILABLE": 8
+      },
+      "settingsTabs": {},
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "affected-runtime-c73",
+      "localReport": ".npm-cache/qa/crm-ux-language/affected-sections-2026-10-21T20-04-22-719Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "c73c6628d075417ffb9644bf77ae4ccebdb294c3",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "6953ecb571591c980d84c1df952e5fd6ef204dfec393133da28c39ddd20de15e"
+        },
+        "trackedRuntimeDiffFromMainSha256": "584f748b16b5c725ce1798a86b9fc1470047b9462897bc90cb54398460b28da3",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "916b963b8ec94c3d460307724f101a30e4e58e9dd7d4adb3ebc3514311db8913"
+        },
+        "buildId": "CF9EBug8ntQ7q4NyZAZ7x",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 5
+      },
+      "pageCoverage": {
+        "PASS": 107,
+        "COVERED_VIA_SAME_SECTION": 24,
+        "NOT_AVAILABLE": 8
+      },
+      "settingsTabs": {},
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "property-and-nine-settings-tabs",
+      "localReport": ".npm-cache/qa/crm-ux-language/affected-sections-properties-settings-2026-10-21T20-09-51-605Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "d89a9a15583a15db5af24d15b1f42d08c174ce0c",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "d3c7a5c511b22c9a4c1e78811b198d597a4863512c3c44d5d671bf7b69fcc63e"
+        },
+        "trackedRuntimeDiffFromMainSha256": "f92b70dd66fd0d661eaae549cb4b66d62974623259cd69e2ede2fd39a5a84b56",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "6daff5c3d05ed4f03bfd07bcf3eec94c15ae7989df59e3b8c4c58d95ec5eb8eb"
+        },
+        "buildId": "FErfjYa83C2ORkXa4TG7b",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 5
+      },
+      "pageCoverage": {
+        "PASS": 20,
+        "COVERED_VIA_SAME_SECTION": 12,
+        "NOT_AVAILABLE": 8
+      },
+      "settingsTabs": {
+        "PASS": 36
+      },
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "last-settings-copy-with-selector-failure",
+      "localReport": ".npm-cache/qa/crm-ux-language/affected-sections-settings-2026-10-21T20-15-17-657Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "d690b9c80221942c74e640b952ae2eb20ce5fc79",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "08e71d73daa882535efaa8d6ef37545a8cfbe78a2e776d46c37a0af9d1956060"
+        },
+        "trackedRuntimeDiffFromMainSha256": "7c7db38ac7a31179bac88fd02b312c01f3b634e645c0906d18fabb10612da7cf",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "f5b9dab6ae921ffb9de00a2583af945405ec5c56d4ce4325f88d1653d1125891"
+        },
+        "buildId": "OJG_xC-CcDLAVrwYhKq8O",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 5
+      },
+      "pageCoverage": {
+        "PASS": 8,
+        "COVERED_VIA_SAME_SECTION": 4,
+        "NOT_AVAILABLE": 8
+      },
+      "settingsTabs": {
+        "PASS": 32,
+        "FAIL": 4
+      },
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    },
+    {
+      "name": "corrected-approval-probe",
+      "localReport": ".npm-cache/qa/crm-ux-language/approval-control-inspection-2026-10-21T20-18-29-216Z/result.json",
+      "sourceBinding": {
+        "gitHeadAtStart": "d690b9c80221942c74e640b952ae2eb20ce5fc79",
+        "workingSourceAtStart": {
+          "files": 548,
+          "sha256": "d02642f18aa179f86bde977635d7ecaf47e2feb19d191cbcdc8978bddedd57e0"
+        },
+        "trackedRuntimeDiffFromMainSha256": "7c7db38ac7a31179bac88fd02b312c01f3b634e645c0906d18fabb10612da7cf",
+        "builtArtifact": {
+          "files": 1100,
+          "sha256": "f5b9dab6ae921ffb9de00a2583af945405ec5c56d4ce4325f88d1653d1125891"
+        },
+        "buildId": "OJG_xC-CcDLAVrwYhKq8O",
+        "note": "Built bytes and current source snapshot are recorded separately. An uncommitted source snapshot is not an exact final Git revision or proof that later source edits were built."
+      },
+      "checks": {
+        "PASS": 5
+      },
+      "pageCoverage": {},
+      "settingsTabs": {},
+      "errors": {
+        "javascript": 0,
+        "unexpectedResponses": 0,
+        "externalRequests": 0,
+        "businessWrites": 0
+      }
+    }
+  ],
+  "visualReview": {
+    "actualSignedInAppBrowser": true,
+    "productionReadOnly": true,
+    "supplementaryOwnSyntheticBrowserContexts": true,
+    "geoInputs": "SIMULATED",
+    "secondDevice": "NEW_BROWSER_CONTEXT_NOT_PHYSICAL_HARDWARE",
+    "finalApprovedStatusSelectHeight": 44,
+    "profileScope": "OWN_SYNTHETIC_COMPANY",
+    "profileDefaultData": "DEFAULT_VALUES_NOT_PERSISTED_COMPANY_PROFILE",
+    "savedBusinessContentTranslated": false,
+    "artifacts": [
+      {
+        "file": "crm-ux-i18n-images/approval-before-de.png",
+        "revision": "d89a9a15583a15db5af24d15b1f42d08c174ce0c",
+        "kind": "ACTUAL_SYNTHETIC_BEFORE"
+      },
+      {
+        "file": "crm-ux-i18n-images/approval-after-de.png",
+        "revision": "d690b9c80221942c74e640b952ae2eb20ce5fc79",
+        "kind": "ACTUAL_SYNTHETIC_AFTER"
+      },
+      {
+        "file": "crm-ux-i18n-images/properties-after-en.png",
+        "revision": "d89a9a15583a15db5af24d15b1f42d08c174ce0c",
+        "kind": "ACTUAL_SYNTHETIC_AFTER_PROPERTY_CODE_UNCHANGED_SINCE"
+      }
+    ]
+  },
+  "limitations": [
+    "The first full report remains FAIL; later fixes are separate evidence.",
+    "Automated page capture PASS is not full-state visual or functional acceptance.",
+    "One last Settings report has four selector timeouts; the four narrow approval cases then pass with the correct unique control.",
+    "Forms/communication and other unavailable module states are recorded as unavailable.",
+    "Units/reservations were empty in visual captures; loaded project sales and all provider actions were not visually accepted.",
+    "Real login/device/geo/provider acceptance on a hosted UX deployment remains blocked."
+  ],
+  "deployment": {
+    "hostedPreview": "BLOCKED_NO_VERIFIED_ISOLATED_BRANCH_BINDING",
+    "migration107": "LOCAL_DISPOSABLE_QA_ONLY",
+    "branchAutomaticDeploy": false,
+    "package4Reopened": false,
+    "productionWrites": false,
+    "productionDeploy": false,
+    "merge": false
+  }
+}
