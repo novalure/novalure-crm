@@ -888,7 +888,7 @@ export function CompanyProfileSettings({
 
             {activeTab === "approval" ? (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
-                <label className={labelClass()}>
+                <label className={`${labelClass()} self-start`}>
                   {text.status}
                   <select
                     className={inputClass()}
