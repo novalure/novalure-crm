@@ -121,10 +121,13 @@ export async function readKnowledgeDocumentUpload(upload: VerifiedKnowledgeDocum
   if (!verified.has(upload)) throw new KnowledgeCenterError("INVALID_UPLOAD", "An authorized private document upload is required.", 403);
   const blob = await get(upload.pathname, { access: "private", token: privateToken(), useCache: false, abortSignal: AbortSignal.timeout(30_000) });
   if (!blob || blob.statusCode !== 200) throw new KnowledgeCenterError("DOCUMENT_UNAVAILABLE", "The private upload is not available. Please retry the upload.", 404);
-  if (blob.blob.size !== upload.metadata.sizeBytes || blob.blob.contentType.split(";", 1)[0].trim().toLowerCase() !== upload.metadata.mimeType) {
+  if (blob.blob.contentType.split(";", 1)[0].trim().toLowerCase() !== upload.metadata.mimeType) {
     await blob.stream.cancel().catch(() => undefined);
     throw new KnowledgeCenterError("DOCUMENT_CHANGED", "The private upload does not match its authorized document.", 409);
   }
+  // Blob GET exposes HTTP Content-Length as size: it may be absent or describe
+  // compressed transfer bytes. Verify the decoded document's exact signed size
+  // and SHA-256 while reading instead, retaining the incremental upload limit.
   const bytes = await readKnowledgeUploadBytes(blob.stream, upload.metadata);
   const file = new File([bytes], upload.metadata.fileName, { type: upload.metadata.mimeType });
   const parts = upload.pathname.split("/");

@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { AppSession } from "../auth/session";
+import { knowledgeMonitoringAuditMetadata } from "./monitoring-delegation";
 import { withCrmRead, type TenantTransaction, type TenantTransactionOptions } from "../crm-command";
 import { knowledgeInternals, listKnowledgeVersions } from "./repository";
 import { KnowledgeCenterError, knowledgeId, knowledgeRevision, knowledgeStructured, knowledgeText, requireKnowledgePermission } from "./policy";
@@ -44,7 +45,7 @@ async function workflow(tx: TenantTransaction, session: AppSession, versionId: s
 export async function recordKnowledgeWorkflowEventInTransaction(tx: TenantTransaction, session: AppSession, eventType: string, row: KnowledgeSource | null, versionId: string | null, details: Record<string, unknown>) {
   const targetArea = row ? await area(tx, session, row.areaId) : typeof details.areaId === "string" ? await area(tx, session, details.areaId) : null;
   const assistants = targetArea ? await tx.query<{ id: string }>(`select distinct b.id from knowledge_area_grants g join bots b on b.id=g.bot_id and b.workspace_id=g.workspace_id where g.workspace_id=$1::uuid and g.area_id=$2::uuid`, [session.workspaceId, targetArea.id]) : [];
-  const summary = { ...details, ...(targetArea ? { areaId: targetArea.id, affectedAssistantIds: assistants.map(item => item.id) } : {}) };
+  const summary = { ...details, ...(targetArea ? { areaId: targetArea.id, affectedAssistantIds: assistants.map(item => item.id) } : {}), ...knowledgeMonitoringAuditMetadata(session) };
   await tx.execute(`insert into knowledge_workflow_events(workspace_id,source_id,version_id,project_id,event_type,actor_id,details) values($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6::uuid,$7::jsonb)`, [session.workspaceId, row?.id ?? null, versionId, row?.projectId ?? targetArea?.projectId ?? null, eventType, session.userId, JSON.stringify(summary)]);
   await audit(tx, session, eventType, row?.id ?? targetArea?.id ?? session.workspaceId, summary);
 }

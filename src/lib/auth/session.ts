@@ -61,6 +61,15 @@ export type AppSession = {
     consumer: "EVELYN";
     environment: "preview";
     jtiHash: string;
+  } | {
+    identityId: "KNOWLEDGE_MONITOR";
+    role: "Knowledge.Monitor";
+    consumer: "KNOWLEDGE_MONITORING";
+    environment: "production";
+    delegatedByIdentityId: string;
+    sourceId: string;
+    configRevision: number;
+    runId: string;
   }>;
   authIdentityId?: string;
   authSessionId?: string;
