@@ -186,9 +186,16 @@ try{
   await section.getByRole('button',{name:'Manuellen Versand vorbereiten',exact:true}).click();
   await section.getByLabel('Manueller Versandbeleg',{exact:false}).fill('SYNTHETIC MANUAL LOCAL RECEIPT');await section.getByRole('button',{name:'Manuellen Versand bestätigen',exact:true}).click();
   await expect(section.getByText('Versand manuell belegt',{exact:true})).toBeVisible();
-  await section.getByRole('button',{name:'Nachfassaufgabe planen',exact:true}).click();await expect(section).toContainText('SCHEDULED');
+  async function persistedOffer(){
+   const response=await page.request.get(fixture.baseUrl+'/api/crm/offers?'+new URLSearchParams({workspaceId:fixture.workspaceId,dealId:deal.id}));
+   assert.equal(response.status(),200,'The authenticated caller must read its persisted offer');
+   return (await response.json()).offer;
+  }
+  await section.getByRole('button',{name:'Nachfassaufgabe planen',exact:true}).click();await expect(section).toContainText('Nachfassen: Geplant');
+  assert.equal((await persistedOffer()).followUpStatus,'SCHEDULED','The localized UI must reflect the persisted scheduled state');
   await section.getByLabel('Kundenantwort / Annahme- oder Ablehnungsbeleg').fill('SYNTHETIC CUSTOMER ACCEPTANCE');
-  await section.getByRole('button',{name:'Kundenannahme belegen',exact:true}).click();await expect(section.getByText('Angenommen · Deal gewonnen · Kunde',{exact:true})).toBeVisible();await expect(section).toContainText('STOPPED');
+  await section.getByRole('button',{name:'Kundenannahme belegen',exact:true}).click();await expect(section.getByText('Angenommen · Deal gewonnen · Kunde',{exact:true})).toBeVisible();await expect(section).toContainText('Nachfassen: Gestoppt');
+  const acceptedOffer=await persistedOffer();assert.equal(acceptedOffer.status,'ACCEPTED');assert.equal(acceptedOffer.followUpStatus,'STOPPED','Acceptance must atomically stop follow-up');
  });
  await step('Flow B creates canonical buyer inquiry and available inventory via APIs',async()=>{
   buyer=(await api('/api/crm/contacts',{contact:{name:'SYNTHETIC Buyer',email:'buyer-browser-'+randomUUID().replaceAll('-','')+'@example.invalid',role:'Käufer',source:'Manual',consent:'Opt-in',projectId:fixture.projectId}})).contact;
