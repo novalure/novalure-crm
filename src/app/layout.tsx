@@ -19,8 +19,9 @@ export const metadata: Metadata = {
   title: "Novalure CRM",
   description: "Real estate CRM, funnel and AI lead platform",
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: ["/icon.svg"],
+    icon: [{ url: "/icon.svg?v=novalure-blue-20261021", type: "image/svg+xml" }],
+    shortcut: ["/icon.svg?v=novalure-blue-20261021"],
+    apple: [{ url: "/apple-icon.png?v=novalure-blue-20261021", sizes: "180x180", type: "image/png" }],
   },
 };
 
