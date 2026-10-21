@@ -160,9 +160,14 @@ test("public landing uses anonymized CRM proof and real privacy content instead 
 test("public website subpages retain the established landing page design system", () => {
   const shell = readText("src/components/public-site-shell.tsx");
   const shellStyles = readText("src/components/public-site-shell.module.css");
+  const landing = readText("src/components/public-crm-landing.tsx");
   const legalPage = readText("src/components/legal-page.tsx");
 
-  assert.match(shell, /className=\{styles\.wordmark\}>Novalure<span>\.<\/span>/);
+  for (const page of [landing, shell]) {
+    assert.match(page, /import \{ NovalureWordmark \} from "@\/components\/novalure-wordmark"/);
+    assert.match(page, /<NovalureWordmark className=\{styles\.wordmark\} \/>/);
+    assert.match(page, /<NovalureWordmark className=\{styles\.footerWordmark\} \/>/);
+  }
   assert.match(shell, /novalure-public-legacy/);
   assert.match(shell, /publicLegalLinks\.map/);
   assert.match(shellStyles, /--nl-bg: #faf9f7/);
